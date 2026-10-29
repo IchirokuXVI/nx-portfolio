@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import type { AllowanceLimits } from '@portfolio/luna-shopper/contracts';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 
@@ -7,7 +8,7 @@ import * as Joi from 'joi';
  *
  * Two things about this file are load bearing.
  *
- * **`GEMINI_API_KEY` may be empty**, and the schema says so rather than requiring
+ * **`ANTHROPIC_API_KEY` may be empty**, and the schema says so rather than requiring
  * it. That follows plan 0026: an operator with no key gets a service that boots
  * and answers 501 on its one route, not a pod stuck in
  * `CreateContainerConfigError` and a cluster that never comes up. It is also what
@@ -30,15 +31,12 @@ export const LOG_LEVELS = [
 ] as const;
 
 /**
- * Which provider answers a turn (plan 0224, section 1).
- *
- * `gemini` is the default and the behaviour from before the switch existed.
- * `claude` answers with Claude and still hears with Gemini, because the Messages
- * API takes no audio: a spoken turn and a voice comment are transcribed by the
- * Gemini key whatever this says.
+ * Claude answers every turn (plan 0236). There is no provider switch any more:
+ * the only other provider this service had does not allow a service that minors
+ * use, and Velista is for every age. A stale `ASSISTANT_PROVIDER` or old
+ * provider key in an environment is ignored, because the schema allows unknown
+ * keys and nothing reads them (section 1).
  */
-export const ASSISTANT_PROVIDERS = ['gemini', 'claude'] as const;
-export type AssistantProviderName = (typeof ASSISTANT_PROVIDERS)[number];
 
 /** `output_config.effort` on a Claude request (plan 0224, section 10). */
 export const CLAUDE_EFFORTS = ['low', 'medium', 'high'] as const;
@@ -54,31 +52,37 @@ export const CLAUDE_EFFORTS = ['low', 'medium', 'high'] as const;
 export const CLAUDE_THINKING_MODES = ['adaptive', 'off'] as const;
 
 /**
- * The Gemini model, as a config value rather than a literal, so changing it is an
- * env edit and a restart (section 9). `gemini-3.1-flash-lite` is the first thing
- * to try if quality disappoints, and the version numbers do not order those two
- * the way they look.
- *
- * It is also the transcription model whenever Claude answers, because Gemini is
- * the only provider here that hears.
- */
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
-
-/**
  * The Claude model, effort and thinking that the evaluation of 2026-10-22 chose
  * (plan 0224, section 10): Sonnet scored one point more for seventeen times the
- * cost, and effort `medium` scored the same as `low` and was slower.
+ * cost, and effort `medium` scored the same as `low` and was slower. The model
+ * is a config value rather than a literal, so changing it is an env edit and a
+ * restart.
  */
 export const DEFAULT_CLAUDE_MODEL = 'claude-haiku-5-5';
 export const DEFAULT_CLAUDE_EFFORT: (typeof CLAUDE_EFFORTS)[number] = 'low';
 export const DEFAULT_CLAUDE_THINKING: (typeof CLAUDE_THINKING_MODES)[number] =
   'adaptive';
 
-/** Google's public endpoint. Overridable so a fake can be pointed at in dev. */
-export const DEFAULT_GEMINI_BASE_URL =
-  'https://generativelanguage.googleapis.com/v1beta';
+/**
+ * The model that checks each reply before it leaves (plan 0236, section 4.1).
+ * One word of output with thinking off, so the smallest model is the right one.
+ */
+export const DEFAULT_MODERATION_MODEL = 'claude-haiku-5-5';
 
-/** Anthropic's public endpoint. Overridable for the same reason. */
+/**
+ * Whether each reply is checked (plan 0236, section 4.3). `off` is for a self
+ * hoster whose deployment no minor uses; Velista runs it `on`.
+ */
+export const MODERATION_SWITCH = ['on', 'off'] as const;
+
+/**
+ * The number the distress sentence names (plan 0236, section 3.2): the
+ * emergency number of Spain and the whole EU. A self hoster elsewhere sets
+ * their own.
+ */
+export const DEFAULT_EMERGENCY_NUMBER = '112';
+
+/** Anthropic's public endpoint. Overridable so a fake can be pointed at in dev. */
 export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 
 /**
@@ -97,12 +101,11 @@ export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
- * The containers this service will forward to the provider.
+ * The containers this service will forward to the transcriber.
  *
- * Every one of these is on Gemini's own accepted list, checked against the
- * current documentation rather than quoted from the plan (section 3.3, which
- * expected `audio/webm` to be missing and it is not — so there is no container
- * rewrite in this codebase and there does not need to be one).
+ * The transcriber decodes with ffmpeg, which reads every one of these (plan
+ * 0235, section 3), so there is no container rewrite in this codebase and there
+ * does not need to be one.
  *
  * The first three are what browsers actually produce: Chrome gives
  * `audio/webm;codecs=opus`, Firefox `audio/ogg;codecs=opus`, Safari
@@ -115,6 +118,123 @@ export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
  */
 export const DEFAULT_AUDIO_MIME_TYPES =
   'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac';
+
+/**
+ * Each person's allowance (plan 0234, section 7): the key, its registered
+ * default and its guest default, which is the same key with `_GUEST`
+ * appended. Written once here; the chart, compose and the slot script state
+ * the same numbers.
+ *
+ * The two deployment keys and the turn reserve have no guest form: they are
+ * about the deployment, not about a person.
+ */
+export const ALLOWANCE_LIMIT_KEYS: readonly {
+  key: string;
+  field: keyof AllowanceLimits;
+  registered: number;
+  guest: number | null;
+}[] = [
+  {
+    key: 'ASSISTANT_TURNS_PER_DAY',
+    field: 'turnsPerDay',
+    registered: 60,
+    guest: 20,
+  },
+  {
+    key: 'ASSISTANT_TURNS_PER_MONTH',
+    field: 'turnsPerMonth',
+    registered: 600,
+    guest: 100,
+  },
+  {
+    key: 'ASSISTANT_AUDIO_SECONDS_PER_DAY',
+    field: 'assistantAudioSecondsPerDay',
+    registered: 900,
+    guest: 300,
+  },
+  {
+    key: 'ASSISTANT_AUDIO_SECONDS_PER_MONTH',
+    field: 'assistantAudioSecondsPerMonth',
+    registered: 9000,
+    guest: 1500,
+  },
+  {
+    key: 'COMMENT_AUDIO_SECONDS_PER_DAY',
+    field: 'commentAudioSecondsPerDay',
+    registered: 1800,
+    guest: 600,
+  },
+  {
+    key: 'COMMENT_AUDIO_SECONDS_PER_MONTH',
+    field: 'commentAudioSecondsPerMonth',
+    registered: 18000,
+    guest: 3000,
+  },
+  {
+    key: 'ASSISTANT_COST_PER_DAY_MICRO_USD',
+    field: 'costPerDayMicroUsd',
+    registered: 100_000,
+    guest: 40_000,
+  },
+  {
+    key: 'ASSISTANT_COST_PER_MONTH_MICRO_USD',
+    field: 'costPerMonthMicroUsd',
+    registered: 1_000_000,
+    guest: 200_000,
+  },
+  {
+    key: 'ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD',
+    field: 'deploymentCostPerDayMicroUsd',
+    registered: 3_000_000,
+    guest: null,
+  },
+  {
+    key: 'ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD',
+    field: 'deploymentCostPerMonthMicroUsd',
+    registered: 30_000_000,
+    guest: null,
+  },
+];
+
+/** What a turn reserves before its first provider call (section 5.2). */
+export const DEFAULT_TURN_RESERVE_MICRO_USD = 20_000;
+
+/** Where the day and the month turn over (section 7). An IANA name. */
+export const DEFAULT_ALLOWANCE_TIMEZONE = 'UTC';
+
+/** True when `timezone` is an IANA name this runtime knows (section 11). */
+export function isTimeZone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function allowanceValidationSchema(): Record<string, Joi.Schema> {
+  const keys: Record<string, Joi.Schema> = {
+    ASSISTANT_TURN_RESERVE_MICRO_USD: Joi.number()
+      .integer()
+      .min(1)
+      .default(DEFAULT_TURN_RESERVE_MICRO_USD),
+    ASSISTANT_ALLOWANCE_TIMEZONE: Joi.string()
+      .custom((value: string, helpers) =>
+        isTimeZone(value) ? value : helpers.error('any.invalid')
+      )
+      .default(DEFAULT_ALLOWANCE_TIMEZONE),
+  };
+  for (const entry of ALLOWANCE_LIMIT_KEYS) {
+    keys[entry.key] = Joi.number().integer().min(1).default(entry.registered);
+    if (entry.guest !== null) {
+      keys[`${entry.key}_GUEST`] = Joi.number()
+        .integer()
+        .min(1)
+        .default(entry.guest);
+    }
+  }
+  return keys;
+}
 
 export const assistantValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3006),
@@ -132,28 +252,18 @@ export const assistantValidationSchema = Joi.object({
   GATEWAY_INTERNAL_URL: Joi.string().required(),
 
   /**
-   * Empty is a supported deployment, not a misconfiguration. See the file
-   * comment, and `OPTIONAL_EMPTY_KEYS` in provision-release.sh.
-   */
-  GEMINI_API_KEY: Joi.string().allow('').default(''),
-  GEMINI_BASE_URL: Joi.string().allow('').default(''),
-
-  /**
-   * The provider switch and the Claude keys (plan 0224, section 5).
+   * The Claude keys (plan 0224, section 5).
    *
    * Every one of them allows `''`, and empty means the shipped default. The
    * chart writes the effort and the thinking empty, and the slot script writes
    * all of them empty, so a `valid()` without `allow('')` would kill the service
-   * at boot on the ordinary configuration, the trap the transcription model's
-   * comment below describes.
+   * at boot on the ordinary configuration, the trap `TRANSCRIBER_URL`'s comment
+   * below describes.
    *
-   * `ANTHROPIC_API_KEY` may be empty by the rule `GEMINI_API_KEY` follows: with
-   * the switch on `claude` and no key, the turn answers 501 not_configured.
+   * An empty `ANTHROPIC_API_KEY` is a supported deployment, not a
+   * misconfiguration: every turn answers 501 not_configured. See the file
+   * comment, and `OPTIONAL_EMPTY_KEYS` in provision-release.sh.
    */
-  ASSISTANT_PROVIDER: Joi.string()
-    .valid(...ASSISTANT_PROVIDERS)
-    .allow('')
-    .default('gemini'),
   ANTHROPIC_API_KEY: Joi.string().allow('').default(''),
   ANTHROPIC_BASE_URL: Joi.string().allow('').default(''),
   ASSISTANT_CLAUDE_EFFORT: Joi.string()
@@ -165,30 +275,45 @@ export const assistantValidationSchema = Joi.object({
     .allow('')
     .default(DEFAULT_CLAUDE_THINKING),
 
-  /**
-   * The model that answers a turn. Empty means the provider's own default:
-   * {@link DEFAULT_GEMINI_MODEL} or {@link DEFAULT_CLAUDE_MODEL}. A literal
-   * default here would send a Gemini name to Claude the day the switch flips.
-   */
+  /** The model that answers a turn. Empty means {@link DEFAULT_CLAUDE_MODEL}. */
   ASSISTANT_MODEL: Joi.string().allow('').default(''),
 
   /**
-   * The model that transcribes (plan 0041, section 10). Always a Gemini model,
-   * whatever the provider (plan 0224, section 5).
-   *
-   * Its own key so a different model can do this job than answers the turn,
-   * without a code change. Whether they *should* differ is a quality question
-   * with no answer before there is usage, so the default is the turn's model and
-   * the key exists to make changing that an env edit.
-   *
-   * **`allow('')` is load bearing**, for the same reason `GEMINI_API_KEY` has it:
-   * empty is the documented value meaning "whatever answers the turn", and it is
-   * what the chart, both compose files and both slot scripts all write. Without
-   * this the service dies at boot on a perfectly ordinary configuration, and it
-   * dies alone — the gateway stays up and answers 500s, which is a slow thing to
-   * diagnose from outside.
+   * The moderation pass after each turn (plan 0236, section 4). All three allow
+   * `''`, which means the shipped default, because the chart writes them empty.
    */
-  ASSISTANT_TRANSCRIPTION_MODEL: Joi.string().allow('').default(''),
+  ASSISTANT_MODERATION: Joi.string()
+    .valid(...MODERATION_SWITCH)
+    .allow('')
+    .default('on'),
+  ASSISTANT_MODERATION_MODEL: Joi.string().allow('').default(''),
+  ASSISTANT_EMERGENCY_NUMBER: Joi.string().allow('').default(''),
+
+  /**
+   * Where the deployment's own transcriber listens (plan 0235, section 7).
+   *
+   * Empty is a supported deployment, like an empty key: the assistant answers
+   * typed turns and cannot hear, so the voice route answers 501 and a voice
+   * comment settles `UNAVAILABLE`. The chart writes it exactly when it runs the
+   * transcriber, so this one value is the switch for voice, and `hears` in the
+   * capabilities follows it (plan 0231, section 3).
+   *
+   * **`allow('')` is load bearing**: empty is what the chart writes in every
+   * cluster without a transcriber, and what compose and a slot without `--voice`
+   * write. Without it the service dies at boot on an ordinary configuration.
+   */
+  TRANSCRIBER_URL: Joi.string().allow('').default(''),
+  /**
+   * How long a transcription may take, waiting in the transcriber's queue
+   * included (section 6.2). A spoken turn allows one running comment ahead of it
+   * plus its own clip on the fast model; a voice comment allows a full queue of
+   * turns and then ninety seconds on the large one.
+   */
+  TRANSCRIBER_TURN_TIMEOUT_MS: Joi.number().integer().min(1000).default(45000),
+  TRANSCRIBER_COMMENT_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .default(110000),
   /** Section 5's byte cap, applied on arrival and again by the gateway. */
   ASSISTANT_AUDIO_MAX_BYTES: Joi.number()
     .integer()
@@ -244,26 +369,81 @@ export const assistantValidationSchema = Joi.object({
    */
   ASSISTANT_TURN_TIMEOUT_MS: Joi.number().integer().min(5000).default(60000),
 
+  /**
+   * Each person's allowance (plan 0234, section 7): positive integers, no
+   * "off". A self hoster who wants no practical limit sets a large number.
+   * Core receives none of them; each reserve carries the limits that apply.
+   */
+  ...allowanceValidationSchema(),
+
   ...telemetryValidationSchema,
 });
+
+/** The allowance, resolved from the keys of {@link ALLOWANCE_LIMIT_KEYS}. */
+export interface AllowanceConfig {
+  registered: AllowanceLimits;
+  /** The limits of a `TEMPORARY` person, a guest. */
+  guest: AllowanceLimits;
+  /** Integer micro dollars a turn reserves (section 5.2). */
+  turnReserveMicroUsd: number;
+  /** An IANA name. The day and the month turn over at midnight there. */
+  timezone: string;
+}
+
+/**
+ * The allowance from an environment. Exported for its spec; an absent key is
+ * its default, as Joi has already filled in at boot.
+ */
+export function resolveAllowance(
+  env: Record<string, string | undefined>
+): AllowanceConfig {
+  const registered = {} as AllowanceLimits;
+  const guest = {} as AllowanceLimits;
+  for (const entry of ALLOWANCE_LIMIT_KEYS) {
+    const value = Number(env[entry.key] ?? entry.registered);
+    registered[entry.field] = value;
+    guest[entry.field] =
+      entry.guest === null
+        ? value
+        : Number(env[`${entry.key}_GUEST`] ?? entry.guest);
+  }
+  return {
+    registered,
+    guest,
+    turnReserveMicroUsd: Number(
+      env['ASSISTANT_TURN_RESERVE_MICRO_USD'] ?? DEFAULT_TURN_RESERVE_MICRO_USD
+    ),
+    timezone: trimmed(
+      env['ASSISTANT_ALLOWANCE_TIMEZONE'],
+      DEFAULT_ALLOWANCE_TIMEZONE
+    ),
+  };
+}
+
+/** The shipped defaults, for specs that build a config by hand. */
+export const DEFAULT_ALLOWANCE: AllowanceConfig = resolveAllowance({});
 
 export interface AssistantConfig {
   port: number;
   natsUrl: string;
   logLevel: (typeof LOG_LEVELS)[number];
   gatewayInternalUrl: string;
-  geminiApiKey: string;
-  geminiBaseUrl: string;
-  /** Which provider answers a turn. Gemini hears in both cases (plan 0224). */
-  provider: AssistantProviderName;
   anthropicApiKey: string;
   anthropicBaseUrl: string;
   claudeEffort: (typeof CLAUDE_EFFORTS)[number];
   claudeThinking: (typeof CLAUDE_THINKING_MODES)[number];
-  /** The model that answers a turn, already resolved for the provider. */
+  /** The model that answers a turn, already resolved to the default. */
   model: string;
-  /** The Gemini model that transcribes. See {@link resolveAssistantModels}. */
-  transcriptionModel: string;
+  /** Whether each reply is checked before it leaves (plan 0236, section 4). */
+  moderation: boolean;
+  /** The model that checks it, already resolved to the default. */
+  moderationModel: string;
+  /** The number the distress sentence names (plan 0236, section 3.2). */
+  emergencyNumber: string;
+  /** The transcriber's base url, or empty where none runs (plan 0235). */
+  transcriberUrl: string;
+  transcriberTurnTimeoutMs: number;
+  transcriberCommentTimeoutMs: number;
   /** The byte cap on a recording, before base64 (plan 0041). */
   audioMaxBytes: number;
   /** The containers this service accepts, already split and lowercased. */
@@ -277,6 +457,8 @@ export interface AssistantConfig {
   providerTimeoutMs: number;
   /** The ceiling on one whole turn, after which the loop stops rather than doing more. */
   turnTimeoutMs: number;
+  /** Each person's allowance (plan 0234). */
+  allowance: AllowanceConfig;
 }
 
 function trimmed(raw: string | undefined, fallback: string): string {
@@ -285,32 +467,22 @@ function trimmed(raw: string | undefined, fallback: string): string {
 }
 
 /**
- * The two model names, from the raw keys and the provider (plan 0224, section 5).
+ * The model names, from the raw keys (plan 0224, section 5; plan 0236).
  *
- * An empty `ASSISTANT_MODEL` is the provider's own default. An empty
- * `ASSISTANT_TRANSCRIPTION_MODEL` follows the turn's model when Gemini answers,
- * so the two stay together by default and an operator who changes one has
- * changed one. When Claude answers it falls back to {@link DEFAULT_GEMINI_MODEL}
- * instead, because the transcription goes to the Gemini endpoint and a Claude
- * name there is a 404 on every spoken turn.
+ * An empty `ASSISTANT_MODEL` is {@link DEFAULT_CLAUDE_MODEL}, and an empty
+ * `ASSISTANT_MODERATION_MODEL` is {@link DEFAULT_MODERATION_MODEL}. There is no
+ * name for transcription: no model provider hears since plan 0235, and the
+ * transcriber names its own models.
  *
  * Exported for its own spec.
  */
 export function resolveAssistantModels(env: {
-  provider: AssistantProviderName;
   model?: string;
-  transcriptionModel?: string;
-}): { model: string; transcriptionModel: string } {
-  const model = trimmed(
-    env.model,
-    env.provider === 'claude' ? DEFAULT_CLAUDE_MODEL : DEFAULT_GEMINI_MODEL
-  );
+  moderationModel?: string;
+}): { model: string; moderationModel: string } {
   return {
-    model,
-    transcriptionModel: trimmed(
-      env.transcriptionModel,
-      env.provider === 'claude' ? DEFAULT_GEMINI_MODEL : model
-    ),
+    model: trimmed(env.model, DEFAULT_CLAUDE_MODEL),
+    moderationModel: trimmed(env.moderationModel, DEFAULT_MODERATION_MODEL),
   };
 }
 
@@ -342,10 +514,6 @@ export function normalizeMimeType(raw: string): string {
 export const assistantConfiguration = registerAs(
   'assistant',
   (): AssistantConfig => {
-    const provider = trimmed(
-      process.env.ASSISTANT_PROVIDER,
-      'gemini'
-    ) as AssistantProviderName;
     return {
       port: Number(process.env.PORT ?? 3006),
       natsUrl: process.env.NATS_URL as string,
@@ -357,12 +525,6 @@ export const assistantConfiguration = registerAs(
         /\/+$/,
         ''
       ),
-      geminiApiKey: (process.env.GEMINI_API_KEY ?? '').trim(),
-      geminiBaseUrl: trimmed(
-        process.env.GEMINI_BASE_URL,
-        DEFAULT_GEMINI_BASE_URL
-      ).replace(/\/+$/, ''),
-      provider,
       anthropicApiKey: (process.env.ANTHROPIC_API_KEY ?? '').trim(),
       anthropicBaseUrl: trimmed(
         process.env.ANTHROPIC_BASE_URL,
@@ -377,10 +539,23 @@ export const assistantConfiguration = registerAs(
         DEFAULT_CLAUDE_THINKING
       ) as AssistantConfig['claudeThinking'],
       ...resolveAssistantModels({
-        provider,
         model: process.env.ASSISTANT_MODEL,
-        transcriptionModel: process.env.ASSISTANT_TRANSCRIPTION_MODEL,
+        moderationModel: process.env.ASSISTANT_MODERATION_MODEL,
       }),
+      moderation: trimmed(process.env.ASSISTANT_MODERATION, 'on') !== 'off',
+      emergencyNumber: trimmed(
+        process.env.ASSISTANT_EMERGENCY_NUMBER,
+        DEFAULT_EMERGENCY_NUMBER
+      ),
+      transcriberUrl: (process.env.TRANSCRIBER_URL ?? '')
+        .trim()
+        .replace(/\/+$/, ''),
+      transcriberTurnTimeoutMs: Number(
+        process.env.TRANSCRIBER_TURN_TIMEOUT_MS ?? 45000
+      ),
+      transcriberCommentTimeoutMs: Number(
+        process.env.TRANSCRIBER_COMMENT_TIMEOUT_MS ?? 110000
+      ),
       audioMaxBytes: Number(
         process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
       ),
@@ -402,6 +577,7 @@ export const assistantConfiguration = registerAs(
         process.env.ASSISTANT_PROVIDER_TIMEOUT_MS ?? 30000
       ),
       turnTimeoutMs: Number(process.env.ASSISTANT_TURN_TIMEOUT_MS ?? 60000),
+      allowance: resolveAllowance(process.env),
     };
   }
 );

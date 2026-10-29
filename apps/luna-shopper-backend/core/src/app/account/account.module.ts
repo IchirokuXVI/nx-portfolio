@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BasketCoverageModule } from '../baskets/basket-coverage.module';
+import { BasketsModule } from '../baskets/baskets.module';
 import { Zone, ZoneMembership } from '../entities';
 import { IdempotencyModule } from '../events/idempotency.module';
-import { BasketsModule } from '../baskets/baskets.module';
 import { ZonesModule } from '../zones/zones.module';
+import { AccountDeletionConsumer } from './account-deletion.consumer';
 import { AccountDeletionService } from './account-deletion.service';
 import { AccountController } from './reconciliation.controller';
 import { UsernamePropagationService } from './username-propagation.service';
@@ -35,6 +36,9 @@ import { ZoneReaperService } from './zone-reaper.service';
   controllers: [AccountController],
   providers: [
     AccountDeletionService,
+    // The durable consumer of the deletion stream (plan 0232, section 5),
+    // started by main.ts and by nothing that only boots the module.
+    AccountDeletionConsumer,
     UsernamePropagationService,
     ZoneReaperService,
   ],

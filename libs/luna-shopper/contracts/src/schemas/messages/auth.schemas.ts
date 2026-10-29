@@ -39,9 +39,14 @@ export const AUTH_SCHEMA_IDS = {
   recoverySignInResult: schemaId('auth/RecoverySignInResult'),
   refreshRequest: schemaId('msg/auth.refresh/request'),
   upgradeRequest: schemaId('msg/auth.upgrade/request'),
-  googleLoginRequest: schemaId('msg/auth.googleLogin/request'),
   oAuthStatePayload: schemaId('auth/OAuthStatePayload'),
   mintOAuthStateResult: schemaId('auth/MintOAuthStateResult'),
+  // The callback stages and the app exchanges (plan 0230).
+  stageGoogleSignInRequest: schemaId('msg/auth.stageGoogleSignIn/request'),
+  stageGoogleSignInResult: schemaId('auth/StageGoogleSignInResult'),
+  exchangeGoogleSignInRequest: schemaId(
+    'msg/auth.exchangeGoogleSignIn/request'
+  ),
   // The basket scoped socket token (plan 0051, section 9): the one token auth
   // signs that names no user.
   mintParticipantTokenRequest: schemaId('auth/MintParticipantTokenRequest'),
@@ -57,7 +62,19 @@ export const AUTH_SCHEMA_IDS = {
   getUsernamesRequest: schemaId('msg/auth.getUsernames/request'),
   userUsernameView: schemaId('auth/UserUsernameView'),
   getUsernamesResult: schemaId('msg/auth.getUsernames/response'),
+  // The Terms accepted from the prompt (plan 0231, section 4.4).
+  acceptTermsRequest: schemaId('msg/auth.acceptTerms/request'),
+  termsAcceptanceView: schemaId('auth/TermsAcceptanceView'),
 } as const;
+
+/**
+ * The Terms version a client drew beside the action that creates an account
+ * (plan 0231, section 4.2). Bounded rather than patterned: the version is
+ * compared for equality by auth, and a regex here would only be sampled.
+ */
+export const ACCEPTED_TERMS_VERSION_MAX_LENGTH = 64;
+const termsVersion = () =>
+  nonEmptyString({ maxLength: ACCEPTED_TERMS_VERSION_MAX_LENGTH });
 
 const authTokens = object(
   AUTH_SCHEMA_IDS.authTokens,
@@ -107,7 +124,7 @@ const googleProfile = object(
 
 const createTemporaryUserRequest = object(
   AUTH_SCHEMA_IDS.createTemporaryUserRequest,
-  {},
+  { acceptedTermsVersion: termsVersion() },
   []
 );
 
@@ -118,6 +135,7 @@ const registerRequest = object(
     password: nonEmptyString(),
     displayName: string(),
     locale: string(),
+    acceptedTermsVersion: termsVersion(),
   },
   ['email', 'password']
 );
@@ -231,33 +249,65 @@ const upgradeRequest = object(
     displayName: string(),
     google: ref(AUTH_SCHEMA_IDS.googleProfile),
     locale: string(),
+    acceptedTermsVersion: termsVersion(),
   },
   ['userId']
 );
 
-const googleLoginRequest = object(
-  AUTH_SCHEMA_IDS.googleLoginRequest,
-  {
-    providerUserId: nonEmptyString(),
-    email: string({ format: 'email' }),
-    displayName: string(),
-    linkUserId: string(),
-  },
-  ['providerUserId']
-);
+/**
+ * A PKCE challenge or verifier (plan 0230, section 2). Its exact shape, 43
+ * base64url characters, is checked by the gateway DTO and again by auth, so the
+ * schema states only that it is present.
+ */
+const pkceValue = () => nonEmptyString();
 
 /**
  * What a state carries, and the mint request that fills it (plan 0023, section
  * 4.1). One schema for both: the request is the payload, and writing it twice
  * would let the two drift into disagreeing about what a state may hold.
  *
- * Nothing is required. A state with no `userId` is the genuine sign in from
- * scratch, not a malformed one.
+ * Only the challenge is required (plan 0230, section 2). A state with no
+ * `userId` is the genuine sign in from scratch, not a malformed one.
  */
 const oAuthStatePayload = object(
   AUTH_SCHEMA_IDS.oAuthStatePayload,
-  { userId: string(), locale: string() },
-  []
+  {
+    userId: string(),
+    locale: string(),
+    codeChallenge: pkceValue(),
+    acceptedTermsVersion: termsVersion(),
+  },
+  ['codeChallenge']
+);
+
+const stageGoogleSignInRequest = object(
+  AUTH_SCHEMA_IDS.stageGoogleSignInRequest,
+  {
+    providerUserId: nonEmptyString(),
+    email: string({ format: 'email' }),
+    displayName: string(),
+    linkUserId: string(),
+    codeChallenge: pkceValue(),
+    locale: string(),
+    acceptedTermsVersion: termsVersion(),
+  },
+  ['providerUserId', 'codeChallenge']
+);
+
+const stageGoogleSignInResult = object(
+  AUTH_SCHEMA_IDS.stageGoogleSignInResult,
+  { code: nonEmptyString() },
+  ['code']
+);
+
+const exchangeGoogleSignInRequest = object(
+  AUTH_SCHEMA_IDS.exchangeGoogleSignInRequest,
+  {
+    code: nonEmptyString(),
+    codeVerifier: pkceValue(),
+    callerUserId: string(),
+  },
+  ['code', 'codeVerifier']
 );
 
 const mintOAuthStateResult = object(
@@ -307,7 +357,7 @@ const getProfileRequest = object(
 /**
  * The profile's fields, apart from the schema that publishes them, so that the
  * view the gateway composes on top of it (plan 0145, section 2) is built from
- * this map rather than from a second copy of these six lines. Two copies would
+ * this map rather than from a second copy of these lines. Two copies would
  * be two things to keep in step, and the one that drifts is the documented one.
  */
 export const USER_PROFILE_VIEW_PROPERTIES: Record<string, JsonSchema> = {
@@ -317,6 +367,9 @@ export const USER_PROFILE_VIEW_PROPERTIES: Record<string, JsonSchema> = {
   email: nullableString(),
   emailVerified: boolean(),
   displayName: nullableString(),
+  // The newest accepted Terms version and when (plan 0231, section 4.4).
+  termsAcceptedVersion: nullableString(),
+  termsAcceptedAt: nullableString(),
 };
 
 /** The names of {@link USER_PROFILE_VIEW_PROPERTIES}, every one of them required. */
@@ -366,6 +419,18 @@ const getUsernamesResult: JsonSchema = {
   ...array(ref(AUTH_SCHEMA_IDS.userUsernameView)),
 };
 
+const acceptTermsRequest = object(
+  AUTH_SCHEMA_IDS.acceptTermsRequest,
+  { userId: nonEmptyString(), version: termsVersion() },
+  ['userId', 'version']
+);
+
+const termsAcceptanceView = object(
+  AUTH_SCHEMA_IDS.termsAcceptanceView,
+  { version: nonEmptyString(), acceptedAt: nonEmptyString() },
+  ['version', 'acceptedAt']
+);
+
 export const authSchemas: JsonSchema[] = [
   authTokens,
   accessTokenClaims,
@@ -382,10 +447,12 @@ export const authSchemas: JsonSchema[] = [
   recoverySignInResult,
   refreshRequest,
   upgradeRequest,
-  googleLoginRequest,
   oAuthStatePayload,
   mintOAuthStateResult,
   consumeOAuthStateRequest,
+  stageGoogleSignInRequest,
+  stageGoogleSignInResult,
+  exchangeGoogleSignInRequest,
   mintParticipantTokenRequest,
   mintParticipantTokenResult,
   setUsernameRequest,
@@ -396,6 +463,8 @@ export const authSchemas: JsonSchema[] = [
   getUsernamesRequest,
   userUsernameView,
   getUsernamesResult,
+  acceptTermsRequest,
+  termsAcceptanceView,
 ];
 
 export const authMessageContracts: Record<
@@ -445,10 +514,6 @@ export const authMessageContracts: Record<
     request: AUTH_SCHEMA_IDS.upgradeRequest,
     response: AUTH_SCHEMA_IDS.authTokens,
   },
-  [AUTH_PATTERNS.googleLogin]: {
-    request: AUTH_SCHEMA_IDS.googleLoginRequest,
-    response: AUTH_SCHEMA_IDS.authTokens,
-  },
   [AUTH_PATTERNS.mintOAuthState]: {
     // The payload is the request: what the gateway asks to have stored is
     // exactly what the callback reads back out.
@@ -458,6 +523,14 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.consumeOAuthState]: {
     request: AUTH_SCHEMA_IDS.consumeOAuthStateRequest,
     response: AUTH_SCHEMA_IDS.oAuthStatePayload,
+  },
+  [AUTH_PATTERNS.stageGoogleSignIn]: {
+    request: AUTH_SCHEMA_IDS.stageGoogleSignInRequest,
+    response: AUTH_SCHEMA_IDS.stageGoogleSignInResult,
+  },
+  [AUTH_PATTERNS.exchangeGoogleSignIn]: {
+    request: AUTH_SCHEMA_IDS.exchangeGoogleSignInRequest,
+    response: AUTH_SCHEMA_IDS.authTokens,
   },
   [AUTH_PATTERNS.setUsername]: {
     request: AUTH_SCHEMA_IDS.setUsernameRequest,
@@ -478,5 +551,9 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.mintParticipantToken]: {
     request: AUTH_SCHEMA_IDS.mintParticipantTokenRequest,
     response: AUTH_SCHEMA_IDS.mintParticipantTokenResult,
+  },
+  [AUTH_PATTERNS.acceptTerms]: {
+    request: AUTH_SCHEMA_IDS.acceptTermsRequest,
+    response: AUTH_SCHEMA_IDS.termsAcceptanceView,
   },
 };

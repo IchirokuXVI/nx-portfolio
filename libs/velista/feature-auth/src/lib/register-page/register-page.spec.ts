@@ -1,28 +1,52 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
   fakeAuthService,
+  fakeOperatorSettingsStore,
   GatewayError,
+  GoogleSignIn,
+  MEMORY_OPERATOR_SETTINGS,
+  NetworkError,
   provideAccountNotice,
   provideFakeAuthService,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   type FakeAuthService,
   type FakeIdentity,
+  type FakeOperatorSettingsStore,
 } from '@portfolio/velista/data-access';
-import { provideVelistaTesting } from '@portfolio/velista/platform';
+import type { OperatorSettings } from '@portfolio/velista/models';
+import {
+  APP_RUNTIME,
+  provideVelistaTesting,
+  type AppRuntime,
+} from '@portfolio/velista/platform';
+import { LegalLinks } from '@portfolio/velista/ui';
+import { AccountForm } from '../account-form/account-form';
 import { RegisterPage } from './register-page';
 
 interface Options {
   readonly auth?: FakeAuthService;
   readonly identity?: FakeIdentity;
+  readonly google?: { readonly start: jest.Mock };
+  readonly runtime?: AppRuntime;
+  /** The operator's settings; null for a store that has not answered. */
+  readonly settings?: OperatorSettings | null;
 }
 
 async function render(options: Options = {}) {
   TestBed.resetTestingModule();
 
   const auth = options.auth ?? fakeAuthService();
+  const google = options.google ?? {
+    start: jest.fn().mockResolvedValue(undefined),
+  };
+  const settings: FakeOperatorSettingsStore = fakeOperatorSettingsStore(
+    options.settings === undefined ? MEMORY_OPERATOR_SETTINGS : options.settings
+  );
 
   await TestBed.configureTestingModule({
     imports: [RegisterPage, RokuTranslatorTestingModule.forTesting()],
@@ -32,6 +56,9 @@ async function render(options: Options = {}) {
       provideFakeAuthService(auth),
       provideFakeSessionStore(options.identity ?? 'anonymous'),
       provideAccountNotice(),
+      { provide: GoogleSignIn, useValue: google },
+      { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
+      provideFakeOperatorSettingsStore(settings),
     ],
   }).compileComponents();
 
@@ -42,7 +69,20 @@ async function render(options: Options = {}) {
   const fixture = TestBed.createComponent(RegisterPage);
   fixture.detectChanges();
 
-  return { fixture, auth, router, notice: TestBed.inject(AccountNotice) };
+  return {
+    fixture,
+    auth,
+    router,
+    google,
+    settings,
+    notice: TestBed.inject(AccountNotice),
+  };
+}
+
+/** The form register shares with upgrade (velista 0173), which holds the fields. */
+function form(fixture: ComponentFixture<RegisterPage>): AccountForm {
+  return fixture.debugElement.query(By.directive(AccountForm))
+    .componentInstance as AccountForm;
 }
 
 /**
@@ -56,11 +96,13 @@ function fill(
   fixture: ComponentFixture<RegisterPage>,
   email: string,
   password: string,
-  confirmPassword: string = password
+  confirmPassword: string = password,
+  accepted = true
 ): void {
-  fixture.componentInstance.email.set(email);
-  fixture.componentInstance.password.set(password);
-  fixture.componentInstance.confirmPassword.set(confirmPassword);
+  form(fixture).email.set(email);
+  form(fixture).password.set(password);
+  form(fixture).confirmPassword.set(confirmPassword);
+  form(fixture).accepted.set(accepted);
   fixture.detectChanges();
 }
 
@@ -85,7 +127,7 @@ describe('RegisterPage', () => {
       const { fixture } = await render();
 
       const inputs = (fixture.nativeElement as HTMLElement).querySelectorAll(
-        'input'
+        'input:not([type="checkbox"])'
       );
       expect(inputs).toHaveLength(3);
       expect(query(fixture, 'input[type="email"]')).not.toBeNull();
@@ -110,7 +152,7 @@ describe('RegisterPage', () => {
 
       fill(fixture, 'marta@example.com', 'password123', '');
 
-      expect(fixture.componentInstance.canSubmit()).toBe(false);
+      expect(form(fixture).canSubmit()).toBe(false);
     });
 
     it('states the password minimum before it is broken', async () => {
@@ -193,7 +235,7 @@ describe('RegisterPage', () => {
       submit(fixture);
       await fixture.whenStable();
 
-      expect(fixture.componentInstance.error()).toEqual({
+      expect(form(fixture).shown()).toEqual({
         key: 'auth.error.passwordMismatch',
         placement: 'password',
       });
@@ -235,7 +277,7 @@ describe('RegisterPage', () => {
       expect(auth.calls).toEqual([
         { method: 'register', email: 'marta@example.com' },
       ]);
-      expect(fixture.componentInstance.error()).toBeNull();
+      expect(form(fixture).shown()).toBeNull();
     });
   });
 
@@ -326,7 +368,7 @@ describe('RegisterPage', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.error()).toEqual({
+      expect(form(fixture).shown()).toEqual({
         key: 'auth.error.badEmail',
         placement: 'email',
       });
@@ -349,7 +391,7 @@ describe('RegisterPage', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(fixture.componentInstance.error()).toEqual({
+      expect(form(fixture).shown()).toEqual({
         key: 'auth.error.shortPassword',
         placement: 'password',
       });
@@ -419,7 +461,7 @@ describe('RegisterPage', () => {
       submit(fixture);
       await fixture.whenStable();
 
-      expect(fixture.componentInstance.error()).toEqual({
+      expect(form(fixture).shown()).toEqual({
         key: 'auth.error.shortPassword',
         placement: 'password',
       });
@@ -443,28 +485,275 @@ describe('RegisterPage', () => {
       submit(fixture);
       await fixture.whenStable();
 
-      expect(fixture.componentInstance.error()).toEqual({
+      expect(form(fixture).shown()).toEqual({
         key: 'auth.error.badEmail',
         placement: 'email',
       });
     });
   });
 
-  describe('Google', () => {
-    it('is not rendered at all for a guest', async () => {
+  describe('Google (velista 0171)', () => {
+    it('starts the sign in, which sends the document to the gateway', async () => {
+      const { fixture, google, router } = await render();
+
+      (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+
+      expect(google.start).toHaveBeenCalledTimes(1);
+      // The line under the button names the terms, so their version goes with it
+      // (velista 0173).
+      expect(google.start).toHaveBeenCalledWith({
+        acceptedTermsVersion: MEMORY_OPERATOR_SETTINGS.terms.version,
+      });
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('starts once however many times it is tapped while starting', async () => {
+      const { fixture, google } = await render({
+        google: { start: jest.fn(() => new Promise<void>(() => undefined)) },
+      });
+      const button = query(
+        fixture,
+        'lib-google-option button'
+      ) as HTMLButtonElement;
+
+      button.click();
+      button.click();
+      fixture.detectChanges();
+
+      expect(google.start).toHaveBeenCalledTimes(1);
+      expect(button.getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('says a refused start beside the button, and leaves the fields alone', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'not_configured',
+              status: 503,
+              correlationId: 'c1',
+            })
+          ),
+        },
+      });
+
+      (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'entry.error.failed'
+      );
+      expect(form(fixture).shown()).toBeNull();
+      expect(fixture.componentInstance.googleStarting()).toBe(false);
+      const message = query(fixture, '#register-google-error');
+      expect(message).not.toBeNull();
+      expect(
+        query(fixture, 'lib-google-option button')?.getAttribute(
+          'aria-describedby'
+        )
+      ).toBe('register-google-error');
+    });
+
+    it('names a support session as the reason it was refused', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'impersonation_not_allowed',
+              status: 403,
+              correlationId: 'c1',
+            })
+          ),
+        },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'support.refused'
+      );
+    });
+
+    it('answers a lost connection with the general sentence', async () => {
+      const { fixture } = await render({
+        google: {
+          start: jest
+            .fn()
+            .mockRejectedValue(new NetworkError('c1', 'auth.google')),
+        },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleError()?.key).toBe(
+        'entry.error.failed'
+      );
+    });
+
+    /**
+     * Backend 0230 links a guest in place, so the groups a guest holds stay and there is
+     * no longer a reason to turn one away.
+     */
+    it('is offered to a guest', async () => {
       const { fixture } = await render({ identity: 'TEMPORARY' });
+
+      expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    it('is offered to somebody with no account', async () => {
+      const { fixture } = await render({ identity: 'anonymous' });
+
+      expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    /** Google refuses to sign anybody in from an embedded WebView (velista 0166). */
+    it('is not drawn at all in the native shell, divider included', async () => {
+      const { fixture } = await render({ runtime: 'native' });
+
+      expect(query(fixture, 'lib-google-option')).toBeNull();
+      expect(query(fixture, '.divider')).toBeNull();
+    });
+  });
+
+  it('links the privacy policy and the terms at its foot (velista 0172)', async () => {
+    const { fixture } = await render();
+
+    const found = fixture.debugElement.query(By.directive(LegalLinks));
+    expect(found).not.toBeNull();
+    const links = found.componentInstance as LegalLinks;
+    expect(links.privacyUrl()).toMatch(/\/privacy$/);
+    expect(links.termsUrl()).toMatch(/\/terms$/);
+  });
+
+  /** Velista 0173: the terms, accepted with a box, and their version sent. */
+  describe('the terms', () => {
+    const version = MEMORY_OPERATOR_SETTINGS.terms.version;
+
+    it('sends the version of the terms the box was ticked for', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.termsVersions).toEqual([version]);
+    });
+
+    it('answers a press with the box clear under the box, and sends nothing', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password123', false);
+      submit(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(auth.calls).toEqual([]);
+      const box = query(fixture, '#register-terms');
+      expect(box?.getAttribute('aria-invalid')).toBe('true');
+      expect(box?.getAttribute('aria-describedby')).toBe(
+        'register-terms-error'
+      );
+      expect(query(fixture, '#register-terms-error')?.textContent).toContain(
+        'legal.accept.unticked'
+      );
+      expect(document.activeElement?.id).toBe('register-terms');
+      // Not a condition on the button (plan 0009 section 5.5, plan 0160).
+      expect((query(fixture, '.primary') as HTMLButtonElement).disabled).toBe(
+        false
+      );
+    });
+
+    it('reads the settings again on a stale version, and clears the box', async () => {
+      const stale = new GatewayError({
+        code: 'terms_version_stale',
+        status: 409,
+        correlationId: 'c1',
+        details: { currentVersion: version + '+2026-12-01' },
+      });
+      const { fixture, settings } = await render({
+        auth: fakeAuthService({ rejectWith: { register: stale } }),
+      });
+
+      fill(fixture, 'marta@example.com', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(settings.reloads()).toBe(1);
+      expect(form(fixture).accepted()).toBe(false);
+      expect(query(fixture, '#register-terms-error')?.textContent).toContain(
+        'legal.accept.stale'
+      );
+    });
+
+    it('links the privacy policy under the box, outside its label', async () => {
+      const { fixture } = await render();
+
+      expect(query(fixture, '.privacy-line')).not.toBeNull();
+      expect(query(fixture, 'label .privacy-line')).toBeNull();
+      expect(form(fixture).privacyUrl()).toBe(
+        '/en/auth/register/sheet/privacy'
+      );
+      expect(form(fixture).termsUrl()).toBe('/en/auth/register/sheet/terms');
+    });
+
+    it('draws no box and sends no version when the operator published nothing', async () => {
+      const { fixture, auth, google } = await render({
+        settings: { ...MEMORY_OPERATOR_SETTINGS, published: false },
+      });
+
+      expect(query(fixture, '#register-terms')).toBeNull();
+      expect(query(fixture, '.terms-line')).toBeNull();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password123', false);
+      submit(fixture);
+      await fixture.whenStable();
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(auth.termsVersions).toEqual([null]);
+      expect(google.start).toHaveBeenCalledWith({ acceptedTermsVersion: null });
+    });
+
+    it('offers Google only where the deployment has it', async () => {
+      const { fixture } = await render({
+        settings: {
+          ...MEMORY_OPERATOR_SETTINGS,
+          features: {
+            ...MEMORY_OPERATOR_SETTINGS.features,
+            googleSignIn: false,
+          },
+        },
+      });
 
       expect(query(fixture, 'lib-google-option')).toBeNull();
     });
 
-    it('records rather than navigating', async () => {
-      const { fixture } = await render();
+    it('shows a stale version at the Google start beside the button, with the terms', async () => {
+      const { fixture, settings } = await render({
+        google: {
+          start: jest.fn().mockRejectedValue(
+            new GatewayError({
+              code: 'terms_version_stale',
+              status: 409,
+              correlationId: 'c1',
+              details: { currentVersion: 'next' },
+            })
+          ),
+        },
+      });
 
-      (query(fixture, 'lib-google-option button') as HTMLButtonElement).click();
+      await fixture.componentInstance.continueWithGoogle();
+      fixture.detectChanges();
 
-      expect(fixture.componentInstance.pendingRoutes()).toEqual([
-        'auth.google',
-      ]);
+      expect(fixture.componentInstance.googleError()).toEqual({
+        key: 'legal.accept.stale',
+        placement: 'terms',
+        link: 'terms',
+      });
+      expect(settings.reloads()).toBe(1);
+      expect(query(fixture, '#register-google-error')).not.toBeNull();
     });
   });
 });

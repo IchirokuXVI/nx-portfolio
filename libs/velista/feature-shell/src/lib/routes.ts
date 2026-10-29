@@ -20,6 +20,7 @@ import {
   CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
+  READ_BEFORE_TERMS,
   RENDERS_WHILE_CONNECTING,
   SHEET_SEGMENT,
   sheetFallGuard,
@@ -32,7 +33,6 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
-import { NotFoundPage } from './not-found-page/not-found-page';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -117,6 +117,29 @@ function sheet(route: Route): Route {
     path: about === '' ? SHEET_SEGMENT : `${SHEET_SEGMENT}/${about}`,
     canDeactivate: [sheetFallGuard],
   };
+}
+
+/**
+ * The privacy policy and the terms as sheets over a credential form (velista `0173`,
+ * target 6, D5), so nothing typed into the form is lost.
+ *
+ * Through `sheet()` like every other sheet, so each is addressed under the marker and
+ * carries the fall guard. The bar stays away, as on the form below. Each is a page to
+ * read before accepting, so the prompt of the terms stands down over it.
+ */
+function legalSheets(): Route[] {
+  return (['privacy', 'terms'] as const).map((document) =>
+    sheet({
+      path: document,
+      data: {
+        document,
+        [NAV_CHROME]: NO_NAV_CHROME,
+        [READ_BEFORE_TERMS]: true,
+      },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-legal').then((m) => m.LegalSheet),
+    })
+  );
 }
 
 /**
@@ -693,7 +716,9 @@ export const AppShellRoutes: Route[] = [
       defaultLocale: APP_DEFAULT_LOCALE,
     },
     // **Every route with a non empty path comes before the `''` front door**, and a
-    // spec fails the moment that stops being true (plan 0008, section 4.1.1).
+    // spec fails the moment that stops being true (plan 0008, section 4.1.1). The one
+    // route after it is the `**` catch-all, which has to be last for the opposite
+    // reason: it matches everything, the empty remainder included.
     //
     // Giving the front door children turned it from a terminal route into a prefix.
     // Its path is `''`, so it consumes no segments and then offers `zones/new` to
@@ -785,6 +810,8 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.SignInPage
               ),
+            // The two documents over the form (velista `0173`).
+            children: legalSheets(),
           },
           {
             path: 'auth/register',
@@ -795,6 +822,8 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.RegisterPage
               ),
+            // The two documents over the form (velista `0173`).
+            children: legalSheets(),
           },
           {
             path: 'auth/upgrade',
@@ -805,12 +834,16 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.UpgradePage
               ),
+            // The two documents over the form (velista `0173`).
+            children: legalSheets(),
           },
           {
             // Public, and it has to be: a confirmation link is opened wherever the mail
             // app happens to be, which is often a phone that has never signed in.
             path: 'auth/verify',
-            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            // A link somebody must be able to finish before accepting the terms
+            // (velista `0173`): the prompt stands down here.
+            data: { [NAV_CHROME]: NO_NAV_CHROME, [READ_BEFORE_TERMS]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.VerifyEmailPage
@@ -834,7 +867,7 @@ export const AppShellRoutes: Route[] = [
             // page decides who may do what from the server's answer, not a guard
             // (velista `0148`).
             path: 'auth/reset-password',
-            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            data: { [NAV_CHROME]: NO_NAV_CHROME, [READ_BEFORE_TERMS]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.ResetPasswordPage
@@ -844,7 +877,7 @@ export const AppShellRoutes: Route[] = [
             // Public, and inert until the gateway redirects here with the pair in the URL
             // fragment instead of answering JSON (section 5.6).
             path: 'auth/callback',
-            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            data: { [NAV_CHROME]: NO_NAV_CHROME, [READ_BEFORE_TERMS]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.AuthCallbackPage
@@ -871,6 +904,7 @@ export const AppShellRoutes: Route[] = [
             data: {
               [NAV_CHROME]: NO_NAV_CHROME,
               [WORKS_WITHOUT_BACKEND]: true,
+              [READ_BEFORE_TERMS]: true,
             },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
@@ -1269,6 +1303,45 @@ export const AppShellRoutes: Route[] = [
             loadComponent: () =>
               import('@portfolio/velista/feature-install').then(
                 (m) => m.InstallPage
+              ),
+          },
+          {
+            // The privacy policy (velista `0172`), filled from the operator's settings.
+            //
+            // **Public, and deliberately so**, like `install`: no `canActivate`, no
+            // `canMatch`. Google's review of the sign in consent screen opens this URL
+            // signed out, and plan `0173`'s acceptance prompt links here for somebody
+            // who has not accepted yet. `routes.spec.ts` asserts the absent guard,
+            // because an absent guard is easy to read as an oversight and this one is a
+            // decision. It still waits behind the startup gate (D1): every sentence
+            // about the controller comes from the backend.
+            path: 'privacy',
+            title: localizedTitle('legal.privacy.title'),
+            // Read before accepting the terms: the prompt of velista `0173` stands
+            // down here, and links here.
+            data: {
+              document: 'privacy',
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [READ_BEFORE_TERMS]: true,
+            },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-legal').then(
+                (m) => m.LegalPage
+              ),
+          },
+          {
+            // The terms of service (velista `0172`). Public for the same two reasons,
+            // and asserted the same way: the absent guard is a decision.
+            path: 'terms',
+            title: localizedTitle('legal.terms.title'),
+            data: {
+              document: 'terms',
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [READ_BEFORE_TERMS]: true,
+            },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-legal').then(
+                (m) => m.LegalPage
               ),
           },
           {
@@ -1801,7 +1874,8 @@ export const AppShellRoutes: Route[] = [
             // route. As a redirect it is checkable, and the signed in user still reaches
             // their groups in one navigation.
             //
-            // Last, and the only empty path here. See the note on `children` above.
+            // Last but for the catch-all, and the only empty path here. See the note on
+            // `children` above.
             path: '',
             canActivate: [anonymousOnlyGuard],
             // **The one route that draws before the backend has answered** (plan 0071
@@ -1828,26 +1902,59 @@ export const AppShellRoutes: Route[] = [
               ),
             children: [...entrySheetRoutes('landing')],
           },
+          {
+            /**
+             * This app's own 404, drawn in a language the visitor can read. It asks
+             * for a newer version before it says so (plan 0150), because a link from
+             * a newer release can name a route this build does not have.
+             *
+             * **Here, under `AppLayout`, and after the front door.** Any URL with a
+             * first segment matches `:locale`, so an unknown path belongs to this
+             * branch, and the guard then settles or redirects its locale. It used to
+             * fall out of the branch to the catch-all below, beside the layout rather
+             * than in it, and there no `--app-*` token resolves: the page drew with no
+             * theme, no fonts, no spacing and under the status bar. Inside the layout
+             * it is a page like any other, with no bar, like the front door.
+             *
+             * It also waits behind the layout's startup gate, like every page but the
+             * front door. On `too-old` the gate's update screen draws instead, and that
+             * screen is the newer version plan 0150 wanted the 404 to ask for.
+             *
+             * After `''` because a `**` matches the empty remainder too: declared
+             * earlier it would take `/en` from the front door. The front door is a
+             * prefix that consumes nothing, so a path its sheets do not claim falls
+             * through it to here.
+             *
+             * Lazy like every other page, so the initial payload does not carry it.
+             */
+            path: '**',
+            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('./not-found-page/not-found-page').then(
+                (m) => m.NotFoundPage
+              ),
+          },
         ],
       },
       {
         /**
          * **Load bearing, and not merely a 404.** The guard above only runs when
          * this parent route matches, and a parent with `children` matches only if
-         * one of them matches the remainder. With `:locale` as the only child, any
-         * URL without a locale segment failed to match the whole branch, Angular
-         * fell through to the shell's routes, and this app's guard, the one whose
-         * job is to *insert* the missing locale, never ran at all.
+         * one of them matches the remainder. `:locale` needs a segment, so without
+         * this a URL with none at all failed to match the whole branch, Angular fell
+         * through to the shell's routes, and this app's guard, the one whose job is
+         * to *insert* the missing locale, never ran at all.
          *
          * So the app claims every path below its mount and the guard settles the
-         * locale for all of them. Anything still here afterwards carries a
-         * supported canonical locale and simply is not a route, which is this
-         * app's own 404, drawn in a language the visitor can read. It asks for a
-         * newer version before it says so (plan 0150), because a link from a newer
-         * release can name a route this build does not have.
+         * locale for all of them. The guard always redirects a URL that arrives
+         * here, so this page is never drawn in practice: every unknown path that
+         * carries a locale is matched by the catch-all inside `:locale` above, which
+         * draws the same page inside the layout. A component is still required of a
+         * route with no children, and this is the honest one.
          */
         path: '**',
-        component: NotFoundPage,
+        loadComponent: () =>
+          import('./not-found-page/not-found-page').then((m) => m.NotFoundPage),
       },
     ],
   },

@@ -1,8 +1,20 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  AiTextProvider,
+  AllowanceLimit,
+  AllowancePeriod,
+  AllowancePurpose,
+  AllowanceReserveOutcome,
+  AllowanceScope,
   AssistantRole,
   ListResolutionBranch,
+  UserKind,
+  type AllowanceLimits,
+  type AllowanceRefusal,
+  type AssistantAllowanceRequest,
+  type AssistantAllowanceView,
+  type AssistantCapabilities,
   type AssistantMessage,
   type AssistantTranscribeRequest,
   type AssistantTranscribeResponse,
@@ -11,6 +23,7 @@ import {
   type AssistantVoiceRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  AllowanceReachedException,
   DEFAULT_LOCALE,
   ForbiddenException,
   getRequestContext,
@@ -20,6 +33,15 @@ import {
   ValidationException,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
+import {
+  AllowanceClient,
+  AllowanceUnavailableError,
+} from '../allowance/allowance.client';
+import {
+  worstOutputAtTypicalInput,
+  type TypicalWorstTurn,
+} from '../allowance/reserve-amount';
+import { TurnMeter } from '../allowance/turn-meter';
 import { normalizeMimeType, type AssistantConfig } from '../config/app-config';
 import {
   MODEL_PROVIDER,
@@ -32,8 +54,15 @@ import {
   type ModelUsage,
 } from '../provider/model-provider';
 import { ConcurrencyGate, TurnLimiter } from '../provider/turn-limiter';
+import { distressSentence } from './child-safety';
 import { GatewayApiClient } from './gateway-api.client';
 import { ChoiceCollector, ListLinkCollector } from './link-and-choices';
+import {
+  checkReply,
+  namesEmergencyNumber,
+  replacementFor,
+  type ModerationVerdict,
+} from './moderation';
 import { plainText } from './plain-text';
 import { buildSystemPrompt, namesZones } from './prompt';
 import {
@@ -97,29 +126,119 @@ export const RAN_OUT_OF_TIME =
 export const ANSWERED_WITHOUT_WORDS =
   'I did that, but lost the words for it. Have a look at the list to see what changed.';
 
+/**
+ * What a turn that ran no tools and has no words to show is answered with: an
+ * empty reply, a refusal, or a reply whose moderation could not run (plan 0236,
+ * section 4.2).
+ *
+ * English, for `NOTHING_HEARD`'s reason.
+ */
+export const GOT_STUCK =
+  'Sorry, I got stuck on that one. Could you say it a different way?';
+
+/**
+ * How long a person waits when a turn of theirs is already in flight (plan
+ * 0234, section 5.1). A person has one conversation, so the answer is the
+ * ordinary `rate_limited`, because waiting does fix it.
+ */
+export const TURN_IN_FLIGHT_RETRY_SECONDS = 5;
+
+/**
+ * How long a failed settle waits before its one retry (plan 0234, section
+ * 15, item 19): long enough for a core pod to come back from a blip, short
+ * enough that the person's answer is not held much longer.
+ */
+export const SETTLE_RETRY_MS = 1000;
+
+/**
+ * The length of a recording, estimated from its bytes as the length at 16
+ * kbit/s, rounded up (plan 0234, section 2.1). A browser records Opus at a
+ * higher rate than that, so the estimate counts more seconds than were spoken,
+ * which is the safe direction. Every reservation uses it, because it runs
+ * before anything is decoded; a settle uses the transcriber's own measure.
+ */
+export function estimateAudioSeconds(bytes: number): number {
+  return Math.ceil(bytes / 2000);
+}
+
+/** A reservation the assistant holds while it runs a call sequence. */
+interface Held {
+  id: string;
+  userId: string;
+  purpose: AllowancePurpose;
+  microUsd: number;
+}
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
   private readonly config: AssistantConfig;
   private readonly limiter: TurnLimiter;
   private readonly gate: ConcurrencyGate;
+  /**
+   * The worst output at the typical input, call by call (plan 0234, section
+   * 5.2): what a call that failed after it may have run is charged.
+   */
+  private readonly worst: TypicalWorstTurn;
 
   constructor(
     @Inject(ConfigService) configService: ConfigService,
     @Inject(MODEL_PROVIDER) private readonly provider: ModelProvider,
     private readonly contexts: TurnContextFactory,
-    private readonly api: GatewayApiClient
+    private readonly api: GatewayApiClient,
+    // Each person's allowance, kept in core (plan 0234).
+    private readonly allowance: AllowanceClient
   ) {
     this.config = configService.getOrThrow<AssistantConfig>('assistant');
     this.limiter = new TurnLimiter(this.config.turnsPerMinute);
     this.gate = new ConcurrencyGate(this.config.concurrency);
+    this.worst = worstOutputAtTypicalInput(this.config);
+  }
+
+  /**
+   * The caller's allowance (plan 0234, section 8.2), with the limits that
+   * apply to them and core's counts. It needs no provider key: a deployment
+   * with no key still has an allowance to show.
+   */
+  allowanceOf(
+    request: AssistantAllowanceRequest
+  ): Promise<AssistantAllowanceView> {
+    return this.allowance.read({
+      userId: request.userId,
+      limits: this.limitsFor(request.kind),
+      timezone: this.config.allowance.timezone,
+      turnReserveMicroUsd: this.config.allowance.turnReserveMicroUsd,
+    });
+  }
+
+  /**
+   * What this deployment's assistant can do (plan 0231, section 3), for the
+   * privacy policy the gateway publishes.
+   *
+   * Computed with exactly the checks that decide the 501s below, so the policy
+   * never describes an assistant that answers 501, nor hides one that answers:
+   * `answers` is {@link requireConfigured}'s test, and `hears` is the test
+   * {@link transcribe} applies. Since plan 0235 the hearing is the deployment's
+   * own transcriber, so `hears` is true exactly when `TRANSCRIBER_URL` is set and
+   * a turn can be answered.
+   */
+  capabilities(): AssistantCapabilities {
+    const answers = this.provider.configured;
+    return {
+      answers,
+      hears: answers && this.provider.transcriptionSupported,
+      // Anthropic is the only text provider since plan 0236.
+      textProvider: answers ? AiTextProvider.ANTHROPIC : null,
+    };
   }
 
   /**
    * Words out of a recording, and nothing else (plan 0041, section 3).
    *
-   * It shares the concurrency gate with {@link turn} and shares nothing else. In
-   * particular it does **not** take a turn from {@link TurnLimiter}: the two
+   * It does **not** pass through the provider concurrency gate (plan 0235,
+   * section 4): the transcriber is the queue, and holding a provider slot while
+   * waiting on a different machine would make a voice comment delay a typed
+   * turn. Nor does it take a turn from {@link TurnLimiter}: the two
    * callers of this are a spoken assistant turn, which takes its own turn from
    * that bucket a moment later, and a voice comment, which is not a turn at all
    * and would otherwise spend somebody's conversation quota on leaving a message.
@@ -140,19 +259,55 @@ export class AssistantService {
       );
     }
 
+    // The allowance fails closed (plan 0234, section 6): a recording with no
+    // author to count it against is refused, which the gateway settles FAILED
+    // and the comment stays playable.
+    if (!request.userId) {
+      throw new ValidationException(
+        'a transcription needs the userId of the comment author'
+      );
+    }
+
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    const audio = Buffer.from(request.audio, 'base64');
+    // Optional on the wire, so a gateway one release behind still works: it
+    // never sent a purpose and its only caller was a voice comment's, which
+    // a turn's model transcribes well enough until it catches up.
+    const purpose = request.purpose ?? 'turn';
+
+    // A voice comment's seconds, counted on its author (plan 0234, section
+    // 5.5). A transcription costs no money since plan 0235.
+    const estimate = estimateAudioSeconds(audio.byteLength);
+    const held = await this.reserve({
+      userId: request.userId,
+      kind: request.kind,
+      purpose: AllowancePurpose.TRANSCRIPTION,
+      audioSeconds: estimate,
+      microUsd: 0,
+      holdSeconds:
+        Math.ceil(
+          (purpose === 'comment'
+            ? this.config.transcriberCommentTimeoutMs
+            : this.config.transcriberTurnTimeoutMs) / 1000
+        ) + 60,
+    });
+    // The estimate until the transcriber measures the recording: a call that
+    // failed may still have used the transcriber's time.
+    let audioSeconds = estimate;
 
     try {
-      const text = await this.gate.run(() =>
-        this.provider.transcribe({
-          audio: Buffer.from(request.audio, 'base64'),
-          mimeType: request.mimeType,
-          locale: request.locale || locale,
-        })
-      );
-      return { text: text.trim() };
+      const heard = await this.provider.transcribe({
+        audio,
+        mimeType: request.mimeType,
+        locale: request.locale || locale,
+        purpose,
+      });
+      audioSeconds = measuredOr(estimate, heard.audioSeconds);
+      return { text: heard.text.trim() };
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
+        // A full queue refused the clip before it ran.
+        audioSeconds = 0;
         // Rule A5's answer, unchanged: a number of seconds in the problem body.
         // The caller of a voice comment does not count it down (the comment is
         // already saved and playable), but a spoken assistant turn does, and the
@@ -167,6 +322,8 @@ export class AssistantService {
         this.logger.warn(`assistant provider unavailable: ${error.message}`);
       }
       throw error;
+    } finally {
+      await this.settle(held, { turns: 0, audioSeconds }, new TurnMeter());
     }
   }
 
@@ -181,7 +338,26 @@ export class AssistantService {
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
     this.takeTurn(request.userId);
 
-    return this.answer(request, locale, startedAtMs);
+    // The allowance, before the first provider call (plan 0234, section 5.5),
+    // and settled in a `finally` around the whole call sequence.
+    const held = await this.reserve({
+      userId: request.userId,
+      kind: request.kind,
+      purpose: AllowancePurpose.TURN,
+      audioSeconds: 0,
+      microUsd: this.config.allowance.turnReserveMicroUsd,
+      holdSeconds: this.turnHoldSeconds(),
+    });
+    const meter = new TurnMeter();
+    try {
+      return await this.answer(request, locale, startedAtMs, meter);
+    } finally {
+      await this.settle(
+        held,
+        { turns: meter.billed ? 1 : 0, audioSeconds: 0 },
+        meter
+      );
+    }
   }
 
   /**
@@ -220,12 +396,75 @@ export class AssistantService {
 
     this.takeTurn(request.userId);
 
+    // One turn and the recording's seconds, held before the transcription
+    // (plan 0234, section 5.5). The estimate stands until the transcriber
+    // measures the recording.
+    const estimate = estimateAudioSeconds(audio.byteLength);
+    const held = await this.reserve({
+      userId: request.userId,
+      kind: request.kind,
+      purpose: AllowancePurpose.VOICE_TURN,
+      audioSeconds: estimate,
+      microUsd: this.config.allowance.turnReserveMicroUsd,
+      holdSeconds: this.turnHoldSeconds(),
+    });
+    const meter = new TurnMeter();
+    const spent = { audioSeconds: estimate };
+    try {
+      return await this.spoken(
+        request,
+        locale,
+        startedAtMs,
+        audio,
+        meter,
+        spent
+      );
+    } finally {
+      await this.settle(
+        held,
+        { turns: meter.billed ? 1 : 0, audioSeconds: spent.audioSeconds },
+        meter
+      );
+    }
+  }
+
+  /** The spoken turn once it holds its reservation: transcribe, then answer. */
+  private async spoken(
+    request: AssistantVoiceRequest,
+    locale: SupportedLocale,
+    startedAtMs: number,
+    audio: Uint8Array,
+    meter: TurnMeter,
+    spent: { audioSeconds: number }
+  ): Promise<AssistantTurnResponse> {
     const heardAtMs = Date.now();
-    const heard = await this.viaProvider(
-      () =>
-        this.provider.transcribe({ audio, mimeType: request.mimeType, locale }),
-      request.userId
-    );
+    let heard: string;
+    try {
+      const transcription = await this.viaProvider(
+        () =>
+          this.provider.transcribe({
+            audio,
+            mimeType: request.mimeType,
+            locale,
+            purpose: 'turn',
+          }),
+        request.userId,
+        // The transcriber queues on its own side (plan 0235, section 4).
+        { gated: false }
+      );
+      heard = transcription.text;
+      spent.audioSeconds = measuredOr(
+        spent.audioSeconds,
+        transcription.audioSeconds
+      );
+    } catch (error) {
+      // A full queue refused the clip before it ran. Anything else keeps the
+      // estimate, since the transcriber may have spent its time on it.
+      if (isRateLimited(error)) {
+        spent.audioSeconds = 0;
+      }
+      throw error;
+    }
     const transcriptionMs = Date.now() - heardAtMs;
 
     // Nothing recognisable in the recording. Saying so is the whole answer, and
@@ -244,6 +483,8 @@ export class AssistantService {
         gatewayMs: 0,
         totalMs: Date.now() - startedAtMs,
         outcome: 'unheard',
+        // One of the service's own sentences, plain by construction.
+        moderation: 'skipped',
       });
 
       return { reply: NOTHING_HEARD, link: null, choices: [], heard };
@@ -267,6 +508,7 @@ export class AssistantService {
       },
       locale,
       startedAtMs,
+      meter,
       transcriptionMs
     );
 
@@ -287,6 +529,8 @@ export class AssistantService {
     request: AssistantTurnRequest,
     locale: SupportedLocale,
     startedAtMs: number,
+    /** What the turn spends, for the settle (plan 0234, section 5.3). */
+    meter: TurnMeter,
     providerMsBefore = 0
   ): Promise<AssistantTurnResponse> {
     // The transcript is client supplied and therefore untrusted (rule A2). It is
@@ -370,7 +614,11 @@ export class AssistantService {
       { role: ModelTurnRole.USER, text: request.message },
     ];
 
-    const system = buildSystemPrompt({ context, locale });
+    const system = buildSystemPrompt({
+      context,
+      locale,
+      emergencyNumber: this.config.emergencyNumber,
+    });
     // The catalog is assembled from the scope rather than filtered inside a
     // tool, because an absent capability is a much harder boundary than an
     // instruction (plan 0044, section 2.2).
@@ -421,6 +669,7 @@ export class AssistantService {
         // small or the provider is too slow, and both are worth knowing before
         // somebody reports a duplicated shopping list.
         outcome: 'timedout',
+        moderation: 'skipped',
       });
 
       return {
@@ -443,7 +692,8 @@ export class AssistantService {
       const askedAtMs = Date.now();
       const reply = await this.ask(
         { system, turns, tools, locale },
-        request.userId
+        request.userId,
+        meter
       );
       providerMs += Date.now() - askedAtMs;
       usage = reply.usage ?? usage;
@@ -476,32 +726,46 @@ export class AssistantService {
         //
         // The text is made plain before the record and the response, so both
         // carry what the person reads (plan 0225, section 2).
+        const toolsRan = calledTools.length > 0;
         const { text, stripped } = plainText(
-          reply.text ||
-            (calledTools.length > 0
-              ? ANSWERED_WITHOUT_WORDS
-              : 'Sorry, I got stuck on that one. Could you say it a different way?')
+          reply.text || (toolsRan ? ANSWERED_WITHOUT_WORDS : GOT_STUCK)
         );
+
+        // Words the model wrote are checked before they leave (plan 0236,
+        // section 4). The service's own sentences are not: they are plain by
+        // construction, as `plainText` already treats them.
+        const checked = reply.text
+          ? await this.moderate(request.message, text, locale, toolsRan, meter)
+          : { verdict: 'skipped' as const, ms: 0 };
+        const shown = checked.replacement ?? text;
 
         this.record({
           userId: request.userId,
           locale,
           said: request.message,
-          replied: text,
+          replied: shown,
           calledTools,
           listResolution,
           usage,
           providerMs,
           gatewayMs: contextReadyAtMs - startedAtMs,
           totalMs: Date.now() - startedAtMs,
-          outcome: calledTools.length === 0 ? 'talked' : 'acted',
+          outcome: toolsRan ? 'acted' : 'talked',
           strippedMarkdown: stripped,
+          moderation: checked.verdict,
+          moderationMs: checked.ms,
+          moderationUsage: checked.usage ?? null,
+          ...(checked.replacement !== undefined ? { withheld: text } : {}),
         });
 
         return {
-          reply: text,
-          link: link.link(),
-          choices: choices.all(),
+          reply: shown,
+          // A flagged reply loses its link and its choices (section 4.2). A
+          // reply whose check could not run keeps the link, because the work it
+          // points at was done, and loses the choices, which answered a
+          // question nobody will now read.
+          link: checked.keepLink === false ? null : link.link(),
+          choices: checked.keepChoices === false ? [] : choices.all(),
           ...(listResolution ? { listResolution } : {}),
         };
       }
@@ -590,6 +854,94 @@ export class AssistantService {
     return results;
   }
 
+  /**
+   * The moderation pass over one reply the model wrote (plan 0236, section 4).
+   *
+   * `replacement` is absent when the reply goes out as written. A category
+   * replaces it with a fixed sentence in the reply language and drops the link
+   * and the choices. A check that could not run fails closed: the model's words
+   * are dropped for the sentence the service already says when it has none.
+   *
+   * **A failed check over words that hold the emergency number answers with the
+   * distress sentence**, not with "got stuck". The model writes that number only
+   * when the person said they are in danger, and asking such a person to say it
+   * a different way is the one replacement that is not safe. The sentence is the
+   * service's own, so nothing unchecked leaves.
+   *
+   * **Not behind the concurrency gate**, unlike a turn's call. The check is one
+   * word long with an eight second deadline, and queuing it behind other
+   * people's whole turns would turn ordinary load into dropped replies.
+   */
+  private async moderate(
+    said: string,
+    replied: string,
+    locale: SupportedLocale,
+    toolsRan: boolean,
+    meter: TurnMeter
+  ): Promise<{
+    verdict: ModerationVerdict;
+    ms: number;
+    replacement?: string;
+    keepLink?: boolean;
+    keepChoices?: boolean;
+    usage?: ModelUsage | null;
+  }> {
+    if (!this.config.moderation) {
+      return { verdict: 'skipped', ms: 0 };
+    }
+
+    const startedAtMs = Date.now();
+    const { verdict, failure, usage } = await checkReply(this.provider, {
+      said,
+      replied,
+      locale,
+    });
+    const ms = Date.now() - startedAtMs;
+
+    // The check is a provider call and is counted inside the turn (plan 0234,
+    // section 12). A check that threw reports no usage, and may still have
+    // been billed, so it is charged its own worst case.
+    if (usage === undefined) {
+      meter.addWorstCase(this.worst.moderationMicroUsd);
+    } else {
+      meter.add(this.config.moderationModel, usage);
+    }
+
+    if (verdict === 'ok') {
+      return { verdict, ms, usage };
+    }
+    if (verdict === 'error') {
+      // The reason, and never the classifier's prompt or the texts it read.
+      this.logger.warn(`assistant moderation failed closed: ${failure}`);
+      if (namesEmergencyNumber(replied, this.config.emergencyNumber)) {
+        return {
+          verdict,
+          ms,
+          usage,
+          replacement: distressSentence(locale, this.config.emergencyNumber),
+          keepLink: false,
+          keepChoices: false,
+        };
+      }
+      return {
+        verdict,
+        ms,
+        usage,
+        replacement: toolsRan ? ANSWERED_WITHOUT_WORDS : GOT_STUCK,
+        keepLink: true,
+        keepChoices: false,
+      };
+    }
+    return {
+      verdict,
+      ms,
+      usage,
+      replacement: replacementFor(verdict, locale, this.config.emergencyNumber),
+      keepLink: false,
+      keepChoices: false,
+    };
+  }
+
   /** Plan 0026's rule, in one place because two entry points now apply it. */
   private requireConfigured(): void {
     if (!this.provider.configured) {
@@ -618,7 +970,7 @@ export class AssistantService {
    * The recording, checked and decoded (plan 0041, sections 5 and 9).
    *
    * Both refusals happen **before the provider is called**, which is the point of
-   * doing them here rather than letting Gemini answer 400: a recording this
+   * doing them here rather than letting the transcriber answer 400: a recording this
    * service will not forward costs nothing, and the caller gets a sentence
    * instead of a stack trace.
    *
@@ -679,12 +1031,220 @@ export class AssistantService {
     );
   }
 
-  /** The provider call, behind the concurrency gate, with 429 mapped to rule A5. */
+  /**
+   * The provider call, behind the concurrency gate, with 429 mapped to rule A5,
+   * and its usage on the meter (plan 0234, section 5.5). A call that failed is
+   * charged one call's worst case, and counts the turn, unless it is one of
+   * the two failures known to carry no bill: a status the provider answered
+   * and a 429. Any other failure may have run at the provider: a deadline, a
+   * dropped connection, or a 200 whose body could not be read. Counting too
+   * much is the safe error.
+   */
   private async ask(
     request: Parameters<ModelProvider['generate']>[0],
-    userId: string
+    userId: string,
+    meter: TurnMeter
   ) {
-    return this.viaProvider(() => this.provider.generate(request), userId);
+    try {
+      const reply = await this.viaProvider(
+        () => this.provider.generate(request),
+        userId
+      );
+      meter.add(this.config.model, reply.usage);
+      return reply;
+    } catch (error) {
+      if (!answeredUnbilled(error)) {
+        meter.addWorstCase(this.worst.perCallMicroUsd);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * How long a turn's reservation holds before it expires (plan 0234, section
+   * 5.4): the turn's own deadline plus a minute.
+   */
+  private turnHoldSeconds(): number {
+    return Math.ceil(this.config.turnTimeoutMs / 1000) + 60;
+  }
+
+  /**
+   * The limits of a person: a guest's for `TEMPORARY`, and for a request that
+   * names no kind, which only a gateway one release behind sends. Counting a
+   * registered person as a guest is the strict error.
+   */
+  private limitsFor(kind: UserKind | undefined): AllowanceLimits {
+    return kind === UserKind.REGISTERED
+      ? this.config.allowance.registered
+      : this.config.allowance.guest;
+  }
+
+  /**
+   * Holds the worst case in core before any provider call (plan 0234, section
+   * 5.1), or refuses: the allowance code when a limit does not fit, the
+   * ordinary `rate_limited` when a turn of this person is already in flight,
+   * and an error when core does not answer within two seconds, because the
+   * allowance fails closed.
+   */
+  private async reserve(input: {
+    userId: string;
+    kind: UserKind | undefined;
+    purpose: AllowancePurpose;
+    audioSeconds: number;
+    microUsd: number;
+    holdSeconds: number;
+  }): Promise<Held> {
+    let answer;
+    try {
+      answer = await this.allowance.reserve({
+        userId: input.userId,
+        purpose: input.purpose,
+        audioSeconds: input.audioSeconds,
+        microUsd: input.microUsd,
+        limits: this.limitsFor(input.kind),
+        timezone: this.config.allowance.timezone,
+        holdSeconds: input.holdSeconds,
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'assistant.allowance.unavailable',
+          userId: input.userId,
+          purpose: input.purpose,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      );
+      throw error instanceof AllowanceUnavailableError
+        ? error
+        : new AllowanceUnavailableError('the allowance could not be reserved', {
+            cause: error,
+          });
+    }
+
+    if (answer.outcome === AllowanceReserveOutcome.TURN_IN_FLIGHT) {
+      throw this.rateLimited(
+        TURN_IN_FLIGHT_RETRY_SECONDS,
+        input.userId,
+        'inFlight'
+      );
+    }
+    if (
+      answer.outcome !== AllowanceReserveOutcome.RESERVED ||
+      !answer.reservationId
+    ) {
+      throw this.allowanceReached(input.userId, input.purpose, answer.refused);
+    }
+    return {
+      id: answer.reservationId,
+      userId: input.userId,
+      purpose: input.purpose,
+      microUsd: input.microUsd,
+    };
+  }
+
+  /**
+   * Releases a reservation and counts what happened (plan 0234, section 5.3).
+   * Never throws: it runs in a `finally`, and a settle that failed must not
+   * replace the answer the person was about to get.
+   *
+   * A settle that failed is tried once more after {@link SETTLE_RETRY_MS}. A
+   * first attempt that core committed but whose answer was lost then counts
+   * twice, which is the safe error. A second failure leaves the reservation to
+   * expire, which charges nothing, and this line is how that gap is counted.
+   */
+  private async settle(
+    held: Held,
+    counted: { turns: number; audioSeconds: number },
+    meter: TurnMeter
+  ): Promise<void> {
+    const microUsd = meter.microUsd(held.microUsd);
+    const request = {
+      reservationId: held.id,
+      userId: held.userId,
+      purpose: held.purpose,
+      timezone: this.config.allowance.timezone,
+      turns: counted.turns,
+      audioSeconds: counted.audioSeconds,
+      microUsd,
+      ...meter.tokens(),
+    };
+    try {
+      await this.allowance.settle(request);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_RETRY_MS));
+    }
+    try {
+      await this.allowance.settle(request);
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'assistant.allowance.settleFailed',
+          userId: held.userId,
+          purpose: held.purpose,
+          microUsd,
+          audioSeconds: counted.audioSeconds,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      );
+    }
+  }
+
+  /**
+   * The allowance code (plan 0234, section 8.1), with `scope`, `period`,
+   * `limit` and `resetsAt` in its details and the time it is back in the
+   * person's language. A deployment that reached its own ceiling is logged as
+   * `assistant.allowance.deploymentReached`, which is how the owner learns of
+   * it.
+   */
+  private allowanceReached(
+    userId: string,
+    purpose: AllowancePurpose,
+    refused: AllowanceRefusal | null
+  ): AllowanceReachedException {
+    const refusal: AllowanceRefusal = refused ?? {
+      // Core said neither yes nor why. Not a state core answers, and still a
+      // refusal: the allowance fails closed.
+      scope: AllowanceScope.USER,
+      period: AllowancePeriod.DAY,
+      limit:
+        purpose === AllowancePurpose.TRANSCRIPTION
+          ? AllowanceLimit.COMMENT_AUDIO
+          : AllowanceLimit.TURNS,
+      resetsAt: new Date().toISOString(),
+    };
+    this.logger.log(
+      JSON.stringify({
+        event:
+          refusal.scope === AllowanceScope.DEPLOYMENT
+            ? 'assistant.allowance.deploymentReached'
+            : 'assistant.allowance.refused',
+        userId,
+        purpose,
+        ...refusal,
+      })
+    );
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    return new AllowanceReachedException(
+      `the assistant allowance is reached: ${refusal.scope} ${refusal.limit} per ${refusal.period}`,
+      {
+        details: {
+          scope: refusal.scope,
+          period: refusal.period,
+          limit: refusal.limit,
+          resetsAt: refusal.resetsAt,
+        },
+        messageArgs: {
+          variant: `${refusal.scope}.${refusal.period}`,
+          time: backAt(
+            refusal.resetsAt,
+            refusal.period,
+            locale,
+            this.config.allowance.timezone
+          ),
+        },
+      }
+    );
   }
 
   /**
@@ -698,12 +1258,14 @@ export class AssistantService {
    */
   private async viaProvider<T>(
     call: () => Promise<T>,
-    userId: string
+    userId: string,
+    options: { gated: boolean } = { gated: true }
   ): Promise<T> {
     try {
       // Queuing is preferable to failing: waiting two seconds is invisible,
-      // being told to come back is not (section 9).
-      return await this.gate.run(call);
+      // being told to come back is not (section 9). A transcription skips the
+      // gate, because the transcriber holds its own queue (plan 0235).
+      return await (options.gated ? this.gate.run(call) : call());
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
         throw this.rateLimited(
@@ -736,7 +1298,7 @@ export class AssistantService {
   private rateLimited(
     retryAfterSeconds: number,
     userId: string,
-    source: 'local' | 'provider'
+    source: 'local' | 'provider' | 'inFlight'
   ): RateLimitedException {
     this.logger.log(
       JSON.stringify({
@@ -783,6 +1345,21 @@ export class AssistantService {
      * sentences, which are plain by construction, and logged as zero there.
      */
     strippedMarkdown?: number;
+    /** The verdict on the reply (plan 0236, section 4.3). */
+    moderation: ModerationVerdict;
+    /** How long the check took, zero when it did not run. */
+    moderationMs?: number;
+    /**
+     * What the check spent, logged as `tokens.moderation`: `null` when it did
+     * not run or its provider reported nothing. Plan 0234 counts the cost of a
+     * turn, and the check is part of it.
+     */
+    moderationUsage?: ModelUsage | null;
+    /**
+     * The model's words that a verdict kept from the person, so the owner can
+     * read what was flagged (section 4.4). Absent when the reply went out.
+     */
+    withheld?: string;
   }): void {
     this.logger.log(
       JSON.stringify({
@@ -799,11 +1376,21 @@ export class AssistantService {
         // How often the prompt's plain text rule still loses, so the rule can be
         // judged from the logs rather than from a hunch.
         strippedMarkdown: entry.strippedMarkdown ?? 0,
-        tokens: entry.usage,
+        // Anything but `ok` and `skipped` is a line the owner counts (plan
+        // 0236, section 4.4). The classifier's prompt is never here.
+        moderation: entry.moderation,
+        ...(entry.withheld !== undefined ? { withheld: entry.withheld } : {}),
+        // The turn's own usage as before, with the check's beside it under
+        // `moderation`, so one read of the record has the whole cost.
+        tokens:
+          entry.usage === null && !entry.moderationUsage
+            ? null
+            : { ...entry.usage, moderation: entry.moderationUsage ?? null },
         latencyMs: {
           total: entry.totalMs,
           gateway: entry.gatewayMs,
           provider: entry.providerMs,
+          moderation: entry.moderationMs ?? 0,
         },
       })
     );
@@ -913,6 +1500,66 @@ export function capTranscript(
   }
 
   return kept;
+}
+
+/** Whether an error is the rate limit of rule A5, before or after mapping. */
+function isRateLimited(error: unknown): boolean {
+  return (
+    error instanceof ProviderRateLimitedError ||
+    error instanceof RateLimitedException
+  );
+}
+
+/**
+ * The seconds a settle counts for a recording (plan 0234, section 2.1): the
+ * transcriber's measure, rounded up, when it is a positive finite number, and
+ * otherwise the byte estimate. The transcriber client reads a missing
+ * `audioSeconds` as zero, and zero would count a heard recording as free.
+ */
+function measuredOr(estimate: number, measured: number): number {
+  return Number.isFinite(measured) && measured > 0
+    ? Math.ceil(measured)
+    : estimate;
+}
+
+/**
+ * Whether a failed provider call is known to carry no bill (plan 0234,
+ * section 15, item 4): a 429, or a status the provider answered, which is a
+ * {@link ProviderUnavailableError} with no cause. Every other failure may have
+ * been billed.
+ */
+function answeredUnbilled(error: unknown): boolean {
+  return (
+    isRateLimited(error) ||
+    (error instanceof ProviderUnavailableError &&
+      (error as { cause?: unknown }).cause === undefined)
+  );
+}
+
+/**
+ * When the assistant is back, in the person's language and the allowance
+ * timezone (plan 0234, section 8.1): a time of day when a day turns over, a
+ * date when a month does.
+ */
+export function backAt(
+  resetsAt: string,
+  period: AllowancePeriod,
+  locale: SupportedLocale,
+  timezone: string
+): string {
+  const instant = new Date(resetsAt);
+  return period === AllowancePeriod.MONTH
+    ? new Intl.DateTimeFormat(locale, {
+        timeZone: timezone,
+        day: 'numeric',
+        month: 'long',
+      }).format(instant)
+    : new Intl.DateTimeFormat(locale, {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(instant);
 }
 
 function toModelTurn(message: AssistantMessage): ModelTurn {

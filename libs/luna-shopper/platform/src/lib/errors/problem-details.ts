@@ -30,8 +30,9 @@ export interface ProblemDetails {
   retryAfterSeconds?: number;
   /**
    * Machine readable facts about this occurrence, present only for a code whose
-   * exception publishes them (plan 0112, section 2). `line_merge_required` is the
-   * one that does, and names the line the rename collided with.
+   * exception publishes them (plan 0112, section 2). `line_merge_required` names
+   * the line the rename collided with, and `line_add_needs_choice` the lines an
+   * add has to choose between (plan 0228).
    */
   details?: Record<string, unknown>;
 }

@@ -2,8 +2,12 @@ import type {
   ModelProvider,
   ModelReply,
   ModelRequest,
+  Transcription,
   TranscriptionRequest,
 } from './model-provider';
+
+/** The length every scripted recording reports (plan 0235, section 7). */
+export const FAKE_AUDIO_SECONDS = 2.5;
 
 /**
  * The provider the suite runs against (rule A4).
@@ -30,11 +34,20 @@ export class FakeModelProvider implements ModelProvider {
    * such thing as a spoken turn.
    */
   readonly transcriptions: TranscriptionRequest[] = [];
+  /**
+   * The moderation checks asked for, in order (plan 0236, section 4).
+   *
+   * In their own list, for the reason {@link transcriptions} is: every turn
+   * that ends in model written words is checked, and a test about the turn
+   * should not have to skip past the check to find the request it means.
+   */
+  readonly moderations: ModelRequest[] = [];
   configured = true;
   transcriptionSupported = true;
 
   private readonly replies: (ModelReply | Error)[];
   private readonly heard: (string | Error)[];
+  private readonly verdicts: (string | Error | Promise<never>)[] = [];
 
   constructor(
     replies: (ModelReply | Error)[] = [],
@@ -54,6 +67,21 @@ export class FakeModelProvider implements ModelProvider {
    */
   willHear(...results: (string | Error)[]): this {
     this.heard.push(...results);
+    return this;
+  }
+
+  /**
+   * Script what the next moderation checks answer: a word the classifier
+   * would write, an error to throw, or a promise that never settles (a hung
+   * call).
+   *
+   * **Unlike the other two scripts, running out answers `ok`.** The check runs
+   * after every turn that ends in model written words, so a default that threw
+   * would make every test of the turn script a verdict it is not about. A test
+   * about moderation scripts what it means.
+   */
+  willModerate(...verdicts: (string | Error | Promise<never>)[]): this {
+    this.verdicts.push(...verdicts);
     return this;
   }
 
@@ -80,6 +108,14 @@ export class FakeModelProvider implements ModelProvider {
   }
 
   async generate(request: ModelRequest): Promise<ModelReply> {
+    if (request.purpose === 'moderation') {
+      this.moderations.push(request);
+      const verdict = this.verdicts.shift() ?? 'ok';
+      if (verdict instanceof Error) {
+        throw verdict;
+      }
+      return FakeModelProvider.says(await verdict);
+    }
     this.requests.push(request);
     const next = this.replies.shift();
     if (next === undefined) {
@@ -106,7 +142,7 @@ export class FakeModelProvider implements ModelProvider {
    * records that it has no transcript), so a test that means it scripts `''`
    * and a test that scripted nothing has a bug worth failing on.
    */
-  async transcribe(request: TranscriptionRequest): Promise<string> {
+  async transcribe(request: TranscriptionRequest): Promise<Transcription> {
     this.transcriptions.push(request);
     const next = this.heard.shift();
     if (next === undefined) {
@@ -117,6 +153,6 @@ export class FakeModelProvider implements ModelProvider {
     if (next instanceof Error) {
       throw next;
     }
-    return next;
+    return { text: next, audioSeconds: FAKE_AUDIO_SECONDS };
   }
 }

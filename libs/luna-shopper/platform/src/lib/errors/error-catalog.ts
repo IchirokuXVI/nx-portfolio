@@ -120,6 +120,12 @@ export const ERROR_CATALOG: Record<
     en: 'Together these two lines would hold more than {max} products, so they cannot be merged.',
     es: 'Juntas, estas dos líneas tendrían más de {max} productos, así que no se pueden unir.',
   },
+  // An add of a name that two or more product lines hold (plan 0228). It says
+  // what to do next, because the person is being asked to choose.
+  [ERROR_CODES.LINE_ADD_NEEDS_CHOICE]: {
+    en: 'This list already has more than one line called "{content}". Choose the line to add to, or add a new line.',
+    es: 'Esta lista ya tiene más de una línea llamada "{content}". Elige la línea a la que sumar, o añade una línea nueva.',
+  },
   // The brand registry's two refusals (plan 0115, section 5.3). Both name what
   // to do rather than what failed: type a real word, or open the brand that
   // already holds the key.
@@ -297,9 +303,57 @@ export const ERROR_CATALOG: Record<
     en: 'This account signs in with Google and has no password to reset.',
     es: 'Esta cuenta entra con Google y no tiene contraseña que restablecer.',
   },
+  // The Terms (plan 0231, section 4.3). Velista plan 0173 may word its own
+  // copy; these are what a client without its own sentence shows.
+  [ERROR_CODES.TERMS_VERSION_STALE]: {
+    en: 'The Terms changed while this page was open. Read the new version and accept it to continue.',
+    es: 'Los Términos han cambiado mientras tenías esta página abierta. Lee la nueva versión y acéptala para continuar.',
+  },
+  [ERROR_CODES.TERMS_ACCEPTANCE_MISSING]: {
+    en: 'Accept the Terms to continue.',
+    es: 'Acepta los Términos para continuar.',
+  },
+  // The sentence a client without its own reads (plan 0234, section 8.1). The
+  // assistant names one of the variants below in `messageArgs.variant`, and
+  // this one is what is left when it names none.
+  [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: {
+    en: 'The assistant is not available for now. It will be back later.',
+    es: 'El asistente no está disponible por ahora. Volverá a estarlo más tarde.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',
+  },
+};
+
+/**
+ * Codes whose sentence depends on which case refused, picked by
+ * `messageArgs.variant` (plan 0234, section 8.1). A variant this map does not
+ * hold falls back to the code's own sentence in {@link ERROR_CATALOG}.
+ *
+ * The deployment's sentences say the assistant is resting and never that a
+ * budget ran out: the ceiling is the operator's fact, not the person's.
+ */
+export const ERROR_CATALOG_VARIANTS: Partial<
+  Record<ErrorCode, Record<string, Record<SupportedLocale, string>>>
+> = {
+  [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: {
+    'user.day': {
+      en: "You have used today's assistant allowance. It is back at {time}.",
+      es: 'Has usado el asistente todo lo que permite hoy. Vuelve a estar disponible a las {time}.',
+    },
+    'user.month': {
+      en: "You have used this month's assistant allowance. It is back on {time}.",
+      es: 'Has usado el asistente todo lo que permite este mes. Vuelve a estar disponible el {time}.',
+    },
+    'deployment.day': {
+      en: 'The assistant is resting for now. It is back at {time}.',
+      es: 'El asistente está descansando. Vuelve a estar disponible a las {time}.',
+    },
+    'deployment.month': {
+      en: 'The assistant is resting for now. It is back on {time}.',
+      es: 'El asistente está descansando. Vuelve a estar disponible el {time}.',
+    },
   },
 };
 
@@ -325,7 +379,12 @@ export function resolveErrorMessage(
   locale: SupportedLocale = DEFAULT_LOCALE,
   args?: Record<string, string | number>
 ): string {
-  const byLocale = ERROR_CATALOG[code] ?? ERROR_CATALOG[ERROR_CODES.INTERNAL];
+  const variant =
+    typeof args?.['variant'] === 'string'
+      ? ERROR_CATALOG_VARIANTS[code]?.[args['variant']]
+      : undefined;
+  const byLocale =
+    variant ?? ERROR_CATALOG[code] ?? ERROR_CATALOG[ERROR_CODES.INTERNAL];
   const template = byLocale[locale] ?? byLocale[DEFAULT_LOCALE];
   return interpolate(template, args);
 }

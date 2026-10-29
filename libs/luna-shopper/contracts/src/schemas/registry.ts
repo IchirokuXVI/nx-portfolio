@@ -43,6 +43,10 @@ import {
   appStateSchemas,
 } from './messages/app-state.schemas';
 import {
+  assistantAllowanceMessageContracts,
+  assistantAllowanceSchemas,
+} from './messages/assistant-allowance.schemas';
+import {
   assistantMessageContracts,
   assistantSchemas,
 } from './messages/assistant.schemas';
@@ -72,6 +76,7 @@ import {
   impersonationMessageContracts,
   impersonationSchemas,
 } from './messages/impersonation.schemas';
+import { legalSchemas } from './messages/legal.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
@@ -118,6 +123,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
+  ...assistantAllowanceMessageContracts,
   ...basketMessageContracts,
   ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
@@ -145,6 +151,7 @@ export const allSchemas: JsonSchema[] = [
   ...adminDashboardSchemas,
   ...accountSchemas,
   ...appStateSchemas,
+  ...legalSchemas,
   ...zoneSchemas,
   ...listSchemas,
   ...mergeSchemas,
@@ -155,6 +162,7 @@ export const allSchemas: JsonSchema[] = [
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,
+  ...assistantAllowanceSchemas,
   ...basketSchemas,
   ...basketSharingSchemas,
   ...basketChangeSchemas,

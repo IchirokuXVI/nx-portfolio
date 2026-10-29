@@ -12,9 +12,12 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
+import { OperatorSettingsStore } from '@portfolio/velista/data-access';
 import {
+  allowanceReturn,
   APP_BASE_PATH,
   ASSISTANT_AUDIO_MAX_MB,
+  type AssistantAllowance,
   type AssistantEntry,
   type AssistantListLink,
 } from '@portfolio/velista/models';
@@ -113,10 +116,24 @@ export class AssistantPage {
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _translator = inject(RokuTranslatorService);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _operator = inject(OperatorSettingsStore);
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
 
   readonly composerDisabled = this._store.composerDisabled;
+
+  /**
+   * Whether the composer offers its microphone (velista `0174`, target 1).
+   *
+   * Only where this deployment can transcribe. The assistant flag is not asked
+   * here: the panel exists only with the assistant, and without it every turn already
+   * answers `unconfigured`. Unknown is off (decision D2): while the settings have not
+   * answered, or could not be read, there is no microphone, because one that appears
+   * a moment late costs nothing and one that fails costs a recording.
+   */
+  readonly voiceOffered = computed(
+    () => this._operator.settings()?.features.transcription === true
+  );
 
   /** The transcript, ready to draw. Empty means the intro is on screen instead. */
   readonly messages = computed<readonly AssistantMessageVm[]>(() => {
@@ -197,7 +214,7 @@ export class AssistantPage {
       text:
         entry.kind === 'said' || entry.kind === 'pending'
           ? entry.text
-          : this._copyFor(entry),
+          : this._copyFor(entry, locale),
       ...(link === null ? {} : { link: this._toLink(link, locale) }),
       // Section 4.3: chips on anything but the newest message are answers to a
       // question that has already been answered.
@@ -218,8 +235,12 @@ export class AssistantPage {
    * and the difference is the whole of rule A5: with one, the message sits beside a
    * clock that shrinks; without one, it says the bot is busy and **invents no number**.
    */
-  private _copyFor(entry: AssistantEntry): string {
+  private _copyFor(entry: AssistantEntry, locale: string): string {
     switch (entry.kind) {
+      case 'allowance':
+        return entry.allowance === undefined
+          ? this._translator.t('assistant.failed')
+          : this._allowanceCopy(entry.allowance, locale);
       case 'throttled':
         return this._translator.t(
           entry.retryAfterSeconds === undefined
@@ -249,6 +270,55 @@ export class AssistantPage {
       default:
         return this._translator.t('assistant.failed');
     }
+  }
+
+  /**
+   * What the panel says when the allowance refused a turn (velista `0174`, target 5).
+   *
+   * Two sentences: whose allowance and what is used up, then when it comes back. The
+   * second is left out when the server's time could not be read, so the first never
+   * waits on it. Never "try again", never a countdown and never money:
+   *
+   * - the deployment's allowance is "resting", whatever its counter was, because a
+   *   budget is the operator's fact and not the person's (backend `0234`, 8.1);
+   * - the person's allowance for speaking says that typing still works, and the
+   *   composer stays usable for exactly that;
+   * - every other counter of the person's, `cost` included, reads as having used the
+   *   assistant as much as it allows for the period.
+   *
+   * The time goes in with its hour as the plural count, because Spanish says "a la
+   * 1:00" and "a las 2:00"; the English forms are the same sentence twice.
+   */
+  private _allowanceCopy(
+    allowance: AssistantAllowance,
+    locale: string
+  ): string {
+    const speaking =
+      allowance.scope === 'user' && allowance.limit === 'assistantAudio';
+    const reason =
+      allowance.scope === 'deployment'
+        ? 'assistant.allowance.resting'
+        : `assistant.allowance.${speaking ? 'speaking' : 'used'}.${allowance.period}`;
+    const sentences = [this._translator.t(reason)];
+
+    const back = allowanceReturn(allowance, locale);
+    if (back !== null) {
+      const again = speaking
+        ? 'assistant.allowance.speakAgain'
+        : 'assistant.allowance.back';
+      sentences.push(
+        allowance.period === 'month'
+          ? this._translator.t(`${again}On`, undefined, undefined, {
+              date: back.when,
+            })
+          : this._translator.t(`${again}At`, undefined, undefined, {
+              time: back.when,
+              count: back.hour,
+            })
+      );
+    }
+
+    return sentences.join(' ');
   }
 
   private _toLink(link: AssistantListLink, locale: string): AssistantLinkVm {

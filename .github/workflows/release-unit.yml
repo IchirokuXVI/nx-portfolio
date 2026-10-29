@@ -98,7 +98,9 @@ jobs:
           else
             testable="$(list --with-target test)"
           fi
-          luna="$(echo "$images" | tr ',' '\n' | grep -E '^luna-shopper-backend-' | paste -sd, - || true)"
+          # The Node bundles, by the target that checks them rather than by name:
+          # the transcriber is a luna-shopper-backend image with no dist (plan 0235).
+          luna="$(list --with-target manifest-check --projects "tag:deploy:$UNIT")"
           {
             echo "images=$images"
             echo "testable=$testable"
@@ -111,10 +113,14 @@ jobs:
             echo "- tested since \`${previous:-(the first tag)}\`: \`${testable:-(nothing)}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # The transcriber's tests are a `docker build` (plan 0235) and BUILD_IMAGE has
+  # no docker, so they run on the runner, as in stage-unit.yml and pr.yml.
   test:
     needs: setup
     if: needs.setup.outputs.testable != ''
     runs-on: ubuntu-latest
+    env:
+      TRANSCRIBER: ${{ contains(format(',{0},', needs.setup.outputs.testable), ',luna-shopper-backend-transcriber,') }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -135,7 +141,18 @@ jobs:
             -v "$PWD":/w -w /w \
             -e CI=true -e HOME=/tmp -e npm_config_cache=/w/.npm \
             "$BUILD_IMAGE" \
-            npx nx run-many -t lint test --projects "$TESTABLE"
+            npx nx run-many -t lint test --projects "$TESTABLE" \
+            --exclude luna-shopper-backend-transcriber
+
+      - name: Setup Node.js
+        if: env.TRANSCRIBER == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Test the transcriber
+        if: env.TRANSCRIBER == 'true'
+        run: npx nx run luna-shopper-backend-transcriber:test
 
   build:
     needs: setup

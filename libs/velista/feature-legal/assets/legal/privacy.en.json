@@ -1,0 +1,576 @@
+{
+  "templateVersion": "2026-10-29",
+  "title": "Privacy Policy",
+  "sections": [
+    {
+      "id": "who",
+      "heading": "Who we are",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} is run by {{controllerName}}. {{controllerName}} decides what happens to your data, which makes them the data controller under the GDPR."
+        },
+        {
+          "kind": "paragraph",
+          "text": "To ask anything about your data, write to {{contactEmail}}."
+        },
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} is built on Luna Shopper, which is open source software. This copy of the app is run by the controller named above, not by the people who wrote the software."
+        }
+      ]
+    },
+    {
+      "id": "summary",
+      "heading": "In short",
+      "blocks": [
+        {
+          "kind": "list",
+          "items": [
+            "We keep what you put in the app: your account, your groups and lists, your shopping trips, and the shops you choose.",
+            "We keep it so the app works for you and for the people you share lists with.",
+            "We sell nothing about you and we show no advertising.",
+            "We use no analytics and nothing that follows you around the web.",
+            "To get a copy of your data or have it deleted, write to {{contactEmail}}. You can also delete your account yourself on the account page."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "heading": "What we keep, why, and for how long",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The table lists what we keep about you. The legal basis is the reason the GDPR allows us to keep it: a contract (article 6(1)(b)) when we need it to give you the service you asked for, and a legitimate interest (article 6(1)(f)) when we need it to keep the service safe and working, or because other people rely on it."
+        },
+        {
+          "kind": "table",
+          "head": ["What", "What it holds", "Why", "Legal basis", "How long"],
+          "rows": [
+            {
+              "cells": [
+                "Your account",
+                "Your email address, your user name (the app makes one up and you can change it), your password stored only as a hash, whether the account is a guest or registered, and when it was made.",
+                "To give you an account and sign you in.",
+                "Contract.",
+                "Until you delete the account."
+              ]
+            },
+            {
+              "cells": [
+                "Signed in devices",
+                "One token for each device you are signed in on.",
+                "To keep you signed in.",
+                "Contract.",
+                "Removed {{expiredGrantDays}} days after it expires."
+              ]
+            },
+            {
+              "cells": [
+                "The terms you accepted",
+                "Which version of the terms of service you accepted, and when.",
+                "To know which terms apply to you.",
+                "Contract.",
+                "Until you delete the account."
+              ]
+            },
+            {
+              "cells": [
+                "What the app remembers about you",
+                "Whether you have seen the first setup and the guided tour, and when.",
+                "So the app shows them to you once and not every time.",
+                "Contract.",
+                "Until you delete the account."
+              ]
+            },
+            {
+              "cells": [
+                "Guest account",
+                "A name the app makes up for you. No email address.",
+                "To let you create or join a group without signing up.",
+                "Contract.",
+                "Until you delete it, or some time after it stops belonging to any group."
+              ]
+            },
+            {
+              "when": "googleSignIn",
+              "cells": [
+                "Your Google identity",
+                "Your Google account number, email address and name.",
+                "To sign you in with Google.",
+                "Contract.",
+                "Until you delete the account."
+              ]
+            },
+            {
+              "cells": [
+                "Groups and lists",
+                "Your groups and who is in them, lists, items and quantities, and the comments you write.",
+                "This is the service itself.",
+                "Contract.",
+                "Until they are deleted. If you delete your account, they stay for the other members with your name removed."
+              ]
+            },
+            {
+              "when": "transcription",
+              "cells": [
+                "Voice comments",
+                "The recording and its written transcript.",
+                "So your group can hear and read what you said.",
+                "Contract.",
+                "The recording is deleted with your account. The transcript stays for the group with your name removed."
+              ]
+            },
+            {
+              "cells": [
+                "Shopping profiles",
+                "Postal codes, a place or address you type, the supermarkets and shops you choose, and your preferences.",
+                "To show you the shops and prices near you.",
+                "Contract.",
+                "Until you delete the profile or the account."
+              ]
+            },
+            {
+              "cells": [
+                "Where you are",
+                "Your position, sent only when you press the button that finds shops near you.",
+                "To find the shops near you.",
+                "Contract.",
+                "Used for that one answer and not stored."
+              ]
+            },
+            {
+              "cells": [
+                "Shopping trips",
+                "Your trips to the shop, what was bought, in which shop and at what price.",
+                "So you and your group can see what was bought.",
+                "Contract. For what stays after you delete your account, legitimate interest.",
+                "Your own trips are deleted with your account. What you marked as bought on a group's list stays for the group with your name removed."
+              ]
+            },
+            {
+              "cells": [
+                "Shop maps",
+                "The walks you record inside a shop to map it: steps, turns, the marks you add and the name you give the walk.",
+                "To draw that shop's map for everybody.",
+                "Legitimate interest.",
+                "Kept. If you delete your account, your name is removed from them."
+              ]
+            },
+            {
+              "cells": [
+                "People on a shared basket",
+                "The name a person types when they join a shared basket, and the description their browser gives of itself (its user agent).",
+                "To show who is shopping and keep their place in the basket.",
+                "Contract.",
+                "As long as the basket."
+              ]
+            },
+            {
+              "when": "assistant",
+              "cells": [
+                "Talking to the assistant",
+                "What you write or say to the assistant, and what it answers.",
+                "To answer you.",
+                "Contract.",
+                "{{assistantLogDays}} days in our logs."
+              ]
+            },
+            {
+              "when": "assistant",
+              "cells": [
+                "How much you used the assistant",
+                "For each day: how many messages you sent it, how many seconds of voice it turned into text, how much text it handled, and what that cost.",
+                "To keep each person within their allowance.",
+                "Legitimate interest.",
+                "Until the end of the following month, or until you delete the account if that comes first."
+              ]
+            },
+            {
+              "cells": [
+                "Security records",
+                "Changes, with the values before and after: a new user name, a request to confirm an email address or reset a password, an account deleted by whoever runs {{appName}}, and a change that whoever runs {{appName}} makes to your groups or lists.",
+                "To protect accounts and look into abuse.",
+                "Legitimate interest.",
+                "{{auditTrailDays}} days."
+              ]
+            },
+            {
+              "cells": [
+                "Links we email",
+                "The links that confirm an email address or reset a password.",
+                "To prove that a request came from you.",
+                "Contract.",
+                "Removed {{expiredGrantDays}} days after they expire."
+              ]
+            },
+            {
+              "when": "googleSignIn",
+              "cells": [
+                "Signing in with Google",
+                "A short record we keep while you sign in with Google. For the few minutes it takes to finish, it also holds the Google account number, email address and name that Google sent back.",
+                "To make sure the sign in that comes back from Google is the one you started.",
+                "Contract.",
+                "Removed {{expiredGrantDays}} days after it expires."
+              ]
+            },
+            {
+              "cells": [
+                "Server logs",
+                "The requests your app makes to our servers, which can include your IP address.",
+                "To run the service and find faults.",
+                "Legitimate interest.",
+                "{{applicationLogDays}} days."
+              ]
+            },
+            {
+              "when": "supportAccess",
+              "cells": [
+                "Support sessions",
+                "That someone who runs {{appName}} opened the app as you, when, for how long and why.",
+                "To help you when you report a problem.",
+                "Legitimate interest.",
+                "{{auditTrailDays}} days."
+              ]
+            },
+            {
+              "when": "offsiteBackups",
+              "cells": [
+                "Backups",
+                "Copies of everything above.",
+                "To recover the service after a failure.",
+                "Legitimate interest.",
+                "{{backupDays}} days."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "when": "assistant",
+      "heading": "The assistant",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The assistant is a program, not a person. To understand what you ask and change your lists, it sends your message to a company that runs AI models."
+        },
+        {
+          "kind": "paragraph",
+          "text": "For each message, that company receives:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "your message;",
+            "the conversation you can see on the screen;",
+            "the names of the groups, lists and items the answer needs;",
+            "the name you use in the app, if you ask to change it."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "It does not receive your email address or the number that identifies your account."
+        },
+        {
+          "kind": "paragraph",
+          "when": "aiTextProvider",
+          "text": "That company is {{aiTextProvider}}. Its commercial terms do not allow it to use what you send to train its models."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Every request tells the assistant that the person reading may be a child, and every reply is checked automatically before you see it."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Each person can use the assistant a limited amount each day and each month."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Our logs keep what you said and what the assistant answered for {{assistantLogDays}} days."
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "when": "transcription",
+      "heading": "Voice",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "When you record your voice, the recording is turned into text on our own servers. No other company receives it."
+        }
+      ]
+    },
+    {
+      "id": "processors",
+      "heading": "Who else handles your data",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "A few companies do work for us that needs your data. Each one may use it only to do that work, on our instructions, under a data processing agreement."
+        },
+        {
+          "kind": "list",
+          "items": [
+            "A hosting company, whose computers run our servers and store the data."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "when": "hostingProvider",
+          "text": "Our hosting company is {{hostingProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "emailProvider",
+          "text": "We send email through {{emailProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "offsiteBackups",
+          "text": "Copies of the data are kept somewhere else as well, so they survive a failure of our servers."
+        },
+        {
+          "kind": "paragraph",
+          "when": "backupProvider",
+          "text": "Those copies are kept with {{backupProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "assistant",
+          "text": "The company that runs the assistant's AI model receives what the assistant section above lists."
+        },
+        {
+          "kind": "paragraph",
+          "when": "aiTextProvider",
+          "text": "That company is {{aiTextProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "googleSignIn",
+          "text": "If you sign in with Google, Google takes part only to sign you in. For your Google account, Google is a controller in its own right and its own privacy policy applies."
+        },
+        {
+          "kind": "paragraph",
+          "when": "transcription",
+          "text": "No company hears your voice: recordings are turned into text on our own servers."
+        }
+      ]
+    },
+    {
+      "id": "photos",
+      "heading": "Product photos",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Many product photos load straight from supermarket websites. When your browser loads one, that website receives your IP address, as it would if you visited it. We tell your browser not to send which page of {{appName}} you were reading."
+        }
+      ]
+    },
+    {
+      "id": "transfers",
+      "heading": "Outside the European Economic Area",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "If a company named above handles your data outside the European Economic Area, the transfer relies on an adequacy decision of the European Commission (such as the EU US Data Privacy Framework) or on the standard contractual clauses the Commission has approved."
+        }
+      ]
+    },
+    {
+      "id": "google",
+      "when": "googleSignIn",
+      "heading": "Signing in with Google",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "When you continue with Google, we ask Google only for your email address and your basic profile (your name). We use them only to sign you in."
+        },
+        {
+          "kind": "paragraph",
+          "text": "We do not read your contacts, your mail or anything else in your Google account, and we do not share what Google gives us with anyone."
+        },
+        {
+          "kind": "paragraph",
+          "text": "{{appName}}'s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements."
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "heading": "What the app keeps on your device",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The app keeps a few things on your phone or computer because it cannot work without them:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "your session, so you stay signed in;",
+            "your theme and language;",
+            "how you like to see your lists, and what you had open last;",
+            "notices you have already seen;",
+            "a shop map you are still recording;",
+            "a copy of the app itself, so it opens without a connection."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "Nothing the app keeps on your device is used for analytics, advertising or tracking, and none of it comes from another company's site. Because everything it keeps is strictly needed for the app to work, the law does not ask us to show a cookie banner (article 5(3) of the ePrivacy Directive; in Spain, article 22.2 of the LSSI)."
+        }
+      ]
+    },
+    {
+      "id": "rights",
+      "heading": "Your rights",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The GDPR gives you these rights over your data:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "to see it and get a copy;",
+            "to have it corrected;",
+            "to have it deleted;",
+            "to have its use limited;",
+            "to object to how it is used;",
+            "to take it with you in a form another service can read."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "To use any of them, write to {{contactEmail}} from the email address on your account and say what you want. We answer within one month."
+        },
+        {
+          "kind": "paragraph",
+          "text": "You can delete your account yourself, at any time, on the account page."
+        },
+        {
+          "kind": "paragraph",
+          "text": "If you think we handle your data wrongly, you can complain to the data protection authority of your country. In Spain that is the Agencia Española de Protección de Datos (AEPD), at aepd.es."
+        }
+      ]
+    },
+    {
+      "id": "deletion",
+      "heading": "When you delete your account",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "These are removed:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "your account, your email address and your password;",
+            "the devices you are signed in on;",
+            "your shopping profiles;",
+            "your own shopping trips;",
+            "what the app remembers about you, such as whether you saw the tour;",
+            "the record of which version of the [[terms]] you accepted."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "when": "googleSignIn",
+          "text": "The link to your Google account is removed too."
+        },
+        {
+          "kind": "paragraph",
+          "when": "transcription",
+          "text": "Your voice recordings are deleted."
+        },
+        {
+          "kind": "paragraph",
+          "when": "assistant",
+          "text": "The count of how much you used the assistant is deleted."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Some things stay, because other people use them, but with your name removed:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "the lists, items and comments you wrote in a group, where you appear as a former member;",
+            "what you marked as bought on a group's list;",
+            "the shop maps you recorded."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "when": "transcription",
+          "text": "The written transcripts of your voice comments stay for the group in the same way."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Your email address and your name are removed from the security records."
+        },
+        {
+          "kind": "paragraph",
+          "when": "offsiteBackups",
+          "text": "Our backups still hold the deleted account for up to {{backupDays}} days, until they expire."
+        }
+      ]
+    },
+    {
+      "id": "minors",
+      "heading": "Children",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Anyone may use {{appName}}. If you are under 14, you need permission from a parent or guardian (article 7 of Spain's data protection law, the LOPDGDD)."
+        },
+        {
+          "kind": "paragraph",
+          "text": "We do not knowingly collect more from children than from anyone else. A parent or guardian can ask us to delete a child's account by writing to {{contactEmail}}."
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "heading": "Security",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Everything between your device and our servers travels encrypted. Passwords are stored only as hashes, so nobody can read them. Only whoever runs {{appName}}, and the companies named above under their agreements with us, can reach the data on the servers."
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "when": "supportAccess",
+      "heading": "When you ask for help",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "If you report a problem or ask for help, whoever runs {{appName}} can open the app as you, to see what you see."
+        },
+        {
+          "kind": "list",
+          "items": [
+            "A session lasts two hours at most and cannot be made longer.",
+            "During it, they cannot delete your account or accept the [[terms]] for you.",
+            "Each session is recorded: who opened it, when, and why. The record is kept for {{auditTrailDays}} days."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "changes",
+      "heading": "Changes to this policy",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "When we change this policy, we change the date at the top of this page, so you can always see when it last changed."
+        }
+      ]
+    }
+  ]
+}

@@ -83,3 +83,29 @@ describe('entryErrorKey', () => {
     });
   });
 });
+
+// Velista `0173`, target 7.
+describe('entryErrorKey about the terms', () => {
+  it('says the terms changed, on both routes', () => {
+    const stale = new GatewayError({
+      code: 'terms_version_stale',
+      status: 409,
+      correlationId: 'c1',
+      details: { currentVersion: '2026-10-29+2026-12-01' },
+    });
+
+    expect(entryErrorKey(stale, 'zones.create')).toBe('legal.accept.stale');
+    expect(entryErrorKey(stale, 'zones.join')).toBe('legal.accept.stale');
+  });
+
+  it('says the same without "changed" for a missing version', () => {
+    const missing = new GatewayError({
+      code: 'terms_acceptance_missing',
+      status: 400,
+      correlationId: 'c2',
+      details: { currentVersion: '2026-10-29' },
+    });
+
+    expect(entryErrorKey(missing, 'zones.create')).toBe('legal.accept.missing');
+  });
+});

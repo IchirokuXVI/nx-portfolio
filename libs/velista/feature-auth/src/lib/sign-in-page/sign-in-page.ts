@@ -6,14 +6,14 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   AUTH_SERVICE,
-  SessionStore,
+  GoogleSignIn,
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
@@ -23,14 +23,19 @@ import {
   EmailField,
   FormError,
   GoogleOption,
+  LegalLinks,
   PasswordField,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
+import { authTerms } from '../auth-terms';
 import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
 
 /** The id the rejection carries, and the id both fields are described by. */
 const ERROR_ID = 'sign-in-error';
+
+/** The id of the message a refused Google start shows, which the button points at. */
+const GOOGLE_ERROR_ID = 'sign-in-google-error';
 
 /**
  * Signing in, for somebody whose account is on another phone.
@@ -51,7 +56,9 @@ const ERROR_ID = 'sign-in-error';
     EmailField,
     FormError,
     GoogleOption,
+    LegalLinks,
     PasswordField,
+    RouterOutlet,
     SpinnerIcon,
   ],
   templateUrl: './sign-in-page.html',
@@ -60,15 +67,22 @@ const ERROR_ID = 'sign-in-error';
 })
 export class SignInPage {
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
-  private readonly _session = inject(SessionStore);
+  private readonly _google = inject(GoogleSignIn);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /** Where the two legal links at the foot of the screen go (velista `0172`). */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly errorId = ERROR_ID;
+  readonly googleErrorId = GOOGLE_ERROR_ID;
 
   /**
    * Prefilled from `?email=`, which is what the register screen's `conflict` message
@@ -108,16 +122,24 @@ export class SignInPage {
   );
 
   /**
-   * Whether to offer Google at all.
+   * The terms over this page, and whether to offer Google at all (velista `0173`).
    *
-   * Never to a guest, and that is not defensive tidiness: until the gateway passes
-   * `linkUserId`, `googleLogin` takes the create branch and mints a **fresh registered
-   * user**, so a guest who tapped it would lose every group exactly as rule C2
-   * describes for register (section 5.6). `anonymousOnlyGuard` already keeps a guest
-   * off this route, and this is the second lock on the same door, on the button
-   * itself, where the plan asks for it.
+   * Google is drawn where the deployment has a Google client and never in the native
+   * shell, where Google refuses an embedded WebView (velista `0166`). A guest is offered
+   * it like anybody else, because backend `0230` links the guest account in place and
+   * keeps its groups. Continuing with Google can make an account, so the line under the
+   * button names the terms and the start sends their version.
    */
-  readonly googleOffered = computed(() => !this._session.isGuest());
+  readonly terms = authTerms(['auth', 'login']);
+
+  /** True from a tap on Google until the document leaves, or until the start fails. */
+  readonly googleStarting = signal(false);
+
+  /**
+   * A refused Google start, or null. Its own message beside the button and not the
+   * form's, because nothing either field holds had anything to do with it.
+   */
+  readonly googleError = signal<AuthErrorCopy | null>(null);
 
   /**
    * The form's own submit, which is what makes the phone keyboard's Go key work.
@@ -186,16 +208,29 @@ export class SignInPage {
   }
 
   /**
-   * Google, which records rather than navigates until section 5.6 lands.
+   * Google, which sends the document to the gateway (velista `0171`).
    *
-   * Observable rather than an empty body, exactly as `0008` left the entry actions: a
-   * test can assert the button is wired to the right destination, which is the half of
-   * this that stays true once the gateway redirects properly.
+   * On success the page is leaving, so the busy state stays on. A refusal comes back
+   * as a sentence beside the button, and a second tap tries again.
    */
-  readonly pendingRoutes = signal<readonly string[]>([]);
+  async continueWithGoogle(): Promise<void> {
+    if (this.googleStarting()) {
+      return;
+    }
 
-  continueWithGoogle(): void {
-    this.pendingRoutes.update((current) => [...current, 'auth.google']);
+    this.googleStarting.set(true);
+    this.googleError.set(null);
+
+    try {
+      await this._google.start({ acceptedTermsVersion: this.terms.version() });
+    } catch (error) {
+      this.googleStarting.set(false);
+      const copy = authErrorCopy(error, 'auth.google');
+      if (copy.placement === 'terms') {
+        this.terms.reload();
+      }
+      this.googleError.set(copy);
+    }
   }
 
   /**

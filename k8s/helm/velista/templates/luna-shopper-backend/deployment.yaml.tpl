@@ -95,7 +95,7 @@ spec:
           ports:
             - containerPort: {{ .port }}
           env:
-            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" $root.Values.environment "tag" $tag) | nindent 12 }}
+            {{- include "lunaShopperBackend.env" (dict "svc" . "cfg" $cfgName "sec" $secName "env" $root.Values.environment "tag" $tag "legal" $ls.legal) | nindent 12 }}
           # The two probes hit two DIFFERENT handlers, and the split is the point
           # rather than a detail (plan 0027, section 1).
           #

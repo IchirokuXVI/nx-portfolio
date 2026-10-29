@@ -155,6 +155,15 @@ export const ERROR_CODES = {
    */
   LINE_MERGE_TOO_MANY_PRODUCTS: 'line_merge_too_many_products',
   /**
+   * A typed name is the name of two or more lines of the list that hold a
+   * product, and the add said it can ask which one (plan 0228, section 3).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client asks
+   * the person and sends the add again with `intoLineId` or with `newLine`.
+   * The envelope's `details` list the lines, so the question can draw them.
+   */
+  LINE_ADD_NEEDS_CHOICE: 'line_add_needs_choice',
+  /**
    * The brand label has no letters and no digits, so it makes no key (plan
    * 0115, section 5.3).
    *
@@ -474,6 +483,31 @@ export const ERROR_CODES = {
    * The reset half would give it a first password, which nobody asked for.
    */
   RECOVERY_NEEDS_PASSWORD: 'recovery_needs_password',
+  /**
+   * A request carried an `acceptedTermsVersion` that is not the current
+   * effective version of the Terms (plan 0231, section 4.3). The person read
+   * a text that is no longer the text. `details.currentVersion` names the one
+   * to draw instead. Refused whether or not acceptance is required.
+   */
+  TERMS_VERSION_STALE: 'terms_version_stale',
+  /**
+   * A path that creates an account carried no `acceptedTermsVersion`, and
+   * this deployment requires acceptance (plan 0231, section 4.3).
+   * `details.currentVersion` names the version to accept.
+   */
+  TERMS_ACCEPTANCE_MISSING: 'terms_acceptance_missing',
+  /**
+   * A person's assistant allowance, or the deployment's ceiling, would not
+   * fit this turn (plan 0234, section 8.1). No provider was called.
+   *
+   * Its own code and not {@link RATE_LIMITED}, because the client's answer is
+   * different: `rate_limited` is a countdown in seconds (rule A5), and this one
+   * is "come back tomorrow" or "the assistant is resting". It carries no
+   * `retryAfterSeconds`, so a client that reads only that field shows nothing
+   * wrong rather than a twelve hour countdown. `details` names `scope`,
+   * `period`, `limit` and `resetsAt`.
+   */
+  ASSISTANT_ALLOWANCE_REACHED: 'assistant_allowance_reached',
   INTERNAL: 'internal',
 } as const;
 
@@ -550,6 +584,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.LINE_MERGE_REQUIRED]: HttpStatus.CONFLICT,
   [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: HttpStatus.CONFLICT,
   [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: HttpStatus.CONFLICT,
+  // 409 as `line_merge_required` is: the add was well formed, and what stops
+  // it is lines the list already holds, which only the person can choose
+  // between (plan 0228).
+  [ERROR_CODES.LINE_ADD_NEEDS_CHOICE]: HttpStatus.CONFLICT,
   // 400, because what is wrong is a value in the body: a label of punctuation
   // makes no key, so there is nothing to register (plan 0115, section 5.3).
   [ERROR_CODES.BRAND_LABEL_EMPTY]: HttpStatus.BAD_REQUEST,
@@ -641,5 +679,12 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.RECOVERY_OTHER_ACCOUNT]: HttpStatus.CONFLICT,
   [ERROR_CODES.RECOVERY_NEEDS_EMAIL]: HttpStatus.CONFLICT,
   [ERROR_CODES.RECOVERY_NEEDS_PASSWORD]: HttpStatus.CONFLICT,
+  // 409: the text moved under the person, as a stale quantity does. 400: the
+  // request is incomplete for this deployment (plan 0231, section 4.3).
+  [ERROR_CODES.TERMS_VERSION_STALE]: HttpStatus.CONFLICT,
+  [ERROR_CODES.TERMS_ACCEPTANCE_MISSING]: HttpStatus.BAD_REQUEST,
+  // 429 beside `rate_limited` and apart from it by code: both say "not now",
+  // and only that one says how many seconds (plan 0234, section 8.1).
+  [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: HttpStatus.TOO_MANY_REQUESTS,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

@@ -241,4 +241,33 @@ describe('AccountApi', () => {
       await expect(result).rejects.toThrow();
     });
   });
+
+  describe('accepting the terms (velista 0173)', () => {
+    it('posts the version and maps the 201', async () => {
+      const result = api.acceptTerms('2026-10-29');
+
+      const request = httpMock.expectOne(
+        `${GATEWAY}/v1/account/terms-acceptances`
+      );
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({ version: '2026-10-29' });
+      request.flush(
+        { version: '2026-10-29', acceptedAt: '2026-10-29T10:00:00.000Z' },
+        { status: 201, statusText: 'Created' }
+      );
+
+      await expect(result).resolves.toEqual({
+        version: '2026-10-29',
+        acceptedAt: '2026-10-29T10:00:00.000Z',
+      });
+    });
+
+    it('fails rather than inventing an acceptance it cannot read', async () => {
+      const result = api.acceptTerms('2026-10-29');
+
+      httpMock.expectOne(`${GATEWAY}/v1/account/terms-acceptances`).flush({});
+
+      await expect(result).rejects.toThrow();
+    });
+  });
 });

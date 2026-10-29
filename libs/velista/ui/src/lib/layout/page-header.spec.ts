@@ -1,6 +1,11 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { BackStack, provideVelistaTesting } from '@portfolio/velista/platform';
+import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  BackStack,
+  LiveConnection,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PageHeader } from './page-header';
@@ -49,7 +54,7 @@ class Host {
 
 async function render(): Promise<ComponentFixture<Host>> {
   await TestBed.configureTestingModule({
-    imports: [Host],
+    imports: [Host, RokuTranslatorTestingModule.forTesting()],
     providers: [provideVelistaTesting()],
   }).compileComponents();
 
@@ -193,6 +198,76 @@ describe('PageHeader', () => {
 
     expect(query(fixture, 'h1')).toBe(before);
     expect(before?.textContent?.trim()).toBe('Compra semanal');
+  });
+});
+
+/**
+ * Plan 0168. One quiet mark on every page while the realtime socket has been down for
+ * more than two seconds. `LiveConnection` is replaced by a writable signal: when the
+ * mark turns on is that service's own spec.
+ */
+describe('PageHeader and the reconnecting mark', () => {
+  let attention: WritableSignal<boolean>;
+
+  beforeEach(() => {
+    attention = signal(false);
+    TestBed.overrideProvider(LiveConnection, { useValue: { attention } });
+  });
+
+  it('is absent while attention is false', async () => {
+    const fixture = await render();
+
+    expect(query(fixture, '.live-mark')).toBeNull();
+  });
+
+  it('is drawn with its accessible name while attention is true, before the actions', async () => {
+    const fixture = await render();
+
+    attention.set(true);
+    fixture.detectChanges();
+
+    const mark = query(fixture, '.actions .live-mark');
+    expect(mark?.getAttribute('role')).toBe('img');
+    expect(mark?.getAttribute('aria-label')).toBe('connection.reconnecting');
+    expect(
+      mark?.querySelector('lib-offline-icon')?.getAttribute('aria-hidden')
+    ).toBe('true');
+    expect(mark?.nextElementSibling).toBe(query(fixture, '.filter'));
+  });
+
+  it('is not a control', async () => {
+    const fixture = await render();
+    attention.set(true);
+    fixture.detectChanges();
+
+    expect(query(fixture, '.live-mark')?.tagName).toBe('SPAN');
+    expect(query(fixture, '.live-mark button')).toBeNull();
+    expect(query(fixture, '.live-mark')?.hasAttribute('tabindex')).toBe(false);
+  });
+
+  it('draws on a page that projects no actions', async () => {
+    const fixture = await render();
+    fixture.componentInstance.hasActions.set(false);
+    attention.set(true);
+    fixture.detectChanges();
+
+    expect(query(fixture, '.actions .live-mark')).not.toBeNull();
+    expect(queryAll(fixture, '.actions button')).toHaveLength(0);
+  });
+
+  it('H1: leaves the header’s height alone, one action square at most', async () => {
+    // jsdom lays nothing out, so the height is read where it is decided: the header
+    // keeps its one block size, and the mark is no taller than an action.
+    const css = stylesheet();
+    const header = css.match(/\.header\s*\{[^}]*\}/)?.[0] ?? '';
+    const mark = css.match(/\.live-mark\s*\{[^}]*\}/)?.[0] ?? '';
+
+    expect(header).toContain(
+      'block-size: calc(var(--app-header-height) + var(--app-safe-top))'
+    );
+    expect(mark).toContain('block-size: var(--app-touch-target)');
+    expect(mark).toContain('flex: none');
+    expect(mark).not.toMatch(/margin|padding-block/);
   });
 });
 

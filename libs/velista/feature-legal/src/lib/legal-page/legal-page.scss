@@ -1,0 +1,151 @@
+// A document to read, in the app's own quiet voice: the body text, the secondary
+// colour and hairlines it already uses, and the one accent (the quiet action colour)
+// for what can be pressed. No tinted container anywhere: the owner's rule for velista.
+//
+// Mixins are copied rather than imported, for the reason `_install-page.scss` gives:
+// Sass cannot cross a library boundary.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+:host {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+}
+
+// One column. The width cap is `AppLayout`'s phone column, deliberately not repeated
+// here, and it is what keeps a line of the policy at a readable length.
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-6);
+  flex: 1;
+  padding: var(--app-space-5);
+  padding-block-end: calc(var(--app-space-10) + var(--app-safe-bottom));
+  overflow-y: auto;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding-block: var(--app-space-8);
+  color: var(--app-text-secondary);
+}
+
+.spinner {
+  font-size: var(--app-icon-lg);
+}
+
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.quiet {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.unpublished {
+  margin: 0;
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+// The date line: a fact to look up, so it takes the quiet text colour.
+.meta {
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+// The contents, folded behind one row the size of a touch target.
+.contents {
+  border-block: 1px solid var(--app-border-subtle);
+}
+
+.contents-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  list-style: none;
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+
+  @include focus-ring;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+}
+
+// The fold's own chevron, turned while open, in place of the marker a flex summary
+// loses.
+.contents-glyph {
+  font-size: var(--app-icon-sm);
+  transition: transform var(--app-motion-fast) var(--app-motion-ease);
+}
+
+.contents[open] .contents-glyph {
+  transform: rotate(180deg);
+}
+
+.contents-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0 0 var(--app-space-4);
+  padding-inline-start: var(--app-space-6);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.contents-link {
+  display: inline-block;
+  padding-block: var(--app-space-2);
+  color: var(--app-action-quiet-fg);
+  text-decoration: none;
+
+  @include focus-ring;
+}
+
+// The sections and their links are drawn by `LegalSections`, which carries their
+// styles, so the sheet of velista 0173 reads the same.
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

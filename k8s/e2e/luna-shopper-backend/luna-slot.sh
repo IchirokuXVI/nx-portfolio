@@ -15,6 +15,9 @@
 #   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up <n>
 #                                                           run a slot and
 #                                                           configure nothing
+#   bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up --voice
+#                                                           also run the
+#                                                           transcriber
 #
 # --- a slot is borrowed, and an .env is yours --------------------------------
 #
@@ -24,7 +27,7 @@
 # between. --restart bounces without releasing, and --down --keep-slot stops
 # everything and holds the number.
 #
-# Nothing else in those files is touched, on any run. A GEMINI_API_KEY pasted in
+# Nothing else in those files is touched, on any run. An ANTHROPIC_API_KEY pasted in
 # by hand, a HARVEST_ENABLED flipped on for a crawl, a MERCADONA_BASE_URL pointed
 # at a local recording: only the keys this script DERIVES from the slot are
 # rewritten, and everything else is kept exactly as it is on disk, blank values
@@ -158,6 +161,10 @@ PROBE="$root/tools/dev/probe-ports.mjs"
 #   Slot 0 is refused. It is the developer's own, and an --ephemeral --down 0
 #   would take their databases with it.
 EPHEMERAL=''
+# --voice (plan 0235): run the transcriber beside the slot and point the
+# assistant at it. Off unless named, because the transcriber takes two CPUs and
+# about 2.5 GB; see start_transcriber.
+VOICE=''
 EPHEMERAL_ROOT="${TMPDIR:-/tmp}/luna-slot-ephemeral"
 EPHEMERAL_DIR=''
 
@@ -180,7 +187,7 @@ MIN_AUTO_SLOT=1
 #
 # Every .env below is rendered from a heredoc in write_config, and every one of
 # them is a file somebody may have edited by hand. Writing it with `cat >` throws
-# that edit away, which is how a pasted GEMINI_API_KEY, a HARVEST_ENABLED flipped
+# that edit away, which is how a pasted ANTHROPIC_API_KEY, a HARVEST_ENABLED flipped
 # on for a crawl, or a MERCADONA_BASE_URL pointed at a local recording all
 # disappear the moment anybody moves the slot or re-runs --up. The values worth
 # keeping are exactly the ones nobody can regenerate.
@@ -212,7 +219,7 @@ declare -A DERIVED_KEYS=(
   [core]='PORT CORE_DB_URL'
   [catalog]='PORT CATALOG_DB_URL'
   [harvester]='PORT HARVESTER_DB_URL'
-  [assistant]='PORT GATEWAY_INTERNAL_URL'
+  [assistant]='PORT GATEWAY_INTERNAL_URL TRANSCRIBER_URL'
   [auth-test]='AUTH_DB_URL'
   [core-test]='CORE_DB_URL'
   [catalog-test]='CATALOG_DB_URL'
@@ -253,7 +260,7 @@ ALLOWED_PORTS=''
 # A key on disk that the template does not name is kept, appended under a marked
 # comment.
 #
-# A BLANK VALUE IS A VALUE. `GEMINI_API_KEY=` present and empty is a decision: it
+# A BLANK VALUE IS A VALUE. `ANTHROPIC_API_KEY=` present and empty is a decision: it
 # means "use no key, answer 501, and do not ask me again". Ten keys ship blank for
 # that reason, MERCADONA_BASE_URL, OVERPASS_URL, MIN_CLIENT_VERSION and
 # VOICE_COMMENT_CONTENT_TYPES among them, where blank means "use the value built
@@ -269,7 +276,7 @@ ALLOWED_PORTS=''
 # Parsing rules, stated because each one is a way to be silently wrong:
 #
 #   - only an uncommented `^[A-Za-z_][A-Za-z0-9_]*=` line counts as a key, so
-#     `# GEMINI_API_KEY=x` is a comment and that key is absent
+#     `# ANTHROPIC_API_KEY=x` is a comment and that key is absent
 #   - the value is the rest of the line, verbatim, so quotes and a `#` inside a
 #     value survive
 #   - a key that appears twice keeps its FIRST value, which is what dotenv does
@@ -794,7 +801,7 @@ options:
                          way; nothing takes it.
   --reset-env            put every key this script does not derive back to its
                          shipped default. Preservation is what makes a hand
-                         edited GEMINI_API_KEY survive a re-run, and this is the
+                         edited ANTHROPIC_API_KEY survive a re-run, and this is the
                          repair for the first time a preserved value is the
                          thing that broke the stack. Refused with --restart:
                          reset with `luna-slot.sh <slot> --reset-env`, then
@@ -803,6 +810,16 @@ options:
                          its own: with nothing being reset there is nothing to
                          keep.
   --timeout <secs>       how long --up waits for each service (default 180)
+  --voice                with --up or --restart: also run the transcriber (the
+                         `voice` profile of compose.apps.yml, plan 0235) on this
+                         slot's port, and write its address into the
+                         assistant's TRANSCRIBER_URL. It takes two CPUs and
+                         about 2.5 GB, so start it only to work on voice. The
+                         models live on the shared volume luna-transcriber-models
+                         (created when absent; the first start downloads about
+                         2 GB into it). An --up without --voice writes
+                         TRANSCRIBER_URL empty and stops the transcriber, and
+                         a --restart keeps whatever the slot had.
   --ephemeral            run a slot without configuring this checkout for it.
                          Nothing under the worktree is written and no claim is
                          made: the values the slot decides are given to the
@@ -863,7 +880,7 @@ EOF
 # mail at +40, observability at +50.
 declare -A DEFAULT_PORT=(
   [gateway]=3000  [realtime]=3001  [auth]=3002  [core]=3003  [catalog]=3004
-  [harvester]=3005 [assistant]=3006
+  [harvester]=3005 [assistant]=3006 [transcriber]=3007
   [auth_db]=5432  [core_db]=5433   [catalog_db]=5434 [harvester_db]=5435
   [auth_db_test]=5442 [core_db_test]=5443 [catalog_db_test]=5444
   [harvester_db_test]=5445
@@ -875,7 +892,7 @@ declare -A DEFAULT_PORT=(
 LUNA_SLOT_BAND=43000
 declare -A SLOT_OFFSET=(
   [gateway]=0   [realtime]=1   [auth]=2   [core]=3   [catalog]=4
-  [harvester]=5 [assistant]=6
+  [harvester]=5 [assistant]=6 [transcriber]=7
   [auth_db]=10  [core_db]=11   [catalog_db]=12 [harvester_db]=13
   [auth_db_test]=14 [core_db_test]=15 [catalog_db_test]=16
   [harvester_db_test]=17
@@ -944,11 +961,19 @@ test_db_ports() {
   done
 }
 
+# The transcriber (plan 0235). A container rather than a Nest service, and opt in
+# with --voice, so it is reserved per slot like the observability block: counted
+# when deciding whether a slot is free, never when deciding whether it is up.
+voice_ports() {
+  luna_port transcriber "$1"
+}
+
 slot_ports() {
   infra_ports "$1"
   service_ports "$1"
   observability_ports "$1"
   test_db_ports "$1"
+  voice_ports "$1"
 }
 
 probe_ports() {
@@ -1089,6 +1114,12 @@ write_config() {
   HARVESTER_PORT="$(luna_port harvester "$slot")"
   ASSISTANT_PORT="$(luna_port assistant "$slot")"
 
+  # The transcriber's published port, and what the assistant is told about it:
+  # its address with --voice, empty without, which is voice off (plan 0235).
+  local TRANSCRIBER_PORT TRANSCRIBER_URL=''
+  TRANSCRIBER_PORT="$(luna_port transcriber "$slot")"
+  [[ -n "$VOICE" ]] && TRANSCRIBER_URL="http://localhost:${TRANSCRIBER_PORT}"
+
   # The one front end the singular URLs point at. See the note at the top and
   # resolve_app_slot: a redirect target cannot be a list, so one slot is picked.
   local SHELL_PORT VELISTA_PORT
@@ -1191,6 +1222,10 @@ LUNA_CORE_PORT=${CORE_PORT}
 LUNA_CATALOG_PORT=${CATALOG_PORT}
 LUNA_HARVESTER_PORT=${HARVESTER_PORT}
 LUNA_ASSISTANT_PORT=${ASSISTANT_PORT}
+# The transcriber (plan 0235), under the \`voice\` profile of compose.apps.yml.
+# LUNA_VOICE=1 says --voice started it, so a --restart keeps it.
+LUNA_TRANSCRIBER_PORT=${TRANSCRIBER_PORT}
+LUNA_VOICE=${VOICE}
 EOF
   fi
 
@@ -1284,7 +1319,8 @@ VOICE_COMMENT_MAX_BYTES=2097152
 # Empty falls back to the contract's list, which is what browsers really produce:
 # WebM/Opus in Chrome, Ogg/Opus in Firefox, MP4/AAC in Safari.
 VOICE_COMMENT_CONTENT_TYPES=
-VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS=45000
+# Above the assistant's own 110 s for a comment (plan 0235, section 6.2).
+VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS=120000
 # The byte cap on an uploaded HarvestDocument (plan 0086, section 10). The
 # gateway is created with no built in body parser so this one route can have a
 # limit of its own; every other JSON body stays at Express's 100 KB. Ten
@@ -1527,35 +1563,43 @@ EOF
   # own token, and the absence of a connection string here is the cheapest place
   # for that to be visible.
   #
-  # GEMINI_API_KEY is EMPTY, and leaving it that way is a supported setup: the
-  # service boots and /v1/assistant answers 501 not_configured (plan 0026). The
-  # suite never needs a key either, because rule A4 forbids any test here from
-  # reaching a model provider. Paste your own key in by hand when you want to
-  # talk to it, and remember the free tier's limits are per Google Cloud project
-  # rather than per user.
+  # ANTHROPIC_API_KEY is EMPTY, and leaving it that way is a supported setup:
+  # the service boots and /v1/assistant answers 501 not_configured (plan 0026).
+  # The suite never needs a key either, because rule A4 forbids any test here
+  # from reaching a model provider. Paste your own key in by hand when you want
+  # to talk to it. Claude is the only provider (plan 0236). A slot written
+  # before that keeps its old provider keys, which nothing reads.
+  #
+  # TRANSCRIBER_URL is derived: this slot's transcriber with --voice, empty
+  # without, which is voice off (plan 0235).
   {
   cat <<EOF
 # Generated by luna-slot.sh (slot ${slot}). Git ignored.
 GATEWAY_INTERNAL_URL=http://localhost:${GATEWAY_PORT}
-GEMINI_API_KEY=
+# Claude answers every turn (plan 0236). It does not hear: the transcriber does
+# (TRANSCRIBER_URL below, plan 0235). A key pasted here survives a re-run: none
+# of these is derived from the slot.
+ANTHROPIC_API_KEY=
 # Empty is the provider's own endpoint. Point it at a local stand in to drive the
 # turn loop without a key and without leaving the machine.
-GEMINI_BASE_URL=
-# Which provider answers a turn (plan 0224): gemini or claude. With claude, Gemini
-# still transcribes, so a spoken turn needs GEMINI_API_KEY too. A key pasted
-# below survives a re-run: none of these is derived from the slot.
-ASSISTANT_PROVIDER=gemini
-ANTHROPIC_API_KEY=
 ANTHROPIC_BASE_URL=
 # Empty means the defaults: low and adaptive.
 ASSISTANT_CLAUDE_EFFORT=
 ASSISTANT_CLAUDE_THINKING=
-# Empty means the default model of the provider that answers. An existing slot
-# keeps its ASSISTANT_MODEL, so blank it when you flip the provider.
+# Empty means claude-haiku-5-5. A slot written before plan 0236 may keep another
+# vendor's model here, and the service warns at boot: blank it.
 ASSISTANT_MODEL=
-# Voice input (plan 0041). An empty transcription model means the model that
-# answers the turn also transcribes it, which is the default everywhere.
-ASSISTANT_TRANSCRIPTION_MODEL=
+# The safety check of every reply (plan 0236). Empty means on, with Haiku, and
+# 112 as the emergency number.
+ASSISTANT_MODERATION=
+ASSISTANT_MODERATION_MODEL=
+ASSISTANT_EMERGENCY_NUMBER=
+# Voice input (plan 0235). This slot's transcriber when --up ran with --voice,
+# and empty otherwise: the voice route then answers 501 and a voice comment
+# settles UNAVAILABLE. Rewritten on every run, because its port is the slot's.
+TRANSCRIBER_URL=${TRANSCRIBER_URL}
+TRANSCRIBER_TURN_TIMEOUT_MS=45000
+TRANSCRIBER_COMMENT_TIMEOUT_MS=110000
 ASSISTANT_AUDIO_MAX_BYTES=2097152
 ASSISTANT_AUDIO_MIME_TYPES=audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac
 ASSISTANT_MAX_TURNS=20
@@ -1566,6 +1610,29 @@ ASSISTANT_CONCURRENCY=2
 ASSISTANT_RETRY_AFTER_FALLBACK=30
 # How long a turn waits on the provider before giving up on it.
 ASSISTANT_PROVIDER_TIMEOUT_MS=30000
+# Each person's allowance (plan 0234, section 7), the chart's defaults, counted
+# in this slot's core. None is derived from the slot, so a number lowered here
+# to try a refusal survives a re-run. Money is integer micro dollars.
+ASSISTANT_TURNS_PER_DAY=60
+ASSISTANT_TURNS_PER_MONTH=600
+ASSISTANT_AUDIO_SECONDS_PER_DAY=900
+ASSISTANT_AUDIO_SECONDS_PER_MONTH=9000
+COMMENT_AUDIO_SECONDS_PER_DAY=1800
+COMMENT_AUDIO_SECONDS_PER_MONTH=18000
+ASSISTANT_COST_PER_DAY_MICRO_USD=100000
+ASSISTANT_COST_PER_MONTH_MICRO_USD=1000000
+ASSISTANT_TURNS_PER_DAY_GUEST=20
+ASSISTANT_TURNS_PER_MONTH_GUEST=100
+ASSISTANT_AUDIO_SECONDS_PER_DAY_GUEST=300
+ASSISTANT_AUDIO_SECONDS_PER_MONTH_GUEST=1500
+COMMENT_AUDIO_SECONDS_PER_DAY_GUEST=600
+COMMENT_AUDIO_SECONDS_PER_MONTH_GUEST=3000
+ASSISTANT_COST_PER_DAY_MICRO_USD_GUEST=40000
+ASSISTANT_COST_PER_MONTH_MICRO_USD_GUEST=200000
+ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD=3000000
+ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD=30000000
+ASSISTANT_TURN_RESERVE_MICRO_USD=20000
+ASSISTANT_ALLOWANCE_TIMEZONE=UTC
 PORT=${ASSISTANT_PORT}
 EOF
   telemetry_env assistant
@@ -1626,6 +1693,7 @@ ${headline}
   redis           : localhost:${REDIS_PORT}
   smtp / mailpit  : localhost:${SMTP_PORT} / http://localhost:${MAILPIT_UI_PORT}
   gateway ${GATEWAY_PORT}   realtime ${REALTIME_PORT}   auth ${AUTH_PORT}   core ${CORE_PORT}   catalog ${CATALOG_PORT}   harvester ${HARVESTER_PORT}   assistant ${ASSISTANT_PORT}
+  transcriber     : localhost:${TRANSCRIBER_PORT} ($([[ -n "$VOICE" ]] && echo 'on, --voice' || echo 'off; --up --voice runs it'))
   otlp http/grpc  : localhost:${OTLP_HTTP_PORT} / ${OTLP_GRPC_PORT}
   jaeger / graf   : http://localhost:${JAEGER_UI_PORT} / http://localhost:${GRAFANA_PORT}
   prometheus      : http://localhost:${PROMETHEUS_PORT}
@@ -1961,6 +2029,45 @@ wait_for_ports() {
   return 1
 }
 
+# --- the transcriber (plan 0235) ------------------------------------------------
+#
+# A container, built from the checkout, under the `voice` profile of
+# compose.apps.yml. Named explicitly on every call, so the profile never starts
+# the six service images that file also describes. Its models live on one
+# EXTERNAL volume that every slot shares, so a second slot costs no second 2 GB
+# download, and a --down never deletes it.
+TRANSCRIBER_VOLUME=luna-transcriber-models
+
+transcriber_compose() {
+  docker compose --env-file "$SLOT_ENV" -f "$here/compose.yml" \
+    -f "$here/compose.apps.yml" --profile voice "$@"
+}
+
+# Whether the slot's descriptor says --voice started the transcriber.
+recorded_voice() {
+  [[ -f "$SLOT_ENV" ]] || return 0
+  sed -n 's/^LUNA_VOICE=\(1\)[[:space:]]*$/\1/p' "$SLOT_ENV" | head -n 1
+}
+
+start_transcriber() {
+  if ! docker volume inspect "$TRANSCRIBER_VOLUME" > /dev/null 2>&1; then
+    echo "==> creating the shared model volume $TRANSCRIBER_VOLUME"
+    echo "    The first start downloads about 2 GB of models into it. To copy a"
+    echo "    models folder in instead, see apps/luna-shopper-backend/transcriber/README.md."
+    docker volume create "$TRANSCRIBER_VOLUME" > /dev/null
+  fi
+  echo "==> starting the transcriber on :$(luna_port transcriber "$LUNA_SLOT") (two CPUs, about 2.5 GB)"
+  echo "    It is ready once both models are in memory: seconds from the volume,"
+  echo "    minutes on the first start."
+  transcriber_compose up -d --wait transcriber
+}
+
+# Removes the container and keeps the volume. Quiet, because it runs on every
+# --down and on an --up without --voice, where usually there is nothing to stop.
+stop_transcriber() {
+  transcriber_compose rm --stop --force transcriber > /dev/null 2>&1 || true
+}
+
 up() {
   local requested_slot="$1" profile="$2" timeout="$3" app_slot="$4" services_csv="$5"
 
@@ -1970,6 +2077,11 @@ up() {
   # them is refused here, before anything is written or started.
   local -a wanted=()
   resolve_services "$services_csv" wanted || return $?
+
+  # What the slot's assistant was started with, read before this run rewrites
+  # the descriptor (plan 0235).
+  local had_voice
+  had_voice="$(recorded_voice)"
 
   # An ephemeral slot takes nothing that somebody else holds: not a number a
   # worktree claims, not the databases a lock keeps, and not a slot another
@@ -2042,7 +2154,10 @@ up() {
     # The slot is kept, but the front end its links name is worked out again, so
     # a front end that paired with this backend since the last run is followed.
     resolve_app_slot "$LUNA_SLOT" "$app_slot"
-    if [[ "$APP_SLOT" != "${LUNA_APP_SLOT:-}" || "$APP_SLOT_CHOSEN" != "${LUNA_APP_SLOT_CHOSEN:-}" ]]; then
+    # --voice turns the transcriber on and its absence turns it off, so a change
+    # rewrites the assistant's TRANSCRIBER_URL as well (plan 0235).
+    if [[ "$APP_SLOT" != "${LUNA_APP_SLOT:-}" || "$APP_SLOT_CHOSEN" != "${LUNA_APP_SLOT_CHOSEN:-}" \
+          || "$VOICE" != "${LUNA_VOICE:-}" ]]; then
       write_config "$LUNA_SLOT" "$APP_SLOT"
     fi
   fi
@@ -2063,8 +2178,28 @@ up() {
     "${stack[@]}" up
   fi
 
+  # The transcriber follows the services, and only once they started: a slot
+  # that already runs refuses them, and its assistant keeps the TRANSCRIBER_URL
+  # it booted with, so starting or stopping the container then would leave the
+  # two disagreeing. The .env already says what --voice asked for, and one
+  # restart of the assistant applies it (plan 0235).
   local -a ports=()
-  serve_services wanted ports || return 1
+  if ! serve_services wanted ports; then
+    if [[ "$VOICE" != "$had_voice" ]]; then
+      echo "voice did not change: the running assistant keeps its TRANSCRIBER_URL. Apply it with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services assistant${VOICE:+ --voice}" >&2
+    fi
+    return 1
+  fi
+
+  if [[ -n "$VOICE" ]]; then
+    start_transcriber || return 1
+  else
+    stop_transcriber
+  fi
+  if [[ "$VOICE" != "$had_voice" && " ${wanted[*]} " != *" assistant "* ]]; then
+    echo "==> --services did not name the assistant, so a running one keeps its old TRANSCRIBER_URL."
+    echo "    Apply it with: bash k8s/e2e/luna-shopper-backend/luna-slot.sh --restart --services assistant${VOICE:+ --voice}"
+  fi
 
   echo "==> waiting up to ${timeout}s for the services to listen"
   if wait_for_ports "$timeout" "${ports[@]}"; then
@@ -2073,6 +2208,7 @@ up() {
     echo "  gateway  http://localhost:${LUNA_GATEWAY_PORT}"
     echo "  realtime http://localhost:${LUNA_REALTIME_PORT}"
     echo "  mailpit  http://localhost:${LUNA_MAILPIT_UI_PORT}"
+    [[ -n "$VOICE" ]] && echo "  transcriber http://localhost:${LUNA_TRANSCRIBER_PORT}/status"
     echo
     if [[ -n "$EPHEMERAL" ]]; then
       echo "Nothing in this checkout was changed, and no worktree claims the slot. It is"
@@ -2281,6 +2417,12 @@ describe_port_holder() {
 restart_services() {
   local services_csv="$1" timeout="$2" app_slot="$3"
 
+  # A restart keeps the transcriber a slot had and --voice adds it; turning it
+  # off is an --up without --voice (plan 0235).
+  local had_voice
+  had_voice="$(recorded_voice)"
+  [[ -z "$VOICE" ]] && VOICE="$had_voice"
+
   # Same as --down: nothing was recorded, so the descriptor is rendered again
   # from the number on the command line.
   if [[ -n "$EPHEMERAL" ]]; then
@@ -2324,8 +2466,30 @@ restart_services() {
     fi
   fi
 
+  # --voice on a slot that ran without it (plan 0235). The assistant read
+  # TRANSCRIBER_URL at boot, so the new one restarts it too.
+  if [[ "$VOICE" != "$had_voice" ]]; then
+    if [[ -z "$EPHEMERAL" ]]; then
+      write_config "$LUNA_SLOT" "$APP_SLOT" > /dev/null
+      require_config
+    fi
+    echo "==> the assistant now hears through this slot's transcriber"
+    if [[ " ${wanted[*]} " != *" assistant "* ]]; then
+      wanted+=(assistant)
+      echo "    restarting assistant as well, because it holds TRANSCRIBER_URL"
+    fi
+  fi
+
   echo "==> restarting on Luna slot $LUNA_SLOT: ${wanted[*]}"
   echo "    (the compose stack and its volumes are left alone)"
+  if [[ -n "$VOICE" ]]; then
+    start_transcriber || return 1
+  elif [[ " ${wanted[*]} " == *" assistant "* ]]; then
+    # The assistant restarts without voice, so a transcriber left from before
+    # (an --up without --voice that a running slot refused) has nobody to
+    # answer. Quiet, and nothing to do on a slot that never had one.
+    stop_transcriber
+  fi
   local -a stopping=()
   for svc in "${wanted[@]}"; do
     port="$(service_port "$svc")"
@@ -2441,7 +2605,7 @@ stop_services() {
 # mode that omits the derived keys instead of computing them.
 #
 # The files themselves are NOT deleted. Deleting them throws away exactly the
-# GEMINI_API_KEY the merge exists to protect. What is removed is only what points
+# ANTHROPIC_API_KEY the merge exists to protect. What is removed is only what points
 # at a slot this worktree no longer holds, and the next --up puts it back through
 # the insert path: a key absent from the file takes the template default, and for
 # a derived key the template default is the freshly computed value.
@@ -2484,6 +2648,9 @@ down() {
   local -a ports=()
   mapfile -t ports < <(service_ports "$LUNA_SLOT")
   stop_services SERVICES ports || echo "  none of them were running"
+  # The transcriber's container goes either way, and its shared model volume
+  # stays: it holds no data of this slot's (plan 0235).
+  stop_transcriber
 
   # Containers only ever hold the infra ports, so they are taken down by compose
   # rather than by killing a pid.
@@ -2721,6 +2888,7 @@ while (( $# )); do
     --keep-data) keep_data=1; shift ;;
     --keep-slot) keep_slot=1; shift ;;
     --ephemeral) EPHEMERAL=1; shift ;;
+    --voice) VOICE=1; shift ;;
     --reset-env) reset_env=1; shift ;;
     --keep-env) KEEP_ENV="${2:-}"; shift 2 ;;
     --keep-env=*) KEEP_ENV="${1#*=}"; shift ;;

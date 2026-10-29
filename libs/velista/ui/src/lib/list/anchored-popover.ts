@@ -22,6 +22,13 @@ export type AnchoredPopoverAlign = 'start' | 'end';
 export type AnchoredPopoverSide = 'above' | 'below';
 
 /**
+ * Its frame. `note` holds sentences and controls inside a padding. `choice` holds
+ * rows that reach its edges, at the width the add choice was drawn to (velista
+ * `0170`).
+ */
+export type AnchoredPopoverFrame = 'note' | 'choice';
+
+/**
  * Above the anchor and aligned with its start edge, since the anchors this is drawn
  * against sit at the foot of the screen and the room is upward; below it when the
  * anchor is near the top.
@@ -96,7 +103,12 @@ const END: ConnectedPosition[] = [
       [cdkConnectedOverlayUsePopover]="'inline'"
       cdkConnectedOverlay
     >
-      <div [attr.aria-labelledby]="labelledBy()" class="pop" role="dialog">
+      <div
+        [attr.aria-labelledby]="labelledBy()"
+        [class.choice]="frame() === 'choice'"
+        class="pop"
+        role="dialog"
+      >
         <ng-content />
       </div>
     </ng-template>
@@ -125,6 +137,9 @@ export class AnchoredPopover {
    * (velista `0134`), or the popover would cover them while it still fits.
    */
   readonly side = input<AnchoredPopoverSide>('above');
+
+  /** Its frame: a padded note, or rows to its edges. */
+  readonly frame = input<AnchoredPopoverFrame>('note');
 
   /** The id of the element inside it that names it, for the dialog's label. */
   readonly labelledBy = input<string | null>(null);

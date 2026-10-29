@@ -4,13 +4,18 @@ import type {
   AppState,
   AppStateFlags,
   SetGlobalUsernameRequest,
+  TermsAcceptance,
   UsernameScope,
   UserProfile,
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
-import { toAppState, toUserProfile } from '../mapping/mappers';
+import {
+  toAppState,
+  toTermsAcceptance,
+  toUserProfile,
+} from '../mapping/mappers';
 import { isRecord, str } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type { AccountServiceI } from './account-service';
@@ -105,6 +110,24 @@ export class AccountApi implements AccountServiceI {
     );
 
     return toAppState(body);
+  }
+
+  /**
+   * `POST /v1/account/terms-acceptances`, ten a minute (backend `0231`).
+   *
+   * The body is the version and nothing else. The 201 is read from `unknown` (rule D4);
+   * an answer with no version rejects, and the prompt says the accept did not save.
+   */
+  async acceptTerms(version: string): Promise<TermsAcceptance> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/account/terms-acceptances'),
+        { version },
+        { context: operation('account.acceptTerms') }
+      )
+    );
+
+    return required(toTermsAcceptance(body), 'account.acceptTerms');
   }
 
   /** `GET /v1/account/username-suggestions`. */

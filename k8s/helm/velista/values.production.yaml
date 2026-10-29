@@ -77,7 +77,9 @@ lunaShopperBackend:
     # refuses to boot with it on against a non local database, and
     # `provision-release.sh --check` asserts no rendered manifest carries it.
     environmentName: production
-    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
+    # The web client velista-web in Google Cloud project velista-512817, owned by
+    # admin@velista.app. Its secret is GOOGLE_CLIENT_SECRET in the Secret.
+    googleClientId: 717012688744-diupovqba48a48vpjpbta5caipv9bn16.apps.googleusercontent.com
     # The path the gateway actually serves: its controllers are versioned, so the
     # callback lives under /v1. It must match a URI pre-registered with Google
     # exactly, which is why it is spelled out rather than derived from a domain.
@@ -175,6 +177,21 @@ lunaShopperBackend:
     # The owner creates each schedule and turns each chain's row on from the
     # back office; neither is in this file.
     schedulerEnabled: true
+
+  # Claude answers every turn in every cluster (plan 0236). The key is
+  # ANTHROPIC_API_KEY in the Secret, from the Velista workspace of the
+  # Anthropic Console, whose monthly spend limit is the provider's own ceiling.
+  # Each person's allowance turns over at midnight in Madrid here (plan 0234,
+  # section 7); every other number of it is values.yaml's.
+  assistant:
+    allowance:
+      timezone: Europe/Madrid
+
+  # Voice (plan 0235): the transcriber runs here and nowhere else. It holds two
+  # cores and 2.5 Gi of this node, and downloads about 2 GB of models on its
+  # first start. Voice is off until its `/health/ready` answers.
+  transcriber:
+    enabled: true
 
   # Two cores for the catalog database. values.yaml gives it one, with the
   # measurements. One search statement is one process, so the second core is for

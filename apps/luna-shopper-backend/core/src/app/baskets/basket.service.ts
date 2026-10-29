@@ -28,7 +28,13 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { DataSource, In, QueryFailedError, Repository } from 'typeorm';
+import {
+  DataSource,
+  In,
+  QueryFailedError,
+  Repository,
+  type EntityManager,
+} from 'typeorm';
 import { Basket, BasketParticipant, BasketSource } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import {
@@ -817,14 +823,26 @@ export class BasketService {
    * to anonymize: it goes. The settlements it wrote are **zone facts** and stay,
    * which is plan 0047 section 3.1's distinction between the basket and the
    * purchase.
+   *
+   * It runs on the caller's manager, because the deletion of an account is one
+   * transaction since plan 0232 (section 3), and it announces nothing. It
+   * answers the lists that lost a basket trip, and the caller announces them
+   * with `announceTripsChanged` after its commit: an announcement for a delete
+   * that then rolled back would tell every open list that a trip is gone that is
+   * still there.
    */
-  async deleteForUser(userId: string): Promise<number> {
+  async deleteForUserIn(
+    manager: EntityManager,
+    userId: string
+  ): Promise<string[]> {
     // Before the delete, as `delete` reads them (plan 0122, section 6): every
     // list one of these baskets drew from loses a basket trip.
-    const tripLists = await tripListsOfOwner(this.tripQuery, userId);
-    const result = await this.lists.delete({ ownerUserId: userId });
-    announceTripsChanged(this.events, tripLists);
-    return result.affected ?? 0;
+    const tripLists = await tripListsOfOwner(
+      (sql, parameters) => manager.query(sql, parameters),
+      userId
+    );
+    await manager.getRepository(Basket).delete({ ownerUserId: userId });
+    return tripLists;
   }
 
   // --- Shared helpers --------------------------------------------------------

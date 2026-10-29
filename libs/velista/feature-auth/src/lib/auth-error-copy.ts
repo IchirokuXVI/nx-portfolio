@@ -1,4 +1,4 @@
-import { GatewayError } from '@portfolio/velista/data-access';
+import { GatewayError, termsRefusal } from '@portfolio/velista/data-access';
 
 /**
  * Which sentence a rejected credential form gets, keyed on the error code **and the
@@ -18,10 +18,17 @@ export type AuthOperation =
   // what reaches this table is a 400 on the address, too many tries, or a failure.
   | 'auth.forgotPassword'
   | 'auth.resetPassword'
-  | 'auth.recoverySignIn';
+  | 'auth.recoverySignIn'
+  // Starting a Google sign in, which only mints a state before the document leaves.
+  | 'auth.google';
 
-/** Where a message belongs, which is the only thing the three screens differ on. */
-export type AuthErrorPlacement = 'pair' | 'email' | 'password';
+/**
+ * Where a message belongs, which is the only thing the three screens differ on.
+ *
+ * `terms` is the checkbox of the account form (velista `0173`): a refusal about the
+ * terms is drawn under it, clears it, and links the terms.
+ */
+export type AuthErrorPlacement = 'pair' | 'email' | 'password' | 'terms';
 
 export interface AuthErrorCopy {
   /** The translation key of the sentence. Never a string from the server. */
@@ -36,6 +43,36 @@ export interface AuthErrorCopy {
    * (section 5.5).
    */
   readonly action?: 'signIn';
+  /**
+   * The document the bracketed words of the sentence open, when it names one: the
+   * terms, for a refusal about them (velista `0173`).
+   */
+  readonly link?: 'terms';
+}
+
+/**
+ * A refusal about the terms (velista `0173`, target 7), or null for any other failure.
+ *
+ * - `stale`: the terms changed while the page was open. The screen reads the settings
+ *   again and clears the box, so the next press sends the new version.
+ * - `missing`: this build sent no version where the server wants one, which
+ *   `minClientVersion` should prevent. The same sentence without "changed".
+ *
+ * Both are about the terms and not about a field, so both are placed on the checkbox
+ * and link the terms.
+ */
+export function termsRefusalCopy(error: unknown): AuthErrorCopy | null {
+  const refusal = termsRefusal(error);
+  if (refusal === null) {
+    return null;
+  }
+
+  return {
+    key:
+      refusal.kind === 'stale' ? 'legal.accept.stale' : 'legal.accept.missing',
+    placement: 'terms',
+    link: 'terms',
+  };
 }
 
 /** The message any failure falls back to, including one with no code at all. */
@@ -53,6 +90,13 @@ export function authErrorCopy(
     // connection screen owns the first of those, so all that is needed here is a
     // sentence that does not claim to know why.
     return GENERIC;
+  }
+
+  // The terms, before anything else: the same answer on every operation (velista
+  // `0173`).
+  const terms = termsRefusalCopy(error);
+  if (terms !== null) {
+    return terms;
   }
 
   // A support session asked for something only the person may do (backend `0194`):
@@ -104,6 +148,13 @@ export function authErrorCopy(
     case 'auth.forgotPassword':
     case 'auth.resetPassword':
     case 'auth.recoverySignIn':
+      return GENERIC;
+
+    case 'auth.google':
+      // Nothing the person typed is involved, so nothing here is about a field. An
+      // `unauthorized` is a guest token the interceptor could not refresh, and
+      // `not_configured` is a gateway with no Google client: neither is something to
+      // explain, and both are worth one more tap (velista `0171`).
       return GENERIC;
   }
 }

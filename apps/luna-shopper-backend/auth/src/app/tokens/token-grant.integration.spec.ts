@@ -22,6 +22,7 @@ import {
   User,
 } from '../entities';
 import { IdentityService } from '../identity/identity.service';
+import { InMemoryTermsService } from '../identity/terms.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { TokenGrantService } from './token-grant.service';
 import { TokenService } from './token.service';
@@ -133,7 +134,9 @@ describeIntegration('reset grants (real Postgres)', () => {
       new UsernameGenerator(),
       new AuthAuditService(dataSource),
       config,
-      {} as never
+      {} as never,
+      new InMemoryTermsService(),
+      { publishSoon: () => undefined } as never
     );
   }, 120_000);
 
@@ -371,7 +374,7 @@ describeIntegration('reset grants (real Postgres)', () => {
     ).resolves.toMatchObject({ outcome: RecoverySignInOutcome.SIGNED_IN });
 
     // The pair from before still rotates.
-    await expect(tokens.rotate(before.refreshToken)).resolves.toMatchObject({
+    await expect(identity.refresh(before.refreshToken)).resolves.toMatchObject({
       userId: user.id,
     });
   });

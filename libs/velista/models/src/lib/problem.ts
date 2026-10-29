@@ -50,7 +50,7 @@ export const ERROR_CODES = [
    *
    * **A statement about the server, not about the caller.** Nobody did anything wrong
    * and retrying will not help, which is the whole reason it is not `internal`: an
-   * install with no `GEMINI_API_KEY` answers this on `/v1/assistant`, and one with no
+   * install with no `ANTHROPIC_API_KEY` answers this on `/v1/assistant`, and one with no
    * OAuth credentials answers it on Google sign in.
    *
    * It was missing from this list, which is the cost of the hand sync this file admits
@@ -138,6 +138,13 @@ export const ERROR_CODES = [
    */
   'line_merge_too_many_products',
   /**
+   * A typed name is the name of two or more lines of the list that hold a product,
+   * and the add said it can ask (backend `0228`, section 3), as a 409. Nothing was
+   * written. `details.lines` names them, and the page asks which one (velista
+   * `0170`).
+   */
+  'line_add_needs_choice',
+  /**
    * The walk moved on since this phone read it (backend `0168`), as a 409, with
    * `details.lastSeq`. Nothing was written. The rewind screen answers it by
    * reading the walk again (velista `0122`).
@@ -177,6 +184,26 @@ export const ERROR_CODES = [
    * before it sends the link again with `switchAccount` (velista `0148`).
    */
   'recovery_other_account',
+  /**
+   * A version of the terms was sent and it is not the current one (backend `0231`), as
+   * a 409. `details.currentVersion` names the current one. The screen reads the
+   * settings again and shows the new terms (velista `0173`, target 7).
+   */
+  'terms_version_stale',
+  /**
+   * No version was sent where the deployment requires acceptance (backend `0231`), as a
+   * 400, with `details.currentVersion`. A build from before velista `0173` meets it;
+   * `minClientVersion` is what keeps one from reaching it.
+   */
+  'terms_acceptance_missing',
+  /**
+   * The person's assistant allowance, or the deployment's, would not fit this turn
+   * (backend `0234`, section 8.1), as a 429. Not `rate_limited`: it carries no
+   * `retryAfterSeconds`, and its answer is a time of day, read from `details` by
+   * `allowanceRefusal` (velista `0174`). Without this member it read as `internal`
+   * and the panel said "try again" to somebody who cannot until tomorrow.
+   */
+  'assistant_allowance_reached',
   'internal',
 ] as const;
 

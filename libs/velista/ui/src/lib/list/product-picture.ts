@@ -67,6 +67,8 @@ import { PhotoViewer } from '../photo/photo-viewer';
     }
 
     <ng-template #photo let-src>
+      <!-- No referrer (velista 0172, D5): the photo is fetched from the chain's own
+           site, and the address of the page somebody is reading is not its business. -->
       <img
         (error)="broken.set(src)"
         [attr.loading]="loading()"
@@ -74,6 +76,7 @@ import { PhotoViewer } from '../photo/photo-viewer';
         alt=""
         class="image"
         decoding="async"
+        referrerpolicy="no-referrer"
       />
     </ng-template>
   `,

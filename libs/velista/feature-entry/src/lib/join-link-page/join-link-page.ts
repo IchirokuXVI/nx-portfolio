@@ -24,11 +24,13 @@ import {
   BrandWordmark,
   InfoIcon,
   isCompleteJoinCode,
+  LinkedText,
   MemberAddIcon,
   normalizeJoinCode,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { entryErrorKey } from '../entry-error-copy';
+import { entryTerms, isTermsSentence } from '../entry-terms';
 
 /**
  * Arriving on somebody else's invite link.
@@ -52,6 +54,7 @@ import { entryErrorKey } from '../entry-error-copy';
     AppVersion,
     BrandWordmark,
     InfoIcon,
+    LinkedText,
     MemberAddIcon,
     SpinnerIcon,
   ],
@@ -83,6 +86,12 @@ export class JoinLinkPage {
   readonly submitting = signal(false);
   readonly errorKey = signal<string | null>(null);
   readonly accountLost = signal(false);
+
+  /** The terms the notice names, and the version a press sends (velista `0173`). */
+  private readonly _terms = entryTerms();
+
+  /** The terms' page, or null when the deployment published none. */
+  readonly termsUrl = this._terms.termsUrl;
 
   /** A link with no usable code in it. Nothing to send, so nothing is offered. */
   readonly usable = isCompleteJoinCode(this.code);
@@ -133,7 +142,7 @@ export class JoinLinkPage {
     this.errorKey.set(null);
 
     const prompting = this._install.prompt();
-    const joining = this._zones.joinZone(this.code);
+    const joining = this._zones.joinZone(this.code, this._versionToSend());
 
     await prompting;
     await this._settle(await joining);
@@ -147,7 +156,14 @@ export class JoinLinkPage {
     this.submitting.set(true);
     this.errorKey.set(null);
 
-    await this._settle(await this._zones.joinZone(this.code));
+    await this._settle(
+      await this._zones.joinZone(this.code, this._versionToSend())
+    );
+  }
+
+  /** The version the notice names, read at the press, when the join makes an account. */
+  private _versionToSend(): string | null {
+    return this.mintingAccount() ? this._terms.version() : null;
   }
 
   /**
@@ -172,7 +188,11 @@ export class JoinLinkPage {
     }
 
     if (outcome.state === 'failed') {
-      this.errorKey.set(entryErrorKey(outcome.error, 'zones.join'));
+      const key = entryErrorKey(outcome.error, 'zones.join');
+      if (isTermsSentence(key)) {
+        this._terms.reload();
+      }
+      this.errorKey.set(key);
     }
   }
 

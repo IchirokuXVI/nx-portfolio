@@ -10,7 +10,11 @@ import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { TokenStore, ZoneStore } from '@portfolio/velista/data-access';
+import {
+  SessionStore,
+  TokenStore,
+  ZoneStore,
+} from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import {
   appPath,
@@ -20,13 +24,16 @@ import {
 import {
   AccountLostPanel,
   AlertIcon,
+  InfoIcon,
   isCompleteJoinCode,
   JoinCodeField,
+  LinkedText,
   normalizeJoinCode,
   SheetShell,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { entryErrorKey } from '../entry-error-copy';
+import { entryTerms, isTermsSentence } from '../entry-terms';
 import { returnPath, type EntryReturnTo } from '../entry-urls';
 
 /**
@@ -48,7 +55,9 @@ import { returnPath, type EntryReturnTo } from '../entry-urls';
     RokuTranslatorPipe,
     AccountLostPanel,
     AlertIcon,
+    InfoIcon,
     JoinCodeField,
+    LinkedText,
     SheetShell,
     SpinnerIcon,
   ],
@@ -59,6 +68,7 @@ import { returnPath, type EntryReturnTo } from '../entry-urls';
 export class JoinCodeSheet {
   private readonly _zones = inject(ZoneStore);
   private readonly _tokens = inject(TokenStore);
+  private readonly _session = inject(SessionStore);
   private readonly _browser = inject(BrowserFacade);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _route = inject(ActivatedRoute);
@@ -69,6 +79,18 @@ export class JoinCodeSheet {
   readonly submitting = signal(false);
   readonly errorKey = signal<string | null>(null);
   readonly accountLost = signal(false);
+
+  /** The terms the notice names, and the version a press sends (velista `0173`). */
+  private readonly _terms = entryTerms();
+
+  /** The terms' page, or null when the deployment published none. */
+  readonly termsUrl = this._terms.termsUrl;
+
+  /**
+   * Whether asking to join also makes an account: true while no session is held, which
+   * the gateway answers by minting a guest. The notice says so before the press.
+   */
+  readonly mintingAccount = computed(() => !this._session.isAuthenticated());
 
   /** Exactly eight characters, which the field has already made legal ones. */
   readonly canSubmit = computed(
@@ -86,7 +108,10 @@ export class JoinCodeSheet {
     this.submitting.set(true);
     this.errorKey.set(null);
 
-    const outcome = await this._zones.joinZone(this.code());
+    const outcome = await this._zones.joinZone(
+      this.code(),
+      this.mintingAccount() ? this._terms.version() : null
+    );
 
     if (outcome.state === 'joined') {
       await this._sheet.leaveTo(
@@ -103,7 +128,11 @@ export class JoinCodeSheet {
     }
 
     if (outcome.state === 'failed') {
-      this.errorKey.set(entryErrorKey(outcome.error, 'zones.join'));
+      const key = entryErrorKey(outcome.error, 'zones.join');
+      if (isTermsSentence(key)) {
+        this._terms.reload();
+      }
+      this.errorKey.set(key);
     }
   }
 

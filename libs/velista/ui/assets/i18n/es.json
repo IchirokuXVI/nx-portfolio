@@ -134,7 +134,7 @@
     }
   },
   "connection": {
-    "notLive": "Las actualizaciones en directo están desactivadas",
+    "reconnecting": "Reconectando las actualizaciones en directo",
     "lost": {
       "title": "Te has quedado sin conexión",
       "body": "Comprueba tu wifi o tus datos móviles. Esta página se recargará sola en cuanto vuelvas a tener conexión.",
@@ -763,6 +763,32 @@
       "voiceBusyNoNumber": "Mucha gente está preguntando a la vez. Inténtalo dentro de un momento, o escríbelo",
       "voiceUnavailable": "El asistente está apagado aquí, así que no se ha añadido nada. Es cosa nuestra, no tuya, y volver a intentarlo no lo cambiará",
       "voiceUnsure": "Algo ha fallado por nuestra parte después de enviarlo. Mira la lista antes de repetirlo, por si ya se ha añadido",
+      "allowance": {
+        "usedDay": {
+          "plain": "Por hoy ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo",
+          "at_one": "Por hoy ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a la {{time}}",
+          "at_other": "Por hoy ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a las {{time}}"
+        },
+        "usedMonth": {
+          "plain": "Por este mes ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo",
+          "on": "Por este mes ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve el {{date}}"
+        },
+        "speakingDay": {
+          "plain": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo",
+          "at_one": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo y volver a hablarle a la {{time}}",
+          "at_other": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo y volver a hablarle a las {{time}}"
+        },
+        "speakingMonth": {
+          "plain": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo",
+          "on": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo y volver a hablarle el {{date}}"
+        },
+        "resting": {
+          "plain": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo",
+          "at_one": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a la {{time}}",
+          "at_other": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a las {{time}}",
+          "on": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve el {{date}}"
+        }
+      },
       "dismissHeard": "Cerrar",
       "suggestions": "Productos que coinciden",
       "groupAdds_one": "Añade su único producto",
@@ -796,6 +822,13 @@
         "alsoCalled": "También: {{- synonym}}",
         "alreadyQuantity": "Cuántos de {{line}}"
       }
+    },
+    "addChoice": {
+      "title": "{{name}} ya está en tu lista",
+      "newLine": "Una línea nueva",
+      "row": "Añadir {{added}} a {{name}}, {{product}}: de {{from}} a {{to}}",
+      "rowNoProduct": "Añadir {{added}} a {{name}}: de {{from}} a {{to}}",
+      "merged": "{{name}}, {{quantity}}"
     },
     "empty": {
       "title": "Todavía no hay nada en esta lista",
@@ -1320,6 +1353,7 @@
   "assistant": {
     "title": "Asistente",
     "back": "Atrás",
+    "disclosure": "Te responde un asistente automático que puede equivocarse.",
     "intro": {
       "lead": "Dime qué necesitas. Por ejemplo:",
       "add": {
@@ -1367,6 +1401,23 @@
     "spoken": "Has dicho algo. Lo estoy escuchando ahora.",
     "tooLong": "Esa grabación era demasiado grande para enviarla. Puedo recibir hasta {{limit}} MB de una vez, así que un mensaje más corto sí llegará.",
     "badFormat": "Tu navegador grabó eso de una forma que no puedo leer. Puedes escribirlo igualmente.",
+    "allowance": {
+      "used": {
+        "day": "Por hoy ya has usado el asistente todo lo que se puede.",
+        "month": "Por este mes ya has usado el asistente todo lo que se puede."
+      },
+      "speaking": {
+        "day": "Ya has gastado el tiempo de hoy para hablar con el asistente. Puedes seguir escribiéndole.",
+        "month": "Ya has gastado el tiempo de este mes para hablar con el asistente. Puedes seguir escribiéndole."
+      },
+      "resting": "El asistente está descansando un rato.",
+      "backAt_one": "Vuelve a la {{time}}.",
+      "backAt_other": "Vuelve a las {{time}}.",
+      "backOn": "Vuelve el {{date}}.",
+      "speakAgainAt_one": "Podrás volver a hablarle a la {{time}}.",
+      "speakAgainAt_other": "Podrás volver a hablarle a las {{time}}.",
+      "speakAgainOn": "Podrás volver a hablarle el {{date}}."
+    },
     "goTo": "Ir a {{list}}",
     "goToInZone": "Ir a {{list}}, en {{zone}}",
     "choices": {
@@ -1904,6 +1955,10 @@
       "listCaption": "{{zone}} · {{count}} por comprar",
       "resultsOnLists": "En tus listas",
       "resultsNone": "Nada en tus listas dice “{{query}}”"
+    },
+    "addChoice": {
+      "title": "{{name}} ya está en esta lista",
+      "back": "{{list}}, elegir otra lista"
     },
     "added": {
       "announced": "{{content}} añadido"
@@ -2780,5 +2835,50 @@
       "body": "Puedes cerrar esta pestaña."
     },
     "refused": "Esto no se puede hacer en una sesión de soporte"
+  },
+  "legal": {
+    "back": "Volver",
+    "contents": "Índice",
+    "loading": "Cargando",
+    "failed": "No se ha podido cargar esta página.",
+    "retry": "Inténtalo de nuevo",
+    "links": "Privacidad y condiciones",
+    "link": {
+      "privacy": "Privacidad",
+      "terms": "Condiciones"
+    },
+    "privacy": {
+      "title": "Política de privacidad",
+      "meta": "Actualizada el {{date}}",
+      "unpublished": "Quien gestiona esta copia de {{appName}} todavía no ha publicado su política de privacidad."
+    },
+    "terms": {
+      "title": "Condiciones del servicio",
+      "meta": "Actualizadas el {{date}}",
+      "metaVersion": "Versión {{version}}, actualizadas el {{date}}",
+      "unpublished": "Quien gestiona esta copia de {{appName}} todavía no ha publicado sus condiciones del servicio."
+    },
+    "accept": {
+      "checkbox": "Acepto las [Condiciones]",
+      "privacy": "Lee cómo usamos tus datos en la [Política de privacidad]",
+      "unticked": "Marca la casilla para aceptar las Condiciones",
+      "google": "Si continúas con Google, aceptas las [Condiciones]",
+      "createNotice": "Al crear el grupo, te creamos una cuenta en este teléfono y aceptas las [Condiciones]",
+      "joinNotice": "Al pedir entrar, te creamos una cuenta en este teléfono y aceptas las [Condiciones]",
+      "stale": "Las [Condiciones] han cambiado mientras tenías esta página abierta. Léelas de nuevo y acéptalas",
+      "missing": "Lee las [Condiciones] y acéptalas"
+    },
+    "prompt": {
+      "title": "Antes de seguir",
+      "titleChanged": "Tenemos nuevas Condiciones",
+      "body": "Lee las [Condiciones del servicio] y acéptalas para seguir",
+      "bodyChanged": "Hemos cambiado las [Condiciones del servicio]. Léelas y acéptalas para seguir",
+      "accept": "Aceptar y continuar",
+      "failed": "No se ha guardado. Inténtalo de nuevo"
+    },
+    "sheet": {
+      "fullPage": "Abrir la página completa",
+      "close": "Cerrar"
+    }
   }
 }

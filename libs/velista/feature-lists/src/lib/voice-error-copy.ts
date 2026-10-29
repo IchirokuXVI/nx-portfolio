@@ -1,4 +1,8 @@
-import { GatewayError } from '@portfolio/velista/data-access';
+import { allowanceRefusal, GatewayError } from '@portfolio/velista/data-access';
+import {
+  allowanceReturn,
+  type AssistantAllowance,
+} from '@portfolio/velista/models';
 
 /** A sentence for the voice strip, by key, with whatever it interpolates. */
 export interface VoiceFailureCopy {
@@ -28,8 +32,20 @@ export interface VoiceFailureCopy {
  *   still running and will finish writing seconds later. The strip used to say
  *   "Nothing was added" here, which is the one claim it had no basis for, and somebody
  *   who believed it said the same sentence again and got two of everything.
+ *
+ * The allowance (velista `0174`, target 6) is the second answer with a time in it:
+ * the allowance refused before a turn ran, so nothing was added, and trying again does
+ * not help until the time it names. `locale` is the reader's, for that time.
  */
-export function voiceFailureCopy(error: unknown): VoiceFailureCopy {
+export function voiceFailureCopy(
+  error: unknown,
+  locale = 'en'
+): VoiceFailureCopy {
+  const allowance = allowanceRefusal(error);
+  if (allowance !== null) {
+    return allowanceCopy(allowance, locale);
+  }
+
   if (!(error instanceof GatewayError)) {
     // A `NetworkError`, or something that never reached the transport at all. The
     // recording did not leave the phone, so nothing was added is a fact here.
@@ -70,4 +86,39 @@ export function voiceFailureCopy(error: unknown): VoiceFailureCopy {
       // The assistant may have written lines already and may still be writing them.
       return { messageKey: 'list.add.voiceUnsure' };
   }
+}
+
+/**
+ * The allowance's sentence for the strip, one key for each case because the strip
+ * draws one.
+ *
+ * The panel's three readings (velista `0174`, target 5), each saying nothing was added
+ * and that typing still works: the list's typed add writes lines and never calls the
+ * assistant, so on this page that is true after every limit, not only the one on
+ * speaking. The deployment's reads as the assistant resting and never names money.
+ * The time carries its hour as the plural count, for Spanish's "a la 1:00".
+ */
+function allowanceCopy(
+  allowance: AssistantAllowance,
+  locale: string
+): VoiceFailureCopy {
+  const group =
+    allowance.scope === 'deployment'
+      ? 'resting'
+      : `${allowance.limit === 'assistantAudio' ? 'speaking' : 'used'}${
+          allowance.period === 'month' ? 'Month' : 'Day'
+        }`;
+  const key = `list.add.allowance.${group}`;
+
+  const back = allowanceReturn(allowance, locale);
+  if (back === null) {
+    return { messageKey: `${key}.plain` };
+  }
+
+  return allowance.period === 'month'
+    ? { messageKey: `${key}.on`, messageArgs: { date: back.when } }
+    : {
+        messageKey: `${key}.at`,
+        messageArgs: { time: back.when, count: back.hour },
+      };
 }

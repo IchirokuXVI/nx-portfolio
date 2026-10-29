@@ -26,8 +26,30 @@
              The message set is the join sheet's, unchanged. -->
         <p class="error" role="alert">
           <lib-alert-icon aria-hidden="true" class="glyph" />
-          {{ key | rokuT }}
+          <!-- A refusal about the terms links them (velista 0173). -->
+          <span>
+            <lib-linked-text [href]="termsUrl()" [text]="key | rokuT" />
+          </span>
         </p>
+      }
+
+      @if (usable && mintingAccount()) {
+        @if (termsUrl(); as terms) {
+          <!--
+            What the press makes, before it is pressed (velista 0173, target 5): an
+            account on this phone, and the terms accepted. Above the buttons, read on
+            the way to them. It replaces the account note that stood at the foot.
+          -->
+          <p class="terms-notice" id="join-link-notice">
+            <lib-info-icon aria-hidden="true" class="glyph" />
+            <span>
+              <lib-linked-text
+                [href]="terms"
+                [text]="'legal.accept.joinNotice' | rokuT"
+              />
+            </span>
+          </p>
+        }
       }
 
       @if (usable) {
@@ -89,7 +111,8 @@
         {{ 'entry.joinLink.decline' | rokuT }}
       </button>
 
-      @if (mintingAccount()) {
+      @if (mintingAccount() && termsUrl() === null) {
+        <!-- No terms published: the account is still told about, as before. -->
         <p class="notice">
           <lib-info-icon aria-hidden="true" class="glyph" />
           {{ 'entry.joinLink.guestNotice' | rokuT }}

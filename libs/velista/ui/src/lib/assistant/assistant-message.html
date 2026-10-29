@@ -59,6 +59,19 @@
     <p class="bubble waiting">{{ entry.text }}</p>
   }
 
+  @case ('allowance') {
+    <!--
+      The allowance said no (backend `0234`, velista `0174`). The container writes the
+      sentence: whose allowance, and when it comes back as a time or a date, never a
+      countdown (rule A5 keeps a clock for `retryAfterSeconds`, which this refusal
+      never carries) and never a word about money. The `unconfigured` treatment and
+      not the failed one, because nothing broke and "try again" is the wrong advice
+      until the period turns over. Polite, so a screen reader says why the answer did
+      not come.
+    -->
+    <p aria-live="polite" class="bubble waiting">{{ entry.text }}</p>
+  }
+
   @case ('dropped') {
     <!--
       The cap bit and the oldest turns went. On a line of its own rather than folded

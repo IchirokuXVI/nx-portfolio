@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpStatus,
@@ -13,9 +14,13 @@ import { ApiBearerAuth, ApiFoundResponse, ApiTags } from '@nestjs/swagger';
 import {
   AUTH_PATTERNS,
   type AuthTokens,
+  type ExchangeGoogleSignInRequest,
   type GoogleProfile,
+  type MintOAuthStateRequest,
   type MintOAuthStateResult,
   type OAuthStatePayload,
+  type StageGoogleSignInRequest,
+  type StageGoogleSignInResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ERROR_CODES,
@@ -27,6 +32,7 @@ import type { GatewayConfig } from '../config/app-config';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { appUrl } from './app-url';
+import { ExchangeGoogleSignInDto, MintOAuthStateDto } from './auth.dto';
 import { AuthUser } from './current-user.decorator';
 import {
   GoogleAuthGuard,
@@ -56,8 +62,10 @@ const APP_CALLBACK_PATH = 'auth/callback';
  *
  * `POST /v1/auth/google/state` mints the opaque state that carries the caller
  * across the round trip, `GET /v1/auth/google` starts the OAuth redirect with it,
- * and the callback spends it, asks auth to create or link the account, and sends
- * the browser back to the app.
+ * and the callback spends it, stages what Google said, and sends the browser
+ * back to the app with a single use code. `POST /v1/auth/google/exchange` trades
+ * that code and the verifier only the minting browser holds for the pair, and
+ * only there does an account change (plan 0230).
  *
  * The routes stay registered whether or not Google is configured, so the
  * published OpenAPI document describes the same API in every environment; what is
@@ -105,17 +113,31 @@ export class GoogleController {
       'An opaque, single use state valid for ten minutes. Pass it as the `state` query parameter when navigating to `GET /v1/auth/google`.',
   })
   @ApiProblemResponses({
+    body: true,
     auth: true,
     notConfigured: true,
     impersonation: 'refused',
+    terms: true,
   })
-  mintState(@AuthUser() user?: CurrentUser): Promise<MintOAuthStateResult> {
-    return this.nats.send(AUTH_PATTERNS.mintOAuthState, {
+  mintState(
+    @Body() dto: MintOAuthStateDto,
+    @AuthUser() user?: CurrentUser
+  ): Promise<MintOAuthStateResult> {
+    const request: MintOAuthStateRequest = {
       // From the verified token or not at all. A body could name somebody else,
       // and linking a Google identity onto an account is permanent.
       userId: user?.userId,
       locale: getRequestContext()?.locale,
-    });
+      // The one field the body requires (plan 0230, section 2). The verifier
+      // behind it stays in the browser until the exchange.
+      codeChallenge: dto.codeChallenge,
+      // Checked by auth now, at the start, and recorded at the exchange (plan
+      // 0231, section 4.2).
+      ...(dto.acceptedTermsVersion
+        ? { acceptedTermsVersion: dto.acceptedTermsVersion }
+        : {}),
+    };
+    return this.nats.send(AUTH_PATTERNS.mintOAuthState, request);
   }
 
   // Ordered: with Google unset there is no passport strategy registered under
@@ -142,11 +164,13 @@ export class GoogleController {
    * tokens on the API's origin with no way back into the app, which is what this
    * route used to do.
    *
-   * The pair rides in the URL **fragment**, never the query string: a fragment is
-   * never sent to a server, and a refresh token in a query string is a refresh
-   * token in the gateway's access log, in every proxy log in front of it, and in
-   * the `Referer` of whatever the app requests next (section 3.1). The app is
-   * required to `history.replaceState` it away as soon as it has read it.
+   * **Nothing permanent happens here** (plan 0230). The state is spent, what
+   * Google said is staged under a single use code, and the code rides in the
+   * URL **fragment**, never the query string: a fragment is never sent to a
+   * server (plan 0023, section 3.1). The pair no longer travels in a URL at
+   * all. The app trades the code at `POST /v1/auth/google/exchange` with the
+   * verifier only the minting browser holds, so a link to the start route sent
+   * to somebody else stages a profile nobody can redeem.
    *
    * Every failure ends at the same page with `#error=`, because the one thing
    * this route must never do is leave the user on the API's origin.
@@ -155,7 +179,7 @@ export class GoogleController {
   @UseGuards(GoogleCallbackGuard)
   @ApiFoundResponse({
     description:
-      'Redirects to the app. On success the token pair rides in the URL fragment (`#accessToken=…&refreshToken=…&userId=…&kind=…&username=…`); on any failure the fragment is `#error=<code>`. There is no response body either way.',
+      'Redirects to the app. On success the fragment is `#code=<single use code>`, to trade at `POST /v1/auth/google/exchange` within two minutes; on any failure the fragment is `#error=<code>`. There is no response body either way.',
   })
   // Deliberately not `{ auth: true }`, though the route can certainly fail to
   // authenticate: a refused sign in leaves here as a 302 carrying `#error=`, not
@@ -169,9 +193,9 @@ export class GoogleController {
     const { url, statusCode } = await this.resolveCallback(req);
     // Written by hand rather than through `@Redirect()`, which reaches Express's
     // `res.redirect` and gets a courtesy body with it: `Found. Redirecting to
-    // <url>`, url and all. On the success path that url carries the token pair
-    // in its fragment, so the one route that must never put those in a body on
-    // this origin was putting them in one, in the response Google's redirect
+    // <url>`, url and all. On the success path that url carries the code in its
+    // fragment, so the one route that must never put it in a body on this
+    // origin would be putting it in one, in the response Google's redirect
     // landed on. A browser discards it and follows the header either way, so
     // there is nothing to lose by leaving it out.
     res.setHeader('Location', url);
@@ -223,20 +247,24 @@ export class GoogleController {
       );
       locale = toSupportedLocale(payload.locale);
 
-      const tokens = await this.nats.send<AuthTokens>(
-        AUTH_PATTERNS.googleLogin,
-        // The parameter this whole plan exists to deliver. Without it a guest who
-        // taps Continue with Google gets a brand new account and loses every zone.
-        { ...req.user, linkUserId: payload.userId }
+      // Staged, not signed in (plan 0230, section 3.3). The link target rides
+      // along so a guest keeps every zone they own, but it is applied only at
+      // the exchange, by a browser holding the verifier and the guest's bearer.
+      const stage: StageGoogleSignInRequest = {
+        ...req.user,
+        linkUserId: payload.userId,
+        codeChallenge: payload.codeChallenge,
+        locale: payload.locale,
+        // Carried, never checked here (plan 0231, section 4.2): a refusal at
+        // a redirect costs the person the whole sign in.
+        acceptedTermsVersion: payload.acceptedTermsVersion,
+      };
+      const { code } = await this.nats.send<StageGoogleSignInResult>(
+        AUTH_PATTERNS.stageGoogleSignIn,
+        stage
       );
 
-      return this.redirect(locale, {
-        accessToken: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
-        userId: tokens.userId,
-        kind: tokens.kind,
-        username: tokens.username,
-      });
+      return this.redirect(locale, { code });
     } catch (error) {
       const code = errorCodeOf(error);
       this.logger.warn(`Google sign in did not complete: ${code}`);
@@ -245,6 +273,50 @@ export class GoogleController {
       // a user's typing speed.
       return this.redirect(locale, { error: code });
     }
+  }
+
+  /**
+   * Trade the code of the callback for the pair (plan 0230, section 4.3).
+   *
+   * The account changes here and nowhere else. Auth spends the code, checks
+   * `base64url(sha256(codeVerifier))` against the challenge of the mint, and,
+   * when the state carried a link target, requires the bearer to name it. A
+   * missing, spent, expired or mismatched code is one answer, 401
+   * `unauthorized`.
+   *
+   * Guarded by the optional guard of plan 0020 for the reason the mint is: a
+   * guest whose access token expired is refused and refreshes first, so the
+   * bearer auth compares is a current one or none.
+   */
+  @Post('exchange')
+  // A support session cannot finish a link either (plan 0194): the identity
+  // would be the operator's.
+  @RefuseImpersonation()
+  @UseGuards(GoogleConfiguredGuard, OptionalJwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiContractResponse(AUTH_PATTERNS.exchangeGoogleSignIn, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    body: true,
+    auth: true,
+    notConfigured: true,
+    impersonation: 'refused',
+  })
+  exchange(
+    @Body() dto: ExchangeGoogleSignInDto,
+    @AuthUser() user?: CurrentUser
+  ): Promise<AuthTokens> {
+    const request: ExchangeGoogleSignInRequest = {
+      code: dto.code,
+      codeVerifier: dto.codeVerifier,
+      // From the verified token or not at all, as on the mint.
+      callerUserId: user?.userId,
+    };
+    return this.nats.send<AuthTokens>(
+      AUTH_PATTERNS.exchangeGoogleSignIn,
+      request
+    );
   }
 
   /**

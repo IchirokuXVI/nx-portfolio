@@ -29,6 +29,7 @@ import {
   gatewayValidationSchema,
 } from './config/app-config';
 import { GatewayHarvestModule } from './harvest/harvest.module';
+import { GatewayLegalModule } from './legal/legal.module';
 import { GatewayListsModule } from './lists/lists.module';
 import { GatewayMergeModule } from './merge/merge.module';
 import { GatewayPurchasesModule } from './purchases/purchases.module';
@@ -133,6 +134,9 @@ import { GatewayZonesModule } from './zones/zones.module';
     // assistant service; no logic here, and no new hostname in either
     // environment.
     GatewayAssistantModule,
+    // What the deployment states for its privacy policy and Terms (plan 0231).
+    // Public, one route.
+    GatewayLegalModule,
   ],
   providers: [
     // The throttler guard runs globally; open endpoints override the bucket's

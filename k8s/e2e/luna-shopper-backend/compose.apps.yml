@@ -124,6 +124,14 @@ services:
       # transcription settles as UNAVAILABLE without a provider call and this
       # deadline is never reached; a long one would only slow a failing suite.
       VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: '5000'
+      # The terms (backend plan 0231, velista plan 0173 section 4.3). Off and
+      # unpublished by default, so the backend gate runs as before. The browser
+      # gate (k8s/e2e/velista-luna/gate.sh) turns acceptance on and names an
+      # invented operator, because the gateway refuses to boot with acceptance
+      # on and either of the two values empty. Auth reads the same switch.
+      TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}
+      LEGAL_CONTROLLER_NAME: ${LEGAL_CONTROLLER_NAME:-}
+      LEGAL_CONTACT_EMAIL: ${LEGAL_CONTACT_EMAIL:-}
       # Names this container on every span and metric (plan 0016, section 4.2).
       # Tracing stays off unless OTEL_ENABLED and an endpoint are supplied, so
       # this tier runs unchanged without a collector.
@@ -213,6 +221,9 @@ services:
       # Auth alone reads it. It defaults to false, and this tier states its
       # environment by hand, so it is named here.
       IMPERSONATION_ENABLED: 'true'
+      # Refuses an account made with no version of the terms (backend plan
+      # 0231). From the environment, for the reason the gateway above states.
+      TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       SMTP_USER: ''
@@ -347,9 +358,8 @@ services:
   # produces one dead service while the gateway stays up and returns 500s, which
   # is a slow thing to diagnose from the outside. Keep the two in step by hand.
   #
-  # GEMINI_API_KEY and ANTHROPIC_API_KEY are empty on purpose and the suite needs
-  # them to stay that way:
-  # rule A4 forbids any test in this repository from reaching a model provider, so
+  # ANTHROPIC_API_KEY is empty on purpose and the suite needs it to stay that
+  # way: rule A4 forbids any test in this repository from reaching a model provider, so
   # a stack that could answer a real turn is a stack that could spend somebody's
   # quota from CI. Empty means /v1/assistant answers 501, which is exactly what an
   # e2e suite should assert.
@@ -363,13 +373,12 @@ services:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: debug
       GATEWAY_INTERNAL_URL: http://gateway:3000
-      ASSISTANT_PROVIDER: gemini
-      GEMINI_API_KEY: ''
       ANTHROPIC_API_KEY: ''
-      ASSISTANT_MODEL: gemini-3.5-flash-lite
-      # Voice input (plan 0041). Empty transcription model means the same model
-      # answers and transcribes, which is the default everywhere.
-      ASSISTANT_TRANSCRIPTION_MODEL: ''
+      # Voice input (plan 0235). Empty on purpose, like the key above: the gate
+      # stack runs no transcriber, so the voice route answers 501 and a voice
+      # comment settles UNAVAILABLE, which is what the e2e suite asserts. The
+      # `transcriber` service below is opt in, under the `voice` profile.
+      TRANSCRIBER_URL: ''
       ASSISTANT_AUDIO_MAX_BYTES: '2097152'
       ASSISTANT_AUDIO_MIME_TYPES: 'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac'
       ASSISTANT_MAX_TURNS: '20'
@@ -378,6 +387,29 @@ services:
       ASSISTANT_TURNS_PER_MINUTE: '8'
       ASSISTANT_CONCURRENCY: '2'
       ASSISTANT_RETRY_AFTER_FALLBACK: '30'
+      # Each person's allowance (plan 0234, section 7), the chart's defaults.
+      # Counted in core over NATS; with no key a turn answers 501 before it
+      # reserves anything, which is what the e2e suite asserts.
+      ASSISTANT_TURNS_PER_DAY: '60'
+      ASSISTANT_TURNS_PER_MONTH: '600'
+      ASSISTANT_AUDIO_SECONDS_PER_DAY: '900'
+      ASSISTANT_AUDIO_SECONDS_PER_MONTH: '9000'
+      COMMENT_AUDIO_SECONDS_PER_DAY: '1800'
+      COMMENT_AUDIO_SECONDS_PER_MONTH: '18000'
+      ASSISTANT_COST_PER_DAY_MICRO_USD: '100000'
+      ASSISTANT_COST_PER_MONTH_MICRO_USD: '1000000'
+      ASSISTANT_TURNS_PER_DAY_GUEST: '20'
+      ASSISTANT_TURNS_PER_MONTH_GUEST: '100'
+      ASSISTANT_AUDIO_SECONDS_PER_DAY_GUEST: '300'
+      ASSISTANT_AUDIO_SECONDS_PER_MONTH_GUEST: '1500'
+      COMMENT_AUDIO_SECONDS_PER_DAY_GUEST: '600'
+      COMMENT_AUDIO_SECONDS_PER_MONTH_GUEST: '3000'
+      ASSISTANT_COST_PER_DAY_MICRO_USD_GUEST: '40000'
+      ASSISTANT_COST_PER_MONTH_MICRO_USD_GUEST: '200000'
+      ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD: '3000000'
+      ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD: '30000000'
+      ASSISTANT_TURN_RESERVE_MICRO_USD: '20000'
+      ASSISTANT_ALLOWANCE_TIMEZONE: 'UTC'
       PORT: '3006'
       OTEL_SERVICE_NAME: luna-shopper-backend-assistant
       DEPLOYMENT_ENVIRONMENT: development
@@ -392,3 +424,56 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # The transcriber (plan 0235): faster-whisper behind a small HTTP service.
+  # Opt in, under the `voice` profile, so the gate stack and the e2e suite never
+  # start it: it takes two CPUs and about 2.5 GB, and no suite reaches a model
+  # (rule A4). `luna-slot.sh --up --voice` starts it and points the assistant's
+  # TRANSCRIBER_URL at its published port.
+  #
+  # Built from the checkout rather than pulled, because a developer who runs it
+  # is working on it. The models live on an EXTERNAL volume, so every slot
+  # shares one 2 GB download and `down -v` never deletes it. Create it once:
+  #
+  #   docker volume create luna-transcriber-models
+  #
+  # The first start then downloads both models into it; apps/luna-shopper-backend/
+  # transcriber/README.md says how to copy a `models` folder in instead.
+  transcriber:
+    profiles: ['voice']
+    build:
+      context: ../../../apps/luna-shopper-backend/transcriber/src
+      target: runtime
+    image: luna-shopper-backend-transcriber:local
+    restart: 'no'
+    environment:
+      PORT: '3007'
+      TRANSCRIBER_TURN_MODEL: small
+      TRANSCRIBER_COMMENT_MODEL: large-v3-turbo
+      TRANSCRIBER_THREADS: '2'
+    volumes:
+      - transcriber-models:/models
+    ports:
+      - '${LUNA_TRANSCRIBER_PORT:-3007}:3007'
+    # The share a production pod gets (section 6.1).
+    cpus: 2
+    mem_limit: 2560m
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:3007/health/ready")',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      # Loading both models takes seconds from the volume, and minutes on the
+      # first start, which downloads them.
+      start_period: 600s
+
+volumes:
+  transcriber-models:
+    name: luna-transcriber-models
+    external: true

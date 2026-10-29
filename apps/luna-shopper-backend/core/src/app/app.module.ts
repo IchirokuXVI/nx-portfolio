@@ -14,6 +14,7 @@ import {
 import { AccountModule } from './account/account.module';
 import { CoreAdminModule } from './admin/admin.module';
 import { AppStateModule } from './app-state/app-state.module';
+import { AssistantAllowanceModule } from './assistant-allowance/assistant-allowance.module';
 import { AuditModule } from './audit/audit.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
@@ -24,6 +25,7 @@ import { MergeModule } from './merge/merge.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { PurchasesModule } from './purchases/purchases.module';
 import { RealtimeAccessModule } from './realtime/realtime-access.module';
+import { RetentionModule } from './retention/retention.module';
 import { ZonesModule } from './zones/zones.module';
 
 @Module({
@@ -73,6 +75,11 @@ import { ZonesModule } from './zones/zones.module';
     // What the back office can see and do here (plan 0074). Last, because it
     // imports two of the slices above and adds nothing they depend on.
     CoreAdminModule,
+    // Deletes audit rows past their lifetime (plan 0233).
+    RetentionModule,
+    // Each person's assistant allowance (plan 0234). It imports nothing, and
+    // nothing above depends on it.
+    AssistantAllowanceModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

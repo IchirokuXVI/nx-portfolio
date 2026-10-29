@@ -28,7 +28,7 @@
 # between. --restart bounces without releasing, and --down --keep-slot stops
 # everything and holds the number.
 #
-# Nothing else in those files is touched, on any run. A GEMINI_API_KEY pasted in
+# Nothing else in those files is touched, on any run. An ANTHROPIC_API_KEY pasted in
 # by hand, a switch flipped for one experiment, a base URL pointed at a local
 # recording: only the keys this script DERIVES from the slot are rewritten, and
 # everything else is kept exactly as it is on disk. See DERIVED_KEYS.

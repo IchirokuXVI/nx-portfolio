@@ -27,7 +27,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -37,7 +37,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -509,7 +509,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -539,7 +539,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -583,6 +583,16 @@
       "post": {
         "operationId": "GoogleController_mintState_v1",
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintOAuthStateDto"
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "An opaque, single use state valid for ten minutes. Pass it as the `state` query parameter when navigating to `GET /v1/auth/google`.",
@@ -590,6 +600,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/auth.MintOAuthStateResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
                 }
               }
             }
@@ -606,6 +626,16 @@
           },
           "403": {
             "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -705,7 +735,7 @@
         "parameters": [],
         "responses": {
           "302": {
-            "description": "Redirects to the app. On success the token pair rides in the URL fragment (`#accessToken=…&refreshToken=…&userId=…&kind=…&username=…`); on any failure the fragment is `#error=<code>`. There is no response body either way."
+            "description": "Redirects to the app. On success the fragment is `#code=<single use code>`, to trade at `POST /v1/auth/google/exchange` within two minutes; on any failure the fragment is `#error=<code>`. There is no response body either way."
           },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
@@ -728,6 +758,102 @@
             }
           }
         },
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/google/exchange": {
+      "post": {
+        "operationId": "GoogleController_exchange_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExchangeGoogleSignInDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.exchangeGoogleSignIn` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.AuthTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
         "tags": [
           "auth"
         ]
@@ -5146,7 +5272,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5157,6 +5283,16 @@
           },
           "401": {
             "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5285,7 +5421,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -5325,7 +5461,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7839,6 +7975,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`line_add_needs_choice` — This list already has more than one line called \"{content}\". Choose the line to add to, or add a new line.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11146,7 +11292,7 @@
             }
           },
           "409": {
-            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_add_needs_choice` — This list already has more than one line called \"{content}\". Choose the line to add to, or add a new line.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -23157,6 +23303,102 @@
         ]
       }
     },
+    "/v1/account/terms-acceptances": {
+      "post": {
+        "operationId": "AccountController_acceptTerms_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AcceptTermsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.acceptTerms` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.TermsAcceptanceView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "account"
+        ]
+      }
+    },
     "/v1/account/app-state": {
       "patch": {
         "operationId": "AccountController_setAppState_v1",
@@ -29140,7 +29382,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "description": "`assistant_allowance_reached` — The assistant is not available for now. It will be back later.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29161,6 +29403,62 @@
           },
           "501": {
             "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/v1/assistant/allowance": {
+      "get": {
+        "operationId": "AssistantController_allowance_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `assistant.allowance` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/assistant.AssistantAllowanceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29252,7 +29550,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "description": "`assistant_allowance_reached` — The assistant is not available for now. It will be back later.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29289,6 +29587,47 @@
         ],
         "tags": [
           "assistant"
+        ]
+      }
+    },
+    "/v1/legal/settings": {
+      "get": {
+        "operationId": "LegalController_settings_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Composed by the gateway from its configuration and the assistant. Public, no token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/gateway.LegalSettingsView"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "legal"
         ]
       }
     }
@@ -29330,6 +29669,12 @@
           "displayName": {
             "type": "string",
             "maxLength": 80
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29419,11 +29764,55 @@
           "displayName": {
             "type": "string",
             "maxLength": 80
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
           "email",
           "password"
+        ]
+      },
+      "MintOAuthStateDto": {
+        "type": "object",
+        "properties": {
+          "codeChallenge": {
+            "type": "string",
+            "description": "base64url of the SHA-256 of a verifier the client made and keeps, 43 characters. The verifier is sent only to `POST /v1/auth/google/exchange`.",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
+          }
+        },
+        "required": [
+          "codeChallenge"
+        ]
+      },
+      "ExchangeGoogleSignInDto": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "The single use code from the `#code=` fragment.",
+            "maxLength": 200
+          },
+          "codeVerifier": {
+            "type": "string",
+            "description": "The verifier whose SHA-256 was sent as `codeChallenge` at the mint: base64url of 32 random bytes, 43 characters.",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          }
+        },
+        "required": [
+          "code",
+          "codeVerifier"
         ]
       },
       "ExchangeImpersonationDto": {
@@ -29659,6 +30048,12 @@
             "type": "string",
             "maxLength": 40,
             "description": "Your display name in this zone. Omit it to be called by your global username."
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29675,6 +30070,12 @@
             "type": "string",
             "maxLength": 40,
             "description": "Your display name in this zone. Omit it to be called by your global username."
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
         },
         "required": [
@@ -29822,6 +30223,19 @@
             "type": "string",
             "format": "uuid",
             "description": "The catalog product group this set came from (plan 0070, section 9), which subscribes the line to it: products the group gains later appear on the line, and products it loses go, unless somebody has adopted or removed them. The server takes the set as sent and never re-derives it from the group, so the line holds exactly what the suggestion said it would add."
+          },
+          "askIfAmbiguous": {
+            "type": "boolean",
+            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "intoLineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "newLine": {
+            "type": "boolean",
+            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId."
           }
         },
         "required": [
@@ -30369,6 +30783,19 @@
             "type": "boolean",
             "default": true,
             "description": "Whether a person typed the content (plan 0207), as the list’s own add takes it. False is kept only when the line holds a product."
+          },
+          "askIfAmbiguous": {
+            "type": "boolean",
+            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "intoLineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "newLine": {
+            "type": "boolean",
+            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId."
           }
         },
         "required": [
@@ -31748,6 +32175,20 @@
         "required": [
           "sourceUserId",
           "targetUserId"
+        ]
+      },
+      "AcceptTermsDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person accepted. Any other answers `terms_version_stale`."
+          }
+        },
+        "required": [
+          "version"
         ]
       },
       "UpdateAppStateDto": {
@@ -34717,6 +35158,70 @@
           }
         }
       },
+      "assistant.AllowanceCounter": {
+        "type": "object",
+        "properties": {
+          "used": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "used",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "assistant.AllowancePeriodView": {
+        "type": "object",
+        "properties": {
+          "turns": {
+            "$ref": "#/components/schemas/assistant.AllowanceCounter"
+          },
+          "assistantAudioSeconds": {
+            "$ref": "#/components/schemas/assistant.AllowanceCounter"
+          },
+          "commentAudioSeconds": {
+            "$ref": "#/components/schemas/assistant.AllowanceCounter"
+          },
+          "resetsAt": {
+            "type": "string",
+            "minLength": 1,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "turns",
+          "assistantAudioSeconds",
+          "commentAudioSeconds",
+          "resetsAt"
+        ],
+        "additionalProperties": false
+      },
+      "assistant.AssistantAllowanceView": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "$ref": "#/components/schemas/assistant.AllowancePeriodView"
+          },
+          "month": {
+            "$ref": "#/components/schemas/assistant.AllowancePeriodView"
+          },
+          "deploymentAvailable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "day",
+          "month",
+          "deploymentAvailable"
+        ],
+        "additionalProperties": false
+      },
       "assistant.AssistantChoice": {
         "type": "object",
         "properties": {
@@ -34893,6 +35398,24 @@
         ],
         "additionalProperties": false
       },
+      "auth.TermsAcceptanceView": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acceptedAt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "version",
+          "acceptedAt"
+        ],
+        "additionalProperties": false
+      },
       "auth.UserProfileView": {
         "type": "object",
         "properties": {
@@ -34921,6 +35444,18 @@
               "string",
               "null"
             ]
+          },
+          "termsAcceptedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "termsAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -34929,7 +35464,9 @@
           "username",
           "email",
           "emailVerified",
-          "displayName"
+          "displayName",
+          "termsAcceptedVersion",
+          "termsAcceptedAt"
         ],
         "additionalProperties": false
       },
@@ -40662,6 +41199,12 @@
           "manual"
         ]
       },
+      "enums.AiTextProvider": {
+        "type": "string",
+        "enum": [
+          "anthropic"
+        ]
+      },
       "enums.AuthProvider": {
         "type": "string",
         "enum": [
@@ -41218,6 +41761,18 @@
               "null"
             ]
           },
+          "termsAcceptedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "termsAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "appState": {
             "$ref": "#/components/schemas/core.UserAppStateView"
           },
@@ -41226,6 +41781,9 @@
             "items": {
               "$ref": "#/components/schemas/enums.Permission"
             }
+          },
+          "terms": {
+            "$ref": "#/components/schemas/gateway.AccountTermsView"
           }
         },
         "required": [
@@ -41235,8 +41793,215 @@
           "email",
           "emailVerified",
           "displayName",
+          "termsAcceptedVersion",
+          "termsAcceptedAt",
           "appState",
-          "permissions"
+          "permissions",
+          "terms"
+        ],
+        "additionalProperties": false
+      },
+      "gateway.AccountTermsView": {
+        "type": "object",
+        "properties": {
+          "currentVersion": {
+            "type": "string",
+            "minLength": 1
+          },
+          "acceptedVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acceptanceRequired": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "currentVersion",
+          "acceptedVersion",
+          "acceptanceRequired"
+        ],
+        "additionalProperties": false
+      },
+      "gateway.LegalSettingsView": {
+        "type": "object",
+        "properties": {
+          "appName": {
+            "type": "string",
+            "minLength": 1
+          },
+          "controllerName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contactEmail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "published": {
+            "type": "boolean"
+          },
+          "terms": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string",
+                "minLength": 1
+              },
+              "updatedOn": {
+                "type": "string",
+                "minLength": 1
+              },
+              "acceptanceRequired": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "version",
+              "updatedOn",
+              "acceptanceRequired"
+            ],
+            "additionalProperties": false
+          },
+          "privacy": {
+            "type": "object",
+            "properties": {
+              "updatedOn": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "updatedOn"
+            ],
+            "additionalProperties": false
+          },
+          "features": {
+            "type": "object",
+            "properties": {
+              "googleSignIn": {
+                "type": "boolean"
+              },
+              "assistant": {
+                "type": "boolean"
+              },
+              "transcription": {
+                "type": "boolean"
+              },
+              "offsiteBackups": {
+                "type": "boolean"
+              },
+              "supportAccess": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "googleSignIn",
+              "assistant",
+              "transcription",
+              "offsiteBackups",
+              "supportAccess"
+            ],
+            "additionalProperties": false
+          },
+          "processors": {
+            "type": "object",
+            "properties": {
+              "hosting": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "email": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "aiText": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/enums.AiTextProvider"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "offsiteBackups": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "hosting",
+              "email",
+              "aiText",
+              "offsiteBackups"
+            ],
+            "additionalProperties": false
+          },
+          "retention": {
+            "type": "object",
+            "properties": {
+              "auditTrailDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "adminLoginFailureDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "expiredGrantDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "applicationLogDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "assistantLogDays": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "backupDays": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            },
+            "required": [
+              "auditTrailDays",
+              "adminLoginFailureDays",
+              "expiredGrantDays",
+              "applicationLogDays",
+              "assistantLogDays",
+              "backupDays"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "appName",
+          "controllerName",
+          "contactEmail",
+          "published",
+          "terms",
+          "privacy",
+          "features",
+          "processors",
+          "retention"
         ],
         "additionalProperties": false
       },
@@ -45690,6 +46455,7 @@
               "line_merge_required",
               "line_merge_needs_approval",
               "line_merge_too_many_products",
+              "line_add_needs_choice",
               "brand_label_empty",
               "brand_key_taken",
               "brand_link_to_self",
@@ -45729,6 +46495,9 @@
               "recovery_other_account",
               "recovery_needs_email",
               "recovery_needs_password",
+              "terms_version_stale",
+              "terms_acceptance_missing",
+              "assistant_allowance_reached",
               "internal"
             ],
             "description": "The stable machine code the client branches on."
@@ -45763,7 +46532,7 @@
           "details": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null."
+            "description": "Machine readable facts about this occurrence. Present when `code` is `line_merge_required` or `line_add_needs_choice`, the two codes whose bag is described here. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null. For `line_add_needs_choice` it carries `lines`, the lines of the list that hold a product under the typed name, in list position order and at most 10 of them (`lineId`, `content`, `named`, `quantity`, `itemIds`, `productGroupId`, `approvalStatus`): send the add again with `intoLineId` set to one of them, or with `newLine` true."
           }
         }
       },

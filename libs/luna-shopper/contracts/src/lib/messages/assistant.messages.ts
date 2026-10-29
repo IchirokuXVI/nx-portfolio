@@ -2,6 +2,8 @@ import type {
   AssistantRole,
   ListResolutionBranch,
 } from '../enums/assistant.enums';
+import type { UserKind } from '../enums/auth.enums';
+import type { AiTextProvider } from '../legal/legal-settings';
 
 /**
  * The assistant service (plan 0039).
@@ -49,7 +51,39 @@ export const ASSISTANT_PATTERNS = {
    * service unbootable without a credential it has no other use for.
    */
   transcribe: 'assistant.transcribe',
+  /**
+   * What this deployment's assistant can do (plan 0231, section 3), asked by
+   * the gateway for `GET /v1/legal/settings`. Empty request. The chart cannot
+   * know whether a provider key is present, so the assistant says.
+   */
+  capabilities: 'assistant.capabilities',
+  /**
+   * The caller's own allowance (plan 0234, section 8.2), asked by the gateway
+   * for `GET /v1/assistant/allowance`. The assistant owns the limits, so it
+   * answers with them and with core's counts.
+   */
+  allowance: 'assistant.allowance',
 } as const;
+
+/** Whose allowance to read (plan 0234, section 8.2). */
+export interface AssistantAllowanceRequest {
+  userId: string;
+  /** Picks the guest limits for `TEMPORARY`. */
+  kind: UserKind;
+}
+
+/** No fields: the answer is about the deployment, not about a caller. */
+export type AssistantCapabilitiesRequest = Record<string, never>;
+
+/** What the assistant can do, computed with the checks that decide its 501s. */
+export interface AssistantCapabilities {
+  /** A typed turn can be answered: the text provider has its key. */
+  answers: boolean;
+  /** A recording can be transcribed by whatever transcribes in this deployment. */
+  hears: boolean;
+  /** Who answers a typed turn, when `answers` is true. */
+  textProvider: AiTextProvider | null;
+}
 
 /**
  * A recording to write down (plan 0041, section 3.2).
@@ -65,6 +99,22 @@ export interface AssistantTranscribeRequest {
   mimeType: string;
   /** BCP 47, the same locale a reply would be written in. */
   locale: string;
+  /**
+   * Who is waiting for the words (plan 0235, section 8). `comment` for a voice
+   * comment, which the transcriber runs on its accurate model and behind every
+   * spoken turn. Optional, and `turn` when absent, so a gateway one release
+   * behind the assistant still works.
+   */
+  purpose?: 'turn' | 'comment';
+  /**
+   * The comment's author, whose comment audio allowance the recording counts
+   * against (plan 0234, section 6). Optional on the wire for a gateway one
+   * release behind; the assistant refuses a transcription without it, because
+   * the allowance fails closed.
+   */
+  userId?: string;
+  /** The author's kind, which picks the guest limits for `TEMPORARY`. */
+  kind?: UserKind;
 }
 
 /**
@@ -171,6 +221,12 @@ export interface AssistantTurnRequest {
   /** What the caller just said. */
   message: string;
   /**
+   * The caller's kind, from the verified token (plan 0234, section 6). It
+   * picks the guest limits for `TEMPORARY`. Optional on the wire for a gateway
+   * one release behind, which the assistant counts as a guest.
+   */
+  kind?: UserKind;
+  /**
    * The one list this turn may touch, when the caller stated one.
    *
    * Absent, the turn is exactly what plan 0039 built and every existing test
@@ -202,6 +258,8 @@ export interface AssistantVoiceRequest {
   audio: string;
   /** What the browser said it recorded. Checked against a whitelist, then sent on. */
   mimeType: string;
+  /** The caller's kind, as on {@link AssistantTurnRequest} (plan 0234). */
+  kind?: UserKind;
   /** The one list this turn may touch, when the caller stated one (plan 0044). */
   scope?: TurnScope;
 }

@@ -151,6 +151,16 @@ export const StorageKeys = {
    * session removes it, and each one then leaves the document behind.
    */
   supportSession: `support-session:${APP_KEY}`,
+  /**
+   * The verifier of the Google sign in this tab started (velista `0171`, backend
+   * `0230`).
+   *
+   * In `sessionStorage`, and that is the design: the verifier belongs to this tab and
+   * this flow, so a second tab cannot finish a flow the first one started, and nothing
+   * in `localStorage` ever holds it. `GoogleSignIn.start()` writes it before the state
+   * is minted, and the callback page removes it before it posts the exchange.
+   */
+  googleVerifier: `google-verifier:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

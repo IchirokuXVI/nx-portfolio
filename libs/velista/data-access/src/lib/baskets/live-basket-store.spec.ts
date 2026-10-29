@@ -177,4 +177,54 @@ describe('LiveBasketStore', () => {
     expect(store.summary()).toBeNull();
     expect(store.state()).toBe('failed');
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    function counting() {
+      let reads = 0;
+      const built = build({
+        getLiveSummary: async () => {
+          reads += 1;
+          return summary(reads);
+        },
+      });
+      return {
+        ...built,
+        realtime: TestBed.inject(RealtimeMemory),
+        reads: () => reads,
+      };
+    }
+
+    it('reads nothing at construction', () => {
+      const { reads } = counting();
+      TestBed.tick();
+
+      expect(reads()).toBe(0);
+    });
+
+    it('reads nothing before anything asked', async () => {
+      const { realtime, reads } = counting();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+
+      expect(reads()).toBe(0);
+    });
+
+    it('reads the summary again, keeping the one on screen while it runs', async () => {
+      const { store, realtime, reads } = counting();
+      await store.load();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      expect(store.summary()?.pending).toBe(1);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(reads()).toBe(2);
+      expect(store.summary()?.pending).toBe(2);
+    });
+  });
 });

@@ -23,6 +23,12 @@
 #   --render-only               with --check: the render half only, no cluster
 #   --rotate                    regenerate secrets that already exist (dangerous)
 #   --out <path>                where to write the operator's plaintext copy
+#   --operator-file <path>      the operator's legal values (plan 0231), a file of
+#                               KEY=value lines outside the repository; the
+#                               Secret is written with exactly its keys
+#   --values <path>             with --check: one more values file, layered after
+#                               the environment's, to try a render without
+#                               editing either
 
 set -euo pipefail
 
@@ -32,6 +38,8 @@ RENDER_ONLY=false
 ROTATE=false
 UNIT_NAME=""
 OUT_PATH=""
+OPERATOR_FILE=""
+EXTRA_VALUES=""
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 K8S_DIR="$REPO_ROOT/k8s"
@@ -63,6 +71,8 @@ while [ $# -gt 0 ]; do
     --render-only) RENDER_ONLY=true;    shift ;;
     --rotate)      ROTATE=true;         shift ;;
     --out)         OUT_PATH="$2";       shift 2 ;;
+    --operator-file) OPERATOR_FILE="$2"; shift 2 ;;
+    --values)      EXTRA_VALUES="$2";   shift 2 ;;
     -h|--help)     sed -n '2,32p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
@@ -70,6 +80,18 @@ done
 
 if [ "$RENDER_ONLY" = true ] && [ "$CHECK_ONLY" = false ]; then
   echo "--render-only goes with --check." >&2
+  exit 1
+fi
+if [ -n "$OPERATOR_FILE" ] && [ "$CHECK_ONLY" = true ]; then
+  echo "--operator-file provisions; it does not go with --check." >&2
+  exit 1
+fi
+if [ -n "$EXTRA_VALUES" ] && [ "$CHECK_ONLY" = false ]; then
+  echo "--values goes with --check: provisioning renders nothing." >&2
+  exit 1
+fi
+if [ -n "$EXTRA_VALUES" ] && [ ! -f "$EXTRA_VALUES" ]; then
+  echo "No values file at $EXTRA_VALUES." >&2
   exit 1
 fi
 
@@ -109,6 +131,12 @@ CATALOG_DB_SECRET=luna-shopper-backend-catalog-db-secret
 # harvester is actually deployed.
 HARVESTER_DB_SECRET=luna-shopper-backend-harvester-db-secret
 BACKUP_SECRET=luna-shopper-backend-backup-secret
+# Who runs the deployment, for its legal documents (plan 0231, section 5). Not
+# credentials: a Secret only because this script owns it and the chart does not,
+# the property HARVESTER_ACTOR_ID needed too. Its own Secret, so rewriting the
+# operator's name can never touch a password or a signing key.
+OPERATOR_SECRET=luna-shopper-backend-operator
+OPERATOR_KEYS="LEGAL_APP_NAME LEGAL_CONTROLLER_NAME LEGAL_CONTACT_EMAIL LEGAL_HOSTING_PROVIDER LEGAL_EMAIL_PROVIDER LEGAL_BACKUP_PROVIDER LEGAL_TERMS_REVISION LEGAL_PRIVACY_REVISION"
 
 # ---------------------------------------------------------------------------
 # --check: the preflight (plan 0006, section 3)
@@ -154,13 +182,16 @@ BACKUP_SECRET=luna-shopper-backend-backup-secret
 
 # The only keys allowed to exist with no value. See the note above.
 #
-# GEMINI_API_KEY joins them for the same reason and by the same rule (plan 0039,
-# section 11): with it empty the assistant boots, its health probes pass, and
+# ANTHROPIC_API_KEY joins them for the same reason and by the same rule (plan
+# 0039, section 11; plan 0224): it is the assistant's only provider key since
+# plan 0236, and with it empty the assistant boots, its health probes pass, and
 # /v1/assistant answers 501 not_configured. An operator who never wanted an
 # assistant should not be told their deploy will fail when it will not.
-# ANTHROPIC_API_KEY joins by the same rule (plan 0224): it answers a turn only
-# when the values file sets `assistant.provider: claude`.
-OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS GEMINI_API_KEY ANTHROPIC_API_KEY"
+#
+# The eight operator keys join by the same rule (plan 0231): a deployment that
+# has published nothing boots and answers `published: false`. The one empty
+# that is wrong is checked on its own below, after the loop.
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS ANTHROPIC_API_KEY $OPERATOR_KEYS"
 
 is_optional_empty() {
   case " $OPTIONAL_EMPTY_KEYS " in
@@ -321,6 +352,63 @@ check_unit_render() {
   [ "$problems" -eq 0 ]
 }
 
+# ---------------------------------------------------------------------------
+# Acceptance required of terms nobody published (plan 0231, section 5.2).
+#
+# The gateway refuses to boot with TERMS_ACCEPTANCE_REQUIRED true and an empty
+# controller or contact, because that is the one combination wrong in every
+# deployment. This finds it before the rollout does. Each of the two keys is
+# satisfied by a literal in the render or, when the render reads it from the
+# operator Secret, by a non empty value there. --render-only asks no cluster,
+# so it checks the literals and says it skipped the Secret.
+# ---------------------------------------------------------------------------
+
+# The first env entry of KEY in the render: its literal value, "@secret" when
+# it comes from a secretKeyRef, or nothing when the render has no such entry.
+render_env_value() {
+  printf '%s\n' "$1" | awk -v key="$2" '
+    $0 ~ "^[[:space:]]*- name: " key "[[:space:]]*$" { found = 1; next }
+    found && /^[[:space:]]*value:/ {
+      sub(/^[[:space:]]*value:[[:space:]]*/, ""); gsub(/"/, ""); print; exit
+    }
+    found && /^[[:space:]]*valueFrom:/ { print "@secret"; exit }
+    found { exit }
+  '
+}
+
+check_published_terms() {
+  local rendered="$1" problems=0 key value
+  if ! printf '%s\n' "$rendered" \
+    | grep -E '^[[:space:]]+TERMS_ACCEPTANCE_REQUIRED:[[:space:]]*"?true"?[[:space:]]*$' > /dev/null; then
+    return 0
+  fi
+  echo
+  echo "TERMS_ACCEPTANCE_REQUIRED is true: the Terms must name a controller and a contact."
+  for key in LEGAL_CONTROLLER_NAME LEGAL_CONTACT_EMAIL; do
+    value="$(render_env_value "$rendered" "$key")"
+    if [ -z "$value" ]; then
+      echo "  REFUSED the render gives no pod $key"
+      problems=$((problems + 1))
+    elif [ "$value" != "@secret" ]; then
+      echo "  ok      $key is set in the values"
+    elif [ "$RENDER_ONLY" = true ]; then
+      echo "  skipped $key comes from secret/$OPERATOR_SECRET (--render-only asks no cluster)"
+    elif [ -n "$(decoded_secret_value "$OPERATOR_SECRET" "$key")" ]; then
+      echo "  ok      $key is set in secret/$OPERATOR_SECRET"
+    else
+      echo "  REFUSED $key is empty in the values and in secret/$OPERATOR_SECRET"
+      problems=$((problems + 1))
+    fi
+  done
+  if [ "$problems" -gt 0 ]; then
+    echo "          Requiring acceptance of terms nobody published fails at boot." >&2
+    echo "          Provision them with --operator-file, or leave" >&2
+    echo "          termsAcceptanceRequired false." >&2
+    return 1
+  fi
+  return 0
+}
+
 run_check() {
   local failures=0
   local chart_failures=0
@@ -331,10 +419,16 @@ run_check() {
 
   echo "Rendering $CHART_DIR as release $RELEASE_NAME in $NAMESPACE for $ENVIRONMENT..."
   local rendered
+  local extra=()
+  if [ -n "$EXTRA_VALUES" ]; then
+    echo "  layering $EXTRA_VALUES after $VALUES_FILE"
+    extra=(--values "$EXTRA_VALUES")
+  fi
   rendered="$(helm template "$RELEASE_NAME" "$CHART_DIR" \
     --namespace "$NAMESPACE" \
     --values "$CHART_DIR/values.yaml" \
-    --values "$VALUES_FILE")"
+    --values "$VALUES_FILE" \
+    "${extra[@]}")"
 
   check_unit_render "$rendered" || registry_failures=1
 
@@ -476,6 +570,8 @@ run_check() {
     failures=$((failures + 1))
   fi
 
+  check_published_terms "$rendered" || failures=$((failures + 1))
+
   echo
   if [ "$registry_failures" -gt 0 ]; then
     echo "The render disagrees with k8s/units (the lines marked WRONG). Make the values" >&2
@@ -503,6 +599,60 @@ if [ "$CHECK_ONLY" = true ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# The operator's legal values (plan 0231, section 5.2).
+#
+# Read before anything is written, so a refused file changes nothing. The file
+# is the whole statement: the Secret gets exactly its keys and every absent one
+# empty, so what is in the file is what is live. It must sit outside the
+# repository, because the repository is public and these name a person.
+# ---------------------------------------------------------------------------
+declare -A OPERATOR_VALUES=()
+if [ -n "$OPERATOR_FILE" ]; then
+  if [ ! -f "$OPERATOR_FILE" ]; then
+    echo "No operator file at $OPERATOR_FILE." >&2
+    exit 1
+  fi
+  operator_dir="$(cd "$(dirname "$OPERATOR_FILE")" && pwd -P)"
+  repo_real="$(cd "$REPO_ROOT" && pwd -P)"
+  case "$operator_dir/" in
+    "$REPO_ROOT"/*|"$repo_real"/*)
+      echo "Refusing an operator file inside the repository ($operator_dir)." >&2
+      echo "Keep it outside $REPO_ROOT, for example ~/velista-operator.$ENVIRONMENT.env." >&2
+      exit 1
+      ;;
+  esac
+  line_number=0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line_number=$((line_number + 1))
+    line="${line%$'\r'}"
+    case "$line" in ''|'#'*) continue ;; esac
+    case "$line" in
+      *=*) ;;
+      *)
+        echo "$OPERATOR_FILE:$line_number is not KEY=value." >&2
+        exit 1
+        ;;
+    esac
+    key="${line%%=*}"
+    value="${line#*=}"
+    case " $OPERATOR_KEYS " in
+      *" $key "*) ;;
+      *)
+        echo "$OPERATOR_FILE:$line_number names $key, which is not an operator key." >&2
+        echo "The keys are: $OPERATOR_KEYS" >&2
+        exit 1
+        ;;
+    esac
+    # One pair of surrounding quotes is the shell habit, not part of the value.
+    case "$value" in
+      \"*\") value="${value:1:${#value}-2}" ;;
+      \'*\') value="${value:1:${#value}-2}" ;;
+    esac
+    OPERATOR_VALUES[$key]="$value"
+  done < "$OPERATOR_FILE"
+fi
+
+# ---------------------------------------------------------------------------
 # Refuse to write secrets into the repository (plan 0006, section 2.2)
 #
 # A path check rather than reading a git ignore file, which is fragile. A
@@ -522,7 +672,7 @@ fi
 # The provisioning below writes the Luna Secrets. A unit that lists another
 # Secret needs code here first, not a silent skip.
 for secret in $UNIT_SECRETS; do
-  case " $APP_SECRET $AUTH_DB_SECRET $CORE_DB_SECRET $CATALOG_DB_SECRET $HARVESTER_DB_SECRET $BACKUP_SECRET " in
+  case " $APP_SECRET $AUTH_DB_SECRET $CORE_DB_SECRET $CATALOG_DB_SECRET $HARVESTER_DB_SECRET $BACKUP_SECRET $OPERATOR_SECRET " in
     *" $secret "*) ;;
     *)
       echo "k8s/units/$UNIT_NAME/unit.env lists the Secret $secret, and this script does not know how to write it." >&2
@@ -691,7 +841,6 @@ fi
 # the service failing to boot.
 GOOGLE_CLIENT_SECRET="$(existing "$APP_SECRET" GOOGLE_CLIENT_SECRET)"
 SMTP_PASS="$(existing "$APP_SECRET" SMTP_PASS)"
-GEMINI_API_KEY="$(existing "$APP_SECRET" GEMINI_API_KEY)"
 ANTHROPIC_API_KEY="$(existing "$APP_SECRET" ANTHROPIC_API_KEY)"
 if [ -t 0 ]; then
   if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
@@ -702,16 +851,12 @@ if [ -t 0 ]; then
     read -rsp "  SMTP password (blank to leave email unconfigured): " SMTP_PASS
     echo
   fi
-  if [ -z "$GEMINI_API_KEY" ]; then
-    read -rsp "  Gemini API key (blank to leave the assistant unconfigured): " GEMINI_API_KEY
-    echo
-  fi
   if [ -z "$ANTHROPIC_API_KEY" ]; then
-    read -rsp "  Anthropic API key (blank unless assistant.provider is claude): " ANTHROPIC_API_KEY
+    read -rsp "  Anthropic API key (blank to leave the assistant unconfigured): " ANTHROPIC_API_KEY
     echo
   fi
 else
-  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS, GEMINI_API_KEY and ANTHROPIC_API_KEY as they are"
+  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS and ANTHROPIC_API_KEY as they are"
 fi
 
 # ---------------------------------------------------------------------------
@@ -755,8 +900,28 @@ apply_secret "$APP_SECRET" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"   --from-literal=ADMIN_JWT_PRIVATE_KEY="$ADMIN_JWT_PRIVATE_KEY"   --from-literal=ADMIN_JWT_PUBLIC_KEY="$ADMIN_JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
   --from-literal=SMTP_PASS="$SMTP_PASS" \
-  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
   --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
+
+# The operator's legal values (plan 0231). With --operator-file, exactly the
+# file's keys. Without it, every existing value is kept, as for every other key,
+# and a fresh cluster gets eight empty ones, so the deploy that first renders
+# the secretKeyRefs passes --check. Not written to the plaintext copy below:
+# they are not credentials, and the file they came from is the operator's copy.
+operator_args=()
+for key in $OPERATOR_KEYS; do
+  if [ -n "$OPERATOR_FILE" ]; then
+    value="${OPERATOR_VALUES[$key]:-}"
+  else
+    value="$(existing "$OPERATOR_SECRET" "$key")"
+  fi
+  operator_args+=(--from-literal="$key=$value")
+done
+apply_secret "$OPERATOR_SECRET" "${operator_args[@]}"
+if [ -n "$OPERATOR_FILE" ]; then
+  echo "  $OPERATOR_SECRET written from $OPERATOR_FILE"
+else
+  echo "  $OPERATOR_SECRET kept as it was (--operator-file to replace it)"
+fi
 
 # The backup credentials (plan 0005). Both environments render the CronJobs:
 # production runs them nightly, and staging keeps them suspended for the release
@@ -809,7 +974,6 @@ ${APP_SECRET}/HARVESTER_DB_URL: ${HARVESTER_DB_URL}
 ${APP_SECRET}/HARVESTER_ACTOR_ID: ${HARVESTER_ACTOR_ID}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
-${APP_SECRET}/GEMINI_API_KEY: ${GEMINI_API_KEY}
 ${APP_SECRET}/ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
 
 ${APP_SECRET}/AUTH_JWT_PRIVATE_KEY:

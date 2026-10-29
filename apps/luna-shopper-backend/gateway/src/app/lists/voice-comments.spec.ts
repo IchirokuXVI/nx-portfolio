@@ -3,14 +3,20 @@ import {
   ASSISTANT_PATTERNS,
   COMMENT_PATTERNS,
   CommentTranscription,
+  UserKind,
   type CommentView,
 } from '@portfolio/luna-shopper/contracts';
 import { ERROR_CODES } from '@portfolio/luna-shopper/platform';
-import type { GatewayConfig } from '../config/app-config';
+import {
+  gatewayValidationSchema,
+  type GatewayConfig,
+} from '../config/app-config';
 import type { NatsClient } from '../messaging/nats-client';
 import {
   CommentTranscriptionService,
+  MAX_RETRY_DELAY_MS,
   RETRY_DELAY_MS,
+  retryDelayMs,
 } from './comment-transcription.service';
 
 /**
@@ -124,13 +130,31 @@ function remoteError(code: string): unknown {
   return { error: { code, status: 501, message: 'no', correlationId: 'x' } };
 }
 
+/** The assistant's rate limit as it crosses the broker, with its wait (rule A5). */
+function rateLimited(retryAfterSeconds: number): unknown {
+  return {
+    error: {
+      code: ERROR_CODES.RATE_LIMITED,
+      status: 429,
+      message: 'busy',
+      correlationId: 'x',
+      retryAfterSeconds,
+    },
+  };
+}
+
 describe('a transcript is asked for after the comment is stored', () => {
   it('sends the recording, its type and the locale to the assistant', async () => {
     const b = broker({
       transcribe: async () => ({ text: 'Bring the big one' }),
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm;codecs=opus');
+    b.service.schedule(
+      COMMENT,
+      AUDIO,
+      'audio/webm;codecs=opus',
+      UserKind.REGISTERED
+    );
     await settle();
 
     const asked = b.sent.find(
@@ -140,6 +164,61 @@ describe('a transcript is asked for after the comment is stored', () => {
     expect(
       Buffer.from(asked?.payload['audio'] as string, 'base64').toString()
     ).toBe('not really audio');
+    // Nobody is waiting on it: the accurate model, behind every turn (plan 0235).
+    expect(asked?.payload['purpose']).toBe('comment');
+    // The author, whose comment audio allowance it counts against (plan 0234).
+    expect(asked?.payload['userId']).toBe('u1');
+    expect(asked?.payload['kind']).toBe(UserKind.REGISTERED);
+  });
+
+  it("settles FAILED at once, with no retry, when the author's allowance is reached", async () => {
+    const b = broker({
+      transcribe: async () => {
+        throw {
+          code: ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED,
+          details: {
+            scope: 'user',
+            period: 'day',
+            limit: 'commentAudio',
+            resetsAt: '2026-10-28T00:00:00+01:00',
+          },
+        };
+      },
+    });
+
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.TEMPORARY);
+    await settle();
+
+    // A retry would be refused the same way. The comment still plays (plan
+    // 0234, section 6).
+    expect(
+      b.subjects().filter((s) => s === ASSISTANT_PATTERNS.transcribe)
+    ).toHaveLength(1);
+    expect(b.settled()).toMatchObject({
+      transcription: CommentTranscription.FAILED,
+    });
+    const asked = b.sent.find(
+      (entry) => entry.subject === ASSISTANT_PATTERNS.transcribe
+    );
+    expect(asked?.payload['kind']).toBe(UserKind.TEMPORARY);
+  });
+
+  it("waits longer than the assistant's own deadline for a comment", () => {
+    // The assistant gives a comment 110 s (a full queue of turns, then ninety
+    // seconds of audio). A gateway that gave up first would drop a transcript
+    // that is still coming (plan 0235, section 6.2).
+    const { value } = gatewayValidationSchema.validate(
+      {
+        NATS_URL: 'nats://localhost:4222',
+        REDIS_URL: 'redis://localhost:6379',
+        AUTH_JWT_PUBLIC_KEY: 'a-public-key',
+        ADMIN_JWT_PUBLIC_KEY: 'an-admin-public-key',
+      },
+      { allowUnknown: true }
+    );
+
+    expect(value.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS).toBe(120000);
+    expect(value.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS).toBeGreaterThan(110000);
   });
 
   it('hands a successful transcript back to core as READY', async () => {
@@ -147,7 +226,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       transcribe: async () => ({ text: 'Bring the big one' }),
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     expect(b.subjects()).toEqual([
@@ -165,7 +244,7 @@ describe('a transcript is asked for after the comment is stored', () => {
   it('records FAILED when the provider heard nothing', async () => {
     const b = broker({ transcribe: async () => ({ text: '' }) });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     // The message is intact and plays; only the reading of it is missing.
@@ -182,7 +261,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle({ retried: true });
 
     // A small bounded retry and no queue: a transcription that failed twice is not
@@ -205,12 +284,62 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle({ retried: true });
 
     expect(b.settled()).toMatchObject({
       body: 'the sourdough one',
       transcription: CommentTranscription.READY,
+    });
+  });
+
+  describe('a full transcriber queue', () => {
+    afterEach(() => jest.useRealTimers());
+
+    it('waits as long as the rate limit says before the second attempt', async () => {
+      // The transcriber's busy answer says ten seconds (plan 0235). A second
+      // attempt after the fixed pause would find the queue still full.
+      jest.useFakeTimers();
+      const b = broker({
+        transcribe: async (attempt) => {
+          if (attempt === 1) {
+            throw rateLimited(10);
+          }
+          return { text: 'the sourdough one' };
+        },
+      });
+      const attempts = () =>
+        b.subjects().filter((s) => s === ASSISTANT_PATTERNS.transcribe);
+
+      b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
+      await jest.advanceTimersByTimeAsync(9_000);
+
+      expect(attempts()).toHaveLength(1);
+
+      await jest.advanceTimersByTimeAsync(1_100);
+
+      expect(attempts()).toHaveLength(2);
+      expect(b.settled()).toMatchObject({
+        body: 'the sourdough one',
+        transcription: CommentTranscription.READY,
+      });
+    });
+
+    it('never waits less than the fixed pause, nor more than the cap', () => {
+      expect(retryDelayMs(rateLimited(10))).toBe(10_000);
+      expect(retryDelayMs(rateLimited(0.2))).toBe(RETRY_DELAY_MS);
+      expect(retryDelayMs(rateLimited(3600))).toBe(MAX_RETRY_DELAY_MS);
+      // The envelope also arrives unnested.
+      expect(
+        retryDelayMs({ code: ERROR_CODES.RATE_LIMITED, retryAfterSeconds: 4 })
+      ).toBe(4_000);
+      // Anything that is not a rate limit with a number keeps the fixed pause.
+      expect(retryDelayMs(new Error('briefly unavailable'))).toBe(
+        RETRY_DELAY_MS
+      );
+      expect(retryDelayMs(remoteError(ERROR_CODES.INTERNAL))).toBe(
+        RETRY_DELAY_MS
+      );
     });
   });
 
@@ -221,7 +350,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     // No number of retries changes a deployment with no key, and telling the
@@ -244,7 +373,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     expect(b.subjects()).toContain(COMMENT_PATTERNS.setTranscription);
@@ -261,7 +390,7 @@ describe('a transcript is asked for after the comment is stored', () => {
     });
 
     expect(() =>
-      b.service.schedule(COMMENT, AUDIO, 'audio/webm')
+      b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED)
     ).not.toThrow();
     await settle();
   });

@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Get,
   HttpStatus,
   Post,
   UploadedFile,
@@ -12,6 +13,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiBody, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import {
   ASSISTANT_PATTERNS,
+  type AssistantAllowanceView,
   type AssistantTurnResponse,
 } from '@portfolio/luna-shopper/contracts';
 import { AuthHeader } from '../auth/auth-header.decorator';
@@ -21,6 +23,14 @@ import type { CurrentUser } from '../auth/jwt.strategy';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { AssistantTurnDto, AssistantVoiceDto } from './assistant.dto';
+
+/**
+ * How long the allowance read waits on the assistant (plan 0234, section
+ * 8.2). The assistant asks core in turn, under its own two seconds, so this is
+ * that plus the two hops, and a cluster with no assistant answers an error
+ * rather than holding the request until the proxy gives up.
+ */
+export const ALLOWANCE_READ_TIMEOUT_MS = 5000;
 
 /**
  * The assistant, reached through the gateway at `/v1/assistant` (plan 0039,
@@ -69,13 +79,14 @@ export class AssistantController {
    * enables CORS with no `exposedHeaders` and a browser therefore cannot read a
    * `Retry-After` header cross origin; the panel counts the body's number down
    * and never derives one of its own. And the 501, which is what a cluster with
-   * no `GEMINI_API_KEY` answers: the route stays in the published document in
-   * every environment, and `notConfigured` is what makes the document honest
-   * about it (plan 0026).
+   * no key for its text provider answers, and on the voice route below also a
+   * cluster that runs no transcriber (`TRANSCRIBER_URL` empty, plan 0235): the
+   * route stays in the published document in every environment, and
+   * `notConfigured` is what makes the document honest about it (plan 0026).
    */
   @Post()
   @ApiContractResponse(ASSISTANT_PATTERNS.turn, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, notConfigured: true })
+  @ApiProblemResponses({ body: true, notConfigured: true, allowance: true })
   turn(
     @AuthUser() user: CurrentUser,
     @AuthHeader() authorization: string,
@@ -92,7 +103,30 @@ export class AssistantController {
       // Forwarded as it arrived. The scope is a claim the service verifies by
       // reading the list with this same token (plan 0044, section 3).
       scope: dto.scope,
+      // From the verified token: a guest gets the guest allowance (plan 0234,
+      // section 6).
+      kind: user.kind,
     });
+  }
+
+  /**
+   * The caller's own allowance (plan 0234, section 8.2): turns and seconds of
+   * audio used against their limits, per day and per month, and whether the
+   * deployment can take a turn now. No money: a person has no use for micro
+   * dollars, and the turn limit already says when money binds first.
+   *
+   * The assistant answers it, because the limits are its configuration, with
+   * core's counts. It needs no provider key, so a deployment with no key still
+   * answers it.
+   */
+  @Get('allowance')
+  @ApiContractResponse(ASSISTANT_PATTERNS.allowance)
+  allowance(@AuthUser() user: CurrentUser): Promise<AssistantAllowanceView> {
+    return this.nats.send<AssistantAllowanceView>(
+      ASSISTANT_PATTERNS.allowance,
+      { userId: user.userId, kind: user.kind },
+      { timeoutMs: ALLOWANCE_READ_TIMEOUT_MS }
+    );
   }
 
   /**
@@ -149,7 +183,7 @@ export class AssistantController {
     },
   })
   @ApiContractResponse(ASSISTANT_PATTERNS.voice, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, notConfigured: true })
+  @ApiProblemResponses({ body: true, notConfigured: true, allowance: true })
   voice(
     @AuthUser() user: CurrentUser,
     @AuthHeader() authorization: string,
@@ -182,6 +216,7 @@ export class AssistantController {
         dto.zoneId !== undefined && dto.listId !== undefined
           ? { zoneId: dto.zoneId, listId: dto.listId }
           : undefined,
+      kind: user.kind,
     });
   }
 }

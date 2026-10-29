@@ -138,4 +138,64 @@ describe('MemberNames', () => {
     expect(names.nameOf(ZONE, 'u-b')).toBeNull();
     expect(names.membersOf(ZONE)).toEqual([]);
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    const reads = (service: ReturnType<typeof setup>['service']) =>
+      service.calls
+        .filter((call) => call.method === 'listMembers')
+        .map((call) => call.zoneId);
+
+    async function reconnect(realtime: RealtimeMemory): Promise<void> {
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('reads nothing at construction', () => {
+      const { service } = setup();
+      TestBed.tick();
+
+      expect(reads(service)).toEqual([]);
+    });
+
+    it('reads nothing when no zone was asked for', async () => {
+      const { realtime, service } = setup();
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(reads(service)).toEqual([]);
+    });
+
+    it('reads every asked zone again and absorbs the rows', async () => {
+      const { names, realtime, service } = setup();
+      // A name that a rename while the socket was down left behind.
+      names.prime(ZONE, [member('a', { username: 'Old' })]);
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(reads(service)).toEqual([ZONE]);
+      expect(names.nameOf(ZONE, 'u-a')).toBe('A');
+    });
+
+    it('keeps the names and the zone asked when the read fails', async () => {
+      const { names, realtime, service } = setup();
+      names.prime(ZONE, [member('a', { username: 'Held' })]);
+      service.listMembers = async (zoneId) => {
+        service.calls.push({ method: 'listMembers', zoneId });
+        throw new Error('offline again');
+      };
+      TestBed.tick();
+
+      await reconnect(realtime);
+      await expect(names.refresh()).resolves.toBeUndefined();
+
+      expect(names.nameOf(ZONE, 'u-a')).toBe('Held');
+      // Still asked: an ensure afterwards reads nothing.
+      await names.ensure(ZONE);
+      expect(reads(service)).toEqual([ZONE, ZONE]);
+    });
+  });
 });

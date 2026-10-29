@@ -3,10 +3,11 @@ import {
   UsernamePropagation,
 } from '@portfolio/luna-shopper/contracts';
 import { fakeAudit } from '../audit/auth-audit.testing';
-import { EmailVerification, User } from '../entities';
+import { AccountDeletion, EmailVerification, User } from '../entities';
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * What an operator may do to somebody else's identity, and what it leaves behind
@@ -74,8 +75,16 @@ function makeVerificationRepo() {
 function build(users: Partial<User>[] = []) {
   const userRepo = makeUserRepo(users);
   const verifications = makeVerificationRepo();
+  const outbox = { rows: [] as unknown[], insert: jest.fn() };
+  outbox.insert.mockImplementation(async (row: unknown) => {
+    outbox.rows.push(row);
+  });
   const repositoryFor = (target: unknown) =>
-    target === EmailVerification ? verifications : userRepo;
+    target === EmailVerification
+      ? verifications
+      : target === AccountDeletion
+        ? outbox
+        : userRepo;
   const manager = { getRepository: repositoryFor };
   const dataSource = {
     manager,
@@ -87,16 +96,20 @@ function build(users: Partial<User>[] = []) {
   const events = {
     userRegistered: jest.fn(),
     userUpgraded: jest.fn(),
-    userDeleted: jest.fn(),
     userEmailVerified: jest.fn(),
     userUsernameChanged: jest.fn(),
   };
   const mail = { sendVerificationEmail: jest.fn() };
+  const deletions = { publishSoon: jest.fn() };
   const audit = fakeAudit([
     [User, { name: 'users', repository: userRepo as never }],
     [
       EmailVerification,
       { name: 'email_verifications', repository: verifications as never },
+    ],
+    [
+      AccountDeletion,
+      { name: 'account_deletions', repository: outbox as never },
     ],
   ]);
   const service = new IdentityService(
@@ -113,9 +126,21 @@ function build(users: Partial<User>[] = []) {
         smtp: { verifyBaseUrl: 'https://x', enabled: true },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService(),
+    deletions as never
   );
-  return { service, userRepo, verifications, events, mail, audit };
+  return {
+    service,
+    userRepo,
+    verifications,
+    outbox,
+    events,
+    deletions,
+    mail,
+    audit,
+  };
 }
 
 function existingUser(over: Partial<User> = {}): Partial<User> {
@@ -262,15 +287,22 @@ describe('IdentityService.setDisplayNameAsOperator (section 3.2)', () => {
 });
 
 describe('IdentityService.deleteAccountAsOperator (0074 audited, section 8)', () => {
-  it('removes the row, emits the deletion and records what was lost', async () => {
-    const { service, userRepo, events, audit } = build([existingUser()]);
+  it('removes the row, queues the deletion and records only what kind of account was lost', async () => {
+    const createdAt = new Date('2026-07-01T00:00:00.000Z');
+    const { service, userRepo, outbox, deletions, audit } = build([
+      existingUser({ roles: [], createdAt }),
+    ]);
 
     await expect(service.deleteAccountAsOperator('u1', ACTOR)).resolves.toEqual(
       { userId: 'u1', deleted: true }
     );
 
     expect(userRepo.store).toEqual([]);
-    expect(events.userDeleted).toHaveBeenCalledWith({ userId: 'u1' });
+    // The outbox row is written in the transaction, and the publisher is woken
+    // after it (plan 0232, section 5).
+    expect(outbox.rows).toEqual([{ userId: 'u1' }]);
+    expect(deletions.publishSoon).toHaveBeenCalledTimes(1);
+    // No email, display name or username (plan 0232, section 4).
     expect(audit.recorded).toEqual([
       {
         actorId: ACTOR,
@@ -279,25 +311,57 @@ describe('IdentityService.deleteAccountAsOperator (0074 audited, section 8)', ()
         entityId: 'u1',
         before: {
           kind: UserKind.REGISTERED,
-          username: 'Swift Sail',
-          email: 'a@b.com',
-          emailVerifiedAt: '2026-08-01T00:00:00.000Z',
-          displayName: 'Alice',
+          roles: [],
+          createdAt: '2026-07-01T00:00:00.000Z',
         },
         after: null,
       },
     ]);
+    expect(audit.scrubbed).toEqual(['u1']);
   });
 
-  it('is idempotent: a second delete emits nothing and records nothing', async () => {
-    const { service, events, audit } = build([]);
+  it('is idempotent: a second delete queues nothing and records nothing', async () => {
+    const { service, outbox, deletions, audit } = build([]);
 
     await expect(service.deleteAccountAsOperator('u1', ACTOR)).resolves.toEqual(
       { userId: 'u1', deleted: false }
     );
 
-    expect(events.userDeleted).not.toHaveBeenCalled();
+    expect(outbox.rows).toEqual([]);
+    expect(deletions.publishSoon).not.toHaveBeenCalled();
     expect(audit.recorded).toEqual([]);
+    expect(audit.scrubbed).toEqual([]);
+  });
+});
+
+describe('IdentityService.deleteAccount (plan 0232, section 4)', () => {
+  it('deletes, queues and scrubs in one transaction, then wakes the publisher', async () => {
+    const { service, userRepo, outbox, deletions, audit } = build([
+      existingUser(),
+    ]);
+
+    await expect(service.deleteAccount({ userId: 'u1' })).resolves.toEqual({
+      userId: 'u1',
+      deleted: true,
+    });
+
+    expect(userRepo.store).toEqual([]);
+    expect(outbox.rows).toEqual([{ userId: 'u1' }]);
+    expect(audit.scrubbed).toEqual(['u1']);
+    // A person deleting their own account is not an operator write.
+    expect(audit.recorded).toEqual([]);
+    expect(deletions.publishSoon).toHaveBeenCalledTimes(1);
+  });
+
+  it('wakes nobody when the outbox insert throws', async () => {
+    const { service, outbox, deletions } = build([existingUser()]);
+    outbox.insert.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(service.deleteAccount({ userId: 'u1' })).rejects.toThrow(
+      'boom'
+    );
+
+    expect(deletions.publishSoon).not.toHaveBeenCalled();
   });
 });
 

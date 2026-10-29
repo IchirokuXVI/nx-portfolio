@@ -171,4 +171,22 @@ describe('AssistantMessage', () => {
     expect(host(fixture).querySelector('a.link')).not.toBeNull();
     expect(host(fixture).querySelectorAll('button.choice')).toHaveLength(1);
   });
+
+  describe('an allowance refusal (velista 0174)', () => {
+    it('says the sentence it was given, quietly, with no clock and no red', async () => {
+      const fixture = await render({
+        kind: 'allowance',
+        text: 'You have used the assistant as much as you can for today.',
+        waitSeconds: 40,
+      });
+      const bubble = host(fixture).querySelector('.bubble');
+
+      expect(bubble?.textContent).toContain('as much as you can for today');
+      expect(bubble?.classList).toContain('waiting');
+      expect(bubble?.classList).not.toContain('failed');
+      expect(bubble?.getAttribute('aria-live')).toBe('polite');
+      // Rule A5: a clock only from `retryAfterSeconds`, and this refusal has none.
+      expect(host(fixture).querySelector('.clock')).toBeNull();
+    });
+  });
 });

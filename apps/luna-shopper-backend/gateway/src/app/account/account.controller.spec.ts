@@ -6,6 +6,7 @@ import {
   type UserProfileView,
 } from '@portfolio/luna-shopper/contracts';
 import type { CurrentUser } from '../auth/jwt.strategy';
+import { legalConfig } from '../config/legal-config';
 import { AccountController } from './account.controller';
 import { UpdateAppStateDto } from './account.dto';
 
@@ -32,6 +33,15 @@ const PROFILE: UserProfileView = {
   email: 'brave@example.test',
   emailVerified: true,
   displayName: null,
+  termsAcceptedVersion: null,
+  termsAcceptedAt: null,
+};
+
+/** The `terms` block of `me` for a deployment with the defaults. */
+const TERMS = {
+  currentVersion: legalConfig({}).terms.version,
+  acceptedVersion: null,
+  acceptanceRequired: false,
 };
 
 const STATE = {
@@ -40,7 +50,8 @@ const STATE = {
 };
 
 function build(
-  answers: Partial<Record<string, unknown | (() => Promise<unknown>)>> = {}
+  answers: Partial<Record<string, unknown | (() => Promise<unknown>)>> = {},
+  env: NodeJS.ProcessEnv = {}
 ) {
   const send = jest.fn(async (pattern: string) => {
     const answer = answers[pattern];
@@ -63,7 +74,9 @@ function build(
   });
   const scopes = { invalidate: jest.fn() } as never;
   return {
-    controller: new AccountController({ send } as never, scopes),
+    controller: new AccountController({ send } as never, scopes, {
+      getOrThrow: () => ({ legal: legalConfig(env) }),
+    } as never),
     send,
   };
 }
@@ -78,6 +91,7 @@ describe('AccountController, on what an account has been shown', () => {
         appState: STATE,
         // From the token, not from auth (plan 0175).
         permissions: ['shopMap.record'],
+        terms: TERMS,
       });
 
       expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.getProfile, {
@@ -98,6 +112,7 @@ describe('AccountController, on what an account has been shown', () => {
         ...PROFILE,
         appState: { setupCompletedAt: null, tourSeenAt: null },
         permissions: ['shopMap.record'],
+        terms: TERMS,
       });
     });
 
@@ -108,6 +123,62 @@ describe('AccountController, on what an account has been shown', () => {
       });
 
       await expect(controller.me(USER)).rejects.toThrow();
+    });
+  });
+
+  describe('the terms block of GET me (plan 0231, section 4.4)', () => {
+    const REQUIRED = {
+      TERMS_ACCEPTANCE_REQUIRED: 'true',
+      LEGAL_CONTROLLER_NAME: 'Jane Example',
+      LEGAL_CONTACT_EMAIL: 'privacy@example.invalid',
+    };
+    const current = legalConfig({}).terms.version;
+
+    it.each([
+      ['not required, nothing accepted', {}, null, false],
+      ['not required, an old version accepted', {}, '2000-01-01', false],
+      ['required, nothing accepted', REQUIRED, null, true],
+      ['required, an old version accepted', REQUIRED, '2000-01-01', true],
+      ['required, the current version accepted', REQUIRED, current, false],
+    ] as const)(
+      '%s',
+      async (_name, env, acceptedVersion, acceptanceRequired) => {
+        const { controller } = build(
+          {
+            [AUTH_PATTERNS.getProfile]: {
+              ...PROFILE,
+              termsAcceptedVersion: acceptedVersion,
+              termsAcceptedAt: acceptedVersion
+                ? '2026-10-28T10:00:00.000Z'
+                : null,
+            },
+          },
+          env
+        );
+
+        await expect(controller.me(USER)).resolves.toMatchObject({
+          terms: {
+            currentVersion: current,
+            acceptedVersion,
+            acceptanceRequired,
+          },
+        });
+      }
+    );
+  });
+
+  describe('POST terms-acceptances', () => {
+    it('sends the version with the caller from the token', async () => {
+      const row = { version: '2026-10-28', acceptedAt: '2026-10-28T10:00:00Z' };
+      const { controller, send } = build({ [AUTH_PATTERNS.acceptTerms]: row });
+
+      await expect(
+        controller.acceptTerms(USER, { version: '2026-10-28' })
+      ).resolves.toEqual(row);
+      expect(send).toHaveBeenCalledWith(AUTH_PATTERNS.acceptTerms, {
+        userId: USER.userId,
+        version: '2026-10-28',
+      });
     });
   });
 

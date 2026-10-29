@@ -11,22 +11,6 @@
     <lib-brand-mark class="brand-mark" pageHeaderIcon />
 
     <ng-container pageHeaderActions>
-      <!--
-        The socket is down (plan 0035, section 5.3). A `span` and not a `button`: it
-        reports a state and leads nowhere, and a control that leads nowhere is worse
-        than no control. Its accessible name sits on the element rather than on the
-        glyph, which is hidden like every other icon here.
-      -->
-      @if (!connected()) {
-        <span
-          [attr.aria-label]="'connection.notLive' | rokuT"
-          class="offline-mark"
-          role="img"
-        >
-          <lib-offline-icon aria-hidden="true" />
-        </span>
-      }
-
       <!-- The only place the tour's `assistant` anchor exists (velista `0099`). -->
       <button
         (click)="openAssistant()"

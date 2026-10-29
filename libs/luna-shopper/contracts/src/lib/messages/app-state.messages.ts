@@ -1,4 +1,5 @@
 import type { Permission } from '../enums/account-role.enums';
+import type { AccountTermsView } from '../legal/legal-settings';
 import type { UserProfileView } from './auth.messages';
 
 /**
@@ -83,4 +84,9 @@ export interface AccountMeView extends UserProfileView {
    * never a role name. Empty for almost everybody, and always for a guest.
    */
   permissions: Permission[];
+  /**
+   * Whether this account must accept the Terms now (plan 0231, section 4.4),
+   * computed by the gateway from the profile and its own configuration.
+   */
+  terms: AccountTermsView;
 }

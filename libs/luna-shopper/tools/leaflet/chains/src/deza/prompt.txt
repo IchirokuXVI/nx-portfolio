@@ -8,7 +8,7 @@ The array elements are rows that will be imported into a product catalog, so
 every element MUST have exactly these keys:
 
 {
-  "name": "product description as printed, without the price",
+  "name": "product description as printed, without the price, the brand or the pack size",
   "brand": "the brand line printed on the pack, or null",
   "unitSize": 0.0,
   "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
@@ -88,6 +88,9 @@ Rules, in order of importance:
                                                          -> "unit"
    A tray whose size happens to be 1 kg is still "pack", because the price buys
    that one tray. Only a price genuinely quoted per kilo is "kg".
+   One container with several pieces inside (a bag of 10 tortillas, a box of
+   18 dishwasher tabs) is one "unit", not a pack: "pack" is several separately
+   wrapped items sold together.
 
 4. "unitSize" AND "sizeFormat" ARE THE SIZE AS A NUMBER AND ITS OWN TOKEN.
    Read them from the size the leaflet prints, and keep the leaflet's own unit
@@ -185,6 +188,26 @@ Rules, in order of importance:
     with the company that makes the line, so never "L'Oréal" for Elvive and
     never "Garnier" for Fructis. Write the maker only when its own name is
     the brand the tile prints.
+    A line is a brand when it carries its own wordmark on the pack (Elvive,
+    Fructis, Torremilano, Ristorante). A range named in the maker's own
+    typography under the maker's logo is not: it stays in "name" and the maker
+    is the brand. "L'Oréal Paris" with the name "Cofre rutina antiedad Age
+    Perfect", never "Age Perfect" as the brand.
+
+17. ONE TILE CAN ADVERTISE SEVERAL PRODUCTS AT ONE PRICE, AND EACH ONE IS A
+    ROW. The caption often joins them with "o": "Pan de chorizo o de
+    salchichón", "Gel limpiador ácido hialurónico o vitamina C", "Friegasuelos
+    olor ropa limpia o bambú", "Zapatilla dinosaurios o estrellas". Decide in
+    two steps. First the wording: when the words on each side of the "o" name
+    a different product or a different variety, so that the caption makes no
+    sense as the name of one product, split it. Then the photograph: when the
+    wording still reads as one name, look at the tile's picture; several
+    similar packs under one price are several products, and each pack's own
+    label says which words belong to which product. Write one row per
+    product, each with that product's full name (repeat the shared words:
+    "Pan de chorizo Regio", "Pan de salchichón Regio"), and the same price,
+    size, unit price, brand, basis and promotion. A list of flavours that
+    describes one pack ("2 variedades", "3x330 ml") is not a split.
 
 EXAMPLE OF A WHOLE ANSWER
 

@@ -72,7 +72,7 @@ The application secret — `luna-shopper-backend-secrets`:
 | `ADMIN_JWT_PUBLIC_KEY`  | PEM public key for operator tokens — the gateway, catalog and harvester (plan 0072), and core since plan 0074 |
 | `GOOGLE_CLIENT_SECRET`  | Google OAuth client secret. May be empty (plan 0026)                                                          |
 | `SMTP_PASS`             | SMTP submission password. May be empty (plan 0026)                                                            |
-| `GEMINI_API_KEY`        | Gemini provider key, **only** the assistant pod receives it. May be empty (plan 0039)                         |
+| `ANTHROPIC_API_KEY`     | Anthropic provider key, **only** the assistant pod receives it. May be empty (plans 0224, 0236)               |
 
 The split is the point of `_env.tpl`: `role` decides which of these a pod
 receives, so only the auth pod ever sees the private half of the keypair, and a

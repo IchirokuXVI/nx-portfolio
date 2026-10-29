@@ -1,0 +1,70 @@
+<!--
+  The one header (velista `0130`), outside the scroller so it never scrolls away.
+-->
+<lib-page-header
+  (back)="back()"
+  [backLabel]="'legal.back' | rokuT"
+  [title]="titleKey | rokuT"
+/>
+
+<main class="page">
+  @switch (state()) {
+    @case ('loading') {
+      <p aria-live="polite" class="loading" role="status">
+        <lib-spinner-icon aria-hidden="true" class="spinner" />
+        <span class="visually-hidden">{{ 'legal.loading' | rokuT }}</span>
+      </p>
+    }
+
+    @case ('failed') {
+      <p class="failed" role="alert">
+        <span>{{ 'legal.failed' | rokuT }}</span>
+        <button (click)="retry()" class="quiet" type="button">
+          {{ 'legal.retry' | rokuT }}
+        </button>
+      </p>
+    }
+
+    @case ('unpublished') {
+      <!-- A template with no controller is not a policy, so none is drawn. -->
+      <p class="unpublished">
+        {{ unpublishedKey | rokuT: { appName: settings()?.appName ?? '' } }}
+      </p>
+    }
+
+    @default {
+      @if (view(); as doc) {
+        @if (changedOn(); as date) {
+          <p class="meta">
+            {{ metaKey() | rokuT: { date: date, version: version() } }}
+          </p>
+        }
+
+        <!--
+          The contents, folded: sixteen anchors at a touch target each would push the
+          first section two screens down on a phone.
+        -->
+        <details class="contents">
+          <summary class="contents-toggle">
+            <span>{{ 'legal.contents' | rokuT }}</span>
+            <lib-chevron-down-icon aria-hidden="true" class="contents-glyph" />
+          </summary>
+          <ol class="contents-list">
+            @for (section of doc.sections; track section.id) {
+              <li>
+                <a
+                  (click)="jump($event, section.id)"
+                  [href]="pageUrl() + '#' + section.id"
+                  class="contents-link"
+                  >{{ section.heading }}</a
+                >
+              </li>
+            }
+          </ol>
+        </details>
+
+        <lib-legal-sections [sections]="doc.sections" />
+      }
+    }
+  }
+</main>

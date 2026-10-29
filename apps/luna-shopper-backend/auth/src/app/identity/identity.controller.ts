@@ -3,14 +3,16 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AUTH_PATTERNS,
   STATS_PATTERNS,
+  type AcceptTermsRequest,
   type AuthTokens,
   type ConsumeOAuthStateRequest,
+  type CreateTemporaryUserRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type ExchangeGoogleSignInRequest,
   type ForgotPasswordRequest,
   type GetProfileRequest,
   type GetUsernamesRequest,
-  type GoogleLoginRequest,
   type IdentityStats,
   type LoginRequest,
   type MintOAuthStateRequest,
@@ -27,6 +29,9 @@ import {
   type ResetPasswordRequest,
   type RetryAfterResult,
   type SetUsernameRequest,
+  type StageGoogleSignInRequest,
+  type StageGoogleSignInResult,
+  type TermsAcceptanceView,
   type UpgradeRequest,
   type UserProfileView,
   type UserUsernameView,
@@ -58,8 +63,10 @@ export class IdentityController {
   }
 
   @MessagePattern(AUTH_PATTERNS.createTemporaryUser)
-  createTemporaryUser(): Promise<AuthTokens> {
-    return this.identity.createTemporaryUser();
+  createTemporaryUser(
+    @Payload() req: CreateTemporaryUserRequest
+  ): Promise<AuthTokens> {
+    return this.identity.createTemporaryUser(req ?? {});
   }
 
   @MessagePattern(AUTH_PATTERNS.register)
@@ -113,11 +120,6 @@ export class IdentityController {
     return this.identity.upgrade(req);
   }
 
-  @MessagePattern(AUTH_PATTERNS.googleLogin)
-  googleLogin(@Payload() req: GoogleLoginRequest): Promise<AuthTokens> {
-    return this.identity.googleLogin(req);
-  }
-
   @MessagePattern(AUTH_PATTERNS.mintOAuthState)
   mintOAuthState(
     @Payload() req: MintOAuthStateRequest
@@ -132,6 +134,22 @@ export class IdentityController {
     return this.identity.consumeOAuthState(req);
   }
 
+  // The callback stages and the app exchanges (plan 0230). The exchange is the
+  // one way a Google sign in reaches an account.
+  @MessagePattern(AUTH_PATTERNS.stageGoogleSignIn)
+  stageGoogleSignIn(
+    @Payload() req: StageGoogleSignInRequest
+  ): Promise<StageGoogleSignInResult> {
+    return this.identity.stageGoogleSignIn(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.exchangeGoogleSignIn)
+  exchangeGoogleSignIn(
+    @Payload() req: ExchangeGoogleSignInRequest
+  ): Promise<AuthTokens> {
+    return this.identity.exchangeGoogleSignIn(req);
+  }
+
   @MessagePattern(AUTH_PATTERNS.deleteAccount)
   deleteAccount(
     @Payload() req: DeleteAccountRequest
@@ -142,6 +160,14 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.setUsername)
   setUsername(@Payload() req: SetUsernameRequest): Promise<UserProfileView> {
     return this.identity.setUsername(req);
+  }
+
+  /** Accept the current Terms from the prompt (plan 0231, section 4.4). */
+  @MessagePattern(AUTH_PATTERNS.acceptTerms)
+  acceptTerms(
+    @Payload() req: AcceptTermsRequest
+  ): Promise<TermsAcceptanceView> {
+    return this.identity.acceptTerms(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.getProfile)

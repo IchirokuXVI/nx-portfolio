@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import type { AdminActivityEntry } from '@portfolio/luna-shopper/contracts';
+import { randomUUID } from 'node:crypto';
 import {
   DataSource,
   type EntityManager,
@@ -43,6 +44,57 @@ const WRITE_BOOKKEEPING: ReadonlySet<string> = new Set([
   // The stored half of the handoff code of a support session (plan 0194).
   'codeHash',
 ]);
+
+/**
+ * The snapshot keys that name or describe a person (plan 0232, section 4). A
+ * scrubbed row keeps the key, so a reader still sees which field moved, and
+ * loses the value.
+ */
+const PERSONAL_KEYS: readonly string[] = [
+  'email',
+  'displayName',
+  'username',
+  'reasonNote',
+  'userAgent',
+];
+
+/**
+ * A jsonb column with the person taken out: each {@link PERSONAL_KEYS} key set
+ * to JSON null, and each value equal to the user id (`$1`) replaced by the
+ * tombstone (`$2`). `$3` is the key list. A null column, or one that is not an
+ * object, is left as it is, and so is `{}`, which `jsonb_object_agg` over no
+ * rows would otherwise turn into null.
+ */
+function scrubbedJson(column: string): string {
+  return `CASE WHEN jsonb_typeof(${column}) = 'object' AND ${column} <> '{}'::jsonb THEN (
+    SELECT jsonb_object_agg(
+      e.key,
+      CASE
+        WHEN e.key = ANY($3::text[]) THEN 'null'::jsonb
+        WHEN e.value = to_jsonb($1::text) THEN to_jsonb($2::text)
+        ELSE e.value
+      END
+    )
+    FROM jsonb_each(${column}) AS e
+  ) ELSE ${column} END`;
+}
+
+/**
+ * Whether a jsonb column holds the user id (`$1`) as a top level value.
+ *
+ * The `LIKE` on the column's text runs first and rules out almost every row
+ * before `jsonb_each` expands it. It never rules out a match: a value equal to
+ * the id prints the id, and a uuid holds no `%` or `_`. The exact test is still
+ * `jsonb_each`, so an id under a nested key or inside a longer string does not
+ * count.
+ */
+function holdsValue(column: string): string {
+  return `(jsonb_typeof(${column}) = 'object'
+    AND ${column}::text LIKE ('%' || $1::text || '%')
+    AND EXISTS (
+      SELECT 1 FROM jsonb_each(${column}) AS e WHERE e.value = to_jsonb($1::text)
+    ))`;
+}
 
 /**
  * Who changed an auth row, and what it said before (plan 0077, section 8).
@@ -95,6 +147,58 @@ export class AuthAuditService {
     return this.dataSource.transaction((manager) =>
       work(new AuditedWrite(manager, this.dataSource, actorId))
     );
+  }
+
+  /**
+   * Take a deleted person out of the trail (plan 0232, section 4).
+   *
+   * Runs through the `manager` of the delete's transaction, so the trail is
+   * scrubbed exactly when the account is gone and never otherwise. A row is the
+   * person's when its `entityId` or `actorId` is their id, or when `before` or
+   * `after` holds their id as a value under any key: `users` rows carry it as
+   * `entityId`, and `email_verifications`, `password_resets` and
+   * `impersonation_sessions` rows carry it as `userId` in the snapshot. One
+   * level is enough, because {@link AuditedWrite.snapshot} stores one level of
+   * fields. `actorId` names an operator and cannot match an account id today;
+   * it is checked anyway, so a trail that one day records an account as the
+   * actor is scrubbed too.
+   *
+   * In those rows, every {@link PERSONAL_KEYS} key that exists becomes JSON null
+   * in both columns, and every place the id appears becomes a tombstone: a
+   * fresh random uuid that joins nothing and is not derived from the id, so
+   * nobody holding the old id can find the rows (plan 0232, section 1). The
+   * person's rows still point at one another through it, and an operator still
+   * sees that an account was renamed and then removed.
+   *
+   * `entityId` changes only where it is the user id. A verification, a reset or
+   * a support session keeps its own id: those rows were deleted by the cascade,
+   * so the id leads nowhere, and it is what ties a session's opening row to the
+   * row that ended it.
+   *
+   * No index serves the jsonb match, so it scans the table. Deletions are rare
+   * and the trail is small, and an index for this one query would be written on
+   * every audited change. A text `LIKE` on each column rules out the rows that
+   * cannot match before any is expanded with `jsonb_each`, which matters when
+   * the orphan reaper deletes temporary accounts in a batch.
+   *
+   * Answers how many rows it changed.
+   */
+  async scrubUser(manager: EntityManager, userId: string): Promise<number> {
+    const tombstone = randomUUID();
+    // `query()` answers `[rows, count]` for an UPDATE.
+    const [, count]: [unknown, number] = await manager.query(
+      `UPDATE "auth_audit" SET
+         "entityId" = CASE WHEN "entityId" = $1::uuid THEN $2::uuid ELSE "entityId" END,
+         "actorId" = CASE WHEN "actorId" = $1::uuid THEN $2::uuid ELSE "actorId" END,
+         "before" = ${scrubbedJson('"before"')},
+         "after" = ${scrubbedJson('"after"')}
+       WHERE "entityId" = $1::uuid
+          OR "actorId" = $1::uuid
+          OR ${holdsValue('"before"')}
+          OR ${holdsValue('"after"')}`,
+      [userId, tombstone, PERSONAL_KEYS]
+    );
+    return count;
   }
 
   /**
@@ -230,14 +334,23 @@ export class AuditedWrite {
     );
   }
 
-  /** Record a deletion another call persisted, from the row as it last was. */
+  /**
+   * Record a deletion another call persisted, from the row as it last was.
+   *
+   * `only` narrows `before` to the fields it names, read straight off the row,
+   * bookkeeping included. The account delete passes it (plan 0232, section 4):
+   * the trail keeps what kind of account was lost and nothing that identifies
+   * the person, because a snapshot of the whole row would write their email,
+   * display name and username into a row that outlives them.
+   */
   async recordDelete<T extends ObjectLiteral>(
     target: EntityTarget<T>,
     row: ObjectLiteral,
-    entityId: string
+    entityId: string,
+    only?: readonly string[]
   ): Promise<void> {
     await this.insert(target, entityId, AuthAuditAction.DELETE, {
-      before: this.snapshot(target, row),
+      before: only ? pick(row, only) : this.snapshot(target, row),
       after: null,
     });
   }
@@ -321,6 +434,15 @@ export function diffFields(
   return Object.keys(isAfter).length > 0
     ? { before: wasBefore, after: isAfter }
     : null;
+}
+
+/** The named fields of a row, as the trail stores them. */
+function pick(row: ObjectLiteral, keys: readonly string[]): AuditFields {
+  const fields: AuditFields = {};
+  for (const key of keys) {
+    fields[key] = normalize(row[key]);
+  }
+  return fields;
 }
 
 /** `undefined` and a `Date` are not json; everything else already is. */

@@ -17,6 +17,7 @@ import {
   MEMBERSHIP_PATTERNS,
   ZONE_PATTERNS,
   type AuthTokens,
+  type CreateTemporaryUserRequest,
   type MembershipPage,
   type MembershipView,
   type MyZoneCounts,
@@ -102,12 +103,19 @@ export class ZoneController {
    */
   private async resolveIdentity(
     user: CurrentUser | undefined,
-    suppliedUsername?: string
+    suppliedUsername?: string,
+    acceptedTermsVersion?: string
   ): Promise<ResolvedCaller> {
     if (!user) {
+      // The version rides only on this branch (plan 0231, section 4.2): the
+      // notice beside the buttons speaks about the account created for you,
+      // so an authenticated caller records nothing, whatever the body says.
+      const request: CreateTemporaryUserRequest = acceptedTermsVersion
+        ? { acceptedTermsVersion }
+        : {};
       const tokens = await this.nats.send<AuthTokens>(
         AUTH_PATTERNS.createTemporaryUser,
-        {}
+        request
       );
       return {
         userId: tokens.userId,
@@ -139,14 +147,15 @@ export class ZoneController {
   // caller who presents a token is claiming an identity, and a token that is
   // expired, malformed or names a deleted account is a 401 rather than a silent
   // fall through to anonymous (plan 0020).
-  @ApiProblemResponses({ auth: true, body: true })
+  @ApiProblemResponses({ auth: true, body: true, terms: true })
   async create(
     @AuthUser() user: CurrentUser | undefined,
     @Body() dto: CreateZoneDto
   ): Promise<WithMaybeToken<ZoneView>> {
     const { userId, username, tokens } = await this.resolveIdentity(
       user,
-      dto.username
+      dto.username,
+      dto.acceptedTermsVersion
     );
     const zone = await this.nats.send<ZoneView>(ZONE_PATTERNS.create, {
       userId,
@@ -170,6 +179,7 @@ export class ZoneController {
     body: true,
     membership: true,
     conflict: true,
+    terms: true,
   })
   async join(
     @AuthUser() user: CurrentUser | undefined,
@@ -177,7 +187,8 @@ export class ZoneController {
   ): Promise<WithMaybeToken<MembershipView>> {
     const { userId, username, tokens } = await this.resolveIdentity(
       user,
-      dto.username
+      dto.username,
+      dto.acceptedTermsVersion
     );
     const membership = await this.nats.send<MembershipView>(
       ZONE_PATTERNS.join,

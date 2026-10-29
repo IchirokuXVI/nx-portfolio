@@ -47,8 +47,10 @@ export class ImpersonationSession extends BaseEntity {
   /**
    * Creation time plus `IMPERSONATION_MAX_MS`. **Never written again.**
    * `update: false` makes TypeORM leave the column out of every `UPDATE` it
-   * builds, so a `save` of a loaded row cannot move the deadline.
+   * builds, so a `save` of a loaded row cannot move the deadline. The
+   * retention sweep reads by it (plan 0233).
    */
+  @Index('ix_impersonation_sessions_expires_at')
   @Column({ type: 'timestamptz', update: false })
   expiresAt!: Date;
 

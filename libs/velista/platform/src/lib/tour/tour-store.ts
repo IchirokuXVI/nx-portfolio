@@ -32,7 +32,11 @@ export const TOUR_ANCHOR_WAIT_MS = 4000;
 export const TOUR_HOLDINGS_WAIT_MS = 4000;
 
 /** What an account that has not been read yet is taken to hold: nothing. */
-const HOLDS_NOTHING: TourHoldings = { hasGroup: false, firstList: null };
+const HOLDS_NOTHING: TourHoldings = {
+  hasGroup: false,
+  firstList: null,
+  voice: false,
+};
 
 /** What `AppLayout` needs to draw one card. */
 export interface TourCardView {

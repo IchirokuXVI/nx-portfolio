@@ -3,6 +3,7 @@ import type {
   AccountPermission,
   AppState,
   AppStateFlags,
+  TermsAcceptance,
   UsernameScope,
   UserProfile,
 } from '@portfolio/velista/models';
@@ -86,6 +87,34 @@ export class AccountMemory implements AccountServiceI {
   /** Every app state write, in order, so a spec can count them. */
   readonly appStateSent: AppStateFlags[] = [];
 
+  /**
+   * The version of the terms this deployment asks for (velista `0173`), or null for a
+   * deployment that requires none, which is the default: the profile then carries no
+   * terms block, as an older backend's does.
+   */
+  requiredTermsVersion: string | null = null;
+
+  /** The versions accepted through the prompt, in order. */
+  readonly termsAccepted: string[] = [];
+
+  async acceptTerms(version: string): Promise<TermsAcceptance> {
+    this._profile();
+    if (
+      this.requiredTermsVersion !== null &&
+      version !== this.requiredTermsVersion
+    ) {
+      throw new GatewayError({
+        code: 'terms_version_stale',
+        status: 409,
+        correlationId: 'memory',
+        details: { currentVersion: this.requiredTermsVersion },
+      });
+    }
+
+    this.termsAccepted.push(version);
+    return { version, acceptedAt: new Date().toISOString() };
+  }
+
   async getProfile(): Promise<UserProfile> {
     return this._profile();
   }
@@ -141,6 +170,10 @@ export class AccountMemory implements AccountServiceI {
     return name;
   }
 
+  private _lastAccepted(): string | null {
+    return this.termsAccepted[this.termsAccepted.length - 1] ?? null;
+  }
+
   private _profile(): UserProfile {
     const tokens = this._tokens.tokens();
     if (tokens === null) {
@@ -167,6 +200,16 @@ export class AccountMemory implements AccountServiceI {
       displayName: null,
       appState: this._appState,
       permissions: [...this.permissions],
+      ...(this.requiredTermsVersion === null
+        ? {}
+        : {
+            terms: {
+              currentVersion: this.requiredTermsVersion,
+              acceptedVersion: this._lastAccepted(),
+              acceptanceRequired:
+                this._lastAccepted() !== this.requiredTermsVersion,
+            },
+          }),
     };
   }
 }

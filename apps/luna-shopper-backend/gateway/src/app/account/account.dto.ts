@@ -1,5 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { UsernamePropagation } from '@portfolio/luna-shopper/contracts';
+import {
+  ACCEPTED_TERMS_VERSION_MAX_LENGTH,
+  UsernamePropagation,
+} from '@portfolio/luna-shopper/contracts';
 import {
   USERNAME_MAX_LENGTH,
   USERNAME_MIN_LENGTH,
@@ -35,6 +38,23 @@ export class UpdateProfileDto {
   @IsOptional()
   @IsEnum(UsernamePropagation)
   propagation?: UsernamePropagation;
+}
+
+/**
+ * Accept the current Terms from the prompt (plan 0231, section 4.4). The
+ * version is required here: this route exists to accept one.
+ */
+export class AcceptTermsDto {
+  @ApiProperty({
+    minLength: 1,
+    maxLength: ACCEPTED_TERMS_VERSION_MAX_LENGTH,
+    description:
+      'The `terms.version` of `GET /v1/legal/settings` the person accepted. Any other answers `terms_version_stale`.',
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(ACCEPTED_TERMS_VERSION_MAX_LENGTH)
+  version!: string;
 }
 
 /** The two flags {@link UpdateAppStateDto} carries, for the rule below. */

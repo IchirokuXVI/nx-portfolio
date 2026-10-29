@@ -1,0 +1,120 @@
+{
+  "title": "Velista Accepting the Terms",
+  "lede": "The design for plan <code>0173</code>: every account velista makes carries the version of the terms the person accepted. One form for register and upgrade with a checkbox, a line under every Google button, a line beside every action that makes a guest account, the prompt that stands in place of the page until the current version is accepted, and what a version that changed while the page was open looks like. Backend <code>0231</code> is behind it. Phone only, 390 by 844, Night theme: no new colour role, so a Day artboard would restate <code>0003</code>. This page is generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.",
+  "artboards": [
+    {
+      "file": "AccountForm.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1330,
+      "h": 970,
+      "title": "One form: register and upgrade"
+    },
+    {
+      "file": "GoogleLine.dc.html",
+      "x": 1400,
+      "y": 0,
+      "w": 900,
+      "h": 970,
+      "title": "The line under every Google button"
+    },
+    {
+      "file": "GuestNotice.dc.html",
+      "x": 0,
+      "y": 1120,
+      "w": 1330,
+      "h": 970,
+      "title": "The guest notice, before the press"
+    },
+    {
+      "file": "GuestNoticeAfter.dc.html",
+      "x": 1400,
+      "y": 1120,
+      "w": 470,
+      "h": 970,
+      "title": "The notice after the button, not chosen"
+    },
+    {
+      "file": "Prompt.dc.html",
+      "x": 0,
+      "y": 2240,
+      "w": 1330,
+      "h": 970,
+      "title": "The prompt, in place of the page"
+    },
+    {
+      "file": "TermsSheet.dc.html",
+      "x": 1400,
+      "y": 2240,
+      "w": 470,
+      "h": 970,
+      "title": "The terms as a sheet over the form"
+    },
+    {
+      "file": "Stale.dc.html",
+      "x": 0,
+      "y": 3360,
+      "w": 1330,
+      "h": 970,
+      "title": "The version changed while the page was open"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "brief",
+      "x": 0,
+      "y": -230,
+      "w": 430,
+      "text": "Plan 0173. The press is the acceptance where there is no form (D1). A checkbox only on the email form, which the owner asked for. Everywhere else one line says what the press means, and the prompt's button says Accept.\nThe privacy policy is linked and never accepted. No copy on this canvas asks anybody to accept it.\nNight only, as the auth and entry folders: every colour here is one those screens already use."
+    },
+    {
+      "id": "one-form",
+      "x": 470,
+      "y": -230,
+      "w": 430,
+      "text": "ONE FORM (D2). Register and upgrade draw the same fields, the same checkbox, the same privacy line and the same Google option. What differs stays on the page: register's sign in footer and its conflict action, upgrade's keepsafe note and Not now.\nTHE BOX IS NOT A CONDITION ON THE BUTTON (plan 0009 section 5.5, plan 0160). Pressed with the box clear, the form says so under the box, marks it invalid, moves focus to it and sends nothing.\nThe link sits inside the label, so the whole row is the target and the word Terms still opens the document."
+    },
+    {
+      "id": "google",
+      "x": 940,
+      "y": -230,
+      "w": 430,
+      "text": "THE LINE BELONGS TO THE BUTTON. GoogleOption and AuthActions draw it themselves, so a fifth Google button cannot be added without it. Small secondary text, centred under the button, no container.\nUPGRADE OFFERS GOOGLE NOW. The state carries the guest's bearer, so the guest is linked in place and keeps every group (backend 0230).\nThe button is drawn when the deployment has Google (features.googleSignIn), and never in the native shell."
+    },
+    {
+      "id": "notice",
+      "x": 1920,
+      "y": 1120,
+      "w": 430,
+      "text": "THE GUEST NOTICE STANDS BEFORE THE PRESS, directly above the primary (A). Read on the way to the button, it describes what the press does before it happens. B puts it under the button, where a thumb has already pressed by the time the eye gets there.\nIt replaces the old submitting note on create and the account note on the shared link: one line, the same while the request runs. No checkbox (the owner).\nOnly while no session is held. A signed in person who creates a group gets no account and accepts nothing here."
+    },
+    {
+      "id": "prompt",
+      "x": 1950,
+      "y": 2240,
+      "w": 430,
+      "text": "THE PROMPT REPLACES THE PAGE (D3), as the update screen does. A cover over a live page would let presses reach it. Drawn while the account must accept the current version, never in a support session, and never on a page somebody must read first: the two documents, the Google callback, the email links and the support ended page.\nNo checkbox: the button says what it does. Sign out is the only other way forward, and only for an account with an email. A guest who signed out would lose the account, so a guest sees Accept alone.\nThe two links open the pages; the prompt stands down on them and comes back after."
+    },
+    {
+      "id": "sheet",
+      "x": 1950,
+      "y": 2760,
+      "w": 430,
+      "text": "THE DOCUMENTS OPEN AS A SHEET over sign in, register and upgrade (D5), so nothing typed is lost. The same renderer as the page, with the page's address at the foot. A link from one document to the other opens the other sheet.\nThe entry sheets and the front door link to the pages: a sheet over a sheet is not a pattern this app has, and the only thing typed there is a short name."
+    },
+    {
+      "id": "stale",
+      "x": 1400,
+      "y": 3360,
+      "w": 430,
+      "text": "A STALE VERSION SHOWS THE NEW TERMS, never a dead end. The settings are read again, the box is cleared, and the sentence links the terms. The next press sends the new version.\nOn Google the refusal comes at the start, before the document leaves, so it is shown beside the button the person pressed.\nA missing version (a build that sent none where the server wants one) gets the same sentence without the word changed."
+    },
+    {
+      "id": "unpublished",
+      "x": 1870,
+      "y": 3360,
+      "w": 430,
+      "text": "WHEN THE OPERATOR HAS PUBLISHED NOTHING, there are no terms to accept. The checkbox, the privacy line, the Google line and the guest notice are not drawn, and no version is sent. The backend refuses to boot with acceptance required and no documents, so that deployment never meets the prompt."
+    }
+  ]
+}

@@ -182,6 +182,21 @@ export class RateLimitedException extends DomainException {
 }
 
 /**
+ * A person's assistant allowance, or the deployment's ceiling, would not fit
+ * the turn (plan 0234, section 8.1). Thrown before any provider call.
+ *
+ * Beside {@link RateLimitedException} and apart from it by code, because the
+ * answer is a time of day and not a countdown. It publishes its details, which
+ * are exactly `scope`, `period`, `limit` and `resetsAt`, because the client
+ * cannot say when the assistant is back without them. It carries no
+ * `retryAfterSeconds`.
+ */
+export class AllowanceReachedException extends DomainException {
+  readonly code = ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED;
+  override readonly exposesDetails = true;
+}
+
+/**
  * The account has failed too many times in a row and is refusing attempts (plan
  * 0071, section 7).
  *
@@ -232,6 +247,20 @@ export class RunInProgressException extends DomainException {
  */
 export class LineMergeRequiredException extends DomainException {
   readonly code = ERROR_CODES.LINE_MERGE_REQUIRED;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A typed name is the name of two or more lines of the list that hold a
+ * product, and the add said it can ask (plan 0228, section 3).
+ *
+ * It publishes its details, for the reason {@link LineMergeRequiredException}
+ * does: the client cannot ask the question without them. `details.lines` names
+ * each line in list position order, at most `LINE_ADD_CHOICE_MAX` of them.
+ * Nothing was written when this is thrown.
+ */
+export class LineAddNeedsChoiceException extends DomainException {
+  readonly code = ERROR_CODES.LINE_ADD_NEEDS_CHOICE;
   override readonly exposesDetails = true;
 }
 
@@ -673,6 +702,30 @@ export class RecoveryNeedsEmailException extends DomainException {
 /** An operator asked for a reset grant for a Google only account (plan 0210). */
 export class RecoveryNeedsPasswordException extends DomainException {
   readonly code = ERROR_CODES.RECOVERY_NEEDS_PASSWORD;
+}
+
+/** The `details` key both Terms refusals name the current version under (plan 0231). */
+export const TERMS_CURRENT_VERSION_DETAIL = 'currentVersion';
+
+/**
+ * The supplied Terms version is not the current one (plan 0231, section 4.3).
+ *
+ * It publishes its details, because the client's next act is to draw the
+ * version under {@link TERMS_CURRENT_VERSION_DETAIL}. Nothing was written.
+ */
+export class TermsVersionStaleException extends DomainException {
+  readonly code = ERROR_CODES.TERMS_VERSION_STALE;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * No Terms version was supplied and this deployment requires one (plan 0231,
+ * section 4.3). It publishes its details for the reason
+ * {@link TermsVersionStaleException} does. Nothing was written.
+ */
+export class TermsAcceptanceMissingException extends DomainException {
+  readonly code = ERROR_CODES.TERMS_ACCEPTANCE_MISSING;
+  override readonly exposesDetails = true;
 }
 
 /** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */

@@ -43,7 +43,8 @@ export interface AssistantMessageVm {
     | 'unconfigured'
     | 'tooLong'
     | 'badFormat'
-    | 'dropped';
+    | 'dropped'
+    | 'allowance';
   /** Where this reply offers to go, and absent when it offers nowhere. */
   readonly link?: AssistantLinkVm;
   /**

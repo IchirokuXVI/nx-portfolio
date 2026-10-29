@@ -58,11 +58,20 @@ export class AuthApi implements AuthServiceI {
    * `displayName` is never sent. The backend generates a username regardless of what
    * arrives, and the display name is not the public cross zone handle, so asking for
    * one would collect a value nothing in the app renders (plan 0009, section 5.1).
+   *
+   * `acceptedTermsVersion` goes with it when there is one (backend `0231`, section
+   * 4.2), and is left out rather than sent empty when there is none: the gateway refuses
+   * an empty string, and a deployment with no terms asks for none.
    */
-  async register(email: string, password: string): Promise<SessionTokens> {
+  async register(
+    email: string,
+    password: string,
+    acceptedTermsVersion: string | null
+  ): Promise<SessionTokens> {
     return this._authenticate('/v1/auth/register', 'auth.register', {
       email,
       password,
+      ...withTermsVersion(acceptedTermsVersion),
     });
   }
 
@@ -88,12 +97,18 @@ export class AuthApi implements AuthServiceI {
    * `TEMPORARY`, and answers with tokens for the same id. Rule C2 is enforced above
    * this, at the route, because a guest who reached the register screen instead would
    * get a perfectly valid new account and lose every group with nothing said.
+   *
+   * `acceptedTermsVersion` as on {@link register}.
    */
-  async upgrade(email: string, password: string): Promise<SessionTokens> {
+  async upgrade(
+    email: string,
+    password: string,
+    acceptedTermsVersion: string | null
+  ): Promise<SessionTokens> {
     const body = await firstValueFrom(
       this._http.post<unknown>(
         this._urls.gateway('/v1/auth/upgrade'),
-        { email, password },
+        { email, password, ...withTermsVersion(acceptedTermsVersion) },
         { context: operation('auth.upgrade') }
       )
     );
@@ -257,6 +272,68 @@ export class AuthApi implements AuthServiceI {
   }
 
   /**
+   * `POST /v1/auth/google/state` (backend `0230`): mint the state of a Google sign in
+   * for this challenge, and answer it.
+   *
+   * The ordinary context, so the interceptor decides: a held bearer goes out and the
+   * state carries the guest it would link, and with no session the request goes out
+   * bare. A 401 refreshes and retries as on any other route. An answer with no string
+   * `state` rejects (rule D4).
+   *
+   * The version of the terms the line under the button names goes beside the challenge
+   * (backend `0231`, section 4.2): the server checks it here, where a refusal can still
+   * be shown beside the button, and records it when the sign in finishes.
+   */
+  async mintGoogleState(
+    codeChallenge: string,
+    acceptedTermsVersion: string | null = null
+  ): Promise<string> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/auth/google/state'),
+        { codeChallenge, ...withTermsVersion(acceptedTermsVersion) },
+        { context: operation('auth.googleState') }
+      )
+    );
+
+    const state = str(isRecord(body) ? body['state'] : null);
+    if (state === null) {
+      throw new Error('auth.googleState returned no state');
+    }
+
+    return state;
+  }
+
+  /**
+   * `POST /v1/auth/google/exchange` (backend `0230`): trade the code the callback
+   * carried and the verifier this tab kept for the pair.
+   *
+   * **Never anonymous.** A guest who links presents their bearer, and the server refuses
+   * the link without it, so the interceptor sends it and refreshes first when it has
+   * expired. The pair is mapped with `toSessionTokens` and handed back, not stored: the
+   * callback page stores it, because the page is what decides that the flow ended here.
+   */
+  async exchangeGoogleCode(
+    code: string,
+    codeVerifier: string
+  ): Promise<SessionTokens> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/auth/google/exchange'),
+        { code, codeVerifier },
+        { context: operation('auth.googleExchange') }
+      )
+    );
+
+    const tokens = toSessionTokens(body);
+    if (tokens === null) {
+      throw new Error('auth.googleExchange returned an unusable token pair');
+    }
+
+    return tokens;
+  }
+
+  /**
    * Rule D4: the answer is `unknown` until it is read here.
    *
    * A pair is stored only with `SIGNED_IN`, and an answer this app cannot read is a
@@ -320,7 +397,7 @@ export class AuthApi implements AuthServiceI {
   private async _authenticate(
     path: string,
     name: string,
-    payload: { email: string; password: string }
+    payload: { email: string; password: string; acceptedTermsVersion?: string }
   ): Promise<SessionTokens> {
     const body = await firstValueFrom(
       this._http.post<unknown>(this._urls.gateway(path), payload, {
@@ -349,6 +426,18 @@ export class AuthApi implements AuthServiceI {
     this._tokens.set(tokens);
     return tokens;
   }
+}
+
+/**
+ * The field of every request that makes an account, or nothing (backend `0231`).
+ *
+ * Exported for `ZoneApi`, which sends it on the two zone routes. An empty string is
+ * left out with null: the gateway refuses one, and no screen draws an empty version.
+ */
+export function withTermsVersion(version: string | null | undefined): {
+  acceptedTermsVersion?: string;
+} {
+  return version ? { acceptedTermsVersion: version } : {};
 }
 
 /** The wait a successful resend reported, when it reported one. See rule C3. */

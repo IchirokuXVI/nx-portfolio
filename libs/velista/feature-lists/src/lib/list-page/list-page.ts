@@ -27,6 +27,7 @@ import {
   type DroppedWrite,
   DroppedWrites,
   DueLineStore,
+  GatewayError,
   ItemNames,
   LineStore,
   LIST_SERVICE,
@@ -36,6 +37,7 @@ import {
   ListViewStore,
   listWritesPage,
   MemberNames,
+  OperatorSettingsStore,
   presenceNames,
   presencePeople,
   PresenceStore,
@@ -44,10 +46,16 @@ import {
   type RealtimeClientI,
   SessionStore,
   ShoppingProfileStore,
+  toAddChoice,
   TripStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import {
+  addChoiceName,
+  type AddChoice as AddChoiceQuestion,
+  type AddChoiceRow,
+  addChoiceRows,
+  type AddLineOptions,
   APP_BASE_PATH,
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
@@ -94,12 +102,16 @@ import {
   zoneIdOf,
 } from '@portfolio/velista/platform';
 import {
+  AddChoice,
+  AnchoredPopover,
+  type AnchoredPopoverClose,
   CloseIcon,
   DueLineRow,
   ErrorState,
   FilterIcon,
   GearIcon,
   LineComposer,
+  type LineComposerSubmit,
   LineList,
   type LineRowAction,
   ListHeader,
@@ -114,6 +126,7 @@ import {
   type SuggestionHoldingChange,
   SuggestionList,
   ToBuyHeading,
+  TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
 import {
@@ -209,6 +222,8 @@ function listReturnKey(listId: string): string {
     GearIcon,
     LineComposer,
     LineList,
+    AddChoice,
+    AnchoredPopover,
     ListHeader,
     ListNotice,
     PageHeader,
@@ -441,6 +456,21 @@ export class ListPage {
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
   private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _tone = inject(NOTIFICATION_TONE);
+  private readonly _operator = inject(OperatorSettingsStore);
+
+  /**
+   * Whether the one field offers its microphone (velista `0174`, target 1).
+   *
+   * Both flags, because a recording made here goes to the list scoped assistant
+   * (decision D3): this deployment has to be able to transcribe it and to answer it.
+   * Unknown is off (decision D2): while the settings have not answered, or could not
+   * be read, the field is a plain field, because a microphone that appears a moment
+   * late costs nothing and one that fails costs a recording.
+   */
+  readonly voiceOffered = computed(() => {
+    const features = this._operator.settings()?.features;
+    return features?.transcription === true && features.assistant === true;
+  });
 
   /**
    * What was heard and what was done, or null (plan 0038, section 5).
@@ -573,18 +603,21 @@ export class ListPage {
       // The product each row shows, its picture and its price (velista `0145`).
       // `ItemNames` is a signal, so a row gains its product the moment it resolves.
       catalog: this._catalogFacts(),
-      // Not live means the room was refused or the connection dropped. What is on
-      // screen is correct and will not update itself, which is worth saying: looking
-      // live while being stale is worse than looking broken.
+      // Not live means the zone room was refused. What is on screen is correct and
+      // will not update itself, which is worth saying: looking live while being stale
+      // is worse than looking broken.
+      //
+      // A plain disconnect is not this band's to say (plan 0168, D7). The page header
+      // draws one mark on every page for that, and a second sentence for the same fact
+      // would push the list down. A refused room is about this list only, which the
+      // header mark cannot say.
       //
       // Keyed on the **zone**, not the list. Nothing subscribes per list, and it does
       // not need to: list and line events are broadcast to the zone room as well
       // (`jetstream.consumer.ts:181-187`), so the zone subscription is what makes this
       // screen live and a refused zone is what makes it stale. Asking about a list room
       // nobody joins could only ever answer no.
-      live:
-        this._realtime.connected() &&
-        !this._realtime.refusedZones().has(zoneId),
+      live: !this._realtime.refusedZones().has(zoneId),
       errorKey: this._errorKey(),
       correlationId: this._correlationId(),
       gone: this._gone(),
@@ -1263,6 +1296,18 @@ export class ListPage {
       untracked(() => this._view.open(listId));
     });
 
+    // The question about a typed name was about the list it was asked on (velista
+    // `0170`), so it closes when the page moves to another list.
+    effect(() => {
+      const listId = this.listId();
+      untracked(() => {
+        const asked = this.addChoice();
+        if (asked !== null && asked.listId !== listId) {
+          this.addChoice.set(null);
+        }
+      });
+    });
+
     // The trips, beside the lines and never in front of them (velista 0088, section 8).
     effect(() => {
       const listId = this.listId();
@@ -1458,12 +1503,18 @@ export class ListPage {
     // correction: shopping from a list **is** being in that group, and the zone
     // subscription every group already holds for its live counts cannot say so,
     // because it is held for every group at once from the moment the app loads.
+    //
+    // The list is held in `LineStore` for the same span as its room, so a reconnect
+    // reads its lines again at once rather than marking them stale (velista `0169`).
     effect((onCleanup) => {
-      const leaveList = this._realtime.viewList(this.listId());
+      const listId = this.listId();
+      const leaveList = this._realtime.viewList(listId);
       const leaveZone = this._realtime.enterZone(this.zoneId());
+      const release = this._lines.hold(listId);
       onCleanup(() => {
         leaveList();
         leaveZone();
+        release();
       });
     });
 
@@ -1609,6 +1660,9 @@ export class ListPage {
       this.announcement.set('');
       if (this._markTimer !== null) {
         clearTimeout(this._markTimer);
+      }
+      if (this._tookTimer !== null) {
+        clearTimeout(this._tookTimer);
       }
     });
   }
@@ -1773,23 +1827,47 @@ export class ListPage {
    * row, it is an approve button flashing on somebody's own line for one frame, which is
    * the defect plan 0030 section 5 exists to remove.
    */
-  async add(entry: {
-    content: string;
-    quantity: number;
-    itemIds?: readonly string[];
-    named?: false;
-  }): Promise<void> {
+  async add(entry: LineComposerSubmit): Promise<void> {
+    // Typed words say the page can ask which line (backend `0228`). A card says
+    // nothing new: its products already decide where it lands.
+    const typed = (entry.itemIds ?? []).length === 0;
+    await this._send(entry, typed ? { askIfAmbiguous: true } : undefined);
+  }
+
+  /**
+   * One add, and what the page does with its answer (velista `0170`).
+   *
+   * The composer holds the words since `0170` (`holdOnSend`), so this decides when
+   * they go. An add that draws its row at once clears the field at once, as it always
+   * has, so a run of six adds is never kept waiting. An add whose name the loaded
+   * lines already carry draws nothing until the answer, and keeps the words until
+   * then: the answer may be a question about them.
+   */
+  private async _send(
+    entry: LineComposerSubmit,
+    options: AddLineOptions | undefined,
+    listId: string = this.listId()
+  ): Promise<void> {
     const current = this.loaded();
+    const drawn = this._lines.drawsBeforeAnswer(
+      listId,
+      entry.content,
+      entry.itemIds,
+      options
+    );
     this._typedBusy.set(true);
 
-    // Before the call, not after it. `addLine` puts the optimistic row on screen
-    // synchronously and only then goes to the network, so both land in one change
-    // detection pass and the list follows the new row on the frame it appears rather
-    // than a round trip later.
-    this._added.update((count) => count + 1);
+    if (drawn) {
+      this._composer()?.sent();
+      // Before the call, not after it. `addLine` puts the optimistic row on screen
+      // synchronously and only then goes to the network, so both land in one change
+      // detection pass and the list follows the new row on the frame it appears
+      // rather than a round trip later.
+      this._added.update((count) => count + 1);
+    }
 
     const outcome = await this._lines.addLine(
-      this.listId(),
+      listId,
       entry.content,
       entry.quantity,
       this._session.userId() ?? '',
@@ -1801,21 +1879,209 @@ export class ListPage {
       // at all for free text, which stays first class (section 6).
       entry.itemIds,
       // A chosen card is not named (velista `0144`, section 3).
-      entry.named
+      entry.named,
+      options
     );
 
-    // The list the suggestions were for has been added. Clearing here rather than in
-    // the composer keeps the two from disagreeing about whether a dropdown is open.
-    this._query.set('');
     this._typedBusy.set(false);
 
     if (outcome.state === 'failed') {
+      if (
+        options?.intoLineId !== undefined &&
+        outcome.error instanceof GatewayError &&
+        outcome.error.code === 'not_found'
+      ) {
+        // The chosen line went while the question was open (backend `0228`, section
+        // 3). The list is still there, so the same add asks again, once: the
+        // question redraws with the lines left, the one line left is raised, or a
+        // line is made. A list that went too answers `not_found` again, and that
+        // one is said as the list being gone.
+        await this._send(entry, { askIfAmbiguous: true }, listId);
+        return;
+      }
+      const choice = toAddChoice(outcome.error);
+      if (choice !== null && entry.anchor !== undefined) {
+        if (listId !== this.listId()) {
+          // The page went to another list while the add was out, and the
+          // question was about the list it left.
+          return;
+        }
+        // Which line takes it? The words stay in the field while it is asked, and
+        // after it is waved away. A row was drawn only when the loaded lines did not
+        // see this coming, and its words go back, into a field nobody has typed in
+        // since: newer words are a newer add and stay.
+        if (drawn && (this._composer()?.content().trim() ?? '') === '') {
+          this._composer()?.restore(entry.content);
+        }
+        this._openChoice(listId, entry, entry.anchor, choice);
+        return;
+      }
+      if (drawn) {
+        this._query.set('');
+      }
+      // A held add keeps its words, so a failure costs nothing to try again.
       this._reportPageError(outcome.error, 'lines.write');
       return;
     }
 
+    // The list the suggestions were for has been added. Clearing here rather than in
+    // the composer keeps the two from disagreeing about whether a dropdown is open.
+    if (!drawn) {
+      this._composer()?.sent();
+    }
+    this._query.set('');
+
+    if (outcome.merged) {
+      // The units went to a line already on the list, which stays where it is: the
+      // page shows it and marks its quantity (target 4).
+      this._markTook(outcome.line.id);
+      this.announcement.set(
+        this._translator.t('list.addChoice.merged', undefined, this._locale(), {
+          name: this._lineName(outcome.line),
+          quantity: new Intl.NumberFormat(this._locale()).format(
+            outcome.line.quantity
+          ),
+        })
+      );
+      return;
+    }
+
+    if (!drawn) {
+      // A new line after all, drawn now, at the end, which the list follows.
+      this._added.update((count) => count + 1);
+    }
     // The name the new row draws, which for a card is the product's.
     this.announcement.set(this._lineName(outcome.line));
+  }
+
+  /**
+   * The question a typed name already on the list asks, while it is open (velista
+   * `0170`, target 5): the list it is about, what was sent, the plus it is held
+   * against, and the lines. The answer goes to that list, and the question closes
+   * when the page moves to another one.
+   */
+  readonly addChoice = signal<{
+    readonly listId: string;
+    readonly entry: LineComposerSubmit;
+    readonly anchor: HTMLElement;
+    readonly choice: AddChoiceQuestion;
+  } | null>(null);
+
+  /** The id of the question's title, for the dialog around it. */
+  readonly choiceTitleId = 'list-add-choice-title';
+
+  /** The name the question's title says, as the first line stores it. */
+  readonly choiceName = computed(() => {
+    const asked = this.addChoice();
+    return asked === null
+      ? ''
+      : addChoiceName(asked.choice, asked.entry.content);
+  });
+
+  /**
+   * The question's rows, from the refusal and what this page reads of the catalog:
+   * a row's name as the list draws it (velista `0144`) and its product's brand and
+   * size. They fill in as the lookup of the products this page did not hold answers.
+   */
+  readonly choiceRows = computed<readonly AddChoiceRow[]>(() => {
+    const asked = this.addChoice();
+    if (asked === null) {
+      return [];
+    }
+    const facts = this._catalogFacts();
+    const lines = this._lines.linesIn(asked.listId);
+    return addChoiceRows(asked.choice, asked.entry.quantity, {
+      itemOf: (itemId) => this._itemNames.nameOf(itemId),
+      favoriteOf: (lineId) =>
+        lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
+      locale: facts.locale,
+      brandSizeOf: facts.brandSizeOf,
+    });
+  });
+
+  /** A line of the question was chosen: the same add, into that line. */
+  chooseLine(lineId: string): void {
+    const asked = this.addChoice();
+    if (asked === null) {
+      return;
+    }
+    this.addChoice.set(null);
+    void this._send(asked.entry, { intoLineId: lineId }, asked.listId);
+  }
+
+  /** "A new line" was chosen: the same add, as a line of its own. */
+  chooseNewLine(): void {
+    const asked = this.addChoice();
+    if (asked === null) {
+      return;
+    }
+    this.addChoice.set(null);
+    void this._send(asked.entry, { newLine: true }, asked.listId);
+  }
+
+  /**
+   * The question was waved away: Escape, a press outside it, or the back gesture.
+   * The words stay in the field, and focus goes back to the plus it came from.
+   */
+  closeChoice(reason: AnchoredPopoverClose): void {
+    const asked = this.addChoice();
+    if (asked === null) {
+      return;
+    }
+    this.addChoice.set(null);
+    if (reason !== 'outside') {
+      asked.anchor.focus();
+    }
+  }
+
+  private _openChoice(
+    listId: string,
+    entry: LineComposerSubmit,
+    anchor: HTMLElement,
+    choice: AddChoiceQuestion
+  ): void {
+    // One lookup of the products this page does not hold, for the rows' brand and
+    // size. Lines that are loaded already have theirs.
+    void this._itemNames.ensure(choice.lines.flatMap((line) => line.itemIds));
+    this.addChoice.set({ listId, entry, anchor, choice });
+  }
+
+  /**
+   * The line an add just raised, whose quantity carries the amber edge for
+   * {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   */
+  readonly tookLine = signal<string | null>(null);
+
+  private _tookTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Mark a raised row, after the list has scrolled it into view if it was not. */
+  private _markTook(lineId: string): void {
+    if (this._tookTimer !== null) {
+      clearTimeout(this._tookTimer);
+    }
+    this.tookLine.set(lineId);
+    this._tookTimer = setTimeout(() => {
+      this._tookTimer = null;
+      this.tookLine.set(null);
+    }, TOOK_DURATION_MS);
+
+    afterNextRender(
+      () => {
+        const column = this._column()?.nativeElement;
+        const row = Array.from(
+          column?.querySelectorAll<HTMLElement>('[data-line-id]') ?? []
+        ).find((candidate) => candidate.dataset['lineId'] === lineId);
+        if (column === undefined || row === undefined) {
+          return;
+        }
+        if (!rowInView(row, column)) {
+          // Centred, for the reason a linked row is: the pinned composer covers the
+          // foot of the column. Instant, because the edge is the news, not the trip.
+          row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+        }
+      },
+      { injector: this._injector }
+    );
   }
 
   /**
@@ -1891,7 +2157,7 @@ export class ListPage {
       this.voiceStrip.set({
         heard: '',
         reply: '',
-        ...voiceFailureCopy(error),
+        ...voiceFailureCopy(error, this._locale()),
         failed: true,
       });
     } finally {
@@ -1999,6 +2265,11 @@ export class ListPage {
 
   onComposerQuery(query: string): void {
     this._query.set(query);
+    // New words are a new add: the open question was about the old ones.
+    const asked = this.addChoice();
+    if (asked !== null && query.trim() !== asked.entry.content) {
+      this.addChoice.set(null);
+    }
     // The lines are searched from the first character, the catalog from the third.
     this._view.search(query);
 
@@ -2416,6 +2687,19 @@ export class ListPage {
  * about", and a ring that stayed would start saying something about the item itself.
  */
 const MARK_DURATION_MS = 4000;
+
+/**
+ * Whether a row is wholly inside the scrolling column, less the pinned composer at
+ * its foot. Reads geometry, so it says yes where there is none to read (jsdom), and
+ * nothing scrolls there.
+ */
+function rowInView(row: HTMLElement, column: HTMLElement): boolean {
+  const box = row.getBoundingClientRect();
+  const frame = column.getBoundingClientRect();
+  const dock = column.querySelector<HTMLElement>('.composer-dock');
+  const foot = dock === null ? frame.bottom : dock.getBoundingClientRect().top;
+  return box.top >= frame.top && box.bottom <= foot;
+}
 
 /**
  * The words above a list shown one category at a time: this app's own for "No

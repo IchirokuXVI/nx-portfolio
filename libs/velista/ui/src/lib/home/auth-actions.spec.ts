@@ -139,4 +139,97 @@ describe('AuthActions', () => {
       expect(button.hasAttribute('aria-disabled')).toBe(false);
     }
   });
+
+  describe('Google', () => {
+    it('is drawn under its divider by default', async () => {
+      const fixture = await createFixture();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelector('.divider')).not.toBeNull();
+      expect(host.querySelector('button.google')).not.toBeNull();
+    });
+
+    // The native shell: Google refuses to sign anybody in from an embedded WebView.
+    it('leaves out the button and its divider when not offered', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput('googleOffered', false);
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelector('.divider')).toBeNull();
+      expect(host.querySelector('button.google')).toBeNull();
+      expect(buttons(fixture)).toHaveLength(3);
+    });
+
+    it('marks the button busy while a start is on its way', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput('googleBusy', true);
+      fixture.detectChanges();
+
+      expect(
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('button.google')
+          ?.getAttribute('aria-busy')
+      ).toBe('true');
+    });
+
+    it('says a refused start in the status line', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput(
+        'failureMessage',
+        'That did not go through'
+      );
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.message()).toBe(
+        'That did not go through'
+      );
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('[role="status"]')
+      ).not.toBeNull();
+    });
+
+    it('lets the held sentence outrank a refused start', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput(
+        'failureMessage',
+        'That did not go through'
+      );
+      fixture.componentRef.setInput('held', true);
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.message()).toBe(CONNECTING);
+    });
+  });
+
+  describe('the line under Google (velista 0173)', () => {
+    function line(fixture: ComponentFixture<AuthActions>): Element | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        '.terms-line'
+      );
+    }
+
+    it('names the terms under the button when there are terms', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput('termsUrl', '/en/terms');
+      fixture.detectChanges();
+
+      expect(line(fixture)?.textContent?.trim()).toBe('legal.accept.google');
+    });
+
+    it('draws no line when the deployment published no terms', async () => {
+      const fixture = await createFixture();
+
+      expect(line(fixture)).toBeNull();
+    });
+
+    it('goes with the button when Google is not offered', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput('termsUrl', '/en/terms');
+      fixture.componentRef.setInput('googleOffered', false);
+      fixture.detectChanges();
+
+      expect(line(fixture)).toBeNull();
+    });
+  });
 });

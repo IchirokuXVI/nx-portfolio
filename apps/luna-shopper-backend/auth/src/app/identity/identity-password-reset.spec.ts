@@ -25,6 +25,7 @@ import {
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * Password reset (plan 0022): asking for a link without telling the asker
@@ -136,7 +137,6 @@ function build(users: Row[] = [], credentials: Row[] = []) {
   const events = {
     userRegistered: jest.fn(),
     userUpgraded: jest.fn(),
-    userDeleted: jest.fn(),
     userEmailVerified: jest.fn(),
     userUsernameChanged: jest.fn(),
   };
@@ -187,7 +187,10 @@ function build(users: Row[] = [], credentials: Row[] = []) {
         },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
   return {
     service,

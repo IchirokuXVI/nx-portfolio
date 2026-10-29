@@ -65,8 +65,23 @@
     </button>
   </div>
 
-  @if (googleOffered()) {
-    <lib-google-option (continueWithGoogle)="continueWithGoogle()" />
+  @if (terms.googleOffered()) {
+    <!-- The line under the button names the terms: continuing with Google can make
+         an account (velista 0173). A refusal about them links the terms too. -->
+    <lib-google-option
+      (continueWithGoogle)="continueWithGoogle()"
+      [busy]="googleStarting()"
+      [describedBy]="googleError() === null ? null : googleErrorId"
+      [termsUrl]="terms.termsUrl()"
+    />
+
+    @if (googleError(); as rejection) {
+      <lib-form-error
+        [linkUrl]="rejection.link === 'terms' ? terms.termsUrl() : null"
+        [message]="rejection.key | rokuT"
+        [messageId]="googleErrorId"
+      />
+    }
   }
 
   <p authFooter class="footer">
@@ -75,4 +90,14 @@
       {{ 'auth.signIn.createAccount' | rokuT }}
     </button>
   </p>
+  <!-- The privacy policy and the terms (velista 0172), projected as a second footer
+       so they sit where the front door keeps its version: last on the screen. -->
+  <lib-legal-links
+    [privacyUrl]="legalUrls().privacy"
+    [termsUrl]="legalUrls().terms"
+    authFooter
+  />
 </lib-auth-screen>
+
+<!-- The terms and the privacy policy as sheets over this page (velista 0173, D5). -->
+<router-outlet />

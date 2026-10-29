@@ -4,7 +4,9 @@ import { ProfileStore } from './account/profile-store';
 import { ApiUrl } from './api-url';
 import { AssistantMemory } from './assistant/assistant-memory';
 import { AccountNotice } from './auth/account-notice';
+import { AuthApi } from './auth/auth-api';
 import { AuthMemory } from './auth/auth-memory';
+import { GoogleSignIn } from './auth/google-sign-in';
 import { ImpersonationSession } from './auth/impersonation-session';
 import { PendingRecoveryLink } from './auth/pending-recovery-link';
 import { SessionStore } from './auth/session-store';
@@ -35,6 +37,8 @@ import { ListStore } from './lists/list-store';
 import { MemberNames } from './memberships/member-names';
 import { MembershipMemory } from './memberships/membership-memory';
 import { MembershipStore } from './memberships/membership-store';
+import { OperatorSettingsMemory } from './operator/operator-settings-memory';
+import { OperatorSettingsStore } from './operator/operator-settings-store';
 import { PresenceStore } from './presence/presence-store';
 import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
 import { ShoppingProfileStore } from './profiles/shopping-profile-store';
@@ -210,7 +214,23 @@ import { ZoneStore } from './zones/zone-store';
  *
  * `CatalogBrowseMemory` (velista `0100`) joins for `ShopMemory`'s reason exactly. The
  * catalog tab holds its query, chain and pages on the page itself, so there is no store
- * to list here, and `CatalogBrowseApi` stays out like every other real transport.
+ * to list here, and `CatalogBrowseApi` stays out like every other real transport. *
+ * `GoogleSignIn` (velista `0171`) joins for `ApiUrl`'s reason: it reaches `ApiUrl`. It
+ * reaches `AuthApi` by class too, for the two Google calls that are not on
+ * `AuthServiceI`, and `appProviders` binds `AUTH_SERVICE` with `useClass`, which
+ * provides the class only behind the token. So `AuthApi` is listed here as well. That
+ * chooses no transport: `AUTH_SERVICE` is still bound by the app alone, and the instance
+ * here is a second one beside the token's, which costs nothing because `AuthApi` holds
+ * no state of its own. The Google flow has no in-memory twin, because a redirect to
+ * Google has nothing to fake.
+ *
+ * `OperatorSettingsStore` (velista `0172`) joins for `ZoneStore`'s reason: it resolves
+ * `OPERATOR_SETTINGS_SERVICE`, which the app binds. It is app scoped because three
+ * plans read the one answer (the legal pages, `0173`'s acceptance and `0174`'s voice),
+ * and `app-providers.ts` constructs it with an environment initializer so the read goes
+ * out when the backend first answers. `OperatorSettingsMemory` joins for
+ * `AccountMemory`'s reason, and `OperatorSettingsApi` stays out like every other real
+ * transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -268,4 +288,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   StartupProbe,
   SessionValidation,
   ImpersonationSession,
+  AuthApi,
+  GoogleSignIn,
+  OperatorSettingsMemory,
+  OperatorSettingsStore,
 ];

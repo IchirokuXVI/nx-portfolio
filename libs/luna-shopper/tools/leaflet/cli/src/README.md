@@ -43,6 +43,7 @@ baseline is written only once a reading is accepted (procedure (b), step 6).
 | `drift-check.mjs`             | Compares a build's statistics with the chain's `baseline.json` and refuses a reading that drifted too far. |
 | `validate.mjs`                | Validates a built document against the contract itself, not a copy of it.                                  |
 | `AGENT-PROMPT.md`             | The prompt to paste to a model agent that writes a new chain's folder.                                     |
+| `review-page.mjs`             | Page images beside one or more readings, with a wrong mark and a comment per row. Procedure (c).           |
 | `chains/src/<slug>/prompt.txt`    | What a model is asked for one page of that chain's leaflet.                                                |
 | `chains/src/<slug>/headings.mjs`  | That chain's heading vocabulary, its fixed pages, its render dpi, and the model it has used so far.        |
 | `chains/src/<slug>/layout.md`     | What one page of that chain's leaflet looks like, for a person (and a model) to check before reading.      |
@@ -331,6 +332,42 @@ baseline has not seen. Check those against the pages, then run
 Every chain's prompt asks for one row shape, and `build-document.mjs` names
 each key it does not know, once per page. `--strict` refuses to write the
 document while there is one.
+
+## Procedure (c): checking a reading by eye
+
+A reading is accepted by a person who looks at the pages. `review-page.mjs`
+builds one HTML file for that: each page image on the left, and on the right
+one row per offer with what each reading says. Two readings of the same leaflet
+(two models, or a model and a re-run) are compared row by row, aligned by page
+and row index, and a cell where they disagree is highlighted. A difference in a
+number, a size, a label, a basis or a promotion marks the row "check this"; a
+difference in wording alone marks it "wording differs".
+
+```sh
+npx nx run luna-shopper/leaflet-cli:review -- \
+  --leaflet deza-2026-11 --title "Deza November Leaflet Review" \
+  --run opus=tmp/leaflet/deza-opus --run sonnet=tmp/leaflet/deza-sonnet \
+  --pages 4,5,6,10 --images tmp/leaflet/deza-opus/pages \
+  --mine tmp/leaflet/my-reading.md --verdicts tmp/leaflet/verdicts.json \
+  --out tmp/leaflet/review
+```
+
+`--run label=<dir>` names a run folder of `cli.mjs` (the one with
+`import/page_NN.json`); one run is a plain check of that reading. `--mine` is a
+person's own reading as a markdown table (`| page | # | name | brand | size |
+price | footer | basis | notes |`), written before looking at any model
+output, and `--verdicts` is `{ "rows": { "p4r3": "..." } }`, a verdict per row
+id. Both are optional and print under the row they belong to. Page images are
+shrunk with ImageMagick when it is installed and copied under `<out>/pages/`.
+
+Publish `<out>/index.html` as a claude.ai artifact with `pages/` as its files
+and the `db` and `downloads` capabilities declared. Each row is named
+`page.item` (`4.3` is the third offer of page 4) and has a "Wrong" mark and a
+comment box, saved as the person types at `reviews/<leaflet>/rows/<rowId>` in
+the artifact's database, where `ArtifactData` reads them back; a button on the
+page offers them all as one JSON file. The first one was built for the Deza
+November 2026 leaflet (Opus 5.5 against Sonnet 5.5), and
+`../records/2026-10-27-deza-noviembre-26.md` is the record of that review.
 
 ## Procedure (b): a new chain
 

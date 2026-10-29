@@ -1,5 +1,6 @@
 import { computed, signal, type Provider } from '@angular/core';
 import type {
+  AddLineOptions,
   AddPostalCodeRequest,
   BasketSummary,
   CatalogItem,
@@ -33,6 +34,7 @@ import type {
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
 import {
+  addMayMeetLine,
   buildCategoryTree,
   EMPTY_CATEGORY_TREE,
   isOpenBasket,
@@ -222,6 +224,8 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
     joinCode?: string;
   }[] = [];
 
+  const termsVersions: (string | null)[] = [];
+
   const respond =
     options.respond ??
     ((call: ZoneMutationCall): ZoneEntryOutcome =>
@@ -257,12 +261,23 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
     },
     upsert: (zone: MyZone) => zones.update((current) => [zone, ...current]),
 
-    createZone: async (name: string): Promise<ZoneEntryOutcome> => {
+    /** The version of the terms each create or join sent, in order (velista `0173`). */
+    termsVersions: termsVersions as readonly (string | null)[],
+
+    createZone: async (
+      name: string,
+      acceptedTermsVersion: string | null = null
+    ): Promise<ZoneEntryOutcome> => {
       calls.push({ method: 'createZone', name });
+      termsVersions.push(acceptedTermsVersion);
       return respond({ method: 'createZone', name });
     },
-    joinZone: async (joinCode: string): Promise<ZoneEntryOutcome> => {
+    joinZone: async (
+      joinCode: string,
+      acceptedTermsVersion: string | null = null
+    ): Promise<ZoneEntryOutcome> => {
       calls.push({ method: 'joinZone', joinCode });
+      termsVersions.push(acceptedTermsVersion);
       return respond({ method: 'joinZone', joinCode });
     },
     clearLastEntry: () => lastEntry.set(null),
@@ -498,6 +513,8 @@ export interface FakeAuthOptions {
 export function fakeAuthService(options: FakeAuthOptions = {}) {
   const userId = options.userId ?? 'u1';
   const calls: AuthCall[] = [];
+  /** The version of the terms each register or upgrade sent, in order (velista `0173`). */
+  const termsVersions: (string | null)[] = [];
 
   const answer = (call: AuthCall, kind: UserKind): SessionTokens => {
     calls.push(call);
@@ -510,12 +527,24 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
   };
 
   const service: AuthServiceI = {
-    register: async (email: string) =>
-      answer({ method: 'register', email }, 'REGISTERED'),
+    register: async (
+      email: string,
+      _password: string,
+      acceptedTermsVersion: string | null
+    ) => {
+      termsVersions.push(acceptedTermsVersion);
+      return answer({ method: 'register', email }, 'REGISTERED');
+    },
     login: async (email: string) =>
       answer({ method: 'login', email }, 'REGISTERED'),
-    upgrade: async (email: string) =>
-      answer({ method: 'upgrade', email }, 'REGISTERED'),
+    upgrade: async (
+      email: string,
+      _password: string,
+      acceptedTermsVersion: string | null
+    ) => {
+      termsVersions.push(acceptedTermsVersion);
+      return answer({ method: 'upgrade', email }, 'REGISTERED');
+    },
 
     verifyEmail: async (token: string): Promise<VerifiedEmail> => {
       calls.push({ method: 'verifyEmail', token });
@@ -572,6 +601,8 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
     ...service,
     /** Everything the page asked for, in order. */
     calls: calls as readonly AuthCall[],
+    /** The version of the terms each register or upgrade sent, in order. */
+    termsVersions: termsVersions as readonly (string | null)[],
   };
 }
 
@@ -746,6 +777,8 @@ export type LineWriteCall =
        */
       readonly itemIds?: readonly string[]; /** `false` for a line made from a card (velista `0144`), absent for typed text. */
       readonly named?: false;
+      /** What a free text add said about a name the list holds (velista `0170`). */
+      readonly options?: AddLineOptions;
     }
   /**
    * A quantity adjustment, as the **delta** that was sent.
@@ -857,6 +890,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   const moreSettlements = new Map<string, readonly LineSettlement[]>(
     Object.entries(options.moreSettlements ?? {})
   );
+  const holdLog: string[] = [];
   const moreItemSettlements = new Map<string, readonly LineSettlement[]>(
     Object.entries(options.moreItemSettlements ?? {})
   );
@@ -896,6 +930,17 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   /** Holds every edit in flight until released, for the states a save passes through. */
   let updateHeld: Promise<void> | null = null;
   let releaseUpdate: (() => void) | null = null;
+  /**
+   * The answers the next adds give, in order, before an add makes a line (velista
+   * `0170`): a refusal with its error, or a raise of a line this double holds.
+   */
+  const addAnswers: (
+    | { readonly state: 'failed'; readonly error: unknown }
+    | { readonly state: 'raised'; readonly lineId: string }
+  )[] = [];
+  /** Holds every add in flight until released. */
+  let addHeld: Promise<void> | null = null;
+  let releaseAdd: (() => void) | null = null;
 
   return {
     loadCount: loads.asReadonly(),
@@ -925,6 +970,22 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     refresh: async () => {
       loads.update((count) => count + 1);
     },
+    /**
+     * The lists a page holds live (velista `0169`), as `hold:<id>` and `release:<id>`
+     * in call order, so a spec can assert that a page holds what it shows and lets go
+     * of it when it leaves. A release counts once, as in the real store.
+     */
+    holdLog,
+    hold: (listId: string) => {
+      holdLog.push(`hold:${listId}`);
+      let released = false;
+      return () => {
+        if (!released) {
+          released = true;
+          holdLog.push(`release:${listId}`);
+        }
+      };
+    },
 
     addLine: async (
       listId: string,
@@ -933,15 +994,47 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       createdByUserId: string,
       _approval: unknown,
       itemIds?: readonly string[],
-      named?: false
-    ) => {
+      named?: false,
+      options?: AddLineOptions
+    ): Promise<
+      | {
+          readonly state: 'added';
+          readonly line: Line;
+          readonly merged: boolean;
+        }
+      | { readonly state: 'failed'; readonly error: unknown }
+    > => {
       calls.push({
         kind: 'add',
         content,
         quantity,
         itemIds,
         ...(named === undefined ? {} : { named }),
+        ...(options === undefined ? {} : { options }),
       });
+
+      if (addHeld !== null) {
+        await addHeld;
+      }
+
+      const next = addAnswers.shift();
+      if (next?.state === 'failed') {
+        return { state: 'failed' as const, error: next.error };
+      }
+      if (next?.state === 'raised') {
+        const held = lines().find((each) => each.id === next.lineId);
+        if (held !== undefined) {
+          const raised: Line = {
+            ...held,
+            quantity: held.quantity + quantity,
+            version: held.version + 1,
+          };
+          lines.update((current) =>
+            current.map((each) => (each.id === raised.id ? raised : each))
+          );
+          return { state: 'added' as const, line: raised, merged: true };
+        }
+      }
 
       if (outcome === 'failed') {
         return { state: 'failed' as const, error: new Error('add failed') };
@@ -972,7 +1065,37 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         version: 1,
       };
       lines.update((current) => [...current, added]);
-      return { state: 'added' as const, line: added };
+      return { state: 'added' as const, line: added, merged: false };
+    },
+
+    /** As the real store reads it: whether the loaded lines carry the typed name. */
+    drawsBeforeAnswer: (
+      _listId: string,
+      content: string,
+      itemIds?: readonly string[],
+      options?: AddLineOptions
+    ) =>
+      (itemIds ?? []).length > 0 ||
+      (options?.intoLineId === undefined && !addMayMeetLine(lines(), content)),
+
+    /** The next add answers this, before any add makes a line (velista `0170`). */
+    answerAddWith: (
+      answer:
+        | { readonly state: 'failed'; readonly error: unknown }
+        | { readonly state: 'raised'; readonly lineId: string }
+    ) => {
+      addAnswers.push(answer);
+    },
+    /** Every add waits until {@link releaseAdds}. */
+    holdAdds: () => {
+      addHeld = new Promise<void>((resolve) => {
+        releaseAdd = resolve;
+      });
+    },
+    releaseAdds: () => {
+      addHeld = null;
+      releaseAdd?.();
+      releaseAdd = null;
     },
 
     /**
@@ -1837,6 +1960,7 @@ export type ProfileCall =
   | { readonly method: 'remove' }
   | { readonly method: 'completeSetup' }
   | { readonly method: 'suggestUsername' }
+  | { readonly method: 'acceptTerms'; readonly version: string }
   | { readonly method: 'clear' };
 
 /**
@@ -1916,6 +2040,13 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
     clear: () => {
       calls.push({ method: 'clear' });
       profile.set(null);
+    },
+
+    /** The real rule: the held profile's terms block, or null (velista `0173`). */
+    terms: computed(() => profile()?.terms ?? null),
+
+    acceptTerms: async (version: string) => {
+      calls.push({ method: 'acceptTerms', version });
     },
 
     /** Everything the page asked for, in order. */

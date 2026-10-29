@@ -6,6 +6,7 @@ import {
   CommentTranscription,
   type AssistantTranscribeResponse,
   type CommentView,
+  type UserKind,
 } from '@portfolio/luna-shopper/contracts';
 import {
   DEFAULT_LOCALE,
@@ -27,13 +28,25 @@ import { NatsClient } from '../messaging/nats-client';
 const ATTEMPTS = 2;
 
 /**
- * How long the second attempt waits. One short pause, not a backoff curve.
+ * How long the second attempt waits at least. One short pause, not a backoff
+ * curve.
  *
  * Exported so the spec waits on this number instead of a literal of its own: a
  * test that hard codes the pause passes for the wrong reason the moment somebody
  * tunes it, and fails for a reason that looks like a product bug.
  */
 export const RETRY_DELAY_MS = 1500;
+
+/**
+ * The longest the second attempt waits on a rate limit's own number.
+ *
+ * A `rate_limited` answer says how long to wait, and the transcriber's full
+ * queue says ten seconds (plan 0235, section 16). Waiting less makes the second
+ * attempt `busy` too, and the comment settles `FAILED` while the queue drains.
+ * The cap keeps a wrong number from holding this task open: each attempt still
+ * has its own `transcribeTimeoutMs`, and the pause between them is at most this.
+ */
+export const MAX_RETRY_DELAY_MS = 30_000;
 
 /**
  * The gateway's half of "store first, transcribe after" (plan 0045, section 4.1).
@@ -59,8 +72,8 @@ export const RETRY_DELAY_MS = 1500;
  * where the provider was never asked. A comment that stayed `PENDING` because
  * this service crashed between the two calls is the one bad state, and it is why
  * `UNAVAILABLE` is decided **before** the provider is called rather than inferred
- * from a failure: a deployment with no key settles every voice comment in the
- * same tick it was created.
+ * from a failure: a deployment with no transcriber settles every voice comment
+ * in the same tick it was created.
  */
 @Injectable()
 export class CommentTranscriptionService {
@@ -83,29 +96,44 @@ export class CommentTranscriptionService {
    * error anybody sees. Everything it could report is either on the comment
    * afterwards or in one log line.
    */
-  schedule(comment: CommentView, audio: Buffer, mimeType: string): void {
+  schedule(
+    comment: CommentView,
+    audio: Buffer,
+    mimeType: string,
+    /** The author's kind, which picks the guest allowance (plan 0234). */
+    kind: UserKind
+  ): void {
     // The locale is read here, while the request's async context is still live,
     // and carried as a plain string from then on. Reading it inside the
     // background work would find no context at all.
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
 
-    void this.run(comment, audio, mimeType, locale).catch((error: unknown) => {
-      // The last resort. Reaching here means even `setTranscription` failed, so
-      // the comment is left PENDING; it still plays, which is the property the
-      // whole plan protects.
-      this.logger.warn(
-        `voice comment ${comment.id} could not be settled: ${describe(error)}`
-      );
-    });
+    void this.run(comment, audio, mimeType, locale, kind).catch(
+      (error: unknown) => {
+        // The last resort. Reaching here means even `setTranscription` failed, so
+        // the comment is left PENDING; it still plays, which is the property the
+        // whole plan protects.
+        this.logger.warn(
+          `voice comment ${comment.id} could not be settled: ${describe(error)}`
+        );
+      }
+    );
   }
 
   private async run(
     comment: CommentView,
     audio: Buffer,
     mimeType: string,
-    locale: string
+    locale: string,
+    kind: UserKind
   ): Promise<void> {
-    const outcome = await this.transcribe(audio, mimeType, locale);
+    const outcome = await this.transcribe(
+      audio,
+      mimeType,
+      locale,
+      comment.authorUserId,
+      kind
+    );
 
     await this.nats.send<CommentView>(COMMENT_PATTERNS.setTranscription, {
       userId: comment.authorUserId,
@@ -127,7 +155,9 @@ export class CommentTranscriptionService {
   private async transcribe(
     audio: Buffer,
     mimeType: string,
-    locale: string
+    locale: string,
+    userId: string,
+    kind: UserKind
   ): Promise<{ state: CommentTranscription; text: string }> {
     let lastError: unknown;
 
@@ -143,6 +173,14 @@ export class CommentTranscriptionService {
               // a NATS header because the assistant reads this one first: by the
               // time this runs the request that carried the header is answered.
               locale,
+              // Nobody is waiting on a comment's words, so the transcriber runs
+              // it on its accurate model and behind every spoken turn (plan
+              // 0235, section 4).
+              purpose: 'comment',
+              // The author, whose comment audio allowance the recording
+              // counts against (plan 0234, section 6).
+              userId,
+              kind,
             }
           ),
           this.voice.transcribeTimeoutMs
@@ -162,8 +200,19 @@ export class CommentTranscriptionService {
           return { state: CommentTranscription.UNAVAILABLE, text: '' };
         }
 
+        // The author is over their comment audio allowance (plan 0234,
+        // section 6). A retry would be refused the same way, so it settles
+        // FAILED now, and the comment stays playable: the allowance limits the
+        // transcription, not the message.
+        if (isAllowanceReached(error)) {
+          this.logger.warn(
+            'transcription refused: the author has used their comment audio allowance'
+          );
+          return { state: CommentTranscription.FAILED, text: '' };
+        }
+
         if (attempt < ATTEMPTS) {
-          await delay(RETRY_DELAY_MS);
+          await delay(retryDelayMs(error));
         }
       }
     }
@@ -189,6 +238,45 @@ function isNotConfigured(error: unknown): boolean {
     (candidate) =>
       (candidate as { code?: unknown })?.code === ERROR_CODES.NOT_CONFIGURED
   );
+}
+
+/** Is this the assistant refusing on the author's allowance (plan 0234)? */
+function isAllowanceReached(error: unknown): boolean {
+  const candidates = [error, (error as { error?: unknown })?.error];
+  return candidates.some(
+    (candidate) =>
+      (candidate as { code?: unknown })?.code ===
+      ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED
+  );
+}
+
+/**
+ * The pause before the next attempt: the fixed one, or the wait a rate limit
+ * named when that is longer, up to {@link MAX_RETRY_DELAY_MS}.
+ *
+ * The assistant's `rate_limited` envelope carries `retryAfterSeconds` (rule
+ * A5), nested under `error` or not, the two shapes {@link isNotConfigured}
+ * reads.
+ */
+export function retryDelayMs(error: unknown): number {
+  const candidates = [error, (error as { error?: unknown })?.error];
+  for (const candidate of candidates) {
+    const problem = candidate as {
+      code?: unknown;
+      retryAfterSeconds?: unknown;
+    };
+    if (
+      problem?.code === ERROR_CODES.RATE_LIMITED &&
+      typeof problem.retryAfterSeconds === 'number' &&
+      Number.isFinite(problem.retryAfterSeconds)
+    ) {
+      return Math.min(
+        MAX_RETRY_DELAY_MS,
+        Math.max(RETRY_DELAY_MS, problem.retryAfterSeconds * 1000)
+      );
+    }
+  }
+  return RETRY_DELAY_MS;
 }
 
 function delay(ms: number): Promise<void> {

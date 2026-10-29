@@ -3158,7 +3158,7 @@
     },
     {
       "name": "09 · Assistant",
-      "description": "The assistant, both routes (plan 0039, and plan 0041 for the spoken one).\n\nWith no GEMINI_API_KEY these answer 501 not_configured, and that is a supported deployment rather than a broken one (plan 0026): the pod boots, the health probes pass, and this route says plainly it is not implemented here. So every test below accepts a 501 as a pass, and checks the shape of a real answer only when a key is configured.\n\nThe spoken route is multipart. Postman cannot carry a recording in a checked-in file, so pick any small audio file for the  part: nothing here decodes it, and with no key the request is refused before it would be read anyway.",
+      "description": "The assistant, both routes (plan 0039, and plan 0041 for the spoken one).\n\nWith no ANTHROPIC_API_KEY these answer 501 not_configured, and that is a supported deployment rather than a broken one (plan 0026): the pod boots, the health probes pass, and this route says plainly it is not implemented here. So every test below accepts a 501 as a pass, and checks the shape of a real answer only when a key is configured.\n\nThe spoken route is multipart. Postman cannot carry a recording in a checked-in file, so pick any small audio file for the  part: nothing here decodes it, and with no key the request is refused before it would be read anyway.",
       "item": [
         {
           "name": "A typed turn",
@@ -3194,7 +3194,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "if (pm.response.code === 501) {",
-                  "  pm.test('SKIPPED: no GEMINI_API_KEY on this deployment', function () {",
+                  "  pm.test('SKIPPED: no ANTHROPIC_API_KEY on this deployment', function () {",
                   "    pm.expect(pm.response.json().code).to.eql('not_configured');",
                   "  });",
                   "} else if (pm.response.code === 429) {",
@@ -3254,7 +3254,7 @@
                   "    pm.expect(pm.response.code).to.eql(400);",
                   "  });",
                   "} else if (pm.response.code === 501) {",
-                  "  pm.test('SKIPPED: no GEMINI_API_KEY on this deployment', function () {",
+                  "  pm.test('SKIPPED: no ANTHROPIC_API_KEY on this deployment', function () {",
                   "    pm.expect(pm.response.json().code).to.eql('not_configured');",
                   "  });",
                   "} else if (pm.response.code === 429) {",

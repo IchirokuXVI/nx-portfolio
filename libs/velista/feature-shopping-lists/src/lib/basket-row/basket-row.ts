@@ -338,6 +338,12 @@ export class BasketRow {
   readonly busy = input(false);
 
   /**
+   * Whether an add from the basket just raised a line of this row, which marks its
+   * quantity (velista `0170`, target 4). The page decides for how long.
+   */
+  readonly took = input(false);
+
+  /**
    * Whether the trip this line belongs to is over (velista `0057`, section 6).
    *
    * A fact about the **basket** and not about the line, which is why it arrives as an

@@ -33,3 +33,48 @@ export enum ListResolutionBranch {
   /** None of the above answered, so the turn asked and wrote nothing. */
   ASKED = 'ASKED',
 }
+
+/**
+ * What a reservation of a person's assistant allowance is for (plan 0234,
+ * section 5.2). A typed turn and a spoken turn each count one turn; a voice
+ * comment's transcription counts no turn and its seconds go to comment audio.
+ */
+export enum AllowancePurpose {
+  TURN = 'TURN',
+  VOICE_TURN = 'VOICE_TURN',
+  TRANSCRIPTION = 'TRANSCRIPTION',
+}
+
+/**
+ * How core answered a reservation (plan 0234, section 5.1). `TURN_IN_FLIGHT`
+ * is the one turn in flight rule, which the assistant answers with an ordinary
+ * `rate_limited`, because waiting does fix it.
+ */
+export enum AllowanceReserveOutcome {
+  RESERVED = 'RESERVED',
+  REFUSED = 'REFUSED',
+  TURN_IN_FLIGHT = 'TURN_IN_FLIGHT',
+}
+
+/**
+ * Whose limit refused a reservation (plan 0234, section 8.1). Lower case,
+ * because these are the values of the problem body's `details`.
+ */
+export enum AllowanceScope {
+  USER = 'user',
+  DEPLOYMENT = 'deployment',
+}
+
+/** The period of the limit that refused (plan 0234, section 8.1). */
+export enum AllowancePeriod {
+  DAY = 'day',
+  MONTH = 'month',
+}
+
+/** Which counter refused (plan 0234, section 8.1). */
+export enum AllowanceLimit {
+  TURNS = 'turns',
+  ASSISTANT_AUDIO = 'assistantAudio',
+  COMMENT_AUDIO = 'commentAudio',
+  COST = 'cost',
+}

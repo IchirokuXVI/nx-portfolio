@@ -143,6 +143,9 @@ export class LineRow {
   /** Whether the list is in reorder mode, which changes what the row is. */
   readonly reordering = input(false);
 
+  /** Whether an add just raised this line, which marks its quantity (velista `0170`). */
+  readonly took = input(false);
+
   /** Whether this row can be moved further in each direction, for the grip's buttons. */
   readonly canMoveUp = input(true);
   readonly canMoveDown = input(true);

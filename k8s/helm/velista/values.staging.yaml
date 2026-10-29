@@ -47,7 +47,9 @@ lunaShopperBackend:
     # Support sessions (plan 0194). On in staging, where the people are the
     # owner's own test accounts. Production does not set this.
     impersonationEnabled: true
-    googleClientId: 256832333234-2oquv8oeb0s65lsnc2tj7u71lnr4iuss.apps.googleusercontent.com
+    # The web client velista-web in Google Cloud project velista-512817, owned by
+    # admin@velista.app. Its secret is GOOGLE_CLIENT_SECRET in the Secret.
+    googleClientId: 717012688744-diupovqba48a48vpjpbta5caipv9bn16.apps.googleusercontent.com
     # Register this URI in the Google console beside the production one. Google
     # matches redirect_uri exactly, so the two are two entries, not a pattern.
     googleCallbackUrl: https://api.staging.velista.app/v1/auth/google/callback

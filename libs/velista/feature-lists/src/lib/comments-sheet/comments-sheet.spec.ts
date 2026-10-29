@@ -11,13 +11,19 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  fakeOperatorSettingsStore,
+  GatewayError,
+  MEMORY_OPERATOR_SETTINGS,
   provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
+  RealtimeMemory,
   type CommentServiceI,
   type FakeLineStore,
+  type FakeOperatorSettingsStore,
 } from '@portfolio/velista/data-access';
 import type {
   Comment,
@@ -157,6 +163,15 @@ interface RenderOptions {
   /** What `addVoiceComment` does. Throwing is how a failed send is driven. */
   addVoice?: CommentServiceI['addVoiceComment'];
   audioUrl?: CommentServiceI['commentAudioUrl'];
+  /** How many comment reads answer before every later one rejects. */
+  readsAnswered?: number;
+  /**
+   * Answer one read by hand, by its position (0 is the read on open). Undefined falls
+   * through to `page`, so a test can hold one read open and leave the rest alone.
+   */
+  answerRead?: (read: number) => Promise<readonly Comment[]> | undefined;
+  /** What the deployment states about itself (velista `0172`). Ready by default. */
+  operator?: FakeOperatorSettingsStore;
 }
 
 async function render(
@@ -166,6 +181,8 @@ async function render(
   fixture: ComponentFixture<CommentsSheet>;
   lines: FakeLineStore;
   voiceSends: { blob: Blob; durationSeconds: number }[];
+  /** The line ids the comments were read for, in order. */
+  commentReads: string[];
 }> {
   const options: RenderOptions = Array.isArray(pageOrOptions)
     ? { page: pageOrOptions, permissions: permissionsArg }
@@ -178,9 +195,23 @@ async function render(
 
   const lines = fakeLineStore({ lines: [line()] });
   const voiceSends: { blob: Blob; durationSeconds: number }[] = [];
+  const commentReads: string[] = [];
 
   const comments: CommentServiceI = {
-    listComments: async () => ({ items: [...page], nextCursor: null }),
+    listComments: async (lineId) => {
+      commentReads.push(lineId);
+      if (
+        options.readsAnswered !== undefined &&
+        commentReads.length > options.readsAnswered
+      ) {
+        throw new Error('offline again');
+      }
+      const held = options.answerRead?.(commentReads.length - 1);
+      return {
+        items: [...(held === undefined ? page : await held)],
+        nextCursor: null,
+      };
+    },
     addComment: async (lineId, body) => ({
       id: 'c-new',
       lineId,
@@ -225,6 +256,9 @@ async function render(
       ),
       provideFakeMemberNames(fakeMemberNames({ 'user-toni': 'Toni' })),
       provideFakeSessionStore('REGISTERED'),
+      provideFakeOperatorSettingsStore(
+        options.operator ?? fakeOperatorSettingsStore()
+      ),
       { provide: COMMENT_SERVICE, useValue: comments },
       {
         provide: AUDIO_CAPTURE,
@@ -241,7 +275,7 @@ async function render(
   await fixture.whenStable();
   fixture.detectChanges();
 
-  return { fixture, lines, voiceSends };
+  return { fixture, lines, voiceSends, commentReads };
 }
 
 /** The shape `route-params.ts` reads: a real `paramMap` observable plus a snapshot. */
@@ -257,6 +291,11 @@ function route() {
     snapshot: { paramMap: map, parent: null, data: {} },
     parent: null,
   };
+}
+
+/** Past the awaits inside a read the test answered by hand, which no TestBed tracks. */
+function settled(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve));
 }
 
 function bodies(fixture: ComponentFixture<CommentsSheet>): string[] {
@@ -329,6 +368,99 @@ describe('CommentsSheet', () => {
     fixture.detectChanges();
 
     expect(bodies(fixture).at(-1)).toBe('got them');
+  });
+
+  describe('a reconnect (velista 0169)', () => {
+    it('reads the comments once on open, and not again at construction', async () => {
+      const { commentReads } = await render();
+      TestBed.tick();
+
+      expect(commentReads).toEqual([LINE_ID]);
+    });
+
+    it('reads the open line comments again and records them', async () => {
+      const { fixture, lines, commentReads } = await render();
+      const recorded = jest.spyOn(lines, 'recordComments');
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+      await fixture.whenStable();
+
+      expect(commentReads).toEqual([LINE_ID, LINE_ID]);
+      expect(recorded).toHaveBeenCalledWith(LINE_ID, expect.any(Array));
+      // Still the conversation, not a skeleton or an error.
+      expect(bodies(fixture)).toHaveLength(3);
+    });
+
+    it('keeps the conversation and shows no error when the read again fails', async () => {
+      const { fixture, commentReads } = await render({ readsAnswered: 1 });
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(commentReads).toEqual([LINE_ID, LINE_ID]);
+      expect(fixture.componentInstance.errorKey()).toBeNull();
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector('.error')
+      ).toBeNull();
+      expect(bodies(fixture)).toHaveLength(3);
+    });
+
+    it('keeps a comment sent while the read again was in flight', async () => {
+      // The race: the reread reads the database before the send commits, and its
+      // answer arrives after the send's. Recorded wholesale, it took the comment away.
+      let answer!: (comments: readonly Comment[]) => void;
+      const { fixture, lines } = await render({
+        answerRead: (read) =>
+          read === 1
+            ? new Promise((resolve) => {
+                answer = resolve;
+              })
+            : undefined,
+      });
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+
+      await fixture.componentInstance.send('and the olives');
+      answer(NEWEST_FIRST);
+      await settled();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(bodies(fixture)).toEqual([
+        'which bread?',
+        'the sourdough one',
+        'and olives',
+        'and the olives',
+      ]);
+      expect(lines.commentCountOf(LINE_ID)).toBe(4);
+    });
+
+    it('still drops a comment the store held before the read and the answer lacks', async () => {
+      let answer!: (comments: readonly Comment[]) => void;
+      const { fixture, lines } = await render({
+        answerRead: (read) =>
+          read === 1
+            ? new Promise((resolve) => {
+                answer = resolve;
+              })
+            : undefined,
+      });
+
+      TestBed.inject(RealtimeMemory).setReconnects(1);
+      TestBed.tick();
+
+      answer(NEWEST_FIRST.slice(1));
+      await settled();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(bodies(fixture)).toEqual(['which bread?', 'the sourdough one']);
+      expect(lines.commentCountOf(LINE_ID)).toBe(2);
+    });
   });
 
   /**
@@ -455,6 +587,95 @@ describe('CommentsSheet', () => {
   });
 
   /** Plan 0039. Nothing here touches a real microphone, media element or socket. */
+  /** Velista `0174`, targets 1, 2 and 7. */
+  describe('where the deployment cannot transcribe', () => {
+    const noTranscriber = () =>
+      fakeOperatorSettingsStore({
+        ...MEMORY_OPERATOR_SETTINGS,
+        features: {
+          ...MEMORY_OPERATOR_SETTINGS.features,
+          transcription: false,
+        },
+      });
+
+    it('draws a plain text composer, with no microphone', async () => {
+      const { fixture } = await render({ operator: noTranscriber() });
+      const composer = fixture.debugElement.query(
+        By.css('lib-comment-composer')
+      );
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(composer.query(By.css('.field'))).not.toBeNull();
+      expect(composer.query(By.css('lib-mic-icon'))).toBeNull();
+      expect(composer.query(By.css('.send lib-send-icon'))).not.toBeNull();
+    });
+
+    it('does not draw the microphone while the settings have not answered', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      const { fixture } = await render({ operator });
+
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer lib-mic-icon'))
+      ).toBeNull();
+
+      operator.land(MEMORY_OPERATOR_SETTINGS);
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer lib-mic-icon'))
+      ).not.toBeNull();
+    });
+
+    it('does not draw it when the settings could not be read', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      operator.fail();
+      const { fixture } = await render({ operator });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+    });
+
+    it('still sends a typed comment', async () => {
+      const { fixture, lines } = await render({ operator: noTranscriber() });
+      const composer = componentOf(fixture);
+      const added = jest.spyOn(lines, 'addComment');
+
+      await fixture.componentInstance.send('The green one');
+
+      expect(composer.button()).toBe('send');
+      expect(added).toHaveBeenCalled();
+    });
+
+    it('answers an allowance refusal on an upload with the generic line, and keeps the recording', async () => {
+      // Backend `0234` never refuses the upload itself, so this is the future case
+      // target 7 asks about: it falls to the existing generic sentence, and the
+      // recording stays held for the retry like any other failed send.
+      const { fixture } = await render({
+        addVoice: async () => {
+          throw new GatewayError({
+            code: 'assistant_allowance_reached',
+            status: 429,
+            correlationId: 'ref-429',
+            details: { scope: 'user', period: 'day', limit: 'commentAudio' },
+          });
+        },
+      });
+      const composer = componentOf(fixture);
+
+      composer.press();
+      await flush();
+      void composer.stopAndSend();
+      await flush();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.errorKey()).toBe('list.error.failed');
+      expect(composer.errorKey()).toBe('list.error.failed');
+      expect(composer.hasHeldRecording()).toBe(true);
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .retry'))
+      ).not.toBeNull();
+    });
+  });
+
   describe('a comment can be a recording', () => {
     it('draws one button, which is a microphone on an empty field', async () => {
       const { fixture } = await render();

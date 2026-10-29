@@ -2,6 +2,10 @@
 {{- $cfg := .Values.lunaShopperBackend.config }}
 {{- $harvest := .Values.lunaShopperBackend.harvester | default dict }}
 {{- $assistant := .Values.lunaShopperBackend.assistant | default dict }}
+{{- $transcriber := .Values.lunaShopperBackend.transcriber | default dict }}
+{{- $allowance := $assistant.allowance | default dict }}
+{{- $registered := $allowance.registered | default dict }}
+{{- $guest := $allowance.guest | default dict }}
 ---
 # One ConfigMap, because this release is one environment (plan 0002). The
 # `range $env, $cfg :=` loop that rendered a production and a staging copy side
@@ -39,11 +43,36 @@ data:
   # guarded against is believing you are in staging when you are in production.
   ENVIRONMENT_NAME: {{ $cfg.environmentName | quote }}
   # Support sessions (plan 0194): an operator opens the app as a user. Auth
-  # reads it and no other service does, so the gateway cannot disagree with
-  # it. False unless the values file of the environment says true. Staging
-  # says true. Production does not name it, and stays off until the owner
-  # turns it on, after the privacy policy names support access.
+  # alone enforces it. The gateway reads the same key only to report it to the
+  # privacy policy (plan 0231), so the two cannot disagree. False unless the
+  # values file of the environment says true. Staging says true. Production
+  # does not name it, and stays off until the owner turns it on, after the
+  # privacy policy names support access.
   IMPERSONATION_ENABLED: {{ $cfg.impersonationEnabled | default false | quote }}
+  # --- The legal documents (plan 0231, section 5.3) --------------------------
+  #
+  # The shape of this deployment, fine to commit. Who runs it is NOT here: the
+  # operator's values come from lunaShopperBackend.legal or the operator
+  # Secret, per key, in _env.tpl. Auth and the gateway both read the switch.
+  TERMS_ACCEPTANCE_REQUIRED: {{ $cfg.termsAcceptanceRequired | default false | quote }}
+  # True exactly where the backup CronJobs run nightly.
+  LEGAL_OFFSITE_BACKUPS: {{ and .Values.lunaShopperBackend.backups.enabled (not .Values.lunaShopperBackend.backups.suspend) | quote }}
+  {{- /*
+  The three periods in days. Not `default`: Sprig reads 0 as empty, so an
+  explicit 0 would render the default, and the policy would state a period that
+  k8s plan 0018 does not enforce. Only an absent or null key falls back. A Go
+  template comment, so the render (and the config checksum) stays as it was.
+  */}}
+  {{- $legalDays := $cfg.legal | default dict }}
+  {{- $backupDays := .Values.lunaShopperBackend.backups.retentionDays }}
+  LEGAL_BACKUP_RETENTION_DAYS: {{ if kindIs "invalid" $backupDays }}"14"{{ else }}{{ $backupDays | quote }}{{ end }}
+  LEGAL_APPLICATION_LOG_DAYS: {{ if kindIs "invalid" $legalDays.applicationLogDays }}"30"{{ else }}{{ $legalDays.applicationLogDays | quote }}{{ end }}
+  LEGAL_ASSISTANT_LOG_DAYS: {{ if kindIs "invalid" $legalDays.assistantLogDays }}"7"{{ else }}{{ $legalDays.assistantLogDays | quote }}{{ end }}
+  # The retention periods (plan 0233). Auth, core and catalog enforce them,
+  # and the gateway reports them to the privacy policy.
+  RETENTION_AUDIT: {{ ($cfg.retention | default dict).audit | default "180d" | quote }}
+  RETENTION_ADMIN_LOGIN_FAILURES: {{ ($cfg.retention | default dict).adminLoginFailures | default "90d" | quote }}
+  RETENTION_EXPIRED_GRANTS: {{ ($cfg.retention | default dict).expiredGrants | default "14d" | quote }}
 {{- /*
 The development autologin is deliberately ABSENT from this ConfigMap, in every
 environment. It signs an operator in with no password; auth refuses to boot with
@@ -109,7 +138,9 @@ part of the render and would trip that very check.
   # How long the gateway waits for a transcript it is not holding a request open
   # for. The comment is already stored and playable; this only stops a hung
   # provider holding a task behind a request that was answered.
-  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 45000 | quote }}
+  # 120 seconds because it must outlast the assistant's own deadline for a
+  # comment, TRANSCRIBER_COMMENT_TIMEOUT_MS below (plan 0235, section 6.2).
+  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 120000 | quote }}
   # --- The file import (plan 0086, section 10) -------------------------------
   #
   # The one route on this gateway with a body limit of its own. Nest's JSON
@@ -178,25 +209,34 @@ part of the render and would trip that very check.
   # for a call that never leaves the cluster, and would put a user's turn through
   # the edge twice.
   #
-  # The model is a value rather than a literal, so changing it is an env edit and
-  # a restart. Empty means the default of the provider that answers (plan 0224,
-  # section 5): the default moved into the service because it depends on
-  # ASSISTANT_PROVIDER, and a Gemini name written here would reach Claude the day
-  # the switch flips.
+  # Claude answers every turn (plan 0236). The model is a value rather than a
+  # literal, so changing it is an env edit and a restart. Empty model, effort
+  # and thinking mean the service's own defaults (Haiku, adaptive thinking,
+  # effort low), which the evaluation of 2026-10-22 chose. The transcriber
+  # below hears (plan 0235).
   GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Release.Namespace) | quote }}
   ASSISTANT_MODEL: {{ $assistant.model | default "" | quote }}
-  # Which provider answers a turn (plan 0224). `claude` answers with Claude and
-  # still hears with Gemini, because Claude takes no audio. Empty effort and
-  # thinking mean the service's own defaults (Haiku, adaptive thinking, effort
-  # low), which the evaluation of 2026-10-22 chose.
-  ASSISTANT_PROVIDER: {{ $assistant.provider | default "gemini" | quote }}
   ASSISTANT_CLAUDE_EFFORT: {{ $assistant.claudeEffort | default "" | quote }}
   ASSISTANT_CLAUDE_THINKING: {{ $assistant.claudeThinking | default "" | quote }}
-  # Voice input (plan 0041). The transcription model is its own key so a different
-  # model can do that job than answers the turn without a code change; empty means
-  # the same one, which is the default and the only setting anybody has evidence
-  # for yet.
-  ASSISTANT_TRANSCRIPTION_MODEL: {{ $assistant.transcriptionModel | default "" | quote }}
+  # The safety check on each reply (plan 0236, section 4). Empty means the
+  # service's defaults: on, with Haiku, and 112 as the emergency number the
+  # assistant names to a person in danger. YAML reads an unquoted on or off as a
+  # boolean, so a boolean is written back as the word the service accepts:
+  # without that, `moderation: off` would arrive empty and mean on.
+  ASSISTANT_MODERATION: {{ if kindIs "bool" $assistant.moderation }}{{ ternary "on" "off" $assistant.moderation | quote }}{{ else }}{{ $assistant.moderation | default "" | quote }}{{ end }}
+  ASSISTANT_MODERATION_MODEL: {{ $assistant.moderationModel | default "" | quote }}
+  ASSISTANT_EMERGENCY_NUMBER: {{ $assistant.emergencyNumber | default "" | quote }}
+  # Voice input (plan 0235). The transcriber's address exactly when the chart
+  # runs it, and empty otherwise, so the one value `transcriber.enabled` decides
+  # whether the assistant hears and what `hears` reports (plan 0231, section 3).
+  # Empty is a supported deployment: the voice route answers 501 and a voice
+  # comment settles UNAVAILABLE.
+  TRANSCRIBER_URL: {{ if $transcriber.enabled }}{{ printf "http://luna-shopper-backend-transcriber:%v" ($transcriber.port | default 3007 | int) | quote }}{{ else }}""{{ end }}
+  # How long the assistant waits on a transcription, the transcriber's queue
+  # included (plan 0235, section 6.2). Written whether or not it runs, so the
+  # keys every assistant pod refers to always exist.
+  TRANSCRIBER_TURN_TIMEOUT_MS: {{ $transcriber.turnTimeoutMs | default 45000 | int64 | quote }}
+  TRANSCRIBER_COMMENT_TIMEOUT_MS: {{ $transcriber.commentTimeoutMs | default 110000 | int64 | quote }}
   # The byte cap on a recording, before base64. The gateway's multipart
   # interceptor enforces the same number on the upload; this one is applied to
   # what actually crossed the broker, because a cap the client could have chosen
@@ -230,4 +270,31 @@ part of the render and would trip that very check.
   # gives up first is what let the assistant write lines after the app had told
   # its reader that nothing arrived. Raise one and raise the other.
   ASSISTANT_TURN_TIMEOUT_MS: {{ $assistant.turnTimeoutMs | default 60000 | quote }}
+  # Each person's allowance (plan 0234, section 7): turns, seconds of audio and
+  # money per day and per month, guests lower, and a ceiling on what the whole
+  # deployment spends. Money is integer micro dollars. The numbers are written
+  # once, in values.yaml, and `required` makes a values file that lost one fail
+  # here rather than in the pod. Core receives none of them: the assistant
+  # sends the limits that apply with each reservation.
+  ASSISTANT_TURNS_PER_DAY: {{ required "lunaShopperBackend.assistant.allowance.registered.turnsPerDay" $registered.turnsPerDay | int64 | quote }}
+  ASSISTANT_TURNS_PER_MONTH: {{ required "lunaShopperBackend.assistant.allowance.registered.turnsPerMonth" $registered.turnsPerMonth | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_DAY: {{ required "lunaShopperBackend.assistant.allowance.registered.assistantAudioSecondsPerDay" $registered.assistantAudioSecondsPerDay | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_MONTH: {{ required "lunaShopperBackend.assistant.allowance.registered.assistantAudioSecondsPerMonth" $registered.assistantAudioSecondsPerMonth | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_DAY: {{ required "lunaShopperBackend.assistant.allowance.registered.commentAudioSecondsPerDay" $registered.commentAudioSecondsPerDay | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_MONTH: {{ required "lunaShopperBackend.assistant.allowance.registered.commentAudioSecondsPerMonth" $registered.commentAudioSecondsPerMonth | int64 | quote }}
+  ASSISTANT_COST_PER_DAY_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.registered.costPerDayMicroUsd" $registered.costPerDayMicroUsd | int64 | quote }}
+  ASSISTANT_COST_PER_MONTH_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.registered.costPerMonthMicroUsd" $registered.costPerMonthMicroUsd | int64 | quote }}
+  ASSISTANT_TURNS_PER_DAY_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.turnsPerDay" $guest.turnsPerDay | int64 | quote }}
+  ASSISTANT_TURNS_PER_MONTH_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.turnsPerMonth" $guest.turnsPerMonth | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_DAY_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.assistantAudioSecondsPerDay" $guest.assistantAudioSecondsPerDay | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_MONTH_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.assistantAudioSecondsPerMonth" $guest.assistantAudioSecondsPerMonth | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_DAY_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.commentAudioSecondsPerDay" $guest.commentAudioSecondsPerDay | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_MONTH_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.commentAudioSecondsPerMonth" $guest.commentAudioSecondsPerMonth | int64 | quote }}
+  ASSISTANT_COST_PER_DAY_MICRO_USD_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.costPerDayMicroUsd" $guest.costPerDayMicroUsd | int64 | quote }}
+  ASSISTANT_COST_PER_MONTH_MICRO_USD_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.costPerMonthMicroUsd" $guest.costPerMonthMicroUsd | int64 | quote }}
+  ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.deploymentCostPerDayMicroUsd" $allowance.deploymentCostPerDayMicroUsd | int64 | quote }}
+  ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.deploymentCostPerMonthMicroUsd" $allowance.deploymentCostPerMonthMicroUsd | int64 | quote }}
+  ASSISTANT_TURN_RESERVE_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.turnReserveMicroUsd" $allowance.turnReserveMicroUsd | int64 | quote }}
+  # An IANA name: the day and the month turn over at midnight there.
+  ASSISTANT_ALLOWANCE_TIMEZONE: {{ required "lunaShopperBackend.assistant.allowance.timezone" $allowance.timezone | quote }}
 {{- end }}

@@ -790,6 +790,31 @@ export interface UserProfile {
    * rename's answer has none, so `ProfileStore` keeps the list it held.
    */
   readonly permissions?: readonly AccountPermission[];
+  /**
+   * Where the account stands with the terms (backend `0231`, velista `0173`).
+   *
+   * Optional for `appState`'s reason: only `GET /v1/account/me` carries it, and a
+   * rename's answer has none, so `ProfileStore` keeps what it held. An absent block
+   * reads as nothing to accept: an older backend asks nothing.
+   */
+  readonly terms?: AccountTerms;
+}
+
+/** The account's answer about the terms (velista `0173`, target 2). */
+export interface AccountTerms {
+  /** The version this deployment asks for now. */
+  readonly currentVersion: string;
+  /** The version the account accepted, or null when it accepted none. */
+  readonly acceptedVersion: string | null;
+  /** True when the deployment requires acceptance and the account has not given it. */
+  readonly acceptanceRequired: boolean;
+}
+
+/** What `POST /v1/account/terms-acceptances` answers (backend `0231`, section 4.4). */
+export interface TermsAcceptance {
+  readonly version: string;
+  /** An ISO timestamp. */
+  readonly acceptedAt: string;
 }
 
 /**

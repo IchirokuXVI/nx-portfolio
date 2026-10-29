@@ -40,7 +40,7 @@ export class AuthController {
   @Post('register')
   @Throttle(THROTTLE_LIMITS.registration)
   @ApiContractResponse(AUTH_PATTERNS.register, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, terms: true })
   register(@Body() dto: RegisterDto): Promise<AuthTokens> {
     return this.nats.send(AUTH_PATTERNS.register, {
       ...dto,
@@ -151,6 +151,7 @@ export class AuthController {
     auth: true,
     conflict: true,
     impersonation: 'refused',
+    terms: true,
   })
   upgrade(
     @AuthUser() user: CurrentUser,

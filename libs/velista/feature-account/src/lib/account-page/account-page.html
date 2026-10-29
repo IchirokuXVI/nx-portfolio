@@ -346,6 +346,13 @@
     />
   </section>
 
+  <!-- The privacy policy and the terms (velista 0172), after the way out and above
+       the version: facts about the service, read from the screen about the account. -->
+  <lib-legal-links
+    [privacyUrl]="legalUrls().privacy"
+    [termsUrl]="legalUrls().terms"
+  />
+
   <!--
     Which build is running, under everything else. This is the screen somebody is
     already on when they are reading facts about their account, so it is the one place

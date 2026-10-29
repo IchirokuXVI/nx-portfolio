@@ -1,0 +1,28 @@
+@use '../styles/tokens' as tokens;
+
+// Metadata at the foot of a screen, beside the version: the quiet text colour and the
+// small size, so it never competes with the ways in above it. The links themselves
+// are the secondary colour rather than the accent for the same reason.
+:host {
+  display: block;
+}
+
+.links {
+  display: flex;
+  justify-content: center;
+  gap: var(--app-space-5);
+}
+
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
+  text-decoration: underline;
+  text-decoration-color: var(--app-border-strong);
+  text-underline-offset: 0.2em;
+
+  @include tokens.app-focus-ring;
+}

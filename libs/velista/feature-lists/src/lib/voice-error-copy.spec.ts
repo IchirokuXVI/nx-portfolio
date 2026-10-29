@@ -89,4 +89,122 @@ describe('voiceFailureCopy', () => {
       );
     });
   });
+
+  /**
+   * Velista `0174`, target 6. The allowance refused before a turn ran, so nothing was
+   * added, and the sentence says when the assistant is back rather than "try again".
+   */
+  describe('the allowance said no', () => {
+    function allowance(details: Record<string, unknown>): GatewayError {
+      return new GatewayError({
+        code: 'assistant_allowance_reached',
+        status: 429,
+        correlationId: 'cid-1',
+        details,
+      });
+    }
+
+    // Local parts, so the expected time holds in whatever zone the run is in.
+    const nine = new Date(2026, 9, 29, 21, 0).toISOString();
+    const one = new Date(2026, 9, 30, 1, 0).toISOString();
+    const november = new Date(2026, 10, 1, 0, 0).toISOString();
+
+    it("names the person's day and the time it is back", () => {
+      expect(
+        voiceFailureCopy(
+          allowance({
+            scope: 'user',
+            period: 'day',
+            limit: 'turns',
+            resetsAt: nine,
+          }),
+          'es'
+        )
+      ).toEqual({
+        messageKey: 'list.add.allowance.usedDay.at',
+        messageArgs: { time: '21:00', count: 21 },
+      });
+    });
+
+    it('passes the hour that picks the Spanish article', () => {
+      expect(
+        voiceFailureCopy(
+          allowance({ scope: 'user', period: 'day', resetsAt: one }),
+          'es'
+        ).messageArgs
+      ).toEqual({ time: '1:00', count: 1 });
+    });
+
+    it('names a date for a month', () => {
+      expect(
+        voiceFailureCopy(
+          allowance({
+            scope: 'user',
+            period: 'month',
+            limit: 'cost',
+            resetsAt: november,
+          }),
+          'es'
+        )
+      ).toEqual({
+        messageKey: 'list.add.allowance.usedMonth.on',
+        messageArgs: { date: '1 de noviembre' },
+      });
+    });
+
+    it('speaks of speaking after the audio limit', () => {
+      expect(
+        voiceFailureCopy(
+          allowance({
+            scope: 'user',
+            period: 'day',
+            limit: 'assistantAudio',
+            resetsAt: nine,
+          }),
+          'en'
+        ).messageKey
+      ).toBe('list.add.allowance.speakingDay.at');
+    });
+
+    it("says the assistant is resting when it is the deployment's", () => {
+      expect(
+        voiceFailureCopy(
+          allowance({
+            scope: 'deployment',
+            period: 'day',
+            limit: 'cost',
+            resetsAt: nine,
+          }),
+          'en'
+        ).messageKey
+      ).toBe('list.add.allowance.resting.at');
+      expect(
+        voiceFailureCopy(
+          allowance({
+            scope: 'deployment',
+            period: 'month',
+            limit: 'cost',
+            resetsAt: november,
+          }),
+          'en'
+        ).messageKey
+      ).toBe('list.add.allowance.resting.on');
+    });
+
+    it('leaves the time out when it could not be read', () => {
+      expect(
+        voiceFailureCopy(allowance({ scope: 'user', period: 'day' }), 'en')
+      ).toEqual({ messageKey: 'list.add.allowance.usedDay.plain' });
+    });
+
+    it('never counts down and never says try again', () => {
+      const copy = voiceFailureCopy(
+        allowance({ scope: 'user', period: 'day', resetsAt: nine }),
+        'en'
+      );
+
+      expect(copy.messageKey).not.toMatch(/voiceBusy|voiceFailed|voiceUnsure/);
+      expect(copy.messageArgs).not.toHaveProperty('seconds');
+    });
+  });
 });

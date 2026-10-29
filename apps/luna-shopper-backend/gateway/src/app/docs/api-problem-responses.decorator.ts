@@ -78,6 +78,13 @@ export interface ProblemResponseOptions {
    */
   lineMerge?: boolean;
   /**
+   * The route adds a line, so a typed name that two or more lines hold with a
+   * product can answer 409 with a code of its own when the body set
+   * `askIfAmbiguous` (plan 0228). It is told apart from a plain conflict
+   * because the client asks the person which line, from `details.lines`.
+   */
+  lineAddChoice?: boolean;
+  /**
    * The route reads the catalog at one shop (plan 0170): `locationId` beside
    * another selector is a 400 of its own code, and an unknown shop a 404 of
    * its own code.
@@ -123,6 +130,24 @@ export interface ProblemResponseOptions {
    * - `operator`: an account with no address, or with no password.
    */
   recovery?: 'signIn' | 'operator';
+  /**
+   * The route takes a Terms version (plan 0231, section 4.3). Both codes
+   * carry `details.currentVersion`:
+   *
+   * - `true`: the route can create an account, and its version is optional.
+   *   A stale version is a 409 of its own code, and a missing one a 400 where
+   *   the deployment requires acceptance.
+   * - `stale`: the route requires the version in its body, so a missing one is
+   *   a validation 400 and only the 409 can be answered.
+   */
+  terms?: boolean | 'stale';
+  /**
+   * The route spends the caller's assistant allowance (plan 0234, section
+   * 8.1), so it can answer 429 with a code of its own beside `rate_limited`.
+   * It carries `details.scope`, `period`, `limit` and `resetsAt`, and no
+   * `retryAfterSeconds`.
+   */
+  allowance?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -209,6 +234,9 @@ export function ApiProblemResponses(
       ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS
     );
   }
+  if (options.lineAddChoice) {
+    codes.push(ERROR_CODES.LINE_ADD_NEEDS_CHOICE);
+  }
   if (options.atLocation) {
     codes.push(
       ERROR_CODES.CATALOG_LOCATION_EXCLUSIVE,
@@ -252,6 +280,15 @@ export function ApiProblemResponses(
       ERROR_CODES.RECOVERY_NEEDS_EMAIL,
       ERROR_CODES.RECOVERY_NEEDS_PASSWORD
     );
+  }
+  if (options.terms) {
+    codes.push(ERROR_CODES.TERMS_VERSION_STALE);
+  }
+  if (options.terms === true) {
+    codes.push(ERROR_CODES.TERMS_ACCEPTANCE_MISSING);
+  }
+  if (options.allowance) {
+    codes.push(ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

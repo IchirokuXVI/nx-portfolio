@@ -23,6 +23,7 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  fakeOperatorSettingsStore,
   fakePresenceStore,
   fakeShoppingProfileStore,
   fakeZoneStore,
@@ -31,6 +32,7 @@ import {
   LineStore,
   LIST_SERVICE,
   ListViewStore,
+  MEMORY_OPERATOR_SETTINGS,
   overlayKey,
   ProductPickStore,
   provideFakeCategoryStore,
@@ -38,6 +40,7 @@ import {
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
+  provideFakeOperatorSettingsStore,
   provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeShoppingProfileStore,
@@ -52,6 +55,7 @@ import {
   type FakeItemNames,
   type FakeLineStore,
   type FakeListStore,
+  type FakeOperatorSettingsStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
   type LineServiceI,
@@ -90,6 +94,7 @@ import {
   LineList,
   ListHeader,
   ToBuyHeading,
+  TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
@@ -239,6 +244,8 @@ interface Options {
   readonly sheetOpen?: boolean;
   /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
   readonly access?: readonly ListAccessEntry[];
+  /** What the deployment states about itself (velista `0172`). Ready by default. */
+  readonly operator?: FakeOperatorSettingsStore;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -397,6 +404,10 @@ async function render(options: Options = {}): Promise<{
       // Plan 0022: the header's viewers and the editor on a row.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
       provideFakeSessionStore('REGISTERED'),
+      // What decides the field's microphone (velista `0174`).
+      provideFakeOperatorSettingsStore(
+        options.operator ?? fakeOperatorSettingsStore()
+      ),
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: AppResumed, useValue: { resumes } },
       { provide: Router, useValue: router },
@@ -555,6 +566,67 @@ function settingsAction(fixture: ComponentFixture<ListPage>) {
 }
 
 describe('ListPage', () => {
+  /**
+   * Velista `0174`, targets 1 and 2: the one field offers its microphone only where
+   * the deployment can transcribe and the assistant is on, because the recording goes
+   * to the assistant. Unknown is off.
+   */
+  describe('the microphone in the one field', () => {
+    const settings = (features: {
+      transcription: boolean;
+      assistant: boolean;
+    }) => ({
+      ...MEMORY_OPERATOR_SETTINGS,
+      features: { ...MEMORY_OPERATOR_SETTINGS.features, ...features },
+    });
+
+    function mic(fixture: ComponentFixture<ListPage>): Element | null {
+      return query(fixture, 'lib-line-composer lib-mic-icon');
+    }
+
+    it('is offered with both flags on', async () => {
+      const { fixture } = await render();
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(true);
+      expect(mic(fixture)).not.toBeNull();
+    });
+
+    it.each([
+      [{ transcription: false, assistant: true }],
+      [{ transcription: true, assistant: false }],
+      [{ transcription: false, assistant: false }],
+    ])('is not drawn with %o', async (features) => {
+      const { fixture } = await render({
+        operator: fakeOperatorSettingsStore(settings(features)),
+      });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(mic(fixture)).toBeNull();
+      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+
+    it('is not drawn until the settings answer', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      const { fixture } = await render({ operator });
+
+      expect(mic(fixture)).toBeNull();
+
+      operator.land(MEMORY_OPERATOR_SETTINGS);
+      fixture.detectChanges();
+
+      expect(mic(fixture)).not.toBeNull();
+    });
+
+    it('is not drawn when the settings could not be read', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      operator.fail();
+      const { fixture } = await render({ operator });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(mic(fixture)).toBeNull();
+    });
+  });
+
   /**
    * Plan 0038 section 5 shipped this strip's markup with no stylesheet and no way to
    * tell its two kinds of message apart, so a failure and a confirmation drew as the
@@ -1060,7 +1132,13 @@ describe('ListPage', () => {
       await fixture.componentInstance.add({ content: 'Milk', quantity: 2 });
 
       expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 2 },
+        {
+          kind: 'add',
+          content: 'Milk',
+          quantity: 2,
+          // Typed words say the page can ask which line (velista 0170).
+          options: { askIfAmbiguous: true },
+        },
       ]);
     });
 
@@ -1070,7 +1148,12 @@ describe('ListPage', () => {
       await fixture.componentInstance.add({ content: 'Milk', quantity: 1 });
 
       expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 1 },
+        {
+          kind: 'add',
+          content: 'Milk',
+          quantity: 1,
+          options: { askIfAmbiguous: true },
+        },
       ]);
     });
 
@@ -1093,8 +1176,399 @@ describe('ListPage', () => {
       await fixture.componentInstance.add({ content: 'Milk', quantity: 1 });
 
       expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 1 },
+        {
+          kind: 'add',
+          content: 'Milk',
+          quantity: 1,
+          options: { askIfAmbiguous: true },
+        },
       ]);
+    });
+
+    it('sends nothing new for a card, whose products decide where it lands', async () => {
+      const { fixture, lines } = await render({ permissions: ADMIN });
+
+      await fixture.componentInstance.add({
+        content: 'Leche entera',
+        quantity: 1,
+        itemIds: ['item-a'],
+        named: false,
+      });
+
+      expect(lines.calls).toEqual([
+        {
+          kind: 'add',
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          named: false,
+        },
+      ]);
+    });
+  });
+
+  /**
+   * A typed name already on the list (velista `0170`): a raise keeps its row and
+   * marks it, and two or more lines with a product ask which, against the plus.
+   */
+  describe('a typed name already on the list (velista 0170)', () => {
+    const MILKS = [
+      line('ln-whole', {
+        content: 'Leche entera',
+        named: false,
+        itemIds: ['item-a'],
+        quantity: 2,
+        position: 1,
+      }),
+      line('ln-other', {
+        content: 'Leche entera',
+        named: false,
+        itemIds: ['item-b'],
+        quantity: 0,
+        position: 2,
+      }),
+      line('ln-bread', { content: 'Pan', position: 3 }),
+    ];
+    const ITEM_A: CatalogItem = {
+      id: 'item-a',
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 1,
+      unit: 'LITER',
+      productGroupId: null,
+      categories: [],
+      offer: null,
+      unitBasis: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+    };
+    const refusal = () =>
+      new GatewayError({
+        code: 'line_add_needs_choice',
+        status: 409,
+        correlationId: 'ref',
+        details: {
+          lines: MILKS.slice(0, 2).map((held) => ({
+            lineId: held.id,
+            content: held.content,
+            named: held.named,
+            quantity: held.quantity,
+            itemIds: held.itemIds,
+            productGroupId: null,
+            approvalStatus: 'APPROVED',
+          })),
+        },
+      });
+
+    function field(fixture: ComponentFixture<ListPage>): HTMLInputElement {
+      return query(
+        fixture,
+        'lib-line-composer input.field'
+      ) as HTMLInputElement;
+    }
+    function plus(fixture: ComponentFixture<ListPage>): HTMLButtonElement {
+      return query(fixture, 'lib-line-composer .send') as HTMLButtonElement;
+    }
+    async function typeAndAdd(
+      fixture: ComponentFixture<ListPage>,
+      text: string
+    ): Promise<void> {
+      const input = field(fixture);
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+      // The add's answer, then the render it causes.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    const choiceRows = () => [
+      ...document.querySelectorAll<HTMLButtonElement>('.pop .row'),
+    ];
+
+    afterEach(() => {
+      // The question lives in the top layer, next to its anchor.
+      TestBed.resetTestingModule();
+      jest.useRealTimers();
+    });
+
+    it('marks the raised row where it stands, for 2.5 s, and says where the units went', async () => {
+      jest.useFakeTimers();
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-bread' });
+
+      await typeAndAdd(fixture, 'Pan');
+
+      const page = fixture.componentInstance;
+      expect(page.tookLine()).toBe('ln-bread');
+      // No row was drawn for it, and the raised row is where it was.
+      expect(lines.linesIn().map((held) => held.id)).toEqual([
+        'ln-whole',
+        'ln-other',
+        'ln-bread',
+      ]);
+      const raised = query(
+        fixture,
+        '[data-line-id="ln-bread"] lib-quantity-reel'
+      ) as HTMLElement;
+      expect(raised.classList.contains('took')).toBe(true);
+      expect(page.announcement()).toBe('list.addChoice.merged');
+      expect(field(fixture).value).toBe('');
+
+      jest.advanceTimersByTime(TOOK_DURATION_MS);
+      fixture.detectChanges();
+
+      expect(page.tookLine()).toBeNull();
+      expect(raised.classList.contains('took')).toBe(false);
+    });
+
+    it('keeps the words in the field while the answer is out, for a name the list holds', async () => {
+      const { fixture, lines } = await render({ lines: MILKS });
+      lines.holdAdds();
+
+      const input = field(fixture);
+      input.value = 'Pan';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('Pan');
+      lines.releaseAdds();
+    });
+
+    it('clears the field at once for a name the list does not hold', async () => {
+      const { fixture, lines } = await render({ lines: MILKS });
+      lines.holdAdds();
+
+      const input = field(fixture);
+      input.value = 'Huevos';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      lines.releaseAdds();
+    });
+
+    it('asks which line against the plus, with a row per line and a new line last', async () => {
+      const { fixture, lines, itemNames } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      await typeAndAdd(fixture, 'Leche entera');
+
+      expect(choiceRows()).toHaveLength(3);
+      expect(document.querySelector('.pop .title')?.textContent).toContain(
+        'list.addChoice.title'
+      );
+      const first = choiceRows()[0];
+      // The name the list row draws (velista 0144): a line made from a product
+      // shows the product's, in the reader's language, with its brand and size.
+      expect(first.querySelector('.name')?.textContent?.trim()).toBe(
+        'Whole milk'
+      );
+      expect(first.querySelector('.product')).not.toBeNull();
+      // A product this page does not hold has no product line yet.
+      expect(choiceRows()[1].querySelector('.product')).toBeNull();
+      expect(first.querySelector('.count')?.textContent).toMatch(/2\s*→\s*3/);
+      // A bought line counts, from 0 (D2).
+      expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
+        /0\s*→\s*1/
+      );
+      expect(choiceRows()[2].classList.contains('new')).toBe(true);
+      // Focus moves to the first row, and the words wait in the field.
+      expect(document.activeElement).toBe(first);
+      expect(field(fixture).value).toBe('Leche entera');
+      // The products named are looked up once.
+      expect(itemNames.asked).toContainEqual(['item-a', 'item-b']);
+    });
+
+    it('sends the chosen line as intoLineId, and a new line as newLine', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      choiceRows()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        quantity: 1,
+        options: { intoLineId: 'ln-other' },
+      });
+      expect(choiceRows()).toHaveLength(0);
+
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+      choiceRows()[2]?.click();
+      await fixture.whenStable();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        quantity: 1,
+        options: { newLine: true },
+      });
+    });
+
+    it('closes on Escape, hands focus back to the plus and keeps the words', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+      fixture.detectChanges();
+
+      expect(choiceRows()).toHaveLength(0);
+      expect(document.activeElement).toBe(plus(fixture));
+      expect(field(fixture).value).toBe('Leche entera');
+    });
+
+    it('titles the question with the line as it is stored, not as it was typed', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      await typeAndAdd(fixture, 'leche ENTERA');
+
+      expect(choiceRows()).toHaveLength(3);
+      expect(fixture.componentInstance.choiceName()).toBe('Leche entera');
+    });
+
+    it('asks again, once, when the chosen line went while the question was open', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      // Backend 0228, section 3: an answer onto a deleted line is the not found.
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'not_found',
+          status: 404,
+          correlationId: 'gone',
+        }),
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      choiceRows()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.slice(-2)).toEqual([
+        {
+          kind: 'add',
+          content: 'Leche entera',
+          quantity: 1,
+          options: { intoLineId: 'ln-other' },
+        },
+        {
+          kind: 'add',
+          content: 'Leche entera',
+          quantity: 1,
+          options: { askIfAmbiguous: true },
+        },
+      ]);
+      // The question is drawn again, and the list is not said to be gone.
+      expect(choiceRows()).toHaveLength(3);
+      expect(fixture.componentInstance.announcement()).not.toBe(
+        'list.error.notAvailable'
+      );
+      expect(field(fixture).value).toBe('Leche entera');
+    });
+
+    it('raises the one line left when the chosen one went', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'not_found',
+          status: 404,
+          correlationId: 'gone',
+        }),
+      });
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-whole' });
+      choiceRows()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(3);
+      expect(fixture.componentInstance.tookLine()).toBe('ln-whole');
+      expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('closes the question when the page moves to another list', async () => {
+      const { fixture, lines, activatedRoute } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+      expect(fixture.componentInstance.addChoice()?.listId).toBe(LIST_ID);
+
+      activatedRoute.setList('list-2');
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.addChoice()).toBeNull();
+      expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('leaves words typed while a drawn add was out, when its answer is the question', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.holdAdds();
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      // A name no loaded line has, so its row is drawn and the field clears.
+      const input = field(fixture);
+      input.value = 'Huevos';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+      expect(field(fixture).value).toBe('');
+
+      field(fixture).value = 'Pan';
+      field(fixture).dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      lines.releaseAdds();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('Pan');
     });
   });
 
@@ -1322,6 +1796,17 @@ describe('ListPage', () => {
 
       expect(realtime.viewedLists.has(LIST_ID)).toBe(false);
       expect(realtime.rooms).not.toContain(`list:${LIST_ID}`);
+    });
+
+    it('holds its list live in the line store, and lets go on the way out (velista 0169)', async () => {
+      const { fixture, lines } = await render();
+
+      // Held, so a reconnect reads the lines again at once rather than marking stale.
+      expect(lines.holdLog).toEqual([`hold:${LIST_ID}`]);
+
+      fixture.destroy();
+
+      expect(lines.holdLog).toEqual([`hold:${LIST_ID}`, `release:${LIST_ID}`]);
     });
 
     it('names the other people shopping it, in the header', async () => {
@@ -1699,6 +2184,19 @@ describe('ListPage: searching and viewing one category', () => {
     await fixture.whenStable();
 
     expect(itemNames.refreshed).toEqual([['milk', 'carrot'], ['bread']]);
+  });
+
+  it('draws the not live band for a refused zone room and not for a plain disconnect (plan 0168, D7)', async () => {
+    const { fixture, realtime } = await render();
+
+    realtime.setConnected(false);
+    fixture.detectChanges();
+    expect(header(fixture).live).toBe(true);
+
+    realtime.refuse.add(ZONE_ID);
+    realtime.subscribeZone(ZONE_ID);
+    fixture.detectChanges();
+    expect(header(fixture).live).toBe(false);
   });
 
   it('reads every product again once the socket comes back (velista 0145)', async () => {

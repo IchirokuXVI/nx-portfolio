@@ -16,6 +16,9 @@
   min-block-size: 100%;
   // No page header here either, so the page clears the status bar itself.
   padding-block-start: var(--app-safe-top);
+  // No tab bar either, so it clears the system navigation bar too. On the page,
+  // because the version line under the content is the last thing on it.
+  padding-block-end: var(--app-safe-bottom);
 }
 
 .head {

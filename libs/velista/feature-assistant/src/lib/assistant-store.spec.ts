@@ -365,7 +365,7 @@ describe('AssistantStore', () => {
   describe('when this deployment has no model provider', () => {
     it('says so, and does not tell anybody to try again', async () => {
       // A 501, which backend plan 0026 documents as an expected state: an install
-      // with no GEMINI_API_KEY boots, stays in the published document, and answers
+      // with no ANTHROPIC_API_KEY boots, stays in the published document, and answers
       // this forever. Retrying is the one thing that cannot help.
       const subject = store(
         fakeAssistant(() =>
@@ -384,6 +384,42 @@ describe('AssistantStore', () => {
       expect(last(subject).kind).toBe('unconfigured');
       // The composer comes back: nothing is counting down, and holding it would be
       // pretending a wait would fix it.
+      expect(subject.composerDisabled()).toBe(false);
+    });
+
+    it('reads an allowance refusal as its own message, not a failure (velista 0174)', async () => {
+      const subject = store(
+        fakeAssistant(() =>
+          Promise.reject(
+            new GatewayError({
+              code: 'assistant_allowance_reached',
+              status: 429,
+              correlationId: 'ref-429',
+              details: {
+                scope: 'user',
+                period: 'day',
+                limit: 'assistantAudio',
+                resetsAt: '2026-10-29T23:00:00Z',
+              },
+            })
+          )
+        )
+      );
+
+      await subject.say('Add milk');
+
+      expect(last(subject)).toMatchObject({
+        kind: 'allowance',
+        speaker: 'bot',
+        allowance: {
+          scope: 'user',
+          period: 'day',
+          limit: 'assistantAudio',
+          resetsAt: new Date('2026-10-29T23:00:00Z'),
+        },
+      });
+      expect(last(subject).retryAfterSeconds).toBeUndefined();
+      // No countdown and nothing held: a typed turn after a limit on speaking works.
       expect(subject.composerDisabled()).toBe(false);
     });
   });

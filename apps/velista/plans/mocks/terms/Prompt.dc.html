@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    a { color: #ffb454; text-decoration: underline; text-underline-offset: 0.18em; }
+    a:hover { color: #ffc271; }
+  </style>
+</helmet>
+
+<div style="width: 1330px; height: 970px; background: #11141f; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 40px; display: flex; gap: 40px; align-items: flex-start;">
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FIRST TIME &middot; no version accepted yet</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <div style="height: 60px;"></div>
+      <div style="flex: 1; padding: 8px 24px 16px; display: flex; flex-direction: column;">
+        <h1 style="margin: 0 0 14px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18;">Before you go on</h1>
+        <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: #98a0bb;">Read the <a href="#">Terms of Service</a>, then accept them to go on</p>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #98a0bb;">Read how we use your data in the <a href="#">Privacy Policy</a></p>
+        <div style="flex: 1;"></div>
+        <div style="width: 100%; height: 54px; margin-top: 0px; border-radius: 14px; background: #ffb454; color: #0a0c14; font-size: 16.5px; font-weight: 650; display: flex; align-items: center; justify-content: center;">Accept and continue</div>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px; font-size: 14.5px; font-weight: 500; color: #98a0bb;">Sign out</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">CHANGED &middot; an older version was accepted</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <div style="height: 60px;"></div>
+      <div style="flex: 1; padding: 8px 24px 16px; display: flex; flex-direction: column;">
+        <h1 style="margin: 0 0 14px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18;">We have new Terms</h1>
+        <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: #98a0bb;">We changed the <a href="#">Terms of Service</a>. Read them, then accept them to go on</p>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #98a0bb;">Read how we use your data in the <a href="#">Privacy Policy</a></p>
+        <div style="flex: 1;"></div>
+        <div style="width: 100%; height: 54px; margin-top: 0px; border-radius: 14px; background: #ffb454; color: #0a0c14; font-size: 16.5px; font-weight: 650; display: flex; align-items: center; justify-content: center;">Accept and continue</div>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px; font-size: 14.5px; font-weight: 500; color: #98a0bb;">Sign out</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: 12px;">
+    <span style="font-size: 13px; font-weight: 600; letter-spacing: 0.04em; color: #98a0bb;">FAILED &middot; one sentence, the same button</span>
+    <div style="width: 390px; height: 844px; background: #0a0c14; color: #f7f8fc; overflow: hidden; border-radius: 4px; position: relative; display: flex; flex-direction: column;">
+
+      <div style="height: 60px;"></div>
+      <div style="flex: 1; padding: 8px 24px 16px; display: flex; flex-direction: column;">
+        <h1 style="margin: 0 0 14px; font-family: 'Marcellus', Georgia, serif; font-weight: 400; font-size: 32px; line-height: 1.18;">We have new Terms</h1>
+        <p style="margin: 0 0 12px; font-size: 15px; line-height: 1.55; color: #98a0bb;">We changed the <a href="#">Terms of Service</a>. Read them, then accept them to go on</p>
+        <p style="margin: 0; font-size: 15px; line-height: 1.55; color: #98a0bb;">Read how we use your data in the <a href="#">Privacy Policy</a></p>
+        <div style="flex: 1;"></div>
+        <div role="alert" style="display: flex; gap: 8px; align-items: flex-start; margin-bottom: 12px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style="flex: none; margin-top: 1px;" aria-hidden="true"><circle cx="12" cy="12" r="9.2" stroke="#fb7185" stroke-width="1.7"/><path d="M12 7.5v6" stroke="#fb7185" stroke-width="1.9" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1.05" fill="#fb7185"/></svg>
+          <span style="font-size: 13px; line-height: 1.5; color: #fb7185;">That did not save. Try again</span>
+        </div>
+        <div style="width: 100%; height: 54px; margin-top: 0px; border-radius: 14px; background: #ffb454; color: #0a0c14; font-size: 16.5px; font-weight: 650; display: flex; align-items: center; justify-content: center;">Accept and continue</div>
+        <div style="display: flex; align-items: center; justify-content: center; height: 44px; margin-top: 6px; font-size: 14.5px; font-weight: 500; color: #98a0bb;">Sign out</div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

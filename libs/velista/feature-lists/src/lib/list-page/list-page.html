@@ -213,6 +213,7 @@
             [highlight]="highlight()"
             [lines]="drawnLines()"
             [markedId]="markedLine()"
+            [tookId]="tookLine()"
           />
         }
 
@@ -306,6 +307,7 @@
             [highlight]="highlight()"
             [lines]="wantedLines()"
             [markedId]="markedLine()"
+            [tookId]="tookLine()"
           />
 
           <section aria-labelledby="due-label" class="due">
@@ -343,6 +345,7 @@
               [highlight]="highlight()"
               [lines]="restLines()"
               [markedId]="markedLine()"
+              [tookId]="tookLine()"
             />
           }
         } @else {
@@ -359,6 +362,7 @@
             [lines]="drawnLines()"
             [markedId]="markedLine()"
             [reordering]="reordering()"
+            [tookId]="tookLine()"
           />
         }
 
@@ -487,6 +491,11 @@
         The one field: it adds, and since velista 0117 it is also the list's search.
         What it finds is drawn in the page, in the results above.
       -->
+      <!--
+        The composer holds the words on a send (velista 0170): the page clears them
+        at once for an add it draws, and keeps them for an add that may come back
+        as a question. Escape belongs to the question while it is open.
+      -->
       <lib-line-composer
         (fieldFocused)="onFieldFocused($event)"
         (queryChanged)="onComposerQuery($event)"
@@ -494,11 +503,40 @@
         (spoke)="addAloud($event)"
         (submitted)="add($event)"
         [busy]="composerBusy()"
+        [escapeClears]="addChoice() === null"
+        [holdOnSend]="true"
         [resultsId]="resultsId"
         [takeFocus]="page.empty"
+        [voice]="voiceOffered()"
         libTourAnchor="list-composer"
       />
     </div>
+
+    <!--
+      Which line takes it? A typed name two or more lines with a product carry
+      (velista 0170, alternative D), held against the plus that was pressed.
+    -->
+    @if (addChoice(); as asked) {
+      <lib-anchored-popover
+        (closed)="closeChoice($event)"
+        [labelledBy]="choiceTitleId"
+        [open]="true"
+        [origin]="asked.anchor"
+        align="end"
+        frame="choice"
+      >
+        <lib-add-choice
+          (chose)="chooseLine($event)"
+          (dismissed)="closeChoice('escape')"
+          (newLine)="chooseNewLine()"
+          [added]="asked.entry.quantity"
+          [name]="choiceName()"
+          [rows]="choiceRows()"
+          [titleId]="choiceTitleId"
+          scope="list"
+        />
+      </lib-anchored-popover>
+    }
   }
 }
 

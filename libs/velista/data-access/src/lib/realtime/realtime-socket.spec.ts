@@ -4,6 +4,7 @@ import { APP_API_CONFIG } from '@portfolio/velista/models';
 import {
   AppResumed,
   ConnectionState,
+  LiveConnection,
   provideFakeBrowserFacade,
 } from '@portfolio/velista/platform';
 import { ApiUrl } from '../api-url';
@@ -138,6 +139,8 @@ describe('RealtimeSocket', () => {
   let authenticated: WritableSignal<boolean>;
   /** The resume counter `AppResumed` publishes. Bumped by hand, never by a browser. */
   let resumes: WritableSignal<number>;
+  /** `BrowserFacade.visible`, written by hand to hide and show the page. */
+  let visible: WritableSignal<boolean>;
   let token: string | null;
   let tokenCalls: number;
 
@@ -151,6 +154,10 @@ describe('RealtimeSocket', () => {
       throw new Error('no socket was created');
     }
     return last;
+  }
+
+  function live(): LiveConnection {
+    return TestBed.inject(LiveConnection);
   }
 
   function build(): RealtimeSocket {
@@ -179,6 +186,7 @@ describe('RealtimeSocket', () => {
     options = [];
     authenticated = signal(true);
     resumes = signal(0);
+    visible = signal(true);
     token = 'fresh-token';
     tokenCalls = 0;
     holdToken = false;
@@ -186,7 +194,7 @@ describe('RealtimeSocket', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        provideFakeBrowserFacade(),
+        provideFakeBrowserFacade(undefined, { visible }),
         // The resume edge, faked rather than driven through a document: what this
         // transport reacts to is the count moving, and how the browser said so is
         // `app-resumed.spec.ts`'s business.
@@ -256,7 +264,6 @@ describe('RealtimeSocket', () => {
       TestBed.tick();
 
       expect(client.connected()).toBe(false);
-      expect(client.degraded()).toBe(false);
       expect(client.refusedZones().size).toBe(0);
     });
   });
@@ -296,26 +303,40 @@ describe('RealtimeSocket', () => {
     });
   });
 
-  describe('R3, the degraded latch', () => {
-    it('latches after two consecutive failed connects and stops calling the factory', async () => {
+  // Replaces "R3, the degraded latch". Plan 0168 removed the latch (D1): the client used
+  // to stop after two failed connects, and on Android both were spent while the screen
+  // was off. These specs assert the rule that took its place.
+  describe('R3, retry without end and never while hidden (replaces the degraded latch, plan 0168)', () => {
+    /** Pin the jitter to the top of its range, so every wait is its ceiling. */
+    function jitterAtCeiling(): void {
+      jest.spyOn(Math, 'random').mockReturnValue(0.9999);
+    }
+
+    afterEach(() => jest.restoreAllMocks());
+
+    it('still schedules an eleventh attempt after ten failures, under a ceiling that stops at 30 s', async () => {
       jest.useFakeTimers();
+      jitterAtCeiling();
       try {
-        const client = build();
+        build();
         await settle();
 
+        for (let failure = 1; failure < 10; failure += 1) {
+          socket().driveConnectError();
+          jest.advanceTimersByTime(30_000);
+          await settle();
+          expect(sockets.length).toBe(failure + 1);
+        }
+
+        // The tenth failure. Its ceiling would be 512 s without the cap.
         socket().driveConnectError();
-        expect(client.degraded()).toBe(false);
-
-        jest.runOnlyPendingTimers();
+        jest.advanceTimersByTime(29_000);
         await settle();
-        expect(sockets.length).toBe(2);
+        expect(sockets.length).toBe(10);
 
-        socket().driveConnectError();
-        expect(client.degraded()).toBe(true);
-
-        jest.runOnlyPendingTimers();
+        jest.advanceTimersByTime(1_000);
         await settle();
-        expect(sockets.length).toBe(2);
+        expect(sockets.length).toBe(11);
       } finally {
         jest.useRealTimers();
       }
@@ -324,77 +345,158 @@ describe('RealtimeSocket', () => {
     it('counts a connect that is dropped straight away, which is what a bad token looks like', async () => {
       // The server answers a bad token by disconnecting inside `handleConnection`, with
       // no error at all. Clearing the counter on `connect` would reset it on exactly the
-      // failure the counter exists to catch, and the client would loop forever.
+      // failure the counter exists to catch, and the client would reconnect in a tight
+      // loop. Counted, the backoff spaces the attempts out instead.
       jest.useFakeTimers();
+      jitterAtCeiling();
       try {
-        const client = build();
+        build();
         await settle();
 
         socket().driveConnect();
         socket().driveDisconnect();
-        jest.runOnlyPendingTimers();
+        jest.advanceTimersByTime(1_000);
         await settle();
+        expect(sockets.length).toBe(2);
 
         socket().driveConnect();
         socket().driveDisconnect();
-
-        expect(client.degraded()).toBe(true);
-      } finally {
-        jest.useRealTimers();
-      }
-    });
-
-    it('re-arms on retry()', async () => {
-      jest.useFakeTimers();
-      try {
-        const client = build();
+        jest.advanceTimersByTime(1_500);
         await settle();
-        socket().driveConnectError();
-        jest.runOnlyPendingTimers();
-        await settle();
-        socket().driveConnectError();
-        expect(client.degraded()).toBe(true);
+        expect(sockets.length).toBe(2);
 
-        client.retry();
+        jest.advanceTimersByTime(500);
         await settle();
-
-        expect(client.degraded()).toBe(false);
         expect(sockets.length).toBe(3);
       } finally {
         jest.useRealTimers();
       }
     });
 
-    it('re-arms when the app comes back from the background', async () => {
-      // Plan 0035, section 3. Regaining the network used to be the only re-arm, and a
-      // backgrounded app never lost it: the browser froze the page, closed the socket
-      // and stopped the timers, so the app came back latched `degraded` waiting for an
-      // `online` event that will never fire. `onLine` is deliberately untouched here,
-      // because that is the whole of the bug.
+    it('schedules nothing for a failure while the page is hidden', async () => {
       jest.useFakeTimers();
       try {
-        const client = build();
+        build();
+        await settle();
+        socket().driveConnect();
+
+        visible.set(false);
+        TestBed.tick();
+        socket().driveDisconnect();
+        jest.advanceTimersByTime(120_000);
+        await settle();
+
+        expect(sockets.length).toBe(1);
+        expect(live().phase()).toBe('down');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('retries a failure that landed while hidden when the page shows again in the same flush', async () => {
+      // The page hides, the socket fails, and the page shows again, all before the
+      // visibility effect runs. The effect sees no edge, so no resume comes; the
+      // failure must therefore have read the visibility the effect last saw, and
+      // scheduled its retry as on a visible page.
+      jest.useFakeTimers();
+      try {
+        build();
+        await settle();
+        socket().driveConnect();
+
+        visible.set(false);
+        socket().driveDisconnect();
+        visible.set(true);
+        TestBed.tick();
+        jest.advanceTimersByTime(120_000);
+        await settle();
+
+        expect(sockets.length).toBe(2);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('opens no socket while the page is hidden, even for a new session', async () => {
+      visible.set(false);
+      build();
+      await settle();
+
+      expect(sockets).toEqual([]);
+      expect(live().phase()).toBe('down');
+    });
+
+    it('attempts at once on the visible edge, with the backoff reset', async () => {
+      jest.useFakeTimers();
+      jitterAtCeiling();
+      try {
+        build();
         await settle();
         socket().driveConnectError();
-        jest.runOnlyPendingTimers();
+        jest.advanceTimersByTime(1_000);
         await settle();
         socket().driveConnectError();
-        expect(client.degraded()).toBe(true);
+
+        visible.set(false);
+        TestBed.tick();
+        visible.set(true);
+        TestBed.tick();
+        await settle();
+        expect(sockets.length).toBe(3);
+
+        // Reset: the next failure waits a second, not four.
+        socket().driveConnectError();
+        jest.advanceTimersByTime(1_000);
+        await settle();
+        expect(sockets.length).toBe(4);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('attempts at once when AppResumed moves, which is how a back/forward cache restore says so', async () => {
+      // `onLine` is deliberately untouched: a backgrounded app never lost the network
+      // as far as the browser knows, so no `online` event comes (plan 0035, section 3).
+      jest.useFakeTimers();
+      jitterAtCeiling();
+      try {
+        build();
+        await settle();
+        socket().driveConnectError();
+        jest.advanceTimersByTime(1_000);
+        await settle();
+        socket().driveConnectError();
+        expect(sockets.length).toBe(2);
 
         resumes.set(1);
         TestBed.tick();
         await settle();
 
-        expect(client.degraded()).toBe(false);
         expect(sockets.length).toBe(3);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('skips the wait on retry()', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        socket().driveConnectError();
+
+        client.retry();
+        await settle();
+
+        expect(sockets.length).toBe(2);
       } finally {
         jest.useRealTimers();
       }
     });
 
     it('opens no second socket when a resume finds a healthy one', async () => {
-      // Unconditional and close to free: `_start` returns immediately when a socket is
-      // already open, so a person glancing at their phone costs nothing.
+      // Close to free: `_start` returns immediately when a socket is already open, so a
+      // person glancing at their phone costs nothing.
       const client = build();
       await settle();
       socket().driveConnect();
@@ -406,6 +508,157 @@ describe('RealtimeSocket', () => {
 
       expect(sockets.length).toBe(1);
       expect(client.connected()).toBe(true);
+    });
+  });
+
+  describe('the stale rule, after a long absence (plan 0168, D2)', () => {
+    it('drops the held socket and opens a new one after 46 s hidden', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        socket().driveConnect();
+        const first = socket();
+
+        // The first socket's ask is still out when the stale rule drops it, so its
+        // reconcile pass is in flight across the drop. A dropped socket never answers,
+        // so the ask ends the way the library ends it: the five second timeout.
+        let timeOutFirst: () => void = () => undefined;
+        first.answers.set('zone.subscribe', [
+          new Promise((_resolve, reject) => {
+            timeOutFirst = () => reject(new Error('operation has timed out'));
+          }),
+        ]);
+        client.subscribeZone('z1');
+        await settle();
+
+        visible.set(false);
+        TestBed.tick();
+        jest.advanceTimersByTime(46_000);
+        visible.set(true);
+        TestBed.tick();
+        await settle();
+
+        expect(first.connected).toBe(false);
+        expect(sockets.length).toBe(2);
+
+        // The dropped socket's own disconnect belongs to an old generation and
+        // schedules nothing.
+        first.driveDisconnect();
+        jest.advanceTimersByTime(60_000);
+        await settle();
+        expect(sockets.length).toBe(2);
+
+        // The new socket's connect asks while the old pass still runs, so it only
+        // leaves the flag. The old pass then bails on the moved generation, and its
+        // `finally` is what starts the pass that joins the room on the new socket.
+        socket().driveConnect();
+        await settle();
+        expect(socket().bodiesFor('zone.subscribe')).toEqual([]);
+        timeOutFirst();
+        await settle();
+        expect(socket().bodiesFor('zone.subscribe')).toEqual([
+          { zoneId: 'z1' },
+        ]);
+        expect(client.reconnects()).toBe(1);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('ignores a join that the dropped socket acknowledges late, and the new socket still asks for the room', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        socket().driveConnect();
+        const first = socket();
+
+        // This time the dropped socket's ask ends with a yes. That answer is about a
+        // connection that no longer exists, so it must not count the room as joined.
+        let acceptFirst: () => void = () => undefined;
+        first.answers.set('zone.subscribe', [
+          new Promise((resolve) => {
+            acceptFirst = () => resolve({ ok: true });
+          }),
+        ]);
+        client.subscribeZone('z1');
+        await settle();
+
+        visible.set(false);
+        TestBed.tick();
+        jest.advanceTimersByTime(46_000);
+        visible.set(true);
+        TestBed.tick();
+        await settle();
+        expect(sockets.length).toBe(2);
+
+        socket().driveConnect();
+        await settle();
+        acceptFirst();
+        await settle();
+
+        expect(socket()).not.toBe(first);
+        expect(socket().bodiesFor('zone.subscribe')).toEqual([
+          { zoneId: 'z1' },
+        ]);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('keeps the held socket after 30 s hidden, and reports it up again', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        socket().driveConnect();
+
+        visible.set(false);
+        TestBed.tick();
+        expect(live().phase()).toBe('down');
+        jest.advanceTimersByTime(30_000);
+        visible.set(true);
+        TestBed.tick();
+        await settle();
+
+        expect(sockets.length).toBe(1);
+        expect(client.connected()).toBe(true);
+        expect(live().phase()).toBe('up');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  describe('the phase LiveConnection holds', () => {
+    it('is off for an anonymous caller', async () => {
+      authenticated.set(false);
+      build();
+      await settle();
+
+      expect(live().phase()).toBe('off');
+    });
+
+    it('is down while connecting, up on connect, down on loss and off on sign out', async () => {
+      jest.useFakeTimers();
+      try {
+        build();
+        await settle();
+        expect(live().phase()).toBe('down');
+
+        socket().driveConnect();
+        expect(live().phase()).toBe('up');
+
+        socket().driveDisconnect();
+        expect(live().phase()).toBe('down');
+
+        authenticated.set(false);
+        TestBed.tick();
+        expect(live().phase()).toBe('off');
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 
@@ -430,7 +683,6 @@ describe('RealtimeSocket', () => {
         await settle();
         socket().driveConnectError();
 
-        expect(client.degraded()).toBe(true);
         expect(failure).not.toHaveBeenCalled();
         expect(reachable).not.toHaveBeenCalled();
       } finally {
@@ -454,6 +706,39 @@ describe('RealtimeSocket', () => {
 
       expect(sockets.length).toBe(1);
       expect(client.connected()).toBe(true);
+    });
+  });
+
+  describe('reconnects, the edge plan 0169 reads', () => {
+    it('is 0 after the first connect, 1 after the second, and 0 after sign out', async () => {
+      jest.useFakeTimers();
+      try {
+        const client = build();
+        await settle();
+        expect(client.reconnects()).toBe(0);
+
+        socket().driveConnect();
+        expect(client.reconnects()).toBe(0);
+
+        socket().driveDisconnect();
+        jest.runOnlyPendingTimers();
+        await settle();
+        socket().driveConnect();
+        expect(client.reconnects()).toBe(1);
+
+        authenticated.set(false);
+        TestBed.tick();
+        expect(client.reconnects()).toBe(0);
+
+        // A new session starts from zero, so its first connect is not a reconnect.
+        authenticated.set(true);
+        TestBed.tick();
+        await settle();
+        socket().driveConnect();
+        expect(client.reconnects()).toBe(0);
+      } finally {
+        jest.useRealTimers();
+      }
     });
   });
 

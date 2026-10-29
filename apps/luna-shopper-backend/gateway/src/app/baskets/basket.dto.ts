@@ -27,6 +27,7 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
+import { ADD_CHOICE_DOCS, NotBesideNewLine } from '../lists/list.dto';
 
 /**
  * Request bodies for the basket (plan 0136).
@@ -276,6 +277,31 @@ export class AddBasketLineDto {
   @IsOptional()
   @IsBoolean()
   named?: boolean;
+
+  // The three fields of plan 0228, as the list's own add takes them: the
+  // basket's add is that add, so it asks the same question.
+  @ApiPropertyOptional({ description: ADD_CHOICE_DOCS.askIfAmbiguous })
+  @Transform(
+    ({ obj }: { obj: Record<string, unknown> }) => obj?.['askIfAmbiguous']
+  )
+  @IsOptional()
+  @IsBoolean()
+  askIfAmbiguous?: boolean;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: ADD_CHOICE_DOCS.intoLineId,
+  })
+  @IsOptional()
+  @IsUUID()
+  @NotBesideNewLine()
+  intoLineId?: string;
+
+  @ApiPropertyOptional({ description: ADD_CHOICE_DOCS.newLine })
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['newLine'])
+  @IsOptional()
+  @IsBoolean()
+  newLine?: boolean;
 }
 
 /**

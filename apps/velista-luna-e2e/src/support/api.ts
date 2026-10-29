@@ -81,6 +81,75 @@ export async function login(email: string): Promise<Session> {
 export const ALICE_EMAIL = 'alice@example.com';
 export const DANA_EMAIL = 'dana@example.com';
 
+/** Every demo user a spec signs in as through the app (velista `0173`). */
+export const DEMO_USER_EMAILS = [ALICE_EMAIL, DANA_EMAIL] as const;
+
+// --- The terms (velista 0173) -------------------------------------------------
+
+/** What `GET /v1/legal/settings` says about the terms, the part a spec reads. */
+export interface LegalTermsSettings {
+  published: boolean;
+  terms: { version: string; acceptanceRequired: boolean };
+}
+
+/** `GET /v1/legal/settings`: public, so no session. */
+export async function legalSettings(): Promise<LegalTermsSettings> {
+  const ctx = await request.newContext({
+    baseURL: GATEWAY_URL,
+    ignoreHTTPSErrors: true,
+  });
+  try {
+    const res = await ctx.get('/v1/legal/settings');
+    await expect(res, 'GET /v1/legal/settings').toBeOK();
+    return (await res.json()) as LegalTermsSettings;
+  } finally {
+    await ctx.dispose();
+  }
+}
+
+/** What `GET /v1/account/me` says about the terms. */
+export interface AccountTermsView {
+  currentVersion: string;
+  acceptedVersion: string | null;
+  acceptanceRequired: boolean;
+}
+
+/** `GET /v1/account/me`, the terms block. */
+export async function accountTerms(s: Session): Promise<AccountTermsView> {
+  const me = await s.get<{ terms: AccountTermsView }>('/v1/account/me');
+  return me.terms;
+}
+
+/** `POST /v1/account/terms-acceptances` with the version the deployment asks for. */
+export async function acceptTerms(s: Session, version: string): Promise<void> {
+  await s.post('/v1/account/terms-acceptances', { version });
+}
+
+/**
+ * Accept the current terms for each demo user, once, before any spec signs in.
+ *
+ * With `TERMS_ACCEPTANCE_REQUIRED` on, a seeded account has accepted nothing, so every
+ * `signIn` would land on the prompt instead of home. The specs stay about their own
+ * subject; the prompt is proved by `velista-e2e`'s stubbed `terms.spec.ts`. A
+ * deployment that asks nothing is left alone. Accepting twice is one fact on the
+ * server, so a run against a world a previous run accepted changes nothing.
+ */
+export async function acceptTermsForDemoUsers(): Promise<void> {
+  const settings = await legalSettings();
+  if (!settings.published || !settings.terms.acceptanceRequired) {
+    return;
+  }
+
+  for (const email of DEMO_USER_EMAILS) {
+    const session = await login(email);
+    try {
+      await acceptTerms(session, settings.terms.version);
+    } finally {
+      await session.dispose();
+    }
+  }
+}
+
 // --- Zone lines --------------------------------------------------------------
 
 export interface LineView {

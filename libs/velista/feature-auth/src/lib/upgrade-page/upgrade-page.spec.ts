@@ -1,19 +1,33 @@
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
   fakeAuthService,
+  fakeOperatorSettingsStore,
   fakeZoneStore,
   GatewayError,
+  GoogleSignIn,
+  MEMORY_OPERATOR_SETTINGS,
+  ProfileStore,
   provideAccountNotice,
   provideFakeAuthService,
+  provideFakeOperatorSettingsStore,
   provideFakeZoneStore,
   TokenStore,
   type FakeAuthService,
 } from '@portfolio/velista/data-access';
-import type { MyZone, SessionTokens } from '@portfolio/velista/models';
+import type {
+  MyZone,
+  OperatorSettings,
+  SessionTokens,
+  UserProfile,
+} from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { LegalLinks } from '@portfolio/velista/ui';
+import { AccountForm } from '../account-form/account-form';
 import { UpgradePage } from './upgrade-page';
 
 const GUEST_ID = 'u-guest';
@@ -52,6 +66,10 @@ interface Options {
   readonly auth?: FakeAuthService;
   /** What a forced refresh answers, for the raced-tabs case (section 3.2). */
   readonly refreshTo?: SessionTokens | null;
+  /** The operator's settings (velista 0173). */
+  readonly settings?: OperatorSettings;
+  /** The profile this document already read, or null. */
+  readonly heldProfile?: UserProfile | null;
 }
 
 async function render(options: Options = {}) {
@@ -72,6 +90,15 @@ async function render(options: Options = {}) {
     refresh: jest.fn(async () => options.refreshTo ?? null),
   };
 
+  const google = { start: jest.fn().mockResolvedValue(undefined) };
+  const settings = fakeOperatorSettingsStore(
+    options.settings ?? MEMORY_OPERATOR_SETTINGS
+  );
+  const profile = {
+    profile: signal<UserProfile | null>(options.heldProfile ?? null),
+    load: jest.fn().mockResolvedValue(undefined),
+  };
+
   await TestBed.configureTestingModule({
     imports: [UpgradePage, RokuTranslatorTestingModule.forTesting()],
     providers: [
@@ -80,7 +107,10 @@ async function render(options: Options = {}) {
       provideFakeZoneStore(zones),
       provideFakeAuthService(auth),
       provideAccountNotice(),
+      provideFakeOperatorSettingsStore(settings),
       { provide: TokenStore, useValue: tokens },
+      { provide: GoogleSignIn, useValue: google },
+      { provide: ProfileStore, useValue: profile },
     ],
   }).compileComponents();
 
@@ -96,8 +126,17 @@ async function render(options: Options = {}) {
     zones,
     router,
     tokens,
+    google,
+    settings,
+    profile,
     notice: TestBed.inject(AccountNotice),
   };
+}
+
+/** The form upgrade shares with register (velista 0173), which holds the fields. */
+function form(fixture: ComponentFixture<UpgradePage>): AccountForm {
+  return fixture.debugElement.query(By.directive(AccountForm))
+    .componentInstance as AccountForm;
 }
 
 /**
@@ -108,11 +147,13 @@ function fill(
   fixture: ComponentFixture<UpgradePage>,
   email: string,
   password: string,
-  confirmPassword: string = password
+  confirmPassword: string = password,
+  accepted = true
 ): void {
-  fixture.componentInstance.email.set(email);
-  fixture.componentInstance.password.set(password);
-  fixture.componentInstance.confirmPassword.set(confirmPassword);
+  form(fixture).email.set(email);
+  form(fixture).password.set(password);
+  form(fixture).confirmPassword.set(confirmPassword);
+  form(fixture).accepted.set(accepted);
   fixture.detectChanges();
 }
 
@@ -214,7 +255,9 @@ describe('UpgradePage', () => {
       const { fixture } = await render();
       const host = fixture.nativeElement as HTMLElement;
 
-      expect(host.querySelectorAll('input')).toHaveLength(3);
+      expect(
+        host.querySelectorAll('input:not([type="checkbox"])')
+      ).toHaveLength(3);
       expect(host.querySelector('#upgrade-password')).not.toBeNull();
       expect(host.querySelector('#upgrade-confirm-password')).not.toBeNull();
       expect(host.querySelectorAll('.password-rule')).toHaveLength(1);
@@ -225,7 +268,7 @@ describe('UpgradePage', () => {
 
       fill(fixture, 'marta@example.com', 'password123', '');
 
-      expect(fixture.componentInstance.canSubmit()).toBe(false);
+      expect(form(fixture).canSubmit()).toBe(false);
     });
 
     it('sends nothing when the two passwords differ', async () => {
@@ -237,7 +280,7 @@ describe('UpgradePage', () => {
 
       expect(auth.calls).toEqual([]);
       expect(router.navigateByUrl).not.toHaveBeenCalled();
-      expect(fixture.componentInstance.error()).toEqual({
+      expect(form(fixture).shown()).toEqual({
         key: 'auth.error.passwordMismatch',
         placement: 'password',
       });
@@ -338,14 +381,105 @@ describe('UpgradePage', () => {
     });
   });
 
-  it('offers no Google button, because it would lose the groups', async () => {
-    // Until the gateway passes `linkUserId`, `googleLogin` takes the create branch and
-    // mints a fresh registered user, which is exactly what this screen promises will
-    // not happen (section 5.6).
+  /**
+   * Velista 0173, D6: Google is offered here as on register. The state carries this
+   * guest's bearer, so the guest is linked in place and keeps every group (backend
+   * 0230).
+   */
+  describe('Google', () => {
+    it('is offered, and starts with the version of the terms', async () => {
+      const { fixture, google } = await render();
+
+      (
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-google-option button'
+        ) as HTMLButtonElement
+      ).click();
+      await fixture.whenStable();
+
+      expect(google.start).toHaveBeenCalledWith({
+        acceptedTermsVersion: MEMORY_OPERATOR_SETTINGS.terms.version,
+      });
+    });
+
+    it('is not drawn where the deployment has no Google client', async () => {
+      const { fixture } = await render({
+        settings: {
+          ...MEMORY_OPERATOR_SETTINGS,
+          features: {
+            ...MEMORY_OPERATOR_SETTINGS.features,
+            googleSignIn: false,
+          },
+        },
+      });
+
+      expect(
+        (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-google-option'
+        )
+      ).toBeNull();
+    });
+  });
+
+  /** Velista 0173: the same box as register, and the version sent with the upgrade. */
+  describe('the terms', () => {
+    it('sends the version the box was ticked for', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(auth.termsVersions).toEqual([
+        MEMORY_OPERATOR_SETTINGS.terms.version,
+      ]);
+    });
+
+    it('sends nothing with the box clear', async () => {
+      const { fixture, auth } = await render();
+
+      fill(fixture, 'marta@example.com', 'password123', 'password123', false);
+      submit(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(auth.calls).toEqual([]);
+      expect(form(fixture).shown()?.key).toBe('legal.accept.unticked');
+    });
+
+    it('opens the documents as sheets over this form', async () => {
+      const { fixture } = await render();
+
+      expect(form(fixture).termsUrl()).toBe('/en/auth/upgrade/sheet/terms');
+      expect(form(fixture).privacyUrl()).toBe('/en/auth/upgrade/sheet/privacy');
+    });
+
+    it('reads a profile it already held again, so it stops asking for the terms', async () => {
+      const held: UserProfile = {
+        userId: GUEST_ID,
+        kind: 'TEMPORARY',
+        username: 'dani',
+        email: null,
+        emailVerified: false,
+        displayName: null,
+      };
+      const { fixture, profile } = await render({ heldProfile: held });
+
+      fill(fixture, 'marta@example.com', 'password123');
+      submit(fixture);
+      await fixture.whenStable();
+
+      expect(profile.load).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it('links the privacy policy and the terms at its foot (velista 0172)', async () => {
     const { fixture } = await render();
 
-    expect(
-      (fixture.nativeElement as HTMLElement).querySelector('lib-google-option')
-    ).toBeNull();
+    const found = fixture.debugElement.query(By.directive(LegalLinks));
+    expect(found).not.toBeNull();
+    const links = found.componentInstance as LegalLinks;
+    expect(links.privacyUrl()).toMatch(/\/privacy$/);
+    expect(links.termsUrl()).toMatch(/\/terms$/);
   });
 });

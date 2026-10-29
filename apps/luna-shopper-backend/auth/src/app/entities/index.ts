@@ -1,15 +1,19 @@
+import { AccountDeletion } from './account-deletion.entity';
 import { AdminLoginFailure } from './admin-login-failure.entity';
 import { AdminUser } from './admin-user.entity';
 import { AuthAudit } from './auth-audit.entity';
 import { Credential } from './credential.entity';
 import { EmailVerification } from './email-verification.entity';
 import { ImpersonationSession } from './impersonation-session.entity';
+import { OAuthHandoff } from './oauth-handoff.entity';
 import { OAuthIdentity } from './oauth-identity.entity';
 import { OAuthState } from './oauth-state.entity';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
+import { TermsAcceptance } from './terms-acceptance.entity';
 import { User } from './user.entity';
 
+export { AccountDeletion } from './account-deletion.entity';
 export { AdminLoginFailure } from './admin-login-failure.entity';
 export { AdminUser } from './admin-user.entity';
 export {
@@ -21,6 +25,7 @@ export { BaseEntity } from './base.entity';
 export { Credential } from './credential.entity';
 export { EmailVerification } from './email-verification.entity';
 export { ImpersonationSession } from './impersonation-session.entity';
+export { OAuthHandoff } from './oauth-handoff.entity';
 export { OAuthIdentity } from './oauth-identity.entity';
 export { OAuthState } from './oauth-state.entity';
 export {
@@ -29,6 +34,7 @@ export {
   PasswordResetSpentAs,
 } from './password-reset.entity';
 export { RefreshToken } from './refresh-token.entity';
+export { TermsAcceptance, TermsAcceptanceVia } from './terms-acceptance.entity';
 export { User } from './user.entity';
 
 /** Every auth entity, for TypeOrmModule registration and the CLI data source. */
@@ -39,10 +45,16 @@ export const AUTH_ENTITIES = [
   EmailVerification,
   PasswordReset,
   OAuthState,
+  // A Google sign in staged at the callback (plan 0230), beside the state it
+  // was copied from.
+  OAuthHandoff,
   // A support session (plan 0194), before the refresh tokens that may name
   // one.
   ImpersonationSession,
   RefreshToken,
+  // Which Terms each account accepted (plan 0231). It references the user and
+  // nothing references it.
+  TermsAcceptance,
   // The operator identity (plan 0071). Last, and separate: it references nothing
   // above it and nothing above it references it.
   AdminUser,
@@ -52,4 +64,7 @@ export const AUTH_ENTITIES = [
   // The row it describes is named by table and id rather than by a foreign key,
   // so the trail outlives whatever it recorded.
   AuthAudit,
+  // The outbox of `user.deleted` (plan 0232, section 5). It references nothing:
+  // the user it names is gone by the time its row commits.
+  AccountDeletion,
 ];

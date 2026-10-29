@@ -9,7 +9,8 @@ Secret.
 
 Call with a dict:
   (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>
-        "env" <environment label> "tag" <imageTag>)
+        "env" <environment label> "tag" <imageTag>
+        "legal" <.Values.lunaShopperBackend.legal>)
 
 `env` is now a telemetry label read from .Values.environment rather than a
 dimension the chart branches on: this release is one environment (plan 0002), so
@@ -22,6 +23,7 @@ them.
 {{- $sec := .sec -}}
 {{- $env := .env -}}
 {{- $tag := .tag -}}
+{{- $legal := .legal -}}
 # Common to every service.
 - name: PORT
   value: {{ $svc.port | quote }}
@@ -127,13 +129,19 @@ own body parser, mounted ahead of the 100 KB default because Nest's built in one
 cannot vary per route. Gateway only: the harvester reads the document off a
 broker message, and NATS carries 8 MB.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "HARVESTER_FILE_IMPORT_MAX_BYTES") }}
+{{- /*
+What GET /v1/legal/settings reports (plan 0231, section 5.3): the switch, the
+retention periods, and support sessions, which auth alone enforces and the
+gateway only reports.
+*/}}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "HARVESTER_FILE_IMPORT_MAX_BYTES" "TERMS_ACCEPTANCE_REQUIRED" "LEGAL_OFFSITE_BACKUPS" "LEGAL_BACKUP_RETENTION_DAYS" "LEGAL_APPLICATION_LOG_DAYS" "LEGAL_ASSISTANT_LOG_DAYS" "RETENTION_AUDIT" "RETENTION_ADMIN_LOGIN_FAILURES" "RETENTION_EXPIRED_GRANTS" "IMPERSONATION_ENABLED") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
+{{- include "lunaShopperBackend.operatorEnv" (dict "legal" $legal "keys" (list "LEGAL_APP_NAME" "LEGAL_CONTROLLER_NAME" "LEGAL_CONTACT_EMAIL" "LEGAL_HOSTING_PROVIDER" "LEGAL_EMAIL_PROVIDER" "LEGAL_BACKUP_PROVIDER" "LEGAL_TERMS_REVISION" "LEGAL_PRIVACY_REVISION")) }}
 {{- end }}
 {{- if eq $svc.role "core" }}
 - name: CORE_DB_URL
@@ -161,8 +169,12 @@ broker message, and NATS carries 8 MB.
 The second half of plan 0045 section 6's cap, from the same two ConfigMap keys the
 gateway reads. Core owns the `bytea` the recording is written into, so it refuses a
 payload that reached the broker without passing the interceptor.
+
+RETENTION_AUDIT is how long core_audit is kept (plan 0233). The sweep's own
+interval, batch and switch are not in the chart: their defaults are the
+deployment's answer.
 */}}
-{{- range $key := (list "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES") }}
+{{- range $key := (list "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "RETENTION_AUDIT") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -204,6 +216,13 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: HARVESTER_ACTOR_ID
+# How long catalog_audit is kept (plan 0233). The sweep's own interval, batch
+# and switch are not in the chart: their defaults are the deployment's answer.
+- name: RETENTION_AUDIT
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: RETENTION_AUDIT
 {{- end }}
 {{- if eq $svc.role "harvester" }}
 # The harvester (plan 0038). It owns the fourth database, verifies tokens offline
@@ -246,25 +265,19 @@ payload that reached the broker without passing the interceptor.
 # application data only through the API carrying the caller's own token, and it
 # holds no credential of its own beyond the provider key below.
 #
-# GEMINI_API_KEY is in `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so an
-# operator with no key gets a service that boots and answers 501 on its one route
-# rather than a pod stuck in CreateContainerConfigError and a cluster that never
-# comes up (plan 0026). Nothing here may be made required without breaking that.
-- name: GEMINI_API_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ $sec }}
-      key: GEMINI_API_KEY
-# The Claude key (plan 0224), optional by the same rule and in the same list. It
-# answers a turn only when ASSISTANT_PROVIDER is `claude`; Gemini still hears, so
-# the key above stays. ANTHROPIC_BASE_URL is not here, like GEMINI_BASE_URL: a
-# stand in is a development thing.
+# The Claude key (plan 0224), the only provider key since plan 0236. It is in
+# `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so an operator with no key gets
+# a service that boots and answers 501 on its one route rather than a pod stuck
+# in CreateContainerConfigError and a cluster that never comes up (plan 0026).
+# Nothing here may be made required without breaking that. No key hears: the
+# transcriber does, at TRANSCRIBER_URL below (plan 0235). ANTHROPIC_BASE_URL is
+# not here: a stand in is a development thing.
 - name: ANTHROPIC_API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ $sec }}
       key: ANTHROPIC_API_KEY
-{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_PROVIDER" "ASSISTANT_CLAUDE_EFFORT" "ASSISTANT_CLAUDE_THINKING" "ASSISTANT_MODEL" "ASSISTANT_TRANSCRIPTION_MODEL" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK" "ASSISTANT_TURN_TIMEOUT_MS") }}
+{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_CLAUDE_EFFORT" "ASSISTANT_CLAUDE_THINKING" "ASSISTANT_MODEL" "ASSISTANT_MODERATION" "ASSISTANT_MODERATION_MODEL" "ASSISTANT_EMERGENCY_NUMBER" "TRANSCRIBER_URL" "TRANSCRIBER_TURN_TIMEOUT_MS" "TRANSCRIBER_COMMENT_TIMEOUT_MS" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK" "ASSISTANT_TURN_TIMEOUT_MS" "ASSISTANT_TURNS_PER_DAY" "ASSISTANT_TURNS_PER_MONTH" "ASSISTANT_AUDIO_SECONDS_PER_DAY" "ASSISTANT_AUDIO_SECONDS_PER_MONTH" "COMMENT_AUDIO_SECONDS_PER_DAY" "COMMENT_AUDIO_SECONDS_PER_MONTH" "ASSISTANT_COST_PER_DAY_MICRO_USD" "ASSISTANT_COST_PER_MONTH_MICRO_USD" "ASSISTANT_TURNS_PER_DAY_GUEST" "ASSISTANT_TURNS_PER_MONTH_GUEST" "ASSISTANT_AUDIO_SECONDS_PER_DAY_GUEST" "ASSISTANT_AUDIO_SECONDS_PER_MONTH_GUEST" "COMMENT_AUDIO_SECONDS_PER_DAY_GUEST" "COMMENT_AUDIO_SECONDS_PER_MONTH_GUEST" "ASSISTANT_COST_PER_DAY_MICRO_USD_GUEST" "ASSISTANT_COST_PER_MONTH_MICRO_USD_GUEST" "ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD" "ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD" "ASSISTANT_TURN_RESERVE_MICRO_USD" "ASSISTANT_ALLOWANCE_TIMEZONE") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -311,15 +324,50 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: SMTP_PASS
-{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "IMPERSONATION_ENABLED" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL") }}
+{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "IMPERSONATION_ENABLED" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL" "TERMS_ACCEPTANCE_REQUIRED" "RETENTION_AUDIT" "RETENTION_ADMIN_LOGIN_FAILURES" "RETENTION_EXPIRED_GRANTS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
+{{- /*
+The Terms revision only (plan 0231, section 5.1): auth computes the version it
+records from it, with the function the gateway publishes it with.
+*/}}
+{{- include "lunaShopperBackend.operatorEnv" (dict "legal" $legal "keys" (list "LEGAL_TERMS_REVISION")) }}
 {{- end }}
 {{- end }}
+
+{{/*
+The operator's own legal values (plan 0231, section 5.1), one env entry per key.
+
+A key set in lunaShopperBackend.legal renders as a literal value, for a self
+hoster with a private values file. An empty one is read from the operator Secret,
+which provision-release.sh writes from a file outside the repository and never
+from the chart: the owner's values files are public, so his entries stay empty
+and his values live only in the cluster. A Secret of its own rather than keys in
+the app Secret, so that rewriting the operator's name can never touch a password.
+
+Call with a dict:
+  (dict "legal" <.Values.lunaShopperBackend.legal> "keys" <list of env names>)
+*/}}
+{{- define "lunaShopperBackend.operatorEnv" -}}
+{{- $legal := .legal | default dict -}}
+{{- $fields := dict "LEGAL_APP_NAME" "appName" "LEGAL_CONTROLLER_NAME" "controllerName" "LEGAL_CONTACT_EMAIL" "contactEmail" "LEGAL_HOSTING_PROVIDER" "hostingProvider" "LEGAL_EMAIL_PROVIDER" "emailProvider" "LEGAL_BACKUP_PROVIDER" "backupProvider" "LEGAL_TERMS_REVISION" "termsRevision" "LEGAL_PRIVACY_REVISION" "privacyRevision" -}}
+{{- range $key := .keys }}
+{{- $value := get $legal (get $fields $key) | default "" | toString }}
+- name: {{ $key }}
+{{- if $value }}
+  value: {{ $value | quote }}
+{{- else }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ $legal.secret | default "luna-shopper-backend-operator" }}
+      key: {{ $key }}
+{{- end }}
+{{- end }}
+{{- end -}}
 
 {{/*
 Luna Shopper migration Job env (plan 0002, section 5; the failure below is plan

@@ -2,11 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -14,32 +14,19 @@ import {
 import {
   AccountNotice,
   AUTH_SERVICE,
-  SessionStore,
+  GoogleSignIn,
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import { AuthScreen, LegalLinks } from '@portfolio/velista/ui';
 import {
-  AuthScreen,
-  EmailField,
-  FormError,
-  GoogleOption,
-  PASSWORD_MIN_LENGTH,
-  PasswordField,
-  SpinnerIcon,
-} from '@portfolio/velista/ui';
+  AccountForm,
+  type AccountFormValue,
+} from '../account-form/account-form';
 import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
+import { authTerms } from '../auth-terms';
 import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
-
-const ERROR_ID = 'register-error';
-
-/**
- * Something, an @, something, a dot, something, with no spaces (velista `0160`).
- *
- * Looser than the gateway's `@IsEmail()` on purpose: this only answers the obvious
- * miss before a round trip, and the server still refuses whatever this lets past.
- */
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
  * Making an account, for somebody who has nothing to lose yet.
@@ -62,37 +49,21 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * lands on the dashboard, signed in, with a dismissible nudge and no blocking step
  * anywhere (section 5.2).
  *
- * ## Three fields
+ * ## The form is `AccountForm`
  *
- * No display name: the backend generates a username regardless of what is sent, and
- * nothing in the app renders a display name. No strength meter either, because nothing
- * the server checks is behind one.
- *
- * There **is** a confirm password field, and section 5.1 argued against one on the
- * grounds that the server does not check it. That is the wrong test: the server cannot
- * check it, because only this screen ever sees the password twice. A typo in the one
- * field nobody can read back produces an account whose password is not the one its
- * owner believes they chose, and the product has no way out of that worth having:
- * signing in fails with the deliberately incurious "that email and password do not
- * match", and the reset flow this app cannot reach yet is what would be needed to
- * recover. Typing it twice is the only check available anywhere, which is why it
- * belongs here rather than nowhere.
- *
- * The mismatch is checked **on submit** rather than as the second field is typed. A
- * password that does not match yet while it is being entered is not wrong, it is
- * unfinished, which is the same reasoning that makes the length rule a rule rather
- * than an error.
+ * The three fields, the checkbox for the terms, the checks before the request and the
+ * Google option live in the form register and upgrade share (velista `0173`). The
+ * confirmation and the order of the checks are recorded there. This page makes the
+ * call, offers sign in on a `conflict`, and draws the footer.
  */
 @Component({
   selector: 'lib-register-page',
   imports: [
     RokuTranslatorPipe,
+    AccountForm,
     AuthScreen,
-    EmailField,
-    FormError,
-    GoogleOption,
-    PasswordField,
-    SpinnerIcon,
+    LegalLinks,
+    RouterOutlet,
   ],
   templateUrl: './register-page.html',
   styleUrl: './register-page.scss',
@@ -100,114 +71,75 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 })
 export class RegisterPage {
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
-  private readonly _session = inject(SessionStore);
+  private readonly _google = inject(GoogleSignIn);
   private readonly _notice = inject(AccountNotice);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
-  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _form = viewChild(AccountForm);
+
+  /** Where the two legal links at the foot of the screen go (velista `0172`). */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
+
+  /** The terms over this form, Google, and the version a press accepts (velista `0173`). */
+  readonly terms = authTerms(['auth', 'register']);
 
   /** The page to come back to, carried on from sign in (velista `0154`). */
   private readonly _returnUrl = safeReturnUrl(
     inject(ActivatedRoute).snapshot.queryParamMap.get(RETURN_URL_PARAM)
   );
 
-  readonly errorId = ERROR_ID;
-  readonly minPasswordLength = PASSWORD_MIN_LENGTH;
-
-  readonly email = signal('');
-  readonly password = signal('');
-  readonly confirmPassword = signal('');
   readonly submitting = signal(false);
   readonly error = signal<AuthErrorCopy | null>(null);
 
+  /** See `SignInPage.googleStarting`. */
+  readonly googleStarting = signal(false);
+
+  /** See `SignInPage.googleError`. */
+  readonly googleError = signal<AuthErrorCopy | null>(null);
+
   /**
-   * All three fields non empty, and nothing else.
+   * The form passed its own checks: make the account.
    *
-   * Neither the length rule nor the match is a condition on the button. The rule is
-   * stated on screen from the start and enforced by the server, and disabling the
-   * button until either is met would leave somebody staring at a control that will not
-   * press with no message saying why. A short password comes back as a
-   * `validation_failed` against the password field and a mismatch is answered by
-   * `submit`, and both are sentences somebody can act on (section 5.5).
-   *
-   * Since velista `0160`, `submit` also answers the address shape and the length before
-   * the request. The button still presses: the check spares the round trip and draws
-   * the same sentence the server's 400 would, and it is not a condition on the button.
+   * The version sent is the one the settings name at this press (velista `0173`,
+   * target 3). A refusal about it reads the settings again, and the form clears its box
+   * and links the new terms.
    */
-  readonly canSubmit = computed(
-    () =>
-      this.email() !== '' &&
-      this.password() !== '' &&
-      this.confirmPassword() !== '' &&
-      !this.submitting()
-  );
-
-  /** Never to a guest. See the same computed on `SignInPage` for why it matters. */
-  readonly googleOffered = computed(() => !this._session.isGuest());
-
-  /** See `SignInPage.onSubmit` for why this is `(submit)` and not `(ngSubmit)`. */
-  onSubmit(event: Event): void {
-    event.preventDefault();
-    void this.submit();
-  }
-
-  async submit(): Promise<void> {
-    if (!this.canSubmit()) {
+  async submit(value: AccountFormValue): Promise<void> {
+    if (this.submitting()) {
       return;
     }
 
-    // Before the request, with the sentence the server's 400 would draw (velista
-    // `0160`). The server still checks both, and stays the authority.
-    if (!EMAIL_SHAPE.test(this.email().trim())) {
-      this.error.set({ key: 'auth.error.badEmail', placement: 'email' });
-      this._focusFirstField();
-      return;
-    }
-
-    // Code points, as the DTO counts them, so an emoji is one character here too.
-    if (Array.from(this.password()).length < PASSWORD_MIN_LENGTH) {
-      this.error.set({
-        key: 'auth.error.shortPassword',
-        placement: 'password',
-      });
-      this._focusPasswordField();
-      return;
-    }
-
-    // Before the request, because there is nothing to ask the server: it sees one
-    // password and cannot know it was typed wrong. Compared exactly, with no trimming
-    // and no case folding, since both of those are characters somebody may genuinely
-    // have meant and a check that ignored them would pass a pair that does not match.
-    if (this.password() !== this.confirmPassword()) {
-      this.error.set({
-        key: 'auth.error.passwordMismatch',
-        placement: 'password',
-      });
-      this._focusConfirmField();
-      return;
-    }
-
-    const email = this.email().trim();
     this.submitting.set(true);
     this.error.set(null);
 
     try {
-      await this._auth.register(email, this.password());
+      await this._auth.register(
+        value.email,
+        value.password,
+        this.terms.version()
+      );
 
       // The address the dashboard's nudge names back at them. It is the only place
-      // the app knows it: the token pair carries no email and `GET /v1/account/me` is
-      // out of scope for this plan.
-      this._notice.set('registered', email);
+      // the app knows it: the token pair carries no email.
+      this._notice.set('registered', value.email);
 
       await this._router.navigateByUrl(
         this._returnUrl ?? appPath(this._locale(), this._basePath, 'home')
       );
     } catch (error) {
       this.submitting.set(false);
-      this.error.set(authErrorCopy(error, 'auth.register'));
-      this._focusFirstField();
+      const copy = authErrorCopy(error, 'auth.register');
+      this.error.set(copy);
+      if (copy.placement === 'terms') {
+        this.terms.reload();
+      } else {
+        this._form()?.focusFirst();
+      }
     }
   }
 
@@ -224,7 +156,7 @@ export class RegisterPage {
    * (section 5.5).
    */
   signIn(): void {
-    const email = this.email().trim();
+    const email = this._form()?.email().trim() ?? '';
     void this._router.navigate(
       [appPath(this._locale(), this._basePath, 'auth', 'login')],
       {
@@ -238,36 +170,27 @@ export class RegisterPage {
     );
   }
 
-  readonly pendingRoutes = signal<readonly string[]>([]);
-
-  continueWithGoogle(): void {
-    this.pendingRoutes.update((current) => [...current, 'auth.google']);
-  }
-
-  private _focusFirstField(): void {
-    this._host.nativeElement
-      .querySelector<HTMLInputElement>('input[type="email"]')
-      ?.focus();
-  }
-
-  /** The first password box, which is the one a short password is about. */
-  private _focusPasswordField(): void {
-    this._host.nativeElement
-      .querySelector<HTMLInputElement>('#register-password')
-      ?.focus();
-  }
-
   /**
-   * The second password box, which is the one a mismatch is about.
-   *
-   * By id rather than by type, because the reveal toggle swaps a password input's type
-   * to `text` and a selector on the type would miss a revealed field. The first box is
-   * deliberately not focused: its contents are the ones being confirmed, so sending
-   * somebody back to it invites them to change the wrong one.
+   * See `SignInPage.continueWithGoogle`, which this is the same as. The line under the
+   * button names the terms, so the version goes with the start (velista `0173`).
    */
-  private _focusConfirmField(): void {
-    this._host.nativeElement
-      .querySelector<HTMLInputElement>('#register-confirm-password')
-      ?.focus();
+  async continueWithGoogle(): Promise<void> {
+    if (this.googleStarting()) {
+      return;
+    }
+
+    this.googleStarting.set(true);
+    this.googleError.set(null);
+
+    try {
+      await this._google.start({ acceptedTermsVersion: this.terms.version() });
+    } catch (error) {
+      this.googleStarting.set(false);
+      const copy = authErrorCopy(error, 'auth.google');
+      if (copy.placement === 'terms') {
+        this.terms.reload();
+      }
+      this.googleError.set(copy);
+    }
   }
 }

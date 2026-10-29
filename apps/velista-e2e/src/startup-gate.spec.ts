@@ -46,8 +46,9 @@ test.describe('the startup gate', () => {
     // waits. Its guard reads only the local session store, so the URL is reached and
     // settled without the backend; what is held is only the drawing. A guarded page
     // like a group's would not do here (`authenticatedGuard` sends an anonymous
-    // visitor to landing, which draws), and neither would a URL that matches nothing
-    // (the app's 404 hangs outside `AppLayout`, where there is no gate to see).
+    // visitor to landing, which draws). A URL that matches nothing would do as well,
+    // since the app's 404 is a page inside `AppLayout` and waits behind the gate too,
+    // but a real page says more about what the gate holds.
     await page.goto('/en/auth/login');
 
     // The panel inside the screen, because the host element is inline with block

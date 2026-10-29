@@ -1,6 +1,8 @@
 import { ASSISTANT_PATTERNS } from '../../lib/messages/assistant.messages';
 import {
   array,
+  boolean,
+  integer,
   JsonSchema,
   nonEmptyString,
   nullableString,
@@ -30,6 +32,14 @@ export const ASSISTANT_SCHEMA_IDS = {
   turnScope: schemaId('assistant/TurnScope'),
   transcribeRequest: schemaId('msg/assistant/transcribeRequest'),
   transcribeResponse: schemaId('msg/assistant/transcribeResponse'),
+  // What this deployment's assistant can do (plan 0231, section 3).
+  capabilitiesRequest: schemaId('msg/assistant.capabilities/request'),
+  capabilities: schemaId('assistant/AssistantCapabilities'),
+  // The caller's own allowance (plan 0234, section 8.2).
+  allowanceRequest: schemaId('msg/assistant.allowance/request'),
+  allowanceCounter: schemaId('assistant/AllowanceCounter'),
+  allowancePeriod: schemaId('assistant/AllowancePeriodView'),
+  allowanceView: schemaId('assistant/AssistantAllowanceView'),
 } as const;
 
 const assistantMessage = object(
@@ -106,6 +116,9 @@ const turnRequest = object(
     message: nonEmptyString(),
     // Optional, and its absence is the unscoped turn plan 0039 built.
     scope: ref(ASSISTANT_SCHEMA_IDS.turnScope),
+    // The caller's kind, which picks the guest allowance (plan 0234). Optional
+    // for a gateway one release behind, which the assistant counts as a guest.
+    kind: ref(ENUM_IDS.userKind),
   },
   ['userId', 'authorization', 'transcript', 'message']
 );
@@ -132,6 +145,7 @@ const voiceRequest = object(
     audio: nonEmptyString(),
     mimeType: nonEmptyString(),
     scope: ref(ASSISTANT_SCHEMA_IDS.turnScope),
+    kind: ref(ENUM_IDS.userKind),
   },
   ['userId', 'authorization', 'transcript', 'audio', 'mimeType']
 );
@@ -158,9 +172,11 @@ const turnResponse = object(
 /**
  * Words out of a recording (plan 0041, section 3.2).
  *
- * No `userId` and no `authorization`, and their absence is the contract: nothing
- * is being read on anybody's behalf, so there is nothing for rule A1 to enforce
- * and no credential this call could need.
+ * No `authorization`, and its absence is the contract: nothing is being read
+ * on anybody's behalf, so there is nothing for rule A1 to enforce and no
+ * credential this call could need. `userId` and `kind` name whose comment audio
+ * allowance the recording counts against (plan 0234, section 6), and nothing
+ * is read with them.
  */
 const transcribeRequest = object(
   ASSISTANT_SCHEMA_IDS.transcribeRequest,
@@ -170,6 +186,9 @@ const transcribeRequest = object(
     audio: nonEmptyString(),
     mimeType: nonEmptyString(),
     locale: nonEmptyString(),
+    purpose: { type: 'string', enum: ['turn', 'comment'] },
+    userId: nonEmptyString(),
+    kind: ref(ENUM_IDS.userKind),
   },
   ['audio', 'mimeType', 'locale']
 );
@@ -182,6 +201,67 @@ const transcribeResponse = object(
   ['text']
 );
 
+const capabilitiesRequest = object(
+  ASSISTANT_SCHEMA_IDS.capabilitiesRequest,
+  {},
+  []
+);
+
+const capabilities = object(
+  ASSISTANT_SCHEMA_IDS.capabilities,
+  {
+    answers: boolean(),
+    hears: boolean(),
+    textProvider: { anyOf: [ref(ENUM_IDS.aiTextProvider), { type: 'null' }] },
+  },
+  ['answers', 'hears', 'textProvider']
+);
+
+const allowanceRequest = object(
+  ASSISTANT_SCHEMA_IDS.allowanceRequest,
+  {
+    userId: nonEmptyString(),
+    kind: ref(ENUM_IDS.userKind),
+  },
+  ['userId', 'kind']
+);
+
+const allowanceCounter = object(
+  ASSISTANT_SCHEMA_IDS.allowanceCounter,
+  {
+    used: integer({ minimum: 0 }),
+    limit: integer({ minimum: 0 }),
+  },
+  ['used', 'limit']
+);
+
+const allowancePeriod = object(
+  ASSISTANT_SCHEMA_IDS.allowancePeriod,
+  {
+    turns: ref(ASSISTANT_SCHEMA_IDS.allowanceCounter),
+    assistantAudioSeconds: ref(ASSISTANT_SCHEMA_IDS.allowanceCounter),
+    commentAudioSeconds: ref(ASSISTANT_SCHEMA_IDS.allowanceCounter),
+    // ISO 8601 with the offset of the deployment's allowance timezone.
+    resetsAt: nonEmptyString({ format: 'date-time' }),
+  },
+  ['turns', 'assistantAudioSeconds', 'commentAudioSeconds', 'resetsAt']
+);
+
+/**
+ * A person's usage against their limits (plan 0234, section 8.2). No money: a
+ * person has no use for micro dollars, and the turn limit is already lowered
+ * to what money allows.
+ */
+const allowanceView = object(
+  ASSISTANT_SCHEMA_IDS.allowanceView,
+  {
+    day: ref(ASSISTANT_SCHEMA_IDS.allowancePeriod),
+    month: ref(ASSISTANT_SCHEMA_IDS.allowancePeriod),
+    deploymentAvailable: boolean(),
+  },
+  ['day', 'month', 'deploymentAvailable']
+);
+
 export const assistantSchemas: JsonSchema[] = [
   assistantMessage,
   assistantListLink,
@@ -192,6 +272,12 @@ export const assistantSchemas: JsonSchema[] = [
   turnResponse,
   transcribeRequest,
   transcribeResponse,
+  capabilitiesRequest,
+  capabilities,
+  allowanceRequest,
+  allowanceCounter,
+  allowancePeriod,
+  allowanceView,
 ];
 
 export const assistantMessageContracts: Record<
@@ -213,5 +299,13 @@ export const assistantMessageContracts: Record<
   [ASSISTANT_PATTERNS.transcribe]: {
     request: ASSISTANT_SCHEMA_IDS.transcribeRequest,
     response: ASSISTANT_SCHEMA_IDS.transcribeResponse,
+  },
+  [ASSISTANT_PATTERNS.capabilities]: {
+    request: ASSISTANT_SCHEMA_IDS.capabilitiesRequest,
+    response: ASSISTANT_SCHEMA_IDS.capabilities,
+  },
+  [ASSISTANT_PATTERNS.allowance]: {
+    request: ASSISTANT_SCHEMA_IDS.allowanceRequest,
+    response: ASSISTANT_SCHEMA_IDS.allowanceView,
   },
 };

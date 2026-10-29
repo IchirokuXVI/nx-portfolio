@@ -40,8 +40,38 @@
     @if (errorKey(); as key) {
       <p class="error" id="create-zone-error" role="alert">
         <lib-alert-icon aria-hidden="true" class="glyph" />
-        {{ key | rokuT }}
+        <!-- A refusal about the terms links them (velista 0173); any other sentence
+             has no brackets and is drawn as text. -->
+        <span>
+          <lib-linked-text [href]="termsUrl()" [text]="key | rokuT" />
+        </span>
       </p>
+    }
+
+    @if (mintingAccount()) {
+      @if (termsUrl(); as terms) {
+        <!--
+          What the press makes, standing before it is pressed (velista 0173, target 5):
+          an account on this phone, and the terms accepted. Above the button, read on
+          the way to it, and the same while the request runs. It replaces the line that
+          used to appear only while submitting.
+        -->
+        <p class="terms-notice" id="create-zone-notice">
+          <lib-info-icon aria-hidden="true" class="glyph" />
+          <span>
+            <lib-linked-text
+              [href]="terms"
+              [text]="'legal.accept.createNotice' | rokuT"
+            />
+          </span>
+        </p>
+      } @else if (submitting()) {
+        <!-- No terms published: the account is still told about while it happens. -->
+        <p class="notice">
+          <lib-info-icon aria-hidden="true" class="glyph" />
+          {{ 'entry.createZone.mintingAccount' | rokuT }}
+        </p>
+      }
     }
 
     <!--
@@ -51,6 +81,9 @@
     <button
       (click)="submit()"
       [attr.aria-busy]="submitting()"
+      [attr.aria-describedby]="
+        mintingAccount() && termsUrl() !== null ? 'create-zone-notice' : null
+      "
       [disabled]="!canSubmit()"
       class="primary"
       type="button"
@@ -63,16 +96,7 @@
       }
     </button>
 
-    @if (submitting()) {
-      @if (mintingAccount()) {
-        <!-- An account appearing is something the person is told about while it
-             happens, rather than something they discover afterwards. -->
-        <p class="notice">
-          <lib-info-icon aria-hidden="true" class="glyph" />
-          {{ 'entry.createZone.mintingAccount' | rokuT }}
-        </p>
-      }
-    } @else {
+    @if (!submitting()) {
       <!-- Gone while the request is in flight: the write has already left, so
            offering to back out of it would be a lie. -->
       <button (click)="shell.requestDismiss()" class="cancel" type="button">

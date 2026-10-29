@@ -375,4 +375,37 @@ describe('TripStore (velista 0088)', () => {
     expect(store.state()).toBe('idle');
     expect(store.past()).toEqual([]);
   });
+
+  describe('a reconnect (velista 0169)', () => {
+    it('reads nothing at construction, nor with no list open', async () => {
+      jest.useFakeTimers();
+      const { fake, realtime } = await build();
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(TRIPS_REFETCH_QUIET_MS);
+
+      expect(fake.heads).toHaveLength(0);
+    });
+
+    it('reads the heads of the open list again, quietly', async () => {
+      jest.useFakeTimers();
+      const old = trip('b-old');
+      const { store, fake, realtime } = await opened({
+        live: [],
+        items: [old],
+        nextCursor: null,
+      });
+      TestBed.tick();
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      jest.advanceTimersByTime(TRIPS_REFETCH_QUIET_MS);
+
+      expect(fake.heads).toHaveLength(2);
+      expect(fake.heads[1].options?.cursor).toBeUndefined();
+      expect(store.state()).toBe('loaded');
+    });
+  });
 });

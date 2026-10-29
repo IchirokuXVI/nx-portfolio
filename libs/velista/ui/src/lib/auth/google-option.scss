@@ -48,3 +48,14 @@
 .glyph {
   font-size: var(--app-icon-md);
 }
+
+// What the press means, under the button it is about (velista 0173). Small secondary
+// text and no container, so it reads as the button's caption.
+.terms-line {
+  margin: var(--app-space-3) 0 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-align: center;
+  text-wrap: pretty;
+}

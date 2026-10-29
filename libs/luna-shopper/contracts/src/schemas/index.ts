@@ -15,12 +15,17 @@ export { ADMIN_CORE_SCHEMA_IDS } from './messages/admin-core.schemas';
 export { ADMIN_DASHBOARD_SCHEMA_IDS } from './messages/admin-dashboard.schemas';
 export { ADMIN_USERS_SCHEMA_IDS } from './messages/admin-users.schemas';
 export { APP_STATE_SCHEMA_IDS } from './messages/app-state.schemas';
-export { AUTH_SCHEMA_IDS } from './messages/auth.schemas';
+export { ASSISTANT_ALLOWANCE_SCHEMA_IDS } from './messages/assistant-allowance.schemas';
+export {
+  ACCEPTED_TERMS_VERSION_MAX_LENGTH,
+  AUTH_SCHEMA_IDS,
+} from './messages/auth.schemas';
 export { BASKET_SHARING_SCHEMA_IDS } from './messages/basket-sharing.schemas';
 export { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
 export { CATALOG_SCHEMA_IDS } from './messages/catalog.schemas';
 export { HARVEST_SCHEMA_IDS } from './messages/harvest.schemas';
 export { IMPERSONATION_SCHEMA_IDS } from './messages/impersonation.schemas';
+export { LEGAL_SCHEMA_IDS } from './messages/legal.schemas';
 export { LIST_SCHEMA_IDS } from './messages/list.schemas';
 export { MERGE_SCHEMA_IDS } from './messages/merge.schemas';
 export { PROFILE_SCHEMA_IDS } from './messages/profile.schemas';

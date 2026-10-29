@@ -16,6 +16,13 @@ export type AcceptSourceEntryDto = {
 };
 
 /**
+ * `AcceptTermsDto` in the gateway's OpenAPI document.
+ */
+export type AcceptTermsDto = {
+  version: string;
+};
+
+/**
  * `AcknowledgeBasketChangesDto` in the gateway's OpenAPI document.
  */
 export type AcknowledgeBasketChangesDto = {
@@ -31,6 +38,9 @@ export type AddBasketLineDto = {
   quantity?: number;
   itemIds?: string[];
   named?: boolean;
+  askIfAmbiguous?: boolean;
+  intoLineId?: string;
+  newLine?: boolean;
 };
 
 /**
@@ -86,6 +96,9 @@ export type AddLineDto = {
   itemIds?: string[];
   named?: boolean;
   productGroupId?: string;
+  askIfAmbiguous?: boolean;
+  intoLineId?: string;
+  newLine?: boolean;
 };
 
 /**
@@ -423,6 +436,15 @@ export type CreateSupermarketLocationDto = {
 export type CreateZoneDto = {
   name: string;
   username?: string;
+  acceptedTermsVersion?: string;
+};
+
+/**
+ * `ExchangeGoogleSignInDto` in the gateway's OpenAPI document.
+ */
+export type ExchangeGoogleSignInDto = {
+  code: string;
+  codeVerifier: string;
 };
 
 /**
@@ -494,6 +516,7 @@ export type JoinBasketDto = {
 export type JoinZoneDto = {
   joinCode: string;
   username?: string;
+  acceptedTermsVersion?: string;
 };
 
 /**
@@ -569,6 +592,14 @@ export type MapSourceLocationDto = {
 };
 
 /**
+ * `MintOAuthStateDto` in the gateway's OpenAPI document.
+ */
+export type MintOAuthStateDto = {
+  codeChallenge: string;
+  acceptedTermsVersion?: string;
+};
+
+/**
  * `NearbyShopsDto` in the gateway's OpenAPI document.
  */
 export type NearbyShopsDto = {
@@ -615,6 +646,7 @@ export type ProblemDetails = {
     | 'line_merge_required'
     | 'line_merge_needs_approval'
     | 'line_merge_too_many_products'
+    | 'line_add_needs_choice'
     | 'brand_label_empty'
     | 'brand_key_taken'
     | 'brand_link_to_self'
@@ -654,6 +686,9 @@ export type ProblemDetails = {
     | 'recovery_other_account'
     | 'recovery_needs_email'
     | 'recovery_needs_password'
+    | 'terms_version_stale'
+    | 'terms_acceptance_missing'
+    | 'assistant_allowance_reached'
     | 'internal';
   detail?: string;
   message: string;
@@ -777,6 +812,7 @@ export type RegisterDto = {
   email: string;
   password: string;
   displayName?: string;
+  acceptedTermsVersion?: string;
 };
 
 /**
@@ -1336,6 +1372,7 @@ export type UpgradeDto = {
   email: string;
   password: string;
   displayName?: string;
+  acceptedTermsVersion?: string;
 };
 
 /**
@@ -1912,6 +1949,33 @@ export type AdminAdminEnvironmentResponse = {
 };
 
 /**
+ * `assistant.AllowanceCounter` in the gateway's OpenAPI document.
+ */
+export type AssistantAllowanceCounter = {
+  used: number;
+  limit: number;
+};
+
+/**
+ * `assistant.AllowancePeriodView` in the gateway's OpenAPI document.
+ */
+export type AssistantAllowancePeriodView = {
+  turns: AssistantAllowanceCounter;
+  assistantAudioSeconds: AssistantAllowanceCounter;
+  commentAudioSeconds: AssistantAllowanceCounter;
+  resetsAt: string;
+};
+
+/**
+ * `assistant.AssistantAllowanceView` in the gateway's OpenAPI document.
+ */
+export type AssistantAssistantAllowanceView = {
+  day: AssistantAllowancePeriodView;
+  month: AssistantAllowancePeriodView;
+  deploymentAvailable: boolean;
+};
+
+/**
  * `assistant.AssistantChoice` in the gateway's OpenAPI document.
  */
 export type AssistantAssistantChoice = {
@@ -1986,6 +2050,14 @@ export type AuthSuggestUsernameResult = {
 };
 
 /**
+ * `auth.TermsAcceptanceView` in the gateway's OpenAPI document.
+ */
+export type AuthTermsAcceptanceView = {
+  version: string;
+  acceptedAt: string;
+};
+
+/**
  * `auth.UserProfileView` in the gateway's OpenAPI document.
  */
 export type AuthUserProfileView = {
@@ -1995,6 +2067,8 @@ export type AuthUserProfileView = {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+  termsAcceptedVersion: string | null;
+  termsAcceptedAt: string | null;
 };
 
 /**
@@ -3702,6 +3776,11 @@ export type EnumsAdapterKey =
   | 'manual';
 
 /**
+ * `enums.AiTextProvider` in the gateway's OpenAPI document.
+ */
+export type EnumsAiTextProvider = 'anthropic';
+
+/**
  * `enums.AuthProvider` in the gateway's OpenAPI document.
  */
 export type EnumsAuthProvider = 'GOOGLE' | 'EMAIL';
@@ -4168,8 +4247,59 @@ export type GatewayAccountMeView = {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+  termsAcceptedVersion: string | null;
+  termsAcceptedAt: string | null;
   appState: CoreUserAppStateView;
   permissions: EnumsPermission[];
+  terms: GatewayAccountTermsView;
+};
+
+/**
+ * `gateway.AccountTermsView` in the gateway's OpenAPI document.
+ */
+export type GatewayAccountTermsView = {
+  currentVersion: string;
+  acceptedVersion: string | null;
+  acceptanceRequired: boolean;
+};
+
+/**
+ * `gateway.LegalSettingsView` in the gateway's OpenAPI document.
+ */
+export type GatewayLegalSettingsView = {
+  appName: string;
+  controllerName: string | null;
+  contactEmail: string | null;
+  published: boolean;
+  terms: {
+    version: string;
+    updatedOn: string;
+    acceptanceRequired: boolean;
+  };
+  privacy: {
+    updatedOn: string;
+  };
+  features: {
+    googleSignIn: boolean;
+    assistant: boolean;
+    transcription: boolean;
+    offsiteBackups: boolean;
+    supportAccess: boolean;
+  };
+  processors: {
+    hosting: string | null;
+    email: string | null;
+    aiText: EnumsAiTextProvider | null;
+    offsiteBackups: string | null;
+  };
+  retention: {
+    auditTrailDays: number;
+    adminLoginFailureDays: number;
+    expiredGrantDays: number;
+    applicationLogDays: number;
+    assistantLogDays: number;
+    backupDays: number | null;
+  };
 };
 
 /**

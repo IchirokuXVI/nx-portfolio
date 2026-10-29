@@ -422,7 +422,7 @@ export class ListsController {
 
   @Post(':id/lines')
   @ApiContractResponse(LINE_PATTERNS.add, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, lineAddChoice: true })
   addLine(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
@@ -436,6 +436,9 @@ export class ListsController {
       itemIds: dto.itemIds,
       productGroupId: dto.productGroupId,
       named: dto.named,
+      askIfAmbiguous: dto.askIfAmbiguous,
+      intoLineId: dto.intoLineId,
+      newLine: dto.newLine,
     });
   }
 
@@ -800,7 +803,9 @@ export class LinesController {
     //
     // The normalised type, the same one core stored, so a recording is described
     // to the provider exactly as it is described in the database.
-    this.transcription.schedule(comment, file.buffer, contentType);
+    // The uploader is the author, so the token's kind is the author's (plan
+    // 0234, section 6).
+    this.transcription.schedule(comment, file.buffer, contentType, user.kind);
 
     return comment;
   }

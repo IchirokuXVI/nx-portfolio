@@ -1,6 +1,6 @@
 import type { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import type { Line, Page } from '@portfolio/velista/models';
+import type { AddLineOptions, Line, Page } from '@portfolio/velista/models';
 import {
   provideFakeBrowserFacade,
   provideVelistaTesting,
@@ -87,10 +87,24 @@ function service(seed: readonly Line[]) {
   let readFailsWith: Error | null = null;
   /** The line the next edit reports as absorbed by a merge (backend plan 0112). */
   let absorbNext: string | null = null;
+  /** The line the next add answers as raised, `merged: true` (velista `0170`). */
+  let raiseNext: Line | null = null;
+  /** What each add said about a name the list holds, in order (backend `0228`). */
+  const addOptions: (AddLineOptions | undefined)[] = [];
+
+  /** Set while the reads after the first are held open, opened by `releaseFollowUps`. */
+  let followUps: Promise<void> | null = null;
+  let openFollowUps: (() => void) | null = null;
 
   const impl: LineServiceI = {
     listLines: async (): Promise<Page<Line>> => {
       calls.push('list');
+      if (
+        followUps !== null &&
+        calls.filter((call) => call === 'list').length > 1
+      ) {
+        await followUps;
+      }
       if (readFailsWith !== null) {
         const error = readFailsWith;
         readFailsWith = null;
@@ -121,17 +135,32 @@ function service(seed: readonly Line[]) {
           version: 1,
         })
       ),
-    addLineResult: async (listId, content, quantity) => ({
-      line: await answer(
-        line('server-id', {
-          listId,
-          content,
-          quantity: quantity ?? 1,
-          version: 1,
-        })
-      ),
-      merged: false,
-    }),
+    addLineResult: async (
+      listId,
+      content,
+      quantity,
+      _itemIds,
+      _named,
+      options
+    ) => {
+      addOptions.push(options);
+      const raised = raiseNext;
+      raiseNext = null;
+      if (raised !== null) {
+        return { line: await answer(raised), merged: true };
+      }
+      return {
+        line: await answer(
+          line('server-id', {
+            listId,
+            content,
+            quantity: quantity ?? 1,
+            version: 1,
+          })
+        ),
+        merged: false,
+      };
+    },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
       const absorbedLineId = absorbNext;
       absorbNext = null;
@@ -217,6 +246,21 @@ function service(seed: readonly Line[]) {
     },
     absorbNext: (lineId: string) => {
       absorbNext = lineId;
+    },
+    raiseNext: (value: Line) => {
+      raiseNext = value;
+    },
+    addOptions,
+    /** The rest of a long list stays out until `releaseFollowUps`. */
+    holdFollowUps: () => {
+      followUps = new Promise<void>((resolve) => {
+        openFollowUps = resolve;
+      });
+    },
+    releaseFollowUps: () => {
+      followUps = null;
+      openFollowUps?.();
+      openFollowUps = null;
     },
     holdWrites: () => {
       held = new Promise<void>((resolve) => {
@@ -426,6 +470,268 @@ describe('LineStore', () => {
 
       expect(outcome.state).toBe('failed');
       expect(store.linesIn(LIST)).toHaveLength(0);
+    });
+  });
+
+  /**
+   * A typed name already on the list (velista `0170`, targets 2 and 3).
+   *
+   * The server can answer an add with a line the list already held, raised. That
+   * line stays where it is, and no row is drawn and taken away for it.
+   */
+  describe('an add that raises a line already held (velista 0170)', () => {
+    const milk = (overrides: Partial<Line> = {}) =>
+      line('milk', {
+        content: 'Leche entera',
+        named: false,
+        itemIds: ['item-milk'],
+        quantity: 2,
+        position: 1,
+        ...overrides,
+      });
+
+    it('answers merged, and raises the line in its own place', async () => {
+      const { store, lines } = await build([
+        milk(),
+        line('bread', { content: 'Pan', position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+
+      const outcome = await store.addLine(
+        LIST,
+        'Leche entera',
+        1,
+        ME,
+        ASKS_FIRST,
+        undefined,
+        undefined,
+        { askIfAmbiguous: true }
+      );
+
+      expect(outcome).toEqual(
+        expect.objectContaining({ state: 'added', merged: true })
+      );
+      // The raised line is first still, and nothing else is on the list.
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
+      expect(store.linesIn(LIST)[0].quantity).toBe(3);
+      expect(lines.addOptions).toEqual([{ askIfAmbiguous: true }]);
+    });
+
+    it('draws no row before the answer when a loaded line has the typed name', async () => {
+      const { store, lines } = await build([milk()]);
+      await store.load(LIST);
+      lines.holdWrites();
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+
+      // Folded as the server folds it: case, accents and spaces do not matter.
+      const adding = store.addLine(
+        LIST,
+        '  LECHE   éntera ',
+        1,
+        ME,
+        ASKS_FIRST
+      );
+
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk']);
+      lines.releaseWrites();
+      await adding;
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk']);
+    });
+
+    it('still draws the row at once for a name no loaded line has', async () => {
+      const { store } = await build([milk()]);
+      await store.load(LIST);
+
+      const adding = store.addLine(LIST, 'Huevos', 1, ME, ASKS_FIRST);
+
+      expect(store.linesIn(LIST)).toHaveLength(2);
+      await adding;
+    });
+
+    it('does not count a turned down line as one the add will meet', async () => {
+      const { store } = await build([milk({ approvalStatus: 'REJECTED' })]);
+      await store.load(LIST);
+
+      expect(store.drawsBeforeAnswer(LIST, 'Leche entera')).toBe(true);
+    });
+
+    it('draws no row for a line the person chose', async () => {
+      const { store } = await build([milk()]);
+      await store.load(LIST);
+
+      expect(
+        store.drawsBeforeAnswer(LIST, 'Huevos', undefined, {
+          intoLineId: 'milk',
+        })
+      ).toBe(false);
+    });
+
+    it('draws a product add at once whatever its name', async () => {
+      const { store } = await build([milk()]);
+      await store.load(LIST);
+
+      expect(store.drawsBeforeAnswer(LIST, 'Leche entera', ['item-milk'])).toBe(
+        true
+      );
+    });
+
+    it('leaves no placeholder behind when an optimistic add is answered as a raise', async () => {
+      // A product add draws at once and can still meet a line (backend 0091): the
+      // placeholder goes and the held line takes the units in its place.
+      const { store, lines } = await build([
+        milk(),
+        line('bread', { content: 'Pan', position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+
+      const adding = store.addLine(
+        LIST,
+        'Leche entera',
+        1,
+        ME,
+        ASKS_FIRST,
+        ['item-milk'],
+        false
+      );
+      expect(store.linesIn(LIST)).toHaveLength(3);
+      await adding;
+
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
+      expect(store.linesIn(LIST)[0].quantity).toBe(3);
+      expect(store.writeNoteOf(store.linesIn(LIST)[0].id)).toBeNull();
+    });
+
+    it('leaves no ghost when the echo of the raise arrives before the answer', async () => {
+      const { store, lines, realtime } = await build([
+        milk(),
+        line('bread', { content: 'Pan', position: 2 }),
+      ]);
+      await store.load(LIST);
+      lines.holdWrites();
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+
+      const adding = store.addLine(
+        LIST,
+        'Leche entera',
+        1,
+        ME,
+        ASKS_FIRST,
+        ['item-milk'],
+        false
+      );
+      realtime.emit('line.updated', milk({ quantity: 3, version: 2 }));
+      lines.releaseWrites();
+      await adding;
+
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
+      expect(store.linesIn(LIST)[0].quantity).toBe(3);
+    });
+
+    it('keeps a newer echo over an older answer', async () => {
+      const { store, lines, realtime } = await build([milk()]);
+      await store.load(LIST);
+      lines.holdWrites();
+      lines.raiseNext(milk({ quantity: 3, version: 2 }));
+
+      const adding = store.addLine(LIST, 'Leche entera', 1, ME, ASKS_FIRST);
+      // Somebody else raised it again before this answer got back.
+      realtime.emit('line.updated', milk({ quantity: 4, version: 3 }));
+      lines.releaseWrites();
+      await adding;
+
+      expect(store.linesIn(LIST)[0].quantity).toBe(4);
+    });
+
+    it('puts a raised line it does not hold where the order puts it', async () => {
+      const { store, lines } = await build([
+        line('eggs', { content: 'Huevos', position: 1 }),
+        line('bread', { content: 'Pan', position: 5 }),
+      ]);
+      await store.load(LIST);
+      lines.raiseNext(milk({ quantity: 1, version: 2, position: 3 }));
+
+      await store.addLine(LIST, 'Leche entera', 1, ME, ASKS_FIRST);
+
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual([
+        'eggs',
+        'milk',
+        'bread',
+      ]);
+    });
+
+    it('draws a raised line once when the rest of a long list brings it again', async () => {
+      const { store, lines } = await build();
+      lines.setPages([
+        [line('eggs', { content: 'Huevos', position: 1 })],
+        [milk({ position: 3 }), line('bread', { content: 'Pan', position: 5 })],
+      ]);
+      lines.holdFollowUps();
+      await store.load(LIST);
+      lines.raiseNext(milk({ quantity: 3, version: 2, position: 3 }));
+
+      await store.addLine(LIST, 'Leche entera', 1, ME, ASKS_FIRST);
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['eggs', 'milk']);
+
+      lines.releaseFollowUps();
+      await new Promise((resolve) => setTimeout(resolve));
+
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual([
+        'eggs',
+        'milk',
+        'bread',
+      ]);
+      // The raise is newer than the page, so it is the one kept.
+      expect(store.linesIn(LIST)[1].quantity).toBe(3);
+    });
+
+    it('puts a new line at the end when no row was drawn for it', async () => {
+      const { store } = await build([milk(), line('bread', { position: 2 })]);
+      await store.load(LIST);
+
+      // The name is held, so nothing is drawn, and the server makes a line anyway.
+      const outcome = await store.addLine(
+        LIST,
+        'Leche entera',
+        1,
+        ME,
+        ASKS_FIRST,
+        undefined,
+        undefined,
+        { newLine: true }
+      );
+
+      expect(outcome).toEqual(
+        expect.objectContaining({ state: 'added', merged: false })
+      );
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual([
+        'milk',
+        'bread',
+        'server-id',
+      ]);
+    });
+
+    it('hands a refusal out and draws nothing', async () => {
+      const { store, lines } = await build([milk()]);
+      await store.load(LIST);
+      const refusal = new GatewayError({
+        code: 'line_add_needs_choice',
+        status: 409,
+        correlationId: 'ref',
+      });
+      lines.failNext(refusal);
+
+      const outcome = await store.addLine(
+        LIST,
+        'Leche entera',
+        1,
+        ME,
+        ASKS_FIRST
+      );
+
+      expect(outcome).toEqual({ state: 'failed', error: refusal });
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk']);
     });
   });
 
@@ -1224,6 +1530,120 @@ describe('LineStore', () => {
       });
 
       expect(store.claims().size).toBe(0);
+    });
+  });
+
+  describe('a reconnect (velista 0169)', () => {
+    const OTHER = 'list-other';
+
+    /** Load two lists, hold the first, and count the reads from here on. */
+    async function twoLists() {
+      const built = await build([line('a')]);
+      await built.store.load(LIST);
+      await built.store.load(OTHER);
+      TestBed.tick();
+      const read = jest.spyOn(built.lines, 'listLines');
+      return { ...built, read };
+    }
+
+    async function reconnect(realtime: RealtimeMemory): Promise<void> {
+      realtime.setReconnects(1);
+      TestBed.tick();
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    it('reads nothing at construction', async () => {
+      const { lines } = await build([line('a')]);
+      TestBed.tick();
+
+      expect(lines.calls).toEqual([]);
+    });
+
+    it('reads nothing when no list is loaded', async () => {
+      const { lines, realtime } = await build([line('a')]);
+      TestBed.tick();
+
+      await reconnect(realtime);
+
+      expect(lines.calls).toEqual([]);
+    });
+
+    it('reads again only the lists a screen holds, keeping their rows', async () => {
+      const { store, realtime, read } = await twoLists();
+      store.hold(LIST);
+
+      realtime.setReconnects(1);
+      TestBed.tick();
+      // No skeleton: the held list stays loaded while its read runs.
+      expect(store.stateOf(LIST)).toBe('loaded');
+      expect(store.linesIn(LIST)).toHaveLength(1);
+      await Promise.resolve();
+
+      expect(read.mock.calls.map(([listId]) => listId)).toEqual([LIST]);
+    });
+
+    it('marks the other lists stale, and serves them from the server on the next load', async () => {
+      const { store, realtime, read } = await twoLists();
+      store.hold(LIST);
+
+      await reconnect(realtime);
+
+      // Stale reads as not read, so a page that loads only what is not held asks.
+      expect(store.stateOf(OTHER)).toBe('idle');
+      // The rows stay until the read replaces them.
+      expect(store.linesIn(OTHER)).toHaveLength(1);
+      read.mockClear();
+
+      await store.load(OTHER);
+
+      expect(read.mock.calls.map(([listId]) => listId)).toEqual([OTHER]);
+      expect(store.stateOf(OTHER)).toBe('loaded');
+    });
+
+    it('stops reading a list once its last holder releases it', async () => {
+      const { store, realtime, read } = await twoLists();
+      const first = store.hold(LIST);
+      const second = store.hold(LIST);
+      first();
+      second();
+
+      await reconnect(realtime);
+
+      expect(read).not.toHaveBeenCalled();
+      expect(store.stateOf(LIST)).toBe('idle');
+    });
+
+    it('does not let a second call of one release drop another holder', async () => {
+      const { store, realtime, read } = await twoLists();
+      const first = store.hold(LIST);
+      store.hold(LIST);
+      first();
+      first();
+
+      await reconnect(realtime);
+
+      expect(read.mock.calls.map(([listId]) => listId)).toEqual([LIST]);
+      expect(store.stateOf(LIST)).toBe('loaded');
+    });
+
+    it('neither reads again nor marks stale a list whose read did not load', async () => {
+      const { store, lines, realtime } = await build([line('a')]);
+      const HELD = 'list-held-failed';
+      const LOOSE = 'list-loose-failed';
+      lines.failNextRead(new Error('offline'));
+      await store.load(HELD);
+      lines.failNextRead(new Error('offline'));
+      await store.load(LOOSE);
+      store.hold(HELD);
+      TestBed.tick();
+      const read = jest.spyOn(lines, 'listLines');
+
+      await reconnect(realtime);
+
+      expect(read).not.toHaveBeenCalled();
+      expect(store.stateOf(HELD)).toBe('failed');
+      expect(store.stateOf(LOOSE)).toBe('failed');
     });
   });
 });

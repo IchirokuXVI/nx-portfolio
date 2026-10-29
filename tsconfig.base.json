@@ -221,7 +221,10 @@
       "@portfolio/luna-shopper/basket-rules": [
         "./libs/luna-shopper/basket-rules/src/index.ts"
       ],
-      "@portfolio/velista/native": ["./libs/velista/native/src/index.ts"]
+      "@portfolio/velista/native": ["./libs/velista/native/src/index.ts"],
+      "@portfolio/velista/feature-legal": [
+        "./libs/velista/feature-legal/src/index.ts"
+      ]
     }
   },
   "include": ["./types/**/*.d.ts"],

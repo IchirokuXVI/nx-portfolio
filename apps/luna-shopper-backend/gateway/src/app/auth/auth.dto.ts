@@ -5,9 +5,11 @@ import {
   IsEmail,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { AcceptedTermsVersion } from '../legal/accepted-terms-version.decorator';
 
 /** Email + password registration (plan 0005, section 4.2). */
 export class RegisterDto {
@@ -26,6 +28,9 @@ export class RegisterDto {
   @IsString()
   @MaxLength(80)
   displayName?: string;
+
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
 }
 
 /** Email + password login (plan 0005, section 4.3). */
@@ -138,4 +143,60 @@ export class UpgradeDto {
   @IsString()
   @MaxLength(80)
   displayName?: string;
+
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
+}
+
+/**
+ * base64url of 32 bytes or of a SHA-256: 43 characters with no padding (plan
+ * 0230). The challenge and the verifier share the shape.
+ */
+const PKCE_VALUE = /^[A-Za-z0-9_-]{43}$/;
+
+/**
+ * Start a Google sign in (plan 0230, section 2). The challenge is the one
+ * thing the body requires. The link target is read from the verified bearer and
+ * never from here.
+ */
+export class MintOAuthStateDto {
+  @ApiProperty({
+    description:
+      'base64url of the SHA-256 of a verifier the client made and keeps, 43 characters. The verifier is sent only to `POST /v1/auth/google/exchange`.',
+    pattern: PKCE_VALUE.source,
+  })
+  @IsString()
+  @Matches(PKCE_VALUE)
+  codeChallenge!: string;
+
+  /**
+   * Checked here, at the start, and recorded at the exchange (plan 0231,
+   * section 4.2): a refusal at the start is a problem the app can show.
+   */
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
+}
+
+/**
+ * Redeem the code the callback put in the fragment (plan 0230, section 4.3).
+ * The verifier proves this is the browser that minted the state.
+ */
+export class ExchangeGoogleSignInDto {
+  @ApiProperty({
+    description: 'The single use code from the `#code=` fragment.',
+    maxLength: 200,
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  code!: string;
+
+  @ApiProperty({
+    description:
+      'The verifier whose SHA-256 was sent as `codeChallenge` at the mint: base64url of 32 random bytes, 43 characters.',
+    pattern: PKCE_VALUE.source,
+  })
+  @IsString()
+  @Matches(PKCE_VALUE)
+  codeVerifier!: string;
 }

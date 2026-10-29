@@ -23,6 +23,7 @@ import {
   User,
 } from '../entities';
 import { IdentityService } from '../identity/identity.service';
+import { InMemoryTermsService } from '../identity/terms.testing';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { TokenService } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
@@ -156,7 +157,9 @@ describeIntegration('support sessions (real Postgres)', () => {
       new UsernameGenerator(),
       audit,
       config(true),
-      impersonation
+      impersonation,
+      new InMemoryTermsService(),
+      { publishSoon: () => undefined } as never
     );
   }, 120_000);
 
@@ -546,7 +549,9 @@ describeIntegration('support sessions (real Postgres)', () => {
       for (const row of rows) {
         expect(row.expiresAt.getTime()).toBe(Date.parse(start.expiresAt));
       }
-      // The presented row is spent, as in any rotation.
+      // The presented row is spent, as in any rotation, once its successor is
+      // used. Before that the reuse grace of plan 0229 can still answer it.
+      await identity.refresh(second.refreshToken);
       await expect(identity.refresh(first.refreshToken)).rejects.toMatchObject({
         code: ERROR_CODES.UNAUTHORIZED,
       });

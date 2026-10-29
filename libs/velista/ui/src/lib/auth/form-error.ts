@@ -5,6 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { AlertIcon } from '../icons/icons';
+import { LinkedText } from '../legal/linked-text';
 
 /**
  * The one message a rejected form shows, and the way out of it when there is one.
@@ -29,14 +30,20 @@ import { AlertIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-form-error',
-  imports: [AlertIcon],
+  imports: [AlertIcon, LinkedText],
   template: `
     <p [id]="messageId()" class="error" role="alert">
       <lib-alert-icon aria-hidden="true" class="glyph" />
       <span class="text">
-        {{ message() }}
+        <lib-linked-text
+          [href]="linkUrl()"
+          [keepQuery]="true"
+          [text]="message()"
+        />
         @if (actionLabel(); as label) {
-          <button (click)="action.emit()" class="action" type="button">
+          <!-- The one space between the sentence and its offer, which the compiler
+               would otherwise drop with the line break. -->
+          &ngsp;<button (click)="action.emit()" class="action" type="button">
             {{ label }}
           </button>
         }
@@ -51,6 +58,13 @@ export class FormError {
   readonly messageId = input.required<string>();
 
   readonly message = input.required<string>();
+
+  /**
+   * Where the bracketed words of the message go, for a message that names a document
+   * (velista `0173`: "The [Terms] changed while this page was open"). Null draws the
+   * whole message as text, the bracketed words included and the brackets left out.
+   */
+  readonly linkUrl = input<string | null>(null);
 
   /** The way out, when the failure has one. Null for the ones that do not. */
   readonly actionLabel = input<string | null>(null);

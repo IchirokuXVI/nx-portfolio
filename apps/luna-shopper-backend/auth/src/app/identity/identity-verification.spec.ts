@@ -15,6 +15,7 @@ import {
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * Confirming an email (plan 0021): resending one, consuming a link that a resend
@@ -97,11 +98,12 @@ function build(users: Row[] = []) {
       accessToken: 'a',
       refreshToken: 'r',
     })),
+    // An upgrade ends the other sessions of the account (plan 0230).
+    revokeAllForUser: jest.fn(async () => undefined),
   };
   const events = {
     userRegistered: jest.fn(),
     userUpgraded: jest.fn(),
-    userDeleted: jest.fn(),
     userEmailVerified: jest.fn(),
     userUsernameChanged: jest.fn(),
   };
@@ -120,7 +122,10 @@ function build(users: Row[] = []) {
         smtp: { verifyBaseUrl: 'https://x', enabled: true },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
   return { service, stores, events, mail };
 }

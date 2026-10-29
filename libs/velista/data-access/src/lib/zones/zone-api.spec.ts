@@ -227,6 +227,76 @@ describe('ZoneApi', () => {
     });
   });
 
+  describe('the version of the terms (velista 0173)', () => {
+    const minted = {
+      tokens: {
+        userId: 'u9',
+        kind: 'TEMPORARY',
+        accessToken: fresh(),
+        refreshToken: 'r9',
+      },
+      data: { id: 'z9', name: 'Flat 3B', status: 'ACTIVE' },
+    };
+
+    it('sends it on a create that makes an account', async () => {
+      const result = api.createZone('Flat 3B', undefined, '2026-10-29');
+      await tick();
+
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones`);
+      expect(req.request.body).toEqual({
+        name: 'Flat 3B',
+        acceptedTermsVersion: '2026-10-29',
+      });
+      req.flush(minted);
+      await result;
+    });
+
+    it('sends it on a join that makes an account', async () => {
+      const result = api.joinZone('FLAT3B', undefined, '2026-10-29');
+      await tick();
+
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones/join`);
+      expect(req.request.body).toEqual({
+        joinCode: 'FLAT3B',
+        acceptedTermsVersion: '2026-10-29',
+      });
+      req.flush({
+        tokens: minted.tokens,
+        data: { id: 'm1', zoneId: 'z9', userId: 'u9', status: 'PENDING' },
+      });
+      await result;
+    });
+
+    it('leaves it out for a caller who holds a session', async () => {
+      // The gateway records nothing for a caller it knows, and would still refuse a
+      // stale version from one.
+      tokens.set({
+        userId: 'u1',
+        kind: 'REGISTERED',
+        accessToken: fresh(),
+        refreshToken: 'r1',
+      });
+
+      const result = api.createZone('Flat 3B', undefined, '2026-10-29');
+      await tick();
+
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones`);
+      expect(req.request.body).toEqual({ name: 'Flat 3B' });
+      req.flush({ data: { id: 'z9', name: 'Flat 3B', status: 'ACTIVE' } });
+      await result;
+    });
+
+    it('leaves it out when there is none to send', async () => {
+      const result = api.createZone('Flat 3B', undefined, null);
+      await tick();
+
+      const req = httpMock.expectOne(`${GATEWAY}/v1/zones`);
+      expect(req.request.body).toEqual({ name: 'Flat 3B' });
+      req.flush(minted);
+      await result;
+    });
+  });
+
   /**
    * The gate above reads the only thing a client can read, which is whether the access
    * token has expired. A pair can be perfectly fresh and still name nobody, and the

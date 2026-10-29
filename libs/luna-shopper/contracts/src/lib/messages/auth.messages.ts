@@ -39,12 +39,20 @@ export const AUTH_PATTERNS = {
   refresh: 'auth.refresh',
   /** Upgrade a temporary user into a registered one, in place. */
   upgrade: 'auth.upgrade',
-  /** Create or link an account from a verified Google profile. */
-  googleLogin: 'auth.googleLogin',
   /** Mint the opaque OAuth `state` that carries a caller across the Google hop. */
   mintOAuthState: 'auth.mintOAuthState',
   /** Spend an OAuth `state`, once, and read back what it was carrying. */
   consumeOAuthState: 'auth.consumeOAuthState',
+  /**
+   * Stage what Google said at the callback, and answer a single use code
+   * (plan 0230, section 3). Nothing permanent happens here.
+   */
+  stageGoogleSignIn: 'auth.stageGoogleSignIn',
+  /**
+   * Trade a staged code and its verifier for the pair (plan 0230, section 4).
+   * The one place a Google sign in creates or links an account.
+   */
+  exchangeGoogleSignIn: 'auth.exchangeGoogleSignIn',
   /** Delete the authenticated user's account and all personal identity data. */
   deleteAccount: 'auth.deleteAccount',
   /** Change the caller's global username, optionally propagating to zones. */
@@ -78,6 +86,12 @@ export const AUTH_PATTERNS = {
    * has no room for anything else.
    */
   mintParticipantToken: 'auth.mintParticipantToken',
+  /**
+   * Record that the caller accepted the current Terms (plan 0231, section
+   * 4.4). The one way to accept outside the paths that create an account.
+   * Idempotent: a repeat answers the row already recorded.
+   */
+  acceptTerms: 'auth.acceptTerms',
 } as const;
 
 export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
@@ -153,10 +167,23 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-/** No fields: a temporary identity is minted purely from the request context. */
-export type CreateTemporaryUserRequest = Record<string, never>;
+/**
+ * The Terms version a client drew beside the action that creates an account
+ * (plan 0231, section 4.2). Optional on every path: a stale one is refused
+ * with `terms_version_stale`, and a missing one with `terms_acceptance_missing`
+ * only where the deployment requires acceptance.
+ */
+export interface AcceptedTermsField {
+  acceptedTermsVersion?: string;
+}
 
-export interface RegisterRequest {
+/**
+ * A temporary identity is minted from the request context, plus the Terms
+ * version the notice beside the zone buttons named (plan 0231, section 4.2).
+ */
+export type CreateTemporaryUserRequest = AcceptedTermsField;
+
+export interface RegisterRequest extends AcceptedTermsField {
   email: string;
   password: string;
   displayName?: string;
@@ -268,7 +295,7 @@ export interface RefreshRequest {
  * from the caller's verified token by the gateway. Either an email + password or
  * a linked Google identity is supplied.
  */
-export interface UpgradeRequest {
+export interface UpgradeRequest extends AcceptedTermsField {
   userId: string;
   email?: string;
   password?: string;
@@ -321,6 +348,19 @@ export interface UserProfileView {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+  /** The newest Terms version this account accepted, or null (plan 0231, section 4.4). */
+  termsAcceptedVersion: string | null;
+  /** When it accepted that version, ISO 8601, or null. */
+  termsAcceptedAt: string | null;
+}
+
+/**
+ * Accept the current Terms (plan 0231, section 4.4). `userId` is set by the
+ * gateway from the verified token, never from a body.
+ */
+export interface AcceptTermsRequest {
+  userId: string;
+  version: string;
 }
 
 /**
@@ -369,8 +409,11 @@ export interface GoogleProfile {
  * Google login (plan 0005, section 4.4). If `linkUserId` is set (the caller held
  * a temporary token), the Google identity is linked onto that user, upgrading it
  * in place; otherwise auth finds or creates a registered user.
+ *
+ * No longer a message (plan 0230): auth runs it inside the exchange, once the
+ * verifier and the bearer have both been checked, and nothing else reaches it.
  */
-export interface GoogleLoginRequest extends GoogleProfile {
+export interface GoogleLoginRequest extends GoogleProfile, AcceptedTermsField {
   linkUserId?: string;
 }
 
@@ -387,14 +430,28 @@ export interface GoogleLoginRequest extends GoogleProfile {
 export interface OAuthStatePayload {
   userId?: string;
   locale?: string;
+  /**
+   * base64url of SHA-256 of a verifier only the minting browser holds (plan
+   * 0230, section 2). Carried so the callback can copy it onto the handoff.
+   */
+  codeChallenge: string;
+  /**
+   * The Terms version the sign in page drew beside the Google button (plan
+   * 0231, section 4.2). Checked at the mint, carried across the round trip,
+   * and recorded at the exchange.
+   */
+  acceptedTermsVersion?: string;
 }
 
 /**
  * Mint an OAuth `state` (plan 0023, section 4.2). `userId` is set by the gateway
  * from the verified token, never from a body: a caller who could name the user a
  * state links to could link their Google identity onto somebody else's account.
+ * `codeChallenge` comes from the body and is required (plan 0230, section 2).
  */
-export type MintOAuthStateRequest = OAuthStatePayload;
+export type MintOAuthStateRequest = OAuthStatePayload & {
+  codeChallenge: string;
+};
 
 /** The raw state, returned exactly once. Auth stores only its hash. */
 export interface MintOAuthStateResult {
@@ -408,4 +465,33 @@ export interface MintOAuthStateResult {
  */
 export interface ConsumeOAuthStateRequest {
   state: string;
+}
+
+/**
+ * Stage a Google sign in at the callback (plan 0230, section 3.3). The profile
+ * is what Google said, `linkUserId` and `locale` are what the state carried,
+ * and `codeChallenge` is copied from the state. Auth writes one handoff row and
+ * nothing else.
+ */
+export interface StageGoogleSignInRequest
+  extends GoogleProfile, AcceptedTermsField {
+  linkUserId?: string;
+  codeChallenge: string;
+  locale?: string;
+}
+
+/** The raw single use code, returned exactly once. Auth stores only its hash. */
+export interface StageGoogleSignInResult {
+  code: string;
+}
+
+/**
+ * Trade a staged code for the pair (plan 0230, section 4.1). `callerUserId` is
+ * set by the gateway from the verified bearer and never from a body: a handoff
+ * that names a link target is redeemed only by that account.
+ */
+export interface ExchangeGoogleSignInRequest {
+  code: string;
+  codeVerifier: string;
+  callerUserId?: string;
 }

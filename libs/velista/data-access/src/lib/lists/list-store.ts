@@ -10,6 +10,7 @@ import type {
   ListPermission,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { onEdge } from '@portfolio/velista/platform';
 import { Mutations } from '../mutations';
 import {
   REALTIME_CLIENT,
@@ -63,6 +64,15 @@ export class ListStore {
     this._realtime.events
       .pipe(takeUntilDestroyed(this._destroyRef))
       .subscribe((event) => this._apply(event));
+
+    // Rooms come back on a reconnect and the events sent while the socket was down
+    // do not (velista `0169`). Every zone the store holds lists for is read again,
+    // quietly; a zone it never loaded is not read.
+    onEdge(this._realtime.reconnects, () => {
+      for (const zoneId of this._byZone().keys()) {
+        void this.refresh(zoneId);
+      }
+    });
   }
 
   /** One zone's lists, as far as this caller may read them. Empty until loaded. */

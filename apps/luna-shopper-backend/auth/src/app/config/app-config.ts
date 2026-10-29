@@ -1,6 +1,12 @@
 import { registerAs } from '@nestjs/config';
+import { effectiveTermsVersion } from '@portfolio/luna-shopper/contracts';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
+import {
+  retentionConfig,
+  retentionValidationSchema,
+  type RetentionConfig,
+} from '../retention/retention-config';
 import { parseDurationMs } from '../tokens/duration';
 import { assertDevAutologinIsSafe } from './local-host';
 import { readKey } from './read-key';
@@ -88,9 +94,21 @@ export const authValidationSchema = Joi.object({
 
   // Support sessions (plan 0194): an operator opens the app as a user. Off
   // unless a deployment turns it on. While it is off, no session starts, no
-  // code is exchanged and no token of a session passes a check. The one
-  // switch is here, and the gateway has none, so the two cannot disagree.
+  // code is exchanged and no token of a session passes a check. Auth alone
+  // enforces it. The gateway reads the same key only to report it to the
+  // privacy policy (plan 0231), and the chart gives both the same value.
   IMPERSONATION_ENABLED: Joi.boolean().default(false),
+
+  // The Terms (plan 0231, sections 1 and 5). `LEGAL_TERMS_REVISION` is the
+  // operator's own date, empty by default, and the effective version is built
+  // from it with the function the gateway uses. `TERMS_ACCEPTANCE_REQUIRED`
+  // refuses a path that creates an account with no version; off by default,
+  // so nothing that worked before is refused.
+  LEGAL_TERMS_REVISION: Joi.string()
+    .pattern(/^\d{4}-\d{2}-\d{2}$/)
+    .allow('')
+    .default(''),
+  TERMS_ACCEPTANCE_REQUIRED: Joi.boolean().default(false),
 
   // Google OAuth (login with Google). Optional, and mirroring the gateway's
   // schema exactly (plan 0026, section 3.2).
@@ -130,6 +148,11 @@ export const authValidationSchema = Joi.object({
   ORPHAN_USER_GRACE: Joi.string().default('30d'),
   ORPHAN_REAPER_INTERVAL: Joi.string().default('1h'),
   ORPHAN_REAPER_BATCH: Joi.number().integer().min(1).default(200),
+
+  // How long each kind of stored row is kept, and the sweep that deletes the
+  // rest (plan 0233). The three periods are the numbers the privacy policy
+  // prints, and each refuses boot below its floor.
+  ...retentionValidationSchema,
 
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
@@ -200,6 +223,13 @@ export interface AuthConfig {
     /** `IMPERSONATION_ENABLED`. False unless a deployment says otherwise. */
     enabled: boolean;
   };
+  /** The Terms (plan 0231, section 1). */
+  terms: {
+    /** The effective version every path compares against, exactly. */
+    currentVersion: string;
+    /** `TERMS_ACCEPTANCE_REQUIRED`. False unless a deployment says otherwise. */
+    acceptanceRequired: boolean;
+  };
   google: {
     clientId: string;
     clientSecret: string;
@@ -232,6 +262,8 @@ export interface AuthConfig {
     intervalMs: number;
     batchSize: number;
   };
+  /** The lifetimes of stored rows, and their sweep (plan 0233). */
+  retention: RetentionConfig;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -297,6 +329,10 @@ export const authConfiguration = registerAs(
     impersonation: {
       enabled: process.env.IMPERSONATION_ENABLED === 'true',
     },
+    terms: {
+      currentVersion: effectiveTermsVersion(process.env.LEGAL_TERMS_REVISION),
+      acceptanceRequired: process.env.TERMS_ACCEPTANCE_REQUIRED === 'true',
+    },
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
@@ -323,6 +359,7 @@ export const authConfiguration = registerAs(
       intervalMs: parseDurationMs(process.env.ORPHAN_REAPER_INTERVAL as string),
       batchSize: Number(process.env.ORPHAN_REAPER_BATCH),
     },
+    retention: retentionConfig(),
     logLevel: process.env.LOG_LEVEL as AuthConfig['logLevel'],
   })
 );

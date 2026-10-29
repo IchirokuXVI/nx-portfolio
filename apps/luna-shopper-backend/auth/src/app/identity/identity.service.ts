@@ -7,16 +7,20 @@ import {
   RecoverySignInOutcome,
   UserKind,
   UsernamePropagation,
+  type AcceptTermsRequest,
   type AccountRole,
   type AuthTokens,
   type ConsumeOAuthStateRequest,
   type CreateAdminRecoveryLinksResult,
+  type CreateTemporaryUserRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
+  type ExchangeGoogleSignInRequest,
   type ForgotPasswordRequest,
   type GetProfileRequest,
   type GetUsernamesRequest,
   type GoogleLoginRequest,
+  type ImpersonationEndedEvent,
   type LoginRequest,
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
@@ -30,6 +34,9 @@ import {
   type RetryAfterResult,
   type SendAdminPasswordResetResult,
   type SetUsernameRequest,
+  type StageGoogleSignInRequest,
+  type StageGoogleSignInResult,
+  type TermsAcceptanceView,
   type UpgradeRequest,
   type UserProfileView,
   type UserUsernameView,
@@ -37,6 +44,7 @@ import {
 import {
   ConflictException,
   GuestHasNoRolesException,
+  ImpersonationEndedException,
   ImpersonationNotAllowedException,
   NotConfiguredException,
   NotFoundException,
@@ -49,7 +57,7 @@ import {
   validateUsername,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID, timingSafeEqual } from 'node:crypto';
 import { DataSource, In, type EntityManager } from 'typeorm';
 import {
   AuthAuditService,
@@ -57,22 +65,27 @@ import {
 } from '../audit/auth-audit.service';
 import type { AuthConfig } from '../config/app-config';
 import {
+  AccountDeletion,
   Credential,
   EmailVerification,
+  OAuthHandoff,
   OAuthIdentity,
   OAuthState,
   PasswordReset,
   PasswordResetChannel,
   PasswordResetSpentAs,
+  TermsAcceptanceVia,
   User,
 } from '../entities';
+import { AccountDeletionPublisher } from '../events/account-deletion.publisher';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
 import { ImpersonationService } from '../impersonation/impersonation.service';
 import { MailService, recoveryLinks } from '../mail/mail.service';
 import { PasswordService } from '../password/password.service';
 import { TokenGrantService } from '../tokens/token-grant.service';
-import { TokenService } from '../tokens/token.service';
+import { TokenService, type RecordedTokens } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
+import { TermsService } from './terms.service';
 
 /** Hours an email verification link stays valid. */
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -119,6 +132,22 @@ const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const INVALID_OAUTH_STATE = 'Invalid or expired sign in request';
 
 /**
+ * How long a staged Google sign in waits to be redeemed (plan 0230, section
+ * 3.2). Two minutes: the callback page of the app spends the code within one
+ * page load of the redirect, and two minutes is that load on a slow phone plus
+ * a retry. A longer life only widens the time in which a profile staged through
+ * a forwarded link sits in the table, waiting for a verifier that never comes.
+ */
+const OAUTH_HANDOFF_TTL_MS = 2 * 60 * 1000;
+
+/**
+ * The one answer an exchange refusal gets: a missing, spent or expired code, a
+ * wrong verifier, or a bearer that is not the link target. On the wire it is
+ * 401 `unauthorized`, as a state is (plan 0023, section 4.4).
+ */
+const INVALID_GOOGLE_CODE = 'Invalid or expired sign in code';
+
+/**
  * The identity domain (plan 0005, section 4). Every way a user comes to exist
  * lives here: temporary tokens, email/password registration and login, Google
  * login, in place upgrade, email verification and refresh rotation. Writes that
@@ -158,7 +187,13 @@ export class IdentityService {
     configService: ConfigService,
     // Last, so that no positional caller moves (plan 0194). Only `refresh`
     // reaches it, and only for the row of a support session.
-    private readonly impersonation: ImpersonationService
+    private readonly impersonation: ImpersonationService,
+    // Last, for the same reason (plan 0231). Every path that creates an
+    // account checks and records the Terms through it.
+    private readonly terms: TermsService,
+    // Last, for the same reason (plan 0232). Both delete paths wake it after
+    // their transaction commits, and nothing else reaches it.
+    private readonly deletions: AccountDeletionPublisher
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
   }
@@ -198,17 +233,53 @@ export class IdentityService {
    * Mint a temporary identity (plan 0005, section 4.1). Called by the gateway
    * only when a client actually creates or joins a zone, so a browsing visitor
    * leaves no account behind.
+   *
+   * The Terms version the notice beside the zone buttons named is checked
+   * first and recorded in the transaction that writes the user (plan 0231,
+   * section 4.2), so a refused version leaves no guest behind.
    */
-  async createTemporaryUser(): Promise<AuthTokens> {
-    const user = await this.dataSource.getRepository(User).save(
-      this.dataSource.getRepository(User).create({
-        kind: UserKind.TEMPORARY,
-        // A guest is named from the moment they exist (plan 0018, section 3.4),
-        // so the zone they are about to create or join has a name to record.
-        username: this.usernames.generate(),
-      })
-    );
+  async createTemporaryUser(
+    req: CreateTemporaryUserRequest = {}
+  ): Promise<AuthTokens> {
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
+    const user = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.getRepository(User).save(
+        manager.getRepository(User).create({
+          kind: UserKind.TEMPORARY,
+          // A guest is named from the moment they exist (plan 0018, section
+          // 3.4), so the zone they are about to create or join has a name to
+          // record.
+          username: this.usernames.generate(),
+        })
+      );
+      await this.recordTerms(
+        manager,
+        saved.id,
+        req.acceptedTermsVersion,
+        TermsAcceptanceVia.GUEST
+      );
+      return saved;
+    });
     return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Record the supplied version when it is the current one, inside the
+   * caller's transaction (plan 0231, section 4.2). A path that refuses a stale
+   * version has already called {@link TermsService.assertAcceptable}, so this
+   * skips only an absent version there. The Google exchange, which never
+   * refuses over the Terms, relies on it to skip a version that went stale
+   * inside the state's ten minutes.
+   */
+  private async recordTerms(
+    manager: EntityManager,
+    userId: string,
+    version: string | null | undefined,
+    via: TermsAcceptanceVia
+  ): Promise<void> {
+    if (this.terms.isCurrent(version)) {
+      await this.terms.record(manager, userId, version, via);
+    }
   }
 
   /** Email + password registration (plan 0005, section 4.2). */
@@ -219,6 +290,8 @@ export class IdentityService {
     if (!req.email || !req.password) {
       throw new ValidationException('Email and password are required');
     }
+    // Before the transaction, so a refused version writes nothing (plan 0231).
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
     const email = this.normalizeEmail(req.email);
 
     const { user, rawVerificationToken } = await this.dataSource.transaction(
@@ -255,6 +328,12 @@ export class IdentityService {
         const { raw: rawVerificationToken } = await this.createVerification(
           manager,
           user.id
+        );
+        await this.recordTerms(
+          manager,
+          user.id,
+          req.acceptedTermsVersion,
+          TermsAcceptanceVia.REGISTER
         );
         return { user, rawVerificationToken };
       }
@@ -944,22 +1023,70 @@ export class IdentityService {
     return { email: user.email, raw, grant: record };
   }
 
-  /** Exchange a refresh token for a fresh pair (plan 0005, section 3). */
+  /**
+   * Exchange a refresh token for a fresh pair (plan 0005, section 3).
+   *
+   * **One rotation is one transaction** (plan 0229, section 3). The spend, the
+   * user load, the insert of the successor and the pointer from the spent row
+   * to it all run on one manager. A failure anywhere after the spend rolls the
+   * spend back, so the presented row stays live and the client's retry works.
+   * Before, a failure after the spend left a revoked row and nothing live.
+   *
+   * A support session that is over is a refusal and not a failure. It is
+   * returned out of the transaction rather than thrown inside it, so the end
+   * of the session and the revoke of its rows commit, as they did before the
+   * rotation had a transaction. A session that this refresh ended (its
+   * operator is disabled or gone) is announced after the commit, never inside
+   * the transaction: an event for a rotation that then rolled back would drop
+   * the sockets of a live session.
+   */
   async refresh(rawRefreshToken: string): Promise<AuthTokens> {
-    const { userId, impersonationSessionId } =
-      await this.tokens.rotate(rawRefreshToken);
-    const user = await this.dataSource
-      .getRepository(User)
-      .findOne({ where: { id: userId } });
-    if (!user) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+    const outcome = await this.dataSource.transaction(
+      async (
+        manager
+      ): Promise<
+        | { tokens: AuthTokens }
+        | {
+            ended: ImpersonationEndedException;
+            endedNow: ImpersonationEndedEvent | null;
+          }
+      > => {
+        const spent = await this.tokens.rotate(rawRefreshToken, manager);
+        const user = await manager
+          .getRepository(User)
+          .findOne({ where: { id: spent.userId } });
+        if (!user) {
+          throw new UnauthorizedException('Invalid or expired refresh token');
+        }
+        // The row of a support session renews under that session's deadline
+        // (plan 0194). Every other row takes the ordinary pair.
+        let issued: RecordedTokens;
+        if (spent.impersonationSessionId) {
+          const renewal = await this.impersonation.refresh(
+            spent.impersonationSessionId,
+            user,
+            manager
+          );
+          if ('over' in renewal) {
+            return { ended: renewal.over, endedNow: renewal.endedNow };
+          }
+          issued = renewal.issued;
+        } else {
+          issued = await this.tokens.issueTokensRecorded(user, manager);
+        }
+        await this.tokens.recordSuccessor(
+          spent.id,
+          issued.refreshRowId,
+          manager
+        );
+        return { tokens: issued.tokens };
+      }
+    );
+    if ('ended' in outcome) {
+      this.impersonation.announceEnded(outcome.endedNow);
+      throw outcome.ended;
     }
-    // The row of a support session renews under that session's deadline (plan
-    // 0194). Every other row takes the line below, exactly as before.
-    if (impersonationSessionId) {
-      return this.impersonation.refresh(impersonationSessionId, user);
-    }
-    return this.tokens.issueTokens(user);
+    return outcome.tokens;
   }
 
   /**
@@ -981,66 +1108,12 @@ export class IdentityService {
     } else {
       this.requireMail();
     }
+    // Before the transaction, so a refused version writes nothing (plan 0231).
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
     const { user, email, rawVerificationToken } =
-      await this.dataSource.transaction(async (manager) => {
-        const user = await manager
-          .getRepository(User)
-          .findOne({ where: { id: req.userId } });
-        if (!user) {
-          throw new NotFoundException('User not found');
-        }
-        if (user.kind !== UserKind.TEMPORARY) {
-          throw new ConflictException('This account is already registered');
-        }
-
-        let email: string | null = null;
-        let rawVerificationToken: string | null = null;
-
-        if (req.google) {
-          await this.linkGoogle(manager, user.id, req.google.providerUserId);
-          if (req.google.email && !user.email) {
-            const googleEmail = this.normalizeEmail(req.google.email);
-            // The same check the email branch makes. Without it the partial
-            // unique index on `users.email` surfaces as a raw 500 for the
-            // situation the other branch answers with a conflict.
-            await this.assertEmailFree(manager, googleEmail, user.id);
-            user.email = googleEmail;
-            // Google verified this address; asking the person to confirm it
-            // again is a nudge with nothing behind it. Matches what the create
-            // branch of `googleLogin` already does.
-            user.emailVerifiedAt = new Date();
-          }
-        } else if (req.email && req.password) {
-          email = this.normalizeEmail(req.email);
-          await this.assertEmailFree(manager, email, user.id);
-          user.email = email;
-          const passwordHash = await this.passwords.hash(req.password);
-          await manager
-            .getRepository(Credential)
-            .save(
-              manager
-                .getRepository(Credential)
-                .create({ userId: user.id, passwordHash })
-            );
-          rawVerificationToken = (
-            await this.createVerification(manager, user.id)
-          ).raw;
-        } else {
-          throw new ValidationException(
-            'Provide a Google identity or an email and password to upgrade'
-          );
-        }
-
-        user.kind = UserKind.REGISTERED;
-        if (req.displayName) {
-          user.displayName = req.displayName;
-        }
-        return {
-          user: await manager.getRepository(User).save(user),
-          email,
-          rawVerificationToken,
-        };
-      });
+      await this.dataSource.transaction((manager) =>
+        this.upgradeIn(manager, req)
+      );
 
     // Sent outside the transaction, for the reason registration gives: delivery
     // must not roll back an upgrade that succeeded, verification is optional, and
@@ -1051,6 +1124,87 @@ export class IdentityService {
 
     this.events.userUpgraded({ userId: user.id });
     return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * The writes of an upgrade, on the caller's transaction. Split from
+   * {@link upgrade} so the Google exchange can run it inside the transaction
+   * that spends its code (plan 0230, section 4.2).
+   *
+   * **Every other session of the account ends here** (plan 0230). The account
+   * is now somebody's for good, and whatever held the guest's refresh token
+   * before this moment must not keep it. The caller issues its own pair after
+   * the commit, so the person upgrading stays signed in and nobody else does,
+   * the same order a password reset keeps.
+   *
+   * The Terms version is recorded here, on the same transaction, under `via`:
+   * `UPGRADE` for a typed address, `GOOGLE` when the exchange upgrades a guest
+   * in place (plan 0231, section 4.2).
+   */
+  private async upgradeIn(
+    manager: EntityManager,
+    req: UpgradeRequest,
+    via: TermsAcceptanceVia = TermsAcceptanceVia.UPGRADE
+  ): Promise<{
+    user: User;
+    email: string | null;
+    rawVerificationToken: string | null;
+  }> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { id: req.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.kind !== UserKind.TEMPORARY) {
+      throw new ConflictException('This account is already registered');
+    }
+
+    let email: string | null = null;
+    let rawVerificationToken: string | null = null;
+
+    if (req.google) {
+      await this.linkGoogle(manager, user.id, req.google.providerUserId);
+      if (req.google.email && !user.email) {
+        const googleEmail = this.normalizeEmail(req.google.email);
+        // The same check the email branch makes. Without it the partial
+        // unique index on `users.email` surfaces as a raw 500 for the
+        // situation the other branch answers with a conflict.
+        await this.assertEmailFree(manager, googleEmail, user.id);
+        user.email = googleEmail;
+        // Google verified this address; asking the person to confirm it
+        // again is a nudge with nothing behind it. Matches what the create
+        // branch of `googleLogin` already does.
+        user.emailVerifiedAt = new Date();
+      }
+    } else if (req.email && req.password) {
+      email = this.normalizeEmail(req.email);
+      await this.assertEmailFree(manager, email, user.id);
+      user.email = email;
+      const passwordHash = await this.passwords.hash(req.password);
+      await manager
+        .getRepository(Credential)
+        .save(
+          manager
+            .getRepository(Credential)
+            .create({ userId: user.id, passwordHash })
+        );
+      rawVerificationToken = (await this.createVerification(manager, user.id))
+        .raw;
+    } else {
+      throw new ValidationException(
+        'Provide a Google identity or an email and password to upgrade'
+      );
+    }
+
+    user.kind = UserKind.REGISTERED;
+    if (req.displayName) {
+      user.displayName = req.displayName;
+    }
+    const saved = await manager.getRepository(User).save(user);
+    await this.tokens.revokeAllForUser(saved.id, manager);
+    await this.recordTerms(manager, saved.id, req.acceptedTermsVersion, via);
+    return { user: saved, email, rawVerificationToken };
   }
 
   /** Refuses an address that already belongs to somebody else. */
@@ -1075,15 +1229,18 @@ export class IdentityService {
    * identities, email verifications and refresh tokens (every child FK is
    * `ON DELETE CASCADE`), so this one delete satisfies the right to be forgotten
    * for the identity data, which lives only in auth. Idempotent: if the user is
-   * already gone the delete affects no rows and no event is emitted.
+   * already gone the delete affects no rows and nothing is published.
+   *
+   * One transaction since plan 0232 (section 4): the delete, the outbox row
+   * that carries `user.deleted` to core and catalog, and the scrub of the audit
+   * trail commit together or not at all.
    */
   async deleteAccount(req: DeleteAccountRequest): Promise<DeleteAccountResult> {
-    const deleted = await this.removeAccount(
-      this.dataSource.manager,
-      req.userId
+    const deleted = await this.dataSource.transaction((manager) =>
+      this.removeAccount(manager, req.userId)
     );
     if (deleted) {
-      this.events.userDeleted({ userId: req.userId });
+      this.deletions.publishSoon();
     }
     return { userId: req.userId, deleted };
   }
@@ -1092,17 +1249,18 @@ export class IdentityService {
    * Delete somebody else's account (plan 0077, section 8).
    *
    * The same delete {@link deleteAccount} makes, so the same cascade runs and the
-   * same `user.deleted` event reaches core, whose `AccountDeletionService` does
-   * its half across its own database. The whole difference is the missing role
-   * check, and the operator gate the caller has already passed.
+   * same `user.deleted` event reaches core and catalog, which do their half
+   * across their own databases. The whole difference is the missing role check,
+   * and the operator gate the caller has already passed.
    *
-   * The row is read before it is removed, because a deletion whose trail says
-   * only that something with this id used to exist cannot answer what was lost.
-   * Nothing read there is a secret: the password hash lives on `credentials`,
-   * which this never touches.
+   * The trail records the deletion with the account's `kind`, `roles` and
+   * `createdAt` only (plan 0232, section 4). That answers what kind of account
+   * was lost and who removed it, and names nothing that identifies the person.
+   * The scrub that follows then takes the person out of every earlier row,
+   * this one included, inside the same transaction.
    *
    * Idempotent for the same reason the user facing one is: a repeat affects no
-   * rows, emits nothing and records nothing, and answers `deleted: false`.
+   * rows, publishes nothing and records nothing, and answers `deleted: false`.
    */
   async deleteAccountAsOperator(
     targetUserId: string,
@@ -1115,26 +1273,43 @@ export class IdentityService {
       if (!user) {
         return false;
       }
-      const removed = await this.removeAccount(tx.manager, targetUserId);
-      if (removed) {
-        await tx.recordDelete(User, user, targetUserId);
-      }
-      return removed;
+      return this.removeAccount(tx.manager, targetUserId, () =>
+        tx.recordDelete(User, user, targetUserId, [
+          'kind',
+          'roles',
+          'createdAt',
+        ])
+      );
     });
 
     if (deleted) {
-      this.events.userDeleted({ userId: targetUserId });
+      this.deletions.publishSoon();
     }
     return { userId: targetUserId, deleted };
   }
 
-  /** The delete both paths make, and the only place that statement is written. */
+  /**
+   * The delete both paths make, and the only place that statement is written.
+   *
+   * Inside the caller's transaction, in this order (plan 0232, sections 4 and
+   * 5): the `users` row and its cascade, the outbox row, the caller's own audit
+   * record if it has one, then the scrub, so the record just written is
+   * scrubbed with the rest. Nothing after the delete runs when it removed
+   * nothing.
+   */
   private async removeAccount(
     manager: EntityManager,
-    userId: string
+    userId: string,
+    record?: () => Promise<void>
   ): Promise<boolean> {
     const result = await manager.getRepository(User).delete({ id: userId });
-    return (result.affected ?? 0) > 0;
+    if ((result.affected ?? 0) === 0) {
+      return false;
+    }
+    await manager.getRepository(AccountDeletion).insert({ userId });
+    await record?.();
+    await this.audit.scrubUser(manager, userId);
+    return true;
   }
 
   /**
@@ -1153,7 +1328,7 @@ export class IdentityService {
     );
 
     this.emitUsernameChanged(user, oldUsername, req.propagation);
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1189,7 +1364,7 @@ export class IdentityService {
     );
 
     this.emitUsernameChanged(user, oldUsername, propagation);
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1223,7 +1398,7 @@ export class IdentityService {
       return tx.update(User, before, user);
     });
 
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1328,7 +1503,7 @@ export class IdentityService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1360,7 +1535,25 @@ export class IdentityService {
     return users.map((user) => ({ userId: user.id, username: user.username }));
   }
 
-  private toProfile(user: User): UserProfileView {
+  /**
+   * The profile every write and read of it answers, with a Terms acceptance
+   * beside it (plan 0231, section 4.4). Read after the caller's transaction has
+   * committed, through the pool.
+   *
+   * The acceptance is the row for the current version when the account has
+   * one, and the newest row otherwise. The newest row alone is wrong when the
+   * current version moves back to one the account already accepted (a rollback
+   * past a template bump, or the operator clearing the revision): the gateway
+   * would ask again, and accepting again would change nothing, because the
+   * insert keeps the old row and the newer version stays the newest.
+   */
+  private async profileOf(user: User): Promise<UserProfileView> {
+    const accepted =
+      (await this.terms.find(
+        this.dataSource.manager,
+        user.id,
+        this.terms.currentVersion
+      )) ?? (await this.terms.latest(user.id));
     return {
       userId: user.id,
       kind: user.kind,
@@ -1368,6 +1561,49 @@ export class IdentityService {
       email: user.email,
       emailVerified: user.emailVerifiedAt !== null,
       displayName: user.displayName,
+      termsAcceptedVersion: accepted?.version ?? null,
+      termsAcceptedAt: accepted?.acceptedAt.toISOString() ?? null,
+    };
+  }
+
+  /**
+   * Accept the current Terms from the prompt (plan 0231, section 4.4).
+   *
+   * Refuses a version that is not the current one, and records `PROMPT`
+   * otherwise. Idempotent: a repeat answers the row already recorded, with the
+   * time it was first accepted. An account that is gone answers not found,
+   * which the gateway turns into a 401 like every other read about the caller.
+   */
+  async acceptTerms(req: AcceptTermsRequest): Promise<TermsAcceptanceView> {
+    if (!req.version) {
+      throw new ValidationException('A version is required', {
+        messageArgs: { field: 'version' },
+      });
+    }
+    this.terms.assertAcceptable(req.version);
+    const accepted = await this.dataSource.transaction(async (manager) => {
+      const user = await manager
+        .getRepository(User)
+        .findOne({ where: { id: req.userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      await this.terms.record(
+        manager,
+        user.id,
+        req.version,
+        TermsAcceptanceVia.PROMPT
+      );
+      return this.terms.find(manager, user.id, req.version);
+    });
+    if (!accepted) {
+      // The insert above either wrote the row or met it, so this cannot happen
+      // short of a delete racing the accept, which the cascade makes possible.
+      throw new NotFoundException('User not found');
+    }
+    return {
+      version: accepted.version,
+      acceptedAt: accepted.acceptedAt.toISOString(),
     };
   }
 
@@ -1402,15 +1638,33 @@ export class IdentityService {
    * beside what the state stands for. `userId` arrives already established by the
    * gateway's guard, so an absent one here means the caller genuinely held no
    * token, not that a stale one was quietly ignored (section 4.2).
+   *
+   * The challenge is required (plan 0230, section 2). It is what ties the code
+   * the callback stages to the browser that minted this state, and a state
+   * without one could be finished by any browser a link reached.
    */
   async mintOAuthState(
     req: MintOAuthStateRequest
   ): Promise<MintOAuthStateResult> {
+    if (!isPkceValue(req.codeChallenge)) {
+      throw new ValidationException(
+        'A codeChallenge is required to start a Google sign in'
+      );
+    }
+    // At the start and not at the finish (plan 0231, section 4.2). The start is
+    // a JSON POST, so a refusal here reaches the app as a problem it can show;
+    // the finish is a redirect, where a refusal costs the whole sign in.
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
     const state = await this.dataSource.transaction((manager) =>
       this.grants.issue(
         manager,
         OAuthState,
-        { userId: req.userId ?? null, locale: req.locale ?? null },
+        {
+          userId: req.userId ?? null,
+          locale: req.locale ?? null,
+          codeChallenge: req.codeChallenge,
+          termsVersion: req.acceptedTermsVersion ?? null,
+        },
         OAUTH_STATE_TTL_MS
       )
     );
@@ -1423,6 +1677,10 @@ export class IdentityService {
    * Single use, which is the property the whole design is for: a state that could
    * be replayed is a way to link an attacker's Google identity onto an account
    * that is not theirs, and unlike a stolen token that is permanent.
+   *
+   * A row with no challenge is refused like an unknown one (plan 0230, section
+   * 2). Only a state minted before that plan lacks one, it is at most ten
+   * minutes old, and nobody holds a verifier for it.
    */
   async consumeOAuthState(
     req: ConsumeOAuthStateRequest
@@ -1435,66 +1693,238 @@ export class IdentityService {
         INVALID_OAUTH_STATE
       )
     );
+    if (!record.codeChallenge) {
+      throw new ValidationException(INVALID_OAUTH_STATE);
+    }
     // Omitted rather than null: `OAuthStatePayload` says absent, and a `userId`
-    // of null reaching `googleLogin` as `linkUserId` would read as a link
+    // of null reaching the handoff as `linkUserId` would read as a link
     // request for nobody.
     return {
       ...(record.userId ? { userId: record.userId } : {}),
       ...(record.locale ? { locale: record.locale } : {}),
+      codeChallenge: record.codeChallenge,
+      ...(record.termsVersion
+        ? { acceptedTermsVersion: record.termsVersion }
+        : {}),
     };
   }
 
-  /** Google login: find, link, or create (plan 0005, section 4.4). */
-  async googleLogin(req: GoogleLoginRequest): Promise<AuthTokens> {
-    // Refuse rather than attempt a lookup against credentials this deployment
-    // does not have (plan 0026, section 3.2).
+  /**
+   * Stage what Google said at the callback (plan 0230, section 3.3).
+   *
+   * One handoff row and nothing else. No identity is looked up here, so the
+   * callback has no branch that depends on the state of an account, and a
+   * profile staged through a link somebody forwarded changes nothing until a
+   * browser holding the verifier redeems it, which never happens.
+   */
+  async stageGoogleSignIn(
+    req: StageGoogleSignInRequest
+  ): Promise<StageGoogleSignInResult> {
     this.requireGoogle();
-    const identity = await this.dataSource
-      .getRepository(OAuthIdentity)
-      .findOne({
-        where: {
-          provider: AuthProvider.GOOGLE,
+    if (!isPkceValue(req.codeChallenge)) {
+      throw new ValidationException(INVALID_OAUTH_STATE);
+    }
+    const code = await this.dataSource.transaction((manager) =>
+      this.grants.issue(
+        manager,
+        OAuthHandoff,
+        {
+          userId: req.linkUserId ?? null,
           providerUserId: req.providerUserId,
+          email: req.email ?? null,
+          displayName: req.displayName ?? null,
+          codeChallenge: req.codeChallenge,
+          locale: req.locale ?? null,
+          termsVersion: req.acceptedTermsVersion ?? null,
         },
-      });
+        OAUTH_HANDOFF_TTL_MS
+      )
+    );
+    return { code };
+  }
+
+  /**
+   * Trade a staged code for the pair (plan 0230, section 4.2). This is where a
+   * Google sign in creates or links an account, and the only place.
+   *
+   * One transaction spends the code, checks the verifier against the challenge,
+   * checks the bearer against the link target, and runs {@link googleLogin}.
+   * A refusal is returned out of the transaction rather than thrown inside it,
+   * so the spend commits: a code that met a wrong verifier is burnt, and it
+   * cannot be tried again. A failure of the login itself rolls the spend back
+   * with it.
+   *
+   * The verifier proves the browser and the bearer proves the account. A link
+   * needs both. A handoff with no link target ignores the bearer, so a caller
+   * cannot turn a sign in from scratch into a link onto themselves.
+   */
+  async exchangeGoogleSignIn(
+    req: ExchangeGoogleSignInRequest
+  ): Promise<AuthTokens> {
+    this.requireGoogle();
+    const outcome = await this.dataSource.transaction(
+      async (manager): Promise<ExchangeOutcome> => {
+        const handoff = await this.grants.spend(
+          manager,
+          OAuthHandoff,
+          this.grants.hash(req.code ?? '')
+        );
+        if (!handoff) {
+          return { refused: 'unknown_code' };
+        }
+        if (!verifierMatches(req.codeVerifier, handoff.codeChallenge)) {
+          return { refused: 'verifier_mismatch', handoffId: handoff.id };
+        }
+        if (handoff.userId && req.callerUserId !== handoff.userId) {
+          return { refused: 'caller_mismatch', handoffId: handoff.id };
+        }
+        return {
+          login: await this.googleLogin(manager, {
+            providerUserId: handoff.providerUserId,
+            ...(handoff.email ? { email: handoff.email } : {}),
+            ...(handoff.displayName
+              ? { displayName: handoff.displayName }
+              : {}),
+            ...(handoff.userId ? { linkUserId: handoff.userId } : {}),
+            ...(handoff.termsVersion
+              ? { acceptedTermsVersion: handoff.termsVersion }
+              : {}),
+          }),
+        };
+      }
+    );
+
+    if ('refused' in outcome) {
+      // The reason and the row, and never the code, the verifier or the
+      // challenge: a log line is not a place to keep a credential.
+      this.logger.warn(
+        `Google sign in exchange refused: ${outcome.refused}` +
+          (outcome.handoffId ? ` (handoff ${outcome.handoffId})` : '')
+      );
+      throw new UnauthorizedException(INVALID_GOOGLE_CODE);
+    }
+
+    const { user, created, upgraded } = outcome.login;
+    if (created) {
+      this.events.userRegistered({ userId: user.id });
+    }
+    if (upgraded) {
+      this.events.userUpgraded({ userId: user.id });
+    }
+    return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Google login: find, link, or create (plan 0005, section 4.4), on the
+   * caller's transaction.
+   *
+   * The one place that knows the three branches. Since plan 0230 its one
+   * caller is {@link exchangeGoogleSignIn}, after the verifier and the bearer
+   * were checked. It answers the user and what happened to it, and the caller
+   * publishes the events and issues the pair after the commit, because a pair
+   * issued inside the transaction would name a user that may not exist yet.
+   *
+   * All three branches record the Terms version the sign in page drew, under
+   * `GOOGLE` (plan 0231, section 4.2): continuing with Google is accepting. A
+   * version that went stale inside the state's ten minutes records nothing,
+   * and the sign in still succeeds; `GET /v1/account/me` then asks.
+   */
+  private async googleLogin(
+    manager: EntityManager,
+    req: GoogleLoginRequest
+  ): Promise<GoogleLoginOutcome> {
+    const identity = await manager.getRepository(OAuthIdentity).findOne({
+      where: {
+        provider: AuthProvider.GOOGLE,
+        providerUserId: req.providerUserId,
+      },
+    });
 
     if (identity) {
-      const user = await this.dataSource
+      const user = await manager
         .getRepository(User)
         .findOneOrFail({ where: { id: identity.userId } });
-      return this.tokens.issueTokens(user);
+      await this.recordTerms(
+        manager,
+        user.id,
+        req.acceptedTermsVersion,
+        TermsAcceptanceVia.GOOGLE
+      );
+      return { user, created: false, upgraded: false };
     }
 
     // No linked user yet: either link onto the caller's temporary user (upgrade
     // in place) or create a fresh registered user.
     if (req.linkUserId) {
-      return this.upgrade({
-        userId: req.linkUserId,
-        google: {
-          providerUserId: req.providerUserId,
-          email: req.email,
-          displayName: req.displayName,
+      const { user } = await this.upgradeIn(
+        manager,
+        {
+          userId: req.linkUserId,
+          google: {
+            providerUserId: req.providerUserId,
+            email: req.email,
+            displayName: req.displayName,
+          },
+          acceptedTermsVersion: req.acceptedTermsVersion,
         },
-      });
+        TermsAcceptanceVia.GOOGLE
+      );
+      return { user, created: false, upgraded: true };
     }
 
-    const user = await this.dataSource.transaction(async (manager) => {
-      const created = await manager.getRepository(User).save(
-        manager.getRepository(User).create({
-          kind: UserKind.REGISTERED,
-          email: req.email ? this.normalizeEmail(req.email) : null,
-          displayName: req.displayName ?? null,
-          emailVerifiedAt: req.email ? new Date() : null,
-          // Specifically NOT the Google profile name (plan 0018, section 1):
-          // that is the person's real name, which they never chose to publish.
-          username: this.usernames.generate(),
-        })
-      );
-      await this.linkGoogle(manager, created.id, req.providerUserId);
-      return created;
-    });
-
-    this.events.userRegistered({ userId: user.id });
-    return this.tokens.issueTokens(user);
+    const created = await manager.getRepository(User).save(
+      manager.getRepository(User).create({
+        kind: UserKind.REGISTERED,
+        email: req.email ? this.normalizeEmail(req.email) : null,
+        displayName: req.displayName ?? null,
+        emailVerifiedAt: req.email ? new Date() : null,
+        // Specifically NOT the Google profile name (plan 0018, section 1):
+        // that is the person's real name, which they never chose to publish.
+        username: this.usernames.generate(),
+      })
+    );
+    await this.linkGoogle(manager, created.id, req.providerUserId);
+    await this.recordTerms(
+      manager,
+      created.id,
+      req.acceptedTermsVersion,
+      TermsAcceptanceVia.GOOGLE
+    );
+    return { user: created, created: true, upgraded: false };
   }
+}
+
+/** What {@link IdentityService.googleLogin} did, for the caller to finish. */
+interface GoogleLoginOutcome {
+  user: User;
+  created: boolean;
+  upgraded: boolean;
+}
+
+/** The answer of the exchange's transaction: a login, or why there is none. */
+type ExchangeOutcome =
+  | { login: GoogleLoginOutcome }
+  | {
+      refused: 'unknown_code' | 'verifier_mismatch' | 'caller_mismatch';
+      handoffId?: string;
+    };
+
+/** base64url of 32 bytes or of a SHA-256: 43 characters, no padding. */
+function isPkceValue(value: unknown): value is string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
+}
+
+/**
+ * Whether `base64url(sha256(verifier))` is the stored challenge (plan 0230,
+ * section 4.2), compared in constant time over buffers of equal length.
+ */
+function verifierMatches(verifier: unknown, challenge: string): boolean {
+  if (!isPkceValue(verifier)) {
+    return false;
+  }
+  const actual = Buffer.from(
+    createHash('sha256').update(verifier).digest('base64url')
+  );
+  const expected = Buffer.from(challenge);
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }

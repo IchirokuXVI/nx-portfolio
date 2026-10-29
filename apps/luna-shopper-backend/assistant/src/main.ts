@@ -10,8 +10,10 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
+import { worstOutputAtTypicalInput } from './app/allowance/reserve-amount';
 import { AppModule } from './app/app.module';
 import type { AssistantConfig } from './app/config/app-config';
+import { hasPriceRow } from './app/provider/prices';
 
 /**
  * Assistant service (plan 0039): takes a question in ordinary language and
@@ -63,33 +65,61 @@ async function bootstrap() {
   logger.log(
     `luna-shopper-backend-assistant bound to NATS; health on http://localhost:${config.port}/health/live`
   );
-  // The key of the provider that answers, named, because with the switch on
-  // `claude` an empty GEMINI_API_KEY no longer means "no assistant" (plan 0224,
-  // section 5).
-  const turnKey =
-    config.provider === 'claude'
-      ? { name: 'ANTHROPIC_API_KEY', value: config.anthropicApiKey }
-      : { name: 'GEMINI_API_KEY', value: config.geminiApiKey };
-  if (turnKey.value.length === 0) {
+  // Claude answers every turn (plan 0236, section 1), so its key is the one
+  // that decides whether there is an assistant at all.
+  if (config.anthropicApiKey.length === 0) {
     logger.warn(
-      `${turnKey.name} is empty: the service is up and healthy, and every turn ` +
+      'ANTHROPIC_API_KEY is empty: the service is up and healthy, and every turn ' +
         'answers 501 not_configured. This is a supported deployment (plan 0026).'
     );
   }
-  if (config.provider === 'claude' && config.geminiApiKey.length === 0) {
+  // Voice is one value (plan 0235, section 9): the chart writes TRANSCRIBER_URL
+  // exactly where it runs the transcriber, and no model provider hears.
+  if (config.transcriberUrl.length === 0) {
     logger.warn(
-      'GEMINI_API_KEY is empty: the assistant answers and cannot hear. Claude ' +
-        'takes no audio, so the voice route answers 501 and a voice comment ' +
-        'settles UNAVAILABLE (plan 0224, section 3).'
+      'TRANSCRIBER_URL is empty: the assistant answers and cannot hear. The ' +
+        'voice route answers 501 and a voice comment settles UNAVAILABLE, which ' +
+        'is a supported deployment (plan 0235, section 7).'
     );
   }
-  // A slot or deployment that switched to claude keeps the ASSISTANT_MODEL it
-  // had, and a Gemini name sent to the Messages API fails every turn.
-  if (config.provider === 'claude' && config.model.startsWith('gemini')) {
+  // Off is for a deployment no minor uses (plan 0236, section 4.3), and it is
+  // said at boot so nobody runs it that way by accident.
+  if (!config.moderation) {
     logger.warn(
-      `ASSISTANT_PROVIDER is claude and the model is ${config.model}, a Gemini ` +
-        'model: every turn will fail. Blank ASSISTANT_MODEL to use the Claude ' +
-        'default (plan 0224, section 5).'
+      'ASSISTANT_MODERATION is off: replies leave without the safety check. ' +
+        'Run it on wherever a minor may use the app (plan 0236, section 4).'
+    );
+  }
+  // The allowance prices every reply (plan 0234, section 2.2). A model with no
+  // row of its own is priced at the dearest row, which counts too much rather
+  // than too little, and is named here.
+  for (const model of new Set([config.model, config.moderationModel])) {
+    if (!hasPriceRow(model)) {
+      logger.warn(
+        `${model} has no row in the assistant's price table: every reply it ` +
+          'writes is priced at the dearest row (plan 0234, section 2.2).'
+      );
+    }
+  }
+  // A reserve below the worst output at the typical input lets an ordinary
+  // long turn run past a person's limit before the settle charges it in full
+  // (plan 0234, section 5.2).
+  const worst = worstOutputAtTypicalInput(config);
+  if (worst.totalMicroUsd > config.allowance.turnReserveMicroUsd) {
+    logger.warn(
+      `ASSISTANT_TURN_RESERVE_MICRO_USD is ${config.allowance.turnReserveMicroUsd}, ` +
+        `below the worst output at the typical input, ${worst.totalMicroUsd} ` +
+        `micro dollars on ${config.model} (plan 0234, section 5.2).`
+    );
+  }
+  // A slot or deployment configured before plan 0236 can keep an ASSISTANT_MODEL
+  // that names another vendor's model, and the Messages API fails every turn
+  // with it.
+  if (!config.model.startsWith('claude-')) {
+    logger.warn(
+      `ASSISTANT_MODEL is ${config.model}, which is not a Claude model: every ` +
+        'turn will fail. Blank ASSISTANT_MODEL to use the default (plan 0236, ' +
+        'section 1).'
     );
   }
 }

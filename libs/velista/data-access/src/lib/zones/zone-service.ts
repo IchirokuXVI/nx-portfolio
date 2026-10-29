@@ -30,11 +30,27 @@ export interface ZoneServiceI {
    * Rule D3 lives behind this: the route treats an expired token as anonymous and
    * would silently mint a **second** guest account over the top of the caller's
    * existing one. See {@link ZoneCreationResult}.
+   *
+   * `acceptedTermsVersion` is the version of the terms the notice beside the button
+   * names (velista `0173`). It goes out only when the caller holds no session, because
+   * only then does the gateway make an account, and it records nothing for anybody else
+   * (backend `0231`, section 4.2).
    */
-  createZone(name: string, username?: string): Promise<ZoneCreationResult>;
+  createZone(
+    name: string,
+    username?: string,
+    acceptedTermsVersion?: string | null
+  ): Promise<ZoneCreationResult>;
 
-  /** Join a zone by its code. Same guest handshake and the same rule D3 hazard. */
-  joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult>;
+  /**
+   * Join a zone by its code. Same guest handshake and the same rule D3 hazard, and the
+   * same `acceptedTermsVersion` as {@link createZone}.
+   */
+  joinZone(
+    joinCode: string,
+    username?: string,
+    acceptedTermsVersion?: string | null
+  ): Promise<ZoneJoinResult>;
 
   /**
    * One zone, with the caller's standing in it (`GET /v1/zones/:id`).

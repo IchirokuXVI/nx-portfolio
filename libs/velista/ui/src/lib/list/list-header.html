@@ -70,9 +70,10 @@
 <lib-list-viewers [viewers]="header().viewers" class="viewers" />
 
 <!--
-  The list is not live: its room was refused or the connection dropped, so what is on
-  screen is correct and will not update itself. Drawn exactly as `0010` draws it on a
-  group, because the situation is the same one.
+  The list is not live: its zone room was refused, so what is on screen is correct and
+  will not update itself. Drawn exactly as `0010` draws it on a group, because the
+  situation is the same one. A plain disconnect draws nothing here: the page header's
+  mark says that on every page (plan 0168, D7).
 -->
 @if (!header().live) {
   <p class="stale">
