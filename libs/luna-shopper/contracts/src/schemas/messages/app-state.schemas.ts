@@ -28,6 +28,8 @@ export const APP_STATE_SCHEMA_IDS = {
    * is documented with `ApiComposedResponse` rather than through a pattern.
    */
   accountMeView: schemaId('gateway/AccountMeView'),
+  // Where the account stands with the Terms (plan 0231, section 4.4).
+  accountTermsView: schemaId('gateway/AccountTermsView'),
 } as const;
 
 const getUserAppStateRequest = object(
@@ -64,14 +66,24 @@ const userAppStateView = object(
   ['setupCompletedAt', 'tourSeenAt']
 );
 
+const accountTermsView = object(
+  APP_STATE_SCHEMA_IDS.accountTermsView,
+  {
+    currentVersion: nonEmptyString(),
+    acceptedVersion: nullableString(),
+    acceptanceRequired: boolean(),
+  },
+  ['currentVersion', 'acceptedVersion', 'acceptanceRequired']
+);
+
 /**
  * The profile's own fields plus `appState`, flat.
  *
  * Built from auth's property map rather than from an `allOf` over
  * `UserProfileView`, for two reasons that point the same way. That schema is
  * strict, so an `allOf` against it would refuse the very field this one adds;
- * and a client author reading the published document gets one object with seven
- * entries instead of a composition to unpick. Nothing is copied: the six fields
+ * and a client author reading the published document gets one flat object
+ * instead of a composition to unpick. Nothing is copied: the profile fields
  * come from the map auth exports, so a change there lands here.
  */
 const accountMeView = object(
@@ -80,14 +92,16 @@ const accountMeView = object(
     ...USER_PROFILE_VIEW_PROPERTIES,
     appState: ref(APP_STATE_SCHEMA_IDS.userAppStateView),
     permissions: array(ref(ENUM_IDS.permission)),
+    terms: ref(APP_STATE_SCHEMA_IDS.accountTermsView),
   },
-  [...USER_PROFILE_VIEW_REQUIRED, 'appState', 'permissions']
+  [...USER_PROFILE_VIEW_REQUIRED, 'appState', 'permissions', 'terms']
 );
 
 export const appStateSchemas: JsonSchema[] = [
   getUserAppStateRequest,
   setUserAppStateRequest,
   userAppStateView,
+  accountTermsView,
   accountMeView,
 ];
 

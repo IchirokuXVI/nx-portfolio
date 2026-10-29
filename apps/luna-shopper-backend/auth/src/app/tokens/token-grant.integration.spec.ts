@@ -22,6 +22,7 @@ import {
   User,
 } from '../entities';
 import { IdentityService } from '../identity/identity.service';
+import { InMemoryTermsService } from '../identity/terms.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { TokenGrantService } from './token-grant.service';
 import { TokenService } from './token.service';
@@ -133,7 +134,8 @@ describeIntegration('reset grants (real Postgres)', () => {
       new UsernameGenerator(),
       new AuthAuditService(dataSource),
       config,
-      {} as never
+      {} as never,
+      new InMemoryTermsService()
     );
   }, 120_000);
 

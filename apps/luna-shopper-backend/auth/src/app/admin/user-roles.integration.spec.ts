@@ -23,6 +23,7 @@ import {
   User,
 } from '../entities';
 import { IdentityService } from '../identity/identity.service';
+import { InMemoryTermsService } from '../identity/terms.testing';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { TokenService } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
@@ -110,7 +111,9 @@ describeIntegration('roles on an account (real Postgres)', () => {
       {} as never,
       new UsernameGenerator(),
       new AuthAuditService(dataSource),
-      config
+      config,
+      undefined as never,
+      new InMemoryTermsService()
     );
     directory = new AdminDirectoryService(
       users,

@@ -675,6 +675,30 @@ export class RecoveryNeedsPasswordException extends DomainException {
   readonly code = ERROR_CODES.RECOVERY_NEEDS_PASSWORD;
 }
 
+/** The `details` key both Terms refusals name the current version under (plan 0231). */
+export const TERMS_CURRENT_VERSION_DETAIL = 'currentVersion';
+
+/**
+ * The supplied Terms version is not the current one (plan 0231, section 4.3).
+ *
+ * It publishes its details, because the client's next act is to draw the
+ * version under {@link TERMS_CURRENT_VERSION_DETAIL}. Nothing was written.
+ */
+export class TermsVersionStaleException extends DomainException {
+  readonly code = ERROR_CODES.TERMS_VERSION_STALE;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * No Terms version was supplied and this deployment requires one (plan 0231,
+ * section 4.3). It publishes its details for the reason
+ * {@link TermsVersionStaleException} does. Nothing was written.
+ */
+export class TermsAcceptanceMissingException extends DomainException {
+  readonly code = ERROR_CODES.TERMS_ACCEPTANCE_MISSING;
+  override readonly exposesDetails = true;
+}
+
 /** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */
 export const WALK_CHANGED_LAST_SEQ_DETAIL = 'lastSeq';
 

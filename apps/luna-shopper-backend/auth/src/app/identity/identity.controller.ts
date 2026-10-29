@@ -3,8 +3,10 @@ import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   AUTH_PATTERNS,
   STATS_PATTERNS,
+  type AcceptTermsRequest,
   type AuthTokens,
   type ConsumeOAuthStateRequest,
+  type CreateTemporaryUserRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
   type ExchangeGoogleSignInRequest,
@@ -29,6 +31,7 @@ import {
   type SetUsernameRequest,
   type StageGoogleSignInRequest,
   type StageGoogleSignInResult,
+  type TermsAcceptanceView,
   type UpgradeRequest,
   type UserProfileView,
   type UserUsernameView,
@@ -60,8 +63,10 @@ export class IdentityController {
   }
 
   @MessagePattern(AUTH_PATTERNS.createTemporaryUser)
-  createTemporaryUser(): Promise<AuthTokens> {
-    return this.identity.createTemporaryUser();
+  createTemporaryUser(
+    @Payload() req: CreateTemporaryUserRequest
+  ): Promise<AuthTokens> {
+    return this.identity.createTemporaryUser(req ?? {});
   }
 
   @MessagePattern(AUTH_PATTERNS.register)
@@ -155,6 +160,14 @@ export class IdentityController {
   @MessagePattern(AUTH_PATTERNS.setUsername)
   setUsername(@Payload() req: SetUsernameRequest): Promise<UserProfileView> {
     return this.identity.setUsername(req);
+  }
+
+  /** Accept the current Terms from the prompt (plan 0231, section 4.4). */
+  @MessagePattern(AUTH_PATTERNS.acceptTerms)
+  acceptTerms(
+    @Payload() req: AcceptTermsRequest
+  ): Promise<TermsAcceptanceView> {
+    return this.identity.acceptTerms(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.getProfile)

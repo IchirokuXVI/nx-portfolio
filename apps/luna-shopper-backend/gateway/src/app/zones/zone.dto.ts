@@ -20,6 +20,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { AcceptedTermsVersion } from '../legal/accepted-terms-version.decorator';
 
 /**
  * The per zone display name is optional on both create and join (plan 0018,
@@ -49,6 +50,10 @@ export class CreateZoneDto {
   @MinLength(USERNAME_MIN_LENGTH)
   @MaxLength(USERNAME_MAX_LENGTH)
   username?: string;
+
+  /** Read only when the caller is anonymous and a guest is minted (plan 0231). */
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
 }
 
 /** Join a zone by code (plan 0006, section 3). */
@@ -65,6 +70,10 @@ export class JoinZoneDto {
   @MinLength(USERNAME_MIN_LENGTH)
   @MaxLength(USERNAME_MAX_LENGTH)
   username?: string;
+
+  /** Read only when the caller is anonymous and a guest is minted (plan 0231). */
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
 }
 
 /** Rename one membership in a zone (plan 0018, section 5). */

@@ -254,6 +254,35 @@ describe('contract schemas', () => {
           email: null,
           emailVerified: false,
           displayName: null,
+          termsAcceptedVersion: null,
+          termsAcceptedAt: null,
+        }).valid
+      ).toBe(true);
+    });
+
+    it('auth.acceptTerms answers the recorded row, and the legal enums are registered (plan 0231)', () => {
+      expect(
+        validateMessageRequest('auth.acceptTerms', {
+          userId: 'u',
+          version: '2026-10-28',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('auth.acceptTerms', {
+          version: '2026-10-28',
+          acceptedAt: '2026-10-28T10:00:00.000Z',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('assistant.capabilities', {
+          answers: true,
+          hears: false,
+          textProvider: 'anthropic',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('auth.createTemporaryUser', {
+          acceptedTermsVersion: '2026-10-28',
         }).valid
       ).toBe(true);
     });

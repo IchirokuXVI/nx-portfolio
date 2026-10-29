@@ -29,6 +29,7 @@ import {
   ZoneRole,
   ZoneStatus,
 } from '../lib/enums/zone.enums';
+import { AiTextProvider } from '../lib/legal/legal-settings';
 import { enumOf, JsonSchema, schemaId } from './builders';
 
 /**
@@ -68,6 +69,8 @@ export const ENUM_IDS = {
   tripRowOutcome: schemaId('enums/TripRowOutcome'),
   /** Why a line at zero is offered back to its list (plan 0123, section 5). */
   lineSuggestionReason: schemaId('enums/LineSuggestionReason'),
+  /** Who answers a typed assistant turn, for the policy (plan 0231, section 2). */
+  aiTextProvider: schemaId('enums/AiTextProvider'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -96,4 +99,5 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.tripKind, Object.values(TripKind)),
   enumOf(ENUM_IDS.tripRowOutcome, Object.values(TripRowOutcome)),
   enumOf(ENUM_IDS.lineSuggestionReason, Object.values(LineSuggestionReason)),
+  enumOf(ENUM_IDS.aiTextProvider, Object.values(AiTextProvider)),
 ];

@@ -72,6 +72,7 @@ import {
   impersonationMessageContracts,
   impersonationSchemas,
 } from './messages/impersonation.schemas';
+import { legalSchemas } from './messages/legal.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
@@ -145,6 +146,7 @@ export const allSchemas: JsonSchema[] = [
   ...adminDashboardSchemas,
   ...accountSchemas,
   ...appStateSchemas,
+  ...legalSchemas,
   ...zoneSchemas,
   ...listSchemas,
   ...mergeSchemas,

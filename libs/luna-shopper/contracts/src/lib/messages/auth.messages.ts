@@ -86,6 +86,12 @@ export const AUTH_PATTERNS = {
    * has no room for anything else.
    */
   mintParticipantToken: 'auth.mintParticipantToken',
+  /**
+   * Record that the caller accepted the current Terms (plan 0231, section
+   * 4.4). The one way to accept outside the paths that create an account.
+   * Idempotent: a repeat answers the row already recorded.
+   */
+  acceptTerms: 'auth.acceptTerms',
 } as const;
 
 export type AuthPattern = (typeof AUTH_PATTERNS)[keyof typeof AUTH_PATTERNS];
@@ -161,10 +167,23 @@ export interface AuthTokens {
   refreshToken: string;
 }
 
-/** No fields: a temporary identity is minted purely from the request context. */
-export type CreateTemporaryUserRequest = Record<string, never>;
+/**
+ * The Terms version a client drew beside the action that creates an account
+ * (plan 0231, section 4.2). Optional on every path: a stale one is refused
+ * with `terms_version_stale`, and a missing one with `terms_acceptance_missing`
+ * only where the deployment requires acceptance.
+ */
+export interface AcceptedTermsField {
+  acceptedTermsVersion?: string;
+}
 
-export interface RegisterRequest {
+/**
+ * A temporary identity is minted from the request context, plus the Terms
+ * version the notice beside the zone buttons named (plan 0231, section 4.2).
+ */
+export type CreateTemporaryUserRequest = AcceptedTermsField;
+
+export interface RegisterRequest extends AcceptedTermsField {
   email: string;
   password: string;
   displayName?: string;
@@ -276,7 +295,7 @@ export interface RefreshRequest {
  * from the caller's verified token by the gateway. Either an email + password or
  * a linked Google identity is supplied.
  */
-export interface UpgradeRequest {
+export interface UpgradeRequest extends AcceptedTermsField {
   userId: string;
   email?: string;
   password?: string;
@@ -329,6 +348,19 @@ export interface UserProfileView {
   email: string | null;
   emailVerified: boolean;
   displayName: string | null;
+  /** The newest Terms version this account accepted, or null (plan 0231, section 4.4). */
+  termsAcceptedVersion: string | null;
+  /** When it accepted that version, ISO 8601, or null. */
+  termsAcceptedAt: string | null;
+}
+
+/**
+ * Accept the current Terms (plan 0231, section 4.4). `userId` is set by the
+ * gateway from the verified token, never from a body.
+ */
+export interface AcceptTermsRequest {
+  userId: string;
+  version: string;
 }
 
 /**
@@ -381,7 +413,7 @@ export interface GoogleProfile {
  * No longer a message (plan 0230): auth runs it inside the exchange, once the
  * verifier and the bearer have both been checked, and nothing else reaches it.
  */
-export interface GoogleLoginRequest extends GoogleProfile {
+export interface GoogleLoginRequest extends GoogleProfile, AcceptedTermsField {
   linkUserId?: string;
 }
 
@@ -403,6 +435,12 @@ export interface OAuthStatePayload {
    * 0230, section 2). Carried so the callback can copy it onto the handoff.
    */
   codeChallenge: string;
+  /**
+   * The Terms version the sign in page drew beside the Google button (plan
+   * 0231, section 4.2). Checked at the mint, carried across the round trip,
+   * and recorded at the exchange.
+   */
+  acceptedTermsVersion?: string;
 }
 
 /**
@@ -435,7 +473,8 @@ export interface ConsumeOAuthStateRequest {
  * and `codeChallenge` is copied from the state. Auth writes one handoff row and
  * nothing else.
  */
-export interface StageGoogleSignInRequest extends GoogleProfile {
+export interface StageGoogleSignInRequest
+  extends GoogleProfile, AcceptedTermsField {
   linkUserId?: string;
   codeChallenge: string;
   locale?: string;

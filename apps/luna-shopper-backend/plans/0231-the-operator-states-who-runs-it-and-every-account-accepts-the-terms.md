@@ -1,3 +1,5 @@
+> **PR:** [#852](https://github.com/IchirokuXVI/nx-portfolio/pull/852)
+
 # 0231: the operator states who runs it, and every account accepts the terms
 
 > Luna Shopper is open source and anybody may deploy it. Velista is one deployment of it. A
@@ -570,3 +572,37 @@ Mine, for the owner to change:
    transcription off".
 9. **The version is a date string**, compared for equality, `template+revision` when the
    operator amends.
+
+## 10. What the build decided
+
+The builder's choices where the plan left room. Each is the owner's to change.
+
+1. **The template version is `2026-10-28`**, the day of the build, not the `2026-11-01` of
+   section 1. Section 1 says the builder sets it to the merge day. Velista `0172` sets it
+   again when it adds the texts.
+2. **`hears` is `answers && transcriptionSupported`**, the exact test `transcribe` applies
+   before its 501. With `ASSISTANT_PROVIDER=claude`, no Anthropic key and a Gemini key, the
+   assistant answers 501 to a recording today, so `hears` is false there too.
+3. **The capability probe has a 5 second timeout per question.** Nest's NATS client waits
+   forever, and a question that never returns would hold the next poll back. A failed poll
+   keeps the last answer.
+4. **`lunaShopperBackend.legal.secret`** names the operator Secret, as `backups.secret` names
+   the backup Secret. Its default is `luna-shopper-backend-operator`.
+5. **`provision-release.sh --values <path>`** layers one more values file after the
+   environment's, with `--check` only. Section 7 asks for a run against a values file that
+   sets acceptance on, and the script had no way to take one.
+6. **`--check --render-only` cannot refuse a controller or contact that comes from the
+   Secret.** It reads no cluster, so it says it skipped those keys. A literal in the values
+   is checked. The full `--check` on the host refuses an empty Secret value. The build
+   proved that half against a stub `kubectl`, not a cluster.
+7. **The operator file is read before anything is written.** A file inside the repository,
+   a line that is not `KEY=value`, or an unknown key stops the script before it creates the
+   namespace. One pair of quotes around a value and a trailing carriage return are removed.
+8. **`TermsVersionStaleException` and `TermsAcceptanceMissingException` publish their
+   details**, so `details.currentVersion` reaches the client. Velista's `problem.ts` and
+   `errors.ts` do not know the two codes yet. Plan `0173` adds them.
+9. **The deploy that follows the merge needs the operator Secret first.** The gateway and
+   auth now read eight (auth: one) `secretKeyRef`s from `luna-shopper-backend-operator`, and
+   the deploy preflight refuses a cluster that does not have it. Run
+   `provision-release.sh --unit velista --env staging` on the host before the staging deploy,
+   and the same with `--env production` before the next release (section 6, step 1).

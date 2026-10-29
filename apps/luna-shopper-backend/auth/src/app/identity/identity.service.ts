@@ -7,10 +7,12 @@ import {
   RecoverySignInOutcome,
   UserKind,
   UsernamePropagation,
+  type AcceptTermsRequest,
   type AccountRole,
   type AuthTokens,
   type ConsumeOAuthStateRequest,
   type CreateAdminRecoveryLinksResult,
+  type CreateTemporaryUserRequest,
   type DeleteAccountRequest,
   type DeleteAccountResult,
   type ExchangeGoogleSignInRequest,
@@ -34,6 +36,7 @@ import {
   type SetUsernameRequest,
   type StageGoogleSignInRequest,
   type StageGoogleSignInResult,
+  type TermsAcceptanceView,
   type UpgradeRequest,
   type UserProfileView,
   type UserUsernameView,
@@ -70,6 +73,7 @@ import {
   PasswordReset,
   PasswordResetChannel,
   PasswordResetSpentAs,
+  TermsAcceptanceVia,
   User,
 } from '../entities';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
@@ -79,6 +83,7 @@ import { PasswordService } from '../password/password.service';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { TokenService, type RecordedTokens } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
+import { TermsService } from './terms.service';
 
 /** Hours an email verification link stays valid. */
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -180,7 +185,10 @@ export class IdentityService {
     configService: ConfigService,
     // Last, so that no positional caller moves (plan 0194). Only `refresh`
     // reaches it, and only for the row of a support session.
-    private readonly impersonation: ImpersonationService
+    private readonly impersonation: ImpersonationService,
+    // Last, for the same reason (plan 0231). Every path that creates an
+    // account checks and records the Terms through it.
+    private readonly terms: TermsService
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
   }
@@ -220,17 +228,53 @@ export class IdentityService {
    * Mint a temporary identity (plan 0005, section 4.1). Called by the gateway
    * only when a client actually creates or joins a zone, so a browsing visitor
    * leaves no account behind.
+   *
+   * The Terms version the notice beside the zone buttons named is checked
+   * first and recorded in the transaction that writes the user (plan 0231,
+   * section 4.2), so a refused version leaves no guest behind.
    */
-  async createTemporaryUser(): Promise<AuthTokens> {
-    const user = await this.dataSource.getRepository(User).save(
-      this.dataSource.getRepository(User).create({
-        kind: UserKind.TEMPORARY,
-        // A guest is named from the moment they exist (plan 0018, section 3.4),
-        // so the zone they are about to create or join has a name to record.
-        username: this.usernames.generate(),
-      })
-    );
+  async createTemporaryUser(
+    req: CreateTemporaryUserRequest = {}
+  ): Promise<AuthTokens> {
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
+    const user = await this.dataSource.transaction(async (manager) => {
+      const saved = await manager.getRepository(User).save(
+        manager.getRepository(User).create({
+          kind: UserKind.TEMPORARY,
+          // A guest is named from the moment they exist (plan 0018, section
+          // 3.4), so the zone they are about to create or join has a name to
+          // record.
+          username: this.usernames.generate(),
+        })
+      );
+      await this.recordTerms(
+        manager,
+        saved.id,
+        req.acceptedTermsVersion,
+        TermsAcceptanceVia.GUEST
+      );
+      return saved;
+    });
     return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Record the supplied version when it is the current one, inside the
+   * caller's transaction (plan 0231, section 4.2). A path that refuses a stale
+   * version has already called {@link TermsService.assertAcceptable}, so this
+   * skips only an absent version there. The Google exchange, which never
+   * refuses over the Terms, relies on it to skip a version that went stale
+   * inside the state's ten minutes.
+   */
+  private async recordTerms(
+    manager: EntityManager,
+    userId: string,
+    version: string | null | undefined,
+    via: TermsAcceptanceVia
+  ): Promise<void> {
+    if (this.terms.isCurrent(version)) {
+      await this.terms.record(manager, userId, version, via);
+    }
   }
 
   /** Email + password registration (plan 0005, section 4.2). */
@@ -241,6 +285,8 @@ export class IdentityService {
     if (!req.email || !req.password) {
       throw new ValidationException('Email and password are required');
     }
+    // Before the transaction, so a refused version writes nothing (plan 0231).
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
     const email = this.normalizeEmail(req.email);
 
     const { user, rawVerificationToken } = await this.dataSource.transaction(
@@ -277,6 +323,12 @@ export class IdentityService {
         const { raw: rawVerificationToken } = await this.createVerification(
           manager,
           user.id
+        );
+        await this.recordTerms(
+          manager,
+          user.id,
+          req.acceptedTermsVersion,
+          TermsAcceptanceVia.REGISTER
         );
         return { user, rawVerificationToken };
       }
@@ -1051,6 +1103,8 @@ export class IdentityService {
     } else {
       this.requireMail();
     }
+    // Before the transaction, so a refused version writes nothing (plan 0231).
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
     const { user, email, rawVerificationToken } =
       await this.dataSource.transaction((manager) =>
         this.upgradeIn(manager, req)
@@ -1077,10 +1131,15 @@ export class IdentityService {
    * before this moment must not keep it. The caller issues its own pair after
    * the commit, so the person upgrading stays signed in and nobody else does,
    * the same order a password reset keeps.
+   *
+   * The Terms version is recorded here, on the same transaction, under `via`:
+   * `UPGRADE` for a typed address, `GOOGLE` when the exchange upgrades a guest
+   * in place (plan 0231, section 4.2).
    */
   private async upgradeIn(
     manager: EntityManager,
-    req: UpgradeRequest
+    req: UpgradeRequest,
+    via: TermsAcceptanceVia = TermsAcceptanceVia.UPGRADE
   ): Promise<{
     user: User;
     email: string | null;
@@ -1139,6 +1198,7 @@ export class IdentityService {
     }
     const saved = await manager.getRepository(User).save(user);
     await this.tokens.revokeAllForUser(saved.id, manager);
+    await this.recordTerms(manager, saved.id, req.acceptedTermsVersion, via);
     return { user: saved, email, rawVerificationToken };
   }
 
@@ -1242,7 +1302,7 @@ export class IdentityService {
     );
 
     this.emitUsernameChanged(user, oldUsername, req.propagation);
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1278,7 +1338,7 @@ export class IdentityService {
     );
 
     this.emitUsernameChanged(user, oldUsername, propagation);
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1312,7 +1372,7 @@ export class IdentityService {
       return tx.update(User, before, user);
     });
 
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1417,7 +1477,7 @@ export class IdentityService {
     if (!user) {
       throw new NotFoundException('User not found');
     }
-    return this.toProfile(user);
+    return this.profileOf(user);
   }
 
   /**
@@ -1449,7 +1509,13 @@ export class IdentityService {
     return users.map((user) => ({ userId: user.id, username: user.username }));
   }
 
-  private toProfile(user: User): UserProfileView {
+  /**
+   * The profile every write and read of it answers, with the newest Terms
+   * acceptance beside it (plan 0231, section 4.4). Read after the caller's
+   * transaction has committed, through the pool.
+   */
+  private async profileOf(user: User): Promise<UserProfileView> {
+    const accepted = await this.terms.latest(user.id);
     return {
       userId: user.id,
       kind: user.kind,
@@ -1457,6 +1523,49 @@ export class IdentityService {
       email: user.email,
       emailVerified: user.emailVerifiedAt !== null,
       displayName: user.displayName,
+      termsAcceptedVersion: accepted?.version ?? null,
+      termsAcceptedAt: accepted?.acceptedAt.toISOString() ?? null,
+    };
+  }
+
+  /**
+   * Accept the current Terms from the prompt (plan 0231, section 4.4).
+   *
+   * Refuses a version that is not the current one, and records `PROMPT`
+   * otherwise. Idempotent: a repeat answers the row already recorded, with the
+   * time it was first accepted. An account that is gone answers not found,
+   * which the gateway turns into a 401 like every other read about the caller.
+   */
+  async acceptTerms(req: AcceptTermsRequest): Promise<TermsAcceptanceView> {
+    if (!req.version) {
+      throw new ValidationException('A version is required', {
+        messageArgs: { field: 'version' },
+      });
+    }
+    this.terms.assertAcceptable(req.version);
+    const accepted = await this.dataSource.transaction(async (manager) => {
+      const user = await manager
+        .getRepository(User)
+        .findOne({ where: { id: req.userId } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      await this.terms.record(
+        manager,
+        user.id,
+        req.version,
+        TermsAcceptanceVia.PROMPT
+      );
+      return this.terms.find(manager, user.id, req.version);
+    });
+    if (!accepted) {
+      // The insert above either wrote the row or met it, so this cannot happen
+      // short of a delete racing the accept, which the cascade makes possible.
+      throw new NotFoundException('User not found');
+    }
+    return {
+      version: accepted.version,
+      acceptedAt: accepted.acceptedAt.toISOString(),
     };
   }
 
@@ -1504,6 +1613,10 @@ export class IdentityService {
         'A codeChallenge is required to start a Google sign in'
       );
     }
+    // At the start and not at the finish (plan 0231, section 4.2). The start is
+    // a JSON POST, so a refusal here reaches the app as a problem it can show;
+    // the finish is a redirect, where a refusal costs the whole sign in.
+    this.terms.assertAcceptable(req.acceptedTermsVersion);
     const state = await this.dataSource.transaction((manager) =>
       this.grants.issue(
         manager,
@@ -1512,6 +1625,7 @@ export class IdentityService {
           userId: req.userId ?? null,
           locale: req.locale ?? null,
           codeChallenge: req.codeChallenge,
+          termsVersion: req.acceptedTermsVersion ?? null,
         },
         OAUTH_STATE_TTL_MS
       )
@@ -1551,6 +1665,9 @@ export class IdentityService {
       ...(record.userId ? { userId: record.userId } : {}),
       ...(record.locale ? { locale: record.locale } : {}),
       codeChallenge: record.codeChallenge,
+      ...(record.termsVersion
+        ? { acceptedTermsVersion: record.termsVersion }
+        : {}),
     };
   }
 
@@ -1580,6 +1697,7 @@ export class IdentityService {
           displayName: req.displayName ?? null,
           codeChallenge: req.codeChallenge,
           locale: req.locale ?? null,
+          termsVersion: req.acceptedTermsVersion ?? null,
         },
         OAUTH_HANDOFF_TTL_MS
       )
@@ -1630,6 +1748,9 @@ export class IdentityService {
               ? { displayName: handoff.displayName }
               : {}),
             ...(handoff.userId ? { linkUserId: handoff.userId } : {}),
+            ...(handoff.termsVersion
+              ? { acceptedTermsVersion: handoff.termsVersion }
+              : {}),
           }),
         };
       }
@@ -1664,6 +1785,11 @@ export class IdentityService {
    * were checked. It answers the user and what happened to it, and the caller
    * publishes the events and issues the pair after the commit, because a pair
    * issued inside the transaction would name a user that may not exist yet.
+   *
+   * All three branches record the Terms version the sign in page drew, under
+   * `GOOGLE` (plan 0231, section 4.2): continuing with Google is accepting. A
+   * version that went stale inside the state's ten minutes records nothing,
+   * and the sign in still succeeds; `GET /v1/account/me` then asks.
    */
   private async googleLogin(
     manager: EntityManager,
@@ -1680,20 +1806,31 @@ export class IdentityService {
       const user = await manager
         .getRepository(User)
         .findOneOrFail({ where: { id: identity.userId } });
+      await this.recordTerms(
+        manager,
+        user.id,
+        req.acceptedTermsVersion,
+        TermsAcceptanceVia.GOOGLE
+      );
       return { user, created: false, upgraded: false };
     }
 
     // No linked user yet: either link onto the caller's temporary user (upgrade
     // in place) or create a fresh registered user.
     if (req.linkUserId) {
-      const { user } = await this.upgradeIn(manager, {
-        userId: req.linkUserId,
-        google: {
-          providerUserId: req.providerUserId,
-          email: req.email,
-          displayName: req.displayName,
+      const { user } = await this.upgradeIn(
+        manager,
+        {
+          userId: req.linkUserId,
+          google: {
+            providerUserId: req.providerUserId,
+            email: req.email,
+            displayName: req.displayName,
+          },
+          acceptedTermsVersion: req.acceptedTermsVersion,
         },
-      });
+        TermsAcceptanceVia.GOOGLE
+      );
       return { user, created: false, upgraded: true };
     }
 
@@ -1709,6 +1846,12 @@ export class IdentityService {
       })
     );
     await this.linkGoogle(manager, created.id, req.providerUserId);
+    await this.recordTerms(
+      manager,
+      created.id,
+      req.acceptedTermsVersion,
+      TermsAcceptanceVia.GOOGLE
+    );
     return { user: created, created: true, upgraded: false };
   }
 }

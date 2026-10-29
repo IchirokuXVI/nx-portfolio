@@ -9,7 +9,8 @@ Secret.
 
 Call with a dict:
   (dict "svc" <service> "cfg" <configMapName> "sec" <secretName>
-        "env" <environment label> "tag" <imageTag>)
+        "env" <environment label> "tag" <imageTag>
+        "legal" <.Values.lunaShopperBackend.legal>)
 
 `env` is now a telemetry label read from .Values.environment rather than a
 dimension the chart branches on: this release is one environment (plan 0002), so
@@ -22,6 +23,7 @@ them.
 {{- $sec := .sec -}}
 {{- $env := .env -}}
 {{- $tag := .tag -}}
+{{- $legal := .legal -}}
 # Common to every service.
 - name: PORT
   value: {{ $svc.port | quote }}
@@ -127,13 +129,19 @@ own body parser, mounted ahead of the 100 KB default because Nest's built in one
 cannot vary per route. Gateway only: the harvester reads the document off a
 broker message, and NATS carries 8 MB.
 */}}
-{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "HARVESTER_FILE_IMPORT_MAX_BYTES") }}
+{{- /*
+What GET /v1/legal/settings reports (plan 0231, section 5.3): the switch, the
+retention periods, and support sessions, which auth alone enforces and the
+gateway only reports.
+*/}}
+{{- range $key := (list "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "APP_BASE_URL" "MIN_CLIENT_VERSION" "ASSISTANT_AUDIO_MAX_BYTES" "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS" "HARVESTER_FILE_IMPORT_MAX_BYTES" "TERMS_ACCEPTANCE_REQUIRED" "LEGAL_OFFSITE_BACKUPS" "LEGAL_BACKUP_RETENTION_DAYS" "LEGAL_APPLICATION_LOG_DAYS" "LEGAL_ASSISTANT_LOG_DAYS" "RETENTION_AUDIT" "RETENTION_ADMIN_LOGIN_FAILURES" "RETENTION_EXPIRED_GRANTS" "IMPERSONATION_ENABLED") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
+{{- include "lunaShopperBackend.operatorEnv" (dict "legal" $legal "keys" (list "LEGAL_APP_NAME" "LEGAL_CONTROLLER_NAME" "LEGAL_CONTACT_EMAIL" "LEGAL_HOSTING_PROVIDER" "LEGAL_EMAIL_PROVIDER" "LEGAL_BACKUP_PROVIDER" "LEGAL_TERMS_REVISION" "LEGAL_PRIVACY_REVISION")) }}
 {{- end }}
 {{- if eq $svc.role "core" }}
 - name: CORE_DB_URL
@@ -311,15 +319,50 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: SMTP_PASS
-{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "IMPERSONATION_ENABLED" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL") }}
+{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "IMPERSONATION_ENABLED" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL" "TERMS_ACCEPTANCE_REQUIRED") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
+{{- /*
+The Terms revision only (plan 0231, section 5.1): auth computes the version it
+records from it, with the function the gateway publishes it with.
+*/}}
+{{- include "lunaShopperBackend.operatorEnv" (dict "legal" $legal "keys" (list "LEGAL_TERMS_REVISION")) }}
 {{- end }}
 {{- end }}
+
+{{/*
+The operator's own legal values (plan 0231, section 5.1), one env entry per key.
+
+A key set in lunaShopperBackend.legal renders as a literal value, for a self
+hoster with a private values file. An empty one is read from the operator Secret,
+which provision-release.sh writes from a file outside the repository and never
+from the chart: the owner's values files are public, so his entries stay empty
+and his values live only in the cluster. A Secret of its own rather than keys in
+the app Secret, so that rewriting the operator's name can never touch a password.
+
+Call with a dict:
+  (dict "legal" <.Values.lunaShopperBackend.legal> "keys" <list of env names>)
+*/}}
+{{- define "lunaShopperBackend.operatorEnv" -}}
+{{- $legal := .legal | default dict -}}
+{{- $fields := dict "LEGAL_APP_NAME" "appName" "LEGAL_CONTROLLER_NAME" "controllerName" "LEGAL_CONTACT_EMAIL" "contactEmail" "LEGAL_HOSTING_PROVIDER" "hostingProvider" "LEGAL_EMAIL_PROVIDER" "emailProvider" "LEGAL_BACKUP_PROVIDER" "backupProvider" "LEGAL_TERMS_REVISION" "termsRevision" "LEGAL_PRIVACY_REVISION" "privacyRevision" -}}
+{{- range $key := .keys }}
+{{- $value := get $legal (get $fields $key) | default "" | toString }}
+- name: {{ $key }}
+{{- if $value }}
+  value: {{ $value | quote }}
+{{- else }}
+  valueFrom:
+    secretKeyRef:
+      name: {{ $legal.secret | default "luna-shopper-backend-operator" }}
+      key: {{ $key }}
+{{- end }}
+{{- end }}
+{{- end -}}
 
 {{/*
 Luna Shopper migration Job env (plan 0002, section 5; the failure below is plan

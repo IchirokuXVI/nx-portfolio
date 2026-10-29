@@ -9,6 +9,7 @@ import { OAuthIdentity } from './oauth-identity.entity';
 import { OAuthState } from './oauth-state.entity';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
+import { TermsAcceptance } from './terms-acceptance.entity';
 import { User } from './user.entity';
 
 export { AdminLoginFailure } from './admin-login-failure.entity';
@@ -31,6 +32,7 @@ export {
   PasswordResetSpentAs,
 } from './password-reset.entity';
 export { RefreshToken } from './refresh-token.entity';
+export { TermsAcceptance, TermsAcceptanceVia } from './terms-acceptance.entity';
 export { User } from './user.entity';
 
 /** Every auth entity, for TypeOrmModule registration and the CLI data source. */
@@ -48,6 +50,9 @@ export const AUTH_ENTITIES = [
   // one.
   ImpersonationSession,
   RefreshToken,
+  // Which Terms each account accepted (plan 0231). It references the user and
+  // nothing references it.
+  TermsAcceptance,
   // The operator identity (plan 0071). Last, and separate: it references nothing
   // above it and nothing above it references it.
   AdminUser,

@@ -6,6 +6,7 @@ import type { User } from '../entities';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * Several accounts' global usernames at once (plan 0114, section 9).
@@ -37,7 +38,9 @@ function build(users: Partial<User>[]) {
     {} as never,
     new UsernameGenerator(),
     fakeAudit([]).service,
-    { getOrThrow: () => ({}) } as never
+    { getOrThrow: () => ({}) } as never,
+    undefined as never,
+    new InMemoryTermsService()
   );
   return { service, find };
 }

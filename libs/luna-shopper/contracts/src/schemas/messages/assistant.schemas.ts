@@ -1,6 +1,7 @@
 import { ASSISTANT_PATTERNS } from '../../lib/messages/assistant.messages';
 import {
   array,
+  boolean,
   JsonSchema,
   nonEmptyString,
   nullableString,
@@ -30,6 +31,9 @@ export const ASSISTANT_SCHEMA_IDS = {
   turnScope: schemaId('assistant/TurnScope'),
   transcribeRequest: schemaId('msg/assistant/transcribeRequest'),
   transcribeResponse: schemaId('msg/assistant/transcribeResponse'),
+  // What this deployment's assistant can do (plan 0231, section 3).
+  capabilitiesRequest: schemaId('msg/assistant.capabilities/request'),
+  capabilities: schemaId('assistant/AssistantCapabilities'),
 } as const;
 
 const assistantMessage = object(
@@ -182,6 +186,22 @@ const transcribeResponse = object(
   ['text']
 );
 
+const capabilitiesRequest = object(
+  ASSISTANT_SCHEMA_IDS.capabilitiesRequest,
+  {},
+  []
+);
+
+const capabilities = object(
+  ASSISTANT_SCHEMA_IDS.capabilities,
+  {
+    answers: boolean(),
+    hears: boolean(),
+    textProvider: { anyOf: [ref(ENUM_IDS.aiTextProvider), { type: 'null' }] },
+  },
+  ['answers', 'hears', 'textProvider']
+);
+
 export const assistantSchemas: JsonSchema[] = [
   assistantMessage,
   assistantListLink,
@@ -192,6 +212,8 @@ export const assistantSchemas: JsonSchema[] = [
   turnResponse,
   transcribeRequest,
   transcribeResponse,
+  capabilitiesRequest,
+  capabilities,
 ];
 
 export const assistantMessageContracts: Record<
@@ -213,5 +235,9 @@ export const assistantMessageContracts: Record<
   [ASSISTANT_PATTERNS.transcribe]: {
     request: ASSISTANT_SCHEMA_IDS.transcribeRequest,
     response: ASSISTANT_SCHEMA_IDS.transcribeResponse,
+  },
+  [ASSISTANT_PATTERNS.capabilities]: {
+    request: ASSISTANT_SCHEMA_IDS.capabilitiesRequest,
+    response: ASSISTANT_SCHEMA_IDS.capabilities,
   },
 };

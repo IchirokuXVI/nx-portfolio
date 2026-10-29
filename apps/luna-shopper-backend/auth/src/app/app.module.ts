@@ -29,6 +29,7 @@ import {
 import { IdentityController } from './identity/identity.controller';
 import { IdentityService } from './identity/identity.service';
 import { StatsService } from './identity/stats.service';
+import { TermsService } from './identity/terms.service';
 import { ImpersonationController } from './impersonation/impersonation.controller';
 import { ImpersonationService } from './impersonation/impersonation.service';
 import { MailModule } from './mail/mail.module';
@@ -118,6 +119,8 @@ import { UsernameController } from './username/username.controller';
   ],
   providers: [
     IdentityService,
+    // The Terms rule every path that creates an account applies (plan 0231).
+    TermsService,
     StatsService,
     TokenService,
     TokenGrantService,

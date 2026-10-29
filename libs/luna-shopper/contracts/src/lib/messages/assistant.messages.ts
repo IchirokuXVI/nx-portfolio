@@ -2,6 +2,7 @@ import type {
   AssistantRole,
   ListResolutionBranch,
 } from '../enums/assistant.enums';
+import type { AiTextProvider } from '../legal/legal-settings';
 
 /**
  * The assistant service (plan 0039).
@@ -49,7 +50,26 @@ export const ASSISTANT_PATTERNS = {
    * service unbootable without a credential it has no other use for.
    */
   transcribe: 'assistant.transcribe',
+  /**
+   * What this deployment's assistant can do (plan 0231, section 3), asked by
+   * the gateway for `GET /v1/legal/settings`. Empty request. The chart cannot
+   * know whether a provider key is present, so the assistant says.
+   */
+  capabilities: 'assistant.capabilities',
 } as const;
+
+/** No fields: the answer is about the deployment, not about a caller. */
+export type AssistantCapabilitiesRequest = Record<string, never>;
+
+/** What the assistant can do, computed with the checks that decide its 501s. */
+export interface AssistantCapabilities {
+  /** A typed turn can be answered: the selected provider has its key. */
+  answers: boolean;
+  /** A recording can be transcribed by whatever transcribes in this deployment. */
+  hears: boolean;
+  /** Who answers a typed turn, when `answers` is true. */
+  textProvider: AiTextProvider | null;
+}
 
 /**
  * A recording to write down (plan 0041, section 3.2).

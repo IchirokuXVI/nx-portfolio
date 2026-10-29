@@ -18,6 +18,7 @@ import {
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * A Google sign in lands only on the account that asked for it (plan 0230,
@@ -175,7 +176,9 @@ function build() {
         smtp: { enabled: true, verifyBaseUrl: 'https://app.example' },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService()
   );
 
   const addGuest = (id: string) =>

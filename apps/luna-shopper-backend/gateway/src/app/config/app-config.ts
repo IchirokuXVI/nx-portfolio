@@ -9,6 +9,11 @@ import {
   telemetryValidationSchema,
 } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
+import {
+  legalConfig,
+  legalValidationSchema,
+  type LegalConfig,
+} from './legal-config';
 import { readKey } from './read-key';
 
 /**
@@ -292,6 +297,11 @@ export const gatewayValidationSchema = Joi.object({
   // did before, and what the validation buys is failing fast on a malformed
   // value rather than silently sampling everything.
   ...telemetryValidationSchema,
+
+  // What the legal documents say about this deployment (plan 0231, section
+  // 5). Every key defaults; acceptance required with no controller or contact
+  // refuses to boot.
+  ...legalValidationSchema,
 })
   .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
   .or('ADMIN_JWT_PUBLIC_KEY', 'ADMIN_JWT_PUBLIC_KEY_FILE');
@@ -341,6 +351,8 @@ export interface GatewayConfig {
     transcribeTimeoutMs: number;
   };
   logLevel: (typeof LOG_LEVELS)[number];
+  /** What `GET /v1/legal/settings` answers from (plan 0231, section 2). */
+  legal: LegalConfig;
 }
 
 /**
@@ -414,5 +426,6 @@ export const gatewayConfiguration = registerAs(
       ),
     },
     logLevel: process.env.LOG_LEVEL as GatewayConfig['logLevel'],
+    legal: legalConfig(),
   })
 );

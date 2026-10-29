@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  AiTextProvider,
   AssistantRole,
   ListResolutionBranch,
+  type AssistantCapabilities,
   type AssistantMessage,
   type AssistantTranscribeRequest,
   type AssistantTranscribeResponse,
@@ -113,6 +115,29 @@ export class AssistantService {
     this.config = configService.getOrThrow<AssistantConfig>('assistant');
     this.limiter = new TurnLimiter(this.config.turnsPerMinute);
     this.gate = new ConcurrencyGate(this.config.concurrency);
+  }
+
+  /**
+   * What this deployment's assistant can do (plan 0231, section 3), for the
+   * privacy policy the gateway publishes.
+   *
+   * Computed with exactly the checks that decide the 501s below, so the policy
+   * never describes an assistant that answers 501, nor hides one that answers:
+   * `answers` is {@link requireConfigured}'s test, and `hears` is the test
+   * {@link transcribe} applies. Plan 0235 changes how `hears` is computed and
+   * nothing else here.
+   */
+  capabilities(): AssistantCapabilities {
+    const answers = this.provider.configured;
+    return {
+      answers,
+      hears: answers && this.provider.transcriptionSupported,
+      textProvider: answers
+        ? this.config.provider === 'claude'
+          ? AiTextProvider.ANTHROPIC
+          : AiTextProvider.GOOGLE
+        : null,
+    };
   }
 
   /**

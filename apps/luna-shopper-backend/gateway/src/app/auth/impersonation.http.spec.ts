@@ -16,6 +16,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { AccountController } from '../account/account.controller';
 import { ScopeResolutionService } from '../catalog/scope-resolution.service';
+import { legalConfig } from '../config/legal-config';
 import { NatsClient } from '../messaging/nats-client';
 import { ZoneController } from '../zones/zone.controller';
 import { AuthController } from './auth.controller';
@@ -108,6 +109,7 @@ describe('a support session at the gateway', () => {
                   .toString(),
                 appBaseUrl: 'http://localhost:4200/{locale}/velista',
                 google: { enabled: true },
+                legal: legalConfig({}),
               }),
             },
           },
@@ -155,8 +157,8 @@ describe('a support session at the gateway', () => {
 
   /**
    * The five routes of target state 8, and the sign in with a reset link that
-   * plan 0210 added, each with the subject its handler sends when it is
-   * allowed to run.
+   * plan 0210 added, and accepting the Terms that plan 0231 added, each with
+   * the subject its handler sends when it is allowed to run.
    */
   const REFUSED: Array<[string, string, string, string]> = [
     ['DELETE /account', 'DELETE', '/account', AUTH_PATTERNS.deleteAccount],
@@ -184,6 +186,12 @@ describe('a support session at the gateway', () => {
       'POST',
       '/auth/recovery-sign-in',
       AUTH_PATTERNS.recoverySignIn,
+    ],
+    [
+      'POST /account/terms-acceptances',
+      'POST',
+      '/account/terms-acceptances',
+      AUTH_PATTERNS.acceptTerms,
     ],
   ];
 

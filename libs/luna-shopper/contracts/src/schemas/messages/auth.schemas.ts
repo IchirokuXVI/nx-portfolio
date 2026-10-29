@@ -62,7 +62,19 @@ export const AUTH_SCHEMA_IDS = {
   getUsernamesRequest: schemaId('msg/auth.getUsernames/request'),
   userUsernameView: schemaId('auth/UserUsernameView'),
   getUsernamesResult: schemaId('msg/auth.getUsernames/response'),
+  // The Terms accepted from the prompt (plan 0231, section 4.4).
+  acceptTermsRequest: schemaId('msg/auth.acceptTerms/request'),
+  termsAcceptanceView: schemaId('auth/TermsAcceptanceView'),
 } as const;
+
+/**
+ * The Terms version a client drew beside the action that creates an account
+ * (plan 0231, section 4.2). Bounded rather than patterned: the version is
+ * compared for equality by auth, and a regex here would only be sampled.
+ */
+export const ACCEPTED_TERMS_VERSION_MAX_LENGTH = 64;
+const termsVersion = () =>
+  nonEmptyString({ maxLength: ACCEPTED_TERMS_VERSION_MAX_LENGTH });
 
 const authTokens = object(
   AUTH_SCHEMA_IDS.authTokens,
@@ -112,7 +124,7 @@ const googleProfile = object(
 
 const createTemporaryUserRequest = object(
   AUTH_SCHEMA_IDS.createTemporaryUserRequest,
-  {},
+  { acceptedTermsVersion: termsVersion() },
   []
 );
 
@@ -123,6 +135,7 @@ const registerRequest = object(
     password: nonEmptyString(),
     displayName: string(),
     locale: string(),
+    acceptedTermsVersion: termsVersion(),
   },
   ['email', 'password']
 );
@@ -236,6 +249,7 @@ const upgradeRequest = object(
     displayName: string(),
     google: ref(AUTH_SCHEMA_IDS.googleProfile),
     locale: string(),
+    acceptedTermsVersion: termsVersion(),
   },
   ['userId']
 );
@@ -257,7 +271,12 @@ const pkceValue = () => nonEmptyString();
  */
 const oAuthStatePayload = object(
   AUTH_SCHEMA_IDS.oAuthStatePayload,
-  { userId: string(), locale: string(), codeChallenge: pkceValue() },
+  {
+    userId: string(),
+    locale: string(),
+    codeChallenge: pkceValue(),
+    acceptedTermsVersion: termsVersion(),
+  },
   ['codeChallenge']
 );
 
@@ -270,6 +289,7 @@ const stageGoogleSignInRequest = object(
     linkUserId: string(),
     codeChallenge: pkceValue(),
     locale: string(),
+    acceptedTermsVersion: termsVersion(),
   },
   ['providerUserId', 'codeChallenge']
 );
@@ -337,7 +357,7 @@ const getProfileRequest = object(
 /**
  * The profile's fields, apart from the schema that publishes them, so that the
  * view the gateway composes on top of it (plan 0145, section 2) is built from
- * this map rather than from a second copy of these six lines. Two copies would
+ * this map rather than from a second copy of these lines. Two copies would
  * be two things to keep in step, and the one that drifts is the documented one.
  */
 export const USER_PROFILE_VIEW_PROPERTIES: Record<string, JsonSchema> = {
@@ -347,6 +367,9 @@ export const USER_PROFILE_VIEW_PROPERTIES: Record<string, JsonSchema> = {
   email: nullableString(),
   emailVerified: boolean(),
   displayName: nullableString(),
+  // The newest accepted Terms version and when (plan 0231, section 4.4).
+  termsAcceptedVersion: nullableString(),
+  termsAcceptedAt: nullableString(),
 };
 
 /** The names of {@link USER_PROFILE_VIEW_PROPERTIES}, every one of them required. */
@@ -396,6 +419,18 @@ const getUsernamesResult: JsonSchema = {
   ...array(ref(AUTH_SCHEMA_IDS.userUsernameView)),
 };
 
+const acceptTermsRequest = object(
+  AUTH_SCHEMA_IDS.acceptTermsRequest,
+  { userId: nonEmptyString(), version: termsVersion() },
+  ['userId', 'version']
+);
+
+const termsAcceptanceView = object(
+  AUTH_SCHEMA_IDS.termsAcceptanceView,
+  { version: nonEmptyString(), acceptedAt: nonEmptyString() },
+  ['version', 'acceptedAt']
+);
+
 export const authSchemas: JsonSchema[] = [
   authTokens,
   accessTokenClaims,
@@ -428,6 +463,8 @@ export const authSchemas: JsonSchema[] = [
   getUsernamesRequest,
   userUsernameView,
   getUsernamesResult,
+  acceptTermsRequest,
+  termsAcceptanceView,
 ];
 
 export const authMessageContracts: Record<
@@ -514,5 +551,9 @@ export const authMessageContracts: Record<
   [AUTH_PATTERNS.mintParticipantToken]: {
     request: AUTH_SCHEMA_IDS.mintParticipantTokenRequest,
     response: AUTH_SCHEMA_IDS.mintParticipantTokenResult,
+  },
+  [AUTH_PATTERNS.acceptTerms]: {
+    request: AUTH_SCHEMA_IDS.acceptTermsRequest,
+    response: AUTH_SCHEMA_IDS.termsAcceptanceView,
   },
 };

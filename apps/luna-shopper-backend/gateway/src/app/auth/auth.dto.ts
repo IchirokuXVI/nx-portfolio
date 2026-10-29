@@ -9,6 +9,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { AcceptedTermsVersion } from '../legal/accepted-terms-version.decorator';
 
 /** Email + password registration (plan 0005, section 4.2). */
 export class RegisterDto {
@@ -27,6 +28,9 @@ export class RegisterDto {
   @IsString()
   @MaxLength(80)
   displayName?: string;
+
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
 }
 
 /** Email + password login (plan 0005, section 4.3). */
@@ -139,6 +143,9 @@ export class UpgradeDto {
   @IsString()
   @MaxLength(80)
   displayName?: string;
+
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
 }
 
 /**
@@ -149,7 +156,7 @@ const PKCE_VALUE = /^[A-Za-z0-9_-]{43}$/;
 
 /**
  * Start a Google sign in (plan 0230, section 2). The challenge is the one
- * thing the body carries. The link target is read from the verified bearer and
+ * thing the body requires. The link target is read from the verified bearer and
  * never from here.
  */
 export class MintOAuthStateDto {
@@ -161,6 +168,13 @@ export class MintOAuthStateDto {
   @IsString()
   @Matches(PKCE_VALUE)
   codeChallenge!: string;
+
+  /**
+   * Checked here, at the start, and recorded at the exchange (plan 0231,
+   * section 4.2): a refusal at the start is a problem the app can show.
+   */
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
 }
 
 /**

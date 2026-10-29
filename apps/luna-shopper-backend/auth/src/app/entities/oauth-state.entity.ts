@@ -48,6 +48,13 @@ export class OAuthState extends BaseEntity {
   @Column({ type: 'varchar', nullable: true })
   codeChallenge!: string | null;
 
+  /**
+   * The Terms version the sign in page drew (plan 0231, section 4.2), checked
+   * at the mint and copied onto the handoff. Null when none was sent.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  termsVersion!: string | null;
+
   @Index('uq_oauth_state_token', { unique: true })
   @Column({ type: 'varchar' })
   tokenHash!: string;

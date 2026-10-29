@@ -123,6 +123,13 @@ export interface ProblemResponseOptions {
    * - `operator`: an account with no address, or with no password.
    */
   recovery?: 'signIn' | 'operator';
+  /**
+   * The route can create an account, or accepts the Terms (plan 0231, section
+   * 4.3): a stale version is a 409 of its own code, and a missing one a 400
+   * where the deployment requires acceptance. Both carry
+   * `details.currentVersion`.
+   */
+  terms?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -251,6 +258,12 @@ export function ApiProblemResponses(
     codes.push(
       ERROR_CODES.RECOVERY_NEEDS_EMAIL,
       ERROR_CODES.RECOVERY_NEEDS_PASSWORD
+    );
+  }
+  if (options.terms) {
+    codes.push(
+      ERROR_CODES.TERMS_VERSION_STALE,
+      ERROR_CODES.TERMS_ACCEPTANCE_MISSING
     );
   }
   if (options.throttled !== false) {

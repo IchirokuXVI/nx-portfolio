@@ -297,6 +297,16 @@ export const ERROR_CATALOG: Record<
     en: 'This account signs in with Google and has no password to reset.',
     es: 'Esta cuenta entra con Google y no tiene contraseña que restablecer.',
   },
+  // The Terms (plan 0231, section 4.3). Velista plan 0173 may word its own
+  // copy; these are what a client without its own sentence shows.
+  [ERROR_CODES.TERMS_VERSION_STALE]: {
+    en: 'The Terms changed while this page was open. Read the new version and accept it to continue.',
+    es: 'Los Términos han cambiado mientras tenías esta página abierta. Lee la nueva versión y acéptala para continuar.',
+  },
+  [ERROR_CODES.TERMS_ACCEPTANCE_MISSING]: {
+    en: 'Accept the Terms to continue.',
+    es: 'Acepta los Términos para continuar.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

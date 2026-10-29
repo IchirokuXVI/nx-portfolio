@@ -14,6 +14,7 @@ import {
 import { InMemoryTokenGrantService } from '../tokens/token-grant.testing';
 import { UsernameGenerator } from '../username/username-generator.service';
 import { IdentityService } from './identity.service';
+import { InMemoryTermsService } from './terms.testing';
 
 /**
  * The OAuth state grant (plan 0023, section 4.1 and section 7).
@@ -108,7 +109,9 @@ function build() {
         smtp: { enabled: true },
         google: { enabled: true },
       }),
-    } as never
+    } as never,
+    undefined as never,
+    new InMemoryTermsService()
   );
   return { service, stores };
 }

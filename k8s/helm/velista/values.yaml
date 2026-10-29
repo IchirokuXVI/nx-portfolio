@@ -221,6 +221,25 @@ lunaShopperBackend:
     # does not name it: production waits for the privacy policy to name
     # support access, and the owner turns it on after that.
     impersonationEnabled: false
+    # The Terms (plan 0231, section 5.3). True refuses a path that creates an
+    # account with no accepted version. False in every environment until
+    # velista plan 0173 ships the acceptance UI and minClientVersion reaches
+    # its first build, in the same PR. The gateway refuses to boot with it true
+    # and no published controller or contact.
+    termsAcceptanceRequired: false
+    # What the privacy policy states about log retention (plan 0231, section
+    # 5.3). Reported by GET /v1/legal/settings and enforced by k8s plan 0018,
+    # which may change the assistant's number.
+    legal:
+      applicationLogDays: 30
+      assistantLogDays: 7
+    # How long auth, core and catalog keep a row of each kind (plan 0233), as
+    # durations. Plan 0231 gives them to the gateway to report in whole days;
+    # plan 0233 gives them to the services that enforce them.
+    retention:
+      audit: 180d
+      adminLoginFailures: 90d
+      expiredGrants: 14d
     # Google sign in is optional (plan 0026): with an empty client id every
     # service still boots, and the two interactive Google routes answer 501
     # `not_configured` instead of failing. Set all three to turn it on.
@@ -837,6 +856,26 @@ lunaShopperBackend:
     name: luna-stateful
     value: 100000
 
+  # Who runs this deployment, for its privacy policy and Terms (plan 0231,
+  # section 5.1). Every entry is empty here, and an empty entry is read from
+  # the operator Secret below, which `provision-release.sh --operator-file`
+  # writes from a file outside the repository. A self hoster with a private
+  # values file may set them here instead; a set entry renders as a literal.
+  #
+  # Never set them in values.staging.yaml or values.production.yaml: those are
+  # in a public repository, and the operator's name is not a repository fact.
+  # With all of them empty the gateway answers `published: false`.
+  legal:
+    secret: luna-shopper-backend-operator
+    appName: ''
+    controllerName: ''
+    contactEmail: ''
+    hostingProvider: ''
+    emailProvider: ''
+    backupProvider: ''
+    termsRevision: ''
+    privacyRevision: ''
+
   # Nightly pg_dump per Postgres instance, uploaded to object storage off the
   # node (plan 0005). Off by default. On in production, and on but suspended in
   # staging, where the only dumps are the ones a release task takes before it
@@ -862,6 +901,9 @@ lunaShopperBackend:
     # Renders the CronJobs suspended: no nightly run, but a release task can
     # still start a Job from one.
     suspend: false
+    # Documents the bucket's lifecycle rule above, for the privacy policy (plan
+    # 0231). It enforces nothing: change the rule and this together.
+    retentionDays: 14
     secret: luna-shopper-backend-backup-secret
     # The same image the instance runs, which is what guarantees pg_dump matches
     # the server version. The awscli package is added at Job start.
