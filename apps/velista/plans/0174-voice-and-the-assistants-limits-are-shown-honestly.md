@@ -1,3 +1,5 @@
+> **PR:** [#865](https://github.com/IchirokuXVI/nx-portfolio/pull/865)
+
 # 0174: voice and the assistant's limits are shown honestly
 
 > Asked for by the owner on 2026-10-27, and widened the same day by the orchestrator to the
