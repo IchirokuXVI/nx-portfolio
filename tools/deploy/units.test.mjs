@@ -407,10 +407,11 @@ test('projects prints one name per line, and an unknown unit fails', () => {
   assert.equal(unknown.status, 1);
 });
 
-test('this workspace passes, with four portfolio and nine velista projects', () => {
+// Ten velista projects since backend plan 0235 added the transcriber.
+test('this workspace passes, with four portfolio and ten velista projects', () => {
   assert.deepEqual(checkUnits(REPO), []);
   const counts = Object.fromEntries(
     listUnits(REPO).map((unit) => [unit.name, unit.projects.length])
   );
-  assert.deepEqual(counts, { portfolio: 4, velista: 9 });
+  assert.deepEqual(counts, { portfolio: 4, velista: 10 });
 });

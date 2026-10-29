@@ -33,9 +33,9 @@ export const LOG_LEVELS = [
  * Which provider answers a turn (plan 0224, section 1).
  *
  * `gemini` is the default and the behaviour from before the switch existed.
- * `claude` answers with Claude and still hears with Gemini, because the Messages
- * API takes no audio: a spoken turn and a voice comment are transcribed by the
- * Gemini key whatever this says.
+ * `claude` answers with Claude. Neither hears: a spoken turn and a voice comment
+ * are transcribed by the deployment's own transcriber, whatever this says (plan
+ * 0235).
  */
 export const ASSISTANT_PROVIDERS = ['gemini', 'claude'] as const;
 export type AssistantProviderName = (typeof ASSISTANT_PROVIDERS)[number];
@@ -58,9 +58,6 @@ export const CLAUDE_THINKING_MODES = ['adaptive', 'off'] as const;
  * env edit and a restart (section 9). `gemini-3.1-flash-lite` is the first thing
  * to try if quality disappoints, and the version numbers do not order those two
  * the way they look.
- *
- * It is also the transcription model whenever Claude answers, because Gemini is
- * the only provider here that hears.
  */
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
 
@@ -97,12 +94,11 @@ export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
 
 /**
- * The containers this service will forward to the provider.
+ * The containers this service will forward to the transcriber.
  *
- * Every one of these is on Gemini's own accepted list, checked against the
- * current documentation rather than quoted from the plan (section 3.3, which
- * expected `audio/webm` to be missing and it is not — so there is no container
- * rewrite in this codebase and there does not need to be one).
+ * The transcriber decodes with ffmpeg, which reads every one of these (plan
+ * 0235, section 3), so there is no container rewrite in this codebase and there
+ * does not need to be one.
  *
  * The first three are what browsers actually produce: Chrome gives
  * `audio/webm;codecs=opus`, Firefox `audio/ogg;codecs=opus`, Safari
@@ -173,22 +169,30 @@ export const assistantValidationSchema = Joi.object({
   ASSISTANT_MODEL: Joi.string().allow('').default(''),
 
   /**
-   * The model that transcribes (plan 0041, section 10). Always a Gemini model,
-   * whatever the provider (plan 0224, section 5).
+   * Where the deployment's own transcriber listens (plan 0235, section 7).
    *
-   * Its own key so a different model can do this job than answers the turn,
-   * without a code change. Whether they *should* differ is a quality question
-   * with no answer before there is usage, so the default is the turn's model and
-   * the key exists to make changing that an env edit.
+   * Empty is a supported deployment, like an empty key: the assistant answers
+   * typed turns and cannot hear, so the voice route answers 501 and a voice
+   * comment settles `UNAVAILABLE`. The chart writes it exactly when it runs the
+   * transcriber, so this one value is the switch for voice, and `hears` in the
+   * capabilities follows it (plan 0231, section 3).
    *
-   * **`allow('')` is load bearing**, for the same reason `GEMINI_API_KEY` has it:
-   * empty is the documented value meaning "whatever answers the turn", and it is
-   * what the chart, both compose files and both slot scripts all write. Without
-   * this the service dies at boot on a perfectly ordinary configuration, and it
-   * dies alone — the gateway stays up and answers 500s, which is a slow thing to
-   * diagnose from outside.
+   * **`allow('')` is load bearing**: empty is what the chart writes in every
+   * cluster without a transcriber, and what compose and a slot without `--voice`
+   * write. Without it the service dies at boot on an ordinary configuration.
    */
-  ASSISTANT_TRANSCRIPTION_MODEL: Joi.string().allow('').default(''),
+  TRANSCRIBER_URL: Joi.string().allow('').default(''),
+  /**
+   * How long a transcription may take, waiting in the transcriber's queue
+   * included (section 6.2). A spoken turn allows one running comment ahead of it
+   * plus its own clip on the fast model; a voice comment allows a full queue of
+   * turns and then ninety seconds on the large one.
+   */
+  TRANSCRIBER_TURN_TIMEOUT_MS: Joi.number().integer().min(1000).default(45000),
+  TRANSCRIBER_COMMENT_TIMEOUT_MS: Joi.number()
+    .integer()
+    .min(1000)
+    .default(110000),
   /** Section 5's byte cap, applied on arrival and again by the gateway. */
   ASSISTANT_AUDIO_MAX_BYTES: Joi.number()
     .integer()
@@ -254,7 +258,7 @@ export interface AssistantConfig {
   gatewayInternalUrl: string;
   geminiApiKey: string;
   geminiBaseUrl: string;
-  /** Which provider answers a turn. Gemini hears in both cases (plan 0224). */
+  /** Which provider answers a turn. Neither hears (plan 0235). */
   provider: AssistantProviderName;
   anthropicApiKey: string;
   anthropicBaseUrl: string;
@@ -262,8 +266,10 @@ export interface AssistantConfig {
   claudeThinking: (typeof CLAUDE_THINKING_MODES)[number];
   /** The model that answers a turn, already resolved for the provider. */
   model: string;
-  /** The Gemini model that transcribes. See {@link resolveAssistantModels}. */
-  transcriptionModel: string;
+  /** The transcriber's base url, or empty where none runs (plan 0235). */
+  transcriberUrl: string;
+  transcriberTurnTimeoutMs: number;
+  transcriberCommentTimeoutMs: number;
   /** The byte cap on a recording, before base64 (plan 0041). */
   audioMaxBytes: number;
   /** The containers this service accepts, already split and lowercased. */
@@ -285,31 +291,22 @@ function trimmed(raw: string | undefined, fallback: string): string {
 }
 
 /**
- * The two model names, from the raw keys and the provider (plan 0224, section 5).
+ * The model name, from the raw key and the provider (plan 0224, section 5).
  *
- * An empty `ASSISTANT_MODEL` is the provider's own default. An empty
- * `ASSISTANT_TRANSCRIPTION_MODEL` follows the turn's model when Gemini answers,
- * so the two stay together by default and an operator who changes one has
- * changed one. When Claude answers it falls back to {@link DEFAULT_GEMINI_MODEL}
- * instead, because the transcription goes to the Gemini endpoint and a Claude
- * name there is a 404 on every spoken turn.
+ * An empty `ASSISTANT_MODEL` is the provider's own default. There is no second
+ * name for transcription any more: no model provider hears since plan 0235, and
+ * the transcriber names its own models.
  *
  * Exported for its own spec.
  */
 export function resolveAssistantModels(env: {
   provider: AssistantProviderName;
   model?: string;
-  transcriptionModel?: string;
-}): { model: string; transcriptionModel: string } {
-  const model = trimmed(
-    env.model,
-    env.provider === 'claude' ? DEFAULT_CLAUDE_MODEL : DEFAULT_GEMINI_MODEL
-  );
+}): { model: string } {
   return {
-    model,
-    transcriptionModel: trimmed(
-      env.transcriptionModel,
-      env.provider === 'claude' ? DEFAULT_GEMINI_MODEL : model
+    model: trimmed(
+      env.model,
+      env.provider === 'claude' ? DEFAULT_CLAUDE_MODEL : DEFAULT_GEMINI_MODEL
     ),
   };
 }
@@ -379,8 +376,16 @@ export const assistantConfiguration = registerAs(
       ...resolveAssistantModels({
         provider,
         model: process.env.ASSISTANT_MODEL,
-        transcriptionModel: process.env.ASSISTANT_TRANSCRIPTION_MODEL,
       }),
+      transcriberUrl: (process.env.TRANSCRIBER_URL ?? '')
+        .trim()
+        .replace(/\/+$/, ''),
+      transcriberTurnTimeoutMs: Number(
+        process.env.TRANSCRIBER_TURN_TIMEOUT_MS ?? 45000
+      ),
+      transcriberCommentTimeoutMs: Number(
+        process.env.TRANSCRIBER_COMMENT_TIMEOUT_MS ?? 110000
+      ),
       audioMaxBytes: Number(
         process.env.ASSISTANT_AUDIO_MAX_BYTES ?? DEFAULT_AUDIO_MAX_BYTES
       ),

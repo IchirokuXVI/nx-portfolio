@@ -59,8 +59,8 @@ export const RETRY_DELAY_MS = 1500;
  * where the provider was never asked. A comment that stayed `PENDING` because
  * this service crashed between the two calls is the one bad state, and it is why
  * `UNAVAILABLE` is decided **before** the provider is called rather than inferred
- * from a failure: a deployment with no key settles every voice comment in the
- * same tick it was created.
+ * from a failure: a deployment with no transcriber settles every voice comment
+ * in the same tick it was created.
  */
 @Injectable()
 export class CommentTranscriptionService {
@@ -143,6 +143,10 @@ export class CommentTranscriptionService {
               // a NATS header because the assistant reads this one first: by the
               // time this runs the request that carried the header is answered.
               locale,
+              // Nobody is waiting on a comment's words, so the transcriber runs
+              // it on its accurate model and behind every spoken turn (plan
+              // 0235, section 4).
+              purpose: 'comment',
             }
           ),
           this.voice.transcribeTimeoutMs

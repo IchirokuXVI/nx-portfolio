@@ -6,7 +6,10 @@ import {
   type CommentView,
 } from '@portfolio/luna-shopper/contracts';
 import { ERROR_CODES } from '@portfolio/luna-shopper/platform';
-import type { GatewayConfig } from '../config/app-config';
+import {
+  gatewayValidationSchema,
+  type GatewayConfig,
+} from '../config/app-config';
 import type { NatsClient } from '../messaging/nats-client';
 import {
   CommentTranscriptionService,
@@ -140,6 +143,26 @@ describe('a transcript is asked for after the comment is stored', () => {
     expect(
       Buffer.from(asked?.payload['audio'] as string, 'base64').toString()
     ).toBe('not really audio');
+    // Nobody is waiting on it: the accurate model, behind every turn (plan 0235).
+    expect(asked?.payload['purpose']).toBe('comment');
+  });
+
+  it("waits longer than the assistant's own deadline for a comment", () => {
+    // The assistant gives a comment 110 s (a full queue of turns, then ninety
+    // seconds of audio). A gateway that gave up first would drop a transcript
+    // that is still coming (plan 0235, section 6.2).
+    const { value } = gatewayValidationSchema.validate(
+      {
+        NATS_URL: 'nats://localhost:4222',
+        REDIS_URL: 'redis://localhost:6379',
+        AUTH_JWT_PUBLIC_KEY: 'a-public-key',
+        ADMIN_JWT_PUBLIC_KEY: 'an-admin-public-key',
+      },
+      { allowUnknown: true }
+    );
+
+    expect(value.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS).toBe(120000);
+    expect(value.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS).toBeGreaterThan(110000);
   });
 
   it('hands a successful transcript back to core as READY', async () => {

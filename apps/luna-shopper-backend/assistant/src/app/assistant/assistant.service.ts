@@ -124,8 +124,9 @@ export class AssistantService {
    * Computed with exactly the checks that decide the 501s below, so the policy
    * never describes an assistant that answers 501, nor hides one that answers:
    * `answers` is {@link requireConfigured}'s test, and `hears` is the test
-   * {@link transcribe} applies. Plan 0235 changes how `hears` is computed and
-   * nothing else here.
+   * {@link transcribe} applies. Since plan 0235 the hearing is the deployment's
+   * own transcriber, so `hears` is true exactly when `TRANSCRIBER_URL` is set and
+   * a turn can be answered.
    */
   capabilities(): AssistantCapabilities {
     const answers = this.provider.configured;
@@ -143,8 +144,10 @@ export class AssistantService {
   /**
    * Words out of a recording, and nothing else (plan 0041, section 3).
    *
-   * It shares the concurrency gate with {@link turn} and shares nothing else. In
-   * particular it does **not** take a turn from {@link TurnLimiter}: the two
+   * It does **not** pass through the provider concurrency gate (plan 0235,
+   * section 4): the transcriber is the queue, and holding a provider slot while
+   * waiting on a different machine would make a voice comment delay a typed
+   * turn. Nor does it take a turn from {@link TurnLimiter}: the two
    * callers of this are a spoken assistant turn, which takes its own turn from
    * that bucket a moment later, and a voice comment, which is not a turn at all
    * and would otherwise spend somebody's conversation quota on leaving a message.
@@ -168,14 +171,16 @@ export class AssistantService {
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
 
     try {
-      const text = await this.gate.run(() =>
-        this.provider.transcribe({
-          audio: Buffer.from(request.audio, 'base64'),
-          mimeType: request.mimeType,
-          locale: request.locale || locale,
-        })
-      );
-      return { text: text.trim() };
+      const heard = await this.provider.transcribe({
+        audio: Buffer.from(request.audio, 'base64'),
+        mimeType: request.mimeType,
+        locale: request.locale || locale,
+        // Optional on the wire, so a gateway one release behind still works: it
+        // never sent a purpose and its only caller was a voice comment's, which
+        // a turn's model transcribes well enough until it catches up.
+        purpose: request.purpose ?? 'turn',
+      });
+      return { text: heard.text.trim() };
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
         // Rule A5's answer, unchanged: a number of seconds in the problem body.
@@ -246,10 +251,17 @@ export class AssistantService {
     this.takeTurn(request.userId);
 
     const heardAtMs = Date.now();
-    const heard = await this.viaProvider(
+    const { text: heard } = await this.viaProvider(
       () =>
-        this.provider.transcribe({ audio, mimeType: request.mimeType, locale }),
-      request.userId
+        this.provider.transcribe({
+          audio,
+          mimeType: request.mimeType,
+          locale,
+          purpose: 'turn',
+        }),
+      request.userId,
+      // The transcriber queues on its own side (plan 0235, section 4).
+      { gated: false }
     );
     const transcriptionMs = Date.now() - heardAtMs;
 
@@ -643,7 +655,7 @@ export class AssistantService {
    * The recording, checked and decoded (plan 0041, sections 5 and 9).
    *
    * Both refusals happen **before the provider is called**, which is the point of
-   * doing them here rather than letting Gemini answer 400: a recording this
+   * doing them here rather than letting the transcriber answer 400: a recording this
    * service will not forward costs nothing, and the caller gets a sentence
    * instead of a stack trace.
    *
@@ -723,12 +735,14 @@ export class AssistantService {
    */
   private async viaProvider<T>(
     call: () => Promise<T>,
-    userId: string
+    userId: string,
+    options: { gated: boolean } = { gated: true }
   ): Promise<T> {
     try {
       // Queuing is preferable to failing: waiting two seconds is invisible,
-      // being told to come back is not (section 9).
-      return await this.gate.run(call);
+      // being told to come back is not (section 9). A transcription skips the
+      // gate, because the transcriber holds its own queue (plan 0235).
+      return await (options.gated ? this.gate.run(call) : call());
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
         throw this.rateLimited(

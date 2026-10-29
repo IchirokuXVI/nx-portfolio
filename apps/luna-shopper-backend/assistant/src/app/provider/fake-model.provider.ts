@@ -2,8 +2,12 @@ import type {
   ModelProvider,
   ModelReply,
   ModelRequest,
+  Transcription,
   TranscriptionRequest,
 } from './model-provider';
+
+/** The length every scripted recording reports (plan 0235, section 7). */
+export const FAKE_AUDIO_SECONDS = 2.5;
 
 /**
  * The provider the suite runs against (rule A4).
@@ -106,7 +110,7 @@ export class FakeModelProvider implements ModelProvider {
    * records that it has no transcript), so a test that means it scripts `''`
    * and a test that scripted nothing has a bug worth failing on.
    */
-  async transcribe(request: TranscriptionRequest): Promise<string> {
+  async transcribe(request: TranscriptionRequest): Promise<Transcription> {
     this.transcriptions.push(request);
     const next = this.heard.shift();
     if (next === undefined) {
@@ -117,6 +121,6 @@ export class FakeModelProvider implements ModelProvider {
     if (next instanceof Error) {
       throw next;
     }
-    return next;
+    return { text: next, audioSeconds: FAKE_AUDIO_SECONDS };
   }
 }

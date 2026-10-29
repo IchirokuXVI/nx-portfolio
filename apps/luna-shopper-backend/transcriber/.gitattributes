@@ -1,0 +1,2 @@
+# The service runs in a Linux image, so its sources keep LF in every checkout.
+* text eol=lf

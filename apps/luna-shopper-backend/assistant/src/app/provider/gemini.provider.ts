@@ -11,7 +11,7 @@ import {
   type ModelToolCall,
   type ModelTurn,
   type ModelUsage,
-  type TranscriptionRequest,
+  type Transcription,
 } from './model-provider';
 
 /**
@@ -48,14 +48,12 @@ export class GeminiProvider implements ModelProvider {
   }
 
   /**
-   * Gemini takes audio natively, so this is a constant (plan 0041, section 3).
-   *
-   * It is a field on the interface rather than a fact about this class because
-   * some other provider's answer will be false, and the service has to be able to
-   * lose the microphone and keep the assistant without catching anything.
+   * Gemini no longer hears (plan 0235). It took audio natively, and every
+   * recording a person made went to Google that way; the deployment's own
+   * transcriber hears now, and this class answers typed turns only.
    */
   get transcriptionSupported(): boolean {
-    return true;
+    return false;
   }
 
   async generate(request: ModelRequest): Promise<ModelReply> {
@@ -65,31 +63,16 @@ export class GeminiProvider implements ModelProvider {
   }
 
   /**
-   * A recording, as the words in it (plan 0041, section 3.1).
-   *
-   * One `generateContent` with the audio inline, **no tools and no history**, and
-   * a system instruction that asks for the words and nothing else. Two calls
-   * rather than one is the decision that buys the caller a transcription they can
-   * check; asking the model to answer *and* say what it heard in the same reply
-   * would mean parsing prose for a fact, which is what rule A3 refuses to do for
-   * the link and refuses to do here for the same reason.
-   *
-   * The locale goes in because the reply's does (section 7 of plan 0039): a
-   * shopping list is brand names and two languages in one sentence, and telling
-   * the model which one to expect is free.
+   * Never reached: both callers read {@link transcriptionSupported} first. It
+   * throws rather than answering an empty transcript, because empty means "the
+   * recording had nothing in it", which would be a lie.
    */
-  async transcribe(request: TranscriptionRequest): Promise<string> {
-    return readTranscription(
-      await this.post(
-        this.config.transcriptionModel,
-        toTranscriptionRequest(request)
-      )
-    );
+  async transcribe(): Promise<Transcription> {
+    throw new ProviderUnavailableError('this provider cannot transcribe');
   }
 
   /**
-   * One request to Gemini, with the deadline and the error mapping both calls
-   * need.
+   * One request to Gemini, with the deadline and the error mapping.
    *
    * A turn is one request to a third party over which we have no promise of
    * latency, so it gets a deadline of its own rather than inheriting whatever the
@@ -188,84 +171,6 @@ export function toGeminiRequest(
         }
       : {}),
   };
-}
-
-/**
- * The instruction the transcription call carries.
- *
- * Deliberately narrow. It is asked for the words and nothing else, because the
- * caller reads this into a bubble labelled as what they said, and a model that
- * helpfully answered the question instead would put an answer in somebody's
- * mouth. "Return an empty string" is the honest failure and is what section 9's
- * "I did not catch that" is built on: the service would rather have nothing than
- * a guess.
- *
- * Exported for its own spec, like everything else on this wire.
- */
-export const TRANSCRIPTION_INSTRUCTION = [
-  'Transcribe the audio exactly as spoken and return only the transcription.',
-  'Do not answer, summarise, translate, explain, or add punctuation the speaker did not imply.',
-  'The speaker is dictating a shopping instruction and may mix languages or say brand names; write each word in the language it was spoken in.',
-  'If the audio contains no intelligible speech, return an empty string.',
-].join(' ');
-
-/**
- * The transcription call's wire shape (plan 0041, section 3.1).
- *
- * No `tools`, because there is nothing to call, and an empty catalog is a much
- * harder boundary than an instruction. No history, because the previous turns
- * cannot help read this sentence and sending them would put the conversation
- * through the provider twice per spoken turn.
- *
- * The audio goes as `inlineData`, base64 the way the API wants it. That is the
- * second base64 in this path and it is unavoidable: the first is the broker leg,
- * the second is the provider's own encoding of a binary part.
- */
-export function toTranscriptionRequest(
-  request: TranscriptionRequest
-): Record<string, unknown> {
-  return {
-    systemInstruction: {
-      parts: [
-        {
-          text: `${TRANSCRIPTION_INSTRUCTION} The speaker's language is most likely ${request.locale}.`,
-        },
-      ],
-    },
-    contents: [
-      {
-        role: 'user',
-        parts: [
-          {
-            inlineData: {
-              mimeType: request.mimeType,
-              data: Buffer.from(request.audio).toString('base64'),
-            },
-          },
-        ],
-      },
-    ],
-  };
-}
-
-/**
- * The words out of a `generateContent` response.
- *
- * {@link readReply} would nearly do, and using it would be wrong: it also reads
- * tool calls and usage, and a transcription that came back with a `functionCall`
- * on it would be a bug worth noticing rather than a field to ignore. This reads
- * text and only text.
- */
-export function readTranscription(payload: unknown): string {
-  const candidate = firstCandidate(payload);
-  const parts = Array.isArray(candidate?.['content']?.['parts'])
-    ? (candidate['content']['parts'] as Record<string, unknown>[])
-    : [];
-
-  return parts
-    .map((part) => (typeof part['text'] === 'string' ? part['text'] : ''))
-    .join('')
-    .trim();
 }
 
 // `ModelTurn` itself rather than the same shape written out again. It was written

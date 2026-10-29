@@ -367,9 +367,11 @@ services:
       GEMINI_API_KEY: ''
       ANTHROPIC_API_KEY: ''
       ASSISTANT_MODEL: gemini-3.5-flash-lite
-      # Voice input (plan 0041). Empty transcription model means the same model
-      # answers and transcribes, which is the default everywhere.
-      ASSISTANT_TRANSCRIPTION_MODEL: ''
+      # Voice input (plan 0235). Empty on purpose, like the keys above: the gate
+      # stack runs no transcriber, so the voice route answers 501 and a voice
+      # comment settles UNAVAILABLE, which is what the e2e suite asserts. The
+      # `transcriber` service below is opt in, under the `voice` profile.
+      TRANSCRIBER_URL: ''
       ASSISTANT_AUDIO_MAX_BYTES: '2097152'
       ASSISTANT_AUDIO_MIME_TYPES: 'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac'
       ASSISTANT_MAX_TURNS: '20'
@@ -392,3 +394,56 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  # The transcriber (plan 0235): faster-whisper behind a small HTTP service.
+  # Opt in, under the `voice` profile, so the gate stack and the e2e suite never
+  # start it: it takes two CPUs and about 2.5 GB, and no suite reaches a model
+  # (rule A4). `luna-slot.sh --up --voice` starts it and points the assistant's
+  # TRANSCRIBER_URL at its published port.
+  #
+  # Built from the checkout rather than pulled, because a developer who runs it
+  # is working on it. The models live on an EXTERNAL volume, so every slot
+  # shares one 2 GB download and `down -v` never deletes it. Create it once:
+  #
+  #   docker volume create luna-transcriber-models
+  #
+  # The first start then downloads both models into it; apps/luna-shopper-backend/
+  # transcriber/README.md says how to copy a `models` folder in instead.
+  transcriber:
+    profiles: ['voice']
+    build:
+      context: ../../../apps/luna-shopper-backend/transcriber/src
+      target: runtime
+    image: luna-shopper-backend-transcriber:local
+    restart: 'no'
+    environment:
+      PORT: '3007'
+      TRANSCRIBER_TURN_MODEL: small
+      TRANSCRIBER_COMMENT_MODEL: large-v3-turbo
+      TRANSCRIBER_THREADS: '2'
+    volumes:
+      - transcriber-models:/models
+    ports:
+      - '${LUNA_TRANSCRIBER_PORT:-3007}:3007'
+    # The share a production pod gets (section 6.1).
+    cpus: 2
+    mem_limit: 2560m
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'python',
+          '-c',
+          'import urllib.request; urllib.request.urlopen("http://127.0.0.1:3007/health/ready")',
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 6
+      # Loading both models takes seconds from the volume, and minutes on the
+      # first start, which downloads them.
+      start_period: 600s
+
+volumes:
+  transcriber-models:
+    name: luna-transcriber-models
+    external: true

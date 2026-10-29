@@ -2,6 +2,7 @@
 {{- $cfg := .Values.lunaShopperBackend.config }}
 {{- $harvest := .Values.lunaShopperBackend.harvester | default dict }}
 {{- $assistant := .Values.lunaShopperBackend.assistant | default dict }}
+{{- $transcriber := .Values.lunaShopperBackend.transcriber | default dict }}
 ---
 # One ConfigMap, because this release is one environment (plan 0002). The
 # `range $env, $cfg :=` loop that rendered a production and a staging copy side
@@ -134,7 +135,9 @@ part of the render and would trip that very check.
   # How long the gateway waits for a transcript it is not holding a request open
   # for. The comment is already stored and playable; this only stops a hung
   # provider holding a task behind a request that was answered.
-  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 45000 | quote }}
+  # 120 seconds because it must outlast the assistant's own deadline for a
+  # comment, TRANSCRIBER_COMMENT_TIMEOUT_MS below (plan 0235, section 6.2).
+  VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: {{ $cfg.voiceCommentTranscribeTimeoutMs | default 120000 | quote }}
   # --- The file import (plan 0086, section 10) -------------------------------
   #
   # The one route on this gateway with a body limit of its own. Nest's JSON
@@ -210,18 +213,24 @@ part of the render and would trip that very check.
   # the switch flips.
   GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Release.Namespace) | quote }}
   ASSISTANT_MODEL: {{ $assistant.model | default "" | quote }}
-  # Which provider answers a turn (plan 0224). `claude` answers with Claude and
-  # still hears with Gemini, because Claude takes no audio. Empty effort and
+  # Which provider answers a turn (plan 0224). Neither hears: the transcriber
+  # below does (plan 0235). Empty effort and
   # thinking mean the service's own defaults (Haiku, adaptive thinking, effort
   # low), which the evaluation of 2026-10-22 chose.
   ASSISTANT_PROVIDER: {{ $assistant.provider | default "gemini" | quote }}
   ASSISTANT_CLAUDE_EFFORT: {{ $assistant.claudeEffort | default "" | quote }}
   ASSISTANT_CLAUDE_THINKING: {{ $assistant.claudeThinking | default "" | quote }}
-  # Voice input (plan 0041). The transcription model is its own key so a different
-  # model can do that job than answers the turn without a code change; empty means
-  # the same one, which is the default and the only setting anybody has evidence
-  # for yet.
-  ASSISTANT_TRANSCRIPTION_MODEL: {{ $assistant.transcriptionModel | default "" | quote }}
+  # Voice input (plan 0235). The transcriber's address exactly when the chart
+  # runs it, and empty otherwise, so the one value `transcriber.enabled` decides
+  # whether the assistant hears and what `hears` reports (plan 0231, section 3).
+  # Empty is a supported deployment: the voice route answers 501 and a voice
+  # comment settles UNAVAILABLE.
+  TRANSCRIBER_URL: {{ if $transcriber.enabled }}{{ printf "http://luna-shopper-backend-transcriber:%v" ($transcriber.port | default 3007 | int) | quote }}{{ else }}""{{ end }}
+  # How long the assistant waits on a transcription, the transcriber's queue
+  # included (plan 0235, section 6.2). Written whether or not it runs, so the
+  # keys every assistant pod refers to always exist.
+  TRANSCRIBER_TURN_TIMEOUT_MS: {{ $transcriber.turnTimeoutMs | default 45000 | int64 | quote }}
+  TRANSCRIBER_COMMENT_TIMEOUT_MS: {{ $transcriber.commentTimeoutMs | default 110000 | int64 | quote }}
   # The byte cap on a recording, before base64. The gateway's multipart
   # interceptor enforces the same number on the upload; this one is applied to
   # what actually crossed the broker, because a cap the client could have chosen

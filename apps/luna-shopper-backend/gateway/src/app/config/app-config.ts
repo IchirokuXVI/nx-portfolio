@@ -262,11 +262,17 @@ export const gatewayValidationSchema = Joi.object({
    * transcript arrives over the socket. The deadline exists so a hung provider
    * does not hold a gateway task open indefinitely behind a request that has
    * already been answered.
+   *
+   * 120 seconds (plan 0235, section 6.2): it must outlast the assistant's own
+   * deadline for a comment (`TRANSCRIBER_COMMENT_TIMEOUT_MS`, 110 seconds, a full
+   * queue of turns and then ninety seconds of audio), or the gateway gives up on
+   * an answer that is still coming. The NATS request itself carries no timeout:
+   * Nest's client waits forever and this race is the only deadline.
    */
   VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: Joi.number()
     .integer()
     .min(1000)
-    .default(45000),
+    .default(120000),
 
   /**
    * The byte cap on an uploaded `HarvestDocument` (plan 0086, section 10).
@@ -422,7 +428,7 @@ export const gatewayConfiguration = registerAs(
       ),
       contentTypes: parseContentTypes(process.env.VOICE_COMMENT_CONTENT_TYPES),
       transcribeTimeoutMs: Number(
-        process.env.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS ?? 45000
+        process.env.VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS ?? 120000
       ),
     },
     logLevel: process.env.LOG_LEVEL as GatewayConfig['logLevel'],

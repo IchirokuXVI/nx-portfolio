@@ -69,9 +69,10 @@ export class AssistantController {
    * enables CORS with no `exposedHeaders` and a browser therefore cannot read a
    * `Retry-After` header cross origin; the panel counts the body's number down
    * and never derives one of its own. And the 501, which is what a cluster with
-   * no `GEMINI_API_KEY` answers: the route stays in the published document in
-   * every environment, and `notConfigured` is what makes the document honest
-   * about it (plan 0026).
+   * no key for its text provider answers, and on the voice route below also a
+   * cluster that runs no transcriber (`TRANSCRIBER_URL` empty, plan 0235): the
+   * route stays in the published document in every environment, and
+   * `notConfigured` is what makes the document honest about it (plan 0026).
    */
   @Post()
   @ApiContractResponse(ASSISTANT_PATTERNS.turn, { status: HttpStatus.CREATED })

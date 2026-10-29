@@ -500,22 +500,18 @@ lunaShopperBackend:
     claudeEffort: ''
     claudeThinking: ''
 
-    # Voice input (plan 0041). A spoken turn is transcribed by the provider the
-    # service already holds a credential for, and then runs the identical code a
-    # typed turn runs, so there is no second secret here and nothing new in
-    # provision-release.sh.
+    # Voice input (plan 0041). A spoken turn is transcribed by the deployment's
+    # own transcriber (plan 0235, `transcriber` below), and then runs the
+    # identical code a typed turn runs. No model provider hears, so there is no
+    # second secret here and nothing new in provision-release.sh.
     #
-    # Empty means "the same model that answers the turn", which is the default
-    # and the only setting anybody has evidence for. The key exists so the two can
-    # differ by an env edit if the transcription quality ever asks for it.
-    transcriptionModel: ''
     # 2 MB, before base64. The gateway's multipart interceptor enforces the same
     # number on the upload; this one is applied to what actually crossed the
     # broker, because a cap the client could have chosen is not a cap. It sits
     # inside `nats.maxPayload` above with deliberate headroom.
     audioMaxBytes: 2097152
-    # Every one of these is on the provider's own accepted list. The first three
-    # are what browsers actually produce: Chrome webm, Firefox ogg, Safari mp4.
+    # The transcriber decodes each of these with ffmpeg. The first three are
+    # what browsers actually produce: Chrome webm, Firefox ogg, Safari mp4.
     audioMimeTypes: 'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac'
 
     # Caps on the client supplied transcript. The service stores nothing between
@@ -537,6 +533,59 @@ lunaShopperBackend:
     concurrency: 2
     # The floor for `retryAfterSeconds`, so the field is never absent.
     retryAfterFallbackSeconds: 30
+
+  # -------------------------------------------------------------------------
+  # The transcriber (plan 0235): speech to text on this cluster's own machine,
+  # faster-whisper behind a small HTTP service, so no recording leaves it. The
+  # assistant is its only caller, and it has no route from outside.
+  #
+  # This one value is voice. True renders the Deployment, the Service and the
+  # model volume (templates/luna-shopper-backend/transcriber.yaml.tpl), and
+  # writes TRANSCRIBER_URL for the assistant, which is what makes the
+  # assistant hear and what `hears` in the published privacy settings follows
+  # (plan 0231, section 3). False is a supported deployment, not a broken one:
+  # the voice route answers 501, a voice comment stays playable and settles
+  # UNAVAILABLE, and velista hides the microphone.
+  #
+  # TURNING IT ON COSTS two cores and 2.5 Gi held for the pod (requests equal
+  # limits, so it is Guaranteed like the stateful tier), and a download of about
+  # 2 GB from Hugging Face on the first start, into the volume below. Voice
+  # stays off until `/health/ready` answers, which is after both models are in
+  # memory. Production is the only environment with room for it.
+  #
+  # TURNING IT OFF KEEPS THE VOLUME. The claim carries
+  # `helm.sh/resource-policy: keep`, so the 2 GB download survives a switch off
+  # and back on. Deleting it is deliberate and manual.
+  # -------------------------------------------------------------------------
+  transcriber:
+    enabled: false
+    image: ghcr.io/ichirokuxvi/nx-portfolio/luna-shopper-backend-transcriber
+    port: 3007
+    # `small` answers a spoken turn, where somebody is waiting. `large-v3-turbo`
+    # writes a voice comment down, where nobody is and accuracy matters more. A
+    # small machine can name `small` for both and load one model.
+    turnModel: small
+    commentModel: large-v3-turbo
+    storageClassName: local-path
+    storageSize: 5Gi
+    # Two cores because that is what the bench measured and `cpu_threads` 2 is
+    # tuned for. 2,560 Mi because both models resident took 1.6 GB, a five minute
+    # clip decoded is another 20 MB, and the rest is headroom against the OOM
+    # killer (section 6.1).
+    resources:
+      requests:
+        cpu: '2'
+        memory: 2560Mi
+      limits:
+        cpu: '2'
+        memory: 2560Mi
+    # How long the assistant waits for a transcription, the transcriber's queue
+    # included (section 6.2). A turn allows one running comment ahead of it and
+    # its own clip; a comment allows a full queue of turns and ninety seconds of
+    # audio. VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS on the gateway stays above the
+    # second.
+    turnTimeoutMs: 45000
+    commentTimeoutMs: 110000
 
   # Each backend service: one Deployment + Service (+ PDB). `routed` services get
   # an HTTPRoute on `hostPrefix`.`baseDomain`, which is `api.` and `rt.` of

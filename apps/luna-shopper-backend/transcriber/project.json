@@ -1,0 +1,44 @@
+{
+  "name": "luna-shopper-backend-transcriber",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/luna-shopper-backend/transcriber/src",
+  "projectType": "application",
+  "tags": [
+    "deploy:velista"
+  ],
+  "targets": {
+    "build:docker": {
+      "executor": "@portfolio/docker:build",
+      "options": {
+        "imageName": "nx-portfolio/luna-shopper-backend-transcriber",
+        "forwardEnv": [
+          "BUILDER_TAG"
+        ],
+        "context": "dockerfile"
+      },
+      "configurations": {
+        "development": {
+          "versionTags": [
+            "dev"
+          ],
+          "buildArgs": {
+            "BUILDER_TAG": "dev"
+          }
+        },
+        "production": {
+          "pushToRegistry": true,
+          "versionTags": [
+            "latest"
+          ]
+        }
+      },
+      "defaultConfiguration": "development"
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker build --target test --file apps/luna-shopper-backend/transcriber/src/Dockerfile apps/luna-shopper-backend/transcriber/src"
+      }
+    }
+  }
+}
