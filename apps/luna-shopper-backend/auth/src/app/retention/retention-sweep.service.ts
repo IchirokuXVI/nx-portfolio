@@ -80,6 +80,15 @@ export function authRetentionTargets(
       column: 'expiresAt',
       retainMs: cfg.expiredGrantsMs,
     },
+    {
+      // A Google sign in staged at the callback holds the Google id, email
+      // and name for its two minutes. Redeeming it only sets `consumedAt`, and
+      // a sign in from scratch has no `userId`, so neither a redemption nor an
+      // account deletion removes it: only this does.
+      table: 'oauth_handoffs',
+      column: 'expiresAt',
+      retainMs: cfg.expiredGrantsMs,
+    },
   ];
 }
 
