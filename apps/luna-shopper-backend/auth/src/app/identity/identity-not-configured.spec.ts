@@ -51,7 +51,8 @@ describe('IdentityService with a feature unconfigured', () => {
       fakeAudit([]).service,
       { getOrThrow: () => config } as never,
       undefined as never,
-      new InMemoryTermsService()
+      new InMemoryTermsService(),
+      { publishSoon: () => undefined } as never
     );
 
     return { service, dataSource, mail };

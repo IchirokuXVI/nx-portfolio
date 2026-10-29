@@ -3,7 +3,6 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   IDENTITY_EVENTS,
   RECONCILIATION_PATTERNS,
-  type UserDeletedEvent,
   type UsersWithoutMembershipsRequest,
   type UsersWithoutMembershipsResponse,
   type UserUsernameChangedEvent,
@@ -12,10 +11,13 @@ import { AccountDeletionService } from './account-deletion.service';
 import { UsernamePropagationService } from './username-propagation.service';
 
 /**
- * Core's account surface: the identity event subscribers (`user.deleted` from
- * plan 0011, `user.usernameChanged` from plan 0018) and the reconciliation query
- * the auth orphan-user reaper calls. Both event handlers are idempotent, so an
- * at-least-once redelivery is harmless.
+ * Core's account surface: the `user.usernameChanged` subscriber (plan 0018) and
+ * the reconciliation query the auth orphan-user reaper calls. The handler is
+ * idempotent, so a duplicate is harmless.
+ *
+ * `user.deleted` is not here since plan 0232 (section 5). It arrives on a
+ * JetStream stream through `AccountDeletionConsumer`, so a deletion is
+ * processed once and survives a stopped core.
  */
 @Controller()
 export class AccountController {
@@ -23,11 +25,6 @@ export class AccountController {
     private readonly service: AccountDeletionService,
     private readonly usernames: UsernamePropagationService
   ) {}
-
-  @EventPattern(IDENTITY_EVENTS.userDeleted)
-  async onUserDeleted(@Payload() event: UserDeletedEvent): Promise<void> {
-    await this.service.handleUserDeleted(event.userId);
-  }
 
   @EventPattern(IDENTITY_EVENTS.userUsernameChanged)
   async onUsernameChanged(

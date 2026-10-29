@@ -12,6 +12,7 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { connect } from 'nats';
 import { AdminDirectoryService } from './admin/admin-directory.service';
 import { AdminIdentityService } from './admin/admin-identity.service';
 import { AdminTokenService } from './admin/admin-token.service';
@@ -22,6 +23,12 @@ import { AuditModule } from './audit/audit.module';
 import type { AuthConfig } from './config/app-config';
 import { authConfiguration, authValidationSchema } from './config/app-config';
 import { AUTH_ENTITIES } from './entities';
+import {
+  ACCOUNT_DELETION_PUBLISH_INTERVAL_MS,
+  ACCOUNT_DELETION_PUBLISHER_OPTIONS,
+  AccountDeletionPublisher,
+  type AccountDeletionPublisherOptions,
+} from './events/account-deletion.publisher';
 import {
   IdentityEventsPublisher,
   NATS_EVENTS,
@@ -35,6 +42,7 @@ import { ImpersonationService } from './impersonation/impersonation.service';
 import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
+import { ReconciliationController } from './reconciliation/reconciliation.controller';
 import { TokenGrantService } from './tokens/token-grant.service';
 import { TokenService } from './tokens/token.service';
 import { UsernameGenerator } from './username/username-generator.service';
@@ -116,6 +124,8 @@ import { UsernameController } from './username/username.controller';
     UsernameController,
     // Support sessions (plan 0194).
     ImpersonationController,
+    // Which of a list of ids are still accounts (plan 0232, section 7).
+    ReconciliationController,
   ],
   providers: [
     IdentityService,
@@ -142,6 +152,26 @@ import { UsernameController } from './username/username.controller';
     ImpersonationService,
     PasswordService,
     IdentityEventsPublisher,
+    // The outbox of `user.deleted` and its own JetStream connection (plan
+    // 0232, section 5). Separate from the `NATS_EVENTS` client, which is a
+    // plain Nest proxy and cannot wait for a stream's ack.
+    {
+      provide: ACCOUNT_DELETION_PUBLISHER_OPTIONS,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService): AccountDeletionPublisherOptions => ({
+        connect: () =>
+          connect({
+            servers: [config.getOrThrow<AuthConfig>('auth').natsUrl],
+            name: 'luna-shopper-backend-auth-account-deletions',
+            // Reconnect for as long as the process lives. The default gives
+            // up after ten tries two seconds apart, and a closed connection
+            // would leave the outbox growing until auth restarts.
+            maxReconnectAttempts: -1,
+          }),
+        intervalMs: ACCOUNT_DELETION_PUBLISH_INTERVAL_MS,
+      }),
+    },
+    AccountDeletionPublisher,
     UsernameGenerator,
     OrphanUserReaperService,
   ],

@@ -1,206 +1,303 @@
+import { Logger } from '@nestjs/common';
 import {
+  CommentTranscription,
   MembershipStatus,
   RealtimeEvent,
   ZoneStatus,
 } from '@portfolio/luna-shopper/contracts';
+import { createHash } from 'node:crypto';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
-import type { Zone, ZoneMembership } from '../entities';
-import { AccountDeletionService } from './account-deletion.service';
+import { Zone, ZoneMembership } from '../entities';
+import {
+  AccountDeletionService,
+  deletionKey,
+} from './account-deletion.service';
 import { ANONYMIZED_USERNAME_PREFIX } from './anonymize';
 
 /**
- * Plan 0139 gave this service a basket announcer. Every write here is asserted
- * through the events it publishes, and the announcement is not one of them: it
- * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ * The orchestration of a deletion (plan 0232, section 3): one transaction, the
+ * key inside it, the events after it. What each statement does to the rows is
+ * proven against real Postgres in `account-deletion.integration.spec.ts`,
+ * because a fake manager would only agree with itself.
+ *
+ * Plan 0139 gave this service a basket announcer. The announcement is a nudge
+ * the basket rooms hear, tested in `basket-announcer.spec.ts`.
  */
 const announcer = fakeBasketAnnouncer();
 
-type MembershipRepo = {
-  find: jest.Mock;
-  save: jest.Mock;
-  createQueryBuilder: jest.Mock;
-};
-
 function build(opts: {
   memberships: Partial<ZoneMembership>[];
-  zones: Record<string, Partial<Zone>>;
+  ownedZones?: Partial<Zone>[];
+  touchedZones?: string[];
+  /** The ids the read of the person's comments answers. */
+  voicedComments?: string[];
   firstSeen?: boolean;
 }) {
   // Every read model carries timestamps (plan 0017, section 7), so the stand in
   // rows carry them too rather than the mappers having to tolerate their absence.
   const stamps = { createdAt: new Date(0), updatedAt: new Date(0) };
-  const zonesRepo = {
-    findOne: jest.fn(async ({ where: { id } }: { where: { id: string } }) => ({
-      ...stamps,
-      ...opts.zones[id],
-    })),
-    save: jest.fn(async (z) => z),
-  };
-  const membershipsRepo: MembershipRepo = {
+  const order: string[] = [];
+  const membershipsRepo = {
     find: jest.fn(async () =>
       opts.memberships.map((m) => ({ ...stamps, ...m }))
     ),
     save: jest.fn(async (m) => m),
-    createQueryBuilder: jest.fn(),
   };
-  const events = { emit: jest.fn(), emitTo: jest.fn(), emitToUsers: jest.fn() };
-  const store = { firstSeen: jest.fn(async () => opts.firstSeen ?? true) };
-  // Retiring a membership drops the zone's member count, so the saga tells the
-  // zone's open screens (plan 0017, section 9).
+  const zonesRepo = {
+    find: jest.fn(async () =>
+      (opts.ownedZones ?? []).map((z) => ({ ...stamps, ...z }))
+    ),
+    save: jest.fn(async (z) => z),
+  };
+  const manager = {
+    query: jest.fn(async (sql: string) => {
+      order.push('query');
+      if (sql.includes('SELECT DISTINCT t."zoneId"')) {
+        return (opts.touchedZones ?? []).map((zoneId) => ({ zoneId }));
+      }
+      if (sql.includes('SELECT c."id" FROM "line_comments"')) {
+        return (opts.voicedComments ?? []).map((id) => ({ id }));
+      }
+      return [];
+    }),
+    getRepository: jest.fn((target: unknown) =>
+      target === ZoneMembership ? membershipsRepo : zonesRepo
+    ),
+  };
+  const dataSource = {
+    transaction: jest.fn(async (work: (m: unknown) => Promise<unknown>) => {
+      order.push('begin');
+      const result = await work(manager);
+      order.push('commit');
+      return result;
+    }),
+  };
+  const events = {
+    emit: jest.fn(() => order.push('emit')),
+    emitTo: jest.fn(() => order.push('emit')),
+    emitToUsers: jest.fn(),
+  };
+  const store = {
+    firstSeenIn: jest.fn(async () => opts.firstSeen ?? true),
+  };
   const zoneCounts = {
     emitZoneCounts: jest.fn(async (_zoneId: string) => undefined),
   };
-
-  // A departing account's baskets go with it (plan 0050, section 7), and they go
-  // first: a basket belongs to a person rather than to a zone, so
-  // somebody who left every group still has one and the membership loop below
-  // would never reach it.
-  const baskets = { deleteForUser: jest.fn().mockResolvedValue(0) };
+  const baskets = {
+    deleteForUserIn: jest.fn(async () => ['l1']),
+  };
+  const audit = { scrubUser: jest.fn(async () => 0) };
   const svc = new AccountDeletionService(
-    zonesRepo as never,
-    membershipsRepo as never,
+    dataSource as never,
+    {} as never,
     events as never,
     zoneCounts as never,
     store as never,
     baskets as never,
-    announcer
+    announcer,
+    audit as never
   );
   return {
     svc,
-    zonesRepo,
+    manager,
     membershipsRepo,
+    zonesRepo,
     events,
     store,
     zoneCounts,
     baskets,
+    audit,
+    order,
   };
 }
 
 describe('AccountDeletionService.handleUserDeleted', () => {
-  it('deletes the departing account’s baskets (plan 0050, section 7)', async () => {
-    const { svc, baskets } = build({
-      memberships: [
-        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
-      ],
-      zones: {
-        z1: {
-          id: 'z1',
-          ownerUserId: 'someone-else',
-          status: ZoneStatus.ACTIVE,
-        },
-      },
-    });
+  it('keys the deletion on the sha256 of the id, inside the transaction', async () => {
+    const { svc, store, manager } = build({ memberships: [] });
 
-    await svc.handleUserDeleted('u1');
+    await expect(svc.handleUserDeleted('u1')).resolves.toBe(true);
 
-    expect(baskets.deleteForUser).toHaveBeenCalledWith('u1');
+    const hash = createHash('sha256').update('u1').digest('hex');
+    expect(deletionKey('u1')).toBe(`user.deleted:${hash}`);
+    expect(store.firstSeenIn).toHaveBeenCalledWith(
+      manager,
+      `user.deleted:${hash}`
+    );
   });
 
-  it('deletes them even for a user who held no membership at all', async () => {
-    // The case the membership loop cannot reach, and the reason the call sits
-    // outside it: a basket belongs to a person rather than to a zone.
-    const { svc, baskets } = build({ memberships: [], zones: {} });
+  it('deletes the baskets on the transaction’s manager (plan 0050, section 7)', async () => {
+    const { svc, baskets, manager } = build({ memberships: [] });
 
     await svc.handleUserDeleted('u-nomad');
 
-    expect(baskets.deleteForUser).toHaveBeenCalledWith('u-nomad');
+    expect(baskets.deleteForUserIn).toHaveBeenCalledWith(manager, 'u-nomad');
   });
 
-  it('owner path: marks the owned zone for deletion and retires the membership', async () => {
+  it('is idempotent: a redelivery writes and announces nothing', async () => {
+    const { svc, manager, events, baskets } = build({
+      memberships: [{ id: 'm3', zoneId: 'z3', userId: 'u3', username: 'Cara' }],
+      firstSeen: false,
+    });
+
+    await expect(svc.handleUserDeleted('u3')).resolves.toBe(false);
+
+    expect(manager.query).not.toHaveBeenCalled();
+    expect(baskets.deleteForUserIn).not.toHaveBeenCalled();
+    expect(events.emitTo).not.toHaveBeenCalled();
+  });
+
+  it('retires each membership with a tombstone of its own zone', async () => {
+    const { svc, membershipsRepo } = build({
+      memberships: [
+        { id: 'm4aaaaaa-1', zoneId: 'z4', userId: 'u4', username: 'D1' },
+        { id: 'm5aaaaaa-1', zoneId: 'z5', userId: 'u4', username: 'D2' },
+      ],
+    });
+
+    await svc.handleUserDeleted('u4');
+
+    const saved = membershipsRepo.save.mock.calls.map((c) => c[0]);
+    expect(saved).toHaveLength(2);
+    for (const membership of saved) {
+      expect(membership.status).toBe(MembershipStatus.KICKED);
+      expect(membership.username).toContain(ANONYMIZED_USERNAME_PREFIX);
+      expect(membership.userId).not.toBe('u4');
+    }
+    expect(saved[0].userId).not.toBe(saved[1].userId);
+  });
+
+  it('marks an owned zone for deletion, ownerless', async () => {
     const { svc, zonesRepo, events } = build({
       memberships: [
         { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
       ],
-      zones: { z1: { id: 'z1', ownerUserId: 'u1', status: ZoneStatus.ACTIVE } },
+      ownedZones: [{ id: 'z1', ownerUserId: 'u1', status: ZoneStatus.ACTIVE }],
     });
 
     await svc.handleUserDeleted('u1');
 
-    // Zone marked for deletion, ownerless, with a timestamp.
     const savedZone = zonesRepo.save.mock.calls[0][0];
     expect(savedZone.ownerUserId).toBeNull();
     expect(savedZone.status).toBe(ZoneStatus.MARKED_FOR_DELETION);
     expect(savedZone.markedForDeletionAt).toBeInstanceOf(Date);
-
-    expect(events.emit.mock.calls.map((c) => c[0])).toContain(
+    expect(events.emit.mock.calls.map((c: unknown[]) => c[0])).toContain(
       RealtimeEvent.ZoneMarkedForDeletion
     );
-    expect(events.emitTo.mock.calls.map((c) => c[0])).toContain(
-      RealtimeEvent.MemberKicked
-    );
   });
 
-  it('non-owner path: leaves the zone untouched, still retires + anonymizes', async () => {
-    const { svc, zonesRepo, membershipsRepo, events } = build({
-      memberships: [{ id: 'm2', zoneId: 'z2', userId: 'u2', username: 'Bob' }],
-      zones: {
-        z2: {
-          id: 'z2',
-          ownerUserId: 'someone-else',
-          status: ZoneStatus.ACTIVE,
-        },
-      },
-    });
-
-    await svc.handleUserDeleted('u2');
-
-    expect(zonesRepo.save).not.toHaveBeenCalled();
-    const savedMembership = membershipsRepo.save.mock.calls[0][0];
-    expect(savedMembership.status).toBe(MembershipStatus.KICKED);
-    expect(savedMembership.username).toContain(ANONYMIZED_USERNAME_PREFIX);
-    expect(events.emit).not.toHaveBeenCalled();
-    expect(events.emitTo.mock.calls.map((c) => c[0])).toEqual([
-      RealtimeEvent.MemberKicked,
-    ]);
-  });
-
-  it('republishes the zone counts for every zone it touched (plan 0017)', async () => {
-    const { svc, zoneCounts } = build({
+  it('announces only after the commit, to the person’s own id', async () => {
+    const { svc, events, order, zoneCounts } = build({
       memberships: [
         { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
         { id: 'm2', zoneId: 'z2', userId: 'u1', username: 'Ali' },
       ],
-      zones: {
-        z1: { id: 'z1', ownerUserId: 'u1', status: ZoneStatus.ACTIVE },
-        z2: { id: 'z2', ownerUserId: 'other', status: ZoneStatus.ACTIVE },
-      },
     });
 
     await svc.handleUserDeleted('u1');
 
+    expect(order.indexOf('emit')).toBeGreaterThan(order.indexOf('commit'));
+    const kicked = events.emitTo.mock.calls.filter(
+      (c: unknown[]) => c[0] === RealtimeEvent.MemberKicked
+    );
+    expect(kicked.map((c: unknown[]) => c[1])).toEqual([
+      { zoneId: 'z1', userIds: ['u1'] },
+      { zoneId: 'z2', userIds: ['u1'] },
+    ]);
     expect(zoneCounts.emitZoneCounts.mock.calls.map((c) => c[0])).toEqual([
       'z1',
       'z2',
     ]);
+    // The trips of the deleted baskets.
+    expect(
+      events.emitTo.mock.calls.some(
+        (c: unknown[]) => c[0] === RealtimeEvent.ListTripsChanged
+      )
+    ).toBe(true);
   });
 
-  it('is idempotent: a redelivery (firstSeen=false) applies nothing', async () => {
-    const { svc, membershipsRepo, zonesRepo } = build({
-      memberships: [{ id: 'm3', zoneId: 'z3', userId: 'u3', username: 'Cara' }],
-      zones: { z3: { id: 'z3', ownerUserId: 'u3', status: ZoneStatus.ACTIVE } },
-      firstSeen: false,
-    });
-
-    await svc.handleUserDeleted('u3');
-
-    expect(membershipsRepo.find).not.toHaveBeenCalled();
-    expect(zonesRepo.save).not.toHaveBeenCalled();
-  });
-
-  it('iterates every membership the user held', async () => {
-    const { svc, membershipsRepo } = build({
+  it('scrubs the trail with the tombstone and the name of each zone', async () => {
+    const { svc, audit, manager } = build({
       memberships: [
-        { id: 'm4', zoneId: 'z4', userId: 'u4', username: 'D1' },
-        { id: 'm5', zoneId: 'z5', userId: 'u4', username: 'D2' },
+        { id: 'm1aaaaaa-1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
       ],
-      zones: {
-        z4: { id: 'z4', ownerUserId: 'x', status: ZoneStatus.ACTIVE },
-        z5: { id: 'z5', ownerUserId: 'y', status: ZoneStatus.ACTIVE },
-      },
+      touchedZones: ['z1', 'z9'],
     });
 
-    await svc.handleUserDeleted('u4');
-    expect(membershipsRepo.save).toHaveBeenCalledTimes(2);
+    await svc.handleUserDeleted('u1');
+
+    const [onManager, userId, tombstones, names, deletion] = audit.scrubUser
+      .mock.calls[0] as unknown as [
+      unknown,
+      string,
+      Map<string, string>,
+      Map<string, string>,
+      { membershipIds: string[] },
+    ];
+    expect(onManager).toBe(manager);
+    expect(userId).toBe('u1');
+    expect([...tombstones.keys()].sort()).toEqual(['z1', 'z9']);
+    expect([...names.keys()]).toEqual(['z1']);
+    expect(deletion.membershipIds).toEqual(['m1aaaaaa-1']);
+  });
+
+  it('ends a pending transcript as FAILED with the recording it waited on', async () => {
+    const { svc, manager } = build({
+      memberships: [],
+      voicedComments: ['c1', 'c2'],
+    });
+
+    await svc.handleUserDeleted('u1');
+
+    // The statement itself runs on real Postgres in the integration spec; here,
+    // that it is the one that clears the audio of those comments and moves
+    // PENDING, and only PENDING, to FAILED.
+    const call = manager.query.mock.calls.find(
+      (c: unknown[]) =>
+        typeof c[0] === 'string' &&
+        c[0].includes('UPDATE "line_comments"') &&
+        c[0].includes('"audioContentType" = NULL')
+    ) as unknown as [string, unknown[]];
+    expect(call[0]).toContain(
+      '"transcription" = CASE WHEN "transcription" = $2'
+    );
+    expect(call[1]).toEqual([
+      ['c1', 'c2'],
+      CommentTranscription.PENDING,
+      CommentTranscription.FAILED,
+    ]);
+  });
+
+  it('answers done when only the announcement fails, so the message is acked', async () => {
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const { svc, zoneCounts, order } = build({
+      memberships: [
+        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
+      ],
+    });
+    zoneCounts.emitZoneCounts.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(svc.handleUserDeleted('u1')).resolves.toBe(true);
+
+    expect(order).toContain('commit');
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      expect.stringContaining('announcing it to open screens failed')
+    );
+    error.mockRestore();
+  });
+
+  it('announces nothing when the transaction throws', async () => {
+    const { svc, events, audit } = build({
+      memberships: [
+        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
+      ],
+    });
+    audit.scrubUser.mockRejectedValueOnce(new Error('boom'));
+
+    await expect(svc.handleUserDeleted('u1')).rejects.toThrow('boom');
+    expect(events.emitTo).not.toHaveBeenCalled();
   });
 });
 
@@ -211,21 +308,17 @@ describe('AccountDeletionService.usersWithoutMemberships', () => {
       where: jest.fn(() => qb),
       getRawMany: jest.fn(async () => rows),
     };
-    const membershipsRepo = {
-      find: jest.fn(),
-      save: jest.fn(),
-      createQueryBuilder: jest.fn(() => qb),
-    };
-    const svc = new AccountDeletionService(
-      { findOne: jest.fn(), save: jest.fn() } as never,
+    const membershipsRepo = { createQueryBuilder: jest.fn(() => qb) };
+    return new AccountDeletionService(
+      {} as never,
       membershipsRepo as never,
       { emit: jest.fn() } as never,
       { emitZoneCounts: jest.fn() } as never,
-      { firstSeen: jest.fn() } as never,
-      { deleteForUser: jest.fn() } as never,
-      announcer
+      { firstSeenIn: jest.fn() } as never,
+      { deleteForUserIn: jest.fn() } as never,
+      announcer,
+      { scrubUser: jest.fn() } as never
     );
-    return svc;
   }
 
   it('returns [] for empty input without querying', async () => {

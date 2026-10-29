@@ -114,6 +114,118 @@ export class CoreAuditService {
       action: row.action,
     }));
   }
+
+  /**
+   * Take a deleted person out of the trail (plan 0232, section 4).
+   *
+   * Runs on the deletion's own manager, so the trail is scrubbed in the
+   * transaction that rewrote the rows it describes, or not at all. A row is the
+   * person's when its `entityId` is their user id or one of their memberships,
+   * or when `before` or `after` holds their user id as a value. On each such row:
+   *
+   * - `email`, `displayName`, `reasonNote` and `userAgent` keys become null;
+   * - a `username` key becomes the anonymized name of the zone, on a row that is
+   *   about the person (their membership, or a diff naming them as `userId`).
+   *   A row about somebody else that only mentions them keeps its names;
+   * - every value equal to the user id, and an `entityId` equal to it, becomes
+   *   the tombstone of the row's zone, or `tombstone` for a row that names no
+   *   zone the deletion touched.
+   *
+   * The zone of a row is the `zoneId` of its diff, or the zone of the zone,
+   * membership, list or line it is about. The trail stores one level of fields
+   * (`AuditFields`), so only top level values are compared and replaced.
+   *
+   * One statement with `jsonb` functions. It answers how many rows it changed.
+   */
+  async scrubUser(
+    manager: EntityManager,
+    userId: string,
+    tombstoneOfZone: ReadonlyMap<string, string>,
+    anonymizedNameOfZone: ReadonlyMap<string, string>,
+    deletion: { tombstone: string; membershipIds: readonly string[] }
+  ): Promise<number> {
+    const zones: Record<string, { tombstone: string; name: string | null }> =
+      {};
+    for (const [zoneId, tombstone] of tombstoneOfZone) {
+      zones[zoneId] = {
+        tombstone,
+        name: anonymizedNameOfZone.get(zoneId) ?? null,
+      };
+    }
+    const scrubbed = (column: '"before"' | '"after"') => `
+      CASE WHEN jsonb_typeof(a.${column}) = 'object' THEN (
+        SELECT COALESCE(jsonb_object_agg(e."key",
+                 CASE
+                   WHEN e."key" IN ('email', 'displayName', 'reasonNote', 'userAgent')
+                     THEN 'null'::jsonb
+                   WHEN e."key" = 'username' AND t."about"
+                     THEN COALESCE(to_jsonb(t."name"), 'null'::jsonb)
+                   WHEN e."value" = to_jsonb($1::text)
+                     THEN to_jsonb(t."tombstone")
+                   ELSE e."value"
+                 END), '{}'::jsonb)
+          FROM jsonb_each(a.${column}) e
+      ) ELSE a.${column} END`;
+    const result: unknown = await manager.query(
+      `WITH "zone_of" AS (
+         SELECT z."key" AS "zoneId",
+                z."value"->>'tombstone' AS "tombstone",
+                z."value"->>'name' AS "name"
+           FROM jsonb_each($3::jsonb) z
+       ),
+       "named" AS (
+         SELECT a."id",
+                (a."entityId" = ANY($2::uuid[])
+                  OR a."before"->>'userId' = $1::text
+                  OR a."after"->>'userId' = $1::text) AS "about",
+                COALESCE(
+                  a."before"->>'zoneId',
+                  a."after"->>'zoneId',
+                  CASE WHEN a."entity" = 'zones' THEN a."entityId"::text END,
+                  (SELECT m."zoneId"::text FROM "zone_memberships" m
+                    WHERE a."entity" = 'zone_memberships' AND m."id" = a."entityId"),
+                  (SELECT l."zoneId"::text FROM "shopping_lists" l
+                    WHERE a."entity" = 'shopping_lists' AND l."id" = a."entityId"),
+                  (SELECT l."zoneId"::text FROM "list_lines" ll
+                     JOIN "shopping_lists" l ON l."id" = ll."listId"
+                    WHERE a."entity" = 'list_lines' AND ll."id" = a."entityId")
+                ) AS "zoneId"
+           FROM "core_audit" a
+          WHERE a."entityId" = $1::uuid
+             OR a."entityId" = ANY($2::uuid[])
+             OR jsonb_path_exists(COALESCE(a."before", '{}'::jsonb), '$.* ? (@ == $u)',
+                                  jsonb_build_object('u', $1::text))
+             OR jsonb_path_exists(COALESCE(a."after", '{}'::jsonb), '$.* ? (@ == $u)',
+                                  jsonb_build_object('u', $1::text))
+       ),
+       "target" AS (
+         SELECT n."id", n."about",
+                COALESCE(z."tombstone", $4::text) AS "tombstone",
+                z."name" AS "name"
+           FROM "named" n
+           LEFT JOIN "zone_of" z ON z."zoneId" = n."zoneId"
+       )
+       UPDATE "core_audit" a
+          SET "entityId" = CASE WHEN a."entityId" = $1::uuid
+                                THEN t."tombstone"::uuid
+                                ELSE a."entityId" END,
+              "before" = ${scrubbed('"before"')},
+              "after" = ${scrubbed('"after"')}
+         FROM "target" t
+        WHERE a."id" = t."id"
+       RETURNING a."id"`,
+      [
+        userId,
+        [...deletion.membershipIds],
+        JSON.stringify(zones),
+        deletion.tombstone,
+      ]
+    );
+    // An UPDATE with RETURNING answers `[rows, count]` through `query()`.
+    return Array.isArray(result) && typeof result[1] === 'number'
+      ? result[1]
+      : 0;
+  }
 }
 
 /**

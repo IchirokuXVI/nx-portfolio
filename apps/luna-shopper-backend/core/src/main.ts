@@ -10,6 +10,7 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
+import { AccountDeletionConsumer } from './app/account/account-deletion.consumer';
 import { AppModule } from './app/app.module';
 import type { CoreConfig } from './app/config/app-config';
 
@@ -33,9 +34,9 @@ async function bootstrap() {
         servers: [config.natsUrl],
         // The queue group. See the note in the auth service: without it every
         // replica receives every message, so at replicaCount 2 each request is
-        // handled twice. It matters most here, because core carries the two
-        // @EventPattern reconciliation handlers (a deleted user, a renamed one),
-        // and an event has no reply to deduplicate the second run away.
+        // handled twice. It matters most here, because core carries an
+        // @EventPattern handler (a renamed user), and an event has no reply to
+        // deduplicate the second run away.
         queue: 'luna-shopper-backend-core',
       },
     },
@@ -47,6 +48,10 @@ async function bootstrap() {
   bootstrapPlatform(app);
 
   await app.startAllMicroservices();
+  // The durable consumer of account deletions (plan 0232, section 5). Started
+  // here and not by its module, so the one off reconcile command, which boots
+  // the same module, never pulls from the stream.
+  app.get(AccountDeletionConsumer).start();
   await app.listen(config.port);
 
   app

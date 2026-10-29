@@ -11,6 +11,7 @@ import {
   PlatformHealthModule,
   PlatformModule,
 } from '@portfolio/luna-shopper/platform';
+import { AccountModule } from './account/account.module';
 import { CatalogModule } from './catalog/catalog.module';
 import type { CatalogConfig } from './config/app-config';
 import {
@@ -46,6 +47,8 @@ import { ShopWalksModule } from './shop-walks/shop-walks.module';
     CatalogModule,
     // Plan 0168: a shop's walks and its map.
     ShopWalksModule,
+    // Plan 0232: a deleted account's walks lose the link to it.
+    AccountModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

@@ -135,7 +135,8 @@ describeIntegration('reset grants (real Postgres)', () => {
       new AuthAuditService(dataSource),
       config,
       {} as never,
-      new InMemoryTermsService()
+      new InMemoryTermsService(),
+      { publishSoon: () => undefined } as never
     );
   }, 120_000);
 

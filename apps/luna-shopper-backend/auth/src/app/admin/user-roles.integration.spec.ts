@@ -113,7 +113,8 @@ describeIntegration('roles on an account (real Postgres)', () => {
       new AuthAuditService(dataSource),
       config,
       undefined as never,
-      new InMemoryTermsService()
+      new InMemoryTermsService(),
+      { publishSoon: () => undefined } as never
     );
     directory = new AdminDirectoryService(
       users,

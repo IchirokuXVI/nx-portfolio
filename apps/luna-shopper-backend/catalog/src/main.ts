@@ -10,6 +10,7 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
+import { AccountDeletionConsumer } from './app/account/account-deletion.consumer';
 import { AppModule } from './app/app.module';
 import type { CatalogConfig } from './app/config/app-config';
 
@@ -42,6 +43,10 @@ async function bootstrap() {
   bootstrapPlatform(app);
 
   await app.startAllMicroservices();
+  // The durable consumer of account deletions (plan 0232, section 6). Started
+  // here and not by its module, so the one off reconcile command, which boots
+  // the same module, never pulls from the stream.
+  app.get(AccountDeletionConsumer).start();
   await app.listen(config.port);
 
   app

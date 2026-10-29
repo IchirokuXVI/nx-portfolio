@@ -31,9 +31,11 @@ export interface UserEmailVerifiedEvent {
 }
 
 /**
- * Emitted after auth removes a user and its personal data (plan 0011). Core
- * reacts by retiring the user's memberships and marking any zones they owned for
- * deletion. Idempotent: a redelivered event is a no-op.
+ * Published after auth removes a user and its personal data (plan 0011). Core
+ * and catalog unlink and delete what the person left (plan 0232). Since plan
+ * 0232 it travels on {@link ACCOUNT_DELETION_STREAM}, not as a plain NATS event:
+ * the message body is this object as JSON. Idempotent: a redelivered event is a
+ * no-op.
  */
 export interface UserDeletedEvent {
   userId: string;
@@ -59,3 +61,26 @@ export interface UserUsernameChangedEvent {
   newUsername: string;
   propagation: UsernamePropagation;
 }
+
+/**
+ * The JetStream stream that carries `user.deleted` (plan 0232, section 5).
+ *
+ * Auth writes an outbox row in the delete's transaction and publishes it here,
+ * waiting for the stream's ack before it deletes the row. Auth ensures the
+ * stream at boot, because auth is the side that must never publish into
+ * nothing. Core and catalog each own a durable consumer with explicit acks, so a
+ * deletion that meets a stopped service completes when it starts again.
+ */
+export const ACCOUNT_DELETION_STREAM = {
+  name: 'LUNA_ACCOUNT_DELETIONS',
+  /** The only subject the stream captures. */
+  subject: IDENTITY_EVENTS.userDeleted,
+  /** File storage, kept this long. */
+  maxAgeDays: 30,
+  consumers: {
+    core: 'core-account-deletion',
+    catalog: 'catalog-account-deletion',
+  },
+  /** Before an unacked message is delivered again. */
+  ackWaitSeconds: 60,
+} as const;

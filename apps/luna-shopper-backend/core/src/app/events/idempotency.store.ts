@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { IdempotencyStore } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
 import { ProcessedEvent } from '../entities';
 
 /**
@@ -26,6 +26,26 @@ export class ProcessedEventStore implements IdempotencyStore {
       .returning('key')
       .execute();
     // A row is returned only when the insert actually happened (not on conflict).
+    return result.raw.length > 0;
+  }
+
+  /**
+   * {@link firstSeen} inside the caller's transaction (plan 0232, section 5).
+   *
+   * The key is then part of the work it guards: a rollback takes it back, and
+   * the redelivery that follows does the whole thing again. A second caller of
+   * the same key waits on the unique index until the first commits or rolls
+   * back, and gets the answer that outcome gives.
+   */
+  async firstSeenIn(manager: EntityManager, key: string): Promise<boolean> {
+    const result = await manager
+      .createQueryBuilder()
+      .insert()
+      .into(ProcessedEvent)
+      .values({ key })
+      .orIgnore()
+      .returning('key')
+      .execute();
     return result.raw.length > 0;
   }
 }

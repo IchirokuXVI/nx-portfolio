@@ -7,6 +7,7 @@ import { RecoveryGrants1772800000000 } from './1772800000000-RecoveryGrants';
 import { OAuthHandoffs1772900000000 } from './1772900000000-OAuthHandoffs';
 import { RefreshTokenSuccessor1773000000000 } from './1773000000000-RefreshTokenSuccessor';
 import { TermsAcceptances1773100000000 } from './1773100000000-TermsAcceptances';
+import { AccountDeletions1773200000000 } from './1773200000000-AccountDeletions';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -49,4 +50,7 @@ export const AUTH_MIGRATIONS = [
   // One new table and a nullable column on each Google grant (plan 0231). It
   // only adds, and a grant from before it carries no version.
   TermsAcceptances1773100000000,
+  // The outbox of `user.deleted` (plan 0232, section 5). One new table that
+  // references nothing, so no existing row changes.
+  AccountDeletions1773200000000,
 ];

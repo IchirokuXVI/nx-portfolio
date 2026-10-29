@@ -91,7 +91,8 @@ describeIntegration('terms acceptances (real Postgres)', () => {
       fakeAudit([]).service,
       config,
       {} as never,
-      terms
+      terms,
+      { publishSoon: () => undefined } as never
     );
   }, 120_000);
 
@@ -173,7 +174,8 @@ describeIntegration('terms acceptances (real Postgres)', () => {
         }),
       } as never,
       {} as never,
-      terms
+      terms,
+      { publishSoon: () => undefined } as never
     );
     const created = (await withTokens.createTemporaryUser({
       acceptedTermsVersion: CURRENT,

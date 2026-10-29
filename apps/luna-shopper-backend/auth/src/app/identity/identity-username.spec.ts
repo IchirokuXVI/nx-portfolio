@@ -72,7 +72,6 @@ function build(users: Partial<User>[] = []) {
   const events = {
     userRegistered: jest.fn(),
     userUpgraded: jest.fn(),
-    userDeleted: jest.fn(),
     userEmailVerified: jest.fn(),
     userUsernameChanged: jest.fn(),
   };
@@ -96,7 +95,8 @@ function build(users: Partial<User>[] = []) {
     fakeAudit([]).service,
     config as never,
     undefined as never,
-    new InMemoryTermsService()
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
   return { service, repo, events, tokens };
 }

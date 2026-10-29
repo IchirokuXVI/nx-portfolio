@@ -65,6 +65,7 @@ import {
 } from '../audit/auth-audit.service';
 import type { AuthConfig } from '../config/app-config';
 import {
+  AccountDeletion,
   Credential,
   EmailVerification,
   OAuthHandoff,
@@ -76,6 +77,7 @@ import {
   TermsAcceptanceVia,
   User,
 } from '../entities';
+import { AccountDeletionPublisher } from '../events/account-deletion.publisher';
 import { IdentityEventsPublisher } from '../events/identity-events.publisher';
 import { ImpersonationService } from '../impersonation/impersonation.service';
 import { MailService, recoveryLinks } from '../mail/mail.service';
@@ -188,7 +190,10 @@ export class IdentityService {
     private readonly impersonation: ImpersonationService,
     // Last, for the same reason (plan 0231). Every path that creates an
     // account checks and records the Terms through it.
-    private readonly terms: TermsService
+    private readonly terms: TermsService,
+    // Last, for the same reason (plan 0232). Both delete paths wake it after
+    // their transaction commits, and nothing else reaches it.
+    private readonly deletions: AccountDeletionPublisher
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
   }
@@ -1224,15 +1229,18 @@ export class IdentityService {
    * identities, email verifications and refresh tokens (every child FK is
    * `ON DELETE CASCADE`), so this one delete satisfies the right to be forgotten
    * for the identity data, which lives only in auth. Idempotent: if the user is
-   * already gone the delete affects no rows and no event is emitted.
+   * already gone the delete affects no rows and nothing is published.
+   *
+   * One transaction since plan 0232 (section 4): the delete, the outbox row
+   * that carries `user.deleted` to core and catalog, and the scrub of the audit
+   * trail commit together or not at all.
    */
   async deleteAccount(req: DeleteAccountRequest): Promise<DeleteAccountResult> {
-    const deleted = await this.removeAccount(
-      this.dataSource.manager,
-      req.userId
+    const deleted = await this.dataSource.transaction((manager) =>
+      this.removeAccount(manager, req.userId)
     );
     if (deleted) {
-      this.events.userDeleted({ userId: req.userId });
+      this.deletions.publishSoon();
     }
     return { userId: req.userId, deleted };
   }
@@ -1241,17 +1249,18 @@ export class IdentityService {
    * Delete somebody else's account (plan 0077, section 8).
    *
    * The same delete {@link deleteAccount} makes, so the same cascade runs and the
-   * same `user.deleted` event reaches core, whose `AccountDeletionService` does
-   * its half across its own database. The whole difference is the missing role
-   * check, and the operator gate the caller has already passed.
+   * same `user.deleted` event reaches core and catalog, which do their half
+   * across their own databases. The whole difference is the missing role check,
+   * and the operator gate the caller has already passed.
    *
-   * The row is read before it is removed, because a deletion whose trail says
-   * only that something with this id used to exist cannot answer what was lost.
-   * Nothing read there is a secret: the password hash lives on `credentials`,
-   * which this never touches.
+   * The trail records the deletion with the account's `kind`, `roles` and
+   * `createdAt` only (plan 0232, section 4). That answers what kind of account
+   * was lost and who removed it, and names nothing that identifies the person.
+   * The scrub that follows then takes the person out of every earlier row,
+   * this one included, inside the same transaction.
    *
    * Idempotent for the same reason the user facing one is: a repeat affects no
-   * rows, emits nothing and records nothing, and answers `deleted: false`.
+   * rows, publishes nothing and records nothing, and answers `deleted: false`.
    */
   async deleteAccountAsOperator(
     targetUserId: string,
@@ -1264,26 +1273,43 @@ export class IdentityService {
       if (!user) {
         return false;
       }
-      const removed = await this.removeAccount(tx.manager, targetUserId);
-      if (removed) {
-        await tx.recordDelete(User, user, targetUserId);
-      }
-      return removed;
+      return this.removeAccount(tx.manager, targetUserId, () =>
+        tx.recordDelete(User, user, targetUserId, [
+          'kind',
+          'roles',
+          'createdAt',
+        ])
+      );
     });
 
     if (deleted) {
-      this.events.userDeleted({ userId: targetUserId });
+      this.deletions.publishSoon();
     }
     return { userId: targetUserId, deleted };
   }
 
-  /** The delete both paths make, and the only place that statement is written. */
+  /**
+   * The delete both paths make, and the only place that statement is written.
+   *
+   * Inside the caller's transaction, in this order (plan 0232, sections 4 and
+   * 5): the `users` row and its cascade, the outbox row, the caller's own audit
+   * record if it has one, then the scrub, so the record just written is
+   * scrubbed with the rest. Nothing after the delete runs when it removed
+   * nothing.
+   */
   private async removeAccount(
     manager: EntityManager,
-    userId: string
+    userId: string,
+    record?: () => Promise<void>
   ): Promise<boolean> {
     const result = await manager.getRepository(User).delete({ id: userId });
-    return (result.affected ?? 0) > 0;
+    if ((result.affected ?? 0) === 0) {
+      return false;
+    }
+    await manager.getRepository(AccountDeletion).insert({ userId });
+    await record?.();
+    await this.audit.scrubUser(manager, userId);
+    return true;
   }
 
   /**

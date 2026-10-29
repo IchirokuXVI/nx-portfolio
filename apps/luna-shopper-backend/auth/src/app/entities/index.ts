@@ -1,3 +1,4 @@
+import { AccountDeletion } from './account-deletion.entity';
 import { AdminLoginFailure } from './admin-login-failure.entity';
 import { AdminUser } from './admin-user.entity';
 import { AuthAudit } from './auth-audit.entity';
@@ -12,6 +13,7 @@ import { RefreshToken } from './refresh-token.entity';
 import { TermsAcceptance } from './terms-acceptance.entity';
 import { User } from './user.entity';
 
+export { AccountDeletion } from './account-deletion.entity';
 export { AdminLoginFailure } from './admin-login-failure.entity';
 export { AdminUser } from './admin-user.entity';
 export {
@@ -62,4 +64,7 @@ export const AUTH_ENTITIES = [
   // The row it describes is named by table and id rather than by a foreign key,
   // so the trail outlives whatever it recorded.
   AuthAudit,
+  // The outbox of `user.deleted` (plan 0232, section 5). It references nothing:
+  // the user it names is gone by the time its row commits.
+  AccountDeletion,
 ];

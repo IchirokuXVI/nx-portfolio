@@ -1,5 +1,8 @@
 import { AUTH_PATTERNS } from '../../lib/messages/auth.messages';
-import { RECONCILIATION_PATTERNS } from '../../lib/messages/reconciliation.messages';
+import {
+  EXISTING_USER_IDS_MAX,
+  RECONCILIATION_PATTERNS,
+} from '../../lib/messages/reconciliation.messages';
 import {
   array,
   boolean,
@@ -22,6 +25,8 @@ export const ACCOUNT_SCHEMA_IDS = {
   usersWithoutMembershipsResponse: schemaId(
     'core/UsersWithoutMembershipsResponse'
   ),
+  existingUserIdsRequest: schemaId('msg/auth.existingUserIds/request'),
+  existingUserIdsResponse: schemaId('auth/ExistingUserIdsResponse'),
 } as const;
 
 const deleteAccountRequest = object(
@@ -48,11 +53,27 @@ const usersWithoutMembershipsResponse = object(
   ['userIds']
 );
 
+const existingUserIdsRequest = object(
+  ACCOUNT_SCHEMA_IDS.existingUserIdsRequest,
+  {
+    userIds: { ...array(nonEmptyString()), maxItems: EXISTING_USER_IDS_MAX },
+  },
+  ['userIds']
+);
+
+const existingUserIdsResponse = object(
+  ACCOUNT_SCHEMA_IDS.existingUserIdsResponse,
+  { userIds: array(nonEmptyString()) },
+  ['userIds']
+);
+
 export const accountSchemas: JsonSchema[] = [
   deleteAccountRequest,
   deleteAccountResult,
   usersWithoutMembershipsRequest,
   usersWithoutMembershipsResponse,
+  existingUserIdsRequest,
+  existingUserIdsResponse,
 ];
 
 export const accountMessageContracts: Record<
@@ -66,5 +87,9 @@ export const accountMessageContracts: Record<
   [RECONCILIATION_PATTERNS.usersWithoutMemberships]: {
     request: ACCOUNT_SCHEMA_IDS.usersWithoutMembershipsRequest,
     response: ACCOUNT_SCHEMA_IDS.usersWithoutMembershipsResponse,
+  },
+  [RECONCILIATION_PATTERNS.existingUserIds]: {
+    request: ACCOUNT_SCHEMA_IDS.existingUserIdsRequest,
+    response: ACCOUNT_SCHEMA_IDS.existingUserIdsResponse,
   },
 };

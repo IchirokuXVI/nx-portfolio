@@ -137,7 +137,6 @@ function build(users: Row[] = [], credentials: Row[] = []) {
   const events = {
     userRegistered: jest.fn(),
     userUpgraded: jest.fn(),
-    userDeleted: jest.fn(),
     userEmailVerified: jest.fn(),
     userUsernameChanged: jest.fn(),
   };
@@ -190,7 +189,8 @@ function build(users: Row[] = [], credentials: Row[] = []) {
       }),
     } as never,
     undefined as never,
-    new InMemoryTermsService()
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
   return {
     service,
