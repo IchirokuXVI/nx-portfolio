@@ -386,6 +386,42 @@ describe('AssistantStore', () => {
       // pretending a wait would fix it.
       expect(subject.composerDisabled()).toBe(false);
     });
+
+    it('reads an allowance refusal as its own message, not a failure (velista 0174)', async () => {
+      const subject = store(
+        fakeAssistant(() =>
+          Promise.reject(
+            new GatewayError({
+              code: 'assistant_allowance_reached',
+              status: 429,
+              correlationId: 'ref-429',
+              details: {
+                scope: 'user',
+                period: 'day',
+                limit: 'assistantAudio',
+                resetsAt: '2026-10-29T23:00:00Z',
+              },
+            })
+          )
+        )
+      );
+
+      await subject.say('Add milk');
+
+      expect(last(subject)).toMatchObject({
+        kind: 'allowance',
+        speaker: 'bot',
+        allowance: {
+          scope: 'user',
+          period: 'day',
+          limit: 'assistantAudio',
+          resetsAt: new Date('2026-10-29T23:00:00Z'),
+        },
+      });
+      expect(last(subject).retryAfterSeconds).toBeUndefined();
+      // No countdown and nothing held: a typed turn after a limit on speaking works.
+      expect(subject.composerDisabled()).toBe(false);
+    });
   });
 
   describe('the cap', () => {

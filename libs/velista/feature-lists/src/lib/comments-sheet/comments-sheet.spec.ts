@@ -11,14 +11,19 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  fakeOperatorSettingsStore,
+  GatewayError,
+  MEMORY_OPERATOR_SETTINGS,
   provideFakeItemNames,
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   RealtimeMemory,
   type CommentServiceI,
   type FakeLineStore,
+  type FakeOperatorSettingsStore,
 } from '@portfolio/velista/data-access';
 import type {
   Comment,
@@ -165,6 +170,8 @@ interface RenderOptions {
    * through to `page`, so a test can hold one read open and leave the rest alone.
    */
   answerRead?: (read: number) => Promise<readonly Comment[]> | undefined;
+  /** What the deployment states about itself (velista `0172`). Ready by default. */
+  operator?: FakeOperatorSettingsStore;
 }
 
 async function render(
@@ -249,6 +256,9 @@ async function render(
       ),
       provideFakeMemberNames(fakeMemberNames({ 'user-toni': 'Toni' })),
       provideFakeSessionStore('REGISTERED'),
+      provideFakeOperatorSettingsStore(
+        options.operator ?? fakeOperatorSettingsStore()
+      ),
       { provide: COMMENT_SERVICE, useValue: comments },
       {
         provide: AUDIO_CAPTURE,
@@ -577,6 +587,95 @@ describe('CommentsSheet', () => {
   });
 
   /** Plan 0039. Nothing here touches a real microphone, media element or socket. */
+  /** Velista `0174`, targets 1, 2 and 7. */
+  describe('where the deployment cannot transcribe', () => {
+    const noTranscriber = () =>
+      fakeOperatorSettingsStore({
+        ...MEMORY_OPERATOR_SETTINGS,
+        features: {
+          ...MEMORY_OPERATOR_SETTINGS.features,
+          transcription: false,
+        },
+      });
+
+    it('draws a plain text composer, with no microphone', async () => {
+      const { fixture } = await render({ operator: noTranscriber() });
+      const composer = fixture.debugElement.query(
+        By.css('lib-comment-composer')
+      );
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(composer.query(By.css('.field'))).not.toBeNull();
+      expect(composer.query(By.css('lib-mic-icon'))).toBeNull();
+      expect(composer.query(By.css('.send lib-send-icon'))).not.toBeNull();
+    });
+
+    it('does not draw the microphone while the settings have not answered', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      const { fixture } = await render({ operator });
+
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer lib-mic-icon'))
+      ).toBeNull();
+
+      operator.land(MEMORY_OPERATOR_SETTINGS);
+      fixture.detectChanges();
+
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer lib-mic-icon'))
+      ).not.toBeNull();
+    });
+
+    it('does not draw it when the settings could not be read', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      operator.fail();
+      const { fixture } = await render({ operator });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+    });
+
+    it('still sends a typed comment', async () => {
+      const { fixture, lines } = await render({ operator: noTranscriber() });
+      const composer = componentOf(fixture);
+      const added = jest.spyOn(lines, 'addComment');
+
+      await fixture.componentInstance.send('The green one');
+
+      expect(composer.button()).toBe('send');
+      expect(added).toHaveBeenCalled();
+    });
+
+    it('answers an allowance refusal on an upload with the generic line, and keeps the recording', async () => {
+      // Backend `0234` never refuses the upload itself, so this is the future case
+      // target 7 asks about: it falls to the existing generic sentence, and the
+      // recording stays held for the retry like any other failed send.
+      const { fixture } = await render({
+        addVoice: async () => {
+          throw new GatewayError({
+            code: 'assistant_allowance_reached',
+            status: 429,
+            correlationId: 'ref-429',
+            details: { scope: 'user', period: 'day', limit: 'commentAudio' },
+          });
+        },
+      });
+      const composer = componentOf(fixture);
+
+      composer.press();
+      await flush();
+      void composer.stopAndSend();
+      await flush();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.errorKey()).toBe('list.error.failed');
+      expect(composer.errorKey()).toBe('list.error.failed');
+      expect(composer.hasHeldRecording()).toBe(true);
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .retry'))
+      ).not.toBeNull();
+    });
+  });
+
   describe('a comment can be a recording', () => {
     it('draws one button, which is a microphone on an empty field', async () => {
       const { fixture } = await render();

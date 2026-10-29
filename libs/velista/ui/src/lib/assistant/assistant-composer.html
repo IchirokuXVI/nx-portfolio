@@ -1,5 +1,9 @@
-@let state = recorder.state();
-@let recording = recorder.active();
+<!--
+  With no microphone (velista `0174`) there may be no recorder at all, and one that is
+  there is never started, so it reads as idle and nothing below about recording draws.
+-->
+@let state = recorder?.state() ?? 'idle';
+@let recording = recorder?.active() ?? false;
 
 <div class="composer">
   <!--
@@ -16,12 +20,12 @@
       {{ 'assistant.recorder.limit.reached' | rokuT }}
       <strong>{{ 'assistant.recorder.limit.pressStop' | rokuT }}</strong>
     </p>
-  } @else if (recorder.warning()) {
+  } @else if (recorder?.warning()) {
     <p aria-live="polite" class="notice">
       {{ 'assistant.recorder.limit.longest' | rokuT }}
       <strong>{{
         'assistant.recorder.limit.left'
-          | rokuT: { count: recorder.remainingSeconds() }
+          | rokuT: { count: recorder?.remainingSeconds() ?? 0 }
       }}</strong>
     </p>
   }
@@ -96,7 +100,7 @@
       <button
         (click)="press()"
         [attr.aria-label]="'assistant.composer.' + button() | rokuT"
-        [disabled]="disabled()"
+        [disabled]="buttonDisabled()"
         class="action"
         type="button"
       >

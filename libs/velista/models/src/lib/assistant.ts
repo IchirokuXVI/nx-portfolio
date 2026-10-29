@@ -7,6 +7,8 @@
  * `data-access`: `ui` renders a turn and may not import that library (rule D1).
  */
 
+import type { AssistantAllowance } from './assistant-allowance';
+
 /** Who said it. Two speakers, and there will not be a third. */
 export type AssistantSpeaker = 'caller' | 'bot';
 
@@ -155,6 +157,11 @@ export interface AssistantReply {
  * and in a container this deployment cannot read. Both are the app speaking, both say
  * so in a sentence in the transcript rather than a banner, and `tooLong` names the
  * limit (backend `0041`, section 9).
+ *
+ * `allowance` is a turn the allowance refused (backend `0234`, velista `0174`). Like
+ * `unconfigured` it must not say "try again", and unlike `throttled` it carries no
+ * clock and leaves the composer usable: the answer is a time of day, and after a limit
+ * on speaking a typed turn still goes through.
  */
 export interface AssistantEntry {
   readonly id: string;
@@ -182,6 +189,12 @@ export interface AssistantEntry {
     | 'unconfigured'
     | 'tooLong'
     | 'badFormat'
-    | 'dropped';
+    | 'dropped'
+    | 'allowance';
   readonly retryAfterSeconds?: number;
+  /**
+   * What an `allowance` entry says: whose allowance, which period, which counter and
+   * when it turns over (velista `0174`, target 5). Absent on every other kind.
+   */
+  readonly allowance?: AssistantAllowance;
 }

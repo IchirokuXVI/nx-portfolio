@@ -8,6 +8,14 @@
   [title]="'assistant.title' | rokuT"
 />
 
+<!--
+  The standing disclosure (velista `0174`, target 8, backend `0236` section 3.3). Under
+  the header and outside the column that scrolls, so it is on screen whatever the
+  conversation holds, before the first message and after the fiftieth. Quiet text and
+  nothing else: no icon, no box. It is a fact about what answers here, not a warning.
+-->
+<p class="disclosure">{{ 'assistant.disclosure' | rokuT }}</p>
+
 <main #column class="column">
   @if (messages().length === 0) {
     <lib-assistant-intro />
@@ -33,4 +41,5 @@
   (send)="send($event)"
   (spoke)="spoke($event)"
   [disabled]="composerDisabled()"
+  [voice]="voiceOffered()"
 />

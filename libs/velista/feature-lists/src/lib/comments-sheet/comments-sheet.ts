@@ -17,6 +17,7 @@ import {
   LineStore,
   ListStore,
   MemberNames,
+  OperatorSettingsStore,
   REALTIME_CLIENT,
   SessionStore,
   type CommentServiceI,
@@ -167,6 +168,23 @@ export class CommentsSheet {
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _operator = inject(OperatorSettingsStore);
+
+  /**
+   * Whether the composer offers its microphone (velista `0174`, target 1).
+   *
+   * Only where this deployment can transcribe. The assistant flag is not asked
+   * (decision D3): a voice comment is a recording for the people on the list, not a
+   * turn the assistant answers. Unknown is off (decision D2), because a microphone
+   * that appears a moment late costs nothing and one that fails costs a recording.
+   *
+   * The sheet keeps providing `AudioRecorder` either way: providers are fixed when the
+   * component is declared and cannot follow a signal, and the composer never starts
+   * one it was given with its microphone off.
+   */
+  readonly voiceOffered = computed(
+    () => this._operator.settings()?.features.transcription === true
+  );
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);

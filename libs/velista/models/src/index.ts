@@ -8,6 +8,7 @@ export * from './lib/app-standalone-origin';
 export * from './lib/app-theme';
 export * from './lib/app-version';
 export * from './lib/assistant';
+export * from './lib/assistant-allowance';
 export * from './lib/attribution';
 export * from './lib/basket-changes';
 export * from './lib/basket-patch';

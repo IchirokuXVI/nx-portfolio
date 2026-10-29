@@ -7,8 +7,12 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ASSISTANT_SERVICE,
+  fakeOperatorSettingsStore,
   GatewayError,
+  MEMORY_OPERATOR_SETTINGS,
+  provideFakeOperatorSettingsStore,
   type AssistantServiceI,
+  type FakeOperatorSettingsStore,
 } from '@portfolio/velista/data-access';
 import type {
   AssistantChoice,
@@ -16,8 +20,8 @@ import type {
 } from '@portfolio/velista/models';
 import {
   PageNavigation,
-  SPEECH_CAPTURE,
   provideVelistaTesting,
+  SPEECH_CAPTURE,
   type SpeechCaptureI,
 } from '@portfolio/velista/platform';
 import { AssistantPage } from './assistant-page';
@@ -37,7 +41,15 @@ interface Options {
   }>;
   /** `/velista` mounted in the portfolio shell, `''` on velista's own origin. */
   readonly basePath?: string;
+  /** What the deployment states about itself (velista `0172`). Ready by default. */
+  readonly operator?: FakeOperatorSettingsStore;
 }
+
+/** The memory deployment with transcription switched off, as on staging. */
+const NO_TRANSCRIBER = {
+  ...MEMORY_OPERATOR_SETTINGS,
+  features: { ...MEMORY_OPERATOR_SETTINGS.features, transcription: false },
+};
 
 async function render(
   options: Options = {}
@@ -56,6 +68,9 @@ async function render(
       { provide: ASSISTANT_SERVICE, useValue: service },
       { provide: SPEECH_CAPTURE, useValue: NO_MICROPHONE },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      provideFakeOperatorSettingsStore(
+        options.operator ?? fakeOperatorSettingsStore()
+      ),
     ],
   }).compileComponents();
 
@@ -128,9 +143,11 @@ describe('AssistantPage', () => {
       const root = fixture.nativeElement as HTMLElement;
 
       expect(root.querySelector('main lib-page-header')).toBeNull();
-      expect(root.querySelector('main')?.previousElementSibling?.tagName).toBe(
-        'LIB-PAGE-HEADER'
-      );
+      // The disclosure line (velista 0174) sits between the two, outside both.
+      expect(
+        root.querySelector('main')?.previousElementSibling
+          ?.previousElementSibling?.tagName
+      ).toBe('LIB-PAGE-HEADER');
     });
 
     it('goes back with a fallback, so a cold arrival stays in the app', async () => {
@@ -375,6 +392,179 @@ describe('AssistantPage', () => {
 
       expect(host(fixture).querySelector('.count')).toBeNull();
       expect(host(fixture).textContent).toContain('assistant.busy.noNumber');
+    });
+  });
+
+  /** Velista `0174`, target 5: the allowance says no, and says when it comes back. */
+  describe('when the allowance refuses a turn', () => {
+    function refusedWith(details: Record<string, unknown>) {
+      return () =>
+        Promise.reject(
+          new GatewayError({
+            code: 'assistant_allowance_reached',
+            status: 429,
+            correlationId: 'ref-allowance',
+            details,
+          })
+        );
+    }
+
+    function lastMessage(fixture: ComponentFixture<AssistantPage>): string {
+      const bubbles = host(fixture).querySelectorAll('lib-assistant-message');
+      return bubbles[bubbles.length - 1]?.textContent ?? '';
+    }
+
+    it("says the person's day is used and when it is back, with no clock", async () => {
+      const fixture = await render({
+        answer: refusedWith({
+          scope: 'user',
+          period: 'day',
+          limit: 'turns',
+          resetsAt: '2026-10-29T23:00:00Z',
+        }),
+      });
+
+      await say(fixture, 'Add tomatoes');
+
+      expect(lastMessage(fixture)).toContain('assistant.allowance.used.day');
+      expect(lastMessage(fixture)).toContain('assistant.allowance.backAt');
+      expect(lastMessage(fixture)).not.toContain('assistant.failed');
+      expect(host(fixture).querySelector('.count')).toBeNull();
+      // Unlike a rate limit, nothing is held: the person can still read and type.
+      expect(fixture.componentInstance.composerDisabled()).toBe(false);
+    });
+
+    it('says the date for a month', async () => {
+      const fixture = await render({
+        answer: refusedWith({
+          scope: 'user',
+          period: 'month',
+          limit: 'cost',
+          resetsAt: '2026-11-01T00:00:00+01:00',
+        }),
+      });
+
+      await say(fixture, 'Add tomatoes');
+
+      expect(lastMessage(fixture)).toContain('assistant.allowance.used.month');
+      expect(lastMessage(fixture)).toContain('assistant.allowance.backOn');
+    });
+
+    it('says typing still works after the time for speaking is used', async () => {
+      const fixture = await render({
+        answer: refusedWith({
+          scope: 'user',
+          period: 'day',
+          limit: 'assistantAudio',
+          resetsAt: '2026-10-29T23:00:00Z',
+        }),
+      });
+
+      await say(fixture, 'Add tomatoes');
+
+      expect(lastMessage(fixture)).toContain(
+        'assistant.allowance.speaking.day'
+      );
+      expect(lastMessage(fixture)).toContain(
+        'assistant.allowance.speakAgainAt'
+      );
+      expect(fixture.componentInstance.composerDisabled()).toBe(false);
+    });
+
+    it("says the assistant is resting when it is the deployment's", async () => {
+      const fixture = await render({
+        answer: refusedWith({
+          scope: 'deployment',
+          period: 'day',
+          limit: 'cost',
+          resetsAt: '2026-10-29T23:00:00Z',
+        }),
+      });
+
+      await say(fixture, 'Add tomatoes');
+
+      expect(lastMessage(fixture)).toContain('assistant.allowance.resting');
+      expect(lastMessage(fixture)).not.toContain('used');
+    });
+
+    it('leaves the time out when the server gave none it could read', async () => {
+      const fixture = await render({
+        answer: refusedWith({ scope: 'user', period: 'day', limit: 'turns' }),
+      });
+
+      await say(fixture, 'Add tomatoes');
+
+      expect(lastMessage(fixture)).toContain('assistant.allowance.used.day');
+      expect(lastMessage(fixture)).not.toContain('assistant.allowance.back');
+    });
+  });
+
+  /** Velista `0174`, target 8. */
+  describe('the disclosure', () => {
+    it('stands under the header before anybody types', async () => {
+      const fixture = await render();
+      const line = host(fixture).querySelector('.disclosure');
+
+      expect(line?.textContent).toContain('assistant.disclosure');
+      // Outside the column that scrolls, so it never scrolls away.
+      expect(line?.closest('main')).toBeNull();
+      expect(line?.previousElementSibling?.tagName).toBe('LIB-PAGE-HEADER');
+    });
+
+    it('stays when the conversation has started', async () => {
+      const fixture = await render();
+
+      await say(fixture, 'Add tomatoes');
+
+      expect(
+        host(fixture).querySelectorAll('lib-assistant-message').length
+      ).toBe(2);
+      expect(host(fixture).querySelector('.disclosure')?.textContent).toContain(
+        'assistant.disclosure'
+      );
+    });
+  });
+
+  /** Velista `0174`, targets 1 and 2. */
+  describe('the microphone', () => {
+    function mic(fixture: ComponentFixture<AssistantPage>): Element | null {
+      return host(fixture).querySelector('lib-assistant-composer lib-mic-icon');
+    }
+
+    it('is offered where the deployment can transcribe', async () => {
+      const fixture = await render();
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(true);
+      expect(mic(fixture)).not.toBeNull();
+    });
+
+    it('is not drawn where it cannot', async () => {
+      const fixture = await render({
+        operator: fakeOperatorSettingsStore(NO_TRANSCRIBER),
+      });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(mic(fixture)).toBeNull();
+    });
+
+    it('is not drawn while the settings have not answered, and appears when they do', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      const fixture = await render({ operator });
+
+      expect(mic(fixture)).toBeNull();
+
+      operator.land(MEMORY_OPERATOR_SETTINGS);
+      fixture.detectChanges();
+
+      expect(mic(fixture)).not.toBeNull();
+    });
+
+    it('is not drawn when the settings could not be read', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      operator.fail();
+      const fixture = await render({ operator });
+
+      expect(mic(fixture)).toBeNull();
     });
   });
 });

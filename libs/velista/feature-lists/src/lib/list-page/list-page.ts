@@ -37,6 +37,7 @@ import {
   ListViewStore,
   listWritesPage,
   MemberNames,
+  OperatorSettingsStore,
   presenceNames,
   presencePeople,
   PresenceStore,
@@ -455,6 +456,21 @@ export class ListPage {
   private readonly _catalog = inject<CatalogServiceI>(CATALOG_SERVICE);
   private readonly _profiles = inject(ShoppingProfileStore);
   private readonly _tone = inject(NOTIFICATION_TONE);
+  private readonly _operator = inject(OperatorSettingsStore);
+
+  /**
+   * Whether the one field offers its microphone (velista `0174`, target 1).
+   *
+   * Both flags, because a recording made here goes to the list scoped assistant
+   * (decision D3): this deployment has to be able to transcribe it and to answer it.
+   * Unknown is off (decision D2): while the settings have not answered, or could not
+   * be read, the field is a plain field, because a microphone that appears a moment
+   * late costs nothing and one that fails costs a recording.
+   */
+  readonly voiceOffered = computed(() => {
+    const features = this._operator.settings()?.features;
+    return features?.transcription === true && features.assistant === true;
+  });
 
   /**
    * What was heard and what was done, or null (plan 0038, section 5).
@@ -2141,7 +2157,7 @@ export class ListPage {
       this.voiceStrip.set({
         heard: '',
         reply: '',
-        ...voiceFailureCopy(error),
+        ...voiceFailureCopy(error, this._locale()),
         failed: true,
       });
     } finally {

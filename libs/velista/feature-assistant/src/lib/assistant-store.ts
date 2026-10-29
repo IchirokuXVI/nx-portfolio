@@ -6,6 +6,7 @@ import {
   signal,
 } from '@angular/core';
 import {
+  allowanceRefusal,
   ASSISTANT_SERVICE,
   GatewayError,
   type AssistantServiceI,
@@ -298,6 +299,23 @@ export class AssistantStore {
         kind: 'unconfigured',
         link: null,
         choices: [],
+      });
+      return;
+    }
+
+    // The allowance said no (backend `0234`, velista `0174`, target 5). Not `failed`,
+    // because "try again" is the wrong advice until the period turns over, and not
+    // `throttled`, because there is no countdown to show and nothing to disable: the
+    // person can still read, and after a limit on speaking a typed turn goes through.
+    const allowance = allowanceRefusal(failure);
+    if (allowance !== null) {
+      this._append({
+        speaker: 'bot',
+        text: '',
+        kind: 'allowance',
+        link: null,
+        choices: [],
+        allowance,
       });
       return;
     }

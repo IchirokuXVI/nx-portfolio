@@ -1,3 +1,5 @@
+> **PR:** [#865](https://github.com/IchirokuXVI/nx-portfolio/pull/865)
+
 # 0174: voice and the assistant's limits are shown honestly
 
 > Asked for by the owner on 2026-10-27, and widened the same day by the orchestrator to the
@@ -256,3 +258,152 @@ Nothing in either suite changes.
 - Hidden rather than disabled (D1); unknown as off (D2); the list mic needing both flags
   (D3).
 - The sentences of target 5, and keeping the composer usable after an audio limit.
+
+## 7. What the build decided
+
+The builder's choices where the plan left room, written on 2026-10-29. Each is the owner's
+to change. No target's text was amended.
+
+### 7.1 The flags and the composers
+
+1. **`voiceOffered` is a `computed` on each page**, read from `OperatorSettingsStore`:
+   the list page asks `transcription && assistant` (D3), the comments sheet and the
+   assistant page ask `transcription`. Each is false while `settings()` is null, whether
+   the read is out or failed (D2). A spec for each page covers on, off, unanswered then
+   landing, and failed. For the list page that meant editing `list-page.spec.ts`, which
+   the scope list does not name (it names `list-page.ts` and `.html` only): the spec gained
+   the fake settings store and the microphone specs.
+2. **Both new `voice` inputs follow `LineComposer`.** With `voice` false the button is
+   always send, disabled while the field is empty, `press()` never reaches the recorder,
+   and the recorder is injected `{ optional: true }`. The templates read the recorder
+   through `?.` with `idle` as the fallback state, so a composer with no recorder at all
+   renders, which a spec in each composer proves.
+3. **The sheet and the panel keep providing `AudioRecorder`.** Component providers are
+   fixed when the component is declared and cannot follow a signal, so stopping them would
+   not be a one line change (target 2 allows keeping it). The recorder is constructed and
+   never started; it asks for no permission until `start()`.
+4. **The comments sheet's doc says why it does not ask the assistant flag**: a voice comment
+   is a recording for the people on the list, not a turn the assistant answers (D3).
+
+### 7.2 The tour
+
+5. **`tourHoldingsOf(zones, voice)`** takes the flag from its caller, since `platform` may
+   not read `data-access`. `HOLDS_NOTHING` holds `voice: false`.
+6. **`app-providers.ts` waits for the settings as it waits for the zones.** While the read
+   is `idle` or `loading` the holdings are null, so the tour waits (up to the existing
+   `TOUR_HOLDINGS_WAIT_MS`) rather than planning five cards for a deployment that offers a
+   microphone; a failed read plans without the card (D2). The voice card needs the same two
+   flags as the list page, because it lights the list's microphone. The review round added
+   `apps/velista/src/app/tour-holdings-wiring.spec.ts`, which drives this effect: loading
+   keeps the holdings null, a failed read lands `voice: false`, and both flags on land
+   `voice: true`.
+7. **`tour-store.spec.ts` gained `voice: true` on its two fixtures.** The type change makes
+   the field required, and that spec is outside the scope list; the edit is the two
+   literals and nothing else, so its expectations (six cards) still hold.
+
+### 7.3 The allowance
+
+8. **`assistant_allowance_reached` joined velista's `ERROR_CODES`** (`models/problem.ts`).
+   Without it the code read as `internal` and no reader could see it. The file is under
+   `libs/velista/models/src/lib/`, which the scope names.
+9. **The types are velista's own**, in `models/src/lib/assistant-allowance.ts`:
+   `AllowanceScope`, `AllowancePeriod`, `AllowanceLimit`, `AssistantAllowance`, and the pure
+   `allowanceReturn(allowance, locale)`, which formats the time (a `day`) or the date (a
+   `month`) through `Intl.DateTimeFormat` in a `try`, in the reader's time zone, and answers
+   null for a moment it cannot format. `AssistantEntry` gained `allowance?` beside the new
+   kind.
+10. **`allowanceRefusal(error)`** is in `data-access/src/lib/assistant/allowance-refusal.ts`,
+    exported from the barrel. Unknown `scope` reads `user`, unknown `period` reads `day`,
+    unknown `limit` reads `turns` (the sentence that says the assistant is done for the
+    period, not one that invites typing), and an unparseable `resetsAt` reads null. So does
+    one that is not an ISO date-time, because `Date` alone accepts `'12'` (2001) and
+    `'2026'` (New Year) and would show a confident wrong time.
+11. **The panel's sentence is two keys joined**: the reason, then the way back, left out
+    when the time is null. The reason is `assistant.allowance.resting` for any deployment
+    refusal, `assistant.allowance.speaking.{day,month}` for the person's `assistantAudio`,
+    and `assistant.allowance.used.{day,month}` for every other person's counter, `cost`
+    included. Money is never named.
+12. **The hour goes in as the plural count.** Spanish says "a la 1:00" and "a las 2:00", so
+    `backAt`, `speakAgainAt` and the list's `at` keys have `_one` and `_other` forms; the
+    English forms are the same sentence twice. The time is formatted with
+    `hour: 'numeric'`, so it carries no leading zero: Spanish reads "a la 1:00" and English
+    "9:05 PM".
+13. **The sentences differ from target 5's examples**, as section 5 allows: "You have used
+    the assistant as much as you can for today." reads more plainly than "as much as it
+    allows". The speaking sentence keeps "You can still type." and adds "You can speak to
+    it again at {time}." English times follow the reader's convention, so midnight reads
+    "12:00 AM" for `en`.
+14. **The allowance message is drawn with the `unconfigured` treatment** (`bubble waiting`,
+    polite), no clock, and the composer is not disabled. It is never the countdown of
+    `throttled`, which stays bound to `retryAfterSeconds`.
+15. **The list's strip says nothing was added and that typing still works, after every
+    limit**, not only the one on speaking: the typed add writes lines and never calls the
+    assistant (verified in `list-page.ts` `add`, which calls `LineStore.addLine`; only
+    `addAloud` calls `askAboutList`). The strip draws one key, so each case is one sentence
+    under `list.add.allowance.{usedDay,usedMonth,speakingDay,speakingMonth,resting}` with
+    `plain`, `at` or `on`. `voiceFailureCopy(error, locale)` takes the reader's locale for
+    the time; the strip keeps the time it was given if the language changes afterwards.
+    The English speaking forms put the way back in a sentence of its own ("You can still
+    type it. You can speak to the assistant again at {{time}}"), so "it" never changes
+    referent inside one sentence.
+16. **Target 7 needed no copy.** A spec in the comments sheet sends an upload that answers
+    429 `assistant_allowance_reached` through the composer (record, stop, the upload
+    refused): it falls to `list.error.failed` in the sheet and in the composer, which keeps
+    the recording and draws its retry, both asserted. A spec in `comment-row` asserts the
+    player and `noTranscript` for `FAILED` and for `UNAVAILABLE`.
+
+### 7.4 The disclosure
+
+17. **`assistant.disclosure`** is a `<p class="disclosure">` between `PageHeader` and the
+    column, in `--app-text-muted` at `--app-text-xs`, with the column's side padding, a
+    small bottom padding (`--app-space-2`) so a scrolled bubble is cut clear of the text,
+    and no icon or box. English is the plan's line. Spanish is "Te responde un asistente
+    automático que puede equivocarse.", written as a sentence rather than the two fragments
+    of the English. At 360 px both fit on one line.
+18. **The header spec now looks two siblings back** for `PageHeader` from the column,
+    because the disclosure sits between them; both stay outside the scroller.
+
+### 7.5 Target 4: every key that names the microphone, voice or speaking
+
+Searched in both files for microphone, mic, voice, say, said, speak, spoken, record,
+listen and hear, and for micrófono, voz, di, dicho, habla, grab, escucha and oír.
+
+- **Drawn only with the list's microphone or its strip:** `list.add.startListening`,
+  `stopListening`, `listening`, `discard`, `heard`, `working`, `notHeard`, `micRefused`,
+  `micMissing`, `voiceFailed`, `voiceBusy`, `voiceBusyNoNumber`, `voiceUnavailable`,
+  `voiceUnsure`, and the new `list.add.allowance.*`.
+- **Drawn only with the comment composer's microphone or a recording:**
+  `list.comments.startRecording`, `stopRecording`, `discardRecording`, `micRefused`,
+  `recordingEmpty`, `recordingTooBig`, `limit.*`, `sending`; on a voice comment's row
+  `noTranscript`, `play`, `playFailed`, `autoTranscript`. These describe a recording that
+  exists, which an older client or another deployment may have left, so they stay true.
+- **Drawn only with the panel's microphone or a spoken turn:** `assistant.composer.record`,
+  `composer.stop`, `assistant.recorder.*`, `assistant.spoken`, `tooLong`, `badFormat`, and
+  `assistant.allowance.speaking.*`, `speakAgain*`, which only an audio refusal draws.
+- **The tour card:** `tour.voice.title`, `tour.voice.body`, left out with the microphone.
+- **Outside those, and true both ways, so unchanged:** `list.comments.placeholder` ("Say
+  something about this", "Di algo sobre esto") and `list.comments.empty` use "say" for
+  writing a comment; `assistant.intro.lead` ("Tell me what you need") and the
+  `assistant.intro.*.said` examples are things one types as well; `tour.assistant.body`
+  ("the way you would tell a person") is O3; `list.confirm.deleteLine.body` ("anything said
+  about it") means the comments. `list.detail.record` ("Record it", "Guárdalo") is about
+  writing a detail down, not audio.
+
+### 7.6 What the build left out, and the evidence
+
+19. **No walk of the allowance against a real assistant.** On an ephemeral slot the rendered
+    `.env` sets `ANTHROPIC_API_KEY=` blank and the script exports it over the process
+    environment, so the key could reach the assistant only by being written into a file,
+    which the build was told never to do. The walk stubbed `POST /v1/assistant` in the
+    browser instead: the first turn a 201 reply, the second a 429 with the backend's
+    `details`. The four other readings were stubbed one turn each.
+20. **The list strip's allowance sentence was not walked**, since it needs a recording; its
+    spec covers every key.
+21. **Walk, 2026-10-29, front end slot 1 on ephemeral Luna slot 7, 360 px, Night, English
+    and Spanish.** The slot answers `transcription: false` and `assistant: false`. No
+    microphone on the list, the comments sheet (send disabled while empty) or the panel;
+    the tour played five cards ending on the assistant card; the disclosure stood with no
+    messages and with four; each allowance reading drew its sentence with the composer
+    still enabled. With `features` stubbed on, all three microphones came back.
+22. **Gates on the slot:** `velista-e2e` 100 passed; `velista-luna-e2e` 8 passed and 2
+    skipped by `terms.spec.ts`'s own condition (the slot publishes no terms).

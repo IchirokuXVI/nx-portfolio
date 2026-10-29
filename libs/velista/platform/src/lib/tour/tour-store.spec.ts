@@ -12,10 +12,15 @@ import {
   TourStore,
 } from './tour-store';
 
-const NEW_ACCOUNT: TourHoldings = { hasGroup: false, firstList: null };
+const NEW_ACCOUNT: TourHoldings = {
+  hasGroup: false,
+  firstList: null,
+  voice: true,
+};
 const WITH_A_LIST: TourHoldings = {
   hasGroup: true,
   firstList: { zoneId: 'z1', listId: 'l1' },
+  voice: true,
 };
 
 const EVERY_ANCHOR: readonly TourAnchorId[] = [

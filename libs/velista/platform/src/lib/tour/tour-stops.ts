@@ -32,6 +32,12 @@ export interface TourHoldings {
     readonly zoneId: string;
     readonly listId: string;
   } | null;
+  /**
+   * Whether the list's field offers its microphone here (velista `0174`, target 3):
+   * the deployment transcribes and the assistant is on. The voice card lights that
+   * microphone, so without it the card is left out rather than pointing at nothing.
+   */
+  readonly voice: boolean;
 }
 
 /** One card of the tour. */
@@ -59,7 +65,8 @@ const HOME = ['home'] as const;
  *
  * **The tour points at what is there, and never fakes a screen.** A stop whose route
  * answers null for this account is left out, so a new account with no group sees four
- * cards and somebody with a group and a list sees six.
+ * cards and somebody with a group and a list sees six, or five where the deployment
+ * offers no microphone.
  */
 export const TOUR_STOPS: readonly TourStop[] = [
   {
@@ -106,10 +113,12 @@ export const TOUR_STOPS: readonly TourStop[] = [
   },
   {
     // Not shown to a new account: there is no list whose composer it could light.
+    // Not shown where the field has no microphone either (velista `0174`): the card
+    // says to tap one.
     id: 'voice',
     anchor: 'list-composer',
-    route: ({ firstList }) =>
-      firstList === null
+    route: ({ firstList, voice }) =>
+      firstList === null || !voice
         ? null
         : ['zones', firstList.zoneId, 'lists', firstList.listId],
     placement: 'above',
@@ -124,8 +133,14 @@ export const TOUR_STOPS: readonly TourStop[] = [
  * Only a group the person is in counts: a request still waiting has no lists to show
  * and no card that opens. The list is the first one on such a group, which is the
  * first list the home page draws for it.
+ *
+ * `voice` is not read from the groups: the caller says whether the deployment offers
+ * the microphone, from what it states about itself.
  */
-export function tourHoldingsOf(zones: readonly MyZone[]): TourHoldings {
+export function tourHoldingsOf(
+  zones: readonly MyZone[],
+  voice: boolean
+): TourHoldings {
   const joined = zones.filter(
     (zone) => zone.myStatus === 'APPROVED' && zone.status === 'ACTIVE'
   );
@@ -138,6 +153,7 @@ export function tourHoldingsOf(zones: readonly MyZone[]): TourHoldings {
       withList === undefined || list === undefined
         ? null
         : { zoneId: withList.id, listId: list.id },
+    voice,
   };
 }
 
