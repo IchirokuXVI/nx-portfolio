@@ -114,6 +114,13 @@ export const LINE_QUANTITY_MAX = 100000;
 export const LINE_BATCH_MAX_ITEMS = 50;
 
 /**
+ * How many lines a `line_add_needs_choice` refusal names (plan 0228, section
+ * 5). A list with eleven lines of one name is not a case a popover can draw
+ * well, and a line past the cap is still on the list to be chosen there.
+ */
+export const LINE_ADD_CHOICE_MAX = 10;
+
+/**
  * The largest set **a person may grow a line to** (plan 0048, section 1.1; plan
  * 0070, section 7).
  *
@@ -690,6 +697,54 @@ export interface AddLineRequest {
   productGroupId?: string;
   /** The same flag {@link AddLinesItem} carries. */
   named?: boolean;
+  /**
+   * The caller can ask the person which line a typed name means (plan 0228,
+   * section 1). When the name is the name of two or more lines that hold a
+   * product, the add is refused with `line_add_needs_choice` and
+   * {@link LineAddNeedsChoiceDetails}. Absent or false, such an add creates a
+   * line, as before. One such line is raised either way.
+   *
+   * Read on a free text add only, as are {@link intoLineId} and
+   * {@link newLine}: an add that carries products or a group is unchanged.
+   */
+  askIfAmbiguous?: boolean;
+  /**
+   * The line the person chose, which the add raises (plan 0228). A line of the
+   * same list that is not `REJECTED`; any other id is the line not found
+   * refusal, and the add never falls back to a new line. Refused beside
+   * `newLine: true`.
+   */
+  intoLineId?: string;
+  /**
+   * The person chose a new line over the lines that hold a product under this
+   * name (plan 0228). A free text line of the same name still takes the add,
+   * because a list holds one free text line per name (plan 0091).
+   */
+  newLine?: boolean;
+}
+
+/**
+ * One line a `line_add_needs_choice` refusal offers (plan 0228, section 3),
+ * as it stood when the add was refused. The client draws the product from its
+ * own catalog read of {@link itemIds}.
+ */
+export interface LineAddChoice {
+  lineId: string;
+  content: string;
+  named: boolean;
+  quantity: number;
+  itemIds: string[];
+  productGroupId: string | null;
+  approvalStatus: LineApprovalStatus;
+}
+
+/**
+ * The `details` a `line_add_needs_choice` refusal carries (plan 0228,
+ * section 3): the candidate lines in list position order, at most
+ * {@link LINE_ADD_CHOICE_MAX} of them.
+ */
+export interface LineAddNeedsChoiceDetails {
+  lines: LineAddChoice[];
 }
 
 /**

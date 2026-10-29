@@ -1,6 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import type {
+  AddLineOptions,
   AddLineQuantityRequest,
   AddLineRequest,
   AlsoOnVm,
@@ -35,6 +36,26 @@ import type {
   LineServiceI,
   LineUpdateResult,
 } from './line-service';
+
+/**
+ * The fields of {@link AddLineOptions} as the request carries them: `true` or an id,
+ * never `false` and never an empty string, so an absent field keeps the server's
+ * default as the single source of it.
+ */
+export function addLineOptionsRequest(
+  options: AddLineOptions | undefined
+): Pick<AddLineRequest, 'askIfAmbiguous' | 'intoLineId' | 'newLine'> {
+  if (options === undefined) {
+    return {};
+  }
+  if (options.intoLineId !== undefined && options.intoLineId !== '') {
+    return { intoLineId: options.intoLineId };
+  }
+  if (options.newLine === true) {
+    return { newLine: true };
+  }
+  return options.askIfAmbiguous === true ? { askIfAmbiguous: true } : {};
+}
 
 /**
  * Lines, over HTTP. The default behind `LINE_SERVICE`.
@@ -82,17 +103,16 @@ export class LineApi implements LineServiceI {
     content: string,
     quantity?: number,
     itemIds?: readonly string[],
-    named?: false
+    named?: false,
+    options?: AddLineOptions
   ): Promise<Line> {
-    // Only the line is read here, because the store upserts by id, so a merge
-    // lands on the screen as the existing row moving rather than a new row
-    // appearing.
     const result = await this.addLineResult(
       listId,
       content,
       quantity,
       itemIds,
-      named
+      named,
+      options
     );
     return result.line;
   }
@@ -102,7 +122,8 @@ export class LineApi implements LineServiceI {
     content: string,
     quantity?: number,
     itemIds?: readonly string[],
-    named?: false
+    named?: false,
+    options?: AddLineOptions
   ): Promise<LineAddResult> {
     // Built as the request type rather than spread from anything, because the
     // gateway's pipe runs with `forbidNonWhitelisted` and an unexpected property is a
@@ -112,15 +133,18 @@ export class LineApi implements LineServiceI {
     // `itemIds` is omitted rather than sent empty for the same reason, and there is
     // no difference between the two on the server: a free text line is what an
     // absent set means, and it stays first class (plan 0043, section 6).
+    const products = itemIds !== undefined && itemIds.length > 0;
     const request: AddLineRequest = {
       content,
       ...(quantity === undefined ? {} : { quantity }),
-      ...(itemIds === undefined || itemIds.length === 0 ? {} : { itemIds }),
+      ...(products ? { itemIds } : {}),
       // Only ever `false` on the wire, and only with a product: typed text says
       // nothing, and the server's default names it (backend `0207`).
-      ...(named === false && itemIds !== undefined && itemIds.length > 0
-        ? { named }
-        : {}),
+      ...(named === false && products ? { named } : {}),
+      // Free text only, and each only as itself (backend `0228`): the server
+      // ignores them beside products, so sending them there would only be noise
+      // that reads like a statement.
+      ...(products ? {} : addLineOptionsRequest(options)),
     };
 
     const body = await firstValueFrom(

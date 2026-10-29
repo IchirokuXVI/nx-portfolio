@@ -1,3 +1,5 @@
+> **PR:** [#855](https://github.com/IchirokuXVI/nx-portfolio/pull/855)
+
 # 0170: a typed name already on the list
 
 > Asked for by the owner on 2026-10-27, with backend `0228`. The owner picked the mocks in
@@ -189,4 +191,76 @@ add creates a line as today.
 
 ## 6. What the build decided
 
-_Filled in by the builder._
+Built against the field names of backend `0228` as its plan states them (`askIfAmbiguous`,
+`intoLineId`, `newLine`, `line_add_needs_choice` with `details.lines`), while `0228` was being
+built beside it. The browser walk of Progress evidence runs once both halves are in.
+
+1. **The list page's composer holds its words now** (`holdOnSend`, as the basket's has since
+   `0116`). The page clears them at once for an add that draws its row, so a run of adds is as
+   quick as before, and keeps them for an add that waits for the server. That is how the words
+   stay in the field while D is open and after a close, and how D gets the plus to stand on.
+   Escape belongs to D while it is open (`escapeClears` is off then).
+2. **Target 3 predicts on any loaded line with the folded name**, not only one that holds a
+   product, and never on a turned down line. A free text line of that name is a certain raise
+   (`0091`), so drawing a row for it would draw a row that vanishes, which is what target 3 is
+   for. An add the person answered with `intoLineId` draws nothing either. The fold is
+   `foldName` from `models`, which is the server's `normalizeContent`.
+3. **`LineStore.addLine` now asks with `addLineResult`** and answers `{ line, merged }`. A
+   raise is patched in place through `_reconcile`, so a newer echo wins by version; a raised line
+   the store does not hold goes where its position puts it; a new line with no placeholder goes
+   at the end. `LineStore.drawsBeforeAnswer` is public, because the page reads it to know whether
+   to follow the end of the list (a new row) or scroll the raised row into view.
+4. **The mapper lives in `data-access`** (`toAddChoice`, `mapping/add-choice-mappers.ts`) and the
+   model in `models/add-choice.ts`, beside `addChoiceRows` (the rows from the refusal and the
+   catalog) and `addMayMeetLine` (the prediction). An entry the mapper cannot read is dropped, a
+   refusal left with none is not a question, and ten is held as the cap.
+5. **The edge** is `--app-action-bg`, the border of the held stepper (`QuantityStepper.is-accent`),
+   on `QuantityReel` through a new `took` input, with the number in `--app-action-quiet-fg` as the
+   mock draws it. No new colour token. The 1.5 px is a size token (`--app-took-edge-width`), drawn
+   as the 1 px border plus a 0.5 px ring so the row does not move. Its transition rides the
+   motion tokens, which are zero under reduced motion, and the reel's own reduced motion rule
+   already drops the pill's transitions.
+6. **D's sizes are tokens** in `_semantic.scss` (`--app-add-choice-*`), because
+   `token-hygiene.spec.ts` refuses a raw pixel. The rows scroll past `45svh`; `dvh` is refused
+   by `no-dynamic-viewport-units.spec.ts`, and with `interactive-widget=resizes-content` the
+   small viewport also shrinks with the keyboard. `AnchoredPopover` gained a `frame` input
+   (`note` or `choice`), so D's rows reach its edges at 276 px.
+7. **Two strings beyond section 2**: `list.addChoice.rowNoProduct` (a row whose product is not
+   loaded has no product to name) and `basket.addChoice.back`, the accessible name of
+   "‹ {{list name}}", which starts with the list's name so the visible words are in it.
+8. **The back gesture** closes D through `handleBackWhile` (the back stack of `0166`), since D
+   has no route. Focus goes to the first row on open and back to the plus on Escape and on the
+   back gesture; a press outside leaves focus where the press put it.
+9. **The basket detects a raise itself**: its route answers the lines, not `merged`, so a raise
+   is an answer naming a line the basket already showed, or an answer to `intoLineId`. The
+   marked row is the one whose entries hold that line. The basket does not scroll it into view;
+   its rows carry no line id to find.
+10. **The basket keeps the picker open while a typed add is out**, so a refusal swaps its
+    content in place (target 6). A card add closes it at the pick, as before. "‹ list" goes back
+    to the lists unchanged and puts focus back in the field.
+11. **D's rows read `ItemNames`** on both pages, which now also backs the basket page; one
+    `ensure` of the refusal's item ids fills the products the page did not hold. The basket
+    holds no favourite, so its rows show a line's first product.
+12. **The live region** says `list.addChoice.merged` on a raise on both pages, with the name
+    and the number the raised row draws: the list row's name and quantity on the list page,
+    and on the basket the row's own name (`basketRowName`) and its count (the entry's `left`
+    under a list heading, the row's everywhere else), not the line's stored words.
+13. **D's title says the first line as it is stored** (`addChoiceName`), on both pages: the
+    rows' own spelling, not the words as typed.
+14. **The basket cannot mark every raise.** Its route answers no `merged`, so a raise of a line
+    it did not show, such as a bought line at 0, reads as an add: it is announced "added", and
+    no row takes the edge.
+15. **The back control.** On the web, the browser back pops the `?search=1` entry that search
+    mode pushes, so it leaves search mode and clears the words, and D closes with it. The
+    native Android back goes through `BackStack` and `handleBackWhile`, closes only D, and
+    keeps the words.
+16. **Focus after an answer.** After a row pick or "A new line", focus stays in the field: the
+    add clears it, and the plus turns back into the mic. Escape and the native back return
+    focus to the plus.
+17. **A chosen line that went** answers `not_found`, and the list page then sends the same add
+    once more with `askIfAmbiguous`: D redraws with the lines left, the one line left is
+    raised, or a line is made.
+18. **A basket add answered after D was waved away** still clears its words when it lands, and
+    a question that comes back then says nothing and leaves the words in the field.
+19. **D on the list page belongs to its list.** It holds the list id it was asked on, sends the
+    answer there, and closes when the page moves to another list.
