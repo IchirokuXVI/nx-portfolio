@@ -5,8 +5,9 @@ import { UserRoles1772600000000 } from './1772600000000-UserRoles';
 import { ImpersonationSessions1772700000000 } from './1772700000000-ImpersonationSessions';
 import { RecoveryGrants1772800000000 } from './1772800000000-RecoveryGrants';
 import { OAuthHandoffs1772900000000 } from './1772900000000-OAuthHandoffs';
-import { TermsAcceptances1773000000000 } from './1773000000000-TermsAcceptances';
-import { AccountDeletions1773100000000 } from './1773100000000-AccountDeletions';
+import { RefreshTokenSuccessor1773000000000 } from './1773000000000-RefreshTokenSuccessor';
+import { TermsAcceptances1773100000000 } from './1773100000000-TermsAcceptances';
+import { AccountDeletions1773200000000 } from './1773200000000-AccountDeletions';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -43,10 +44,13 @@ export const AUTH_MIGRATIONS = [
   // One nullable column on `oauth_states` and one new table (plan 0230). It
   // only adds, and a state minted before it is refused at consume.
   OAuthHandoffs1772900000000,
+  // Two nullable columns on `refresh_tokens` (plan 0229). It only adds, and
+  // every existing revoked row reads as revoked with no successor.
+  RefreshTokenSuccessor1773000000000,
   // One new table and a nullable column on each Google grant (plan 0231). It
   // only adds, and a grant from before it carries no version.
-  TermsAcceptances1773000000000,
+  TermsAcceptances1773100000000,
   // The outbox of `user.deleted` (plan 0232, section 5). One new table that
   // references nothing, so no existing row changes.
-  AccountDeletions1773100000000,
+  AccountDeletions1773200000000,
 ];

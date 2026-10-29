@@ -1,3 +1,5 @@
+> **PR:** [#853](https://github.com/IchirokuXVI/nx-portfolio/pull/853)
+
 # 0229: a refresh whose answer was lost keeps the session
 
 > The session token review of 2026-10-27
@@ -112,8 +114,9 @@ with an integration spec against Postgres and with tests 1 and 2 of the review b
 ### Acceptance criteria
 
 - [ ] `refresh_tokens` has `replacedById uuid NULL` with a foreign key to
-      `refresh_tokens(id) ON DELETE SET NULL`, added by `RefreshTokenSuccessor1772900000000`,
-      listed last in `index.ts`, and `migrations.spec.ts` passes.
+      `refresh_tokens(id) ON DELETE SET NULL`, and `replacedAt timestamptz NULL`, added by
+      `RefreshTokenSuccessor1773000000000` (plan 0230 took 1772900000000 first), listed
+      last in `index.ts`, and `migrations.spec.ts` passes.
 - [ ] `TokenService.rotate(raw, manager)` spends the row with one conditional update as
       section 3.1 states, and never with a read followed by a save.
 - [ ] A spend that updates nothing takes the grace path of section 3.2 under a row lock,
@@ -161,11 +164,12 @@ good.
 
 ## 2. The rows after this plan
 
-`refresh_tokens` gains one column:
+`refresh_tokens` gains two columns:
 
 | Column | Type | Meaning |
 | --- | --- | --- |
 | `replacedById` | `uuid NULL`, FK to `refresh_tokens(id)`, `ON DELETE SET NULL` | The row that a rotation of this row issued. Null on a live row, and on a row that a reset or a session end revoked. |
+| `replacedAt` | `timestamptz NULL` | The wall clock moment (`clock_timestamp()`) at which the rotation that set `replacedById` wrote it, its last write. Written in the same statement as `replacedById`, so the two cannot disagree. The `in_flight` rule of section 3.2 reads it. It is its own column and not `updatedAt`, because TypeORM rewrites `updatedAt` on every update, and a later write to a revoked row would move the window by accident. |
 
 The migration only adds. No existing row changes, every existing revoked row reads as
 "revoked with no successor", which is what it was, and so it is a migration and not a
@@ -212,8 +216,20 @@ manager and decide:
 | `expiresAt <= now()` | `expired` | 401 |
 | `revokedAt` set, `replacedById` null | `revoked` | 401. A reset, a session end, or a row rotated before this plan. |
 | `revokedAt` older than the grace | `grace_over` | 401 |
+| This transaction began before `replacedAt`, or less than the floor of section 3.3 after it | `in_flight` | 401. A second copy of the request that rotated the row, not a retry of a lost answer: a retry cannot begin before the answer was sent. Decision D2. |
+| The successor's `createdAt` is later than `revokedAt` | `reissued_before` | 401. The row had its one reissue. Decision D2. |
 | Successor exists, the update of section 3.2.1 spent nothing | `successor_spent` | 401. The answer did arrive and the token was spent again by somebody. |
 | Successor exists and was unused | `reissued` (info, not warn) | A fresh pair, section 3.2.1 |
+
+The rules are judged in that order, and every rule of time is judged on the clock of the
+database inside the transaction that holds the row lock: `now()` is the start of this
+transaction, the clock that wrote `revokedAt`. The successor is read in a statement of its
+own after the lock is held, not in a subquery of the locking statement. A statement that
+waited on the lock re-reads the locked row in its newest version, but a subquery in it
+still runs on the snapshot from before the wait, which cannot see a successor that the
+lock holder inserted. A `replacedById` whose successor cannot be found is therefore taken
+as reissued, never as unused: with `ON DELETE SET NULL` the only way to see such a pointer
+is a concurrent insert.
 
 #### 3.2.1 Reissue inside the grace
 
@@ -234,10 +250,29 @@ and a presentation of it is refused as `revoked`.
 Zero rows back means the successor was spent. The answer arrived somewhere and was used.
 This presentation is a replay, whoever made it, and it is refused.
 
-Two retries of one lost answer inside the grace serialize on the row lock of the presented
-row. The second one finds `replacedById` pointing at the row the first one issued, finds
-it unused, revokes it and issues a third. That is one wasted row and no refusal, which is
-the right trade: a doubled retry is a flaky radio, not an attack.
+**The grace gives one fresh pair, one time** (decision D2, taken at build). The first draft
+of this section let two retries of one lost answer serialize on the row lock, with the
+second one revoking the first one's successor and issuing a third row, "one wasted row and
+no refusal". Built literally, that contradicts the proofs of section 4: ten concurrent
+presentations of one token all resolve, because each loser waits on the lock, finds the
+newest successor unused and reissues in turn. Battery test 2 forks on every round. So the
+grace path refuses two more cases, both logged and both answered with the same 401:
+
+- `in_flight`: the presentation began before the rotation that spent the row finished
+  (`now()` of this transaction is earlier than `replacedAt`), or within the floor of
+  section 3.3 after it. A lost answer is lost after the rotation committed, so its retry
+  always begins later. A presentation that overlapped the rotation is a second copy of the
+  same request, a doubled send or two tabs, and without this rule both copies get a pair:
+  the fork of finding F3.
+- `reissued_before`: the row was reissued once already. The first successor is inserted in
+  the transaction that revoked the row, so its `createdAt` equals the row's `revokedAt`
+  (both are `now()` of that transaction). A successor whose `createdAt` is later is a
+  reissue, and the row has had its one.
+
+A doubled retry of one lost answer thus answers the first copy and refuses the second. The
+second copy sees the 401, refreshes with the pair it no longer holds, and clears. That is
+the two tabs case of finding F6, which is the client's to fix with one refresh across
+documents, and not this plan's.
 
 ### 3.3 The grace is two minutes
 
@@ -252,6 +287,21 @@ needs a window long enough that a copied token stays replayable for as long afte
 victim's rotation, against a victim whose successor sits unused because they are idle. The
 report's F4 (a family and reuse detection) is the right answer to that, not a longer
 window. Two minutes is decision D1, and the owner can move it with one constant.
+
+**The floor of `in_flight` is thirty milliseconds** (`REFRESH_RETRY_FLOOR_MS = 30`,
+decision D3, taken at build). A copy of the request whose transaction began after the
+rotation committed cannot be told from a retry by the rows alone, only by time. The build
+measured one such copy in ten battery rounds: its transaction started 11 ms after the
+rotation's, on a cold pool connection, and did not overlap it. Without a floor that round
+forked. A retry needs the answer to be lost first, then a request, a 401 and a new
+refresh: at least two round trips from the browser. On localhost it began 65 to 81 ms after
+the rotation; a real network adds more. Thirty milliseconds sits between the two, nearer
+the copy. A copy taken for a retry costs one reissue and no second live child; a retry
+taken for a copy is the sign out this plan exists to stop. That is the direction it errs,
+and the owner can move it with one constant. A more exact signal, the moment the request
+reached the auth service before it waited for a connection, would let the floor fall near
+zero. It is not built, because it adds a process clock to a rule that the database clock
+judges alone today.
 
 ### 3.4 The refusal is logged
 
@@ -272,7 +322,13 @@ Against a real Postgres, as `token-grant.integration.spec.ts` runs, with
 `IdentityService.refresh` under test and a user row seeded:
 
 1. **One of ten.** Ten concurrent `refresh(R1)`. Exactly one resolves with a pair, nine
-   reject with `UnauthorizedException`. The table holds one live row for the user.
+   reject with `UnauthorizedException`, each with reason `in_flight`. The table holds one
+   live row for the user.
+1b. **A copy inside the floor.** A presentation whose transaction began less than the floor
+   after `replacedAt` rejects with reason `in_flight`. Made deterministic by setting
+   `replacedAt` by SQL right before the presentation, not by racing two awaits.
+1c. **The third presentation.** `refresh(R1)` gives R2, `refresh(R1)` gives R3, and a third
+   `refresh(R1)` rejects with reason `reissued_before`. R3 stays live.
 2. **The retry after a lost answer.** `refresh(R1)` gives R2. `refresh(R1)` again gives
    R3. R2 is revoked, `R1.replacedById` is R3's id, `refresh(R2)` rejects, `refresh(R3)`
    resolves.
@@ -282,9 +338,10 @@ Against a real Postgres, as `token-grant.integration.spec.ts` runs, with
    `revoked`.
 5. **Outside the grace.** Set `revokedAt` of a rotated row to three minutes ago by SQL.
    `refresh` rejects with reason `grace_over`.
-6. **A failure after the spend leaves the row live.** Make the user load fail (delete the
-   user inside the test, or a failing manager). `refresh(R1)` rejects and `R1.revokedAt` is
-   still null.
+6. **A failure after the spend leaves the row live.** Make the issue of the successor fail,
+   and in a second case the write of `replacedById` after the successor was inserted.
+   `refresh(R1)` rejects, `R1.revokedAt` is still null, and no successor row exists.
+   (Deleting the user is not a way to make the load fail: the delete cascades to R1.)
 7. **A support row.** A row that names a session rotates under the same deadline, and the
    grace path reissues under the same session.
 
@@ -301,3 +358,21 @@ and test 6b (theft) are expected to keep failing. They are F6 and F4.
   documents with the Web Locks API (F6), compare and set on the stored pair (F7).
 - A timeout on the NATS forward of the refresh, and a throttle on the route (F21).
 - Purging expired rows.
+- A deadlock that the transaction makes possible between `ImpersonationService.end()`,
+  which locks the session row and then its refresh rows, and the rotation of a support row
+  whose operator was disabled meanwhile, which locks the refresh row and then ends the
+  session. Postgres aborts one side after `deadlock_timeout`: a 500 and a rollback, no bad
+  data, and a case that needs an operator to be disabled during a refresh of their session.
+  The lock orders are left as they are.
+
+## 6. Decisions taken at build (2026-10-28)
+
+- **D2, one reissue.** Section 3.2.1 as first written and section 4.1 could not both hold.
+  The build keeps the proofs and refuses `in_flight` and `reissued_before`.
+- **D3, the floor.** `REFRESH_RETRY_FLOOR_MS = 30` is a second time constant beside the
+  grace, section 3.3. The owner can move either, or ask for the arrival time signal.
+- `replacedAt` is a second column of the same migration, section 2.
+- The migration is `1773000000000`, because plan 0230 took `1772900000000` first.
+- An ended support session still commits its revoke on a refresh. The
+  `ImpersonationEndedException` leaves the transaction as a value and is thrown after the
+  commit, and so is the `impersonationEnded` event, as every emit of that service.

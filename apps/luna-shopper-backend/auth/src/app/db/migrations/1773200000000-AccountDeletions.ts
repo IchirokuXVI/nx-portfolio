@@ -7,8 +7,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * It only adds. No release task: nothing a person or a run wrote is read,
  * changed or deleted.
  */
-export class AccountDeletions1773100000000 implements MigrationInterface {
-  name = 'AccountDeletions1773100000000';
+export class AccountDeletions1773200000000 implements MigrationInterface {
+  name = 'AccountDeletions1773200000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

@@ -6,7 +6,7 @@ import {
 import { DataSource, type Repository } from 'typeorm';
 import { fakeAudit } from '../audit/auth-audit.testing';
 import { AUTH_MIGRATIONS } from '../db/migrations';
-import { TermsAcceptances1773000000000 } from '../db/migrations/1773000000000-TermsAcceptances';
+import { TermsAcceptances1773100000000 } from '../db/migrations/1773100000000-TermsAcceptances';
 import {
   AUTH_ENTITIES,
   TermsAcceptance,
@@ -210,7 +210,7 @@ describeIntegration('terms acceptances (real Postgres)', () => {
   });
 
   it('undoes cleanly and applies again', async () => {
-    const target = AUTH_MIGRATIONS.indexOf(TermsAcceptances1773000000000);
+    const target = AUTH_MIGRATIONS.indexOf(TermsAcceptances1773100000000);
     // In a loop, so a later migration does not break this spec.
     for (let i = AUTH_MIGRATIONS.length - 1; i >= target; i--) {
       await dataSource.undoLastMigration();

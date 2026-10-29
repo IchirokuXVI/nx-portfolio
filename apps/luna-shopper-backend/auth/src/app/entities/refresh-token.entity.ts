@@ -42,4 +42,29 @@ export class RefreshToken extends BaseEntity {
   })
   @JoinColumn({ name: 'impersonationSessionId' })
   impersonationSession!: ImpersonationSession | null;
+
+  /**
+   * The row that the rotation of this row issued (plan 0229). Null on a live
+   * row, and on a row that a password reset or the end of a support session
+   * revoked. Only a row with a successor can take the reuse grace, so a row
+   * that those revoked stays dead.
+   *
+   * After a reissue inside the grace it names the newest successor, and the
+   * successor that it replaced is revoked with none of its own.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  replacedById!: string | null;
+
+  @ManyToOne(() => RefreshToken, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'replacedById' })
+  replacedBy!: RefreshToken | null;
+
+  /**
+   * When the rotation that wrote {@link replacedById} finished, on the wall
+   * clock of the database (plan 0229). The same statement writes both. The
+   * `in_flight` rule reads it, and not `updatedAt`, which TypeORM rewrites on
+   * every update of the row.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  replacedAt!: Date | null;
 }

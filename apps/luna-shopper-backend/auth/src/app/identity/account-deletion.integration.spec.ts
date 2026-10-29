@@ -11,7 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource, type EntityManager, type Repository } from 'typeorm';
 import { AuthAuditService } from '../audit/auth-audit.service';
 import { AUTH_MIGRATIONS } from '../db/migrations';
-import { AccountDeletions1773100000000 } from '../db/migrations/1773100000000-AccountDeletions';
+import { AccountDeletions1773200000000 } from '../db/migrations/1773200000000-AccountDeletions';
 import {
   AccountDeletion,
   AUTH_ENTITIES,
@@ -389,7 +389,7 @@ describeIntegration('an account deletion in auth (real Postgres, NATS)', () => {
   });
 
   it('undoes the outbox table cleanly and applies it again', async () => {
-    const target = AUTH_MIGRATIONS.indexOf(AccountDeletions1773100000000);
+    const target = AUTH_MIGRATIONS.indexOf(AccountDeletions1773200000000);
     // In a loop, so a later migration does not break this spec.
     for (let i = AUTH_MIGRATIONS.length - 1; i >= target; i--) {
       await dataSource.undoLastMigration();
