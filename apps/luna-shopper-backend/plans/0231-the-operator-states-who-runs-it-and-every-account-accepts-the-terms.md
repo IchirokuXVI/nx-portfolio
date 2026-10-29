@@ -610,7 +610,7 @@ The builder's choices where the plan left room. Each is the owner's to change.
    `provision-release.sh --unit velista --env staging` on the host before the staging deploy,
    and the same with `--env production` before the next release (section 6, step 1).
 10. **The profile answers the row for the current version, not only the newest row**
-    (review fix, PR #PENDING). With the newest row alone, a current version that moved back
+    (review fix, PR [#856](https://github.com/IchirokuXVI/nx-portfolio/pull/856)). With the newest row alone, a current version that moved back
     to one the account already accepted (a `redeploy.yml` rollback past a template bump, or
     the operator clearing `LEGAL_TERMS_REVISION`) read as `acceptanceRequired: true` forever,
     because accepting again keeps the old row and the newer version stays the newest. Section
