@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
+  AddLineOptions,
   AlsoOnVm,
   ItemLists,
   Line,
@@ -76,13 +77,18 @@ export interface LineServiceI {
    * `named: false` is a line made from a card, whose `content` is the name of a
    * product and not a name somebody typed (backend `0207`). Omitted, the line is
    * named. The server keeps `false` only on a line that holds a product.
+   *
+   * `options` is what a free text add says about a name the list already holds
+   * (backend `0228`): that the caller can ask, or which answer the person gave. It is
+   * ignored on an add that carries products, and is not sent there.
    */
   addLine(
     listId: string,
     content: string,
     quantity?: number,
     itemIds?: readonly string[],
-    named?: false
+    named?: false,
+    options?: AddLineOptions
   ): Promise<Line>;
 
   /**
@@ -91,16 +97,20 @@ export interface LineServiceI {
    * A list holds one line for each name and product identity, so an add that
    * matches raises that line and answers `merged: true`. The catalog asks this way
    * because it has to undo an add exactly: a new line is deleted, and a raised one
-   * goes back to the quantity it had. A screen that holds the list in `LineStore`
-   * uses {@link addLine}, because the store upserts by id and the difference never
-   * reaches it.
+   * goes back to the quantity it had. `LineStore` asks this way too since velista
+   * `0170`: a merged answer is patched onto the row it raised, in its place, and
+   * marked, where an upsert by id moved the row to the end.
+   *
+   * A free text add with `askIfAmbiguous` can be refused with
+   * `line_add_needs_choice` (backend `0228`), which names the lines to choose from.
    */
   addLineResult(
     listId: string,
     content: string,
     quantity?: number,
     itemIds?: readonly string[],
-    named?: false
+    named?: false,
+    options?: AddLineOptions
   ): Promise<LineAddResult>;
 
   /**

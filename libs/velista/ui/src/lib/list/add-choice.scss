@@ -1,0 +1,170 @@
+// The add choice (velista 0170, alternative D), inside the anchored popover's
+// `choice` frame. The title stays put and the rows scroll under it once they pass
+// what fits above the keyboard.
+:host {
+  display: flex;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
+// Back to the basket's list picker: the list that was picked, quiet, above the title.
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--app-space-2);
+  align-self: flex-start;
+  max-inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin-block: calc(var(--app-space-3) * -1) 0;
+  padding: 0 var(--app-space-3) 0 var(--app-space-2);
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-xs);
+  cursor: pointer;
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+.back-glyph {
+  flex: none;
+  font-size: var(--app-icon-sm);
+}
+
+.back-name {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// The typed name, whole. It wraps on as many lines as it needs and is never clamped,
+// and a word with no spaces breaks anywhere rather than pushing the frame wider.
+.title {
+  flex: none;
+  margin: 0;
+  padding: 0 var(--app-space-4) var(--app-space-3);
+  color: var(--app-text-primary);
+  font-size: var(--app-add-choice-title);
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  max-block-size: var(--app-add-choice-rows-max);
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+// One line, or the new one. A row reaches the frame's edges, so its pressed tint and
+// its rule above it line up with the popover rather than with an inset.
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  inline-size: 100%;
+  min-block-size: var(--app-add-choice-row-height);
+  padding: var(--app-space-2) var(--app-space-4);
+  border: 0;
+  border-block-start: 1px solid var(--app-border-subtle);
+  background: transparent;
+  color: var(--app-text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+
+  &:active {
+    background: var(--app-surface-sunken);
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
+
+// The row's picture at the popover's size, through the knobs the picture reads.
+.thumb {
+  --app-line-picture-size: var(--app-add-choice-thumb);
+  --app-line-picture-radius: var(--app-radius-sm);
+  --app-line-picture-glyph: var(--app-icon-sm);
+
+  flex: none;
+}
+
+// "A new line": the dashed square with a plus the list draws for a line with no
+// product, in the amber of a quiet action.
+.thumb.dashed {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: var(--app-add-choice-thumb);
+  block-size: var(--app-add-choice-thumb);
+  border: 1px dashed var(--app-border-strong);
+  border-radius: var(--app-radius-sm);
+  color: var(--app-action-quiet-fg);
+}
+
+.dashed-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-inline-size: 0;
+}
+
+.name,
+.product {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.name {
+  font-size: var(--app-add-choice-name);
+  line-height: 1.3;
+}
+
+.new .name {
+  color: var(--app-action-quiet-fg);
+  font-weight: 600;
+}
+
+.product {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  line-height: 1.35;
+}
+
+// What the add makes of the line. It never shrinks: the name gives way first.
+.count {
+  flex: none;
+  color: var(--app-text-muted);
+  font-size: var(--app-text-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.to {
+  color: var(--app-text-primary);
+  font-weight: 650;
+}

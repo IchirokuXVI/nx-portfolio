@@ -911,6 +911,12 @@ export interface AddBasketLineRequest {
    * the add of a list line as it arrived, and absent means true.
    */
   named?: boolean;
+  /** Handed to the list's own add as it arrived (plan 0228). */
+  askIfAmbiguous?: boolean;
+  /** The same field the list's own add carries (plan 0228). */
+  intoLineId?: string;
+  /** The same field the list's own add carries (plan 0228). */
+  newLine?: boolean;
 }
 
 /**
