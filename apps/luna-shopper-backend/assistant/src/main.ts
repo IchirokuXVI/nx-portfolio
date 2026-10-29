@@ -10,8 +10,10 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
+import { worstOutputAtTypicalInput } from './app/allowance/reserve-amount';
 import { AppModule } from './app/app.module';
 import type { AssistantConfig } from './app/config/app-config';
+import { hasPriceRow } from './app/provider/prices';
 
 /**
  * Assistant service (plan 0039): takes a question in ordinary language and
@@ -86,6 +88,28 @@ async function bootstrap() {
     logger.warn(
       'ASSISTANT_MODERATION is off: replies leave without the safety check. ' +
         'Run it on wherever a minor may use the app (plan 0236, section 4).'
+    );
+  }
+  // The allowance prices every reply (plan 0234, section 2.2). A model with no
+  // row of its own is priced at the dearest row, which counts too much rather
+  // than too little, and is named here.
+  for (const model of new Set([config.model, config.moderationModel])) {
+    if (!hasPriceRow(model)) {
+      logger.warn(
+        `${model} has no row in the assistant's price table: every reply it ` +
+          'writes is priced at the dearest row (plan 0234, section 2.2).'
+      );
+    }
+  }
+  // A reserve below the worst output at the typical input lets an ordinary
+  // long turn run past a person's limit before the settle charges it in full
+  // (plan 0234, section 5.2).
+  const worst = worstOutputAtTypicalInput(config);
+  if (worst.totalMicroUsd > config.allowance.turnReserveMicroUsd) {
+    logger.warn(
+      `ASSISTANT_TURN_RESERVE_MICRO_USD is ${config.allowance.turnReserveMicroUsd}, ` +
+        `below the worst output at the typical input, ${worst.totalMicroUsd} ` +
+        `micro dollars on ${config.model} (plan 0234, section 5.2).`
     );
   }
   // A slot or deployment configured before plan 0236 can keep an ASSISTANT_MODEL

@@ -37,6 +37,9 @@ import { CORE_USER_IDS_SQL } from './reconcile-deletions';
  *   LUNA_INTEGRATION=1 CORE_DB_URL=postgres://luna_core:luna_core@localhost:<port>/luna_core \
  *     npx nx run luna-shopper-backend-core:test-integration --testFile=account-deletion.integration.spec.ts
  */
+/** The day the allowance rows of the seed are on (plan 0234, section 9). */
+const ALLOWANCE_DAY = '1990-01-01';
+
 describeIntegration('an account deletion in core (real Postgres)', () => {
   let dataSource: DataSource;
   const zones: string[] = [];
@@ -265,6 +268,28 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
       `INSERT INTO "user_app_state" ("userId", "setupCompletedAt") VALUES ($1, now())`,
       [person]
     );
+    // The assistant allowance (plan 0234, section 9): a usage row, and an open
+    // reservation that holds 500 micro dollars on the deployment's day. The
+    // day is far in the past, so no other suite's rows share it.
+    await sql(
+      `INSERT INTO "assistant_usage_days"
+         ("userId", "day", "turns", "costMicroUsd", "reservedTurns", "reservedMicroUsd")
+       VALUES ($1, $2, 3, 900, 1, 500)`,
+      [person, ALLOWANCE_DAY]
+    );
+    await sql(
+      `INSERT INTO "assistant_usage_deployment_days" ("day", "reservedMicroUsd")
+       VALUES ($1, 500)
+       ON CONFLICT ("day") DO UPDATE
+         SET "reservedMicroUsd" = "assistant_usage_deployment_days"."reservedMicroUsd" + 500`,
+      [ALLOWANCE_DAY]
+    );
+    await sql(
+      `INSERT INTO "assistant_reservations"
+         ("id", "userId", "day", "purpose", "turns", "audioSeconds", "microUsd", "expiresAt")
+       VALUES ($1, $2, $3, 'TURN', 1, 0, 500, now() + interval '1 hour')`,
+      [randomUUID(), person, ALLOWANCE_DAY]
+    );
 
     const admin = randomUUID();
     const audit = async (
@@ -393,8 +418,16 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
     const person = randomUUID();
     const friend = randomUUID();
     const s = await seed(person, friend);
+    const deploymentDay = () =>
+      one<{ reservedMicroUsd: string }>(
+        `SELECT "reservedMicroUsd"::text AS "reservedMicroUsd"
+           FROM "assistant_usage_deployment_days" WHERE "day" = $1`,
+        [ALLOWANCE_DAY]
+      );
+    const deploymentBefore = await deploymentDay();
 
     await expect(service.handleUserDeleted(person)).resolves.toBe(true);
+    const deploymentAfter = await deploymentDay();
 
     // zone_memberships: kept, KICKED, anonymized, a tombstone per zone.
     const inA = await one<{ userId: string; username: string; status: string }>(
@@ -611,6 +644,21 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
       sql(`SELECT 1 FROM "user_app_state" WHERE "userId" = $1`, [person])
     ).resolves.toEqual([]);
 
+    // The assistant allowance (plan 0234, section 9): the person's usage rows
+    // and reservations are gone, and the deployment's day keeps its row with
+    // what the reservation held taken back out.
+    await expect(
+      sql(`SELECT 1 FROM "assistant_usage_days" WHERE "userId" = $1`, [person])
+    ).resolves.toEqual([]);
+    await expect(
+      sql(`SELECT 1 FROM "assistant_reservations" WHERE "userId" = $1`, [
+        person,
+      ])
+    ).resolves.toEqual([]);
+    expect(deploymentAfter.reservedMicroUsd).toBe(
+      String(Number(deploymentBefore.reservedMicroUsd) - 500)
+    );
+
     // core_audit: scrubbed, each row by the zone it names.
     const renamed = await one<{
       entityId: string;
@@ -746,6 +794,20 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
       appState: await sql(
         `SELECT "userId" FROM "user_app_state" WHERE "userId" = $1`,
         [person]
+      ),
+      allowance: await sql(
+        `SELECT "day"::text, "turns", "reservedMicroUsd"::text
+           FROM "assistant_usage_days" WHERE "userId" = $1`,
+        [person]
+      ),
+      reservations: await sql(
+        `SELECT "id" FROM "assistant_reservations" WHERE "userId" = $1`,
+        [person]
+      ),
+      deploymentDay: await sql(
+        `SELECT "reservedMicroUsd"::text FROM "assistant_usage_deployment_days"
+          WHERE "day" = $1`,
+        [ALLOWANCE_DAY]
       ),
       audit: await sql(
         `SELECT "id", "entityId", "before", "after" FROM "core_audit"

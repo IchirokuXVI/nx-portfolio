@@ -2,6 +2,7 @@ import type {
   AssistantRole,
   ListResolutionBranch,
 } from '../enums/assistant.enums';
+import type { UserKind } from '../enums/auth.enums';
 import type { AiTextProvider } from '../legal/legal-settings';
 
 /**
@@ -56,7 +57,20 @@ export const ASSISTANT_PATTERNS = {
    * know whether a provider key is present, so the assistant says.
    */
   capabilities: 'assistant.capabilities',
+  /**
+   * The caller's own allowance (plan 0234, section 8.2), asked by the gateway
+   * for `GET /v1/assistant/allowance`. The assistant owns the limits, so it
+   * answers with them and with core's counts.
+   */
+  allowance: 'assistant.allowance',
 } as const;
+
+/** Whose allowance to read (plan 0234, section 8.2). */
+export interface AssistantAllowanceRequest {
+  userId: string;
+  /** Picks the guest limits for `TEMPORARY`. */
+  kind: UserKind;
+}
 
 /** No fields: the answer is about the deployment, not about a caller. */
 export type AssistantCapabilitiesRequest = Record<string, never>;
@@ -92,6 +106,15 @@ export interface AssistantTranscribeRequest {
    * behind the assistant still works.
    */
   purpose?: 'turn' | 'comment';
+  /**
+   * The comment's author, whose comment audio allowance the recording counts
+   * against (plan 0234, section 6). Optional on the wire for a gateway one
+   * release behind; the assistant refuses a transcription without it, because
+   * the allowance fails closed.
+   */
+  userId?: string;
+  /** The author's kind, which picks the guest limits for `TEMPORARY`. */
+  kind?: UserKind;
 }
 
 /**
@@ -198,6 +221,12 @@ export interface AssistantTurnRequest {
   /** What the caller just said. */
   message: string;
   /**
+   * The caller's kind, from the verified token (plan 0234, section 6). It
+   * picks the guest limits for `TEMPORARY`. Optional on the wire for a gateway
+   * one release behind, which the assistant counts as a guest.
+   */
+  kind?: UserKind;
+  /**
    * The one list this turn may touch, when the caller stated one.
    *
    * Absent, the turn is exactly what plan 0039 built and every existing test
@@ -229,6 +258,8 @@ export interface AssistantVoiceRequest {
   audio: string;
   /** What the browser said it recorded. Checked against a whitelist, then sent on. */
   mimeType: string;
+  /** The caller's kind, as on {@link AssistantTurnRequest} (plan 0234). */
+  kind?: UserKind;
   /** The one list this turn may touch, when the caller stated one (plan 0044). */
   scope?: TurnScope;
 }

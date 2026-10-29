@@ -1,9 +1,11 @@
 import {
   assistantConfiguration,
   assistantValidationSchema,
+  DEFAULT_ALLOWANCE,
   DEFAULT_CLAUDE_MODEL,
   DEFAULT_EMERGENCY_NUMBER,
   DEFAULT_MODERATION_MODEL,
+  resolveAllowance,
   resolveAssistantModels,
 } from './app-config';
 
@@ -144,5 +146,82 @@ describe('assistantConfiguration', () => {
 
     expect(config.moderation).toBe(false);
     expect(config.emergencyNumber).toBe('911');
+  });
+});
+
+/** Each person's allowance (plan 0234, sections 7 and 11). */
+describe('the allowance keys', () => {
+  const BASE = { NATS_URL: 'nats://x', GATEWAY_INTERNAL_URL: 'http://g' };
+
+  it('defaults every limit to the numbers of section 7, guests lower', () => {
+    expect(DEFAULT_ALLOWANCE.registered).toEqual({
+      turnsPerDay: 60,
+      turnsPerMonth: 600,
+      assistantAudioSecondsPerDay: 900,
+      assistantAudioSecondsPerMonth: 9000,
+      commentAudioSecondsPerDay: 1800,
+      commentAudioSecondsPerMonth: 18000,
+      costPerDayMicroUsd: 100_000,
+      costPerMonthMicroUsd: 1_000_000,
+      deploymentCostPerDayMicroUsd: 3_000_000,
+      deploymentCostPerMonthMicroUsd: 30_000_000,
+    });
+    expect(DEFAULT_ALLOWANCE.guest).toEqual({
+      turnsPerDay: 20,
+      turnsPerMonth: 100,
+      assistantAudioSecondsPerDay: 300,
+      assistantAudioSecondsPerMonth: 1500,
+      commentAudioSecondsPerDay: 600,
+      commentAudioSecondsPerMonth: 3000,
+      costPerDayMicroUsd: 40_000,
+      costPerMonthMicroUsd: 200_000,
+      // The deployment is one deployment, whoever asks.
+      deploymentCostPerDayMicroUsd: 3_000_000,
+      deploymentCostPerMonthMicroUsd: 30_000_000,
+    });
+    expect(DEFAULT_ALLOWANCE.turnReserveMicroUsd).toBe(20_000);
+    expect(DEFAULT_ALLOWANCE.timezone).toBe('UTC');
+  });
+
+  it('reads a guest key apart from its registered key', () => {
+    const allowance = resolveAllowance({
+      ASSISTANT_TURNS_PER_DAY: '5',
+      ASSISTANT_TURNS_PER_DAY_GUEST: '1',
+      ASSISTANT_ALLOWANCE_TIMEZONE: 'Europe/Madrid',
+    });
+    expect(allowance.registered.turnsPerDay).toBe(5);
+    expect(allowance.guest.turnsPerDay).toBe(1);
+    expect(allowance.timezone).toBe('Europe/Madrid');
+  });
+
+  it('refuses a limit below one, a fraction, and an unknown timezone', () => {
+    for (const bad of [
+      { ASSISTANT_TURNS_PER_DAY: '0' },
+      { COMMENT_AUDIO_SECONDS_PER_DAY_GUEST: '1.5' },
+      { ASSISTANT_TURN_RESERVE_MICRO_USD: '-1' },
+      { ASSISTANT_ALLOWANCE_TIMEZONE: 'Mars/Olympus' },
+    ]) {
+      expect(
+        assistantValidationSchema.validate({ ...BASE, ...bad }).error
+      ).toBeDefined();
+    }
+    expect(
+      assistantValidationSchema.validate({
+        ...BASE,
+        ASSISTANT_ALLOWANCE_TIMEZONE: 'Europe/Madrid',
+        ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD: '30000000',
+      }).error
+    ).toBeUndefined();
+  });
+
+  it('has no guest form of a deployment key', () => {
+    expect(
+      assistantValidationSchema.describe().keys[
+        'ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD_GUEST'
+      ]
+    ).toBeUndefined();
+    expect(
+      assistantValidationSchema.describe().keys['ASSISTANT_TURNS_PER_DAY_GUEST']
+    ).toBeDefined();
   });
 });

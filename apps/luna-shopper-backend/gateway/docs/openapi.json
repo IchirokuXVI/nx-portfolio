@@ -29382,7 +29382,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "description": "`assistant_allowance_reached` — The assistant is not available for now. It will be back later.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29403,6 +29403,62 @@
           },
           "501": {
             "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "assistant"
+        ]
+      }
+    },
+    "/v1/assistant/allowance": {
+      "get": {
+        "operationId": "AssistantController_allowance_v1",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The `assistant.allowance` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/assistant.AssistantAllowanceView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29494,7 +29550,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "description": "`assistant_allowance_reached` — The assistant is not available for now. It will be back later.\n\n`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -35101,6 +35157,70 @@
             "description": "Whether this deployment will issue an admin token without a password, from `ADMIN_DEV_AUTOLOGIN`. The back office asks rather than deciding for itself that it is in development, so the decision to skip the login screen is the server’s. False everywhere it would matter: auth refuses to boot with the switch on against a non local database."
           }
         }
+      },
+      "assistant.AllowanceCounter": {
+        "type": "object",
+        "properties": {
+          "used": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "used",
+          "limit"
+        ],
+        "additionalProperties": false
+      },
+      "assistant.AllowancePeriodView": {
+        "type": "object",
+        "properties": {
+          "turns": {
+            "$ref": "#/components/schemas/assistant.AllowanceCounter"
+          },
+          "assistantAudioSeconds": {
+            "$ref": "#/components/schemas/assistant.AllowanceCounter"
+          },
+          "commentAudioSeconds": {
+            "$ref": "#/components/schemas/assistant.AllowanceCounter"
+          },
+          "resetsAt": {
+            "type": "string",
+            "minLength": 1,
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "turns",
+          "assistantAudioSeconds",
+          "commentAudioSeconds",
+          "resetsAt"
+        ],
+        "additionalProperties": false
+      },
+      "assistant.AssistantAllowanceView": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "$ref": "#/components/schemas/assistant.AllowancePeriodView"
+          },
+          "month": {
+            "$ref": "#/components/schemas/assistant.AllowancePeriodView"
+          },
+          "deploymentAvailable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "day",
+          "month",
+          "deploymentAvailable"
+        ],
+        "additionalProperties": false
       },
       "assistant.AssistantChoice": {
         "type": "object",
@@ -46377,6 +46497,7 @@
               "recovery_needs_password",
               "terms_version_stale",
               "terms_acceptance_missing",
+              "assistant_allowance_reached",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

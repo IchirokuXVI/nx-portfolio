@@ -31,6 +31,8 @@ export const CORE_USER_IDS_SQL = `
     UNION SELECT "ownerUserId" FROM "zones"
     UNION SELECT "userId" FROM "shopping_profiles"
     UNION SELECT "userId" FROM "user_app_state"
+    UNION SELECT "userId" FROM "assistant_usage_days"
+    UNION SELECT "userId" FROM "assistant_reservations"
     UNION SELECT substr("key", 14)::uuid FROM "processed_events"
      WHERE "key" ~ '^user\\.deleted:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   ) t

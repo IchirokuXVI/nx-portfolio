@@ -10,6 +10,8 @@ import {
 } from '../lib/messages/admin-core.messages';
 import { ADMIN_USER_PATTERNS } from '../lib/messages/admin-users.messages';
 import { APP_STATE_PATTERNS } from '../lib/messages/app-state.messages';
+import { ASSISTANT_ALLOWANCE_PATTERNS } from '../lib/messages/assistant-allowance.messages';
+import { ASSISTANT_PATTERNS } from '../lib/messages/assistant.messages';
 import { AUTH_PATTERNS } from '../lib/messages/auth.messages';
 import {
   ADMIN_POSTAL_CODE_PATTERNS,
@@ -124,6 +126,9 @@ describe('contract schemas', () => {
       ...Object.values(STATS_PATTERNS),
       // What an account has been shown (plan 0145).
       ...Object.values(APP_STATE_PATTERNS),
+      // The assistant, and the allowance it keeps in core (plan 0234).
+      ...Object.values(ASSISTANT_PATTERNS),
+      ...Object.values(ASSISTANT_ALLOWANCE_PATTERNS),
     ];
 
     it.each(allMessageSubjects)(

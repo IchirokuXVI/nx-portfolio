@@ -33,7 +33,7 @@ import { AssistantController } from './assistant.controller';
 
 const CAP = 4096;
 
-const caller = { userId: 'u1' };
+const caller = { userId: 'u1', kind: 'TEMPORARY' };
 
 /** A recording of `bytes` bytes, as a multipart part would carry it. */
 function recording(bytes: number, type = 'audio/webm'): Blob {
@@ -164,6 +164,8 @@ describe('POST /v1/assistant/voice', () => {
       ];
       expect(subject).toBe(ASSISTANT_PATTERNS.voice);
       expect(payload['userId']).toBe('u1');
+      // From the token, so a guest gets the guest allowance (plan 0234).
+      expect(payload['kind']).toBe('TEMPORARY');
       // Verbatim, which is rule A1: the assistant can do exactly what this user
       // could do by tapping, and nothing more.
       expect(payload['authorization']).toBe('Bearer the-callers-own-token');
@@ -313,6 +315,42 @@ describe('POST /v1/assistant/voice', () => {
       expect(res.status).toBe(400);
       expect((await res.json()).code).toBe(ERROR_CODES.VALIDATION_FAILED);
       expect(send).not.toHaveBeenCalled();
+    } finally {
+      await nest.close();
+    }
+  });
+});
+
+describe('GET /v1/assistant/allowance (plan 0234, section 8.2)', () => {
+  it('asks the assistant with the caller id and kind, and answers its view', async () => {
+    const { nest, send, origin } = await boot();
+    const view = {
+      day: {
+        turns: { used: 1, limit: 20 },
+        assistantAudioSeconds: { used: 0, limit: 300 },
+        commentAudioSeconds: { used: 0, limit: 600 },
+        resetsAt: '2026-10-28T00:00:00+01:00',
+      },
+      month: {
+        turns: { used: 1, limit: 100 },
+        assistantAudioSeconds: { used: 0, limit: 1500 },
+        commentAudioSeconds: { used: 0, limit: 3000 },
+        resetsAt: '2026-11-01T00:00:00+01:00',
+      },
+      deploymentAvailable: true,
+    };
+    send.mockResolvedValueOnce(view as never);
+    try {
+      const res = await fetch(`${origin}/v1/assistant/allowance`);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(view);
+      const [subject, payload] = send.mock.calls[0] as unknown as [
+        string,
+        Record<string, unknown>,
+      ];
+      expect(subject).toBe(ASSISTANT_PATTERNS.allowance);
+      expect(payload).toEqual({ userId: 'u1', kind: 'TEMPORARY' });
     } finally {
       await nest.close();
     }

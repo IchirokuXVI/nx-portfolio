@@ -313,9 +313,47 @@ export const ERROR_CATALOG: Record<
     en: 'Accept the Terms to continue.',
     es: 'Acepta los Términos para continuar.',
   },
+  // The sentence a client without its own reads (plan 0234, section 8.1). The
+  // assistant names one of the variants below in `messageArgs.variant`, and
+  // this one is what is left when it names none.
+  [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: {
+    en: 'The assistant is not available for now. It will be back later.',
+    es: 'El asistente no está disponible por ahora. Volverá a estarlo más tarde.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',
+  },
+};
+
+/**
+ * Codes whose sentence depends on which case refused, picked by
+ * `messageArgs.variant` (plan 0234, section 8.1). A variant this map does not
+ * hold falls back to the code's own sentence in {@link ERROR_CATALOG}.
+ *
+ * The deployment's sentences say the assistant is resting and never that a
+ * budget ran out: the ceiling is the operator's fact, not the person's.
+ */
+export const ERROR_CATALOG_VARIANTS: Partial<
+  Record<ErrorCode, Record<string, Record<SupportedLocale, string>>>
+> = {
+  [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: {
+    'user.day': {
+      en: "You have used today's assistant allowance. It is back at {time}.",
+      es: 'Has usado el asistente todo lo que permite hoy. Vuelve a estar disponible a las {time}.',
+    },
+    'user.month': {
+      en: "You have used this month's assistant allowance. It is back on {time}.",
+      es: 'Has usado el asistente todo lo que permite este mes. Vuelve a estar disponible el {time}.',
+    },
+    'deployment.day': {
+      en: 'The assistant is resting for now. It is back at {time}.',
+      es: 'El asistente está descansando. Vuelve a estar disponible a las {time}.',
+    },
+    'deployment.month': {
+      en: 'The assistant is resting for now. It is back on {time}.',
+      es: 'El asistente está descansando. Vuelve a estar disponible el {time}.',
+    },
   },
 };
 
@@ -341,7 +379,12 @@ export function resolveErrorMessage(
   locale: SupportedLocale = DEFAULT_LOCALE,
   args?: Record<string, string | number>
 ): string {
-  const byLocale = ERROR_CATALOG[code] ?? ERROR_CATALOG[ERROR_CODES.INTERNAL];
+  const variant =
+    typeof args?.['variant'] === 'string'
+      ? ERROR_CATALOG_VARIANTS[code]?.[args['variant']]
+      : undefined;
+  const byLocale =
+    variant ?? ERROR_CATALOG[code] ?? ERROR_CATALOG[ERROR_CODES.INTERNAL];
   const template = byLocale[locale] ?? byLocale[DEFAULT_LOCALE];
   return interpolate(template, args);
 }

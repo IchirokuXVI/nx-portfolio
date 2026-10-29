@@ -688,6 +688,7 @@ export type ProblemDetails = {
     | 'recovery_needs_password'
     | 'terms_version_stale'
     | 'terms_acceptance_missing'
+    | 'assistant_allowance_reached'
     | 'internal';
   detail?: string;
   message: string;
@@ -1945,6 +1946,33 @@ export type AdminAdminDashboardResponse = {
 export type AdminAdminEnvironmentResponse = {
   environment: string;
   devAutologin: boolean;
+};
+
+/**
+ * `assistant.AllowanceCounter` in the gateway's OpenAPI document.
+ */
+export type AssistantAllowanceCounter = {
+  used: number;
+  limit: number;
+};
+
+/**
+ * `assistant.AllowancePeriodView` in the gateway's OpenAPI document.
+ */
+export type AssistantAllowancePeriodView = {
+  turns: AssistantAllowanceCounter;
+  assistantAudioSeconds: AssistantAllowanceCounter;
+  commentAudioSeconds: AssistantAllowanceCounter;
+  resetsAt: string;
+};
+
+/**
+ * `assistant.AssistantAllowanceView` in the gateway's OpenAPI document.
+ */
+export type AssistantAssistantAllowanceView = {
+  day: AssistantAllowancePeriodView;
+  month: AssistantAllowancePeriodView;
+  deploymentAvailable: boolean;
 };
 
 /**

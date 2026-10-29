@@ -1,5 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ClientsModule, Transport } from '@nestjs/microservices';
+import {
+  AllowanceClient,
+  CORE_NATS_CLIENT,
+} from '../allowance/allowance.client';
 import type { AssistantConfig } from '../config/app-config';
 import { ClaudeProvider } from '../provider/claude.provider';
 import { MODEL_PROVIDER, type ModelProvider } from '../provider/model-provider';
@@ -50,11 +55,28 @@ export function buildModelProvider(
  * `FakeModelProvider` with no network at all.
  *
  * There is no `TypeOrmModule.forFeature` here, and there is not meant to be one.
+ * The allowance's counts live in core (plan 0234, section 3), reached over the
+ * NATS client below: the first question this service asks rather than answers.
  */
 @Module({
+  imports: [
+    ClientsModule.registerAsync([
+      {
+        name: CORE_NATS_CLIENT,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.NATS,
+          options: {
+            servers: [config.getOrThrow<AssistantConfig>('assistant').natsUrl],
+          },
+        }),
+      },
+    ]),
+  ],
   controllers: [AssistantController],
   providers: [
     AssistantService,
+    AllowanceClient,
     GatewayApiClient,
     TurnContextFactory,
     {

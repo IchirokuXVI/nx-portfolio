@@ -141,6 +141,13 @@ export interface ProblemResponseOptions {
    *   a validation 400 and only the 409 can be answered.
    */
   terms?: boolean | 'stale';
+  /**
+   * The route spends the caller's assistant allowance (plan 0234, section
+   * 8.1), so it can answer 429 with a code of its own beside `rate_limited`.
+   * It carries `details.scope`, `period`, `limit` and `resetsAt`, and no
+   * `retryAfterSeconds`.
+   */
+  allowance?: boolean;
 }
 
 const problemName = hoistProblemDetails();
@@ -279,6 +286,9 @@ export function ApiProblemResponses(
   }
   if (options.terms === true) {
     codes.push(ERROR_CODES.TERMS_ACCEPTANCE_MISSING);
+  }
+  if (options.allowance) {
+    codes.push(ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

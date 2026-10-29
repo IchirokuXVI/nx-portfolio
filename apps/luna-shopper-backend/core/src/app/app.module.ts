@@ -14,6 +14,7 @@ import {
 import { AccountModule } from './account/account.module';
 import { CoreAdminModule } from './admin/admin.module';
 import { AppStateModule } from './app-state/app-state.module';
+import { AssistantAllowanceModule } from './assistant-allowance/assistant-allowance.module';
 import { AuditModule } from './audit/audit.module';
 import type { CoreConfig } from './config/app-config';
 import { coreConfiguration, coreValidationSchema } from './config/app-config';
@@ -76,6 +77,9 @@ import { ZonesModule } from './zones/zones.module';
     CoreAdminModule,
     // Deletes audit rows past their lifetime (plan 0233).
     RetentionModule,
+    // Each person's assistant allowance (plan 0234). It imports nothing, and
+    // nothing above depends on it.
+    AssistantAllowanceModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {
