@@ -1,3 +1,5 @@
+> **PR:** [#858](https://github.com/IchirokuXVI/nx-portfolio/pull/858)
+
 # 0235: speech to text runs on our own server
 
 > Every recording a person makes in the app goes to Google today. A spoken assistant turn
