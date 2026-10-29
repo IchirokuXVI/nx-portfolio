@@ -46,7 +46,15 @@ export interface ChainLogoView {
     @if (logo().store) {
       <lib-store-icon class="glyph" />
     } @else if (image(); as src) {
-      <img (error)="broken.set(true)" [src]="src" alt="" class="image" />
+      <!-- No referrer (velista 0172, D5): a logo is fetched from wherever the
+           operator points it, and the page being read is not that host's business. -->
+      <img
+        (error)="broken.set(true)"
+        [src]="src"
+        alt=""
+        class="image"
+        referrerpolicy="no-referrer"
+      />
     } @else {
       {{ initial() }}
     }

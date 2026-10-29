@@ -46,12 +46,20 @@
   />
 
   <!--
-    Last on the page, under the ways in, and the only thing here that may be clipped.
-    This screen deliberately does not scroll, so everything above competes for the
-    spacer's room; the version is the one line whose loss on a very short phone costs
-    nothing, which is precisely why it goes at the end rather than in the header.
+    The foot: the privacy policy, the terms and the version on one line (velista 0172).
+    The front door is the home page Google's consent screen names, so the policy link
+    belongs here, signed out. On one line rather than a row of their own because at
+    360 by 640 the ways in already reach below the fold, and a second row would push
+    them further. Last on the page, and the only thing here whose loss on a very short
+    phone costs nothing, which is why it is at the end rather than in the header.
   -->
-  <lib-app-version />
+  <div class="foot">
+    <lib-legal-links
+      [privacyUrl]="legalUrls().privacy"
+      [termsUrl]="legalUrls().terms"
+    />
+    <lib-app-version />
+  </div>
 </div>
 
 <!--

@@ -12,8 +12,8 @@
 
 /** The repository's templates. Bumped in the PR that changes their meaning. */
 export const LEGAL_TEMPLATES = {
-  terms: { version: '2026-10-28' },
-  privacy: { updatedOn: '2026-10-28' },
+  terms: { version: '2026-10-29' },
+  privacy: { updatedOn: '2026-10-29' },
 } as const;
 
 /** The separator between the template version and an operator revision. */

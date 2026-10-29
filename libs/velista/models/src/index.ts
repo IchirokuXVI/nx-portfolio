@@ -35,6 +35,7 @@ export * from './lib/line-name';
 export * from './lib/line-products';
 export * from './lib/list-view';
 export * from './lib/nearby-shops';
+export * from './lib/operator-settings';
 export * from './lib/price-history';
 export * from './lib/problem';
 export * from './lib/product-category';

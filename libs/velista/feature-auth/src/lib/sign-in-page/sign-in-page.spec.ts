@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -17,6 +18,7 @@ import {
   provideVelistaTesting,
   type AppRuntime,
 } from '@portfolio/velista/platform';
+import { LegalLinks } from '@portfolio/velista/ui';
 import { SignInPage } from './sign-in-page';
 
 interface Options {
@@ -492,5 +494,15 @@ describe('SignInPage', () => {
 
       expect(query(fixture, '.password-rule')).toBeNull();
     });
+  });
+
+  it('links the privacy policy and the terms at its foot (velista 0172)', async () => {
+    const { fixture } = await render();
+
+    const found = fixture.debugElement.query(By.directive(LegalLinks));
+    expect(found).not.toBeNull();
+    const links = found.componentInstance as LegalLinks;
+    expect(links.privacyUrl()).toMatch(/\/privacy$/);
+    expect(links.termsUrl()).toMatch(/\/terms$/);
   });
 });

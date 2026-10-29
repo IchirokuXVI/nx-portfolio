@@ -15,10 +15,68 @@ import type { Page, Route } from '@playwright/test';
  */
 const HEALTH_READY = '**/health/ready';
 
-/** Answer the readiness probe, so the app starts. */
-export async function stubBackendReady(page: Page): Promise<void> {
+const LEGAL_SETTINGS = '**/v1/legal/settings';
+
+/**
+ * What backend `0231`'s `GET /v1/legal/settings` answers in these suites: a deployment
+ * that published both documents, with invented values. Nothing here is anybody's real
+ * deployment. A spec that needs another deployment passes its own changes.
+ */
+export const STUB_LEGAL_SETTINGS = {
+  appName: 'Example Shopper',
+  controllerName: 'Example Controller',
+  contactEmail: 'privacy@example.org',
+  published: true,
+  terms: {
+    version: '2026-10-29',
+    updatedOn: '2026-10-29',
+    acceptanceRequired: false,
+  },
+  privacy: { updatedOn: '2026-10-29' },
+  features: {
+    googleSignIn: true,
+    assistant: true,
+    transcription: true,
+    offsiteBackups: true,
+    supportAccess: false,
+  },
+  processors: {
+    hosting: null,
+    email: 'Example Mail',
+    aiText: 'anthropic',
+    offsiteBackups: null,
+  },
+  retention: {
+    auditTrailDays: 180,
+    adminLoginFailureDays: 90,
+    expiredGrantDays: 14,
+    applicationLogDays: 30,
+    assistantLogDays: 7,
+    backupDays: 14,
+  },
+};
+
+/**
+ * Answer the readiness probe, so the app starts, and the operator's settings (velista
+ * `0172`), which the app reads the first time the backend is ready. Unanswered, that
+ * read fails, which changes only the legal pages today, but plans `0173` and `0174`
+ * read the same answer on the screens every suite opens.
+ */
+export async function stubBackendReady(
+  page: Page,
+  legalSettings: Record<string, unknown> = STUB_LEGAL_SETTINGS
+): Promise<void> {
   await page.route(HEALTH_READY, (route: Route) =>
     route.fulfill({ status: 200, contentType: 'text/plain', body: 'ok' })
+  );
+  await page.route(LEGAL_SETTINGS, (route: Route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      // The gateway is another origin than the app, as it is everywhere.
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(legalSettings),
+    })
   );
 }
 

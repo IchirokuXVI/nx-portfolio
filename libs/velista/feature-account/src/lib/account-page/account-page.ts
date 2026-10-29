@@ -37,6 +37,7 @@ import {
 import {
   AccountRow,
   AppVersion,
+  LegalLinks,
   PageHeader,
   SectionHeading,
 } from '@portfolio/velista/ui';
@@ -94,6 +95,7 @@ import { RenameAnnouncement } from '../rename-announcement';
     RouterOutlet,
     AccountRow,
     AppVersion,
+    LegalLinks,
     PageHeader,
     SectionHeading,
   ],
@@ -112,6 +114,12 @@ export class AccountPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /** Where the two legal links at the foot of the screen go (velista `0172`). */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
   private readonly _announcement = inject(RenameAnnouncement);
   private readonly _install = inject(InstallStore);
   private readonly _browser = inject(BrowserFacade);

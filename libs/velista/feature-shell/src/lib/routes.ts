@@ -1273,6 +1273,35 @@ export const AppShellRoutes: Route[] = [
               ),
           },
           {
+            // The privacy policy (velista `0172`), filled from the operator's settings.
+            //
+            // **Public, and deliberately so**, like `install`: no `canActivate`, no
+            // `canMatch`. Google's review of the sign in consent screen opens this URL
+            // signed out, and plan `0173`'s acceptance prompt links here for somebody
+            // who has not accepted yet. `routes.spec.ts` asserts the absent guard,
+            // because an absent guard is easy to read as an oversight and this one is a
+            // decision. It still waits behind the startup gate (D1): every sentence
+            // about the controller comes from the backend.
+            path: 'privacy',
+            title: localizedTitle('legal.privacy.title'),
+            data: { document: 'privacy', [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-legal').then(
+                (m) => m.LegalPage
+              ),
+          },
+          {
+            // The terms of service (velista `0172`). Public for the same two reasons,
+            // and asserted the same way: the absent guard is a decision.
+            path: 'terms',
+            title: localizedTitle('legal.terms.title'),
+            data: { document: 'terms', [NAV_CHROME]: NO_NAV_CHROME },
+            loadComponent: () =>
+              import('@portfolio/velista/feature-legal').then(
+                (m) => m.LegalPage
+              ),
+          },
+          {
             /**
              * The second tab: every product from every supermarket (velista `0100`),
              * at the URL `0097` gave it.

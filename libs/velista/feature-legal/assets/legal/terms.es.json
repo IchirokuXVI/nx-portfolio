@@ -1,0 +1,218 @@
+{
+  "templateVersion": "2026-10-29",
+  "title": "Condiciones del servicio",
+  "sections": [
+    {
+      "id": "who",
+      "heading": "Quién presta el servicio",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} lo gestiona {{controllerName}}. Para cualquier duda, escribe a {{contactEmail}}."
+        }
+      ]
+    },
+    {
+      "id": "accept",
+      "heading": "Aceptación de estas condiciones",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Aceptas estas condiciones al crear una cuenta. Eso incluye la cuenta de invitado que se crea cuando creas un grupo o te unes a uno."
+        },
+        {
+          "kind": "paragraph",
+          "when": "googleSignIn",
+          "text": "También las aceptas si continúas con Google."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Esta es la versión {{termsVersion}}. Cuando cambien, la app te pedirá que aceptes la nueva versión."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Cómo usamos tus datos se explica en otro documento, la [[privacy]]. Ese documento te informa, pero no forma parte de lo que aceptas."
+        }
+      ]
+    },
+    {
+      "id": "service",
+      "heading": "Qué es el servicio",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} te ofrece listas de la compra compartidas, precios recogidos de los supermercados y mapas de tiendas. Es gratis."
+        },
+        {
+          "kind": "paragraph",
+          "text": "No podemos garantizar que esté disponible siempre."
+        }
+      ]
+    },
+    {
+      "id": "prices",
+      "heading": "Los precios son información, no ofertas",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Los precios y las fotos vienen de las webs de los supermercados y de las personas que usan la app. Pueden estar mal o no estar al día."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Por eso, el precio que vale es el que te cobra la tienda en caja."
+        }
+      ]
+    },
+    {
+      "id": "minors",
+      "heading": "Edad",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Cualquier persona puede usar {{appName}}. Si tienes menos de 14 años, necesitas el permiso de tus padres o de tu tutor legal. La app no comprueba la edad de nadie."
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "heading": "Tu cuenta",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Quien conozca tu contraseña puede entrar en tu cuenta, así que no se la des a nadie."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Una cuenta de invitado solo está en un dispositivo, hasta que le añades un correo electrónico."
+        }
+      ]
+    },
+    {
+      "id": "conduct",
+      "heading": "Lo que no puedes hacer",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Para que el servicio funcione bien para todos, no puedes:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Publicar contenido ilegal.",
+            "Acosar a otras personas.",
+            "Enviar mensajes no deseados (spam).",
+            "Usar programas que copien datos de la app de forma automática.",
+            "Atacar el servicio o intentar que deje de funcionar."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "when": "assistant",
+          "text": "Tampoco puedes abusar del asistente para disparar sus costes o para que cree contenido dañino."
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "heading": "Lo que escribes",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Lo que escribes en la app sigue siendo tuyo."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Para que el servicio funcione, nos permites guardarlo y mostrarlo a las personas con las que lo compartes. También nos permites conservarlo sin tu nombre cuando te vas, tal como explica la [[privacy]]."
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "when": "assistant",
+      "heading": "El asistente",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "El asistente es automático y puede equivocarse. Revisa lo que ha escrito."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Hay un límite de cuánto puede usarlo cada persona."
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "when": "transcription",
+      "heading": "Comentarios de voz",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "La transcripción de un comentario de voz la hace una máquina, así que puede entender mal lo que dijiste."
+        }
+      ]
+    },
+    {
+      "id": "ending",
+      "heading": "Baja y suspensión",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Puedes borrar tu cuenta cuando quieras."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Si una cuenta incumple estas condiciones, podemos suspenderla."
+        }
+      ]
+    },
+    {
+      "id": "liability",
+      "heading": "Responsabilidad",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Nuestra responsabilidad por el servicio se limita en la medida en que la ley lo permite."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Nada de estas condiciones recorta los derechos que tienes como consumidor según la ley de tu país."
+        }
+      ]
+    },
+    {
+      "id": "law",
+      "heading": "Ley aplicable",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Estas condiciones se rigen por la ley del país de {{controllerName}}. Si eres consumidor, puedes acudir a los tribunales del lugar donde vives."
+        }
+      ]
+    },
+    {
+      "id": "changes",
+      "heading": "Cambios en estas condiciones",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Si cambiamos estas condiciones, lo avisaremos en la app. Antes de seguir, la app te pedirá que aceptes la nueva versión."
+        }
+      ]
+    },
+    {
+      "id": "open-source",
+      "heading": "El programa",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} funciona con Luna Shopper, un programa de código abierto que se distribuye con su propia licencia."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Estas condiciones se aplican a esta copia del servicio, {{appName}}, no al código del programa."
+        }
+      ]
+    }
+  ]
+}

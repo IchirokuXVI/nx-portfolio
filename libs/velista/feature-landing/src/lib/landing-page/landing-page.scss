@@ -63,3 +63,13 @@
   line-height: var(--app-leading-body);
   color: var(--app-text-secondary);
 }
+
+// The legal links and the version on one line (velista 0172), centred like the version
+// was alone. It wraps onto two only where the language makes the line too long.
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  column-gap: var(--app-space-5);
+}
