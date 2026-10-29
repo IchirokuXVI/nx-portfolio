@@ -25,7 +25,7 @@ jobs:
       images: ${{ steps.list.outputs.images }}
     steps:
       - name: Checkout the unit registry
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: List the images
         id: list
@@ -43,7 +43,7 @@ jobs:
         image: ${{ fromJSON(needs.images.outputs.images) }}
     steps:
       - name: Scan
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ matrix.image }}:staging
           format: sarif
@@ -54,7 +54,7 @@ jobs:
 
       # One category per image, or each upload replaces the one before it.
       - name: Upload to code scanning
-        uses: github/codeql-action/upload-sarif@v4
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           sarif_file: trivy.sarif
           category: ${{ matrix.image }}:staging

@@ -71,7 +71,7 @@ jobs:
           echo "### Debian snapshot \`$snap\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout the unit registry
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       # Every host of every unit, from k8s/units (k8s plan 0016 D7), so a new
       # unit needs no edit here.
