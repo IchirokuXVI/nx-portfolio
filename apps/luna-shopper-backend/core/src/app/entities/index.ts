@@ -1,3 +1,8 @@
+import {
+  AssistantReservation,
+  AssistantUsageDay,
+  AssistantUsageDeploymentDay,
+} from './assistant-usage.entity';
 import { BasketChangeCursor } from './basket-change-cursor.entity';
 import { BasketLineSkip } from './basket-line-skip.entity';
 import { BasketSource } from './basket-source.entity';
@@ -26,6 +31,11 @@ import { UserAppState } from './user-app-state.entity';
 import { ZoneMembership } from './zone-membership.entity';
 import { Zone } from './zone.entity';
 
+export {
+  AssistantReservation,
+  AssistantUsageDay,
+  AssistantUsageDeploymentDay,
+} from './assistant-usage.entity';
 export { BaseEntity } from './base.entity';
 export { BasketChangeCursor } from './basket-change-cursor.entity';
 export { BasketLineSkip } from './basket-line-skip.entity';
@@ -112,6 +122,11 @@ export const CORE_ENTITIES = [
   // nothing references it: the account lives in auth's database and is named
   // here by the opaque `userId` that is also this table's primary key.
   UserAppState,
+  // Each person's assistant allowance (plan 0234). They reference nothing and
+  // nothing references them: the person is the opaque `userId`, as above.
+  AssistantUsageDay,
+  AssistantUsageDeploymentDay,
+  AssistantReservation,
   // The audit trail (plan 0077, section 8). Last, because it references
   // nothing and nothing references it: the actor lives in auth's database and
   // the row it describes is named by table and id rather than by a foreign key.

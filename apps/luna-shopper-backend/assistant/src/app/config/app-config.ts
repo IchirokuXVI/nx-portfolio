@@ -1,4 +1,5 @@
 import { registerAs } from '@nestjs/config';
+import type { AllowanceLimits } from '@portfolio/luna-shopper/contracts';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
 
@@ -117,6 +118,123 @@ export const DEFAULT_AUDIO_MAX_BYTES = 2 * 1024 * 1024;
  */
 export const DEFAULT_AUDIO_MIME_TYPES =
   'audio/webm,audio/ogg,audio/mp4,audio/wav,audio/mpeg,audio/aac,audio/flac';
+
+/**
+ * Each person's allowance (plan 0234, section 7): the key, its registered
+ * default and its guest default, which is the same key with `_GUEST`
+ * appended. Written once here; the chart, compose and the slot script state
+ * the same numbers.
+ *
+ * The two deployment keys and the turn reserve have no guest form: they are
+ * about the deployment, not about a person.
+ */
+export const ALLOWANCE_LIMIT_KEYS: readonly {
+  key: string;
+  field: keyof AllowanceLimits;
+  registered: number;
+  guest: number | null;
+}[] = [
+  {
+    key: 'ASSISTANT_TURNS_PER_DAY',
+    field: 'turnsPerDay',
+    registered: 60,
+    guest: 20,
+  },
+  {
+    key: 'ASSISTANT_TURNS_PER_MONTH',
+    field: 'turnsPerMonth',
+    registered: 600,
+    guest: 100,
+  },
+  {
+    key: 'ASSISTANT_AUDIO_SECONDS_PER_DAY',
+    field: 'assistantAudioSecondsPerDay',
+    registered: 900,
+    guest: 300,
+  },
+  {
+    key: 'ASSISTANT_AUDIO_SECONDS_PER_MONTH',
+    field: 'assistantAudioSecondsPerMonth',
+    registered: 9000,
+    guest: 1500,
+  },
+  {
+    key: 'COMMENT_AUDIO_SECONDS_PER_DAY',
+    field: 'commentAudioSecondsPerDay',
+    registered: 1800,
+    guest: 600,
+  },
+  {
+    key: 'COMMENT_AUDIO_SECONDS_PER_MONTH',
+    field: 'commentAudioSecondsPerMonth',
+    registered: 18000,
+    guest: 3000,
+  },
+  {
+    key: 'ASSISTANT_COST_PER_DAY_MICRO_USD',
+    field: 'costPerDayMicroUsd',
+    registered: 100_000,
+    guest: 40_000,
+  },
+  {
+    key: 'ASSISTANT_COST_PER_MONTH_MICRO_USD',
+    field: 'costPerMonthMicroUsd',
+    registered: 1_000_000,
+    guest: 200_000,
+  },
+  {
+    key: 'ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD',
+    field: 'deploymentCostPerDayMicroUsd',
+    registered: 3_000_000,
+    guest: null,
+  },
+  {
+    key: 'ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD',
+    field: 'deploymentCostPerMonthMicroUsd',
+    registered: 30_000_000,
+    guest: null,
+  },
+];
+
+/** What a turn reserves before its first provider call (section 5.2). */
+export const DEFAULT_TURN_RESERVE_MICRO_USD = 20_000;
+
+/** Where the day and the month turn over (section 7). An IANA name. */
+export const DEFAULT_ALLOWANCE_TIMEZONE = 'UTC';
+
+/** True when `timezone` is an IANA name this runtime knows (section 11). */
+export function isTimeZone(timezone: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function allowanceValidationSchema(): Record<string, Joi.Schema> {
+  const keys: Record<string, Joi.Schema> = {
+    ASSISTANT_TURN_RESERVE_MICRO_USD: Joi.number()
+      .integer()
+      .min(1)
+      .default(DEFAULT_TURN_RESERVE_MICRO_USD),
+    ASSISTANT_ALLOWANCE_TIMEZONE: Joi.string()
+      .custom((value: string, helpers) =>
+        isTimeZone(value) ? value : helpers.error('any.invalid')
+      )
+      .default(DEFAULT_ALLOWANCE_TIMEZONE),
+  };
+  for (const entry of ALLOWANCE_LIMIT_KEYS) {
+    keys[entry.key] = Joi.number().integer().min(1).default(entry.registered);
+    if (entry.guest !== null) {
+      keys[`${entry.key}_GUEST`] = Joi.number()
+        .integer()
+        .min(1)
+        .default(entry.guest);
+    }
+  }
+  return keys;
+}
 
 export const assistantValidationSchema = Joi.object({
   PORT: Joi.number().port().default(3006),
@@ -251,8 +369,59 @@ export const assistantValidationSchema = Joi.object({
    */
   ASSISTANT_TURN_TIMEOUT_MS: Joi.number().integer().min(5000).default(60000),
 
+  /**
+   * Each person's allowance (plan 0234, section 7): positive integers, no
+   * "off". A self hoster who wants no practical limit sets a large number.
+   * Core receives none of them; each reserve carries the limits that apply.
+   */
+  ...allowanceValidationSchema(),
+
   ...telemetryValidationSchema,
 });
+
+/** The allowance, resolved from the keys of {@link ALLOWANCE_LIMIT_KEYS}. */
+export interface AllowanceConfig {
+  registered: AllowanceLimits;
+  /** The limits of a `TEMPORARY` person, a guest. */
+  guest: AllowanceLimits;
+  /** Integer micro dollars a turn reserves (section 5.2). */
+  turnReserveMicroUsd: number;
+  /** An IANA name. The day and the month turn over at midnight there. */
+  timezone: string;
+}
+
+/**
+ * The allowance from an environment. Exported for its spec; an absent key is
+ * its default, as Joi has already filled in at boot.
+ */
+export function resolveAllowance(
+  env: Record<string, string | undefined>
+): AllowanceConfig {
+  const registered = {} as AllowanceLimits;
+  const guest = {} as AllowanceLimits;
+  for (const entry of ALLOWANCE_LIMIT_KEYS) {
+    const value = Number(env[entry.key] ?? entry.registered);
+    registered[entry.field] = value;
+    guest[entry.field] =
+      entry.guest === null
+        ? value
+        : Number(env[`${entry.key}_GUEST`] ?? entry.guest);
+  }
+  return {
+    registered,
+    guest,
+    turnReserveMicroUsd: Number(
+      env['ASSISTANT_TURN_RESERVE_MICRO_USD'] ?? DEFAULT_TURN_RESERVE_MICRO_USD
+    ),
+    timezone: trimmed(
+      env['ASSISTANT_ALLOWANCE_TIMEZONE'],
+      DEFAULT_ALLOWANCE_TIMEZONE
+    ),
+  };
+}
+
+/** The shipped defaults, for specs that build a config by hand. */
+export const DEFAULT_ALLOWANCE: AllowanceConfig = resolveAllowance({});
 
 export interface AssistantConfig {
   port: number;
@@ -288,6 +457,8 @@ export interface AssistantConfig {
   providerTimeoutMs: number;
   /** The ceiling on one whole turn, after which the loop stops rather than doing more. */
   turnTimeoutMs: number;
+  /** Each person's allowance (plan 0234). */
+  allowance: AllowanceConfig;
 }
 
 function trimmed(raw: string | undefined, fallback: string): string {
@@ -406,6 +577,7 @@ export const assistantConfiguration = registerAs(
         process.env.ASSISTANT_PROVIDER_TIMEOUT_MS ?? 30000
       ),
       turnTimeoutMs: Number(process.env.ASSISTANT_TURN_TIMEOUT_MS ?? 60000),
+      allowance: resolveAllowance(process.env),
     };
   }
 );

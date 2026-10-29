@@ -2,8 +2,18 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   AiTextProvider,
+  AllowanceLimit,
+  AllowancePeriod,
+  AllowancePurpose,
+  AllowanceReserveOutcome,
+  AllowanceScope,
   AssistantRole,
   ListResolutionBranch,
+  UserKind,
+  type AllowanceLimits,
+  type AllowanceRefusal,
+  type AssistantAllowanceRequest,
+  type AssistantAllowanceView,
   type AssistantCapabilities,
   type AssistantMessage,
   type AssistantTranscribeRequest,
@@ -13,6 +23,7 @@ import {
   type AssistantVoiceRequest,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  AllowanceReachedException,
   DEFAULT_LOCALE,
   ForbiddenException,
   getRequestContext,
@@ -22,6 +33,12 @@ import {
   ValidationException,
   type SupportedLocale,
 } from '@portfolio/luna-shopper/platform';
+import {
+  AllowanceClient,
+  AllowanceUnavailableError,
+} from '../allowance/allowance.client';
+import { worstTurn, type WorstTurn } from '../allowance/reserve-amount';
+import { TurnMeter } from '../allowance/turn-meter';
 import { normalizeMimeType, type AssistantConfig } from '../config/app-config';
 import {
   MODEL_PROVIDER,
@@ -116,22 +133,69 @@ export const ANSWERED_WITHOUT_WORDS =
 export const GOT_STUCK =
   'Sorry, I got stuck on that one. Could you say it a different way?';
 
+/**
+ * How long a person waits when a turn of theirs is already in flight (plan
+ * 0234, section 5.1). A person has one conversation, so the answer is the
+ * ordinary `rate_limited`, because waiting does fix it.
+ */
+export const TURN_IN_FLIGHT_RETRY_SECONDS = 5;
+
+/**
+ * The length of a recording, estimated from its bytes as the length at 16
+ * kbit/s, rounded up (plan 0234, section 2.1). A browser records Opus at a
+ * higher rate than that, so the estimate counts more seconds than were spoken,
+ * which is the safe direction. Every reservation uses it, because it runs
+ * before anything is decoded; a settle uses the transcriber's own measure.
+ */
+export function estimateAudioSeconds(bytes: number): number {
+  return Math.ceil(bytes / 2000);
+}
+
+/** A reservation the assistant holds while it runs a call sequence. */
+interface Held {
+  id: string;
+  userId: string;
+  purpose: AllowancePurpose;
+  microUsd: number;
+}
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
   private readonly config: AssistantConfig;
   private readonly limiter: TurnLimiter;
   private readonly gate: ConcurrencyGate;
+  /** The worst case of one turn, call by call (plan 0234, section 5.2). */
+  private readonly worst: WorstTurn;
 
   constructor(
     @Inject(ConfigService) configService: ConfigService,
     @Inject(MODEL_PROVIDER) private readonly provider: ModelProvider,
     private readonly contexts: TurnContextFactory,
-    private readonly api: GatewayApiClient
+    private readonly api: GatewayApiClient,
+    // Each person's allowance, kept in core (plan 0234).
+    private readonly allowance: AllowanceClient
   ) {
     this.config = configService.getOrThrow<AssistantConfig>('assistant');
     this.limiter = new TurnLimiter(this.config.turnsPerMinute);
     this.gate = new ConcurrencyGate(this.config.concurrency);
+    this.worst = worstTurn(this.config);
+  }
+
+  /**
+   * The caller's allowance (plan 0234, section 8.2), with the limits that
+   * apply to them and core's counts. It needs no provider key: a deployment
+   * with no key still has an allowance to show.
+   */
+  allowanceOf(
+    request: AssistantAllowanceRequest
+  ): Promise<AssistantAllowanceView> {
+    return this.allowance.read({
+      userId: request.userId,
+      limits: this.limitsFor(request.kind),
+      timezone: this.config.allowance.timezone,
+      turnReserveMicroUsd: this.config.allowance.turnReserveMicroUsd,
+    });
   }
 
   /**
@@ -182,21 +246,55 @@ export class AssistantService {
       );
     }
 
+    // The allowance fails closed (plan 0234, section 6): a recording with no
+    // author to count it against is refused, which the gateway settles FAILED
+    // and the comment stays playable.
+    if (!request.userId) {
+      throw new ValidationException(
+        'a transcription needs the userId of the comment author'
+      );
+    }
+
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    const audio = Buffer.from(request.audio, 'base64');
+    // Optional on the wire, so a gateway one release behind still works: it
+    // never sent a purpose and its only caller was a voice comment's, which
+    // a turn's model transcribes well enough until it catches up.
+    const purpose = request.purpose ?? 'turn';
+
+    // A voice comment's seconds, counted on its author (plan 0234, section
+    // 5.5). A transcription costs no money since plan 0235.
+    const estimate = estimateAudioSeconds(audio.byteLength);
+    const held = await this.reserve({
+      userId: request.userId,
+      kind: request.kind,
+      purpose: AllowancePurpose.TRANSCRIPTION,
+      audioSeconds: estimate,
+      microUsd: 0,
+      holdSeconds:
+        Math.ceil(
+          (purpose === 'comment'
+            ? this.config.transcriberCommentTimeoutMs
+            : this.config.transcriberTurnTimeoutMs) / 1000
+        ) + 60,
+    });
+    // The estimate until the transcriber measures the recording: a call that
+    // failed may still have used the transcriber's time.
+    let audioSeconds = estimate;
 
     try {
       const heard = await this.provider.transcribe({
-        audio: Buffer.from(request.audio, 'base64'),
+        audio,
         mimeType: request.mimeType,
         locale: request.locale || locale,
-        // Optional on the wire, so a gateway one release behind still works: it
-        // never sent a purpose and its only caller was a voice comment's, which
-        // a turn's model transcribes well enough until it catches up.
-        purpose: request.purpose ?? 'turn',
+        purpose,
       });
+      audioSeconds = Math.ceil(heard.audioSeconds);
       return { text: heard.text.trim() };
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
+        // A full queue refused the clip before it ran.
+        audioSeconds = 0;
         // Rule A5's answer, unchanged: a number of seconds in the problem body.
         // The caller of a voice comment does not count it down (the comment is
         // already saved and playable), but a spoken assistant turn does, and the
@@ -211,6 +309,8 @@ export class AssistantService {
         this.logger.warn(`assistant provider unavailable: ${error.message}`);
       }
       throw error;
+    } finally {
+      await this.settle(held, { turns: 0, audioSeconds }, new TurnMeter());
     }
   }
 
@@ -225,7 +325,26 @@ export class AssistantService {
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
     this.takeTurn(request.userId);
 
-    return this.answer(request, locale, startedAtMs);
+    // The allowance, before the first provider call (plan 0234, section 5.5),
+    // and settled in a `finally` around the whole call sequence.
+    const held = await this.reserve({
+      userId: request.userId,
+      kind: request.kind,
+      purpose: AllowancePurpose.TURN,
+      audioSeconds: 0,
+      microUsd: this.config.allowance.turnReserveMicroUsd,
+      holdSeconds: this.turnHoldSeconds(),
+    });
+    const meter = new TurnMeter();
+    try {
+      return await this.answer(request, locale, startedAtMs, meter);
+    } finally {
+      await this.settle(
+        held,
+        { turns: meter.billed ? 1 : 0, audioSeconds: 0 },
+        meter
+      );
+    }
   }
 
   /**
@@ -264,19 +383,72 @@ export class AssistantService {
 
     this.takeTurn(request.userId);
 
+    // One turn and the recording's seconds, held before the transcription
+    // (plan 0234, section 5.5). The estimate stands until the transcriber
+    // measures the recording.
+    const estimate = estimateAudioSeconds(audio.byteLength);
+    const held = await this.reserve({
+      userId: request.userId,
+      kind: request.kind,
+      purpose: AllowancePurpose.VOICE_TURN,
+      audioSeconds: estimate,
+      microUsd: this.config.allowance.turnReserveMicroUsd,
+      holdSeconds: this.turnHoldSeconds(),
+    });
+    const meter = new TurnMeter();
+    const spent = { audioSeconds: estimate };
+    try {
+      return await this.spoken(
+        request,
+        locale,
+        startedAtMs,
+        audio,
+        meter,
+        spent
+      );
+    } finally {
+      await this.settle(
+        held,
+        { turns: meter.billed ? 1 : 0, audioSeconds: spent.audioSeconds },
+        meter
+      );
+    }
+  }
+
+  /** The spoken turn once it holds its reservation: transcribe, then answer. */
+  private async spoken(
+    request: AssistantVoiceRequest,
+    locale: SupportedLocale,
+    startedAtMs: number,
+    audio: Uint8Array,
+    meter: TurnMeter,
+    spent: { audioSeconds: number }
+  ): Promise<AssistantTurnResponse> {
     const heardAtMs = Date.now();
-    const { text: heard } = await this.viaProvider(
-      () =>
-        this.provider.transcribe({
-          audio,
-          mimeType: request.mimeType,
-          locale,
-          purpose: 'turn',
-        }),
-      request.userId,
-      // The transcriber queues on its own side (plan 0235, section 4).
-      { gated: false }
-    );
+    let heard: string;
+    try {
+      const transcription = await this.viaProvider(
+        () =>
+          this.provider.transcribe({
+            audio,
+            mimeType: request.mimeType,
+            locale,
+            purpose: 'turn',
+          }),
+        request.userId,
+        // The transcriber queues on its own side (plan 0235, section 4).
+        { gated: false }
+      );
+      heard = transcription.text;
+      spent.audioSeconds = Math.ceil(transcription.audioSeconds);
+    } catch (error) {
+      // A full queue refused the clip before it ran. Anything else keeps the
+      // estimate, since the transcriber may have spent its time on it.
+      if (isRateLimited(error)) {
+        spent.audioSeconds = 0;
+      }
+      throw error;
+    }
     const transcriptionMs = Date.now() - heardAtMs;
 
     // Nothing recognisable in the recording. Saying so is the whole answer, and
@@ -320,6 +492,7 @@ export class AssistantService {
       },
       locale,
       startedAtMs,
+      meter,
       transcriptionMs
     );
 
@@ -340,6 +513,8 @@ export class AssistantService {
     request: AssistantTurnRequest,
     locale: SupportedLocale,
     startedAtMs: number,
+    /** What the turn spends, for the settle (plan 0234, section 5.3). */
+    meter: TurnMeter,
     providerMsBefore = 0
   ): Promise<AssistantTurnResponse> {
     // The transcript is client supplied and therefore untrusted (rule A2). It is
@@ -501,7 +676,8 @@ export class AssistantService {
       const askedAtMs = Date.now();
       const reply = await this.ask(
         { system, turns, tools, locale },
-        request.userId
+        request.userId,
+        meter
       );
       providerMs += Date.now() - askedAtMs;
       usage = reply.usage ?? usage;
@@ -543,7 +719,7 @@ export class AssistantService {
         // section 4). The service's own sentences are not: they are plain by
         // construction, as `plainText` already treats them.
         const checked = reply.text
-          ? await this.moderate(request.message, text, locale, toolsRan)
+          ? await this.moderate(request.message, text, locale, toolsRan, meter)
           : { verdict: 'skipped' as const, ms: 0 };
         const shown = checked.replacement ?? text;
 
@@ -684,7 +860,8 @@ export class AssistantService {
     said: string,
     replied: string,
     locale: SupportedLocale,
-    toolsRan: boolean
+    toolsRan: boolean,
+    meter: TurnMeter
   ): Promise<{
     verdict: ModerationVerdict;
     ms: number;
@@ -704,6 +881,15 @@ export class AssistantService {
       locale,
     });
     const ms = Date.now() - startedAtMs;
+
+    // The check is a provider call and is counted inside the turn (plan 0234,
+    // section 12). A check that threw reports no usage, and may still have
+    // been billed, so it is charged its own worst case.
+    if (usage === undefined) {
+      meter.addWorstCase(this.worst.moderationMicroUsd);
+    } else {
+      meter.add(this.config.moderationModel, usage);
+    }
 
     if (verdict === 'ok') {
       return { verdict, ms, usage };
@@ -829,12 +1015,209 @@ export class AssistantService {
     );
   }
 
-  /** The provider call, behind the concurrency gate, with 429 mapped to rule A5. */
+  /**
+   * The provider call, behind the concurrency gate, with 429 mapped to rule A5,
+   * and its usage on the meter (plan 0234, section 5.5). A call that failed
+   * with a cause (a deadline, a dropped connection) may have run at the
+   * provider, so it is charged one call's worst case; a status the provider
+   * answered, a 429 included, was not billed.
+   */
   private async ask(
     request: Parameters<ModelProvider['generate']>[0],
-    userId: string
+    userId: string,
+    meter: TurnMeter
   ) {
-    return this.viaProvider(() => this.provider.generate(request), userId);
+    try {
+      const reply = await this.viaProvider(
+        () => this.provider.generate(request),
+        userId
+      );
+      meter.add(this.config.model, reply.usage);
+      return reply;
+    } catch (error) {
+      if (
+        error instanceof ProviderUnavailableError &&
+        (error as { cause?: unknown }).cause !== undefined
+      ) {
+        meter.addWorstCase(this.worst.perCallMicroUsd);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * How long a turn's reservation holds before it expires (plan 0234, section
+   * 5.4): the turn's own deadline plus a minute.
+   */
+  private turnHoldSeconds(): number {
+    return Math.ceil(this.config.turnTimeoutMs / 1000) + 60;
+  }
+
+  /**
+   * The limits of a person: a guest's for `TEMPORARY`, and for a request that
+   * names no kind, which only a gateway one release behind sends. Counting a
+   * registered person as a guest is the strict error.
+   */
+  private limitsFor(kind: UserKind | undefined): AllowanceLimits {
+    return kind === UserKind.REGISTERED
+      ? this.config.allowance.registered
+      : this.config.allowance.guest;
+  }
+
+  /**
+   * Holds the worst case in core before any provider call (plan 0234, section
+   * 5.1), or refuses: the allowance code when a limit does not fit, the
+   * ordinary `rate_limited` when a turn of this person is already in flight,
+   * and an error when core does not answer within two seconds, because the
+   * allowance fails closed.
+   */
+  private async reserve(input: {
+    userId: string;
+    kind: UserKind | undefined;
+    purpose: AllowancePurpose;
+    audioSeconds: number;
+    microUsd: number;
+    holdSeconds: number;
+  }): Promise<Held> {
+    let answer;
+    try {
+      answer = await this.allowance.reserve({
+        userId: input.userId,
+        purpose: input.purpose,
+        audioSeconds: input.audioSeconds,
+        microUsd: input.microUsd,
+        limits: this.limitsFor(input.kind),
+        timezone: this.config.allowance.timezone,
+        holdSeconds: input.holdSeconds,
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'assistant.allowance.unavailable',
+          userId: input.userId,
+          purpose: input.purpose,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      );
+      throw error instanceof AllowanceUnavailableError
+        ? error
+        : new AllowanceUnavailableError('the allowance could not be reserved', {
+            cause: error,
+          });
+    }
+
+    if (answer.outcome === AllowanceReserveOutcome.TURN_IN_FLIGHT) {
+      throw this.rateLimited(
+        TURN_IN_FLIGHT_RETRY_SECONDS,
+        input.userId,
+        'inFlight'
+      );
+    }
+    if (
+      answer.outcome !== AllowanceReserveOutcome.RESERVED ||
+      !answer.reservationId
+    ) {
+      throw this.allowanceReached(input.userId, input.purpose, answer.refused);
+    }
+    return {
+      id: answer.reservationId,
+      userId: input.userId,
+      purpose: input.purpose,
+      microUsd: input.microUsd,
+    };
+  }
+
+  /**
+   * Releases a reservation and counts what happened (plan 0234, section 5.3).
+   * Never throws: it runs in a `finally`, and a settle that failed must not
+   * replace the answer the person was about to get. The reservation then
+   * expires and charges nothing, and this line is how that gap is counted.
+   */
+  private async settle(
+    held: Held,
+    counted: { turns: number; audioSeconds: number },
+    meter: TurnMeter
+  ): Promise<void> {
+    const microUsd = meter.microUsd(held.microUsd);
+    try {
+      await this.allowance.settle({
+        reservationId: held.id,
+        userId: held.userId,
+        purpose: held.purpose,
+        timezone: this.config.allowance.timezone,
+        turns: counted.turns,
+        audioSeconds: counted.audioSeconds,
+        microUsd,
+        ...meter.tokens(),
+      });
+    } catch (error) {
+      this.logger.error(
+        JSON.stringify({
+          event: 'assistant.allowance.settleFailed',
+          userId: held.userId,
+          purpose: held.purpose,
+          microUsd,
+          reason: error instanceof Error ? error.message : String(error),
+        })
+      );
+    }
+  }
+
+  /**
+   * The allowance code (plan 0234, section 8.1), with `scope`, `period`,
+   * `limit` and `resetsAt` in its details and the time it is back in the
+   * person's language. A deployment that reached its own ceiling is logged as
+   * `assistant.allowance.deploymentReached`, which is how the owner learns of
+   * it.
+   */
+  private allowanceReached(
+    userId: string,
+    purpose: AllowancePurpose,
+    refused: AllowanceRefusal | null
+  ): AllowanceReachedException {
+    const refusal: AllowanceRefusal = refused ?? {
+      // Core said neither yes nor why. Not a state core answers, and still a
+      // refusal: the allowance fails closed.
+      scope: AllowanceScope.USER,
+      period: AllowancePeriod.DAY,
+      limit:
+        purpose === AllowancePurpose.TRANSCRIPTION
+          ? AllowanceLimit.COMMENT_AUDIO
+          : AllowanceLimit.TURNS,
+      resetsAt: new Date().toISOString(),
+    };
+    this.logger.log(
+      JSON.stringify({
+        event:
+          refusal.scope === AllowanceScope.DEPLOYMENT
+            ? 'assistant.allowance.deploymentReached'
+            : 'assistant.allowance.refused',
+        userId,
+        purpose,
+        ...refusal,
+      })
+    );
+    const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
+    return new AllowanceReachedException(
+      `the assistant allowance is reached: ${refusal.scope} ${refusal.limit} per ${refusal.period}`,
+      {
+        details: {
+          scope: refusal.scope,
+          period: refusal.period,
+          limit: refusal.limit,
+          resetsAt: refusal.resetsAt,
+        },
+        messageArgs: {
+          variant: `${refusal.scope}.${refusal.period}`,
+          time: backAt(
+            refusal.resetsAt,
+            refusal.period,
+            locale,
+            this.config.allowance.timezone
+          ),
+        },
+      }
+    );
   }
 
   /**
@@ -888,7 +1271,7 @@ export class AssistantService {
   private rateLimited(
     retryAfterSeconds: number,
     userId: string,
-    source: 'local' | 'provider'
+    source: 'local' | 'provider' | 'inFlight'
   ): RateLimitedException {
     this.logger.log(
       JSON.stringify({
@@ -1090,6 +1473,40 @@ export function capTranscript(
   }
 
   return kept;
+}
+
+/** Whether an error is the rate limit of rule A5, before or after mapping. */
+function isRateLimited(error: unknown): boolean {
+  return (
+    error instanceof ProviderRateLimitedError ||
+    error instanceof RateLimitedException
+  );
+}
+
+/**
+ * When the assistant is back, in the person's language and the allowance
+ * timezone (plan 0234, section 8.1): a time of day when a day turns over, a
+ * date when a month does.
+ */
+export function backAt(
+  resetsAt: string,
+  period: AllowancePeriod,
+  locale: SupportedLocale,
+  timezone: string
+): string {
+  const instant = new Date(resetsAt);
+  return period === AllowancePeriod.MONTH
+    ? new Intl.DateTimeFormat(locale, {
+        timeZone: timezone,
+        day: 'numeric',
+        month: 'long',
+      }).format(instant)
+    : new Intl.DateTimeFormat(locale, {
+        timeZone: timezone,
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      }).format(instant);
 }
 
 function toModelTurn(message: AssistantMessage): ModelTurn {

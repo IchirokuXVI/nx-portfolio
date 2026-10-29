@@ -1,6 +1,7 @@
 import type { ConfigService } from '@nestjs/config';
 import { AiTextProvider } from '@portfolio/luna-shopper/contracts';
 import {
+  DEFAULT_ALLOWANCE,
   DEFAULT_CLAUDE_MODEL,
   DEFAULT_MODERATION_MODEL,
   type AssistantConfig,
@@ -46,6 +47,7 @@ const BASE: AssistantConfig = {
   retryAfterFallbackSeconds: 30,
   providerTimeoutMs: 30000,
   turnTimeoutMs: 60000,
+  allowance: DEFAULT_ALLOWANCE,
 };
 
 const TRANSCRIBER = 'http://luna-shopper-backend-transcriber:3007';
@@ -62,6 +64,7 @@ function capabilitiesOf(overrides: Partial<AssistantConfig>) {
   return new AssistantService(
     configService,
     buildModelProvider(configService),
+    {} as never,
     {} as never,
     {} as never
   ).capabilities();

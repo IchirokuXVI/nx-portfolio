@@ -2,6 +2,8 @@ import { Controller } from '@nestjs/common';
 import { MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ASSISTANT_PATTERNS,
+  type AssistantAllowanceRequest,
+  type AssistantAllowanceView,
   type AssistantCapabilities,
   type AssistantTranscribeRequest,
   type AssistantTranscribeResponse,
@@ -55,6 +57,14 @@ export class AssistantController {
   @MessagePattern(ASSISTANT_PATTERNS.capabilities)
   capabilities(): AssistantCapabilities {
     return this.assistant.capabilities();
+  }
+
+  /** The caller's own allowance (plan 0234, section 8.2). */
+  @MessagePattern(ASSISTANT_PATTERNS.allowance)
+  allowance(
+    @Payload() request: AssistantAllowanceRequest
+  ): Promise<AssistantAllowanceView> {
+    return this.assistant.allowanceOf(request);
   }
 
   @MessagePattern(ASSISTANT_PATTERNS.transcribe)

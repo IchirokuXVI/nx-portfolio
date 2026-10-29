@@ -205,8 +205,8 @@ section 2.3. A model that has no row is priced at the most expensive row in the 
 the boot log names it. A reply whose `usage` is `null` is charged its reservation in
 full.
 
-A transcription call to Gemini (until `0236` removes it) is priced from the same row by
-its tokens. A transcription by the self hosted transcriber (`0235`) costs zero.
+A transcription by the self hosted transcriber (`0235`) costs zero. Gemini is gone
+(`0236`), so no transcription is priced by tokens (section 15, item 3).
 
 ## 3. Where the counters live
 
@@ -284,8 +284,10 @@ person and are the operator's record of the bill. Neither is in a backup longer 
 
 ### 5.1 Reserve
 
-`assistantAllowance.reserve` takes `{ userId, kind: 'REGISTERED' | 'TEMPORARY', purpose:
-'TURN' | 'VOICE_TURN' | 'TRANSCRIPTION', audioSeconds, microUsd }`. In one transaction:
+`assistantAllowance.reserve` takes `{ userId, purpose: 'TURN' | 'VOICE_TURN' |
+'TRANSCRIPTION', audioSeconds, microUsd, limits, timezone, holdSeconds }`: the assistant
+picks the limits by the person's kind and sends them, so core never sees the kind
+(section 15, item 6). In one transaction:
 
 1. Upsert today's person row and today's deployment row, then lock both with
    `SELECT ... FOR UPDATE`, person first, always in that order.
@@ -315,14 +317,15 @@ not be.
 | Purpose | Turns | Audio seconds | Micro dollars |
 | --- | --- | --- | --- |
 | `TURN` | 1 | 0 | `ASSISTANT_TURN_RESERVE_MICRO_USD` |
-| `VOICE_TURN` | 1 | the estimate of section 2.1 | the same, plus a Gemini transcription's worst case while Gemini hears |
-| `TRANSCRIPTION` (a voice comment) | 0 | the estimate of section 2.1 | zero after `0235`; a Gemini transcription's worst case before |
+| `VOICE_TURN` | 1 | the estimate of section 2.1 | the same: the transcriber is ours and costs no money (`0235`) |
+| `TRANSCRIPTION` (a voice comment) | 0 | the estimate of section 2.1 | zero (`0235`) |
 
 `ASSISTANT_TURN_RESERVE_MICRO_USD` defaults to 20,000 ($0.02). The worst turn is seven
 model calls (one plus `ASSISTANT_MAX_TOOL_CALLS` of 6, `app-config.ts:212`), each at most
 4,096 output tokens and about 6,400 input tokens (`0224` section 10). At the Haiku row that
 is about $0.019. The builder recomputes this from the price table and the caps in a spec,
-so a cap or a price that moves fails a test instead of drifting.
+so a cap or a price that moves fails a test instead of drifting. With the moderation call
+of `0236` the worst turn is 19,637 micro dollars (section 15, item 2).
 
 ### 5.3 Settle
 
@@ -357,8 +360,9 @@ of at most one reservation per killed turn, logged by the sweep.
 - The usage of each provider reply is added up across the loop; the record already sees
   each reply (`:449`).
 
-If core does not answer within 2 seconds, the turn is refused with `unavailable` and no
-provider call is made. The allowance fails closed: an assistant that answers while its
+If core does not answer within 2 seconds, the turn is refused and no provider call is
+made. No `unavailable` code exists, so the refusal is the ordinary `internal` 500
+(section 15, item 9). The allowance fails closed: an assistant that answers while its
 counter is down is exactly the hole this plan closes.
 
 ## 6. The gateway
@@ -371,8 +375,10 @@ counter is down is exactly the hole this plan closes.
   `FAILED` on the first attempt, with no retry, and the comment stays playable. The log
   line names the reason. The upload itself is not refused: the recording is the message,
   and the allowance limits the transcription, not speech.
-- `GET /v1/assistant/allowance` (section 8.2) sends `assistantAllowance.read` to core and
-  needs no assistant at all.
+- `GET /v1/assistant/allowance` (section 8.2) asks the assistant (`assistant.allowance`),
+  which sends `assistantAllowance.read` to core with the limits that apply. It needs no
+  provider key. The plan said it needs no assistant at all, but core holds no limits, and
+  the assistant is their one owner (section 15, item 7).
 
 ## 7. Limits and defaults
 
@@ -451,8 +457,10 @@ the person's.
 
 Money is not in the read. A person has no use for micro dollars, and the operator's
 prices are not theirs to see. When the person's cost limit binds before their turn limit,
-the turn limit in the read is lowered to what the cost allows at the reserve amount, so
-the number shown is the number that stops them.
+the turn limit in the read is lowered to the turns already used, so the number shown is
+the number that stops them. Money binds when the next turn's reserve no longer fits; the
+build does not count turns forward at the reserve amount, because a turn reserves about
+fifty times what it costs (section 15, item 8).
 
 ### 8.3 Velista
 
@@ -556,3 +564,107 @@ fits ten: exactly ten succeed. The month sum across a month boundary in
 5. Limits sent by the assistant in each request, so core holds counts and no settings.
 6. The read hides money and lowers the turn number to what money allows.
 7. The audio estimate of 16 kbit/s before `0235`.
+
+## 15. What the build decided
+
+The builder's choices where the plan left room, and the computations it asked for. Each
+choice is the owner's to change. The branch already had `0232`, `0235` and `0236`, so the
+build took section 12's second half of each: the transcriber's measured seconds, no Gemini,
+and the moderation call counted inside the turn.
+
+1. **House column names.** Core quotes camelCase columns (`"userId"`, `"costMicroUsd"`), so
+   the three tables do too, with snake case table names as section 4 wrote them. Three
+   departures from the sketch: the reserved audio is two columns,
+   `reservedAssistantAudioSeconds` and `reservedCommentAudioSeconds`, because a check of
+   comment audio must not count a spoken turn in flight; the reservation's purpose is
+   `purpose` (with a check constraint), because `kind` already means `UserKind`; and a
+   reservation has `createdAt`. Indexes: the day of the usage rows (retention), and the
+   reservations' `expiresAt` and `userId`. Migration `1756004000000-AssistantAllowance`.
+2. **The worst turn, on today's caps and prices.** Seven calls at the Haiku row, each 6,400
+   input tokens priced as fresh and 4,096 output tokens: 640 + 2,048 = 2,688 micro dollars,
+   18,816 for seven. The moderation call reads its prompt (2,030 characters), the longest
+   typed message (2,000 characters, the gateway's cap) and the reply at its ceiling (4,096
+   tokens), each character counted as a token: 8,126 input tokens and 16 output, 821 micro
+   dollars. Total **19,637**, under the 20,000 reserve by 363. `reserve-amount.spec.ts`
+   recomputes it. The 6,400 is `0224`'s measured average and not a cap: a turn with a full
+   transcript and large tool results reads more, and the settle then charges what it cost.
+   The boot log warns when the configured model makes the worst turn exceed the reserve.
+3. **The price table** (`provider/prices.ts`), in integer micro dollars per million tokens,
+   checked on 2026-10-29 against the `claude-api` reference (cached 2026-10-06): Haiku 5.5
+   0.10 in, 0.50 out, 0.01 cache read; Sonnet 5.5 2.00, 10.00 and **0.20** (plan `0226`
+   section 2.3 says 0.10; the price list says 0.20); Opus 5.5 4.00, 20.00, 0.20; Fable 5.1
+   10.00, 50.00, 0.25. Opus and Fable are there so that a model set in `ASSISTANT_MODEL` is
+   priced at its own row, and so the dearest row an unknown model gets is Fable's. Claude's
+   `input_tokens` already excludes cache reads, so the formula's fresh prompt is
+   `promptTokens` itself. Haiku's rate above 100,000 prompt tokens is not modelled: no turn
+   comes near it. **Cache writes are not counted**: `ModelUsage` has no field for
+   `cache_creation_input_tokens`, and the plan keeps the provider classes out of scope. A
+   cold turn's write is about $0.0005; a follow up adds the field to `readUsage`.
+4. **What an unknown spend costs.** A reply with `usage: null` makes the turn cost at least
+   its reservation (section 2.2). A call that failed with a cause (a deadline, a dropped
+   connection) may have run, so it costs one call's worst case, 2,688; a moderation call
+   that threw costs its worst case, 821. A status the provider answered, a 429 included,
+   costs nothing. This keeps a provider outage from spending a whole reservation of every
+   person it touches. A turn counts one turn only when some model call was or may have been
+   billed, so a turn refused by the provider's 429 counts none.
+5. **Audio.** A settle uses the transcriber's `audioSeconds`, rounded up. A clip the
+   transcriber refused with a full queue counts zero seconds; any other failure keeps the
+   estimate. A spoken turn that heard nothing counts its seconds and no turn.
+6. **The limits are chosen in the assistant.** Core receives `limits`, `timezone` and
+   `holdSeconds` with each reserve and never sees the kind; the guest limits are therefore
+   tested in the assistant and in core's rules spec. A request with no `kind`, which only a
+   gateway one release behind sends, gets the guest limits: counting a registered person as
+   a guest is the strict error. A transcription with no `userId` is refused with
+   `validation_failed`, so during a deploy window an older gateway's voice comments settle
+   `FAILED` and stay playable.
+7. **The read goes through the assistant.** `GET /v1/assistant/allowance` asks
+   `assistant.allowance`, and the assistant asks core with the limits. Core holds no limits
+   by design (section 7), so the plan's "needs no assistant at all" could not hold. It needs
+   no provider key. The gateway waits 5 seconds.
+8. **The turn limit in the read** is the configured limit, or the turns already used once the
+   next turn's 20,000 reserve no longer fits the person's cost limit. Counting forward at
+   the reserve amount would show five turns a day to a registered person with sixty.
+9. **Core not answering** is an `AllowanceUnavailableError`, which the filter answers as
+   `internal` 500, logged as `assistant.allowance.unavailable`. There is no `unavailable`
+   code, and adding one is a client contract change this plan did not ask for.
+10. **One code, four sentences.** `assistant_allowance_reached` carries `messageArgs.variant`
+    (`user.day`, `user.month`, `deployment.day`, `deployment.month`) and `messageArgs.time`;
+    `ERROR_CATALOG_VARIANTS` in the platform picks the sentence, and an unknown variant falls
+    back to the code's own sentence, which names no time. The time is formatted in the
+    person's language and the allowance timezone: "00:00" for a day, "November 1" or "1 de
+    noviembre" for a month. The deployment sentences say "resting" and never name money.
+11. **A counter a reservation adds nothing to is not checked**, so a person over their cost
+    limit (a settle never caps a real cost) is not refused a voice comment's transcription,
+    which costs no money.
+12. **Locks and chores.** Every write takes reservation rows first, then the person's day
+    rows in ascending day, then the deployment's. A reserve releases this person's expired
+    reservations of any day (`SKIP LOCKED`). A sweep in core releases anybody's every minute,
+    logged as `assistant.allowance.reservationExpired`, so a killed pod does not leave the
+    deployment's day looking fuller. Once a day per pod it deletes a person's rows from
+    before the first day of the previous month and deployment rows older than thirteen
+    months; core has no timezone, so both cutoffs are a day earlier than the UTC date says.
+    No core key, no switch.
+13. **How long a reservation holds**: a turn and a spoken turn, the turn deadline plus 60 s
+    (120 s); a voice comment's transcription, the transcriber's comment deadline plus 60 s
+    (170 s), because the comment lane may wait 110 s.
+14. **Deletion.** Inside `0232`'s transaction, `deleteAllowanceRowsOf` deletes the person's
+    reservations, takes what they held out of the deployment's days, and deletes the usage
+    rows. Both tables also joined `CORE_USER_IDS_SQL`, so `0232`'s reconcile command and its
+    spec see them. `0232` section 2 names them in its core table.
+15. **The comment's author kind** is the uploader's token kind: the uploader is the author.
+    `list.controller.ts` passes `user.kind` to `schedule`, one line outside the plan's scope
+    list. A refusal on the author's allowance settles `FAILED` on the first attempt with the
+    log line "transcription refused: the author has used their comment audio allowance".
+16. **The chart** holds the defaults once, under `lunaShopperBackend.assistant.allowance`
+    (`registered`, `guest`, the two deployment ceilings, `turnReserveMicroUsd`, `timezone`),
+    and the template uses `required`, so a values file that lost one fails at render.
+    Production sets `assistant.allowance.timezone: Europe/Madrid`, which is section 7's
+    `allowanceTimezone`.
+17. **Core's rules are tested where they are true.** The check order and the guest limits
+    are a pure unit spec (`allowance-rules.spec.ts`); one turn in flight, expiry releasing
+    without charging and a settle on an expired reservation are in the integration spec,
+    because a fake of the SQL would only agree with itself.
+18. **Left out**: the velista message and the remaining turns (section 8.3; velista's
+    `problem.ts` does not know the code yet and shows its generic sentence); an alert on the
+    deployment ceiling (section 13); cache writes (item 3). No default of section 7 was
+    changed.

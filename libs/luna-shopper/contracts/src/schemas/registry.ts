@@ -43,6 +43,10 @@ import {
   appStateSchemas,
 } from './messages/app-state.schemas';
 import {
+  assistantAllowanceMessageContracts,
+  assistantAllowanceSchemas,
+} from './messages/assistant-allowance.schemas';
+import {
   assistantMessageContracts,
   assistantSchemas,
 } from './messages/assistant.schemas';
@@ -119,6 +123,7 @@ export const messageContracts: Record<string, MessageContract> = {
   ...harvestMessageContracts,
   ...statsMessageContracts,
   ...assistantMessageContracts,
+  ...assistantAllowanceMessageContracts,
   ...basketMessageContracts,
   ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
@@ -157,6 +162,7 @@ export const allSchemas: JsonSchema[] = [
   ...harvestSchemas,
   ...statsSchemas,
   ...assistantSchemas,
+  ...assistantAllowanceSchemas,
   ...basketSchemas,
   ...basketSharingSchemas,
   ...basketChangeSchemas,

@@ -170,6 +170,7 @@ invited) are set to null instead.
 |---|---|---|
 | `shopping_profiles` and, by cascade, `profile_postal_codes`, `profile_supermarket_preferences`, `profile_location_preferences`, `profile_generation_sources` | `name`, `addressText`, postal codes and their labels | **Delete** |
 | `user_app_state` | setup and tour times | **Delete** |
+| `assistant_usage_days`, `assistant_reservations` | usage counts | Delete (plan 0234) |
 | `comment_audio` of the person's comments | the voice | **Delete**, and null the three audio columns of the comment (`audioContentType`, `audioByteLength`, `audioDurationSeconds`, `core/src/app/entities/line-comment.entity.ts:46` to `:62`) so it reads as a comment with no recording. `transcription` stays: it is the transcript's state, and the owner keeps transcripts. A `PENDING` state becomes `FAILED`, because the recording it waited on is gone and `setTranscription` refuses once the author is a tombstone, so it would stay pending forever. The builder checks how velista draws a comment whose transcription state says voice but which has no audio, and names any gap in the PR. |
 | `line_comments` | `authorUserId` | **Keep**, `authorUserId` to the zone's tombstone. The body and any transcript stay: they are part of the list's conversation. |
 | `list_lines` | `createdByUserId`, `approvedByUserId`, `deletedByUserId` | **Keep**, the three to the tombstone |

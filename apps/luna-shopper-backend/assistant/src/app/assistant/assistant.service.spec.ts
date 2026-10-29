@@ -20,7 +20,9 @@ import {
   retryAfterSecondsOf,
   runWithRequestContext,
 } from '@portfolio/luna-shopper/platform';
+import { FakeAllowance } from '../allowance/allowance.fake';
 import {
+  DEFAULT_ALLOWANCE,
   DEFAULT_CLAUDE_MODEL,
   DEFAULT_MODERATION_MODEL,
   type AssistantConfig,
@@ -282,6 +284,7 @@ const CONFIG: AssistantConfig = {
   retryAfterFallbackSeconds: 30,
   providerTimeoutMs: 30000,
   turnTimeoutMs: 60000,
+  allowance: DEFAULT_ALLOWANCE,
 };
 
 function build(
@@ -298,7 +301,8 @@ function build(
     configService,
     provider,
     new TurnContextFactory(api.asClient()),
-    api.asClient()
+    api.asClient(),
+    new FakeAllowance().asClient()
   );
 }
 
@@ -1805,6 +1809,7 @@ describe('AssistantService.transcribe', () => {
     const service = build(provider, new RecordingApi());
 
     const heard = await service.transcribe({
+      userId: 'user-1',
       audio: AUDIO,
       mimeType: 'audio/webm;codecs=opus',
       locale: 'es',
@@ -1832,6 +1837,7 @@ describe('AssistantService.transcribe', () => {
 
     for (let i = 0; i < 3; i += 1) {
       await service.transcribe({
+        userId: 'user-1',
         audio: AUDIO,
         mimeType: 'audio/webm',
         locale: 'en',
@@ -1848,7 +1854,12 @@ describe('AssistantService.transcribe', () => {
     // Not an error: a recording of silence is a real thing somebody uploads, and
     // the caller records that no transcript exists rather than retrying forever.
     await expect(
-      service.transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      service.transcribe({
+        userId: 'user-1',
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      })
     ).resolves.toEqual({ text: '' });
   });
 
@@ -1861,7 +1872,12 @@ describe('AssistantService.transcribe', () => {
     // the voice comment settles as UNAVAILABLE rather than waiting for a
     // transcript that is never coming.
     const error = await service
-      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .transcribe({
+        userId: 'user-1',
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      })
       .catch((thrown: unknown) => thrown);
 
     expect(isDomainException(error)).toBe(true);
@@ -1877,7 +1893,12 @@ describe('AssistantService.transcribe', () => {
     // says so in a field rather than by throwing, so the two are told apart at the
     // call site rather than guessed at from an error.
     const error = await service
-      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .transcribe({
+        userId: 'user-1',
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      })
       .catch((thrown: unknown) => thrown);
 
     expect((error as { code: string }).code).toBe('not_configured');
@@ -1890,7 +1911,12 @@ describe('AssistantService.transcribe', () => {
     const service = build(provider, new RecordingApi());
 
     const error = await service
-      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .transcribe({
+        userId: 'user-1',
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      })
       .catch((thrown: unknown) => thrown);
 
     expect(isDomainException(error)).toBe(true);
@@ -1904,7 +1930,12 @@ describe('AssistantService.transcribe', () => {
     const service = build(provider, new RecordingApi());
 
     const error = await service
-      .transcribe({ audio: AUDIO, mimeType: 'audio/webm', locale: 'en' })
+      .transcribe({
+        userId: 'user-1',
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'en',
+      })
       .catch((thrown: unknown) => thrown);
 
     // Mandatory by the time it reaches the client, whatever the provider said.
@@ -1918,6 +1949,7 @@ describe('AssistantService.transcribe', () => {
     const service = build(provider, new RecordingApi());
 
     await service.transcribe({
+      userId: 'user-1',
       audio: AUDIO,
       mimeType: 'audio/webm',
       locale: 'es',
@@ -1943,6 +1975,7 @@ describe('AssistantService.transcribe', () => {
 
     await expect(
       service.transcribe({
+        userId: 'user-1',
         audio: AUDIO,
         mimeType: 'audio/webm',
         locale: 'es',
@@ -1994,6 +2027,7 @@ describe('a deployment with no transcriber', () => {
 
     const error = await service
       .transcribe({
+        userId: 'user-1',
         audio: AUDIO,
         mimeType: 'audio/webm',
         locale: 'es',

@@ -8,7 +8,9 @@ import {
   type MyZoneView,
 } from '@portfolio/luna-shopper/contracts';
 import { runWithRequestContext } from '@portfolio/luna-shopper/platform';
+import { FakeAllowance } from '../allowance/allowance.fake';
 import {
+  DEFAULT_ALLOWANCE,
   DEFAULT_CLAUDE_MODEL,
   DEFAULT_MODERATION_MODEL,
   type AssistantConfig,
@@ -100,6 +102,7 @@ const CONFIG: AssistantConfig = {
   retryAfterFallbackSeconds: 30,
   providerTimeoutMs: 30000,
   turnTimeoutMs: 60000,
+  allowance: DEFAULT_ALLOWANCE,
 };
 
 function build(
@@ -113,7 +116,8 @@ function build(
     { getOrThrow: () => config } as unknown as ConfigService,
     provider,
     new TurnContextFactory(api),
-    api
+    api,
+    new FakeAllowance().asClient()
   );
 }
 

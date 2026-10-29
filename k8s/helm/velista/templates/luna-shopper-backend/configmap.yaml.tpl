@@ -3,6 +3,9 @@
 {{- $harvest := .Values.lunaShopperBackend.harvester | default dict }}
 {{- $assistant := .Values.lunaShopperBackend.assistant | default dict }}
 {{- $transcriber := .Values.lunaShopperBackend.transcriber | default dict }}
+{{- $allowance := $assistant.allowance | default dict }}
+{{- $registered := $allowance.registered | default dict }}
+{{- $guest := $allowance.guest | default dict }}
 ---
 # One ConfigMap, because this release is one environment (plan 0002). The
 # `range $env, $cfg :=` loop that rendered a production and a staging copy side
@@ -267,4 +270,31 @@ part of the render and would trip that very check.
   # gives up first is what let the assistant write lines after the app had told
   # its reader that nothing arrived. Raise one and raise the other.
   ASSISTANT_TURN_TIMEOUT_MS: {{ $assistant.turnTimeoutMs | default 60000 | quote }}
+  # Each person's allowance (plan 0234, section 7): turns, seconds of audio and
+  # money per day and per month, guests lower, and a ceiling on what the whole
+  # deployment spends. Money is integer micro dollars. The numbers are written
+  # once, in values.yaml, and `required` makes a values file that lost one fail
+  # here rather than in the pod. Core receives none of them: the assistant
+  # sends the limits that apply with each reservation.
+  ASSISTANT_TURNS_PER_DAY: {{ required "lunaShopperBackend.assistant.allowance.registered.turnsPerDay" $registered.turnsPerDay | int64 | quote }}
+  ASSISTANT_TURNS_PER_MONTH: {{ required "lunaShopperBackend.assistant.allowance.registered.turnsPerMonth" $registered.turnsPerMonth | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_DAY: {{ required "lunaShopperBackend.assistant.allowance.registered.assistantAudioSecondsPerDay" $registered.assistantAudioSecondsPerDay | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_MONTH: {{ required "lunaShopperBackend.assistant.allowance.registered.assistantAudioSecondsPerMonth" $registered.assistantAudioSecondsPerMonth | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_DAY: {{ required "lunaShopperBackend.assistant.allowance.registered.commentAudioSecondsPerDay" $registered.commentAudioSecondsPerDay | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_MONTH: {{ required "lunaShopperBackend.assistant.allowance.registered.commentAudioSecondsPerMonth" $registered.commentAudioSecondsPerMonth | int64 | quote }}
+  ASSISTANT_COST_PER_DAY_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.registered.costPerDayMicroUsd" $registered.costPerDayMicroUsd | int64 | quote }}
+  ASSISTANT_COST_PER_MONTH_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.registered.costPerMonthMicroUsd" $registered.costPerMonthMicroUsd | int64 | quote }}
+  ASSISTANT_TURNS_PER_DAY_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.turnsPerDay" $guest.turnsPerDay | int64 | quote }}
+  ASSISTANT_TURNS_PER_MONTH_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.turnsPerMonth" $guest.turnsPerMonth | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_DAY_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.assistantAudioSecondsPerDay" $guest.assistantAudioSecondsPerDay | int64 | quote }}
+  ASSISTANT_AUDIO_SECONDS_PER_MONTH_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.assistantAudioSecondsPerMonth" $guest.assistantAudioSecondsPerMonth | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_DAY_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.commentAudioSecondsPerDay" $guest.commentAudioSecondsPerDay | int64 | quote }}
+  COMMENT_AUDIO_SECONDS_PER_MONTH_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.commentAudioSecondsPerMonth" $guest.commentAudioSecondsPerMonth | int64 | quote }}
+  ASSISTANT_COST_PER_DAY_MICRO_USD_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.costPerDayMicroUsd" $guest.costPerDayMicroUsd | int64 | quote }}
+  ASSISTANT_COST_PER_MONTH_MICRO_USD_GUEST: {{ required "lunaShopperBackend.assistant.allowance.guest.costPerMonthMicroUsd" $guest.costPerMonthMicroUsd | int64 | quote }}
+  ASSISTANT_DEPLOYMENT_COST_PER_DAY_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.deploymentCostPerDayMicroUsd" $allowance.deploymentCostPerDayMicroUsd | int64 | quote }}
+  ASSISTANT_DEPLOYMENT_COST_PER_MONTH_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.deploymentCostPerMonthMicroUsd" $allowance.deploymentCostPerMonthMicroUsd | int64 | quote }}
+  ASSISTANT_TURN_RESERVE_MICRO_USD: {{ required "lunaShopperBackend.assistant.allowance.turnReserveMicroUsd" $allowance.turnReserveMicroUsd | int64 | quote }}
+  # An IANA name: the day and the month turn over at midnight there.
+  ASSISTANT_ALLOWANCE_TIMEZONE: {{ required "lunaShopperBackend.assistant.allowance.timezone" $allowance.timezone | quote }}
 {{- end }}

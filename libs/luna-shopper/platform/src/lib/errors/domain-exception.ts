@@ -182,6 +182,21 @@ export class RateLimitedException extends DomainException {
 }
 
 /**
+ * A person's assistant allowance, or the deployment's ceiling, would not fit
+ * the turn (plan 0234, section 8.1). Thrown before any provider call.
+ *
+ * Beside {@link RateLimitedException} and apart from it by code, because the
+ * answer is a time of day and not a countdown. It publishes its details, which
+ * are exactly `scope`, `period`, `limit` and `resetsAt`, because the client
+ * cannot say when the assistant is back without them. It carries no
+ * `retryAfterSeconds`.
+ */
+export class AllowanceReachedException extends DomainException {
+  readonly code = ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED;
+  override readonly exposesDetails = true;
+}
+
+/**
  * The account has failed too many times in a row and is refusing attempts (plan
  * 0071, section 7).
  *

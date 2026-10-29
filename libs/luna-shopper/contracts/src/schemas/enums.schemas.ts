@@ -1,5 +1,10 @@
 import { ACCOUNT_ROLES, PERMISSIONS } from '../lib/enums/account-role.enums';
 import {
+  AllowanceLimit,
+  AllowancePeriod,
+  AllowancePurpose,
+  AllowanceReserveOutcome,
+  AllowanceScope,
   AssistantRole,
   ListResolutionBranch,
 } from '../lib/enums/assistant.enums';
@@ -71,6 +76,12 @@ export const ENUM_IDS = {
   lineSuggestionReason: schemaId('enums/LineSuggestionReason'),
   /** Who answers a typed assistant turn, for the policy (plan 0231, section 2). */
   aiTextProvider: schemaId('enums/AiTextProvider'),
+  /** The assistant allowance (plan 0234, sections 5 and 8.1). */
+  allowancePurpose: schemaId('enums/AllowancePurpose'),
+  allowanceReserveOutcome: schemaId('enums/AllowanceReserveOutcome'),
+  allowanceScope: schemaId('enums/AllowanceScope'),
+  allowancePeriod: schemaId('enums/AllowancePeriod'),
+  allowanceLimit: schemaId('enums/AllowanceLimit'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -100,4 +111,12 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.tripRowOutcome, Object.values(TripRowOutcome)),
   enumOf(ENUM_IDS.lineSuggestionReason, Object.values(LineSuggestionReason)),
   enumOf(ENUM_IDS.aiTextProvider, Object.values(AiTextProvider)),
+  enumOf(ENUM_IDS.allowancePurpose, Object.values(AllowancePurpose)),
+  enumOf(
+    ENUM_IDS.allowanceReserveOutcome,
+    Object.values(AllowanceReserveOutcome)
+  ),
+  enumOf(ENUM_IDS.allowanceScope, Object.values(AllowanceScope)),
+  enumOf(ENUM_IDS.allowancePeriod, Object.values(AllowancePeriod)),
+  enumOf(ENUM_IDS.allowanceLimit, Object.values(AllowanceLimit)),
 ];

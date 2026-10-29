@@ -3,6 +3,7 @@ import {
   ASSISTANT_PATTERNS,
   COMMENT_PATTERNS,
   CommentTranscription,
+  UserKind,
   type CommentView,
 } from '@portfolio/luna-shopper/contracts';
 import { ERROR_CODES } from '@portfolio/luna-shopper/platform';
@@ -148,7 +149,12 @@ describe('a transcript is asked for after the comment is stored', () => {
       transcribe: async () => ({ text: 'Bring the big one' }),
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm;codecs=opus');
+    b.service.schedule(
+      COMMENT,
+      AUDIO,
+      'audio/webm;codecs=opus',
+      UserKind.REGISTERED
+    );
     await settle();
 
     const asked = b.sent.find(
@@ -160,6 +166,41 @@ describe('a transcript is asked for after the comment is stored', () => {
     ).toBe('not really audio');
     // Nobody is waiting on it: the accurate model, behind every turn (plan 0235).
     expect(asked?.payload['purpose']).toBe('comment');
+    // The author, whose comment audio allowance it counts against (plan 0234).
+    expect(asked?.payload['userId']).toBe('u1');
+    expect(asked?.payload['kind']).toBe(UserKind.REGISTERED);
+  });
+
+  it("settles FAILED at once, with no retry, when the author's allowance is reached", async () => {
+    const b = broker({
+      transcribe: async () => {
+        throw {
+          code: ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED,
+          details: {
+            scope: 'user',
+            period: 'day',
+            limit: 'commentAudio',
+            resetsAt: '2026-10-28T00:00:00+01:00',
+          },
+        };
+      },
+    });
+
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.TEMPORARY);
+    await settle();
+
+    // A retry would be refused the same way. The comment still plays (plan
+    // 0234, section 6).
+    expect(
+      b.subjects().filter((s) => s === ASSISTANT_PATTERNS.transcribe)
+    ).toHaveLength(1);
+    expect(b.settled()).toMatchObject({
+      transcription: CommentTranscription.FAILED,
+    });
+    const asked = b.sent.find(
+      (entry) => entry.subject === ASSISTANT_PATTERNS.transcribe
+    );
+    expect(asked?.payload['kind']).toBe(UserKind.TEMPORARY);
   });
 
   it("waits longer than the assistant's own deadline for a comment", () => {
@@ -185,7 +226,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       transcribe: async () => ({ text: 'Bring the big one' }),
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     expect(b.subjects()).toEqual([
@@ -203,7 +244,7 @@ describe('a transcript is asked for after the comment is stored', () => {
   it('records FAILED when the provider heard nothing', async () => {
     const b = broker({ transcribe: async () => ({ text: '' }) });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     // The message is intact and plays; only the reading of it is missing.
@@ -220,7 +261,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle({ retried: true });
 
     // A small bounded retry and no queue: a transcription that failed twice is not
@@ -243,7 +284,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle({ retried: true });
 
     expect(b.settled()).toMatchObject({
@@ -270,7 +311,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       const attempts = () =>
         b.subjects().filter((s) => s === ASSISTANT_PATTERNS.transcribe);
 
-      b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+      b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
       await jest.advanceTimersByTimeAsync(9_000);
 
       expect(attempts()).toHaveLength(1);
@@ -309,7 +350,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     // No number of retries changes a deployment with no key, and telling the
@@ -332,7 +373,7 @@ describe('a transcript is asked for after the comment is stored', () => {
       },
     });
 
-    b.service.schedule(COMMENT, AUDIO, 'audio/webm');
+    b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED);
     await settle();
 
     expect(b.subjects()).toContain(COMMENT_PATTERNS.setTranscription);
@@ -349,7 +390,7 @@ describe('a transcript is asked for after the comment is stored', () => {
     });
 
     expect(() =>
-      b.service.schedule(COMMENT, AUDIO, 'audio/webm')
+      b.service.schedule(COMMENT, AUDIO, 'audio/webm', UserKind.REGISTERED)
     ).not.toThrow();
     await settle();
   });

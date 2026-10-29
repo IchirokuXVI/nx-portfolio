@@ -487,6 +487,18 @@ export const ERROR_CODES = {
    * `details.currentVersion` names the version to accept.
    */
   TERMS_ACCEPTANCE_MISSING: 'terms_acceptance_missing',
+  /**
+   * A person's assistant allowance, or the deployment's ceiling, would not
+   * fit this turn (plan 0234, section 8.1). No provider was called.
+   *
+   * Its own code and not {@link RATE_LIMITED}, because the client's answer is
+   * different: `rate_limited` is a countdown in seconds (rule A5), and this one
+   * is "come back tomorrow" or "the assistant is resting". It carries no
+   * `retryAfterSeconds`, so a client that reads only that field shows nothing
+   * wrong rather than a twelve hour countdown. `details` names `scope`,
+   * `period`, `limit` and `resetsAt`.
+   */
+  ASSISTANT_ALLOWANCE_REACHED: 'assistant_allowance_reached',
   INTERNAL: 'internal',
 } as const;
 
@@ -658,5 +670,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // request is incomplete for this deployment (plan 0231, section 4.3).
   [ERROR_CODES.TERMS_VERSION_STALE]: HttpStatus.CONFLICT,
   [ERROR_CODES.TERMS_ACCEPTANCE_MISSING]: HttpStatus.BAD_REQUEST,
+  // 429 beside `rate_limited` and apart from it by code: both say "not now",
+  // and only that one says how many seconds (plan 0234, section 8.1).
+  [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: HttpStatus.TOO_MANY_REQUESTS,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

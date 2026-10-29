@@ -6,6 +6,7 @@ import {
   CommentTranscription,
   type AssistantTranscribeResponse,
   type CommentView,
+  type UserKind,
 } from '@portfolio/luna-shopper/contracts';
 import {
   DEFAULT_LOCALE,
@@ -95,29 +96,44 @@ export class CommentTranscriptionService {
    * error anybody sees. Everything it could report is either on the comment
    * afterwards or in one log line.
    */
-  schedule(comment: CommentView, audio: Buffer, mimeType: string): void {
+  schedule(
+    comment: CommentView,
+    audio: Buffer,
+    mimeType: string,
+    /** The author's kind, which picks the guest allowance (plan 0234). */
+    kind: UserKind
+  ): void {
     // The locale is read here, while the request's async context is still live,
     // and carried as a plain string from then on. Reading it inside the
     // background work would find no context at all.
     const locale = getRequestContext()?.locale ?? DEFAULT_LOCALE;
 
-    void this.run(comment, audio, mimeType, locale).catch((error: unknown) => {
-      // The last resort. Reaching here means even `setTranscription` failed, so
-      // the comment is left PENDING; it still plays, which is the property the
-      // whole plan protects.
-      this.logger.warn(
-        `voice comment ${comment.id} could not be settled: ${describe(error)}`
-      );
-    });
+    void this.run(comment, audio, mimeType, locale, kind).catch(
+      (error: unknown) => {
+        // The last resort. Reaching here means even `setTranscription` failed, so
+        // the comment is left PENDING; it still plays, which is the property the
+        // whole plan protects.
+        this.logger.warn(
+          `voice comment ${comment.id} could not be settled: ${describe(error)}`
+        );
+      }
+    );
   }
 
   private async run(
     comment: CommentView,
     audio: Buffer,
     mimeType: string,
-    locale: string
+    locale: string,
+    kind: UserKind
   ): Promise<void> {
-    const outcome = await this.transcribe(audio, mimeType, locale);
+    const outcome = await this.transcribe(
+      audio,
+      mimeType,
+      locale,
+      comment.authorUserId,
+      kind
+    );
 
     await this.nats.send<CommentView>(COMMENT_PATTERNS.setTranscription, {
       userId: comment.authorUserId,
@@ -139,7 +155,9 @@ export class CommentTranscriptionService {
   private async transcribe(
     audio: Buffer,
     mimeType: string,
-    locale: string
+    locale: string,
+    userId: string,
+    kind: UserKind
   ): Promise<{ state: CommentTranscription; text: string }> {
     let lastError: unknown;
 
@@ -159,6 +177,10 @@ export class CommentTranscriptionService {
               // it on its accurate model and behind every spoken turn (plan
               // 0235, section 4).
               purpose: 'comment',
+              // The author, whose comment audio allowance the recording
+              // counts against (plan 0234, section 6).
+              userId,
+              kind,
             }
           ),
           this.voice.transcribeTimeoutMs
@@ -176,6 +198,17 @@ export class CommentTranscriptionService {
         // transcript that will never come is the state `UNAVAILABLE` exists for.
         if (isNotConfigured(error)) {
           return { state: CommentTranscription.UNAVAILABLE, text: '' };
+        }
+
+        // The author is over their comment audio allowance (plan 0234,
+        // section 6). A retry would be refused the same way, so it settles
+        // FAILED now, and the comment stays playable: the allowance limits the
+        // transcription, not the message.
+        if (isAllowanceReached(error)) {
+          this.logger.warn(
+            'transcription refused: the author has used their comment audio allowance'
+          );
+          return { state: CommentTranscription.FAILED, text: '' };
         }
 
         if (attempt < ATTEMPTS) {
@@ -204,6 +237,16 @@ function isNotConfigured(error: unknown): boolean {
   return candidates.some(
     (candidate) =>
       (candidate as { code?: unknown })?.code === ERROR_CODES.NOT_CONFIGURED
+  );
+}
+
+/** Is this the assistant refusing on the author's allowance (plan 0234)? */
+function isAllowanceReached(error: unknown): boolean {
+  const candidates = [error, (error as { error?: unknown })?.error];
+  return candidates.some(
+    (candidate) =>
+      (candidate as { code?: unknown })?.code ===
+      ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED
   );
 }
 

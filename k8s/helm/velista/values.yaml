@@ -539,6 +539,46 @@ lunaShopperBackend:
     # The floor for `retryAfterSeconds`, so the field is never absent.
     retryAfterFallbackSeconds: 30
 
+    # Each person's allowance (plan 0234, section 7). The two numbers above
+    # protect the provider's rate limit and the pod; these protect the bill.
+    # Counted in core's database, so they survive a restart and are shared by
+    # every replica. Positive integers, and no "off": a self hoster who wants
+    # no practical limit sets a large number. Money is integer micro dollars,
+    # so 100000 is $0.10. These are the only place the defaults are written;
+    # the template refuses to render without them.
+    allowance:
+      registered:
+        turnsPerDay: 60
+        turnsPerMonth: 600
+        # Fifteen minutes of talking to the app.
+        assistantAudioSecondsPerDay: 900
+        assistantAudioSecondsPerMonth: 9000
+        # Thirty one minute voice comments.
+        commentAudioSecondsPerDay: 1800
+        commentAudioSecondsPerMonth: 18000
+        # The turn count binds first; money is the backstop for long turns.
+        costPerDayMicroUsd: 100000
+        costPerMonthMicroUsd: 1000000
+      # A guest (a `TEMPORARY` account).
+      guest:
+        turnsPerDay: 20
+        turnsPerMonth: 100
+        assistantAudioSecondsPerDay: 300
+        assistantAudioSecondsPerMonth: 1500
+        commentAudioSecondsPerDay: 600
+        commentAudioSecondsPerMonth: 3000
+        costPerDayMicroUsd: 40000
+        costPerMonthMicroUsd: 200000
+      # What the whole deployment may spend: one bad day costs at most this.
+      # Reached, the assistant says it is resting and never names money.
+      deploymentCostPerDayMicroUsd: 3000000
+      deploymentCostPerMonthMicroUsd: 30000000
+      # What a turn holds before its first provider call: at least the worst
+      # turn at the default caps and prices (plan 0234, section 5.2).
+      turnReserveMicroUsd: 20000
+      # An IANA name. The day and the month turn over at midnight there.
+      timezone: UTC
+
   # -------------------------------------------------------------------------
   # The transcriber (plan 0235): speech to text on this cluster's own machine,
   # faster-whisper behind a small HTTP service, so no recording leaves it. The

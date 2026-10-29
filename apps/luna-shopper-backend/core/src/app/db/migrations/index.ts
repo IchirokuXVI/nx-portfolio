@@ -35,6 +35,7 @@ import { LineFavoriteAndSupermarket1756003600000 } from './1756003600000-LineFav
 import { LineChangeBuyKinds1756003700000 } from './1756003700000-LineChangeBuyKinds';
 import { SettlementSnapshotAndReplacement1756003800000 } from './1756003800000-SettlementSnapshotAndReplacement';
 import { LineNamed1756003900000 } from './1756003900000-LineNamed';
+import { AssistantAllowance1756004000000 } from './1756004000000-AssistantAllowance';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -191,4 +192,8 @@ export const CORE_MIGRATIONS = [
   // follows every migration that touched that table and nothing else (plan
   // 0207, section 1.1).
   LineNamed1756003900000,
+  // Three new tables for each person's assistant allowance. It reads and
+  // writes no existing row and references no table, so it follows everything
+  // (plan 0234, section 4).
+  AssistantAllowance1756004000000,
 ];

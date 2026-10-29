@@ -9,6 +9,7 @@ import {
 import { runOnce } from '@portfolio/luna-shopper/platform';
 import { createHash, randomUUID } from 'node:crypto';
 import { DataSource, Repository, type EntityManager } from 'typeorm';
+import { deleteAllowanceRowsOf } from '../assistant-allowance/assistant-allowance.sql';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { BasketService } from '../baskets/basket.service';
@@ -304,6 +305,10 @@ export class AccountDeletionService {
       `DELETE FROM "user_app_state" WHERE "userId" = $1::uuid`,
       [userId]
     );
+    // Their assistant allowance (plan 0234, section 9): the usage rows and the
+    // open reservations. They hold no zone. The deployment's rows hold no
+    // person and stay, with what the reservations held taken back out.
+    await deleteAllowanceRowsOf(manager, userId);
 
     // Step 4.
     await this.audit.scrubUser(
