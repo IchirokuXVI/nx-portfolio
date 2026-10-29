@@ -151,6 +151,11 @@
       "description": "GitHub Actions in one weekly PR",
       "matchManagers": ["github-actions"],
       "groupName": "github actions"
+    },
+    {
+      "description": "typeorm 1.1.2 nests a yargs 18 tree that the lock file Nx prunes for each Luna bundle cannot hold: npm ci in catalog, core and harvester images refuses it (Missing: string-width@7.2.0). PR checks build no image, so the update merged green and broke the staging deploy. Lift this once a bundle built with the newer version passes npm ci in its image",
+      "matchPackageNames": ["typeorm"],
+      "allowedVersions": "<1.1.2"
     }
   ]
 }
