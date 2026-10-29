@@ -78,6 +78,7 @@ describe('RetentionSweepService (auth)', () => {
           retainMs: 14 * DAY,
         },
         { table: 'oauth_states', column: 'expiresAt', retainMs: 14 * DAY },
+        { table: 'oauth_handoffs', column: 'expiresAt', retainMs: 14 * DAY },
       ]);
     });
 
@@ -119,7 +120,7 @@ describe('RetentionSweepService (auth)', () => {
 
       const results = await svc.sweep(NOW);
 
-      expect(calls).toHaveLength(7);
+      expect(calls).toHaveLength(8);
       expect(results.find((r) => r.table === 'refresh_tokens')).toEqual({
         table: 'refresh_tokens',
         deleted: 4,
@@ -205,14 +206,14 @@ describe('RetentionSweepService (auth)', () => {
       expect(query).not.toHaveBeenCalled();
 
       await jest.advanceTimersByTimeAsync(1);
-      expect(query).toHaveBeenCalledTimes(7);
+      expect(query).toHaveBeenCalledTimes(8);
 
       await jest.advanceTimersByTimeAsync(60 * 60 * 1000);
-      expect(query).toHaveBeenCalledTimes(14);
+      expect(query).toHaveBeenCalledTimes(16);
 
       svc.onApplicationShutdown();
       await jest.advanceTimersByTimeAsync(10 * 60 * 60 * 1000);
-      expect(query).toHaveBeenCalledTimes(14);
+      expect(query).toHaveBeenCalledTimes(16);
     });
 
     it('starts nothing when switched off', async () => {
@@ -252,7 +253,7 @@ describe('RetentionSweepService (auth)', () => {
 
       release();
       await first;
-      expect(query).toHaveBeenCalledTimes(7);
+      expect(query).toHaveBeenCalledTimes(8);
     });
 
     it('swallows and logs an error of the whole sweep', async () => {
