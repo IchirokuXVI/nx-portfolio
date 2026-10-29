@@ -35,13 +35,15 @@ import { LinkedText } from '../legal/linked-text';
     <p [id]="messageId()" class="error" role="alert">
       <lib-alert-icon aria-hidden="true" class="glyph" />
       <span class="text">
-        @if (linkUrl(); as url) {
-          <lib-linked-text [href]="url" [keepQuery]="true" [text]="message()" />
-        } @else {
-          {{ message() }}
-        }
+        <lib-linked-text
+          [href]="linkUrl()"
+          [keepQuery]="true"
+          [text]="message()"
+        />
         @if (actionLabel(); as label) {
-          <button (click)="action.emit()" class="action" type="button">
+          <!-- The one space between the sentence and its offer, which the compiler
+               would otherwise drop with the line break. -->
+          &ngsp;<button (click)="action.emit()" class="action" type="button">
             {{ label }}
           </button>
         }
@@ -60,7 +62,7 @@ export class FormError {
   /**
    * Where the bracketed words of the message go, for a message that names a document
    * (velista `0173`: "The [Terms] changed while this page was open"). Null draws the
-   * message as text.
+   * whole message as text, the bracketed words included and the brackets left out.
    */
   readonly linkUrl = input<string | null>(null);
 

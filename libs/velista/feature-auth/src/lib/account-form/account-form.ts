@@ -8,6 +8,7 @@ import {
   inject,
   Injector,
   input,
+  linkedSignal,
   output,
   signal,
   untracked,
@@ -161,6 +162,24 @@ export class AccountForm {
       : null;
   });
 
+  /**
+   * Whether the box was ticked since the page's last {@link error}. A tick sets it, and a
+   * new answer from the page clears it.
+   *
+   * A refusal about the terms is the page's input, so ticking cannot take it away: the
+   * sentence stays until the next press. The box itself is answered by the tick, so it
+   * stops being marked invalid and described by that sentence.
+   */
+  private readonly _answered = linkedSignal({
+    source: this.error,
+    computation: () => false,
+  });
+
+  /** Whether the box is drawn invalid and described by the sentence under it. */
+  readonly termsFlagged = computed(
+    () => this.termsProblem() !== null && !this._answered()
+  );
+
   /** The message about the fields, drawn in the error slot, or null. */
   readonly fieldProblem = computed(() => {
     const shown = this.shown();
@@ -248,6 +267,7 @@ export class AccountForm {
 
   onTermsChange(event: Event): void {
     this.accepted.set((event.target as HTMLInputElement).checked);
+    this._answered.set(this.accepted());
     // Ticking answers the sentence under the box, so it goes.
     if (this.accepted() && this.localError()?.placement === 'terms') {
       this.localError.set(null);

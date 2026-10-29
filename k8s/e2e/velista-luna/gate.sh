@@ -36,6 +36,14 @@ if [ "$with_luna" = true ]; then
   export COMPOSE_PROJECT_NAME="luna-browser-${GITHUB_RUN_ID:-local}"
   # The one origin the gateway and realtime images have to allow.
   export CORS_ORIGINS=https://staging.velista.app
+  # The terms published and owed (velista plan 0173, section 4.3), so the
+  # suite drives the checkbox, the guest notice and the prompt against the
+  # real backend. The operator is invented; the gateway refuses to boot with
+  # acceptance on and either value empty. Global setup accepts the current
+  # version for the demo users, so the other specs never meet the prompt.
+  export TERMS_ACCEPTANCE_REQUIRED=true
+  export LEGAL_CONTROLLER_NAME="Jane Example"
+  export LEGAL_CONTACT_EMAIL=privacy@example.invalid
 fi
 
 teardown() {

@@ -222,8 +222,8 @@ export class UpgradePage {
    * The one way out of this screen, however it was reached.
    *
    * A profile this document already read is read again: the upgrade changed the
-   * account's kind and its address, and recorded its acceptance of the terms, so the
-   * one held would ask for the terms again (velista `0173`).
+   * account's kind and its address, and the one held still names a guest with no
+   * address. The read also brings the acceptance the upgrade recorded (velista `0173`).
    */
   private async _finish(email: string): Promise<void> {
     this._notice.set('upgraded', email);

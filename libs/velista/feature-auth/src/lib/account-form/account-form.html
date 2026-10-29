@@ -53,6 +53,7 @@
           ? ('auth.error.emailTakenAction' | rokuT)
           : null
       "
+      [linkUrl]="rejection.link === 'terms' ? termsUrl() : null"
       [message]="rejection.key | rokuT"
       [messageId]="ids().error"
     />
@@ -66,10 +67,8 @@
       <div class="check-row">
         <input
           (change)="onTermsChange($event)"
-          [attr.aria-describedby]="
-            termsProblem() === null ? null : ids().termsError
-          "
-          [attr.aria-invalid]="termsProblem() === null ? null : 'true'"
+          [attr.aria-describedby]="termsFlagged() ? ids().termsError : null"
+          [attr.aria-invalid]="termsFlagged() ? 'true' : null"
           [checked]="accepted()"
           [id]="ids().terms"
           class="check"

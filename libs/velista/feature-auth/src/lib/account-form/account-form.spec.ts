@@ -164,6 +164,61 @@ describe('AccountForm (velista 0173, target 3)', () => {
     expect(host(fixture).querySelector('lib-form-error')).toBeNull();
   });
 
+  it('stops marking the box invalid once it is ticked after a refusal, and keeps the sentence', async () => {
+    const { fixture } = await render();
+    fill(fixture, true);
+    fixture.componentRef.setInput('error', {
+      key: 'legal.accept.stale',
+      placement: 'terms',
+      link: 'terms',
+    } satisfies AuthErrorCopy);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const box =
+      host(fixture).querySelector<HTMLInputElement>('#register-terms');
+    expect(box?.getAttribute('aria-invalid')).toBe('true');
+    expect(box?.getAttribute('aria-describedby')).toBe('register-terms-error');
+
+    if (box !== null) {
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+    }
+    fixture.detectChanges();
+
+    expect(box?.hasAttribute('aria-invalid')).toBe(false);
+    expect(box?.hasAttribute('aria-describedby')).toBe(false);
+    expect(
+      host(fixture).querySelector('#register-terms-error')?.textContent
+    ).toContain('legal.accept.stale');
+
+    // A new answer from the page marks it again.
+    fixture.componentRef.setInput('error', {
+      key: 'legal.accept.missing',
+      placement: 'terms',
+      link: 'terms',
+    } satisfies AuthErrorCopy);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(box?.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('draws a refusal in the field slot with its words as text, never brackets, while the terms are unknown', async () => {
+    const { fixture } = await render({ termsUrl: null });
+    fixture.componentRef.setInput('error', {
+      key: 'Read the [Terms], then accept them',
+      placement: 'terms',
+      link: 'terms',
+    } satisfies AuthErrorCopy);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const slot = host(fixture).querySelector('lib-form-error');
+    expect(slot?.textContent).toContain('Read the Terms, then accept them');
+    expect(slot?.querySelector('a')).toBeNull();
+  });
+
   it('draws neither box nor line, and checks no box, with no terms published', async () => {
     const { fixture, sent } = await render({ termsUrl: null });
 

@@ -29,6 +29,13 @@ export class LegalSections {
   readonly idPrefix = input('legal-');
 
   /**
+   * The level of each section's heading, one under the title of what draws it: 2 on the
+   * page, whose title is the `h1`; 3 in a sheet, whose title is an `h2`. A table row's
+   * title is one level under its section.
+   */
+  readonly headingLevel = input<2 | 3>(2);
+
+  /**
    * Whether a link to the other document keeps the page's query, as a sheet over a
    * form does, so the form underneath keeps its own.
    */

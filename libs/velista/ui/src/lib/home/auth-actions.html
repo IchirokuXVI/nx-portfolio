@@ -77,7 +77,7 @@
     <p aria-live="polite" class="held-message" role="status">
       <!-- A refusal about the terms links them (velista 0173); any other sentence
            has no brackets and is drawn as text. -->
-      <lib-linked-text [href]="termsUrl() ?? ''" [text]="sentence" />
+      <lib-linked-text [href]="termsUrl()" [text]="sentence" />
     </p>
   }
 </div>

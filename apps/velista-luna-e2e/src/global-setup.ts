@@ -83,9 +83,20 @@ export default async function globalSetup(): Promise<void> {
         'database holds. The specs expect the demo world (alice@example.com and ' +
         'friends); set E2E_SEED=1 to seed it first.'
     );
-    return;
+  } else {
+    seedDemoWorld();
   }
 
+  // A seeded account has accepted no terms. Where the deployment asks for them (the
+  // gate's compose turns acceptance on, velista `0173` section 4.3), each demo user a
+  // spec signs in as accepts the current version here, once, so no spec meets the
+  // prompt it is not about. Also on a run with no seed: a world seeded earlier, against
+  // a stack that asks for the terms now, would otherwise put every sign in on the prompt.
+  await acceptTermsForDemoUsers();
+}
+
+/** Run the Nx `seed` target's script against the databases the environment names. */
+function seedDemoWorld(): void {
   // The seed resolves each database from the service .env files through
   // dotenv, which never overwrites a variable that is already set. So against
   // an ephemeral slot, whose configuration lives in the environment rather than
@@ -103,10 +114,4 @@ export default async function globalSetup(): Promise<void> {
       '[velista-luna-e2e] seeding the demo world failed; aborting.'
     );
   }
-
-  // A seeded account has accepted no terms. Where the deployment asks for them (the
-  // gate's compose turns acceptance on, velista `0173` section 4.3), each demo user a
-  // spec signs in as accepts the current version here, once, so no spec meets the
-  // prompt it is not about.
-  await acceptTermsForDemoUsers();
 }

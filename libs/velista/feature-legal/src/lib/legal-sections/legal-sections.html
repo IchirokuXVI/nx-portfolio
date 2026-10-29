@@ -1,13 +1,26 @@
 @for (section of sections(); track section.id) {
   <section [attr.aria-labelledby]="idPrefix() + section.id" class="section">
-    <h2
-      [attr.data-section]="section.id"
-      [id]="idPrefix() + section.id"
-      class="heading"
-      tabindex="-1"
-    >
-      {{ section.heading }}
-    </h2>
+    <!-- One level under the title of whatever draws the document: an h1 on the page,
+         an h2 in a sheet. -->
+    @if (headingLevel() === 2) {
+      <h2
+        [attr.data-section]="section.id"
+        [id]="idPrefix() + section.id"
+        class="heading"
+        tabindex="-1"
+      >
+        {{ section.heading }}
+      </h2>
+    } @else {
+      <h3
+        [attr.data-section]="section.id"
+        [id]="idPrefix() + section.id"
+        class="heading"
+        tabindex="-1"
+      >
+        {{ section.heading }}
+      </h3>
+    }
 
     @for (block of section.blocks; track $index) {
       @switch (block.kind) {
@@ -39,12 +52,21 @@
           <div class="rows">
             @for (row of block.rows; track $index) {
               <div class="row">
-                <h3 class="row-title">
-                  <ng-container
-                    [ngTemplateOutlet]="runsTemplate"
-                    [ngTemplateOutletContext]="{ $implicit: row[0] }"
-                  />
-                </h3>
+                @if (headingLevel() === 2) {
+                  <h3 class="row-title">
+                    <ng-container
+                      [ngTemplateOutlet]="runsTemplate"
+                      [ngTemplateOutletContext]="{ $implicit: row[0] }"
+                    />
+                  </h3>
+                } @else {
+                  <h4 class="row-title">
+                    <ng-container
+                      [ngTemplateOutlet]="runsTemplate"
+                      [ngTemplateOutletContext]="{ $implicit: row[0] }"
+                    />
+                  </h4>
+                }
                 <dl class="row-cells">
                   @for (cell of row; track $index; let first = $first) {
                     @if (!first) {

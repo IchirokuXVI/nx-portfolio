@@ -47,7 +47,7 @@ export function linkedParts(text: string): LinkedParts {
   // Written on as few lines as the parts allow, and kept that way: a line break
   // between the text and the link would draw a space before a full stop.
   // prettier-ignore
-  template: `@let parts = cut(text());{{ parts.before }}@if (parts.link !== null) {<a [queryParamsHandling]="keepQuery() ? 'preserve' : null" [routerLink]="href()" class="link">{{ parts.link }}</a>}{{ parts.after }}`,
+  template: `@let parts = cut(text());{{ parts.before }}@if (parts.link !== null) {@if (href(); as url) {<a [queryParamsHandling]="keepQuery() ? 'preserve' : null" [routerLink]="url" class="link">{{ parts.link }}</a>} @else {{{ parts.link }}}}{{ parts.after }}`,
   styleUrl: './linked-text.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -55,8 +55,13 @@ export class LinkedText {
   /** The translated sentence, with its link in brackets. */
   readonly text = input.required<string>();
 
-  /** Where the link goes, built with `appPath` by the container. */
-  readonly href = input.required<string>();
+  /**
+   * Where the link goes, built with `appPath` by the container. Null while the address
+   * is unknown (the settings are not read yet, or the read failed): the bracketed
+   * words are then drawn as plain text, never as brackets and never as a link to
+   * nowhere.
+   */
+  readonly href = input.required<string | null>();
 
   /**
    * Whether the link keeps the page's query, as a sheet over a form does so its fallback

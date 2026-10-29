@@ -1883,6 +1883,7 @@ export type ProfileCall =
   | { readonly method: 'remove' }
   | { readonly method: 'completeSetup' }
   | { readonly method: 'suggestUsername' }
+  | { readonly method: 'acceptTerms'; readonly version: string }
   | { readonly method: 'clear' };
 
 /**
@@ -1962,6 +1963,13 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
     clear: () => {
       calls.push({ method: 'clear' });
       profile.set(null);
+    },
+
+    /** The real rule: the held profile's terms block, or null (velista `0173`). */
+    terms: computed(() => profile()?.terms ?? null),
+
+    acceptTerms: async (version: string) => {
+      calls.push({ method: 'acceptTerms', version });
     },
 
     /** Everything the page asked for, in order. */

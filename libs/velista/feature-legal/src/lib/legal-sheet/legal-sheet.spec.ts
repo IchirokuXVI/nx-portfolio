@@ -89,7 +89,9 @@ describe('LegalSheet (velista 0173, target 6)', () => {
     expect(root.querySelector('#legal-sheet-title')?.textContent?.trim()).toBe(
       'legal.terms.title'
     );
-    expect(root.querySelectorAll('h2.heading').length).toBeGreaterThan(3);
+    // The sections sit one level under the sheet's own h2 title.
+    expect(root.querySelectorAll('h3.heading').length).toBeGreaterThan(3);
+    expect(root.querySelectorAll('h2.heading')).toHaveLength(0);
   });
 
   it('opens the other document as a sheet over the same form', async () => {

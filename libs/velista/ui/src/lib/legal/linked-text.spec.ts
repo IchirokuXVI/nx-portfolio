@@ -38,11 +38,11 @@ describe('linkedParts (velista 0173)', () => {
 });
 
 describe('LinkedText', () => {
-  function render(text: string) {
+  function render(text: string, href: string | null = '/en/terms') {
     TestBed.configureTestingModule({ providers: [provideRouter([])] });
     const fixture = TestBed.createComponent(LinkedText);
     fixture.componentRef.setInput('text', text);
-    fixture.componentRef.setInput('href', '/en/terms');
+    fixture.componentRef.setInput('href', href);
     fixture.detectChanges();
     return fixture.nativeElement as HTMLElement;
   }
@@ -68,5 +68,12 @@ describe('LinkedText', () => {
 
     expect(host.querySelector('a')).toBeNull();
     expect(host.textContent?.trim()).toBe('Nothing to open');
+  });
+
+  it('draws the bracketed words as text, with no brackets and no link, with no url', () => {
+    const host = render('Read the [Terms], then accept them', null);
+
+    expect(host.querySelector('a')).toBeNull();
+    expect(host.textContent).toBe('Read the Terms, then accept them');
   });
 });

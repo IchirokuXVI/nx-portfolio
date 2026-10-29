@@ -336,15 +336,23 @@ for each demo user the specs sign in as, `POST /v1/auth/login` then
 the stubbed spec. Do this in the same PR, after the UI sends the version everywhere, never
 before (the gate would turn red for a UI that does not exist).
 
-(As built: the global setup and the helpers are in this PR; the compose half is not. The
-gate's Luna services are declared in `k8s/e2e/luna-shopper-backend/compose.apps.yml`,
-which states every variable by hand, and `k8s/e2e/velista-luna/compose.yml` holds only
-velista and its proxy, so the keys cannot be turned on from the two files this plan
-names. See section 7, and O1.)
+(As built: the gate runs with acceptance on. The gate's Luna services are declared in
+`k8s/e2e/luna-shopper-backend/compose.apps.yml`, which states every variable by hand, and
+`k8s/e2e/velista-luna/compose.yml` holds only velista and its proxy, so the keys went
+there and not into the two files this paragraph names. `compose.apps.yml` reads
+`TERMS_ACCEPTANCE_REQUIRED` on `gateway` and `auth`, and `LEGAL_CONTROLLER_NAME` and
+`LEGAL_CONTACT_EMAIL` on `gateway`, each from the environment with a default of off and
+empty, so the backend gate that shares the file runs as before. `gate.sh` exports
+`TERMS_ACCEPTANCE_REQUIRED=true`, `LEGAL_CONTROLLER_NAME="Jane Example"` and
+`LEGAL_CONTACT_EMAIL=privacy@example.invalid` when `velista-luna-e2e` runs. Those two
+values are the least the gateway boots with: its schema refuses acceptance on with
+either empty. The global setup accepts for the demo users on every run, seeded or not.
+See section 7, item 31.)
 
 ## 5. Decisions that are the owner's
 
-- **O1.** Whether the gate runs with acceptance on (section 4.3) or keeps the default.
+- **O1.** Whether the gate runs with acceptance on (section 4.3) or keeps the default. As
+  built it runs with acceptance on; the three exports in `gate.sh` turn it back.
 - **O2.** The order on the day: this plan deployed, then `termsAcceptanceRequired: true` with
   the `minClientVersion` raise, staging then production (`0231` section 6).
 - **O3.** Google offered on all four screens once PR #846 lands (D6).
@@ -411,9 +419,11 @@ to change.
     first read of a document still may come from the cache. This touches
     `data-access/src/lib/operator/`, which section 2's scope list did not name; without it
     target 7's "the new version is the one sent next time" does not hold for five minutes.
-13. **The upgrade page reads a held profile again after it succeeds**, because the profile
-    this document read before the upgrade still said the guest owed the terms, and the
-    prompt would have drawn over home.
+13. **The upgrade page reads a held profile again after it succeeds**, because the upgrade
+    changed the account's kind and its address, and the profile this document read before
+    still names a guest with no address. It is not about the terms: a guest who owes them
+    never sees this form, because `auth/upgrade` is not flagged `READ_BEFORE_TERMS` and the
+    prompt replaces it. The read also brings the acceptance the upgrade recorded.
 
 ### 7.3 The form, Google and the sheets
 
@@ -484,18 +494,22 @@ to change.
     (and answers preflights), so the app never reads as offline under the prompt.
 30. **`velista-luna-e2e`**: `support/api.ts` gained `legalSettings`, `accountTerms`,
     `acceptTerms` and `acceptTermsForDemoUsers` (Alice and Dana, the two users a spec signs
-    in as); `global-setup.ts` calls the last after seeding, and it does nothing where the
-    deployment asks nothing. `terms.spec.ts` registers through the UI and creates a group
+    in as); `global-setup.ts` calls the last on every run, after the seed or with none, and
+    it does nothing where the deployment asks nothing. `terms.spec.ts` registers through the UI and creates a group
     signed out, then reads `acceptedVersion` with the tab's own token; both skip on a
     deployment that published no terms.
-31. **The gate is not turned on (O1).** The gate's Luna services take their environment
-    from `k8s/e2e/luna-shopper-backend/compose.apps.yml`, which names no `LEGAL_*` or
-    `TERMS_ACCEPTANCE_REQUIRED` key, and `gate.env` is not an environment file. Turning
-    acceptance on needs those keys on `gateway` and `auth` there (for example
-    `TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}` and the eight
-    `LEGAL_*` keys of `0231` section 5.1) and `gate.sh` exporting them when
-    `velista-luna-e2e` runs. Both files are outside this plan's scope, so neither changed.
-    The suite was run with acceptance on against an ephemeral slot instead (7.7).
+31. **The gate runs with acceptance on (O1).** The gate's Luna services take their
+    environment from `k8s/e2e/luna-shopper-backend/compose.apps.yml`, and `gate.env` is not
+    an environment file, so the edit is in those two files, outside section 2's scope list.
+    `compose.apps.yml` gained `TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}`
+    on `gateway` and `auth`, and `LEGAL_CONTROLLER_NAME: ${LEGAL_CONTROLLER_NAME:-}` and
+    `LEGAL_CONTACT_EMAIL: ${LEGAL_CONTACT_EMAIL:-}` on `gateway`: of the eight `LEGAL_*`
+    keys of `0231` section 5.1, only those two are needed, because the gateway's schema
+    refuses acceptance on with either empty and defaults the rest. Auth reads only the
+    switch. `gate.sh` exports the three values inside its `with_luna` block. The defaults
+    keep the backend gate, which shares `compose.apps.yml`, as it was. The new
+    `velista-luna-e2e/terms.spec.ts` stops skipping there. Before this edit the suite was
+    run with acceptance on against an ephemeral slot (7.7).
 32. **The review battery** (`apps/velista-luna-e2e/reviews/2026-10-27-session-tokens`)
     registers through the API with no version. It is not in the gate and was not changed.
     Once acceptance is on where it runs, its `register` helper needs `acceptedTermsVersion`
@@ -525,3 +539,21 @@ to change.
   pages open: register cleared its box and said the terms changed, the next press went
   through; Google on sign in was refused beside the button; Alice's reload drew "We have
   new Terms".
+
+### 7.8 The review round
+
+33. **A sentence about the terms never shows brackets or a link to nowhere.** While the
+    settings are unread or their read failed, the terms have no address. `LinkedText`
+    takes a null `href` and draws the bracketed words as plain text, the entry screens
+    and the front door pass the null through, and `FormError` always draws its message
+    through `LinkedText`, also in the account form's field slot.
+34. **A tick answers a refusal on the box.** After the server refuses for the terms,
+    ticking the box takes away its `aria-invalid` and `aria-describedby`; the sentence
+    stays until the next press, and a new answer from the page marks the box again.
+35. **The sections of a document sit one level under its title**: `LegalSections` takes
+    a `headingLevel`, 2 on the page under its `h1` and 3 in the sheet under its `h2`.
+36. **The prompt takes focus on its heading** once drawn, since it replaces the page and
+    the element that held focus is gone.
+37. **The wiring in `app-providers.ts` has its own spec** (`terms-gate-wiring.spec.ts`),
+    against a faked `ProfileStore` and `SessionStore`; `fakeProfileStore` gained `terms`
+    and `acceptTerms` for it.

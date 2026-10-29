@@ -1,6 +1,9 @@
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  inject,
   input,
   output,
 } from '@angular/core';
@@ -95,6 +98,19 @@ import { LinkedText } from './linked-text';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class TermsPrompt {
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+
+  constructor() {
+    // The prompt replaces the page, so the element that held focus is gone and focus
+    // would fall to the body, where a screen reader says nothing. The heading takes it
+    // once drawn, and is read out as what is now on screen.
+    afterNextRender(() =>
+      this._host.nativeElement
+        .querySelector<HTMLElement>('#terms-prompt-title')
+        ?.focus()
+    );
+  }
+
   /** Whether an older version was accepted, which picks the heading and the body. */
   readonly acceptedBefore = input(false);
 
