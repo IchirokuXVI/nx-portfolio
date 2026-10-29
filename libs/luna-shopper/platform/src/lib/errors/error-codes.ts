@@ -155,6 +155,15 @@ export const ERROR_CODES = {
    */
   LINE_MERGE_TOO_MANY_PRODUCTS: 'line_merge_too_many_products',
   /**
+   * A typed name is the name of two or more lines of the list that hold a
+   * product, and the add said it can ask which one (plan 0228, section 3).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the client asks
+   * the person and sends the add again with `intoLineId` or with `newLine`.
+   * The envelope's `details` list the lines, so the question can draw them.
+   */
+  LINE_ADD_NEEDS_CHOICE: 'line_add_needs_choice',
+  /**
    * The brand label has no letters and no digits, so it makes no key (plan
    * 0115, section 5.3).
    *
@@ -575,6 +584,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.LINE_MERGE_REQUIRED]: HttpStatus.CONFLICT,
   [ERROR_CODES.LINE_MERGE_NEEDS_APPROVAL]: HttpStatus.CONFLICT,
   [ERROR_CODES.LINE_MERGE_TOO_MANY_PRODUCTS]: HttpStatus.CONFLICT,
+  // 409 as `line_merge_required` is: the add was well formed, and what stops
+  // it is lines the list already holds, which only the person can choose
+  // between (plan 0228).
+  [ERROR_CODES.LINE_ADD_NEEDS_CHOICE]: HttpStatus.CONFLICT,
   // 400, because what is wrong is a value in the body: a label of punctuation
   // makes no key, so there is nothing to register (plan 0115, section 5.3).
   [ERROR_CODES.BRAND_LABEL_EMPTY]: HttpStatus.BAD_REQUEST,

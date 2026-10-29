@@ -65,6 +65,7 @@ export * from './lib/layout/support-strip';
 export * from './lib/legal/legal-links';
 export * from './lib/legal/linked-text';
 export * from './lib/legal/terms-prompt';
+export * from './lib/list/add-choice';
 export * from './lib/list/anchored-popover';
 export * from './lib/list/audio-player';
 export * from './lib/list/chip-row';

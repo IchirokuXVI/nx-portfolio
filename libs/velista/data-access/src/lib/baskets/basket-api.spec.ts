@@ -421,6 +421,57 @@ describe('BasketApi, the writes on a row', () => {
     expect((await done).entries[0].content).toBe('Batteries');
   });
 
+  it('sends what a typed add says about a name the list holds, and never with products (backend 0228)', async () => {
+    const asked = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      askIfAmbiguous: true,
+    });
+    const ask = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+    expect(ask.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      askIfAmbiguous: true,
+    });
+    ask.flush(ANSWER);
+    await asked;
+
+    const chose = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      intoLineId: 'zl-1',
+    });
+    const into = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+    expect(into.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      intoLineId: 'zl-1',
+    });
+    into.flush(ANSWER);
+    await chose;
+
+    const card = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+      askIfAmbiguous: true,
+    });
+    const product = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+    expect(product.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+    });
+    product.flush(ANSWER);
+    await card;
+  });
+
   it('sends a suggestion\u2019s product set as itemIds', async () => {
     const done = api.addLine(BASKET, {
       targetListId: 'list-weekly',

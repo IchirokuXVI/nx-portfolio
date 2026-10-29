@@ -138,6 +138,13 @@ export const ERROR_CODES = [
    */
   'line_merge_too_many_products',
   /**
+   * A typed name is the name of two or more lines of the list that hold a product,
+   * and the add said it can ask (backend `0228`, section 3), as a 409. Nothing was
+   * written. `details.lines` names them, and the page asks which one (velista
+   * `0170`).
+   */
+  'line_add_needs_choice',
+  /**
    * The walk moved on since this phone read it (backend `0168`), as a 409, with
    * `details.lastSeq`. Nothing was written. The rewind screen answers it by
    * reading the walk again (velista `0122`).

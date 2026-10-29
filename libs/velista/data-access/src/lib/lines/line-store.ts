@@ -7,9 +7,11 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
+  addMayMeetLine,
   LINE_QUANTITY_MIN,
   LINES_PAGE_SIZE,
   SETTLEMENTS_PAGE_SIZE,
+  type AddLineOptions,
   type Comment,
   type Line,
   type LineApprovalStatus,
@@ -62,6 +64,15 @@ export type LineUpdateOutcome =
 
 /** How one list's lines are loading. Per list, since two can be open in a session. */
 export type LineLoadState = 'idle' | 'loading' | 'loaded' | 'failed';
+
+/**
+ * What `LineStore.addLine` came to (velista `0170`): the line, and whether it was one
+ * the list already held, raised rather than made; or the failure, whose error a
+ * refusal that asks which line carries.
+ */
+export type LineAddOutcome =
+  | { readonly state: 'added'; readonly line: Line; readonly merged: boolean }
+  | { readonly state: 'failed'; readonly error: unknown };
 
 /** How a pending write on one line is going. Mirrors `LineWriteState` in `models`. */
 export type LineWriteOutcome = 'pending' | 'failed' | 'overwritten';
@@ -526,6 +537,21 @@ export class LineStore {
    * Required rather than defaulted, because a default of "not approved" is exactly the
    * old behaviour and would reintroduce the defect silently at every call site that
    * forgot it.
+   *
+   * ## A raise stays where it is (velista `0170`)
+   *
+   * The answer says whether the add raised a line the list already held. A raised
+   * line is patched **in its own place**, and the optimistic row, if one was drawn,
+   * simply goes. Treating the answer as the new row moved the raised line into the
+   * optimistic row's slot at the end, so the line somebody had just added to left
+   * the place they knew it by.
+   *
+   * No optimistic row is drawn when that is likely ({@link drawsBeforeAnswer}): a row
+   * that appears and then vanishes is worse than a row that appears a beat late, and
+   * the answer is quick.
+   *
+   * `options` goes to the server as it is (backend `0228`). A refusal asking which
+   * line is an ordinary failure here, whose error the page reads.
    */
   async addLine(
     listId: string,
@@ -537,11 +563,20 @@ export class LineStore {
       readonly autoApproveLines: boolean;
     },
     itemIds?: readonly string[],
-    named?: false
-  ): Promise<
-    | { readonly state: 'added'; readonly line: Line }
-    | { readonly state: 'failed'; readonly error: unknown }
-  > {
+    named?: false,
+    options?: AddLineOptions
+  ): Promise<LineAddOutcome> {
+    if (!this.drawsBeforeAnswer(listId, content, itemIds, options)) {
+      return this._addOnAnswer(
+        listId,
+        content,
+        quantity,
+        itemIds,
+        named,
+        options
+      );
+    }
+
     const clientKey = `pending-${Math.random().toString(36).slice(2, 10)}`;
     const optimistic: Line = {
       id: clientKey,
@@ -582,7 +617,14 @@ export class LineStore {
     this._note(clientKey, { outcome: 'pending', byUserId: null });
 
     const outcome = await this._mutations.run(null, () =>
-      this._lines.addLine(listId, content, quantity, itemIds, named)
+      this._lines.addLineResult(
+        listId,
+        content,
+        quantity,
+        itemIds,
+        named,
+        options
+      )
     );
 
     this._clearNote(clientKey);
@@ -595,11 +637,78 @@ export class LineStore {
       return { state: 'failed', error: outcome.error };
     }
 
+    const { line, merged } = outcome.value;
+    if (merged) {
+      // A line the list already held. The placeholder goes, and the line is raised
+      // where it stands (velista `0170`, target 2).
+      this._removeLine(clientKey);
+      this._settleRaise(listId, line);
+      return { state: 'added', line, merged };
+    }
+
     // The server's row replaces the local one in place, keeping its position in the
     // rendered order, so nothing jumps at the moment the response lands.
-    this._mine.add(outcome.value.id);
-    this._settleAdd(listId, clientKey, outcome.value);
-    return { state: 'added', line: outcome.value };
+    this._mine.add(line.id);
+    this._settleAdd(listId, clientKey, line);
+    return { state: 'added', line, merged };
+  }
+
+  /**
+   * Whether an add draws its row before the server answers (velista `0170`, target 3).
+   *
+   * Yes for a product add and for a typed name no loaded line carries. No for a typed
+   * name a loaded line already carries, since the answer is then likely a raise or a
+   * question and a drawn row would vanish, and no for a line the person chose, which
+   * is a raise by definition. The page reads it too, to know whether the list follows
+   * a new row to its end or waits for the answer to say where the units went.
+   */
+  drawsBeforeAnswer(
+    listId: string,
+    content: string,
+    itemIds?: readonly string[],
+    options?: AddLineOptions
+  ): boolean {
+    if ((itemIds ?? []).length > 0) {
+      return true;
+    }
+    if (options?.intoLineId !== undefined) {
+      return false;
+    }
+    return !addMayMeetLine(this._byList().get(listId) ?? [], content);
+  }
+
+  /** An add that draws nothing until the server says where it went. */
+  private async _addOnAnswer(
+    listId: string,
+    content: string,
+    quantity: number,
+    itemIds: readonly string[] | undefined,
+    named: false | undefined,
+    options: AddLineOptions | undefined
+  ): Promise<LineAddOutcome> {
+    const outcome = await this._mutations.run(null, () =>
+      this._lines.addLineResult(
+        listId,
+        content,
+        quantity,
+        itemIds,
+        named,
+        options
+      )
+    );
+
+    if (outcome.state === 'failed') {
+      return { state: 'failed', error: outcome.error };
+    }
+
+    const { line, merged } = outcome.value;
+    if (merged) {
+      this._settleRaise(listId, line);
+    } else {
+      this._mine.add(line.id);
+      this._settleNew(listId, line);
+    }
+    return { state: 'added', line, merged };
   }
 
   /**
@@ -1325,9 +1434,20 @@ export class LineStore {
           order: 'position',
         });
 
+        // A line this store already holds past the first page is not appended again:
+        // an add that raised a line the store did not hold has put it in place while
+        // the rest was loading (velista `0170`). The read is reconciled into it, so the
+        // newer of the two wins by version.
+        const read = this._mergeRead(local, page.items);
+        const readById = new Map(read.map((line) => [line.id, line]));
+        const held = this._byList().get(listId) ?? [];
+        const heldIds = new Set(held.map((line) => line.id));
         this._setLines(listId, [
-          ...(this._byList().get(listId) ?? []),
-          ...this._mergeRead(local, page.items),
+          ...held.map((line) => {
+            const again = readById.get(line.id);
+            return again === undefined ? line : this._reconcile(line, again);
+          }),
+          ...read.filter((line) => !heldIds.has(line.id)),
         ]);
         this._recordReadCounts(local, page.items);
         cursor = page.nextCursor;
@@ -1669,6 +1789,51 @@ export class LineStore {
 
       return new Map(current).set(listId, settled);
     });
+  }
+
+  /**
+   * A line an add raised, put where it stands (velista `0170`, target 2).
+   *
+   * Patched in place when it is held, so it keeps its slot. An echo that got here
+   * first has already done the same, and the answer is then only as new as it, which
+   * {@link _reconcile} decides by version. A line this device does not hold is put
+   * where the list's order puts it, not at the end: it was already on the list.
+   */
+  private _settleRaise(listId: string, line: Line): void {
+    if (!this._byList().has(listId)) {
+      // The list was forgotten while the request was out. Nothing is written, as
+      // `_settleAdd` writes nothing then.
+      return;
+    }
+    if (this._lineById(line.id) !== null) {
+      this._patch(listId, line.id, (current) => this._reconcile(current, line));
+      return;
+    }
+    this._byList.update((current) => {
+      const lines = current.get(listId) ?? [];
+      const at = lines.findIndex((held) => held.position > line.position);
+      const next =
+        at === -1
+          ? [...lines, line]
+          : [...lines.slice(0, at), line, ...lines.slice(at)];
+      return new Map(current).set(listId, next);
+    });
+  }
+
+  /**
+   * A line an add made, with no placeholder drawn for it. The echo may have drawn it
+   * already, and is then refreshed in place; otherwise it goes at the end, where a new
+   * line is.
+   */
+  private _settleNew(listId: string, line: Line): void {
+    if (!this._byList().has(listId)) {
+      return;
+    }
+    if (this._lineById(line.id) !== null) {
+      this._patch(listId, line.id, () => line);
+      return;
+    }
+    this._insert(listId, line);
   }
 
   private _patch(
