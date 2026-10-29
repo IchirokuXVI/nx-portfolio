@@ -1,3 +1,5 @@
+> **PR:** [#859](https://github.com/IchirokuXVI/nx-portfolio/pull/859)
+
 # 0236: the assistant is safe for every age
 
 > Velista is for everyone: the owner's terms let a person under 14 use it with a parent's
