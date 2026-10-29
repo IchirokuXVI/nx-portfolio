@@ -131,6 +131,13 @@ export interface AddLineRequest {
    * Omitted for typed text: the server's default names the line.
    */
   readonly named?: false;
+  /**
+   * The three answers of a free text add to a name the list already holds (backend
+   * `0228`), each sent only as itself and never with products. See `AddLineOptions`.
+   */
+  readonly askIfAmbiguous?: boolean;
+  readonly intoLineId?: string;
+  readonly newLine?: boolean;
 }
 
 export interface UpdateLineRequest {

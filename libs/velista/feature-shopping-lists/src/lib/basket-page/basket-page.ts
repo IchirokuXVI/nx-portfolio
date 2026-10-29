@@ -24,12 +24,17 @@ import {
   BasketStore,
   BasketViewStore,
   GroupMembers,
+  ItemNames,
   keepsShopMap,
   SessionStore,
   ShopDetailStore,
   ShopSectionsStore,
+  toAddChoice,
 } from '@portfolio/velista/data-access';
 import {
+  type AddChoice,
+  addChoiceRows,
+  type AddLineOptions,
   APP_BASE_PATH,
   type BasketParticipant,
   type BasketProduct,
@@ -80,6 +85,7 @@ import {
   LineComposer,
   type LineComposerSubmit,
   ListPicker,
+  type ListPickerChoice,
   type ListPickerRow,
   ListTools,
   MapIcon,
@@ -87,6 +93,7 @@ import {
   OfflineIcon,
   PageHeader,
   PageHeaderAction,
+  productBrandSizeText,
   ShareIcon,
   type SuggestionChoice,
   type SuggestionHolding,
@@ -122,6 +129,9 @@ import { SeenTarget } from './seen-target';
  * with weeks left on it.
  */
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/** How long a raised row's quantity keeps its amber edge (velista `0170`, D4). */
+const TOOK_DURATION_MS = 2500;
 
 /**
  * What the basket showed when somebody left it for another page, handed back when
@@ -1092,6 +1102,9 @@ export class BasketPage {
       );
       this._scroll.detach();
       this._letGo();
+      if (this._tookTimer !== null) {
+        clearTimeout(this._tookTimer);
+      }
     });
   }
 
@@ -2170,6 +2183,61 @@ export class BasketPage {
   /** The line the open picker is asking about, as the composer sent it. */
   private _waiting: LineComposerSubmit | null = null;
 
+  private readonly _itemNames = inject(ItemNames);
+
+  /**
+   * The second question, once a list was picked and its answer was that the typed
+   * name is on two or more of its lines (velista `0170`, target 6). Null while the
+   * picker asks for a list, and while it is shut.
+   */
+  private readonly _choice = signal<{
+    readonly listId: string;
+    readonly listName: string;
+    readonly entry: LineComposerSubmit;
+    readonly choice: AddChoice;
+  } | null>(null);
+
+  /** The second question as the picker draws it, rows and all. */
+  protected readonly pickerChoice = computed<ListPickerChoice | null>(() => {
+    const asked = this._choice();
+    if (asked === null) {
+      return null;
+    }
+    const locale = this._locale();
+    // Read so the sizes redraw once the translations of a cold load arrive.
+    this._translator.loaded();
+    const translate = (key: string, args?: Record<string, unknown>) =>
+      this._translator.t(key, undefined, locale, args);
+    return {
+      name: asked.entry.content,
+      listName: asked.listName,
+      added: asked.entry.quantity,
+      rows: addChoiceRows(asked.choice, asked.entry.quantity, {
+        itemOf: (itemId) => this._itemNames.nameOf(itemId),
+        // The basket holds no favourite, so a row shows the line's first product.
+        favoriteOf: () => null,
+        locale,
+        brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      }),
+    };
+  });
+
+  /**
+   * The line a basket add just raised, whose row's quantity carries the amber edge
+   * for {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   */
+  protected readonly tookLine = signal<string | null>(null);
+
+  private _tookTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Whether a row holds the line an add just raised. */
+  protected tookIn(row: BasketRowModel): boolean {
+    const lineId = this.tookLine();
+    return (
+      lineId !== null && row.entries.some((held) => held.lineId === lineId)
+    );
+  }
+
   /**
    * The plus or a card's add button was pressed, and the answer is a question:
    * which list is it for? (velista `0116`.)
@@ -2192,15 +2260,54 @@ export class BasketPage {
   /** A list was picked, which is the add. */
   protected async pickList(listId: string): Promise<void> {
     const entry = this._waiting;
-    this._closePicker();
-    if (entry === null) {
+    if (entry === null || this.adding()) {
       return;
     }
-    // Cleared now, as an unheld send is: the add is not optimistic, but the words
-    // go back into the field if it fails (see `add`), and a field that kept them
-    // while the request was out would invite pressing the plus again.
-    this._composer()?.sent();
-    await this._addTo(listId, entry);
+    if ((entry.itemIds ?? []).length > 0) {
+      // A card's products decide where it lands, so nothing can come back as a
+      // question. Cleared now, as an unheld send is: the add is not optimistic, but
+      // the words go back into the field if it fails (see `_addTo`), and a field
+      // that kept them while the request was out would invite pressing the plus
+      // again.
+      this._closePicker();
+      this._composer()?.sent();
+      await this._addTo(listId, entry);
+      return;
+    }
+    // Typed words can come back as a question about them (velista `0170`), asked in
+    // this same popover, so it stays open and the words stay in the field until the
+    // answer. The plus waits meanwhile, because the add is in flight.
+    await this._addTo(listId, entry, { askIfAmbiguous: true });
+  }
+
+  /** A line of the second question was chosen: the same add, into that line. */
+  protected async chooseLine(lineId: string): Promise<void> {
+    const asked = this._choice();
+    if (asked === null || this.adding()) {
+      return;
+    }
+    await this._addTo(asked.listId, asked.entry, { intoLineId: lineId });
+  }
+
+  /** "A new line" was chosen. */
+  protected async chooseNewLine(): Promise<void> {
+    const asked = this._choice();
+    if (asked === null || this.adding()) {
+      return;
+    }
+    await this._addTo(asked.listId, asked.entry, { newLine: true });
+  }
+
+  /**
+   * Back from the second question to the lists, unchanged. Focus goes back into the
+   * field, where it was while the lists were asked.
+   */
+  protected backToLists(): void {
+    const asked = this._choice();
+    this._choice.set(null);
+    if (asked !== null) {
+      this._composer()?.restore(asked.entry.content);
+    }
   }
 
   /**
@@ -2213,7 +2320,20 @@ export class BasketPage {
 
   private _closePicker(): void {
     this._waiting = null;
+    this._choice.set(null);
     this.pickerAnchor.set(null);
+  }
+
+  /** Mark the row of a line an add raised (velista `0170`, target 4). */
+  private _markTook(lineId: string): void {
+    if (this._tookTimer !== null) {
+      clearTimeout(this._tookTimer);
+    }
+    this.tookLine.set(lineId);
+    this._tookTimer = setTimeout(() => {
+      this._tookTimer = null;
+      this.tookLine.set(null);
+    }, TOOK_DURATION_MS);
   }
 
   /**
@@ -2432,9 +2552,15 @@ export class BasketPage {
    */
   private async _addTo(
     listId: string,
-    entry: LineComposerSubmit
+    entry: LineComposerSubmit,
+    options?: AddLineOptions
   ): Promise<void> {
     const itemIds = entry.itemIds ?? [];
+    // The lines this basket already shows, so an answer naming one of them is a
+    // raise: the basket route answers the lines and not whether they were new.
+    const held = new Set(
+      this._store.rows().flatMap((row) => row.entries.map((e) => e.lineId))
+    );
     const result = await this._store.addLine({
       targetListId: listId,
       content: entry.content,
@@ -2442,15 +2568,32 @@ export class BasketPage {
       ...(itemIds.length > 0 ? { itemIds } : {}),
       // A chosen card is not named (velista `0144`, section 3).
       ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
+      // What typed words say about a name the list holds (backend `0228`).
+      ...(itemIds.length > 0 ? {} : (options ?? {})),
     });
 
-    // The dropdown goes with the words that produced it, whichever way the add
-    // went. Clearing it here rather than in the composer keeps the two from
-    // disagreeing about whether a list is open.
-    this._query.set('');
-    this.suggestions.set([]);
-
     if (result === null) {
+      const choice = toAddChoice(this._store.error());
+      if (choice !== null && this.pickerAnchor() !== null) {
+        // Which line takes it? The popover's content becomes the question, in
+        // place, with the picked list above its title (target 6).
+        void this._itemNames.ensure(
+          choice.lines.flatMap((line) => line.itemIds)
+        );
+        this._choice.set({
+          listId,
+          listName:
+            this._store.lists().get(listId)?.name ??
+            this.pickerRows().find((row) => row.listId === listId)?.name ??
+            '',
+          entry,
+          choice,
+        });
+        return;
+      }
+      this._closePicker();
+      this._query.set('');
+      this.suggestions.set([]);
       this._composer()?.restore(entry.content);
       this._say(
         this._translator.t(
@@ -2462,9 +2605,37 @@ export class BasketPage {
       return;
     }
 
+    // The add landed: the popover goes, and the words with it. A card's add was
+    // cleared when its list was picked.
+    if (this.pickerAnchor() !== null) {
+      this._closePicker();
+      this._composer()?.sent();
+    }
+    // The dropdown goes with the words that produced it. Clearing it here rather
+    // than in the composer keeps the two from disagreeing about whether a list is
+    // open.
+    this._query.set('');
+    this.suggestions.set([]);
+
+    const line = result.entries[0];
+    if (
+      line !== undefined &&
+      (options?.intoLineId !== undefined || held.has(line.lineId))
+    ) {
+      // A line the basket already showed, raised: its row is marked (target 4).
+      this._markTook(line.lineId);
+      this._say(
+        this._translator.t('list.addChoice.merged', undefined, this._locale(), {
+          name: line.content === '' ? entry.content : line.content,
+          quantity: new Intl.NumberFormat(this._locale()).format(line.left),
+        })
+      );
+      return;
+    }
+
     this._say(
       this._translator.t('basket.added.announced', undefined, this._locale(), {
-        content: result.entries[0]?.content ?? entry.content,
+        content: line?.content ?? entry.content,
       })
     );
   }

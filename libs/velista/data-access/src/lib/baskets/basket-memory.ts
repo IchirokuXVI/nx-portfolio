@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import {
+  ADD_CHOICE_MAX,
   basketEntryPatchOf,
   isOpenBasket,
   LINK_VISIT_HOURS,
@@ -1542,7 +1543,12 @@ export class BasketMemory implements BasketServiceI {
    * is exactly what the store has to fold correctly.
    *
    * The name alone is not a match. Two products of one name that differ in brand
-   * or in format are two lines, and free text meets only free text.
+   * or in format are two lines.
+   *
+   * Typed text follows backend `0228` since velista `0170`: the line the person
+   * chose, then a free text line of that name, then a new line when the person asked
+   * for one, and then the lines that hold a product under that name. One of those is
+   * raised; two or more refuse with `line_add_needs_choice` when the add can ask.
    *
    * A list this reader was not served is refused, which is the redaction being a
    * rule rather than a caption: a target you were not told about is one you may
@@ -1564,13 +1570,16 @@ export class BasketMemory implements BasketServiceI {
     const quantity = Math.max(1, Math.trunc(body.quantity));
     const key = normalizeContent(content);
     const wanted = productSetKey(body.itemIds ?? []);
-    const held = this._lines.find(
-      (line) =>
-        !line.deleted &&
-        line.listId === body.targetListId &&
-        normalizeContent(line.content) === key &&
-        productSetKey(line.itemIds) === wanted
-    );
+    const held =
+      wanted === ''
+        ? this._typedAddTarget(body, key)
+        : this._lines.find(
+            (line) =>
+              !line.deleted &&
+              line.listId === body.targetListId &&
+              normalizeContent(line.content) === key &&
+              productSetKey(line.itemIds) === wanted
+          );
 
     if (held !== undefined) {
       held.quantity += quantity;
@@ -1595,6 +1604,61 @@ export class BasketMemory implements BasketServiceI {
     this._lines.push(line);
     this._announce([line.id], true, false);
     return this._result([line.id]);
+  }
+
+  /**
+   * Where a typed add lands on its list, or undefined for a new line (backend
+   * `0228`, target 1). Throws what the server would: the not found for a chosen line
+   * that is gone, and the question for two or more lines that hold a product.
+   */
+  private _typedAddTarget(
+    body: BasketAddLineRequest,
+    key: string
+  ): StoredLine | undefined {
+    const onList = this._lines.filter(
+      (line) => !line.deleted && line.listId === body.targetListId
+    );
+
+    if (body.intoLineId !== undefined) {
+      const chosen = onList.find((line) => line.id === body.intoLineId);
+      if (chosen === undefined) {
+        throw this._refuse('not_found', 404, 'That line is not on the list');
+      }
+      return chosen;
+    }
+
+    const named = onList.filter(
+      (line) => normalizeContent(line.content) === key
+    );
+    const text = named.find((line) => line.itemIds.length === 0);
+    if (text !== undefined || body.newLine === true) {
+      return text;
+    }
+
+    const candidates = named.filter((line) => line.itemIds.length > 0);
+    if (candidates.length === 1) {
+      return candidates[0];
+    }
+    if (candidates.length > 1 && body.askIfAmbiguous === true) {
+      throw new GatewayError({
+        code: 'line_add_needs_choice',
+        status: 409,
+        correlationId: 'memory',
+        detail: 'That name is on more than one line of the list',
+        details: {
+          lines: candidates.slice(0, ADD_CHOICE_MAX).map((line) => ({
+            lineId: line.id,
+            content: line.content,
+            named: true,
+            quantity: line.quantity,
+            itemIds: [...line.itemIds],
+            productGroupId: null,
+            approvalStatus: line.approved ? 'APPROVED' : 'PENDING',
+          })),
+        },
+      });
+    }
+    return undefined;
   }
 
   /**

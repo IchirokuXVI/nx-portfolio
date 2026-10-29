@@ -21,6 +21,7 @@ import {
   BasketViewStore,
   fakeCategoryStore,
   fakeGroupMembers,
+  fakeItemNames,
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
@@ -28,11 +29,13 @@ import {
   MEMORY_SHOP_MAPS,
   provideFakeCategoryStore,
   provideFakeGroupMembers,
+  provideFakeItemNames,
   provideFakeShopDetailStore,
   provideFakeShopSectionsStore,
   SessionStore,
   type FakeCategoryStore,
   type FakeGroupMembers,
+  type FakeItemNames,
   type FakeShopDetailStore,
   type FakeShopSectionsStore,
   type ShopDetailRead,
@@ -257,6 +260,8 @@ interface Options {
   readonly echoValues?: boolean;
   /** What the catalog says each product group holds. */
   readonly groupMembers?: FakeGroupMembers;
+  /** The products the catalog has resolved, for the add choice's rows (velista `0170`). */
+  readonly itemNames?: FakeItemNames;
   /**
    * How many changes are new to this viewer (velista `0093`, section 5).
    *
@@ -766,6 +771,7 @@ async function render(options: Options = {}): Promise<{
         options.storage ?? new Map([[StorageKeys.shopAskOff, 'true']])
       ),
       provideFakeGroupMembers(options.groupMembers ?? fakeGroupMembers()),
+      provideFakeItemNames(options.itemNames ?? fakeItemNames()),
       provideFakeShopSectionsStore(
         options.shopSections ?? fakeShopSectionsStore()
       ),
@@ -3494,6 +3500,8 @@ describe('the composer and the list it adds to', () => {
         targetListId: 'l-parents',
         content: 'Batteries',
         quantity: 2,
+        // Typed words say the page can ask which line (velista 0170).
+        askIfAmbiguous: true,
       });
       expect(field(fixture).value).toBe('');
       expect(composer(fixture).quantity()).toBe(1);
@@ -3583,6 +3591,167 @@ describe('the composer and the list it adds to', () => {
       // remembered in an aisle is the failure this screen cannot afford.
       expect(query(fixture, '.said')?.textContent).toContain('basket.error');
       expect(field(fixture).value).toBe('Batteries');
+    });
+
+    /**
+     * Velista `0170`, target 6: after a pick, a typed name already on two or more
+     * lines of that list turns the same popover into the question of which line.
+     */
+    describe('a typed name already on the picked list (velista 0170)', () => {
+      const refusal = () =>
+        new GatewayError({
+          code: 'line_add_needs_choice',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            lines: [
+              {
+                lineId: 'zl-a',
+                content: 'Leche entera',
+                named: true,
+                quantity: 2,
+                itemIds: ['item-a'],
+                productGroupId: null,
+                approvalStatus: 'APPROVED',
+              },
+              {
+                lineId: 'zl-b',
+                content: 'Leche entera',
+                named: true,
+                quantity: 0,
+                itemIds: ['item-b'],
+                productGroupId: null,
+                approvalStatus: 'APPROVED',
+              },
+            ],
+          },
+        });
+      const choiceRows = () => [
+        ...document.querySelectorAll<HTMLButtonElement>('.pop .row'),
+      ];
+
+      async function asked() {
+        const itemNames = fakeItemNames({
+          items: [
+            {
+              id: 'item-a',
+              name: { es: 'Leche entera', en: 'Whole milk' },
+              brand: 'Hacendado',
+              size: 1,
+              unit: 'LITER',
+              productGroupId: null,
+              categories: [],
+              offer: null,
+              chainPrices: [],
+              imageUrl: null,
+              packCount: null,
+              unitBasis: null,
+            },
+          ],
+        });
+        const rendered = await render({ served, itemNames });
+        const { fixture, store } = rendered;
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(refusal());
+          return Promise.resolve(null);
+        });
+        typeInto(fixture, 'Leche entera');
+        plus(fixture).click();
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+        return { ...rendered, itemNames };
+      }
+
+      it('swaps the lists for the lines, in place, with the picked list above the title', async () => {
+        const { fixture, itemNames } = await asked();
+
+        // The lists are gone and the lines are in the same popover.
+        expect(options()).toHaveLength(0);
+        expect(document.querySelectorAll('.pop')).toHaveLength(1);
+        expect(document.querySelector('.pop .back')?.textContent).toContain(
+          'Weekly shop'
+        );
+        expect(document.querySelector('.pop .title')?.textContent).toContain(
+          'basket.addChoice.title'
+        );
+        // One row per line and "A new line" last.
+        expect(choiceRows()).toHaveLength(3);
+        expect(choiceRows()[0].querySelector('.count')?.textContent).toMatch(
+          /2\s*→\s*3/
+        );
+        expect(choiceRows()[2].classList.contains('new')).toBe(true);
+        // One lookup of the products named, for their brand and size.
+        expect(itemNames.asked).toContainEqual(['item-a', 'item-b']);
+        // The words wait in the field.
+        expect(field(fixture).value).toBe('Leche entera');
+      });
+
+      it('sends the chosen line, then closes and clears the field', async () => {
+        const { fixture, store } = await asked();
+
+        choiceRows()[1]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(store.addLine).toHaveBeenLastCalledWith({
+          targetListId: 'l-weekly',
+          content: 'Leche entera',
+          quantity: 1,
+          intoLineId: 'zl-b',
+        });
+        expect(document.querySelector('.pop')).toBeNull();
+        expect(field(fixture).value).toBe('');
+      });
+
+      it('sends a new line when that is the answer', async () => {
+        const { fixture, store } = await asked();
+
+        choiceRows()[2]?.click();
+        await fixture.whenStable();
+
+        expect(store.addLine).toHaveBeenLastCalledWith({
+          targetListId: 'l-weekly',
+          content: 'Leche entera',
+          quantity: 1,
+          newLine: true,
+        });
+      });
+
+      it('goes back to the lists, unchanged, and keeps the words', async () => {
+        const { fixture } = await asked();
+
+        (document.querySelector('.pop .back') as HTMLButtonElement).click();
+        fixture.detectChanges();
+
+        expect(
+          options().map((one) => one.querySelector('.name')?.textContent)
+        ).toEqual(['Weekly shop', 'Groceries']);
+        expect(choiceRows()).toHaveLength(0);
+        expect(field(fixture).value).toBe('Leche entera');
+      });
+
+      it('marks the row of the line a raise went to', async () => {
+        const raised = line('zl-a');
+        const { fixture, store } = await render({ served, lines: [raised] });
+        store.addLine.mockResolvedValueOnce(rowResult(raised));
+        typeInto(fixture, 'Leche entera');
+        plus(fixture).click();
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(
+          (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-quantity-reel.took'
+          )
+        ).not.toBeNull();
+        expect(query(fixture, '.said')?.textContent).toContain(
+          'list.addChoice.merged'
+        );
+      });
     });
   });
 

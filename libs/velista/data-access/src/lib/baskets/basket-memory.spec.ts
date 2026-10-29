@@ -905,6 +905,67 @@ describe('BasketMemory: adding a line', () => {
     ).toBe('forbidden');
   });
 
+  it('raises the one line that holds a product under a typed name (backend 0228)', async () => {
+    const memory = new BasketMemory();
+    const result = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'milk',
+      quantity: 1,
+      askIfAmbiguous: true,
+    });
+
+    expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
+    expect(result.entries[0].left).toBe(3);
+  });
+
+  it('asks which line when two hold a product under the name, and takes the answer', async () => {
+    const memory = new BasketMemory();
+    const second = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-milk-pascual'],
+    });
+    const secondId = second.entries[0].lineId;
+
+    let refusal: unknown = null;
+    try {
+      await memory.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        quantity: 1,
+        askIfAmbiguous: true,
+      });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toMatchObject({
+      code: 'line_add_needs_choice',
+      status: 409,
+    });
+    expect(
+      (
+        refusal as { details: { lines: { lineId: string }[] } }
+      ).details.lines.map((line) => line.lineId)
+    ).toEqual(['zl-1', secondId]);
+
+    const into = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 2,
+      intoLineId: secondId,
+    });
+    expect(into.entries[0]).toMatchObject({ lineId: secondId, left: 3 });
+
+    const fresh = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      newLine: true,
+    });
+    expect(['zl-1', secondId]).not.toContain(fresh.entries[0].lineId);
+  });
+
   it('refuses an add on a finished trip', async () => {
     const memory = new BasketMemory();
     memory.status = 'FINISHED';

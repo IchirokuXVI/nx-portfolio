@@ -122,6 +122,7 @@ import { classifyReelGesture } from './quantity-reel-gesture';
     '[class.open]': 'open()',
     '[class.readonly]': 'readonly()',
     '[class.with-buttons]': '!hideButtons()',
+    '[class.took]': 'took()',
   },
 })
 export class QuantityReel {
@@ -148,6 +149,13 @@ export class QuantityReel {
    * never be permitted for them.
    */
   readonly readonly = input(false);
+
+  /**
+   * Whether an add just raised this number (velista `0170`, target 4): the pill takes
+   * an amber edge while it is true. The container decides for how long. It says
+   * where the units went, so it changes nothing about the control.
+   */
+  readonly took = input(false);
 
   /**
    * Whether to draw the control without its minus and plus buttons.

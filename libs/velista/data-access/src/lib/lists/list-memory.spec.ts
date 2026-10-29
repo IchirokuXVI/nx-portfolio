@@ -718,3 +718,142 @@ describe('LineMemory keeps the two rules of backend 0207 (velista 0144)', () => 
     expect(freed.line.named).toBe(true);
   });
 });
+
+describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170)', () => {
+  /** Two lines that hold a product under one name, on the owned list. */
+  async function twoMilks() {
+    const built = await build();
+    const whole = await built.lines.addLine(
+      OWNED_LIST,
+      'Leche entera',
+      2,
+      ['item-milk-a'],
+      false
+    );
+    const other = await built.lines.addLine(
+      OWNED_LIST,
+      'Leche entera',
+      1,
+      ['item-milk-b'],
+      false
+    );
+    return { ...built, whole, other };
+  }
+
+  it('raises the one line that holds a product under the typed name', async () => {
+    const { lines } = await build();
+    const milk = await lines.addLine(
+      OWNED_LIST,
+      'Leche entera',
+      2,
+      ['item-milk-a'],
+      false
+    );
+
+    const result = await lines.addLineResult(
+      OWNED_LIST,
+      'leche ENTERA',
+      1,
+      undefined,
+      undefined,
+      { askIfAmbiguous: true }
+    );
+
+    expect(result.merged).toBe(true);
+    expect(result.line).toMatchObject({ id: milk.id, quantity: 3 });
+  });
+
+  it('asks which line when two hold a product under the name, in list order', async () => {
+    const { lines, whole, other } = await twoMilks();
+
+    let refusal: unknown = null;
+    try {
+      await lines.addLineResult(
+        OWNED_LIST,
+        'Leche entera',
+        1,
+        undefined,
+        undefined,
+        {
+          askIfAmbiguous: true,
+        }
+      );
+    } catch (error) {
+      refusal = error;
+    }
+
+    expect(refusal).toBeInstanceOf(GatewayError);
+    const failure = refusal as GatewayError;
+    expect(failure.code).toBe('line_add_needs_choice');
+    expect(failure.status).toBe(409);
+    expect(
+      (failure.details?.['lines'] as { lineId: string }[]).map((l) => l.lineId)
+    ).toEqual([whole.id, other.id]);
+  });
+
+  it('makes a line when two match and the caller cannot ask', async () => {
+    const { lines } = await twoMilks();
+
+    const result = await lines.addLineResult(OWNED_LIST, 'Leche entera', 1);
+
+    expect(result.merged).toBe(false);
+  });
+
+  it('raises the line the person chose, and makes one when they asked for a new one', async () => {
+    const { lines, other } = await twoMilks();
+
+    const into = await lines.addLineResult(
+      OWNED_LIST,
+      'Leche entera',
+      3,
+      undefined,
+      undefined,
+      { intoLineId: other.id }
+    );
+    expect(into).toEqual({
+      line: expect.objectContaining({ id: other.id, quantity: 4 }),
+      merged: true,
+    });
+
+    const fresh = await lines.addLineResult(
+      OWNED_LIST,
+      'Leche entera',
+      1,
+      undefined,
+      undefined,
+      { newLine: true }
+    );
+    expect(fresh.merged).toBe(false);
+  });
+
+  it('refuses a chosen line that is not on the list', async () => {
+    const { lines } = await build();
+
+    expect(
+      await codeOf(
+        lines.addLineResult(OWNED_LIST, 'Leche', 1, undefined, undefined, {
+          intoLineId: 'line-nowhere',
+        })
+      )
+    ).toBe('not_found');
+  });
+
+  it('lets a free text line of the name take the add before anything else', async () => {
+    const { lines } = await twoMilks();
+    const typed = await lines.addLine(OWNED_LIST, 'Leche entera', 1);
+
+    const result = await lines.addLineResult(
+      OWNED_LIST,
+      'Leche entera',
+      1,
+      undefined,
+      undefined,
+      { newLine: true }
+    );
+
+    expect(result).toEqual({
+      line: expect.objectContaining({ id: typed.id, quantity: 2 }),
+      merged: true,
+    });
+  });
+});

@@ -95,7 +95,7 @@ import {
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
-import { ListPage } from './list-page';
+import { ListPage, TOOK_DURATION_MS } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
 const LIST_ID = '3c9a1d02-5f47-4b8e-9a1c-7d2e6b4f0a35';
@@ -1060,7 +1060,13 @@ describe('ListPage', () => {
       await fixture.componentInstance.add({ content: 'Milk', quantity: 2 });
 
       expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 2 },
+        {
+          kind: 'add',
+          content: 'Milk',
+          quantity: 2,
+          // Typed words say the page can ask which line (velista 0170).
+          options: { askIfAmbiguous: true },
+        },
       ]);
     });
 
@@ -1070,7 +1076,12 @@ describe('ListPage', () => {
       await fixture.componentInstance.add({ content: 'Milk', quantity: 1 });
 
       expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 1 },
+        {
+          kind: 'add',
+          content: 'Milk',
+          quantity: 1,
+          options: { askIfAmbiguous: true },
+        },
       ]);
     });
 
@@ -1093,8 +1104,273 @@ describe('ListPage', () => {
       await fixture.componentInstance.add({ content: 'Milk', quantity: 1 });
 
       expect(lines.calls).toEqual([
-        { kind: 'add', content: 'Milk', quantity: 1 },
+        {
+          kind: 'add',
+          content: 'Milk',
+          quantity: 1,
+          options: { askIfAmbiguous: true },
+        },
       ]);
+    });
+
+    it('sends nothing new for a card, whose products decide where it lands', async () => {
+      const { fixture, lines } = await render({ permissions: ADMIN });
+
+      await fixture.componentInstance.add({
+        content: 'Leche entera',
+        quantity: 1,
+        itemIds: ['item-a'],
+        named: false,
+      });
+
+      expect(lines.calls).toEqual([
+        {
+          kind: 'add',
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          named: false,
+        },
+      ]);
+    });
+  });
+
+  /**
+   * A typed name already on the list (velista `0170`): a raise keeps its row and
+   * marks it, and two or more lines with a product ask which, against the plus.
+   */
+  describe('a typed name already on the list (velista 0170)', () => {
+    const MILKS = [
+      line('ln-whole', {
+        content: 'Leche entera',
+        named: false,
+        itemIds: ['item-a'],
+        quantity: 2,
+        position: 1,
+      }),
+      line('ln-other', {
+        content: 'Leche entera',
+        named: false,
+        itemIds: ['item-b'],
+        quantity: 0,
+        position: 2,
+      }),
+      line('ln-bread', { content: 'Pan', position: 3 }),
+    ];
+    const ITEM_A: CatalogItem = {
+      id: 'item-a',
+      name: { es: 'Leche entera', en: 'Whole milk' },
+      brand: 'Hacendado',
+      size: 1,
+      unit: 'LITER',
+      productGroupId: null,
+      categories: [],
+      offer: null,
+      unitBasis: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+    };
+    const refusal = () =>
+      new GatewayError({
+        code: 'line_add_needs_choice',
+        status: 409,
+        correlationId: 'ref',
+        details: {
+          lines: MILKS.slice(0, 2).map((held) => ({
+            lineId: held.id,
+            content: held.content,
+            named: held.named,
+            quantity: held.quantity,
+            itemIds: held.itemIds,
+            productGroupId: null,
+            approvalStatus: 'APPROVED',
+          })),
+        },
+      });
+
+    function field(fixture: ComponentFixture<ListPage>): HTMLInputElement {
+      return query(
+        fixture,
+        'lib-line-composer input.field'
+      ) as HTMLInputElement;
+    }
+    function plus(fixture: ComponentFixture<ListPage>): HTMLButtonElement {
+      return query(fixture, 'lib-line-composer .send') as HTMLButtonElement;
+    }
+    async function typeAndAdd(
+      fixture: ComponentFixture<ListPage>,
+      text: string
+    ): Promise<void> {
+      const input = field(fixture);
+      input.value = text;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+      // The add's answer, then the render it causes.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      fixture.detectChanges();
+    }
+    const choiceRows = () => [
+      ...document.querySelectorAll<HTMLButtonElement>('.pop .row'),
+    ];
+
+    afterEach(() => {
+      // The question lives in the top layer, next to its anchor.
+      TestBed.resetTestingModule();
+      jest.useRealTimers();
+    });
+
+    it('marks the raised row where it stands, for 2.5 s, and says where the units went', async () => {
+      jest.useFakeTimers();
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-bread' });
+
+      await typeAndAdd(fixture, 'Pan');
+
+      const page = fixture.componentInstance;
+      expect(page.tookLine()).toBe('ln-bread');
+      // No row was drawn for it, and the raised row is where it was.
+      expect(lines.linesIn().map((held) => held.id)).toEqual([
+        'ln-whole',
+        'ln-other',
+        'ln-bread',
+      ]);
+      const raised = query(
+        fixture,
+        '[data-line-id="ln-bread"] lib-quantity-reel'
+      ) as HTMLElement;
+      expect(raised.classList.contains('took')).toBe(true);
+      expect(page.announcement()).toBe('list.addChoice.merged');
+      expect(field(fixture).value).toBe('');
+
+      jest.advanceTimersByTime(TOOK_DURATION_MS);
+      fixture.detectChanges();
+
+      expect(page.tookLine()).toBeNull();
+      expect(raised.classList.contains('took')).toBe(false);
+    });
+
+    it('keeps the words in the field while the answer is out, for a name the list holds', async () => {
+      const { fixture, lines } = await render({ lines: MILKS });
+      lines.holdAdds();
+
+      const input = field(fixture);
+      input.value = 'Pan';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('Pan');
+      lines.releaseAdds();
+    });
+
+    it('clears the field at once for a name the list does not hold', async () => {
+      const { fixture, lines } = await render({ lines: MILKS });
+      lines.holdAdds();
+
+      const input = field(fixture);
+      input.value = 'Huevos';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('');
+      lines.releaseAdds();
+    });
+
+    it('asks which line against the plus, with a row per line and a new line last', async () => {
+      const { fixture, lines, itemNames } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      await typeAndAdd(fixture, 'Leche entera');
+
+      expect(choiceRows()).toHaveLength(3);
+      expect(document.querySelector('.pop .title')?.textContent).toContain(
+        'list.addChoice.title'
+      );
+      const first = choiceRows()[0];
+      // The name the list row draws (velista 0144): a line made from a product
+      // shows the product's, in the reader's language, with its brand and size.
+      expect(first.querySelector('.name')?.textContent?.trim()).toBe(
+        'Whole milk'
+      );
+      expect(first.querySelector('.product')).not.toBeNull();
+      // A product this page does not hold has no product line yet.
+      expect(choiceRows()[1].querySelector('.product')).toBeNull();
+      expect(first.querySelector('.count')?.textContent).toMatch(/2\s*→\s*3/);
+      // A bought line counts, from 0 (D2).
+      expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
+        /0\s*→\s*1/
+      );
+      expect(choiceRows()[2].classList.contains('new')).toBe(true);
+      // Focus moves to the first row, and the words wait in the field.
+      expect(document.activeElement).toBe(first);
+      expect(field(fixture).value).toBe('Leche entera');
+      // The products named are looked up once.
+      expect(itemNames.asked).toContainEqual(['item-a', 'item-b']);
+    });
+
+    it('sends the chosen line as intoLineId, and a new line as newLine', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      choiceRows()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        quantity: 1,
+        options: { intoLineId: 'ln-other' },
+      });
+      expect(choiceRows()).toHaveLength(0);
+
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+      choiceRows()[2]?.click();
+      await fixture.whenStable();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        quantity: 1,
+        options: { newLine: true },
+      });
+    });
+
+    it('closes on Escape, hands focus back to the plus and keeps the words', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      document.body.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+      fixture.detectChanges();
+
+      expect(choiceRows()).toHaveLength(0);
+      expect(document.activeElement).toBe(plus(fixture));
+      expect(field(fixture).value).toBe('Leche entera');
     });
   });
 

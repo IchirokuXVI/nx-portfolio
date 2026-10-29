@@ -963,4 +963,18 @@ describe('QuantityReel', () => {
       expect(deltas).toEqual([]);
     });
   });
+
+  describe('the edge of a raise (velista 0170)', () => {
+    it('marks the number while an add has just raised it, and changes nothing else', async () => {
+      const { fixture, host } = await render(3);
+      expect(host.classList.contains('took')).toBe(false);
+
+      fixture.componentRef.setInput('took', true);
+      fixture.detectChanges();
+
+      expect(host.classList.contains('took')).toBe(true);
+      expect(host.getAttribute('aria-valuenow')).toBe('3');
+      expect(host.getAttribute('role')).toBe('spinbutton');
+    });
+  });
 });

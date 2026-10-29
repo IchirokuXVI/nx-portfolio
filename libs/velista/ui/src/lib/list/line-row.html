@@ -266,6 +266,7 @@
       (pointerdown)="$event.stopPropagation()"
       [label]="'list.line.quantityFor' | rokuT: { name: line().content }"
       [readonly]="!line().adjustable"
+      [took]="took()"
       [value]="line().quantity"
       #reel
     />
