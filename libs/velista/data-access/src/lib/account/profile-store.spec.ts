@@ -38,6 +38,8 @@ function fakeAccount(
     normalizeTo?: string;
     /** What the app state write throws, if anything. */
     appStateRejectsWith?: unknown;
+    /** What accepting the terms throws, if anything (velista 0173). */
+    acceptRejectsWith?: unknown;
   } = {}
 ) {
   const calls: {
@@ -62,9 +64,10 @@ function fakeAccount(
         throw options.setRejectsWith;
       }
       held = { ...held, username: options.normalizeTo ?? username };
-      // The server's rename answers the auth half alone, with no `appState`.
+      // The server's rename answers the auth half alone, with no `appState` and no
+      // terms.
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { appState, ...authHalf } = held;
+      const { appState, terms, ...authHalf } = held;
       return authHalf;
     },
     deleteAccount: async () => {
@@ -81,6 +84,21 @@ function fakeAccount(
     suggestUsername: async () => {
       calls.push({ method: 'suggestUsername' });
       return 'Quiet Harbour';
+    },
+    acceptTerms: async (version: string) => {
+      calls.push({ method: 'acceptTerms', username: version });
+      if (options.acceptRejectsWith !== undefined) {
+        throw options.acceptRejectsWith;
+      }
+      held = {
+        ...held,
+        terms: {
+          currentVersion: version,
+          acceptedVersion: version,
+          acceptanceRequired: false,
+        },
+      };
+      return { version, acceptedAt: '2026-10-29T10:00:00.000Z' };
     },
   };
 
@@ -732,6 +750,81 @@ describe('ProfileStore', () => {
       expect(store.state()).toBe('loaded');
       expect(store.error()).toBeNull();
       expect(store.profile()).toBe(held);
+    });
+  });
+
+  describe('the terms (velista 0173)', () => {
+    const owed = {
+      currentVersion: '2026-10-29',
+      acceptedVersion: null,
+      acceptanceRequired: true,
+    };
+
+    it('reads nothing to accept until a profile with a terms block is held', async () => {
+      const { store } = setUp(fakeAccount());
+      expect(store.terms()).toBeNull();
+
+      await store.load();
+      expect(store.terms()).toBeNull();
+    });
+
+    it('accepts, then reads the profile again', async () => {
+      const service = fakeAccount({ profile: profile({ terms: owed }) });
+      const { store } = setUp(service);
+      await store.load();
+      expect(store.terms()?.acceptanceRequired).toBe(true);
+
+      await store.acceptTerms('2026-10-29');
+
+      expect(service.calls.map((call) => call.method)).toEqual([
+        'getProfile',
+        'acceptTerms',
+        'getProfile',
+      ]);
+      expect(store.terms()?.acceptanceRequired).toBe(false);
+    });
+
+    it('reads the profile again on a stale version, rather than failing', async () => {
+      const service = fakeAccount({
+        profile: profile({ terms: owed }),
+        acceptRejectsWith: new GatewayError({
+          code: 'terms_version_stale',
+          status: 409,
+          correlationId: 'c1',
+          details: { currentVersion: '2026-12-01' },
+        }),
+      });
+      const { store } = setUp(service);
+      await store.load();
+
+      await expect(store.acceptTerms('2026-10-29')).resolves.toBeUndefined();
+      expect(
+        service.calls.filter((c) => c.method === 'getProfile')
+      ).toHaveLength(2);
+    });
+
+    it('rejects any other failure, so the prompt can say it did not save', async () => {
+      const failure = new Error('offline');
+      const { store } = setUp(
+        fakeAccount({
+          profile: profile({ terms: owed }),
+          acceptRejectsWith: failure,
+        })
+      );
+      await store.load();
+
+      await expect(store.acceptTerms('2026-10-29')).rejects.toBe(failure);
+    });
+
+    it('keeps the terms through a rename, whose answer carries none', async () => {
+      const { store } = setUp(
+        fakeAccount({ profile: profile({ terms: owed }) })
+      );
+      await store.load();
+
+      await store.rename('Dani', 'GLOBAL_ONLY');
+
+      expect(store.terms()).toEqual(owed);
     });
   });
 });

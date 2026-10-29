@@ -9,6 +9,7 @@ import type {
 } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
+import { withTermsVersion } from '../auth/auth-api';
 import { operation } from '../auth/http-context';
 import { TokenStore } from '../auth/token-store';
 import { refuseUnprovenSession } from '../auth/unproven-session';
@@ -92,10 +93,15 @@ export class ZoneApi implements ZoneServiceI {
    * half. A token that is signed by the current key and has not expired passes it, and
    * the account it names may still be gone: deleted, or wiped with the database it
    * lived in. Only the server knows, so that one is answered afterwards.
+   *
+   * `acceptedTermsVersion` goes out only on the anonymous branch (velista `0173`): the
+   * gateway records nothing for a caller it already knows, and would still refuse a
+   * stale version from one.
    */
   async createZone(
     name: string,
-    username?: string
+    username?: string,
+    acceptedTermsVersion?: string | null
   ): Promise<ZoneCreationResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
@@ -114,7 +120,13 @@ export class ZoneApi implements ZoneServiceI {
           // per-zone name in mind: the backend fills it from their global username,
           // and the validation pipe runs with `forbidNonWhitelisted`, so a stray
           // `undefined` is not something to be casual about.
-          username === undefined ? { name } : { name, username },
+          {
+            name,
+            ...(username === undefined ? {} : { username }),
+            ...(authorized.state === 'anonymous'
+              ? withTermsVersion(acceptedTermsVersion)
+              : {}),
+          },
           { context: operation('zones.create') }
         )
       );
@@ -137,8 +149,15 @@ export class ZoneApi implements ZoneServiceI {
     return { state: 'created', zone };
   }
 
-  /** `POST /v1/zones/join`. Same handshake, the same rule D3 gate, the same net. */
-  async joinZone(joinCode: string, username?: string): Promise<ZoneJoinResult> {
+  /**
+   * `POST /v1/zones/join`. Same handshake, the same rule D3 gate, the same net, and the
+   * version of the terms on the anonymous branch only, as on {@link createZone}.
+   */
+  async joinZone(
+    joinCode: string,
+    username?: string,
+    acceptedTermsVersion?: string | null
+  ): Promise<ZoneJoinResult> {
     const authorized = await this._tokens.authorizeOptionalAuthCall();
     if (authorized.state === 'guest-account-lost') {
       return { state: 'guest-account-lost' };
@@ -152,7 +171,13 @@ export class ZoneApi implements ZoneServiceI {
       body = await firstValueFrom(
         this._http.post<unknown>(
           this._urls.gateway('/v1/zones/join'),
-          username === undefined ? { joinCode } : { joinCode, username },
+          {
+            joinCode,
+            ...(username === undefined ? {} : { username }),
+            ...(authorized.state === 'anonymous'
+              ? withTermsVersion(acceptedTermsVersion)
+              : {}),
+          },
           { context: operation('zones.join') }
         )
       );

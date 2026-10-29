@@ -103,6 +103,21 @@ describe('OperatorSettingsStore (velista 0172, target 1)', () => {
     expect(store.state()).toBe('ready');
   });
 
+  it('reads past the cache on a reload, and not on the first read (velista 0173)', async () => {
+    const { store, readiness } = setUp();
+
+    readiness.reportReady();
+    TestBed.tick();
+    await settle();
+    expect(memory.freshReads).toBe(0);
+
+    store.reload();
+    await settle();
+
+    expect(memory.reads).toBe(2);
+    expect(memory.freshReads).toBe(1);
+  });
+
   it('retries a failed read on the next readiness edge, and never in a loop', async () => {
     const { store, readiness } = setUp();
     memory.failNext = true;
@@ -187,6 +202,39 @@ describe('OperatorSettingsApi', () => {
 
     // No terms version: the answer is unreadable, which the store calls failed.
     await expect(read).resolves.toBeNull();
+    // The first read may come from the browser's cache.
+    expect(request.request.cache).toBeUndefined();
+    http.verify();
+  });
+
+  it('asks past the browser cache for a fresh read (velista 0173)', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideFakeBrowserFacade(),
+        {
+          provide: APP_API_CONFIG,
+          useValue: {
+            gatewayBaseUrl: 'https://api.example.org',
+            realtimeBaseUrl: 'https://rt.example.org',
+          },
+        },
+        ApiUrl,
+        OperatorSettingsApi,
+      ],
+    });
+    const api = TestBed.inject(OperatorSettingsApi);
+    const http = TestBed.inject(HttpTestingController);
+
+    const read = api.read({ fresh: true });
+    const request = http.expectOne((req) =>
+      req.url.endsWith('/v1/legal/settings')
+    );
+    expect(request.request.cache).toBe('no-cache');
+    request.flush({});
+    await read;
     http.verify();
   });
 });

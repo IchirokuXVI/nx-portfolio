@@ -21,8 +21,8 @@ const VERIFIER_BYTES = 32;
  * somebody else made lands on that page in a browser that holds no verifier, so it signs
  * nobody in and replaces nobody's session.
  *
- * The Google button on sign in, register and the front door calls {@link start}, and
- * each page shows a refused start in its own way.
+ * The Google button on sign in, register, upgrade and the front door calls
+ * {@link start}, and each page shows a refused start in its own way.
  *
  * Installed by `VELISTA_DATA_ACCESS_PROVIDERS` and not at the root (rule D5): it reaches
  * `ApiUrl` and `AuthApi`, which only the app injector holds.
@@ -46,8 +46,15 @@ export class GoogleSignIn {
    * session, a network error) and removes the verifier first. The error is the
    * `GatewayError` or the network failure as it arrived, and the caller decides what to
    * show. Rejects on the server too, where there is no generator to make a verifier.
+   *
+   * `acceptedTermsVersion` is the version the line under the button names, read from
+   * the operator's settings at the press, or null when the deployment published no
+   * terms (velista `0173`). It goes in the mint's body beside the challenge, where a
+   * stale one is refused as `terms_version_stale` before the document leaves.
    */
-  async start(): Promise<void> {
+  async start(options: {
+    readonly acceptedTermsVersion: string | null;
+  }): Promise<void> {
     const verifier = base64url(this._browser.randomBytes(VERIFIER_BYTES));
     this._browser.writeSessionStorage(GOOGLE_VERIFIER_KEY, verifier);
 
@@ -56,7 +63,10 @@ export class GoogleSignIn {
       const challenge = base64url(
         new Uint8Array(await this._browser.sha256(ascii(verifier)))
       );
-      state = await this._api.mintGoogleState(challenge);
+      state = await this._api.mintGoogleState(
+        challenge,
+        options.acceptedTermsVersion
+      );
     } catch (error) {
       this._browser.removeSessionStorage(GOOGLE_VERIFIER_KEY);
       throw error;

@@ -15,6 +15,7 @@ import {
   NAV_CHROME,
   NO_NAV_CHROME,
   productPagePath,
+  READ_BEFORE_TERMS,
   SHEET_SEGMENT,
   sheetFallGuard,
   SHOP_PATHS,
@@ -418,11 +419,30 @@ describe('AppShellRoutes', () => {
       ).toBeUndefined();
     });
 
-    it('gives none of them children, because none of them is a sheet', () => {
+    it('gives none of them children but the two documents over the three forms', () => {
+      // None of them is a sheet. Sign in, register and upgrade carry the privacy
+      // policy and the terms as sheets over them (velista 0173), so nothing typed
+      // into the form is lost; the others carry nothing.
+      const forms = ['auth/login', 'auth/register', 'auth/upgrade'];
       for (const path of AUTH_PATHS) {
-        expect(
-          pages.find((route) => route.path === path)?.children
-        ).toBeUndefined();
+        const children = pages.find((route) => route.path === path)?.children;
+        if (forms.includes(path)) {
+          expect(children?.map((child) => child.path)).toEqual([
+            `${SHEET_SEGMENT}/privacy`,
+            `${SHEET_SEGMENT}/terms`,
+          ]);
+          expect(children?.map((child) => child.data?.['document'])).toEqual([
+            'privacy',
+            'terms',
+          ]);
+          expect(
+            children?.every(
+              (child) => child.data?.[NAV_CHROME] === NO_NAV_CHROME
+            )
+          ).toBe(true);
+        } else {
+          expect(children).toBeUndefined();
+        }
       }
     });
 
@@ -841,6 +861,56 @@ describe('AppShellRoutes', () => {
         expect(route?.data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
         expect(route?.title).toBeDefined();
       }
+    });
+  });
+
+  /**
+   * The pages somebody must be able to read, or a link they must be able to finish,
+   * before accepting the terms (velista `0173`, target 8). The prompt stands down on
+   * exactly these, and on the two documents as sheets.
+   */
+  describe('the pages read before the terms', () => {
+    const READ_FIRST = [
+      'privacy',
+      'terms',
+      'auth/callback',
+      'auth/verify',
+      'auth/reset-password',
+      'auth/support-ended',
+    ];
+
+    function flagged(routes: readonly Route[], prefix = ''): string[] {
+      return routes.flatMap((route) => {
+        const path =
+          prefix === '' ? (route.path ?? '') : `${prefix}/${route.path}`;
+        return [
+          ...(route.data?.[READ_BEFORE_TERMS] === true ? [path] : []),
+          ...flagged(route.children ?? [], path),
+        ];
+      });
+    }
+
+    it('flags these and no other page', () => {
+      const pagesFlagged = flagged(pages).filter(
+        (path) => !path.split('/').includes(SHEET_SEGMENT)
+      );
+
+      expect(pagesFlagged.sort()).toEqual([...READ_FIRST].sort());
+    });
+
+    it('flags the two documents as sheets over the three forms', () => {
+      const sheetsFlagged = flagged(pages).filter((path) =>
+        path.split('/').includes(SHEET_SEGMENT)
+      );
+
+      expect(sheetsFlagged.sort()).toEqual(
+        ['auth/login', 'auth/register', 'auth/upgrade']
+          .flatMap((form) => [
+            `${form}/${SHEET_SEGMENT}/privacy`,
+            `${form}/${SHEET_SEGMENT}/terms`,
+          ])
+          .sort()
+      );
     });
   });
 
@@ -1436,7 +1506,10 @@ describe('the sheets and their exit animation', () => {
     // list and for all of them, over both baskets: two more.
     //
     // `0141` added the shop question at the first buy, over both baskets: two more.
-    expect(sheets).toHaveLength(65);
+    //
+    // `0173` added six: the privacy policy and the terms over sign in, register and
+    // upgrade.
+    expect(sheets).toHaveLength(71);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

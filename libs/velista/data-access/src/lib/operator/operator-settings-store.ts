@@ -77,20 +77,22 @@ export class OperatorSettingsStore {
   }
 
   /**
-   * Read again: the retry of a failed read. While a read is in flight it does nothing,
-   * so a second press cannot send a second request.
+   * Read again: the retry of a failed read, and the read after the server said the
+   * terms moved (velista `0173`). While a read is in flight it does nothing, so a
+   * second press cannot send a second request. Past the browser's cache, which would
+   * otherwise answer with what the server said up to five minutes ago.
    */
   reload(): void {
     if (this._state() === 'loading') {
       return;
     }
-    void this._read();
+    void this._read(true);
   }
 
-  private async _read(): Promise<void> {
+  private async _read(fresh = false): Promise<void> {
     this._state.set('loading');
     try {
-      const settings = await this._service.read();
+      const settings = await this._service.read(fresh ? { fresh } : undefined);
       if (settings === null) {
         this._fail();
         return;

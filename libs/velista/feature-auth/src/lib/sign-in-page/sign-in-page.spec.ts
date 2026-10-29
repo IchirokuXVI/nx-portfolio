@@ -4,11 +4,14 @@ import { ActivatedRoute, provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeAuthService,
+  fakeOperatorSettingsStore,
   GatewayError,
   GoogleSignIn,
+  MEMORY_OPERATOR_SETTINGS,
   NetworkError,
   provideAccountNotice,
   provideFakeAuthService,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   type FakeAuthService,
   type FakeIdentity,
@@ -30,6 +33,8 @@ interface Options {
   readonly returnUrl?: string;
   readonly google?: { readonly start: jest.Mock };
   readonly runtime?: AppRuntime;
+  /** False for a deployment that published no terms (velista 0173). */
+  readonly published?: boolean;
 }
 
 async function render(options: Options = {}) {
@@ -50,6 +55,13 @@ async function render(options: Options = {}) {
       provideAccountNotice(),
       { provide: GoogleSignIn, useValue: google },
       { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
+      provideFakeOperatorSettingsStore(
+        fakeOperatorSettingsStore(
+          options.published === false
+            ? { ...MEMORY_OPERATOR_SETTINGS, published: false }
+            : MEMORY_OPERATOR_SETTINGS
+        )
+      ),
       {
         provide: ActivatedRoute,
         useValue: {
@@ -504,5 +516,42 @@ describe('SignInPage', () => {
     const links = found.componentInstance as LegalLinks;
     expect(links.privacyUrl()).toMatch(/\/privacy$/);
     expect(links.termsUrl()).toMatch(/\/terms$/);
+  });
+
+  /**
+   * Velista 0173: continuing with Google can make an account, so the line under the
+   * button names the terms and the start sends their version.
+   */
+  describe('the terms under Google', () => {
+    it('draws the line, linking the terms as a sheet over this page', async () => {
+      const { fixture } = await render();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(
+        host.querySelector('lib-google-option .terms-line')
+      ).not.toBeNull();
+      expect(fixture.componentInstance.terms.termsUrl()).toBe(
+        '/en/auth/login/sheet/terms'
+      );
+    });
+
+    it('sends the version with the start', async () => {
+      const { fixture, google } = await render();
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(google.start).toHaveBeenCalledWith({
+        acceptedTermsVersion: MEMORY_OPERATOR_SETTINGS.terms.version,
+      });
+    });
+
+    it('draws no line and sends no version when no terms were published', async () => {
+      const { fixture, google } = await render({ published: false });
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelector('lib-google-option .terms-line')).toBeNull();
+      await fixture.componentInstance.continueWithGoogle();
+      expect(google.start).toHaveBeenCalledWith({ acceptedTermsVersion: null });
+    });
   });
 });

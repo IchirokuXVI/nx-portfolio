@@ -8,66 +8,23 @@
        number of groups, which is what turns a general promise into a specific one. -->
   <lib-success-note [message]="keepsafe()" class="keepsafe" />
 
-  <form (submit)="onSubmit($event)" class="form" novalidate>
-    <lib-email-field
-      [(value)]="email"
-      [describedBy]="error()?.placement === 'password' ? null : errorId"
-      [invalid]="error() !== null && error()?.placement !== 'password'"
-      [label]="'auth.field.email' | rokuT"
-      [placeholder]="'auth.field.emailPlaceholder' | rokuT"
-      [readOnly]="submitting()"
-      fieldId="upgrade-email"
-    />
+  <!-- The one form register and upgrade share (velista 0173). Google is offered here
+       too: the state carries this guest's bearer, so the guest is linked in place and
+       keeps every group (backend 0230). -->
+  <lib-account-form
+    (continueWithGoogle)="continueWithGoogle()"
+    (submitted)="submit($event)"
+    [error]="error()"
+    [googleBusy]="googleStarting()"
+    [googleError]="googleError()"
+    [googleOffered]="terms.googleOffered()"
+    [privacyUrl]="terms.privacyUrl()"
+    [submitting]="submitting()"
+    [termsUrl]="terms.termsUrl()"
+    mode="upgrade"
+  />
 
-    <lib-password-field
-      [(value)]="password"
-      [describedBy]="error()?.placement === 'email' ? null : errorId"
-      [hideLabel]="'auth.field.hidePassword' | rokuT"
-      [invalid]="error() !== null && error()?.placement !== 'email'"
-      [label]="'auth.field.password' | rokuT"
-      [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
-      [readOnly]="submitting()"
-      [rule]="'auth.field.passwordRule' | rokuT"
-      [showLabel]="'auth.field.showPassword' | rokuT"
-      autocomplete="new-password"
-      fieldId="upgrade-password"
-    />
-
-    <!-- Typed twice, as on register: nothing else anywhere can catch a typo in it.
-         No rule sentence, because the rule is stated once above. -->
-    <lib-password-field
-      [(value)]="confirmPassword"
-      [describedBy]="error()?.placement === 'email' ? null : errorId"
-      [hideLabel]="'auth.field.hidePassword' | rokuT"
-      [invalid]="error() !== null && error()?.placement !== 'email'"
-      [label]="'auth.field.confirmPassword' | rokuT"
-      [placeholder]="'auth.field.confirmPasswordPlaceholder' | rokuT"
-      [readOnly]="submitting()"
-      [showLabel]="'auth.field.showPassword' | rokuT"
-      autocomplete="new-password"
-      fieldId="upgrade-confirm-password"
-    />
-
-    @if (error(); as rejection) {
-      <lib-form-error [message]="rejection.key | rokuT" [messageId]="errorId" />
-    }
-
-    <button
-      [attr.aria-busy]="submitting()"
-      [disabled]="!canSubmit()"
-      class="primary"
-      type="submit"
-    >
-      @if (submitting()) {
-        <lib-spinner-icon class="glyph" />
-      }
-      {{ 'auth.upgrade.submit' | rokuT }}
-    </button>
-  </form>
-
-  <!-- Not now, and nothing else. There is no alternative account to offer somebody
-       who already has one: register is barred to them by rule C2, and Google would
-       lose the groups this screen just promised to keep. -->
+  <!-- Not now, and nothing else: register is barred to a guest by rule C2. -->
   <p authFooter class="footer">
     <button (click)="back()" class="footer-link quiet" type="button">
       {{ 'auth.upgrade.later' | rokuT }}
@@ -81,3 +38,6 @@
     authFooter
   />
 </lib-auth-screen>
+
+<!-- The terms and the privacy policy as sheets over this form (velista 0173, D5). -->
+<router-outlet />

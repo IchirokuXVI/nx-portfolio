@@ -2802,6 +2802,28 @@
       "meta": "Changed on {{date}}",
       "metaVersion": "Version {{version}}, changed on {{date}}",
       "unpublished": "Whoever runs this copy of {{appName}} has not published terms of service yet."
+    },
+    "accept": {
+      "checkbox": "I accept the [Terms]",
+      "privacy": "Read how we use your data in the [Privacy Policy]",
+      "unticked": "Tick the box to accept the Terms",
+      "google": "By continuing with Google you accept the [Terms]",
+      "createNotice": "When you create the group, we make an account for you on this phone, and you accept the [Terms]",
+      "joinNotice": "When you ask to join, we make an account for you on this phone, and you accept the [Terms]",
+      "stale": "The [Terms] changed while this page was open. Read them again, then accept them",
+      "missing": "Read the [Terms], then accept them"
+    },
+    "prompt": {
+      "title": "Before you go on",
+      "titleChanged": "We have new Terms",
+      "body": "Read the [Terms of Service], then accept them to go on",
+      "bodyChanged": "We changed the [Terms of Service]. Read them, then accept them to go on",
+      "accept": "Accept and continue",
+      "failed": "That did not save. Try again"
+    },
+    "sheet": {
+      "fullPage": "Open the full page",
+      "close": "Close"
     }
   }
 }

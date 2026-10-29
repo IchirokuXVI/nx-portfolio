@@ -39,10 +39,11 @@
     [connectingMessage]="'startup.actions.connecting' | rokuT"
     [failureMessage]="googleError() === null ? '' : (googleError()! | rokuT)"
     [googleBusy]="googleStarting()"
-    [googleOffered]="googleOffered"
+    [googleOffered]="googleOffered()"
     [held]="actionsHeld()"
     [slow]="startupSlow()"
     [slowMessage]="'startup.actions.slow' | rokuT"
+    [termsUrl]="termsUrl()"
   />
 
   <!--

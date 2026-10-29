@@ -1,0 +1,72 @@
+@use '../credential-form' as credential;
+
+:host {
+  display: block;
+}
+
+@include credential.credential-form;
+
+// The checkbox, the sentence a refusal draws under it, and the privacy line, as one
+// group between the fields and the button. No container: the box and the text carry it.
+.terms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-2);
+}
+
+// The whole row is the label's target, a full touch target tall.
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+}
+
+// A native box, sized up to be pressed with a thumb and tinted with the accent. The
+// browser draws the tick, so it is the same control a screen reader announces.
+.check {
+  flex: none;
+  inline-size: var(--app-icon-md);
+  block-size: var(--app-icon-md);
+  margin: 0;
+  accent-color: var(--app-action-bg);
+  cursor: pointer;
+
+  @include credential.focus-ring;
+
+  &[aria-invalid='true'] {
+    outline: 1px solid var(--app-status-danger-fg);
+    outline-offset: 1px;
+  }
+}
+
+.check-label {
+  flex: 1;
+  font-size: var(--app-text-base);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+  cursor: pointer;
+}
+
+// Under the box, indented to its text, so it reads as about the box.
+.terms-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  margin: 0;
+  padding-inline-start: calc(var(--app-icon-md) + var(--app-space-4));
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-status-danger-fg);
+  text-wrap: pretty;
+}
+
+// Read, never accepted: the secondary colour, indented to the label's text.
+.privacy-line {
+  margin: 0;
+  padding-inline-start: calc(var(--app-icon-md) + var(--app-space-4));
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}

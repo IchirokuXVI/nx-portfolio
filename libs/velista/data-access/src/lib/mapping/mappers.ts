@@ -28,6 +28,7 @@ import {
   ZONE_ROLES,
   ZONE_STATUS_FALLBACK,
   ZONE_STATUSES,
+  type AccountTerms,
   type AlsoOnPlaceVm,
   type AppState,
   type AssistantChoice,
@@ -75,6 +76,7 @@ import {
   type ShoppingListSummary,
   type ShoppingProfile,
   type Supermarket,
+  type TermsAcceptance,
   type UserProfile,
   type Zone,
   type ZoneCounts,
@@ -1146,7 +1148,44 @@ export function toUserProfile(raw: unknown): UserProfile | null {
           ),
         }
       : {}),
+    // Left off when the body carries no block, for `appState`'s reason: a rename's
+    // answer has none, and `ProfileStore` keeps the one it held (velista `0173`).
+    ...(isRecord(raw['terms']) ? { terms: toAccountTerms(raw['terms']) } : {}),
   };
+}
+
+/**
+ * From `AccountMeView.terms` (backend `0231`, section 4.4).
+ *
+ * Only `acceptanceRequired: true` asks anything of the person, so every unreadable
+ * value reads as not required: a prompt nobody can satisfy is worse than one that
+ * does not appear, and the server still refuses whatever it must.
+ */
+export function toAccountTerms(raw: unknown): AccountTerms {
+  const record = isRecord(raw) ? raw : {};
+
+  return {
+    currentVersion: strOr(record['currentVersion'], ''),
+    acceptedVersion: nullableStr(record['acceptedVersion']),
+    acceptanceRequired: record['acceptanceRequired'] === true,
+  };
+}
+
+/**
+ * From `TermsAcceptanceView` (`POST /v1/account/terms-acceptances`). Null when the
+ * answer names no version.
+ */
+export function toTermsAcceptance(raw: unknown): TermsAcceptance | null {
+  if (!isRecord(raw)) {
+    return null;
+  }
+
+  const version = str(raw['version']);
+  if (version === null) {
+    return null;
+  }
+
+  return { version, acceptedAt: strOr(raw['acceptedAt'], '') };
 }
 
 /**

@@ -1,0 +1,61 @@
+<!--
+  The document over the form that linked it (velista 0173). The form is the parent route
+  and stays alive underneath, so nothing typed there is lost.
+-->
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [hasFooter]="true"
+  #shell
+  labelledBy="legal-sheet-title"
+>
+  <h2 class="title" id="legal-sheet-title">{{ titleKey | rokuT }}</h2>
+
+  @switch (state()) {
+    @case ('loading') {
+      <p aria-live="polite" class="loading" role="status">
+        <lib-spinner-icon aria-hidden="true" class="spinner" />
+        <span class="visually-hidden">{{ 'legal.loading' | rokuT }}</span>
+      </p>
+    }
+
+    @case ('failed') {
+      <p class="failed" role="alert">
+        <span>{{ 'legal.failed' | rokuT }}</span>
+        <button (click)="retry()" class="quiet" type="button">
+          {{ 'legal.retry' | rokuT }}
+        </button>
+      </p>
+    }
+
+    @case ('unpublished') {
+      <p class="unpublished">
+        {{ unpublishedKey | rokuT: { appName: settings()?.appName ?? '' } }}
+      </p>
+    }
+
+    @default {
+      @if (view(); as doc) {
+        @if (changedOn(); as date) {
+          <p class="meta">
+            {{ metaKey() | rokuT: { date: date, version: version() } }}
+          </p>
+        }
+
+        <lib-legal-sections
+          [keepQuery]="true"
+          [sections]="doc.sections"
+          idPrefix="legal-sheet-"
+        />
+      }
+    }
+  }
+
+  <div class="foot" sheetFooter>
+    <a [routerLink]="pageUrl()" class="page-link">{{
+      'legal.sheet.fullPage' | rokuT
+    }}</a>
+    <button (click)="shell.requestDismiss()" class="close" type="button">
+      {{ 'legal.sheet.close' | rokuT }}
+    </button>
+  </div>
+</lib-sheet-shell>

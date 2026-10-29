@@ -36,13 +36,34 @@
     @if (errorKey(); as key) {
       <p class="error" id="join-zone-error" role="alert">
         <lib-alert-icon aria-hidden="true" class="glyph" />
-        {{ key | rokuT }}
+        <!-- A refusal about the terms links them (velista 0173). -->
+        <span>
+          <lib-linked-text [href]="termsUrl() ?? ''" [text]="key | rokuT" />
+        </span>
       </p>
+    }
+
+    @if (mintingAccount()) {
+      @if (termsUrl(); as terms) {
+        <!-- What the press makes, before it is pressed (velista 0173, target 5). -->
+        <p class="terms-notice" id="join-zone-notice">
+          <lib-info-icon aria-hidden="true" class="glyph" />
+          <span>
+            <lib-linked-text
+              [href]="terms"
+              [text]="'legal.accept.joinNotice' | rokuT"
+            />
+          </span>
+        </p>
+      }
     }
 
     <button
       (click)="submit()"
       [attr.aria-busy]="submitting()"
+      [attr.aria-describedby]="
+        mintingAccount() && termsUrl() !== null ? 'join-zone-notice' : null
+      "
       [disabled]="!canSubmit()"
       class="primary"
       type="button"

@@ -1,0 +1,16 @@
+@use '../styles/tokens' as tokens;
+
+// Inline in running text, so it takes the colour and size of where it is drawn.
+:host {
+  display: inline;
+}
+
+// The quiet accent, underlined, so it reads as a link without colour alone.
+.link {
+  color: var(--app-action-quiet-fg);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+
+  @include tokens.app-focus-ring;
+}

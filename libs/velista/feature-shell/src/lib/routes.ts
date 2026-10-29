@@ -20,6 +20,7 @@ import {
   CATALOG_PICK_DATA,
   NAV_CHROME,
   NO_NAV_CHROME,
+  READ_BEFORE_TERMS,
   RENDERS_WHILE_CONNECTING,
   SHEET_SEGMENT,
   sheetFallGuard,
@@ -116,6 +117,29 @@ function sheet(route: Route): Route {
     path: about === '' ? SHEET_SEGMENT : `${SHEET_SEGMENT}/${about}`,
     canDeactivate: [sheetFallGuard],
   };
+}
+
+/**
+ * The privacy policy and the terms as sheets over a credential form (velista `0173`,
+ * target 6, D5), so nothing typed into the form is lost.
+ *
+ * Through `sheet()` like every other sheet, so each is addressed under the marker and
+ * carries the fall guard. The bar stays away, as on the form below. Each is a page to
+ * read before accepting, so the prompt of the terms stands down over it.
+ */
+function legalSheets(): Route[] {
+  return (['privacy', 'terms'] as const).map((document) =>
+    sheet({
+      path: document,
+      data: {
+        document,
+        [NAV_CHROME]: NO_NAV_CHROME,
+        [READ_BEFORE_TERMS]: true,
+      },
+      loadComponent: () =>
+        import('@portfolio/velista/feature-legal').then((m) => m.LegalSheet),
+    })
+  );
 }
 
 /**
@@ -786,6 +810,8 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.SignInPage
               ),
+            // The two documents over the form (velista `0173`).
+            children: legalSheets(),
           },
           {
             path: 'auth/register',
@@ -796,6 +822,8 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.RegisterPage
               ),
+            // The two documents over the form (velista `0173`).
+            children: legalSheets(),
           },
           {
             path: 'auth/upgrade',
@@ -806,12 +834,16 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.UpgradePage
               ),
+            // The two documents over the form (velista `0173`).
+            children: legalSheets(),
           },
           {
             // Public, and it has to be: a confirmation link is opened wherever the mail
             // app happens to be, which is often a phone that has never signed in.
             path: 'auth/verify',
-            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            // A link somebody must be able to finish before accepting the terms
+            // (velista `0173`): the prompt stands down here.
+            data: { [NAV_CHROME]: NO_NAV_CHROME, [READ_BEFORE_TERMS]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.VerifyEmailPage
@@ -835,7 +867,7 @@ export const AppShellRoutes: Route[] = [
             // page decides who may do what from the server's answer, not a guard
             // (velista `0148`).
             path: 'auth/reset-password',
-            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            data: { [NAV_CHROME]: NO_NAV_CHROME, [READ_BEFORE_TERMS]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.ResetPasswordPage
@@ -845,7 +877,7 @@ export const AppShellRoutes: Route[] = [
             // Public, and inert until the gateway redirects here with the pair in the URL
             // fragment instead of answering JSON (section 5.6).
             path: 'auth/callback',
-            data: { [NAV_CHROME]: NO_NAV_CHROME },
+            data: { [NAV_CHROME]: NO_NAV_CHROME, [READ_BEFORE_TERMS]: true },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
                 (m) => m.AuthCallbackPage
@@ -872,6 +904,7 @@ export const AppShellRoutes: Route[] = [
             data: {
               [NAV_CHROME]: NO_NAV_CHROME,
               [WORKS_WITHOUT_BACKEND]: true,
+              [READ_BEFORE_TERMS]: true,
             },
             loadComponent: () =>
               import('@portfolio/velista/feature-auth').then(
@@ -1284,7 +1317,13 @@ export const AppShellRoutes: Route[] = [
             // about the controller comes from the backend.
             path: 'privacy',
             title: localizedTitle('legal.privacy.title'),
-            data: { document: 'privacy', [NAV_CHROME]: NO_NAV_CHROME },
+            // Read before accepting the terms: the prompt of velista `0173` stands
+            // down here, and links here.
+            data: {
+              document: 'privacy',
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [READ_BEFORE_TERMS]: true,
+            },
             loadComponent: () =>
               import('@portfolio/velista/feature-legal').then(
                 (m) => m.LegalPage
@@ -1295,7 +1334,11 @@ export const AppShellRoutes: Route[] = [
             // and asserted the same way: the absent guard is a decision.
             path: 'terms',
             title: localizedTitle('legal.terms.title'),
-            data: { document: 'terms', [NAV_CHROME]: NO_NAV_CHROME },
+            data: {
+              document: 'terms',
+              [NAV_CHROME]: NO_NAV_CHROME,
+              [READ_BEFORE_TERMS]: true,
+            },
             loadComponent: () =>
               import('@portfolio/velista/feature-legal').then(
                 (m) => m.LegalPage

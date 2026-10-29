@@ -3,6 +3,7 @@ import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   AppState,
   AppStateFlags,
+  TermsAcceptance,
   UserProfile,
   UsernameScope,
 } from '@portfolio/velista/models';
@@ -59,6 +60,18 @@ export interface AccountServiceI {
    * answer is the whole state after the write.
    */
   setAppState(flags: AppStateFlags): Promise<AppState>;
+
+  /**
+   * Accept a version of the terms (`POST /v1/account/terms-acceptances`, backend
+   * `0231`, section 4.4).
+   *
+   * The only way to accept outside the paths that make an account: the prompt of
+   * velista `0173` calls it. A repeat answers the row that already exists. Refused with
+   * `terms_version_stale` when the version is no longer the current one, and with
+   * `impersonation_not_allowed` in a support session: an operator never accepts for
+   * somebody.
+   */
+  acceptTerms(version: string): Promise<TermsAcceptance>;
 
   /**
    * One name from the pool registration draws from

@@ -7,12 +7,14 @@ import {
 } from '@angular/core';
 import type {
   AccountPermission,
+  AccountTerms,
   AppState,
   ProfileLoad,
   UsernameScope,
   UserProfile,
 } from '@portfolio/velista/models';
 import { onEdge } from '@portfolio/velista/platform';
+import { termsRefusal } from '../auth/terms-refusal';
 import { TokenStore } from '../auth/token-store';
 import { Mutations } from '../mutations';
 import {
@@ -189,6 +191,35 @@ export class ProfileStore {
     () => this._profile()?.permissions ?? null
   );
 
+  /**
+   * Where the account stands with the terms (velista `0173`), or null while no profile
+   * is held or the backend sent no block. Null asks nothing of anybody.
+   */
+  readonly terms = computed<AccountTerms | null>(
+    () => this._profile()?.terms ?? null
+  );
+
+  /**
+   * Accept a version of the terms, then read the profile again (velista `0173`,
+   * target 8). The prompt's acceptor.
+   *
+   * Through `Mutations.run` like every other write (rule D2). A stale version is not a
+   * failure to report: the terms changed while the prompt was up, so the profile is
+   * read again and the prompt redraws with the version it now asks for. Any other
+   * failure rejects, and the prompt says the accept did not save.
+   */
+  async acceptTerms(version: string): Promise<void> {
+    const outcome = await this._mutations.run(null, () =>
+      this._account.acceptTerms(version)
+    );
+
+    if (outcome.state === 'failed' && termsRefusal(outcome.error) === null) {
+      throw outcome.error;
+    }
+
+    await this.load();
+  }
+
   /** Whether the account holds a permission. False while it is not known. */
   can(permission: AccountPermission): boolean {
     return this.permissions()?.includes(permission) ?? false;
@@ -314,6 +345,7 @@ export class ProfileStore {
     // again in the middle of the setup's own name step.
     const held = this._profile()?.appState;
     const heldPermissions = this._profile()?.permissions;
+    const heldTerms = this._profile()?.terms;
     this._profile.set({
       ...outcome.value,
       ...(outcome.value.appState === undefined && held !== undefined
@@ -322,6 +354,10 @@ export class ProfileStore {
       ...(outcome.value.permissions === undefined &&
       heldPermissions !== undefined
         ? { permissions: heldPermissions }
+        : {}),
+      // A rename's answer has no terms either (velista `0173`).
+      ...(outcome.value.terms === undefined && heldTerms !== undefined
+        ? { terms: heldTerms }
         : {}),
     });
     this._state.set('loaded');

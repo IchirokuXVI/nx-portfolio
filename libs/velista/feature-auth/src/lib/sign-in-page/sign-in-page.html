@@ -65,15 +65,19 @@
     </button>
   </div>
 
-  @if (googleOffered) {
+  @if (terms.googleOffered()) {
+    <!-- The line under the button names the terms: continuing with Google can make
+         an account (velista 0173). A refusal about them links the terms too. -->
     <lib-google-option
       (continueWithGoogle)="continueWithGoogle()"
       [busy]="googleStarting()"
       [describedBy]="googleError() === null ? null : googleErrorId"
+      [termsUrl]="terms.termsUrl()"
     />
 
     @if (googleError(); as rejection) {
       <lib-form-error
+        [linkUrl]="rejection.link === 'terms' ? terms.termsUrl() : null"
         [message]="rejection.key | rokuT"
         [messageId]="googleErrorId"
       />
@@ -94,3 +98,6 @@
     authFooter
   />
 </lib-auth-screen>
+
+<!-- The terms and the privacy policy as sheets over this page (velista 0173, D5). -->
+<router-outlet />

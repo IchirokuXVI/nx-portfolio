@@ -5,10 +5,15 @@ import {
   inject,
 } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
+import { APP_BASE_PATH } from '@portfolio/velista/models';
 import {
   APP_RUNTIME,
   APP_STORE_URL,
+  appPath,
   AppUpdates,
   BackendReadiness,
   BrowserFacade,
@@ -18,6 +23,7 @@ import {
   NavChrome,
   ReloadBlocker,
   StartupGate,
+  TermsGate,
   ThemeStore,
   TourAnchor,
   TourStore,
@@ -28,6 +34,7 @@ import {
   StartupScreen,
   UpdateScreen,
 } from '../home/state-panels';
+import { TermsPrompt } from '../legal/terms-prompt';
 import { TourCard } from '../tour/tour-card';
 import { TourSpotlight } from '../tour/tour-spotlight';
 import { AppNav } from './app-nav';
@@ -73,6 +80,7 @@ import { SupportStrip } from './support-strip';
     StartupScreen,
     UpdateScreen,
     SupportStrip,
+    TermsPrompt,
   ],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss',
@@ -95,6 +103,9 @@ export class AppLayout {
   private readonly _tour = inject(TourStore);
   private readonly _impersonation = inject(ImpersonationState);
   private readonly _browser = inject(BrowserFacade);
+  private readonly _terms = inject(TermsGate);
+  private readonly _locale = inject(RokuLocaleStore).locale;
+  private readonly _basePath = inject(APP_BASE_PATH);
 
   /**
    * The store listing to send a refused native build to, or null (velista `0166`, D3).
@@ -216,11 +227,38 @@ export class AppLayout {
       this._tour.running() &&
       !this._nav.sheetOpen() &&
       this.rendersNow() &&
-      !this.mustUpdate()
+      !this.mustUpdate() &&
+      !this.termsPrompt()
   );
 
   /** The card to draw, from `TourStore`, which reads the router on this one's behalf. */
   readonly tourCard = this._tour.card;
+
+  /**
+   * Whether the terms prompt stands in place of the page (velista `0173`). `TermsGate`
+   * decides: required, not a support session, not a page to read first.
+   */
+  readonly termsPrompt = this._terms.promptShown;
+
+  readonly termsState = this._terms.state;
+
+  readonly termsAcceptedBefore = this._terms.acceptedBefore;
+
+  readonly termsCanSignOut = this._terms.canSignOut;
+
+  /** The prompt's two links, to the pages, which the prompt stands down on. */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
+
+  acceptTerms(): void {
+    void this._terms.accept();
+  }
+
+  signOutInstead(): void {
+    this._terms.signOut();
+  }
 
   /** "End" on the strip. `data-access` ends the session and leaves the document. */
   endSupportSession(): void {

@@ -8,10 +8,14 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
+  fakeOperatorSettingsStore,
   GatewayError,
   GoogleSignIn,
+  MEMORY_OPERATOR_SETTINGS,
   NetworkError,
+  provideFakeOperatorSettingsStore,
 } from '@portfolio/velista/data-access';
+import type { OperatorSettings } from '@portfolio/velista/models';
 import { APP_KEY } from '@portfolio/velista/models';
 import {
   APP_RUNTIME,
@@ -64,6 +68,8 @@ interface Options {
   readonly backendReady?: boolean;
   readonly google?: { readonly start: jest.Mock };
   readonly runtime?: AppRuntime;
+  /** The operator's settings (velista 0173). */
+  readonly settings?: OperatorSettings;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -95,6 +101,9 @@ async function render(options: Options = {}): Promise<{
     imports: [LandingPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting(),
+      provideFakeOperatorSettingsStore(
+        fakeOperatorSettingsStore(options.settings ?? MEMORY_OPERATOR_SETTINGS)
+      ),
       // The real `AccountNotice` rather than a double, matching `provideAccountNotice`:
       // it is one signal and two setters with no dependencies, so faking it would mean
       // writing the same object twice and would let a spec pass against behaviour the
@@ -493,5 +502,49 @@ describe('LandingPage', () => {
     const links = found.componentInstance as LegalLinks;
     expect(links.privacyUrl()).toBe('/en/privacy');
     expect(links.termsUrl()).toBe('/en/terms');
+  });
+
+  /** Velista 0173: Google where the deployment has it, with the line and the version. */
+  describe('the terms under Google', () => {
+    it('sends the version of the terms with the start', async () => {
+      const { fixture, google } = await render();
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(google.start).toHaveBeenCalledWith({
+        acceptedTermsVersion: MEMORY_OPERATOR_SETTINGS.terms.version,
+      });
+    });
+
+    it('draws the line under the button, linking the terms page', async () => {
+      const { fixture } = await render();
+
+      expect(query(fixture, 'lib-auth-actions .terms-line')).not.toBeNull();
+      expect(fixture.componentInstance.termsUrl()).toBe('/en/terms');
+    });
+
+    it('does not offer Google where the deployment has no Google client', async () => {
+      const { fixture } = await render({
+        settings: {
+          ...MEMORY_OPERATOR_SETTINGS,
+          features: {
+            ...MEMORY_OPERATOR_SETTINGS.features,
+            googleSignIn: false,
+          },
+        },
+      });
+
+      expect(query(fixture, 'lib-auth-actions button.google')).toBeNull();
+    });
+
+    it('draws no line and sends no version when no terms were published', async () => {
+      const { fixture, google } = await render({
+        settings: { ...MEMORY_OPERATOR_SETTINGS, published: false },
+      });
+
+      expect(query(fixture, 'lib-auth-actions .terms-line')).toBeNull();
+      await fixture.componentInstance.continueWithGoogle();
+      expect(google.start).toHaveBeenCalledWith({ acceptedTermsVersion: null });
+    });
   });
 });

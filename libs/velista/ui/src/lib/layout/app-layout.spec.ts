@@ -1,5 +1,6 @@
 import { Component, signal, type Provider } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router, type Routes } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import { type AppBrand } from '@portfolio/velista/models';
@@ -13,8 +14,10 @@ import {
   NavChrome,
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  READ_BEFORE_TERMS,
   RENDERS_WHILE_CONNECTING,
   StorageKeys,
+  TermsGate,
   ThemeStore,
   TourStore,
   WORKS_WITHOUT_BACKEND,
@@ -22,6 +25,7 @@ import {
 } from '@portfolio/velista/platform';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
+import { TermsPrompt } from '../legal/terms-prompt';
 import { AppLayout } from './app-layout';
 
 /** A page below the layout, so a route can actually activate under it. */
@@ -891,6 +895,103 @@ describe('AppLayout', () => {
       expect(strip).toBeGreaterThan(fixedZ('../entry/sheet-shell.scss'));
       expect(strip).toBeGreaterThan(fixedZ('../entry/account-lost-panel.scss'));
       expect(strip).toBeGreaterThan(fixedZ('../home/state-panels.scss'));
+    });
+  });
+
+  /**
+   * The terms prompt (velista `0173`, target 8). `TermsGate` decides when; these check
+   * that the layout draws it in place of the page and nothing else beside it.
+   */
+  describe('the terms prompt', () => {
+    async function withPrompt(
+      required: boolean,
+      routes: Routes = [{ path: 'home', component: TestPage }],
+      extra: Provider[] = []
+    ): Promise<ComponentFixture<AppLayout>> {
+      const fixture = await createFixture({}, routes, extra);
+      TestBed.inject(BackendReadiness).reportReady();
+      await TestBed.inject(Router).navigate(['/home']);
+      TestBed.inject(TermsGate).report(required, '2026-10-29', {
+        canSignOut: true,
+      });
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    function promptOf(fixture: ComponentFixture<AppLayout>): Element | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        'lib-terms-prompt'
+      );
+    }
+
+    it('stands in place of the page while the account must accept', async () => {
+      const fixture = await withPrompt(true);
+
+      expect(promptOf(fixture)).not.toBeNull();
+      expect(outletOf(fixture)).toBeNull();
+      expect(navOf(fixture)).toBeNull();
+    });
+
+    it('is absent when nothing is required', async () => {
+      const fixture = await withPrompt(false);
+
+      expect(promptOf(fixture)).toBeNull();
+      expect(outletOf(fixture)).not.toBeNull();
+    });
+
+    it('stands down on a page somebody must read first', async () => {
+      const fixture = await withPrompt(true, [
+        { path: 'home', component: TestPage },
+        {
+          path: 'terms',
+          component: TestPage,
+          data: { [READ_BEFORE_TERMS]: true },
+        },
+      ]);
+
+      await TestBed.inject(Router).navigate(['/terms']);
+      fixture.detectChanges();
+
+      expect(promptOf(fixture)).toBeNull();
+      expect(outletOf(fixture)).not.toBeNull();
+    });
+
+    it('is never drawn in a support session', async () => {
+      const fixture = await withPrompt(
+        true,
+        [{ path: 'home', component: TestPage }],
+        [
+          {
+            provide: ImpersonationState,
+            useValue: { active: true, session: signal(null), end: jest.fn() },
+          },
+        ]
+      );
+
+      expect(promptOf(fixture)).toBeNull();
+    });
+
+    it('hands the press to the gate, and the gate calls the acceptor once', async () => {
+      const fixture = await withPrompt(true);
+      const acceptor = jest.fn(() => new Promise<void>(() => undefined));
+      TestBed.inject(TermsGate).handleAccept(acceptor);
+
+      const button =
+        promptOf(fixture)?.querySelector<HTMLButtonElement>('button.primary');
+      button?.click();
+      button?.click();
+
+      expect(acceptor).toHaveBeenCalledTimes(1);
+      expect(acceptor).toHaveBeenCalledWith('2026-10-29');
+    });
+
+    it('links the two documents to their pages', async () => {
+      const fixture = await withPrompt(true);
+      const prompt = fixture.debugElement.query(By.directive(TermsPrompt))
+        .componentInstance as TermsPrompt;
+
+      expect(prompt.termsUrl()).toBe('/en/terms');
+      expect(prompt.privacyUrl()).toBe('/en/privacy');
     });
   });
 });

@@ -8,6 +8,8 @@ import {
 import {
   fakeZoneStore,
   GatewayError,
+  MEMORY_OPERATOR_SETTINGS,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   SEED_JOIN_CODES,
@@ -30,6 +32,7 @@ const inFlight = () => new Promise<ZoneEntryOutcome>(() => undefined);
 
 interface Options {
   readonly returnTo?: 'landing' | 'home';
+  readonly identity?: 'anonymous' | 'TEMPORARY' | 'REGISTERED';
   readonly clipboard?: string;
   readonly respond?: (
     call: ZoneMutationCall
@@ -63,7 +66,8 @@ async function render(options: Options = {}): Promise<{
         } as unknown as Window & typeof globalThis,
       }),
       provideFakeZoneStore(store),
-      provideFakeSessionStore('TEMPORARY'),
+      provideFakeOperatorSettingsStore(),
+      provideFakeSessionStore(options.identity ?? 'TEMPORARY'),
       { provide: SheetNavigation, useValue: sheets },
       { provide: TokenStore, useValue: { clear: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -297,6 +301,32 @@ describe('JoinCodeSheet', () => {
       expect(await keyFor(SEED_JOIN_CODES.banned.toLowerCase())).toBe(
         'entry.error.notAllowed'
       );
+    });
+  });
+
+  /** Velista 0173, target 5: the notice, worded for joining, and the version sent. */
+  describe('the terms', () => {
+    it('says, before the press, that asking makes an account and accepts the terms', async () => {
+      const { fixture } = await render({ identity: 'anonymous' });
+
+      expect(query(fixture, '.terms-notice')?.textContent).toContain(
+        'legal.accept.joinNotice'
+      );
+    });
+
+    it('sends the version only when the ask makes an account', async () => {
+      const anonymous = await render({ identity: 'anonymous' });
+      anonymous.fixture.componentInstance.code.set('HK7M2QPD');
+      await anonymous.fixture.componentInstance.submit();
+      expect(anonymous.store.termsVersions).toEqual([
+        MEMORY_OPERATOR_SETTINGS.terms.version,
+      ]);
+
+      const guest = await render({ identity: 'TEMPORARY' });
+      guest.fixture.componentInstance.code.set('HK7M2QPD');
+      await guest.fixture.componentInstance.submit();
+      expect(guest.store.termsVersions).toEqual([null]);
+      expect(query(guest.fixture, '.terms-notice')).toBeNull();
     });
   });
 });

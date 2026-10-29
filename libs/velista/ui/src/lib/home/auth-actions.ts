@@ -7,6 +7,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { GoogleIcon, JoinCodeIcon, PlusIcon } from '../icons/icons';
+import { LinkedText } from '../legal/linked-text';
 
 /**
  * The four ways in, on the anonymous screen.
@@ -24,7 +25,7 @@ import { GoogleIcon, JoinCodeIcon, PlusIcon } from '../icons/icons';
  * decision, 2026-08-26). A tap is an output, and the container starts the sign in
  * (velista `0171`). The container also says whether to draw it at all: inside the
  * native shell it is left out with its divider, because Google refuses to sign anybody
- * in from an embedded WebView.
+ * in from an embedded WebView, or when the deployment has no Google client.
  *
  * ## Held, while the app cannot reach the backend
  *
@@ -36,7 +37,7 @@ import { GoogleIcon, JoinCodeIcon, PlusIcon } from '../icons/icons';
  */
 @Component({
   selector: 'lib-auth-actions',
-  imports: [RokuTranslatorPipe, PlusIcon, JoinCodeIcon, GoogleIcon],
+  imports: [RokuTranslatorPipe, PlusIcon, JoinCodeIcon, GoogleIcon, LinkedText],
   templateUrl: './auth-actions.html',
   styleUrl: './auth-actions.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -55,6 +56,13 @@ export class AuthActions {
 
   /** False in the native shell, where Google and its divider are not drawn. */
   readonly googleOffered = input(true);
+
+  /**
+   * Where the line under the Google button sends the terms (velista `0173`), or null
+   * when the deployment published none. The line belongs to the button, as it does in
+   * `GoogleOption`.
+   */
+  readonly termsUrl = input<string | null>(null);
 
   /** True while a Google start is on its way, until the document leaves. */
   readonly googleBusy = input(false);

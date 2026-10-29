@@ -2,6 +2,7 @@ import { request } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { GATEWAY_URL, VELISTA_BASE_URL } from '../playwright.config';
+import { acceptTermsForDemoUsers } from './support/api';
 
 /**
  * Playwright global setup: refuse a run that cannot work, then seed.
@@ -102,4 +103,10 @@ export default async function globalSetup(): Promise<void> {
       '[velista-luna-e2e] seeding the demo world failed; aborting.'
     );
   }
+
+  // A seeded account has accepted no terms. Where the deployment asks for them (the
+  // gate's compose turns acceptance on, velista `0173` section 4.3), each demo user a
+  // spec signs in as accepts the current version here, once, so no spec meets the
+  // prompt it is not about.
+  await acceptTermsForDemoUsers();
 }

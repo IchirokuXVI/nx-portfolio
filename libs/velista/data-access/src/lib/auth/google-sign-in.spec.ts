@@ -71,11 +71,15 @@ describe('GoogleSignIn', () => {
       async () => 'state/1+'
     );
 
-    await google.start();
+    await google.start({ acceptedTermsVersion: '2026-10-29' });
 
     expect(GOOGLE_VERIFIER_KEY).toBe('google-verifier:velista');
     expect(storage.get(GOOGLE_VERIFIER_KEY)).toBe(VECTOR_VERIFIER);
-    expect(api.mintGoogleState).toHaveBeenCalledWith(VECTOR_CHALLENGE);
+    // The version the line under the button names goes with the mint (velista 0173).
+    expect(api.mintGoogleState).toHaveBeenCalledWith(
+      VECTOR_CHALLENGE,
+      '2026-10-29'
+    );
     // The verifier is written before the mint goes out, and the document leaves last.
     expect(calls).toEqual([
       'randomBytes 32',
@@ -92,7 +96,9 @@ describe('GoogleSignIn', () => {
       throw refusal;
     });
 
-    await expect(google.start()).rejects.toBe(refusal);
+    await expect(google.start({ acceptedTermsVersion: null })).rejects.toBe(
+      refusal
+    );
 
     expect(storage.has(GOOGLE_VERIFIER_KEY)).toBe(false);
     expect(facade.assignDocument).not.toHaveBeenCalled();
