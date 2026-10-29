@@ -234,8 +234,10 @@ lunaShopperBackend:
       applicationLogDays: 30
       assistantLogDays: 7
     # How long auth, core and catalog keep a row of each kind (plan 0233), as
-    # durations. Plan 0231 gives them to the gateway to report in whole days;
-    # plan 0233 gives them to the services that enforce them.
+    # durations. The privacy policy prints these numbers (plan 0231 gives them
+    # to the gateway, which reports them in whole days), so a change here is a
+    # change to the policy. Auth, core and catalog enforce them with a sweep,
+    # and each refuses to boot below a floor: 7d for audit, 1d for the others.
     retention:
       audit: 180d
       adminLoginFailures: 90d

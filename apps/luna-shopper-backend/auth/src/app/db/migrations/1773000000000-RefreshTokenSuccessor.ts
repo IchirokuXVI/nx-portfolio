@@ -16,10 +16,13 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * the reuse grace. No release task: nothing that a person or a run wrote is
  * read, changed or deleted.
  *
- * No index. The only read of either column goes from a row that was just
- * locked by its hash to its successor by primary key. `ON DELETE SET NULL`, so
- * a successor that goes away (with its user, by the existing cascade) never
- * blocks the delete.
+ * No index here. The only read of either column goes from a row that was
+ * just locked by its hash to its successor by primary key. `ON DELETE SET
+ * NULL`, so a successor that goes away (with its user, by the existing
+ * cascade, or by the retention sweep) never blocks the delete. The sweep of
+ * plan 0233 deletes tokens in bulk, and each delete then looks up the rows
+ * that name the deleted one, so `1773300000000-RetentionIndexes` adds the
+ * index on `replacedById` that this migration left out.
  */
 export class RefreshTokenSuccessor1773000000000 implements MigrationInterface {
   name = 'RefreshTokenSuccessor1773000000000';

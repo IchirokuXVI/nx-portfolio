@@ -22,6 +22,8 @@ export class RefreshToken extends BaseEntity {
   @Column({ type: 'varchar' })
   tokenHash!: string;
 
+  /** The retention sweep reads by it (plan 0233). */
+  @Index('ix_refresh_tokens_expires_at')
   @Column({ type: 'timestamptz' })
   expiresAt!: Date;
 
@@ -51,7 +53,14 @@ export class RefreshToken extends BaseEntity {
    *
    * After a reissue inside the grace it names the newest successor, and the
    * successor that it replaced is revoked with none of its own.
+   *
+   * Indexed for the `ON DELETE SET NULL` below: the retention sweep deletes
+   * tokens in bulk, and each delete looks up the rows that name it (plan
+   * 0233, section 5).
    */
+  @Index('ix_refresh_tokens_replaced_by', {
+    where: '"replacedById" IS NOT NULL',
+  })
   @Column({ type: 'uuid', nullable: true })
   replacedById!: string | null;
 

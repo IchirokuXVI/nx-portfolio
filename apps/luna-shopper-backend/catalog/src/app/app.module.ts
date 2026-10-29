@@ -19,6 +19,7 @@ import {
   catalogValidationSchema,
 } from './config/app-config';
 import { CATALOG_ENTITIES } from './entities';
+import { RetentionModule } from './retention/retention.module';
 import { ShopWalksModule } from './shop-walks/shop-walks.module';
 
 @Module({
@@ -49,6 +50,8 @@ import { ShopWalksModule } from './shop-walks/shop-walks.module';
     ShopWalksModule,
     // Plan 0232: a deleted account's walks lose the link to it.
     AccountModule,
+    // Plan 0233: audit rows past their lifetime are deleted.
+    RetentionModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

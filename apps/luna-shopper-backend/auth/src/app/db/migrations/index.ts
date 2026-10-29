@@ -8,6 +8,7 @@ import { OAuthHandoffs1772900000000 } from './1772900000000-OAuthHandoffs';
 import { RefreshTokenSuccessor1773000000000 } from './1773000000000-RefreshTokenSuccessor';
 import { TermsAcceptances1773100000000 } from './1773100000000-TermsAcceptances';
 import { AccountDeletions1773200000000 } from './1773200000000-AccountDeletions';
+import { RetentionIndexes1773300000000 } from './1773300000000-RetentionIndexes';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -53,4 +54,7 @@ export const AUTH_MIGRATIONS = [
   // The outbox of `user.deleted` (plan 0232, section 5). One new table that
   // references nothing, so no existing row changes.
   AccountDeletions1773200000000,
+  // Six indexes the retention sweep reads by (plan 0233, section 5). It only
+  // adds, so no existing row changes.
+  RetentionIndexes1773300000000,
 ];

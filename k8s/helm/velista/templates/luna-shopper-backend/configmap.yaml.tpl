@@ -64,7 +64,8 @@ data:
   LEGAL_BACKUP_RETENTION_DAYS: {{ if kindIs "invalid" $backupDays }}"14"{{ else }}{{ $backupDays | quote }}{{ end }}
   LEGAL_APPLICATION_LOG_DAYS: {{ if kindIs "invalid" $legalDays.applicationLogDays }}"30"{{ else }}{{ $legalDays.applicationLogDays | quote }}{{ end }}
   LEGAL_ASSISTANT_LOG_DAYS: {{ if kindIs "invalid" $legalDays.assistantLogDays }}"7"{{ else }}{{ $legalDays.assistantLogDays | quote }}{{ end }}
-  # The retention periods (plan 0233), given to the gateway to report.
+  # The retention periods (plan 0233). Auth, core and catalog enforce them,
+  # and the gateway reports them to the privacy policy.
   RETENTION_AUDIT: {{ ($cfg.retention | default dict).audit | default "180d" | quote }}
   RETENTION_ADMIN_LOGIN_FAILURES: {{ ($cfg.retention | default dict).adminLoginFailures | default "90d" | quote }}
   RETENTION_EXPIRED_GRANTS: {{ ($cfg.retention | default dict).expiredGrants | default "14d" | quote }}

@@ -2,6 +2,11 @@ import { registerAs } from '@nestjs/config';
 import { effectiveTermsVersion } from '@portfolio/luna-shopper/contracts';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
+import {
+  retentionConfig,
+  retentionValidationSchema,
+  type RetentionConfig,
+} from '../retention/retention-config';
 import { parseDurationMs } from '../tokens/duration';
 import { assertDevAutologinIsSafe } from './local-host';
 import { readKey } from './read-key';
@@ -144,6 +149,11 @@ export const authValidationSchema = Joi.object({
   ORPHAN_REAPER_INTERVAL: Joi.string().default('1h'),
   ORPHAN_REAPER_BATCH: Joi.number().integer().min(1).default(200),
 
+  // How long each kind of stored row is kept, and the sweep that deletes the
+  // rest (plan 0233). The three periods are the numbers the privacy policy
+  // prints, and each refuses boot below its floor.
+  ...retentionValidationSchema,
+
   LOG_LEVEL: Joi.string()
     .valid(...LOG_LEVELS)
     .default('info'),
@@ -252,6 +262,8 @@ export interface AuthConfig {
     intervalMs: number;
     batchSize: number;
   };
+  /** The lifetimes of stored rows, and their sweep (plan 0233). */
+  retention: RetentionConfig;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -347,6 +359,7 @@ export const authConfiguration = registerAs(
       intervalMs: parseDurationMs(process.env.ORPHAN_REAPER_INTERVAL as string),
       batchSize: Number(process.env.ORPHAN_REAPER_BATCH),
     },
+    retention: retentionConfig(),
     logLevel: process.env.LOG_LEVEL as AuthConfig['logLevel'],
   })
 );

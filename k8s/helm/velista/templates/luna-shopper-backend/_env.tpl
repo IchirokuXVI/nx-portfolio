@@ -169,8 +169,12 @@ gateway only reports.
 The second half of plan 0045 section 6's cap, from the same two ConfigMap keys the
 gateway reads. Core owns the `bytea` the recording is written into, so it refuses a
 payload that reached the broker without passing the interceptor.
+
+RETENTION_AUDIT is how long core_audit is kept (plan 0233). The sweep's own
+interval, batch and switch are not in the chart: their defaults are the
+deployment's answer.
 */}}
-{{- range $key := (list "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES") }}
+{{- range $key := (list "VOICE_COMMENT_MAX_BYTES" "VOICE_COMMENT_CONTENT_TYPES" "RETENTION_AUDIT") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:
@@ -212,6 +216,13 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: HARVESTER_ACTOR_ID
+# How long catalog_audit is kept (plan 0233). The sweep's own interval, batch
+# and switch are not in the chart: their defaults are the deployment's answer.
+- name: RETENTION_AUDIT
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: RETENTION_AUDIT
 {{- end }}
 {{- if eq $svc.role "harvester" }}
 # The harvester (plan 0038). It owns the fourth database, verifies tokens offline
@@ -319,7 +330,7 @@ payload that reached the broker without passing the interceptor.
     secretKeyRef:
       name: {{ $sec }}
       key: SMTP_PASS
-{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "IMPERSONATION_ENABLED" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL" "TERMS_ACCEPTANCE_REQUIRED") }}
+{{- range $key := (list "AUTH_JWT_KID" "ACCESS_TOKEN_TTL" "REFRESH_TOKEN_TTL" "ADMIN_JWT_KID" "ADMIN_ACCESS_TOKEN_TTL" "ADMIN_LOGIN_LOCKOUT_THRESHOLD" "ADMIN_LOGIN_LOCKOUT_WINDOW" "IMPERSONATION_ENABLED" "GOOGLE_CLIENT_ID" "GOOGLE_CALLBACK_URL" "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "MAIL_VERIFY_BASE_URL" "MAIL_RESET_BASE_URL" "TERMS_ACCEPTANCE_REQUIRED" "RETENTION_AUDIT" "RETENTION_ADMIN_LOGIN_FAILURES" "RETENTION_EXPIRED_GRANTS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

@@ -5,6 +5,11 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
 import * as Joi from 'joi';
+import {
+  retentionConfig,
+  retentionValidationSchema,
+  type RetentionConfig,
+} from '../retention/retention-config';
 import { parseDurationMs } from './duration';
 import { DEFAULT_LOCATION_MAX_DISTANCE_METRES } from './location-max-distance';
 import {
@@ -187,6 +192,11 @@ export const coreValidationSchema = Joi.object({
   BASKET_SWEEP_INTERVAL: Joi.string().default('1h'),
   BASKET_SWEEP_BATCH: Joi.number().integer().min(1).default(100),
 
+  // How long the audit trail is kept, and the sweep that deletes the rest
+  // (plan 0233). The period is a number the privacy policy prints, and it
+  // refuses boot below its floor.
+  ...retentionValidationSchema,
+
   /**
    * The voice comment caps (plan 0045, section 6).
    *
@@ -322,6 +332,8 @@ export interface CoreConfig {
     /** Stamp `tourSeenAt` when an account is created. */
     newAccountsSkipTour: boolean;
   };
+  /** The lifetime of the audit trail, and its sweep (plan 0233). */
+  retention: RetentionConfig;
   logLevel: (typeof LOG_LEVELS)[number];
 }
 
@@ -419,6 +431,7 @@ export const coreConfiguration = registerAs(
     appState: {
       newAccountsSkipTour: process.env.NEW_ACCOUNTS_SKIP_TOUR === 'true',
     },
+    retention: retentionConfig(),
     logLevel: process.env.LOG_LEVEL as CoreConfig['logLevel'],
   })
 );

@@ -60,6 +60,33 @@ describe('legal configuration at boot', () => {
       validate({ LEGAL_TERMS_REVISION: '15 December' }).error?.message
     ).toContain('LEGAL_TERMS_REVISION');
   });
+
+  it.each([
+    ['RETENTION_AUDIT', '6d', '7d'],
+    ['RETENTION_AUDIT', '167h', '7d'],
+    ['RETENTION_ADMIN_LOGIN_FAILURES', '23h', '1d'],
+    ['RETENTION_EXPIRED_GRANTS', '0d', '1d'],
+  ])('refuses %s=%s, under the floor auth enforces', (key, value, floor) => {
+    expect(validate({ [key]: value }).error?.message).toBe(
+      `"${key}" must be at least ${floor}`
+    );
+  });
+
+  it('refuses a period with no unit, as auth does', () => {
+    expect(validate({ RETENTION_AUDIT: '180' }).error?.message).toBe(
+      '"RETENTION_AUDIT" must be a duration such as 180d'
+    );
+  });
+
+  it('boots on a period at its floor, and on one between whole days', () => {
+    expect(
+      validate({
+        RETENTION_AUDIT: '7d',
+        RETENTION_ADMIN_LOGIN_FAILURES: '24h',
+        RETENTION_EXPIRED_GRANTS: '36h',
+      }).error
+    ).toBeUndefined();
+  });
 });
 
 describe('legalConfig', () => {

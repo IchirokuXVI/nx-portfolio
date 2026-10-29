@@ -1,3 +1,5 @@
+> **PR:** [#857](https://github.com/IchirokuXVI/nx-portfolio/pull/857)
+
 # 0233: a stored row lives as long as the policy says
 
 > The privacy policy will tell people how long each kind of record is kept. Today nothing in
@@ -112,6 +114,7 @@ Report after each service's integration spec passes. Ground each claim in a comm
 | `password_resets` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` | `RETENTION_EXPIRED_GRANTS` |
 | `email_verifications` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` | `RETENTION_EXPIRED_GRANTS` |
 | `oauth_states` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` | `RETENTION_EXPIRED_GRANTS` |
+| `oauth_handoffs` | auth | `expiresAt < now() - RETENTION_EXPIRED_GRANTS` (review follow up, section 10) | `RETENTION_EXPIRED_GRANTS` |
 
 Notes on the rows that are not obvious:
 
@@ -134,8 +137,9 @@ Notes on the rows that are not obvious:
 One `RetentionSweepService` per service, in `<svc>/src/app/retention/retention-sweep.service.ts`,
 shaped exactly like `OrphanUserReaperService`: `setInterval` at `RETENTION_SWEEP_INTERVAL`
 from `onApplicationBootstrap` when `RETENTION_SWEEP_ENABLED`, `unref`, a `running` flag so ticks
-never overlap, cleared on shutdown, errors logged and swallowed. The first tick runs one
-minute after boot, not at boot, so a crash looping pod does not sweep on every start.
+never overlap, cleared on shutdown, errors logged and swallowed (one table's error is logged
+and the walk goes on to the next table, section 10). The first tick runs one minute after
+boot, not at boot, so a crash looping pod does not sweep on every start.
 
 Each table is one entry of a list the service walks in order:
 
@@ -162,13 +166,16 @@ WHERE "id" IN (
 )
 ```
 
-- `$1` is computed once per tick in the service (`new Date(Date.now() - retainMs)`), not
-  `now()` in SQL, so every batch of a tick agrees on the cutoff and the spec can fix the clock.
+- `$1` is computed in the service from one clock reading per tick (`sweep(now)`, and
+  `new Date(now.getTime() - retainMs)` for each table), not `now()` in SQL, so every batch of
+  a tick agrees on the cutoff and the spec can fix the clock.
 - `FOR UPDATE SKIP LOCKED` is what lets two replicas sweep at once: each takes rows the other
   has not locked, and neither waits. The same clause makes the harvester's schedule claim safe
   (plan `0206`).
 - Each `DELETE` is its own short transaction. A batch of 1000 rows of these narrow tables is
-  milliseconds; the batch limit is about lock time and WAL, not memory.
+  milliseconds; the batch limit is about lock time and WAL, not memory. For `refresh_tokens`
+  that holds only with the seventh index of section 5: without it one batch took 1713 ms on
+  50,000 rows.
 - The tick logs one line per target that deleted something: `{ table, deleted }`. A target
   that deleted nothing logs nothing.
 
@@ -212,9 +219,9 @@ parser is the existing state (auth and core already have one each), and moving t
   `RETENTION_AUDIT` to core and catalog.
 - The sweep's own interval, batch and enable keys are not in the chart. Their defaults are the
   deployment's answer, and a key nobody sets is a key nobody reads.
-- Neither environment file changes. If plan `0231` is built first it has already added the
-  three keys (its section 5.3); this plan then only adds them to the services that enforce
-  them.
+- Neither environment file changes. Plan `0231` was built first and had already added the
+  three keys to the ConfigMap and the gateway (its section 5.3); this plan only gives them to
+  the services that enforce them, and rewrites the two comments to say so.
 
 ## 5. The migration
 
@@ -226,17 +233,30 @@ CREATE INDEX "ix_refresh_tokens_expires_at" ON "refresh_tokens" ("expiresAt");
 CREATE INDEX "ix_password_resets_expires_at" ON "password_resets" ("expiresAt");
 CREATE INDEX "ix_email_verifications_expires_at" ON "email_verifications" ("expiresAt");
 CREATE INDEX "ix_oauth_states_expires_at" ON "oauth_states" ("expiresAt");
+CREATE INDEX "ix_oauth_handoffs_expires_at" ON "oauth_handoffs" ("expiresAt");
 CREATE INDEX "ix_impersonation_sessions_expires_at" ON "impersonation_sessions" ("expiresAt");
 CREATE INDEX "ix_admin_login_failures_created" ON "admin_login_failures" ("createdAt");
+CREATE INDEX "ix_refresh_tokens_replaced_by" ON "refresh_tokens" ("replacedById")
+  WHERE "replacedById" IS NOT NULL;
 ```
+
+The last one (`ix_refresh_tokens_replaced_by`) is not about finding rows to delete. `fk_refresh_tokens_replaced_by` (plan `0229`,
+`1773000000000-RefreshTokenSuccessor.ts`) is `ON DELETE SET NULL` onto the same table, so for
+each deleted token Postgres runs `UPDATE "refresh_tokens" SET "replacedById" = NULL WHERE
+"replacedById" = $1`. Plan `0229` left the column without an index on purpose, when nothing
+deleted tokens in bulk. Under the sweep each of those lookups is a scan of the whole table: the
+review measured one batch of 1000 at 1713 ms on 50,000 rows without the index, and 12 ms with
+it. It is partial because only a rotated row has a successor. Section 10 records it as beyond
+the plan's list of six.
 
 Not `CONCURRENTLY`: migrations run inside a transaction (the probe specs run them with
 `transaction: 'each'`, for example `core/src/app/db/basket-shop.migration.integration.spec.ts:120`;
-the builder confirms the bundled runner does the same, which I did not verify), and these
-tables are small enough that a plain build takes well under a second. The builder states the
-row counts of staging and production in the PR (`SELECT count(*)` of each, read through the
-release tooling, not by hand on a pod) to show it. Each index is named in the entity too, so
-TypeORM's schema and the migration agree.
+the bundled runner `auth/src/migrate.ts` runs the whole set with `transaction: 'all'`, and the
+CLI's `migration:run` defaults to the same), and these tables are small enough that a plain
+build takes well under a second. The plan asked for the row counts of staging and production,
+read through the release tooling. The build did not read them: every read path of that
+tooling reaches a cluster over SSH, and the build touched no cluster (section 10). Each index
+is named in the entity too, so TypeORM's schema and the migration agree.
 
 No core or catalog migration: their audit tables already have an index on `at`.
 
@@ -287,3 +307,91 @@ Mine, for the owner to change:
 5. **The same six month period for all three trails**, including catalog's, which holds no end
    user data and which the owner might prefer to keep longer for curation history.
 6. **`processed_events` is not swept here.**
+
+## 10. What the build decided
+
+The builder's choices where the plan left room. Each is the owner's to change.
+
+1. **One `RetentionModule` per service**, imported by its `AppModule`, holding only the sweep.
+   It imports nothing: the sweep reads the global `DataSource`, `ConfigService` and logger,
+   and writes raw statements.
+2. **The first tick is a one minute `setTimeout`**, `unref`ed and cleared on shutdown, and the
+   interval starts when it fires. A pod stopped inside its first minute never sweeps.
+3. **A failing table does not stop the tick.** Its error is logged with the table name, the
+   walk goes on to the next table, and the table is tried again on the next tick. `sweep()`
+   answers `{ table, deleted, failed }` for each table, which the specs assert.
+4. **Two replicas can still wait on each other in one case: a rotation chain split across two
+   batches.** `refresh_tokens.replacedById` is `ON DELETE SET NULL` onto the same table, so a
+   delete updates the rows that name the deleted token. Every row of one rotation chain carries
+   the same `expiresAt`, so a chain can be split between the batches of two replicas, and each
+   delete can then have to update a row the other batch holds. The two wait on each other;
+   Postgres detects the deadlock and aborts one statement, that table reports `failed` for that
+   tick (decision 3), and its rows go on the next tick. The acceptance criterion still holds:
+   both sweeps finish, and no row is deleted twice. With the seventh index of section 5 each of
+   those updates is an index lookup, so the batches are short and the window is small.
+   The cascade from a support session to its refresh tokens cannot cause it in steady state. A
+   session's tokens carry the session's own `expiresAt` (`auth/src/app/tokens/token.service.ts:230`
+   to `:231`), so the 14 day grant sweep removes them about 166 days before the session reaches
+   its 180 day cutoff. The concurrency spec proves the plain case (2,500 unchained rows in
+   `refresh_tokens` and in `auth_audit`, with a held row each sweep must pass by), not a chain of
+   rotations. If the owner wants no such abort at all, each batch can first take
+   `pg_try_advisory_xact_lock(hashtext(<table>))` and skip the table when it is taken, so that one
+   replica sweeps a table at a time. The build does not do that.
+5. **The count comes from the driver**, which answers a `DELETE` through `query()` as
+   `[rows, rowCount]`. No `RETURNING`, so a batch moves no ids back. Any other shape throws,
+   rather than reading as zero and ending the loop with rows left.
+6. **The cutoff is read once per sweep.** `sweep(now)` takes one clock reading, and each table's
+   cutoff is `now` minus its period, so every batch of a tick agrees and the specs pass a fixed
+   `now`.
+7. **The extra condition on `impersonation_sessions` reads the database clock**:
+   `"endedAt" IS NOT NULL OR "expiresAt" < now()`. With the floor of seven days it can never be
+   false for a row past the cutoff; it is there so that no clock of a pod, however wrong, can
+   delete a session that is still live.
+8. **The floors are a Joi rule, `durationAtLeast(default, floor)`**, one copy per service in
+   `retention/retention-config.ts`. Below the floor the message is `"RETENTION_AUDIT" must be
+   at least 7d`; a value with no unit (`180`) is `"RETENTION_AUDIT" must be a duration such as
+   180d`. `RETENTION_SWEEP_INTERVAL` uses the same rule with a floor of `1m`. The batch keys use
+   `min(1)`.
+9. **The gateway refuses the same floors.** Plan `0231` gave it a pattern with no floor, so a
+   value under a floor crashlooped auth while a gateway that had rolled out printed it, and the
+   gateway compared nothing but whole days. Now all four services refuse the same floors (`7d`,
+   `1d`, `1d`) on the exact value, with the same message (`"RETENTION_AUDIT" must be at least
+   7d`). The policy still prints whole days rounded down, which is the contract of plan `0231`:
+   `36h` prints one day while auth keeps a day and a half.
+10. **Order of the auth walk**: `auth_audit`, `impersonation_sessions`, `admin_login_failures`,
+    `refresh_tokens`, `password_resets`, `email_verifications`, `oauth_states`,
+    `oauth_handoffs` (item 17). Sessions go
+    before refresh tokens, so the tokens a session takes by cascade are gone before the token
+    batch runs.
+11. **`tick()` is public**, unlike the reaper's, so a spec can prove that a second tick while
+    one runs does nothing.
+12. **No compose or `luna-slot.sh` change.** Every new key has a default, so a slot and the tier
+    2 stack boot without one. A slot therefore sweeps its own databases on the owner's
+    numbers, one minute after each boot.
+13. **The chart comments say who enforces the numbers.** The ConfigMap's comment above the three
+    keys changed, so its render and checksum change, and the next deploy restarts every
+    service that reads it. That deploy restarts auth, core and catalog anyway, for their new
+    environment entries.
+14. **The row counts of section 5 were not read.** Every read path of the release tooling
+    (`provision-release.sh --check`, the release task `check` phase) runs on the host over SSH,
+    and the build touched no cluster. The owner can read them on the host before the deploy;
+    the build expects the tables to be small for the reasons section 6 gives.
+15. **The log line carries the message as `context`.** It is written as
+    `logger.log({ table, deleted }, 'retention sweep deleted rows past their lifetime')`, the
+    reaper's shape, and `nestjs-pino` files the trailing string under `context`. A search for
+    the sweep in the logs matches that field.
+16. **A seventh index, beyond the plan's list of six**: `ix_refresh_tokens_replaced_by` on
+    `refresh_tokens ("replacedById") WHERE "replacedById" IS NOT NULL`, in the same migration
+    and named in the `RefreshToken` entity. Section 5 gives the reason and the measurement
+    (1713 ms against 12 ms for one batch of 1000 on 50,000 rows). The comment in
+    `1773000000000-RefreshTokenSuccessor.ts` that said "no index" now points here. The owner
+    can drop it only together with a sweep that never deletes tokens in bulk.
+17. **`oauth_handoffs` is swept with the other grants** (a review follow up from velista plan
+    `0172`, whose privacy policy states its period). A Google sign in staged at the callback
+    (plan `0230`) keeps the Google id, email and name for two minutes. Redeeming it only sets
+    `consumedAt`, and a sign in from scratch has `userId` null, so neither a redemption nor an
+    account deletion removes the row; before this, nothing did. It is deleted by `expiresAt`
+    under `RETENTION_EXPIRED_GRANTS`, last in the auth walk, with the index
+    `ix_oauth_handoffs_expires_at` added to the same migration (the plan's migration was not
+    yet deployed anywhere) and named in the `OAuthHandoff` entity. The integration spec adds a
+    handoff with no user either side of the cutoff.

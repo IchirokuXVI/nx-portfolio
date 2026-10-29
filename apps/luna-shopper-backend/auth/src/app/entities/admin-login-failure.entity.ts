@@ -23,6 +23,9 @@ import { BaseEntity } from './base.entity';
 // The lockout query is "how many failures for this username since a moment", so
 // the index carries both columns in that order.
 @Index('ix_admin_login_failures_username_created', ['username', 'createdAt'])
+// The retention sweep reads by the attempt time alone (plan 0233), which the
+// index above does not serve.
+@Index('ix_admin_login_failures_created', ['createdAt'])
 export class AdminLoginFailure extends BaseEntity {
   /** Exactly what was typed, stored as given. Not normalized, not a foreign key. */
   @Column({ type: 'varchar' })
