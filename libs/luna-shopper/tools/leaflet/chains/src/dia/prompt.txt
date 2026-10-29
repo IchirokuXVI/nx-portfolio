@@ -8,7 +8,7 @@ The array elements are rows that will be imported into a product catalog, so
 every element MUST have exactly these keys:
 
 {
-  "name": "product description as printed, without the price",
+  "name": "product description as printed, without the price, the brand or the pack size",
   "brand": "manufacturer brand, or null",
   "unitSize": 0.0,
   "sizeFormat": "kg" | "g" | "l" | "ml" | "ud" | "m" | null,
@@ -199,6 +199,21 @@ Rules, in order of importance:
 15. Use null for anything the page does not state. Do not invent values and do
     not compute a value the page does not print. Never divide one printed
     number by another to produce a price.
+
+16. ONE TILE CAN ADVERTISE SEVERAL PRODUCTS AT ONE PRICE, AND EACH ONE IS A
+    ROW. The caption often joins them with "o": "Pan de chorizo o de
+    salchichón", "Gel limpiador ácido hialurónico o vitamina C", "Friegasuelos
+    olor ropa limpia o bambú", "Zapatilla dinosaurios o estrellas". Decide in
+    two steps. First the wording: when the words on each side of the "o" name
+    a different product or a different variety, so that the caption makes no
+    sense as the name of one product, split it. Then the photograph: when the
+    wording still reads as one name, look at the tile's picture; several
+    similar packs under one price are several products, and each pack's own
+    label says which words belong to which product. Write one row per
+    product, each with that product's full name (repeat the shared words:
+    "Pan de chorizo Regio", "Pan de salchichón Regio"), and the same price,
+    size, unit price, brand, basis and promotion. A list of flavours that
+    describes one pack ("2 variedades", "3x330 ml") is not a split.
 
 EXAMPLE OF A WHOLE ANSWER
 
