@@ -142,8 +142,8 @@
   "landingV2.detail.velista.sections.harvester.deep.p4": "Printed leaflets are a source too. A second CLI renders the PDF pages to images, and a model reads each page into the same document a crawl produces. An offer waits until it is matched to a product, and a fuzzy match never writes a price by itself. When someone enters a postal code Velista has never seen, a run goes looking for the shops around it.",
 
   "landingV2.detail.velista.sections.assistant.title": "The AI assistant",
-  "landingV2.detail.velista.sections.assistant.highlight.p1": "The add button on a list is a microphone. You say or type what you need, and an assistant built on Gemini adds the lines, changes them, removes them or ticks them off.",
-  "landingV2.detail.velista.sections.assistant.deep.p1": "The assistant is a service of its own, built on Gemini. You speak or type something like \"two milks and whatever we need for a tortilla\", and it adds, updates, removes or settles lines, or answers questions about your lists. Voice notes are transcribed on the server first.",
+  "landingV2.detail.velista.sections.assistant.highlight.p1": "The add button on a list is a microphone. You say or type what you need, and an AI assistant adds the lines, changes them, removes them or ticks them off.",
+  "landingV2.detail.velista.sections.assistant.deep.p1": "The assistant is a service of its own, built on an AI model that is told the reader may be a child. You speak or type something like \"two milks and whatever we need for a tortilla\", and it adds, updates, removes or settles lines, or answers questions about your lists. Voice notes are transcribed on the server first.",
   "landingV2.detail.velista.sections.assistant.deep.p2": "It holds no special access. It reads and writes only through the same gateway API the app uses, with the caller's own token, so it can do exactly what that person could do by tapping and nothing more.",
 
   "landingV2.detail.velista.sections.baskets.title": "Baskets and lists",

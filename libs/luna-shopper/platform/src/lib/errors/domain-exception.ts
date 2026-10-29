@@ -251,6 +251,20 @@ export class LineMergeRequiredException extends DomainException {
 }
 
 /**
+ * A typed name is the name of two or more lines of the list that hold a
+ * product, and the add said it can ask (plan 0228, section 3).
+ *
+ * It publishes its details, for the reason {@link LineMergeRequiredException}
+ * does: the client cannot ask the question without them. `details.lines` names
+ * each line in list position order, at most `LINE_ADD_CHOICE_MAX` of them.
+ * Nothing was written when this is thrown.
+ */
+export class LineAddNeedsChoiceException extends DomainException {
+  readonly code = ERROR_CODES.LINE_ADD_NEEDS_CHOICE;
+  override readonly exposesDetails = true;
+}
+
+/**
  * A pending or rejected line was renamed onto an approved one by somebody who
  * holds neither `DECIDE` nor `MANAGE`, on a list that does not auto approve
  * (plan 0112, section 2).

@@ -297,6 +297,7 @@
                     [row]="row.row"
                     [section]="rowSection(row.row)"
                     [shelf]="row.shelf"
+                    [took]="tookIn(row.row)"
                     [usual]="row.usual"
                   />
                 </li>
@@ -680,6 +681,7 @@
                         [row]="row.row"
                         [section]="rowSection(row.row)"
                         [shelf]="row.shelf"
+                        [took]="tookIn(row.row)"
                         [usual]="row.usual"
                       />
                     </li>
@@ -744,10 +746,18 @@
     Which list is it for? Held against the button that was pressed and never inside
     the suggestion panel, which clips and scrolls. A pick is the add.
   -->
+  <!--
+    After a pick, a typed name already on two or more lines of that list turns the
+    same popover into the question of which line (velista 0170).
+  -->
   <lib-list-picker
+    (backToLists)="backToLists()"
+    (choseLine)="chooseLine($event)"
     (chosen)="pickList($event)"
+    (choseNewLine)="chooseNewLine()"
     (dismissed)="dismissPicker()"
     [anchor]="pickerAnchor()"
+    [choice]="pickerChoice()"
     [rows]="pickerRows()"
   />
 }

@@ -1340,6 +1340,13 @@ export interface BasketAddLineRequest {
    * name and nobody typed it (backend `0207`). Absent for typed text.
    */
   readonly named?: false;
+  /**
+   * What a free text add says about a name the list already holds (backend `0228`,
+   * velista `0170`). Absent on an add that carries products.
+   */
+  readonly askIfAmbiguous?: true;
+  readonly intoLineId?: string;
+  readonly newLine?: true;
 }
 
 /**

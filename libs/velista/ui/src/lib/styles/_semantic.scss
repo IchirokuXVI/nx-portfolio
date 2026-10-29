@@ -414,6 +414,19 @@ $app-content-max: 480px;
   // A popover held against a control at the foot of the screen (velista 0110): two
   // short sentences, at three lines or so on a phone (velista 0113).
   --app-anchored-popover-width: 280px;
+  // The question a typed name already on the list asks (velista 0170), drawn to the
+  // owner's mock: a little narrower than the note popover, with rows of 48 px, a 30 px
+  // thumb, and a title of 15 px over names of 14.5 px. The rows scroll inside it past
+  // what fits above the keyboard, which `resizes-content` takes out of `svh`.
+  --app-add-choice-width: 276px;
+  --app-add-choice-row-height: 48px;
+  --app-add-choice-thumb: 30px;
+  --app-add-choice-title: 15px;
+  --app-add-choice-name: 14.5px;
+  --app-add-choice-rows-max: 45svh;
+  // The edge on the quantity of a row an add raised (velista 0170, target 4), in the
+  // amber of a held stepper's border, for 2.5 s.
+  --app-took-edge-width: 1.5px;
 
   // The progress bar on the resume card.
   --app-progress-height: 6px;
