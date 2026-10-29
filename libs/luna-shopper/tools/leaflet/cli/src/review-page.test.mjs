@@ -101,6 +101,8 @@ test('the page carries one article per row with its id and the saving controls',
     ],
   });
   assert.match(html, /<article class="row check" id="p15r1" data-row="p15r1">/);
+  assert.match(html, /<span class="idx">15\.1<\/span>/);
+  assert.match(html, /id="download-comments"/);
   assert.match(html, /id="w-p15r1"/);
   assert.match(html, /id="c-p15r1"/);
   assert.match(html, /Sonnet misread the price\./);

@@ -12,8 +12,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *
  * `userId` cascades, so an account delete takes its acceptances (plan 0232).
  */
-export class TermsAcceptances1773000000000 implements MigrationInterface {
-  name = 'TermsAcceptances1773000000000';
+export class TermsAcceptances1773100000000 implements MigrationInterface {
+  name = 'TermsAcceptances1773100000000';
 
   async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(

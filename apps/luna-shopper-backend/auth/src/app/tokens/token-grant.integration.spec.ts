@@ -373,7 +373,7 @@ describeIntegration('reset grants (real Postgres)', () => {
     ).resolves.toMatchObject({ outcome: RecoverySignInOutcome.SIGNED_IN });
 
     // The pair from before still rotates.
-    await expect(tokens.rotate(before.refreshToken)).resolves.toMatchObject({
+    await expect(identity.refresh(before.refreshToken)).resolves.toMatchObject({
       userId: user.id,
     });
   });
