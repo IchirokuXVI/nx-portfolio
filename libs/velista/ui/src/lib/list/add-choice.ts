@@ -35,7 +35,8 @@ let choiceCount = 0;
  *
  * ## The title wraps and the count does not shrink
  *
- * The title is the typed name, which can be anything the person wrote, so it wraps
+ * The title is the name as the first line stores it, which can be anything somebody
+ * wrote, so it wraps
  * on as many lines as it needs and breaks a word with no spaces anywhere. A row's
  * name and product line are cut with an ellipsis instead, because the count beside
  * them is the part of the row that answers the question.
@@ -112,7 +113,10 @@ let choiceCount = 0;
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AddChoice {
-  /** The words the person typed, as they typed them. */
+  /**
+   * The name the title says: the stored words of the first line (`addChoiceName`),
+   * which is the rows' own spelling, and not the words as typed.
+   */
   readonly name = input.required<string>();
 
   /** The lines that carry them, in the order the server named them. */
@@ -123,7 +127,10 @@ export class AddChoice {
 
   readonly scope = input<AddChoiceScope>('list');
 
-  /** The list the basket's picker chose, drawn as the way back to it, or null. */
+  /**
+   * The list the basket's picker chose, drawn as the way back to it, or null. An
+   * empty name draws nothing either, never a chevron with no words.
+   */
   readonly back = input<string | null>(null);
 
   /** A line was chosen, by id. The add is sent again with `intoLineId`. */

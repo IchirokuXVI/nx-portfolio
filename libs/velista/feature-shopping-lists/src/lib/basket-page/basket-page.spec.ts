@@ -3752,6 +3752,136 @@ describe('the composer and the list it adds to', () => {
           'list.addChoice.merged'
         );
       });
+
+      it('says the raised row as it draws it, its name and its number', async () => {
+        const WHOLE_MILK: BasketProduct = {
+          id: 'i-milk',
+          name: { en: 'Whole milk', es: 'Whole milk' },
+          brand: null,
+          imageUrl: null,
+          size: null,
+          unit: null,
+          offer: null,
+          offers: [],
+          atShop: null,
+          productGroupId: null,
+          categories: [],
+          sectionIds: [],
+        };
+        const milk = line('Leche entera', {
+          productId: 'i-milk',
+          left: 8,
+          entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+        });
+        const { fixture, store } = await render({
+          served,
+          lines: [milk],
+          products: new Map([['i-milk', WHOLE_MILK]]),
+          echoValues: true,
+        });
+        // The answer names the line with its own words and number, which the
+        // row does not draw.
+        store.addLine.mockResolvedValueOnce({
+          entries: [entry(null, 'zl-milk', 4, { content: 'Leche entera' })],
+          skippedCount: 0,
+        });
+        typeInto(fixture, 'Leche entera');
+        plus(fixture).click();
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const said = query(fixture, '.said')?.textContent ?? '';
+        expect(said).toContain('list.addChoice.merged');
+        expect(said).toContain('"name":"Whole milk"');
+        expect(said).toContain('"quantity":"8"');
+      });
+
+      it('titles the question with the line as it is stored, not as it was typed', async () => {
+        const { fixture, store } = await render({ served, echoValues: true });
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(refusal());
+          return Promise.resolve(null);
+        });
+        typeInto(fixture, 'leche ENTERA');
+        plus(fixture).click();
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(document.querySelector('.pop .title')?.textContent).toContain(
+          '"name":"Leche entera"'
+        );
+      });
+
+      it('clears the words of an add that lands after its popover was waved away', async () => {
+        const { fixture, store } = await render({ served });
+        let land: (value: BasketRowResult) => void = () => undefined;
+        store.addLine.mockImplementationOnce(
+          () =>
+            new Promise<BasketRowResult>((resolve) => {
+              land = resolve;
+            })
+        );
+        typeInto(fixture, 'Pan');
+        plus(fixture).click();
+        fixture.detectChanges();
+        options()[0]?.click();
+        fixture.detectChanges();
+
+        // A press outside, or Escape, while the add is out.
+        document.body.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        );
+        fixture.detectChanges();
+        expect(document.querySelector('.pop')).toBeNull();
+        expect(field(fixture).value).toBe('Pan');
+
+        land(rowResult(line('Pan')));
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        // Pressing the plus again would add it a second time.
+        expect(field(fixture).value).toBe('');
+        expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+          'basket.error'
+        );
+      });
+
+      it('stays quiet and keeps the words when the question comes back after a dismissal', async () => {
+        const { fixture, store } = await render({ served });
+        let land: () => void = () => undefined;
+        store.addLine.mockImplementationOnce(
+          () =>
+            new Promise<null>((resolve) => {
+              land = () => {
+                store.error.set(refusal());
+                resolve(null);
+              };
+            })
+        );
+        typeInto(fixture, 'Leche entera');
+        plus(fixture).click();
+        fixture.detectChanges();
+        options()[0]?.click();
+        fixture.detectChanges();
+        document.body.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+        );
+        fixture.detectChanges();
+
+        land();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(document.querySelector('.pop')).toBeNull();
+        expect(field(fixture).value).toBe('Leche entera');
+        expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+          'basket.error'
+        );
+      });
     });
   });
 

@@ -92,9 +92,19 @@ function service(seed: readonly Line[]) {
   /** What each add said about a name the list holds, in order (backend `0228`). */
   const addOptions: (AddLineOptions | undefined)[] = [];
 
+  /** Set while the reads after the first are held open, opened by `releaseFollowUps`. */
+  let followUps: Promise<void> | null = null;
+  let openFollowUps: (() => void) | null = null;
+
   const impl: LineServiceI = {
     listLines: async (): Promise<Page<Line>> => {
       calls.push('list');
+      if (
+        followUps !== null &&
+        calls.filter((call) => call === 'list').length > 1
+      ) {
+        await followUps;
+      }
       if (readFailsWith !== null) {
         const error = readFailsWith;
         readFailsWith = null;
@@ -241,6 +251,17 @@ function service(seed: readonly Line[]) {
       raiseNext = value;
     },
     addOptions,
+    /** The rest of a long list stays out until `releaseFollowUps`. */
+    holdFollowUps: () => {
+      followUps = new Promise<void>((resolve) => {
+        openFollowUps = resolve;
+      });
+    },
+    releaseFollowUps: () => {
+      followUps = null;
+      openFollowUps?.();
+      openFollowUps = null;
+    },
     holdWrites: () => {
       held = new Promise<void>((resolve) => {
         release = resolve;
@@ -638,6 +659,31 @@ describe('LineStore', () => {
         'milk',
         'bread',
       ]);
+    });
+
+    it('draws a raised line once when the rest of a long list brings it again', async () => {
+      const { store, lines } = await build();
+      lines.setPages([
+        [line('eggs', { content: 'Huevos', position: 1 })],
+        [milk({ position: 3 }), line('bread', { content: 'Pan', position: 5 })],
+      ]);
+      lines.holdFollowUps();
+      await store.load(LIST);
+      lines.raiseNext(milk({ quantity: 3, version: 2, position: 3 }));
+
+      await store.addLine(LIST, 'Leche entera', 1, ME, ASKS_FIRST);
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['eggs', 'milk']);
+
+      lines.releaseFollowUps();
+      await new Promise((resolve) => setTimeout(resolve));
+
+      expect(store.linesIn(LIST).map((l) => l.id)).toEqual([
+        'eggs',
+        'milk',
+        'bread',
+      ]);
+      // The raise is newer than the page, so it is the one kept.
+      expect(store.linesIn(LIST)[1].quantity).toBe(3);
     });
 
     it('puts a new line at the end when no row was drawn for it', async () => {

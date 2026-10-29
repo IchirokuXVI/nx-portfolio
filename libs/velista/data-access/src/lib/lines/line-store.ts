@@ -1434,9 +1434,20 @@ export class LineStore {
           order: 'position',
         });
 
+        // A line this store already holds past the first page is not appended again:
+        // an add that raised a line the store did not hold has put it in place while
+        // the rest was loading (velista `0170`). The read is reconciled into it, so the
+        // newer of the two wins by version.
+        const read = this._mergeRead(local, page.items);
+        const readById = new Map(read.map((line) => [line.id, line]));
+        const held = this._byList().get(listId) ?? [];
+        const heldIds = new Set(held.map((line) => line.id));
         this._setLines(listId, [
-          ...(this._byList().get(listId) ?? []),
-          ...this._mergeRead(local, page.items),
+          ...held.map((line) => {
+            const again = readById.get(line.id);
+            return again === undefined ? line : this._reconcile(line, again);
+          }),
+          ...read.filter((line) => !heldIds.has(line.id)),
         ]);
         this._recordReadCounts(local, page.items);
         cursor = page.nextCursor;

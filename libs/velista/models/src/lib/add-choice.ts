@@ -103,6 +103,17 @@ export function addChoiceRows(
 }
 
 /**
+ * The name the question's title says: the stored words of the first line the
+ * refusal named, which is the row's own spelling, and not the words as typed
+ * ("Leche entera", where somebody typed "leche entera"). The typed words only when
+ * the line holds none.
+ */
+export function addChoiceName(choice: AddChoice, typed: string): string {
+  const stored = choice.lines[0]?.content.trim() ?? '';
+  return stored === '' ? typed : stored;
+}
+
+/**
  * Whether a free text add of `content` is likely to land on a line already held
  * (velista `0170`, target 3): a loaded line, not turned down, carries the same name
  * as the server folds it.

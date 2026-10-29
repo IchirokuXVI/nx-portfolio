@@ -3,6 +3,7 @@ import {
   ADD_CHOICE_MAX,
   basketEntryPatchOf,
   isOpenBasket,
+  LINE_QUANTITY_MAX,
   LINK_VISIT_HOURS,
   type Basket,
   type BasketAddLineRequest,
@@ -1582,7 +1583,8 @@ export class BasketMemory implements BasketServiceI {
           );
 
     if (held !== undefined) {
-      held.quantity += quantity;
+      // Capped as `raiseForAdd` caps it, and as `LineMemory` does.
+      held.quantity = Math.min(LINE_QUANTITY_MAX, held.quantity + quantity);
       this._moved(held.id);
       this._announce([held.id], true, false);
       return this._result([held.id]);

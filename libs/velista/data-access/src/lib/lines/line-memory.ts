@@ -225,9 +225,12 @@ export class LineMemory implements LineServiceI {
       line.itemIds.length > 0 || line.productGroupId !== null;
 
     // Plan 0091 first, and even over `newLine`: a free text line of that name always
-    // takes the add.
+    // takes the add. A turned down line takes nothing, as `findEarliestLines` skips it.
     const text = lines.find(
-      (held) => !holdsProduct(held) && foldName(held.content) === typed
+      (held) =>
+        held.approvalStatus !== 'REJECTED' &&
+        !holdsProduct(held) &&
+        foldName(held.content) === typed
     );
     if (text !== undefined) {
       return text;

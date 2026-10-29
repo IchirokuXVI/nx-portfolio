@@ -838,6 +838,24 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
     ).toBe('not_found');
   });
 
+  it('passes over a turned down free text line of the name, as the server does', async () => {
+    const { lines } = await build();
+    const refused = await lines.addLine(OWNED_LIST, 'Garbanzos tostados', 1);
+    await lines.setApproval(refused.id, 'REJECTED');
+
+    const result = await lines.addLineResult(
+      OWNED_LIST,
+      'garbanzos tostados',
+      1,
+      undefined,
+      undefined,
+      { askIfAmbiguous: true }
+    );
+
+    expect(result.merged).toBe(false);
+    expect(result.line.id).not.toBe(refused.id);
+  });
+
   it('lets a free text line of the name take the add before anything else', async () => {
     const { lines } = await twoMilks();
     const typed = await lines.addLine(OWNED_LIST, 'Leche entera', 1);

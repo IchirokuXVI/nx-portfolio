@@ -1,4 +1,8 @@
-import type { BasketRow, BasketRowTarget } from '@portfolio/velista/models';
+import {
+  LINE_QUANTITY_MAX,
+  type BasketRow,
+  type BasketRowTarget,
+} from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import { BasketMemory } from './basket-memory';
 
@@ -916,6 +920,19 @@ describe('BasketMemory: adding a line', () => {
 
     expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
     expect(result.entries[0].left).toBe(3);
+  });
+
+  it('caps a raise at the most a line can hold, as raiseForAdd does', async () => {
+    const memory = new BasketMemory();
+    const result = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'milk',
+      quantity: LINE_QUANTITY_MAX,
+      askIfAmbiguous: true,
+    });
+
+    expect(result.entries.map((entry) => entry.lineId)).toEqual(['zl-1']);
+    expect(result.entries[0].left).toBe(LINE_QUANTITY_MAX);
   });
 
   it('asks which line when two hold a product under the name, and takes the answer', async () => {

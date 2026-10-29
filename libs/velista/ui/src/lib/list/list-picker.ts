@@ -24,10 +24,13 @@ export interface ListPickerRow {
  * name is already on two or more of its lines, and which one takes it.
  */
 export interface ListPickerChoice {
-  /** The words as typed. */
+  /** The name the title says, as the first line stores it. */
   readonly name: string;
-  /** The list that was picked, drawn as the way back to the first question. */
-  readonly listName: string;
+  /**
+   * The list that was picked, drawn as the way back to the first question, or null
+   * when no name for it is held: no way back is drawn then, rather than a bare "‹".
+   */
+  readonly listName: string | null;
   readonly rows: readonly AddChoiceRow[];
   /** How many the add carries. */
   readonly added: number;

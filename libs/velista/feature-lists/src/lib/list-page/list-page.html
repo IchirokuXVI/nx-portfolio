@@ -529,7 +529,7 @@
           (dismissed)="closeChoice('escape')"
           (newLine)="chooseNewLine()"
           [added]="asked.entry.quantity"
-          [name]="asked.entry.content"
+          [name]="choiceName()"
           [rows]="choiceRows()"
           [titleId]="choiceTitleId"
           scope="list"

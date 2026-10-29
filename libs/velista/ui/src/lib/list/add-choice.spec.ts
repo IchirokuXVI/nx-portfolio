@@ -158,6 +158,14 @@ describe('AddChoice', () => {
     expect(returned).toBe(1);
   });
 
+  it('draws no bare chevron for a list with no name', async () => {
+    const fixture = await render({ scope: 'basket', back: '' });
+
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.back')
+    ).toBeNull();
+  });
+
   it('closes on the back gesture, which has no route to pop', async () => {
     const fixture = await render();
     let dismissed = 0;

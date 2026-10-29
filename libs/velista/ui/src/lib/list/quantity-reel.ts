@@ -22,6 +22,12 @@ import { handleBackWhile } from '@portfolio/velista/platform';
 import { classifyReelGesture } from './quantity-reel-gesture';
 
 /**
+ * How long a raised number keeps its {@link QuantityReel.took} edge (velista `0170`,
+ * D4). One value for the list page and the basket, which both decide when it goes.
+ */
+export const TOOK_DURATION_MS = 2500;
+
+/**
  * How many of something, as a number you drag.
  *
  * The primary gesture of the list page (velista plan 0043, section 4). A thumb lands
@@ -152,7 +158,8 @@ export class QuantityReel {
 
   /**
    * Whether an add just raised this number (velista `0170`, target 4): the pill takes
-   * an amber edge while it is true. The container decides for how long. It says
+   * an amber edge while it is true. The container decides for how long, which is
+   * {@link TOOK_DURATION_MS} on both pages that draw it. It says
    * where the units went, so it changes nothing about the control.
    */
   readonly took = input(false);

@@ -27,6 +27,7 @@ import {
   type DroppedWrite,
   DroppedWrites,
   DueLineStore,
+  GatewayError,
   ItemNames,
   LineStore,
   LIST_SERVICE,
@@ -49,6 +50,7 @@ import {
   ZoneStore,
 } from '@portfolio/velista/data-access';
 import {
+  addChoiceName,
   type AddChoice as AddChoiceQuestion,
   type AddChoiceRow,
   addChoiceRows,
@@ -123,6 +125,7 @@ import {
   type SuggestionHoldingChange,
   SuggestionList,
   ToBuyHeading,
+  TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
 import {
@@ -1277,6 +1280,18 @@ export class ListPage {
       untracked(() => this._view.open(listId));
     });
 
+    // The question about a typed name was about the list it was asked on (velista
+    // `0170`), so it closes when the page moves to another list.
+    effect(() => {
+      const listId = this.listId();
+      untracked(() => {
+        const asked = this.addChoice();
+        if (asked !== null && asked.listId !== listId) {
+          this.addChoice.set(null);
+        }
+      });
+    });
+
     // The trips, beside the lines and never in front of them (velista 0088, section 8).
     effect(() => {
       const listId = this.listId();
@@ -1814,10 +1829,10 @@ export class ListPage {
    */
   private async _send(
     entry: LineComposerSubmit,
-    options: AddLineOptions | undefined
+    options: AddLineOptions | undefined,
+    listId: string = this.listId()
   ): Promise<void> {
     const current = this.loaded();
-    const listId = this.listId();
     const drawn = this._lines.drawsBeforeAnswer(
       listId,
       entry.content,
@@ -1855,15 +1870,34 @@ export class ListPage {
     this._typedBusy.set(false);
 
     if (outcome.state === 'failed') {
+      if (
+        options?.intoLineId !== undefined &&
+        outcome.error instanceof GatewayError &&
+        outcome.error.code === 'not_found'
+      ) {
+        // The chosen line went while the question was open (backend `0228`, section
+        // 3). The list is still there, so the same add asks again, once: the
+        // question redraws with the lines left, the one line left is raised, or a
+        // line is made. A list that went too answers `not_found` again, and that
+        // one is said as the list being gone.
+        await this._send(entry, { askIfAmbiguous: true }, listId);
+        return;
+      }
       const choice = toAddChoice(outcome.error);
       if (choice !== null && entry.anchor !== undefined) {
+        if (listId !== this.listId()) {
+          // The page went to another list while the add was out, and the
+          // question was about the list it left.
+          return;
+        }
         // Which line takes it? The words stay in the field while it is asked, and
         // after it is waved away. A row was drawn only when the loaded lines did not
-        // see this coming, and its words go back.
-        if (drawn) {
+        // see this coming, and its words go back, into a field nobody has typed in
+        // since: newer words are a newer add and stay.
+        if (drawn && (this._composer()?.content().trim() ?? '') === '') {
           this._composer()?.restore(entry.content);
         }
-        this._openChoice(entry, entry.anchor, choice);
+        this._openChoice(listId, entry, entry.anchor, choice);
         return;
       }
       if (drawn) {
@@ -1906,9 +1940,12 @@ export class ListPage {
 
   /**
    * The question a typed name already on the list asks, while it is open (velista
-   * `0170`, target 5): what was sent, the plus it is held against, and the lines.
+   * `0170`, target 5): the list it is about, what was sent, the plus it is held
+   * against, and the lines. The answer goes to that list, and the question closes
+   * when the page moves to another one.
    */
   readonly addChoice = signal<{
+    readonly listId: string;
     readonly entry: LineComposerSubmit;
     readonly anchor: HTMLElement;
     readonly choice: AddChoiceQuestion;
@@ -1916,6 +1953,14 @@ export class ListPage {
 
   /** The id of the question's title, for the dialog around it. */
   readonly choiceTitleId = 'list-add-choice-title';
+
+  /** The name the question's title says, as the first line stores it. */
+  readonly choiceName = computed(() => {
+    const asked = this.addChoice();
+    return asked === null
+      ? ''
+      : addChoiceName(asked.choice, asked.entry.content);
+  });
 
   /**
    * The question's rows, from the refusal and what this page reads of the catalog:
@@ -1928,7 +1973,7 @@ export class ListPage {
       return [];
     }
     const facts = this._catalogFacts();
-    const lines = this._lines.forList(this.listId())().lines;
+    const lines = this._lines.linesIn(asked.listId);
     return addChoiceRows(asked.choice, asked.entry.quantity, {
       itemOf: (itemId) => this._itemNames.nameOf(itemId),
       favoriteOf: (lineId) =>
@@ -1945,7 +1990,7 @@ export class ListPage {
       return;
     }
     this.addChoice.set(null);
-    void this._send(asked.entry, { intoLineId: lineId });
+    void this._send(asked.entry, { intoLineId: lineId }, asked.listId);
   }
 
   /** "A new line" was chosen: the same add, as a line of its own. */
@@ -1955,7 +2000,7 @@ export class ListPage {
       return;
     }
     this.addChoice.set(null);
-    void this._send(asked.entry, { newLine: true });
+    void this._send(asked.entry, { newLine: true }, asked.listId);
   }
 
   /**
@@ -1974,6 +2019,7 @@ export class ListPage {
   }
 
   private _openChoice(
+    listId: string,
     entry: LineComposerSubmit,
     anchor: HTMLElement,
     choice: AddChoiceQuestion
@@ -1981,7 +2027,7 @@ export class ListPage {
     // One lookup of the products this page does not hold, for the rows' brand and
     // size. Lines that are loaded already have theirs.
     void this._itemNames.ensure(choice.lines.flatMap((line) => line.itemIds));
-    this.addChoice.set({ entry, anchor, choice });
+    this.addChoice.set({ listId, entry, anchor, choice });
   }
 
   /**
@@ -2625,9 +2671,6 @@ export class ListPage {
  * about", and a ring that stayed would start saying something about the item itself.
  */
 const MARK_DURATION_MS = 4000;
-
-/** How long a raised row's quantity keeps its amber edge (velista `0170`, D4). */
-export const TOOK_DURATION_MS = 2500;
 
 /**
  * Whether a row is wholly inside the scrolling column, less the pinned composer at

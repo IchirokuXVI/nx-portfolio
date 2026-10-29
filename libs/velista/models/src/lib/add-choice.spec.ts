@@ -1,4 +1,9 @@
-import { addChoiceRows, addMayMeetLine, type AddChoice } from './add-choice';
+import {
+  addChoiceName,
+  addChoiceRows,
+  addMayMeetLine,
+  type AddChoice,
+} from './add-choice';
 import type { CatalogItem } from './domain';
 import { LINE_QUANTITY_MAX } from './limits';
 
@@ -98,5 +103,20 @@ describe('addMayMeetLine', () => {
     expect(addMayMeetLine(held, 'Pan')).toBe(false);
     expect(addMayMeetLine(held, 'Leche')).toBe(false);
     expect(addMayMeetLine(held, '   ')).toBe(false);
+  });
+});
+
+describe('addChoiceName', () => {
+  it('says the first line as it is stored, not the words as typed', () => {
+    expect(addChoiceName(CHOICE, 'leche ENTERA')).toBe('Leche entera');
+  });
+
+  it('falls back to the typed words for a line that holds none', () => {
+    expect(
+      addChoiceName(
+        { lines: [{ ...CHOICE.lines[0], content: '  ' }] },
+        'leche entera'
+      )
+    ).toBe('leche entera');
   });
 });

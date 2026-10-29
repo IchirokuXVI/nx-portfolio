@@ -90,12 +90,13 @@ import {
   LineList,
   ListHeader,
   ToBuyHeading,
+  TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
-import { ListPage, TOOK_DURATION_MS } from './list-page';
+import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
 const LIST_ID = '3c9a1d02-5f47-4b8e-9a1c-7d2e6b4f0a35';
@@ -1371,6 +1372,132 @@ describe('ListPage', () => {
       expect(choiceRows()).toHaveLength(0);
       expect(document.activeElement).toBe(plus(fixture));
       expect(field(fixture).value).toBe('Leche entera');
+    });
+
+    it('titles the question with the line as it is stored, not as it was typed', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      await typeAndAdd(fixture, 'leche ENTERA');
+
+      expect(choiceRows()).toHaveLength(3);
+      expect(fixture.componentInstance.choiceName()).toBe('Leche entera');
+    });
+
+    it('asks again, once, when the chosen line went while the question was open', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      // Backend 0228, section 3: an answer onto a deleted line is the not found.
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'not_found',
+          status: 404,
+          correlationId: 'gone',
+        }),
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      choiceRows()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.slice(-2)).toEqual([
+        {
+          kind: 'add',
+          content: 'Leche entera',
+          quantity: 1,
+          options: { intoLineId: 'ln-other' },
+        },
+        {
+          kind: 'add',
+          content: 'Leche entera',
+          quantity: 1,
+          options: { askIfAmbiguous: true },
+        },
+      ]);
+      // The question is drawn again, and the list is not said to be gone.
+      expect(choiceRows()).toHaveLength(3);
+      expect(fixture.componentInstance.announcement()).not.toBe(
+        'list.error.notAvailable'
+      );
+      expect(field(fixture).value).toBe('Leche entera');
+    });
+
+    it('raises the one line left when the chosen one went', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'not_found',
+          status: 404,
+          correlationId: 'gone',
+        }),
+      });
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-whole' });
+      choiceRows()[1]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(3);
+      expect(fixture.componentInstance.tookLine()).toBe('ln-whole');
+      expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('closes the question when the page moves to another list', async () => {
+      const { fixture, lines, activatedRoute } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+      expect(fixture.componentInstance.addChoice()?.listId).toBe(LIST_ID);
+
+      activatedRoute.setList('list-2');
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.addChoice()).toBeNull();
+      expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('leaves words typed while a drawn add was out, when its answer is the question', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.holdAdds();
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      // A name no loaded line has, so its row is drawn and the field clears.
+      const input = field(fixture);
+      input.value = 'Huevos';
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      plus(fixture).click();
+      fixture.detectChanges();
+      expect(field(fixture).value).toBe('');
+
+      field(fixture).value = 'Pan';
+      field(fixture).dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      lines.releaseAdds();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(field(fixture).value).toBe('Pan');
     });
   });
 
