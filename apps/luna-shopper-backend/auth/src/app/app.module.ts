@@ -43,6 +43,7 @@ import { MailModule } from './mail/mail.module';
 import { PasswordService } from './password/password.service';
 import { OrphanUserReaperService } from './reaper/orphan-user-reaper.service';
 import { ReconciliationController } from './reconciliation/reconciliation.controller';
+import { RetentionModule } from './retention/retention.module';
 import { TokenGrantService } from './tokens/token-grant.service';
 import { TokenService } from './tokens/token.service';
 import { UsernameGenerator } from './username/username-generator.service';
@@ -92,6 +93,8 @@ import { UsernameController } from './username/username.controller';
       },
     ]),
     MailModule,
+    // Deletes the rows whose lifetime has ended (plan 0233).
+    RetentionModule,
     // Readiness probes the private DB and the broker (plan 0004, section 6).
     PlatformHealthModule.forRoot({
       readiness: {

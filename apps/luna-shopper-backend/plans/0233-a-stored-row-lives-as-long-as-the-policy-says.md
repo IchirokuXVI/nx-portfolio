@@ -134,8 +134,9 @@ Notes on the rows that are not obvious:
 One `RetentionSweepService` per service, in `<svc>/src/app/retention/retention-sweep.service.ts`,
 shaped exactly like `OrphanUserReaperService`: `setInterval` at `RETENTION_SWEEP_INTERVAL`
 from `onApplicationBootstrap` when `RETENTION_SWEEP_ENABLED`, `unref`, a `running` flag so ticks
-never overlap, cleared on shutdown, errors logged and swallowed. The first tick runs one
-minute after boot, not at boot, so a crash looping pod does not sweep on every start.
+never overlap, cleared on shutdown, errors logged and swallowed (one table's error is logged
+and the walk goes on to the next table, section 10). The first tick runs one minute after
+boot, not at boot, so a crash looping pod does not sweep on every start.
 
 Each table is one entry of a list the service walks in order:
 
@@ -162,8 +163,9 @@ WHERE "id" IN (
 )
 ```
 
-- `$1` is computed once per tick in the service (`new Date(Date.now() - retainMs)`), not
-  `now()` in SQL, so every batch of a tick agrees on the cutoff and the spec can fix the clock.
+- `$1` is computed in the service from one clock reading per tick (`sweep(now)`, and
+  `new Date(now.getTime() - retainMs)` for each table), not `now()` in SQL, so every batch of
+  a tick agrees on the cutoff and the spec can fix the clock.
 - `FOR UPDATE SKIP LOCKED` is what lets two replicas sweep at once: each takes rows the other
   has not locked, and neither waits. The same clause makes the harvester's schedule claim safe
   (plan `0206`).
@@ -212,9 +214,9 @@ parser is the existing state (auth and core already have one each), and moving t
   `RETENTION_AUDIT` to core and catalog.
 - The sweep's own interval, batch and enable keys are not in the chart. Their defaults are the
   deployment's answer, and a key nobody sets is a key nobody reads.
-- Neither environment file changes. If plan `0231` is built first it has already added the
-  three keys (its section 5.3); this plan then only adds them to the services that enforce
-  them.
+- Neither environment file changes. Plan `0231` was built first and had already added the
+  three keys to the ConfigMap and the gateway (its section 5.3); this plan only gives them to
+  the services that enforce them, and rewrites the two comments to say so.
 
 ## 5. The migration
 
@@ -232,11 +234,12 @@ CREATE INDEX "ix_admin_login_failures_created" ON "admin_login_failures" ("creat
 
 Not `CONCURRENTLY`: migrations run inside a transaction (the probe specs run them with
 `transaction: 'each'`, for example `core/src/app/db/basket-shop.migration.integration.spec.ts:120`;
-the builder confirms the bundled runner does the same, which I did not verify), and these
-tables are small enough that a plain build takes well under a second. The builder states the
-row counts of staging and production in the PR (`SELECT count(*)` of each, read through the
-release tooling, not by hand on a pod) to show it. Each index is named in the entity too, so
-TypeORM's schema and the migration agree.
+the bundled runner `auth/src/migrate.ts` runs the whole set with `transaction: 'all'`, and the
+CLI's `migration:run` defaults to the same), and these tables are small enough that a plain
+build takes well under a second. The plan asked for the row counts of staging and production,
+read through the release tooling. The build did not read them: every read path of that
+tooling reaches a cluster over SSH, and the build touched no cluster (section 10). Each index
+is named in the entity too, so TypeORM's schema and the migration agree.
 
 No core or catalog migration: their audit tables already have an index on `at`.
 
@@ -287,3 +290,62 @@ Mine, for the owner to change:
 5. **The same six month period for all three trails**, including catalog's, which holds no end
    user data and which the owner might prefer to keep longer for curation history.
 6. **`processed_events` is not swept here.**
+
+## 10. What the build decided
+
+The builder's choices where the plan left room. Each is the owner's to change.
+
+1. **One `RetentionModule` per service**, imported by its `AppModule`, holding only the sweep.
+   It imports nothing: the sweep reads the global `DataSource`, `ConfigService` and logger,
+   and writes raw statements.
+2. **The first tick is a one minute `setTimeout`**, `unref`ed and cleared on shutdown, and the
+   interval starts when it fires. A pod stopped inside its first minute never sweeps.
+3. **A failing table does not stop the tick.** Its error is logged with the table name, the
+   walk goes on to the next table, and the table is tried again on the next tick. `sweep()`
+   answers `{ table, deleted, failed }` for each table, which the specs assert.
+4. **Two replicas can still wait on each other in one case.** `refresh_tokens.replacedById` is
+   `ON DELETE SET NULL` onto the same table, and deleting a support session cascades to its
+   refresh tokens. A delete can therefore have to update or delete a row the other replica's
+   batch holds, and wait for that batch to commit (milliseconds). A deadlock between the two is
+   possible in principle; Postgres aborts one statement, which is decision 3. The concurrency
+   spec proves the plain case (2,500 unchained rows in `refresh_tokens` and in `auth_audit`),
+   not a chain of rotations.
+5. **The count comes from the driver**, which answers a `DELETE` through `query()` as
+   `[rows, rowCount]`. No `RETURNING`, so a batch moves no ids back. Any other shape throws,
+   rather than reading as zero and ending the loop with rows left.
+6. **The cutoff is read once per sweep.** `sweep(now)` takes one clock reading, and each table's
+   cutoff is `now` minus its period, so every batch of a tick agrees and the specs pass a fixed
+   `now`.
+7. **The extra condition on `impersonation_sessions` reads the database clock**:
+   `"endedAt" IS NOT NULL OR "expiresAt" < now()`. With the floor of seven days it can never be
+   false for a row past the cutoff; it is there so that no clock of a pod, however wrong, can
+   delete a session that is still live.
+8. **The floors are a Joi rule, `durationAtLeast(default, floor)`**, one copy per service in
+   `retention/retention-config.ts`. Below the floor the message is `"RETENTION_AUDIT" must be
+   at least 7d`; a value with no unit (`180`) is `"RETENTION_AUDIT" must be a duration such as
+   180d`. `RETENTION_SWEEP_INTERVAL` uses the same rule with a floor of `1m`. The batch keys use
+   `min(1)`.
+9. **The gateway's validation of the three keys is unchanged.** Plan `0231` gave it a pattern
+   with no floor. A value under a floor still cannot reach the policy unnoticed: auth, core or
+   catalog refuses to boot on it, and the rollout fails.
+10. **Order of the auth walk**: `auth_audit`, `impersonation_sessions`, `admin_login_failures`,
+    `refresh_tokens`, `password_resets`, `email_verifications`, `oauth_states`. Sessions go
+    before refresh tokens, so the tokens a session takes by cascade are gone before the token
+    batch runs.
+11. **`tick()` is public**, unlike the reaper's, so a spec can prove that a second tick while
+    one runs does nothing.
+12. **No compose or `luna-slot.sh` change.** Every new key has a default, so a slot and the tier
+    2 stack boot without one. A slot therefore sweeps its own databases on the owner's
+    numbers, one minute after each boot.
+13. **The chart comments say who enforces the numbers.** The ConfigMap's comment above the three
+    keys changed, so its render and checksum change, and the next deploy restarts every
+    service that reads it. That deploy restarts auth, core and catalog anyway, for their new
+    environment entries.
+14. **The row counts of section 5 were not read.** Every read path of the release tooling
+    (`provision-release.sh --check`, the release task `check` phase) runs on the host over SSH,
+    and the build touched no cluster. The owner can read them on the host before the deploy;
+    the build expects the tables to be small for the reasons section 6 gives.
+15. **The log line carries the message as `context`.** It is written as
+    `logger.log({ table, deleted }, 'retention sweep deleted rows past their lifetime')`, the
+    reaper's shape, and `nestjs-pino` files the trailing string under `context`. A search for
+    the sweep in the logs matches that field.

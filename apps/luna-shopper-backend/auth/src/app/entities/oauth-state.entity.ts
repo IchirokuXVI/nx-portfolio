@@ -59,6 +59,8 @@ export class OAuthState extends BaseEntity {
   @Column({ type: 'varchar' })
   tokenHash!: string;
 
+  /** The retention sweep reads by it (plan 0233). */
+  @Index('ix_oauth_states_expires_at')
   @Column({ type: 'timestamptz' })
   expiresAt!: Date;
 

@@ -10,6 +10,11 @@ import {
   postalCodeDeriveMaxMetres,
 } from '@portfolio/luna-shopper/postal-codes';
 import * as Joi from 'joi';
+import {
+  retentionConfig,
+  retentionValidationSchema,
+  type RetentionConfig,
+} from '../retention/retention-config';
 import { readKey } from './read-key';
 
 /**
@@ -55,6 +60,11 @@ export const catalogValidationSchema = Joi.object({
     .valid(...LOG_LEVELS)
     .default('info'),
 
+  // How long the audit trail is kept, and the sweep that deletes the rest
+  // (plan 0233). The period is a number the privacy policy prints, and it
+  // refuses boot below its floor.
+  ...retentionValidationSchema,
+
   // Tracing and metrics (plan 0016, section 7). Declared once in the platform
   // library so all seven services accept the same names. Every one is optional
   // with a working default: with none of them set the service runs exactly as it
@@ -81,6 +91,8 @@ export interface CatalogConfig {
   logLevel: (typeof LOG_LEVELS)[number];
   /** The bound on a derived postal code (plan 0061, section 4). */
   postalCodeDeriveMaxMetres: number;
+  /** The lifetime of the audit trail, and its sweep (plan 0233). */
+  retention: RetentionConfig;
 }
 
 function parseActorIds(raw?: string): string[] {
@@ -109,5 +121,6 @@ export const catalogConfiguration = registerAs(
     postalCodeDeriveMaxMetres: postalCodeDeriveMaxMetres(
       process.env[POSTAL_CODE_DERIVE_MAX_METRES_VAR]
     ),
+    retention: retentionConfig(),
   })
 );

@@ -22,6 +22,8 @@ export class RefreshToken extends BaseEntity {
   @Column({ type: 'varchar' })
   tokenHash!: string;
 
+  /** The retention sweep reads by it (plan 0233). */
+  @Index('ix_refresh_tokens_expires_at')
   @Column({ type: 'timestamptz' })
   expiresAt!: Date;
 
