@@ -763,6 +763,32 @@
       "voiceBusyNoNumber": "Mucha gente está preguntando a la vez. Inténtalo dentro de un momento, o escríbelo",
       "voiceUnavailable": "El asistente está apagado aquí, así que no se ha añadido nada. Es cosa nuestra, no tuya, y volver a intentarlo no lo cambiará",
       "voiceUnsure": "Algo ha fallado por nuestra parte después de enviarlo. Mira la lista antes de repetirlo, por si ya se ha añadido",
+      "allowance": {
+        "usedDay": {
+          "plain": "Por hoy ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo",
+          "at_one": "Por hoy ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a la {{time}}",
+          "at_other": "Por hoy ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a las {{time}}"
+        },
+        "usedMonth": {
+          "plain": "Por este mes ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo",
+          "on": "Por este mes ya has usado el asistente todo lo que se puede, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve el {{date}}"
+        },
+        "speakingDay": {
+          "plain": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo",
+          "at_one": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo, y volver a hablarle a la {{time}}",
+          "at_other": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo, y volver a hablarle a las {{time}}"
+        },
+        "speakingMonth": {
+          "plain": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo",
+          "on": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo, y volver a hablarle el {{date}}"
+        },
+        "resting": {
+          "plain": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo",
+          "at_one": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a la {{time}}",
+          "at_other": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve a las {{time}}",
+          "on": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo, y el asistente vuelve el {{date}}"
+        }
+      },
       "dismissHeard": "Cerrar",
       "suggestions": "Productos que coinciden",
       "groupAdds_one": "Añade su único producto",
@@ -1320,6 +1346,7 @@
   "assistant": {
     "title": "Asistente",
     "back": "Atrás",
+    "disclosure": "Te responde un asistente automático, y puede equivocarse.",
     "intro": {
       "lead": "Dime qué necesitas. Por ejemplo:",
       "add": {
@@ -1367,6 +1394,23 @@
     "spoken": "Has dicho algo. Lo estoy escuchando ahora.",
     "tooLong": "Esa grabación era demasiado grande para enviarla. Puedo recibir hasta {{limit}} MB de una vez, así que un mensaje más corto sí llegará.",
     "badFormat": "Tu navegador grabó eso de una forma que no puedo leer. Puedes escribirlo igualmente.",
+    "allowance": {
+      "used": {
+        "day": "Por hoy ya has usado el asistente todo lo que se puede.",
+        "month": "Por este mes ya has usado el asistente todo lo que se puede."
+      },
+      "speaking": {
+        "day": "Ya has gastado el tiempo de hoy para hablar con el asistente. Puedes seguir escribiéndole.",
+        "month": "Ya has gastado el tiempo de este mes para hablar con el asistente. Puedes seguir escribiéndole."
+      },
+      "resting": "El asistente está descansando un rato.",
+      "backAt_one": "Vuelve a la {{time}}.",
+      "backAt_other": "Vuelve a las {{time}}.",
+      "backOn": "Vuelve el {{date}}.",
+      "speakAgainAt_one": "Podrás volver a hablarle a la {{time}}.",
+      "speakAgainAt_other": "Podrás volver a hablarle a las {{time}}.",
+      "speakAgainOn": "Podrás volver a hablarle el {{date}}."
+    },
     "goTo": "Ir a {{list}}",
     "goToInZone": "Ir a {{list}}, en {{zone}}",
     "choices": {

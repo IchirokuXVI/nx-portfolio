@@ -3,6 +3,7 @@ export * from './lib/account/account-memory';
 export * from './lib/account/account-service';
 export * from './lib/account/profile-store';
 export * from './lib/api-url';
+export * from './lib/assistant/allowance-refusal';
 export * from './lib/assistant/assistant-api';
 export * from './lib/assistant/assistant-memory';
 export * from './lib/assistant/assistant-service';

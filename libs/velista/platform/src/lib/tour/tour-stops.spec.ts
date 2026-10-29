@@ -37,7 +37,7 @@ describe('the tour stops (velista 0099, section 3)', () => {
   });
 
   it('shows a new account four: no lists stop, no voice stop', () => {
-    const plan = planTour({ hasGroup: false, firstList: null });
+    const plan = planTour({ hasGroup: false, firstList: null, voice: true });
 
     expect(plan.map((planned) => planned.stop.id)).toEqual([
       'nav',
@@ -51,14 +51,26 @@ describe('the tour stops (velista 0099, section 3)', () => {
     const plan = planTour({
       hasGroup: true,
       firstList: { zoneId: 'z1', listId: 'l1' },
+      voice: true,
     });
 
     expect(plan).toHaveLength(6);
     expect(plan.at(-1)?.route).toEqual(['zones', 'z1', 'lists', 'l1']);
   });
 
+  it('leaves the voice stop out where there is no microphone (velista 0174)', () => {
+    const plan = planTour({
+      hasGroup: true,
+      firstList: { zoneId: 'z1', listId: 'l1' },
+      voice: false,
+    });
+
+    expect(plan).toHaveLength(5);
+    expect(plan.map((planned) => planned.stop.id)).not.toContain('voice');
+  });
+
   it('points nowhere inside a group that has no list', () => {
-    const plan = planTour({ hasGroup: true, firstList: null });
+    const plan = planTour({ hasGroup: true, firstList: null, voice: true });
 
     expect(plan.map((planned) => planned.stop.id)).not.toContain('lists');
   });
@@ -66,19 +78,33 @@ describe('the tour stops (velista 0099, section 3)', () => {
 
 describe('tourHoldingsOf', () => {
   it('holds nothing without a group', () => {
-    expect(tourHoldingsOf([])).toEqual({ hasGroup: false, firstList: null });
+    expect(tourHoldingsOf([], true)).toEqual({
+      hasGroup: false,
+      firstList: null,
+      voice: true,
+    });
   });
 
   it('takes the first list of the first joined group that has one', () => {
     expect(
-      tourHoldingsOf([zone('empty', []), zone('z2', ['l2', 'l3'])])
-    ).toEqual({ hasGroup: true, firstList: { zoneId: 'z2', listId: 'l2' } });
+      tourHoldingsOf([zone('empty', []), zone('z2', ['l2', 'l3'])], true)
+    ).toEqual({
+      hasGroup: true,
+      firstList: { zoneId: 'z2', listId: 'l2' },
+      voice: true,
+    });
+  });
+
+  it('carries whether the microphone is offered, as it was told', () => {
+    expect(tourHoldingsOf([zone('z1', ['l1'])], false).voice).toBe(false);
+    expect(tourHoldingsOf([zone('z1', ['l1'])], true).voice).toBe(true);
   });
 
   it('does not count a group the person has only asked to join', () => {
-    expect(tourHoldingsOf([zone('asked', ['l1'], 'PENDING')])).toEqual({
+    expect(tourHoldingsOf([zone('asked', ['l1'], 'PENDING')], true)).toEqual({
       hasGroup: false,
       firstList: null,
+      voice: true,
     });
   });
 });

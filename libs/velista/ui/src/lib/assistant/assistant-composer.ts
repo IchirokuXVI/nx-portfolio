@@ -83,7 +83,26 @@ export type ComposerButton = 'record' | 'send';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AssistantComposer {
-  private readonly _recorder = inject(AudioRecorder);
+  /**
+   * The recorder the page provides, or null where none is.
+   *
+   * Optional for {@link voice}'s reason: a composer that offers no microphone must not
+   * need a recorder to exist, and one it is given is never started.
+   */
+  private readonly _recorder = inject(AudioRecorder, { optional: true });
+
+  /**
+   * Whether this composer offers a microphone at all (velista `0174`, target 2).
+   *
+   * `LineComposer`'s input, with its rules. True by default, so a caller that says
+   * nothing keeps the composer it always had. False where the deployment cannot
+   * transcribe: {@link button} then answers `'send'` whatever the field holds, the
+   * button is disabled while the field is empty, a press never reaches the recorder,
+   * and no copy about recording is drawn. Hidden rather than disabled (decision D1):
+   * a microphone that cannot be pressed asks a question the screen cannot answer in a
+   * word, and the field already does the job.
+   */
+  readonly voice = input(true);
 
   /**
    * Whether the composer may be used at all.
@@ -104,7 +123,7 @@ export class AssistantComposer {
 
   /** The elapsed length as `m:ss`, which is what sits between pause and stop. */
   protected readonly elapsed = computed(() => {
-    const seconds = this._recorder.elapsedSeconds();
+    const seconds = this._recorder?.elapsedSeconds() ?? 0;
 
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   });
@@ -117,7 +136,16 @@ export class AssistantComposer {
    * lands in the same corner the microphone was in.
    */
   protected readonly button = computed<ComposerButton>(() =>
-    this.text().trim().length > 0 ? 'send' : 'record'
+    this.text().trim().length > 0 || !this.voice() ? 'send' : 'record'
+  );
+
+  /**
+   * Whether the button is out of use: while the page says so, and, with no
+   * microphone, while there is nothing to send. With a microphone an empty field still
+   * has a job for the button, which is to record.
+   */
+  protected readonly buttonDisabled = computed(
+    () => this.disabled() || (!this.voice() && this.text().trim().length === 0)
   );
 
   /** A message the person typed or dictated with the platform keyboard. */
@@ -153,7 +181,11 @@ export class AssistantComposer {
       return;
     }
 
-    void this._recorder.start();
+    // With no microphone the button is always send, so this is unreachable; the check
+    // is here so that it stays unreachable whatever `button` becomes.
+    if (this.voice()) {
+      void this._recorder?.start();
+    }
   }
 
   /** Stop from the recording row, which is the press that sends. */
@@ -169,7 +201,7 @@ export class AssistantComposer {
    * recording is the one somebody most wants to be rid of.
    */
   protected discard(): void {
-    this._recorder.cancel();
+    this._recorder?.cancel();
   }
 
   /** Submitting the form, which is the keyboard's own way of pressing send. */
@@ -189,7 +221,7 @@ export class AssistantComposer {
    * against a permission the browser has remembered produces the same state silently.
    */
   protected dismissRecorderState(): void {
-    this._recorder.cancel();
+    this._recorder?.cancel();
   }
 
   private _submit(): void {
@@ -203,7 +235,7 @@ export class AssistantComposer {
   }
 
   private async _stop(): Promise<void> {
-    const recording = await this._recorder.stop();
+    const recording = (await this._recorder?.stop()) ?? null;
 
     // Null means the recorder had nothing, which is the same as an empty field: the
     // press ended the recording and sent nothing rather than sending an empty message.

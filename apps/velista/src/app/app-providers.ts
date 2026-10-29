@@ -451,6 +451,7 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
     const injector = inject(Injector);
     const profile = inject(ProfileStore);
     const tour = inject(TourStore);
+    const settings = inject(OperatorSettingsStore);
 
     effect(() => {
       if (!tour.running()) {
@@ -458,8 +459,19 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
       }
 
       const zones = untracked(() => injector.get(ZoneStore));
+      // Whether the list's field has a microphone for the voice card to light
+      // (velista `0174`, target 3): the same two flags the list page reads. A read
+      // still out is waited for like the zones; a failed one is no microphone.
+      const operator = settings.state();
+      const features = settings.settings()?.features;
+      const voice =
+        features?.transcription === true && features.assistant === true;
       tour.setHoldings(
-        zones.state() === 'loaded' ? tourHoldingsOf(zones.myZones()) : null
+        zones.state() === 'loaded' &&
+          operator !== 'idle' &&
+          operator !== 'loading'
+          ? tourHoldingsOf(zones.myZones(), voice)
+          : null
       );
     });
 

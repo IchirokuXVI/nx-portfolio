@@ -23,6 +23,7 @@ import {
   fakeLineStore,
   fakeListStore,
   fakeMemberNames,
+  fakeOperatorSettingsStore,
   fakePresenceStore,
   fakeShoppingProfileStore,
   fakeZoneStore,
@@ -31,6 +32,7 @@ import {
   LineStore,
   LIST_SERVICE,
   ListViewStore,
+  MEMORY_OPERATOR_SETTINGS,
   overlayKey,
   ProductPickStore,
   provideFakeCategoryStore,
@@ -38,6 +40,7 @@ import {
   provideFakeLineStore,
   provideFakeListStore,
   provideFakeMemberNames,
+  provideFakeOperatorSettingsStore,
   provideFakePresenceStore,
   provideFakeSessionStore,
   provideFakeShoppingProfileStore,
@@ -52,6 +55,7 @@ import {
   type FakeItemNames,
   type FakeLineStore,
   type FakeListStore,
+  type FakeOperatorSettingsStore,
   type FakePresenceOptions,
   type FakeShoppingProfileStore,
   type LineServiceI,
@@ -239,6 +243,8 @@ interface Options {
   readonly sheetOpen?: boolean;
   /** What `GET /v1/lists/:id/access` answers (velista `0152`). Nobody by default. */
   readonly access?: readonly ListAccessEntry[];
+  /** What the deployment states about itself (velista `0172`). Ready by default. */
+  readonly operator?: FakeOperatorSettingsStore;
 }
 
 async function render(options: Options = {}): Promise<{
@@ -397,6 +403,10 @@ async function render(options: Options = {}): Promise<{
       // Plan 0022: the header's viewers and the editor on a row.
       provideFakePresenceStore(fakePresenceStore(options.presence)),
       provideFakeSessionStore('REGISTERED'),
+      // What decides the field's microphone (velista `0174`).
+      provideFakeOperatorSettingsStore(
+        options.operator ?? fakeOperatorSettingsStore()
+      ),
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: AppResumed, useValue: { resumes } },
       { provide: Router, useValue: router },
@@ -555,6 +565,67 @@ function settingsAction(fixture: ComponentFixture<ListPage>) {
 }
 
 describe('ListPage', () => {
+  /**
+   * Velista `0174`, targets 1 and 2: the one field offers its microphone only where
+   * the deployment can transcribe and the assistant is on, because the recording goes
+   * to the assistant. Unknown is off.
+   */
+  describe('the microphone in the one field', () => {
+    const settings = (features: {
+      transcription: boolean;
+      assistant: boolean;
+    }) => ({
+      ...MEMORY_OPERATOR_SETTINGS,
+      features: { ...MEMORY_OPERATOR_SETTINGS.features, ...features },
+    });
+
+    function mic(fixture: ComponentFixture<ListPage>): Element | null {
+      return query(fixture, 'lib-line-composer lib-mic-icon');
+    }
+
+    it('is offered with both flags on', async () => {
+      const { fixture } = await render();
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(true);
+      expect(mic(fixture)).not.toBeNull();
+    });
+
+    it.each([
+      [{ transcription: false, assistant: true }],
+      [{ transcription: true, assistant: false }],
+      [{ transcription: false, assistant: false }],
+    ])('is not drawn with %o', async (features) => {
+      const { fixture } = await render({
+        operator: fakeOperatorSettingsStore(settings(features)),
+      });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(mic(fixture)).toBeNull();
+      expect(query(fixture, 'lib-line-composer')).not.toBeNull();
+    });
+
+    it('is not drawn until the settings answer', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      const { fixture } = await render({ operator });
+
+      expect(mic(fixture)).toBeNull();
+
+      operator.land(MEMORY_OPERATOR_SETTINGS);
+      fixture.detectChanges();
+
+      expect(mic(fixture)).not.toBeNull();
+    });
+
+    it('is not drawn when the settings could not be read', async () => {
+      const operator = fakeOperatorSettingsStore(null);
+      operator.fail();
+      const { fixture } = await render({ operator });
+
+      expect(fixture.componentInstance.voiceOffered()).toBe(false);
+      expect(mic(fixture)).toBeNull();
+    });
+  });
+
   /**
    * Plan 0038 section 5 shipped this strip's markup with no stylesheet and no way to
    * tell its two kinds of message apart, so a failure and a confirmation drew as the

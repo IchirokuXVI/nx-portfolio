@@ -189,6 +189,14 @@ export const ERROR_CODES = [
    * `minClientVersion` is what keeps one from reaching it.
    */
   'terms_acceptance_missing',
+  /**
+   * The person's assistant allowance, or the deployment's, would not fit this turn
+   * (backend `0234`, section 8.1), as a 429. Not `rate_limited`: it carries no
+   * `retryAfterSeconds`, and its answer is a time of day, read from `details` by
+   * `allowanceRefusal` (velista `0174`). Without this member it read as `internal`
+   * and the panel said "try again" to somebody who cannot until tomorrow.
+   */
+  'assistant_allowance_reached',
   'internal',
 ] as const;
 

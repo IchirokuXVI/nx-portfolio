@@ -78,9 +78,8 @@ function host(fixture: ComponentFixture<AssistantComposer>): HTMLElement {
 function action(
   fixture: ComponentFixture<AssistantComposer>
 ): HTMLButtonElement {
-  const button = host(fixture).querySelector<HTMLButtonElement>(
-    '.action, .stop'
-  );
+  const button =
+    host(fixture).querySelector<HTMLButtonElement>('.action, .stop');
   if (button === null) {
     throw new Error('the one action button is not rendered');
   }
@@ -362,6 +361,72 @@ describe('AssistantComposer', () => {
       expect(host(fixture).querySelector('.trouble')?.textContent).toContain(
         'unavailable'
       );
+    });
+  });
+
+  describe('with no microphone (velista 0174)', () => {
+    async function withoutVoice(capture: AudioCaptureI = fakeCapture()) {
+      const fixture = await render(capture);
+      fixture.componentRef.setInput('voice', false);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('draws send on an empty field, held until something is typed', async () => {
+      const fixture = await withoutVoice();
+
+      expect(glyph(fixture)).toBe('lib-send-icon');
+      expect(action(fixture).disabled).toBe(true);
+      expect(host(fixture).querySelector('lib-mic-icon')).toBeNull();
+    });
+
+    it('never reaches the recorder', async () => {
+      const open = jest.fn();
+      const fixture = await withoutVoice(fakeCapture({ open }));
+      const recorder = TestBed.inject(AudioRecorder);
+      const start = jest.spyOn(recorder, 'start');
+
+      // The button is disabled, so a click does nothing; the press itself is what
+      // must not reach the recorder, so it is called directly as well.
+      await press(fixture);
+      (fixture.componentInstance as unknown as { press(): void }).press();
+      await Promise.resolve();
+
+      expect(start).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+      expect(recorder.state()).toBe('idle');
+    });
+
+    it('sends what was typed, as before', async () => {
+      const fixture = await withoutVoice();
+      const sent: string[] = [];
+      fixture.componentInstance.send.subscribe((text) => sent.push(text));
+
+      type(fixture, 'Add tomatoes');
+      expect(action(fixture).disabled).toBe(false);
+      await press(fixture);
+
+      expect(sent).toEqual(['Add tomatoes']);
+      expect(glyph(fixture)).toBe('lib-send-icon');
+    });
+
+    it('works with no recorder provided at all', async () => {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [AssistantComposer, RokuTranslatorTestingModule.forTesting()],
+        providers: [provideVelistaTesting()],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(AssistantComposer);
+      fixture.componentRef.setInput('voice', false);
+      fixture.detectChanges();
+      const sent: string[] = [];
+      fixture.componentInstance.send.subscribe((text) => sent.push(text));
+
+      type(fixture, 'Milk');
+      await press(fixture);
+
+      expect(sent).toEqual(['Milk']);
     });
   });
 

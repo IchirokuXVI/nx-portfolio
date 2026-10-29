@@ -68,6 +68,7 @@
         (recorded)="sendVoice($event)"
         (submitted)="send($event)"
         [busy]="sending()"
+        [voice]="voiceOffered()"
       />
     } @else {
       <p class="read-only">{{ 'list.comments.readOnly' | rokuT }}</p>

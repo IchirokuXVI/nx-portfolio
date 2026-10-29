@@ -87,7 +87,11 @@ type ComposerButton = 'record' | 'send';
     RecordingElapsed,
   ],
   template: `
-    @let state = recorder.state();
+    <!--
+      With no microphone (velista 0174) there may be no recorder, and one that is
+      there is never started, so it reads as idle and nothing about recording draws.
+    -->
+    @let state = recorder?.state() ?? 'idle';
 
     <!--
       The warning and the cap message grow the composer and sit above it, so
@@ -100,16 +104,16 @@ type ComposerButton = 'record' | 'send';
         {{ 'list.comments.limit.reached' | rokuT }}
         <strong>{{ 'list.comments.limit.pressStop' | rokuT }}</strong>
       </p>
-    } @else if (recorder.warning()) {
+    } @else if (recorder?.warning()) {
       <p aria-live="polite" class="notice">
         {{
           'list.comments.limit.left'
-            | rokuT: { count: recorder.remainingSeconds() }
+            | rokuT: { count: recorder?.remainingSeconds() ?? 0 }
         }}
       </p>
     }
 
-    @if (recorder.active()) {
+    @if (recorder?.active()) {
       <lib-recording-row
         (discard)="discard()"
         (stop)="stopAndSend()"
@@ -139,7 +143,7 @@ type ComposerButton = 'record' | 'send';
         <button
           (click)="press()"
           [attr.aria-label]="buttonLabel() | rokuT"
-          [disabled]="busy()"
+          [disabled]="busy() || (!voice() && body().trim() === '')"
           class="send"
           type="button"
         >
@@ -180,6 +184,19 @@ type ComposerButton = 'record' | 'send';
 export class CommentComposer {
   readonly busy = input(false);
 
+  /**
+   * Whether this composer offers a microphone at all (velista `0174`, target 2).
+   *
+   * `LineComposer`'s input, with its rules. True by default, so a caller that says
+   * nothing keeps the composer it always had. False where the deployment cannot
+   * transcribe: {@link button} then answers `'send'` whatever the field holds, the
+   * button is disabled while the field is empty, {@link press} never reaches the
+   * recorder, and the recorder, injected optionally, is never started. Hidden rather
+   * than disabled (decision D1): the textarea already does the job, and a microphone
+   * that cannot be pressed asks a question nobody here can answer.
+   */
+  readonly voice = input(true);
+
   readonly submitted = output<string>();
 
   /**
@@ -203,8 +220,11 @@ export class CommentComposer {
    * open in a comment cannot collide with the one in the assistant panel. Its
    * `RECORDING_LIMITS` are the sheet's, which is how a comment stops at a minute
    * where a message to the assistant runs to five (plan 0041, section 6.2).
+   *
+   * Optional since velista `0174`: a composer with {@link voice} off must not need
+   * one, and never starts the one it is given.
    */
-  protected readonly recorder = inject(AudioRecorder);
+  protected readonly recorder = inject(AudioRecorder, { optional: true });
 
   private readonly _field = viewChild<ElementRef<HTMLTextAreaElement>>('field');
 
@@ -214,7 +234,7 @@ export class CommentComposer {
   readonly hasHeldRecording = computed(() => this._held() !== null);
 
   readonly button = computed<ComposerButton>(() =>
-    this.body().trim() === '' ? 'record' : 'send'
+    this.body().trim() === '' && this.voice() ? 'record' : 'send'
   );
 
   readonly buttonLabel = computed(() =>
@@ -225,7 +245,7 @@ export class CommentComposer {
 
   /** `m:ss`, the same shape the assistant's clock uses. */
   readonly elapsed = computed(() => {
-    const seconds = this.recorder.elapsedSeconds();
+    const seconds = this.recorder?.elapsedSeconds() ?? 0;
 
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   });
@@ -252,7 +272,11 @@ export class CommentComposer {
       return;
     }
 
-    void this._record();
+    // With no microphone the button is always send, so this is unreachable; the check
+    // keeps it unreachable whatever `button` becomes.
+    if (this.voice()) {
+      void this._record();
+    }
   }
 
   /**
@@ -269,26 +293,36 @@ export class CommentComposer {
    * it renders, so this reads the state rather than catching.
    */
   private async _record(): Promise<void> {
+    const recorder = this.recorder;
+    if (recorder === null) {
+      return;
+    }
+
     this.errorKey.set(null);
     // A new recording replaces a held one. Two recordings in one composer is a
     // state with no control to resolve it, and the person just started speaking.
     this._held.set(null);
 
-    await this.recorder.start();
+    await recorder.start();
 
-    const state = this.recorder.state();
+    const state = recorder.state();
     if (state === 'refused' || state === 'unavailable') {
       // A refused permission and an absent device read the same from here, and
       // the field still works either way.
       this.reportError('list.comments.micRefused');
-      this.recorder.cancel();
+      recorder.cancel();
     }
   }
 
   /** Stop, which sends. There is no second press. */
   async stopAndSend(): Promise<void> {
-    const seconds = this.recorder.elapsedSeconds();
-    const blob = await this.recorder.stop();
+    const recorder = this.recorder;
+    if (recorder === null) {
+      return;
+    }
+
+    const seconds = recorder.elapsedSeconds();
+    const blob = await recorder.stop();
 
     if (blob === null || blob.size === 0) {
       // The recorder had nothing, or the browser gave back an empty file. Said
@@ -321,7 +355,7 @@ export class CommentComposer {
 
   /** Throw the recording away. Whatever was typed is still in the field. */
   discard(): void {
-    this.recorder.cancel();
+    this.recorder?.cancel();
     this._held.set(null);
     this.errorKey.set(null);
   }

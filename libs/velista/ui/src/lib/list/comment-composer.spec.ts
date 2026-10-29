@@ -306,6 +306,72 @@ describe('CommentComposer', () => {
     });
   });
 
+  describe('with no microphone (velista 0174)', () => {
+    async function withoutVoice(capture: AudioCaptureI = fakeCapture()) {
+      const fixture = await render(capture);
+      fixture.componentRef.setInput('voice', false);
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('draws send on an empty field, held until something is typed', async () => {
+      const fixture = await withoutVoice();
+
+      expect(glyph(fixture)).toBe('lib-send-icon');
+      expect(action(fixture).disabled).toBe(true);
+      expect(action(fixture).getAttribute('aria-label')).toBe(
+        'list.comments.send'
+      );
+      expect(host(fixture).querySelector('lib-mic-icon')).toBeNull();
+    });
+
+    it('never reaches the recorder on a press', async () => {
+      const open = jest.fn();
+      const fixture = await withoutVoice(fakeCapture({ open }));
+      const recorder = TestBed.inject(AudioRecorder);
+      const start = jest.spyOn(recorder, 'start');
+
+      await press(fixture);
+      fixture.componentInstance.press();
+      await Promise.resolve();
+
+      expect(start).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+      expect(recorder.state()).toBe('idle');
+      expect(host(fixture).querySelector('.error')).toBeNull();
+    });
+
+    it('sends what was typed, as before', async () => {
+      const fixture = await withoutVoice();
+      const sent: string[] = [];
+      fixture.componentInstance.submitted.subscribe((body) => sent.push(body));
+
+      type(fixture, 'The green one, not the red');
+      expect(action(fixture).disabled).toBe(false);
+      await press(fixture);
+
+      expect(sent).toEqual(['The green one, not the red']);
+    });
+
+    it('works with no recorder provided at all', async () => {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [CommentComposer, RokuTranslatorTestingModule.forTesting()],
+      }).compileComponents();
+
+      const fixture = TestBed.createComponent(CommentComposer);
+      fixture.componentRef.setInput('voice', false);
+      fixture.detectChanges();
+      const sent: string[] = [];
+      fixture.componentInstance.submitted.subscribe((body) => sent.push(body));
+
+      type(fixture, 'Two of these');
+      await press(fixture);
+
+      expect(sent).toEqual(['Two of these']);
+    });
+  });
+
   describe('when the microphone is not available', () => {
     it('says so and leaves the field working', async () => {
       const fixture = await render(

@@ -101,3 +101,34 @@ describe('CommentRow, where the words came from', () => {
     expect(source(fixture)).toBeNull();
   });
 });
+
+/**
+ * Velista `0174`, target 7: a recording with no words is drawn the same whatever kept
+ * the words from it. Backend `0234` settles one over its author's allowance as
+ * `FAILED`, and `0235` settles one on a deployment with no transcriber as
+ * `UNAVAILABLE`. Both are still a message somebody left, so both keep the player.
+ */
+describe('CommentRow, a recording with no words', () => {
+  for (const transcription of ['FAILED', 'UNAVAILABLE'] as const) {
+    it(`draws the player and the neutral phrase when ${transcription}`, async () => {
+      const fixture = await render(
+        vm({
+          body: '',
+          transcription,
+          recording: { src: '/audio/c1', durationSeconds: 12 },
+        })
+      );
+      fixture.componentRef.setInput('loadAudio', () =>
+        Promise.resolve('blob:c1')
+      );
+      fixture.detectChanges();
+      const host = fixture.nativeElement as HTMLElement;
+
+      expect(host.querySelector('lib-audio-player')).not.toBeNull();
+      expect(host.querySelector('.body')?.textContent).toContain(
+        'list.comments.noTranscript'
+      );
+      expect(source(fixture)).toBeNull();
+    });
+  }
+});
