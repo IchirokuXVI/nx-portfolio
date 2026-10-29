@@ -528,7 +528,7 @@ describe('ClaudeProvider', () => {
     expect(reply.text).toBe('ok');
   });
 
-  it('gives a moderation request its own five second deadline', async () => {
+  it('gives a moderation request its own eight second deadline', async () => {
     jest.useFakeTimers();
     try {
       fetchMock.mockImplementation(

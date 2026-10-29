@@ -34,6 +34,7 @@ import {
   MODERATION_CATEGORIES,
   MODERATION_PROMPT,
   moderationRequest,
+  namesEmergencyNumber,
   readVerdict,
   replacementFor,
 } from './moderation';
@@ -178,10 +179,55 @@ describe('readVerdict', () => {
     }
   });
 
+  it('reads a category written with a hyphen, a space or a stop', () => {
+    // The first word alone read these as `error`, and a child in distress was
+    // asked to rephrase (plan 0236, section 13).
+    expect(readVerdict('self-harm')).toBe('self_harm');
+    expect(readVerdict('Self harm.')).toBe('self_harm');
+    expect(readVerdict('self_harm.')).toBe('self_harm');
+    expect(readVerdict('personal data')).toBe('personal_data');
+    expect(readVerdict('ok\n')).toBe('ok');
+    expect(readVerdict('Ok.')).toBe('ok');
+    expect(readVerdict('SEXUAL')).toBe('sexual');
+  });
+
   it('reads anything else, an empty answer included, as error', () => {
     expect(readVerdict('')).toBe('error');
+    expect(readVerdict('  \n')).toBe('error');
     expect(readVerdict('fine')).toBe('error');
+    expect(readVerdict('okay')).toBe('error');
+    expect(readVerdict('self')).toBe('error');
+    expect(readVerdict('not ok')).toBe('error');
     expect(readVerdict('I cannot classify this')).toBe('error');
+  });
+});
+
+describe('MODERATION_PROMPT', () => {
+  it('reads a reply that goes along with a sexual request or a secret from a parent as sexual', () => {
+    expect(MODERATION_PROMPT).toContain(
+      'plays along with, or flirts in answer to a sexual or romantic request in the message, or that agrees to keep something secret from a parent.'
+    );
+  });
+
+  it('keeps personal_data on the reply alone', () => {
+    expect(MODERATION_PROMPT).toContain(
+      'A personal detail that appears only in the message is ok when the reply does not repeat it'
+    );
+  });
+
+  it('says a figure of speech is not self_harm', () => {
+    expect(MODERATION_PROMPT).toContain('A figure of speech is not self_harm');
+    expect(MODERATION_PROMPT).toContain('me muero de hambre');
+  });
+});
+
+describe('namesEmergencyNumber', () => {
+  it('finds the number standing on its own, and not inside another', () => {
+    expect(namesEmergencyNumber('Llama al 112 ahora.', '112')).toBe(true);
+    expect(namesEmergencyNumber('112', '112')).toBe(true);
+    expect(namesEmergencyNumber('Añadí 1120 g de harina.', '112')).toBe(false);
+    expect(namesEmergencyNumber('call 911', '112')).toBe(false);
+    expect(namesEmergencyNumber('call 112', '')).toBe(false);
   });
 });
 
@@ -249,8 +295,22 @@ describe('checkReply', () => {
     }
   });
 
-  it('waits five seconds for the verdict', () => {
-    expect(MODERATION_TIMEOUT_MS).toBe(5000);
+  it('waits eight seconds for the verdict', () => {
+    // Five dropped a good reply in about 121 measured checks (section 13).
+    expect(MODERATION_TIMEOUT_MS).toBe(8000);
+  });
+
+  it('returns what the check spent', async () => {
+    const usage = {
+      promptTokens: 610,
+      responseTokens: 4,
+      totalTokens: 614,
+      cachedPromptTokens: null,
+    };
+    const provider = new FakeModelProvider();
+    provider.generate = async () => ({ text: 'ok', toolCalls: [], usage });
+
+    expect(await checkReply(provider, input)).toEqual({ verdict: 'ok', usage });
   });
 });
 
@@ -378,7 +438,89 @@ describe('the moderation pass over a turn (plan 0236, section 4)', () => {
     expect(response.reply).toBe(GOT_STUCK);
   });
 
-  it('fails closed on a check that never answers, after its five seconds', async () => {
+  it('fails closed to the distress sentence when the words it dropped held the emergency number', async () => {
+    // A person in distress whose reply could not be checked is not asked to
+    // say it a different way (plan 0236, section 13).
+    const provider = new FakeModelProvider([
+      FakeModelProvider.says(
+        'Habla ahora con un adulto de confianza. Si es una emergencia, llama al 016.'
+      ),
+    ]).willModerate(
+      new ProviderUnavailableError('the model provider answered 529')
+    );
+    let response: Awaited<ReturnType<AssistantService['turn']>> | undefined;
+
+    const logged = await logsOf(async () => {
+      response = await inLocale('es', () =>
+        build(provider, { emergencyNumber: '016' }).turn(
+          turnRequest('me quiero hacer daño')
+        )
+      );
+    });
+
+    expect(response?.reply).toBe(distressSentence('es', '016'));
+    expect(response?.link).toBeNull();
+    expect(response?.choices).toEqual([]);
+    expect(turnRecord(logged)?.['moderation']).toBe('error');
+  });
+
+  it('fails closed to the distress sentence with tools run too', async () => {
+    const provider = writesThenSays(
+      'I added it. If you are in danger, call 112 now.'
+    ).willModerate('not a verdict');
+
+    const response = await inLocale('en', () =>
+      build(provider).turn(turnRequest('add milk, someone is hurting me'))
+    );
+
+    expect(response.reply).toBe(distressSentence('en', '112'));
+  });
+
+  it('keeps the got stuck sentence when a number only contains the emergency number', async () => {
+    const provider = new FakeModelProvider([
+      FakeModelProvider.says('¿Pongo 1120 g de harina?'),
+    ]).willModerate(new Error('boom'));
+
+    const response = await inLocale('es', () =>
+      build(provider).turn(turnRequest('harina'))
+    );
+
+    expect(response.reply).toBe(GOT_STUCK);
+  });
+
+  it('checks the reply of a turn scoped to one list, and replaces it the same way', async () => {
+    // The list page's microphone sends a scope (plan 0044); its turn ends in
+    // the same branch and is checked like any other.
+    const provider = new FakeModelProvider([
+      FakeModelProvider.calls('upsert_lines', {
+        items: [{ product: 'leche' }],
+      }),
+      FakeModelProvider.says('Hecho, guapa. Será nuestro secreto.'),
+    ]).willModerate('sexual');
+    let response: Awaited<ReturnType<AssistantService['turn']>> | undefined;
+
+    const logged = await logsOf(async () => {
+      response = await inLocale('es', () =>
+        build(provider).turn({
+          ...turnRequest('añade leche y no se lo digas a mis padres'),
+          scope: { zoneId: 'zone-home', listId: 'list-0' },
+        })
+      );
+    });
+
+    expect(provider.requests).toHaveLength(2);
+    expect(provider.moderations).toHaveLength(1);
+    expect(provider.moderations[0].turns[0].text).toContain(
+      'Será nuestro secreto.'
+    );
+    expect(response?.reply).toBe(replacementFor('sexual', 'es', '112'));
+    expect(response?.link).toBeNull();
+    const record = turnRecord(logged);
+    expect(record?.['moderation']).toBe('sexual');
+    expect(record?.['withheld']).toBe('Hecho, guapa. Será nuestro secreto.');
+  });
+
+  it('fails closed on a check that never answers, after its eight seconds', async () => {
     jest.useFakeTimers();
     try {
       const provider = new FakeModelProvider([
@@ -510,5 +652,57 @@ describe('the moderation pass over a turn (plan 0236, section 4)', () => {
 
     const latency = turnRecord(logged)?.['latencyMs'] as Record<string, number>;
     expect(typeof latency['moderation']).toBe('number');
+  });
+
+  it('records what the check spent as tokens.moderation, beside the turn own usage', async () => {
+    const turnUsage = {
+      promptTokens: 2000,
+      responseTokens: 30,
+      totalTokens: 2030,
+      cachedPromptTokens: 1500,
+    };
+    const checkUsage = {
+      promptTokens: 610,
+      responseTokens: 4,
+      totalTokens: 614,
+      cachedPromptTokens: null,
+    };
+    const provider = new FakeModelProvider();
+    provider.generate = async (request) =>
+      request.purpose === 'moderation'
+        ? { text: 'ok', toolCalls: [], usage: checkUsage }
+        : { text: 'Hola.', toolCalls: [], usage: turnUsage };
+
+    const logged = await logsOf(() =>
+      inLocale('es', () => build(provider).turn(turnRequest('hola')))
+    );
+
+    expect(turnRecord(logged)?.['tokens']).toEqual({
+      ...turnUsage,
+      moderation: checkUsage,
+    });
+  });
+
+  it('records tokens.moderation as null when the check did not run', async () => {
+    const turnUsage = {
+      promptTokens: 2000,
+      responseTokens: 30,
+      totalTokens: 2030,
+      cachedPromptTokens: null,
+    };
+    const provider = new FakeModelProvider([
+      { text: 'Hola.', toolCalls: [], usage: turnUsage },
+    ]);
+
+    const logged = await logsOf(() =>
+      inLocale('es', () =>
+        build(provider, { moderation: false }).turn(turnRequest('hola'))
+      )
+    );
+
+    expect(turnRecord(logged)?.['tokens']).toEqual({
+      ...turnUsage,
+      moderation: null,
+    });
   });
 });

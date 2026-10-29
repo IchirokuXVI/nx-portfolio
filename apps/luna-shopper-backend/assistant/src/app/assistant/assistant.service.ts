@@ -34,10 +34,12 @@ import {
   type ModelUsage,
 } from '../provider/model-provider';
 import { ConcurrencyGate, TurnLimiter } from '../provider/turn-limiter';
+import { distressSentence } from './child-safety';
 import { GatewayApiClient } from './gateway-api.client';
 import { ChoiceCollector, ListLinkCollector } from './link-and-choices';
 import {
   checkReply,
+  namesEmergencyNumber,
   replacementFor,
   type ModerationVerdict,
 } from './moderation';
@@ -560,6 +562,7 @@ export class AssistantService {
           strippedMarkdown: stripped,
           moderation: checked.verdict,
           moderationMs: checked.ms,
+          moderationUsage: checked.usage ?? null,
           ...(checked.replacement !== undefined ? { withheld: text } : {}),
         });
 
@@ -667,9 +670,15 @@ export class AssistantService {
    * and the choices. A check that could not run fails closed: the model's words
    * are dropped for the sentence the service already says when it has none.
    *
+   * **A failed check over words that hold the emergency number answers with the
+   * distress sentence**, not with "got stuck". The model writes that number only
+   * when the person said they are in danger, and asking such a person to say it
+   * a different way is the one replacement that is not safe. The sentence is the
+   * service's own, so nothing unchecked leaves.
+   *
    * **Not behind the concurrency gate**, unlike a turn's call. The check is one
-   * word long with a five second deadline, and queuing it behind other people's
-   * whole turns would turn ordinary load into dropped replies.
+   * word long with an eight second deadline, and queuing it behind other
+   * people's whole turns would turn ordinary load into dropped replies.
    */
   private async moderate(
     said: string,
@@ -682,13 +691,14 @@ export class AssistantService {
     replacement?: string;
     keepLink?: boolean;
     keepChoices?: boolean;
+    usage?: ModelUsage | null;
   }> {
     if (!this.config.moderation) {
       return { verdict: 'skipped', ms: 0 };
     }
 
     const startedAtMs = Date.now();
-    const { verdict, failure } = await checkReply(this.provider, {
+    const { verdict, failure, usage } = await checkReply(this.provider, {
       said,
       replied,
       locale,
@@ -696,14 +706,25 @@ export class AssistantService {
     const ms = Date.now() - startedAtMs;
 
     if (verdict === 'ok') {
-      return { verdict, ms };
+      return { verdict, ms, usage };
     }
     if (verdict === 'error') {
       // The reason, and never the classifier's prompt or the texts it read.
       this.logger.warn(`assistant moderation failed closed: ${failure}`);
+      if (namesEmergencyNumber(replied, this.config.emergencyNumber)) {
+        return {
+          verdict,
+          ms,
+          usage,
+          replacement: distressSentence(locale, this.config.emergencyNumber),
+          keepLink: false,
+          keepChoices: false,
+        };
+      }
       return {
         verdict,
         ms,
+        usage,
         replacement: toolsRan ? ANSWERED_WITHOUT_WORDS : GOT_STUCK,
         keepLink: true,
         keepChoices: false,
@@ -712,6 +733,7 @@ export class AssistantService {
     return {
       verdict,
       ms,
+      usage,
       replacement: replacementFor(verdict, locale, this.config.emergencyNumber),
       keepLink: false,
       keepChoices: false,
@@ -918,6 +940,12 @@ export class AssistantService {
     /** How long the check took, zero when it did not run. */
     moderationMs?: number;
     /**
+     * What the check spent, logged as `tokens.moderation`: `null` when it did
+     * not run or its provider reported nothing. Plan 0234 counts the cost of a
+     * turn, and the check is part of it.
+     */
+    moderationUsage?: ModelUsage | null;
+    /**
      * The model's words that a verdict kept from the person, so the owner can
      * read what was flagged (section 4.4). Absent when the reply went out.
      */
@@ -942,7 +970,12 @@ export class AssistantService {
         // 0236, section 4.4). The classifier's prompt is never here.
         moderation: entry.moderation,
         ...(entry.withheld !== undefined ? { withheld: entry.withheld } : {}),
-        tokens: entry.usage,
+        // The turn's own usage as before, with the check's beside it under
+        // `moderation`, so one read of the record has the whole cost.
+        tokens:
+          entry.usage === null && !entry.moderationUsage
+            ? null
+            : { ...entry.usage, moderation: entry.moderationUsage ?? null },
         latencyMs: {
           total: entry.totalMs,
           gateway: entry.gatewayMs,

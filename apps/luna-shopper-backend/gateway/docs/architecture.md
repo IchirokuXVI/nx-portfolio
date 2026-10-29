@@ -39,7 +39,7 @@ flowchart TB
     smtp["SMTP server<br/>(Mailpit locally)"]
     google["Google sign in"]
     sources["Storefronts and<br/>OpenStreetMap"]
-    gemini["Gemini API"]
+    claude["Claude API<br/>(Anthropic)"]
 
     velista -->|"REST"| gateway
     velista -->|"WebSocket / SSE"| realtime
@@ -64,7 +64,7 @@ flowchart TB
     auth --> smtp
     gateway --> google
     harvester --> sources
-    assistant --> gemini
+    assistant --> claude
     assistant -->|"internal HTTP, user token"| gateway
 ```
 
@@ -108,8 +108,8 @@ that person can.
   `/v1/admin/harvest/...` routes. It also has its own background worker, for the postal code
   queue.
 - **The assistant** owns no database. The gateway forwards `/v1/assistant` turns to it over the
-  broker. It calls the Gemini API for the model and acts through the gateway's internal URL. With
-  no `GEMINI_API_KEY` it stays healthy and answers 501.
+  broker. It calls the Claude API (Anthropic) for the model and acts through the gateway's
+  internal URL. With no `ANTHROPIC_API_KEY` it stays healthy and answers 501.
 
 ## Sequence: start a space or join by code (token handshake)
 

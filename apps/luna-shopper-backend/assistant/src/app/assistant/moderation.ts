@@ -4,6 +4,7 @@ import {
   ModelTurnRole,
   type ModelProvider,
   type ModelRequest,
+  type ModelUsage,
 } from '../provider/model-provider';
 import { distressSentence } from './child-safety';
 
@@ -51,9 +52,14 @@ export type ModerationVerdict = 'ok' | ModerationCategory | 'error' | 'skipped';
  * knife or condoms on it is a normal list, and a check that flags it fails the
  * person who wrote it. The names of the person's groups, lists and items and
  * their app username are not personal details: the assistant reads them back
- * all the time. Every word but `self_harm` judges the reply alone: a child who
- * typed their address and got "you need not tell me where you live" back was
- * flagged in every run until the prompt said so (plan 0236, section 13).
+ * all the time. `personal_data` and the other words judge the reply alone: a
+ * child who typed their address and got "you need not tell me where you live"
+ * back was flagged in every run until the prompt said so (plan 0236, section
+ * 13). Two read the message too. `self_harm`, because the message alone can
+ * say it, and figures of speech ("me muero de hambre") are spelled out as not
+ * being it. And `sexual`, for a reply that goes along with what the message
+ * asks: "of course, it's our secret" has no explicit word in it, and it is the
+ * reply a grooming message wants (section 13, the review fixes).
  */
 export const MODERATION_PROMPT = [
   'You check one reply of a shopping list assistant before a person reads it. The person may be a child.',
@@ -64,13 +70,16 @@ export const MODERATION_PROMPT = [
   'ok: the reply is fine for a child to read.',
   'self_harm: the message or the reply says that someone wants to hurt themselves, is being hurt, or is in danger.',
   'sexual: the reply contains sexual content or discusses a sexual topic.',
+  'sexual also covers a reply that agrees to, plays along with, or flirts in answer to a sexual or romantic request in the message, or that agrees to keep something secret from a parent.',
   'violence: the reply describes violence, weapons, drugs or alcohol beyond naming an item on a shopping list.',
   'personal_data: the reply asks for a personal detail of someone, or repeats one: an age, an address, a school, a phone number, where someone is, or a photo. A reply that only tells the person they need not share such details, without repeating them, is ok.',
   'hate: the reply insults or demeans people for who they are.',
   '',
   'Ordinary shopping is ok: food, drinks including beer and wine, household products, kitchen knives, medicines and condoms named as items on a list, and how many of them. The names of groups, lists and items, and the username a person chose for the app, are not personal details. A reply that politely declines something is ok, unless the message says that someone wants to hurt themselves, is being hurt, or is in danger.',
   '',
-  'Judge the reply, not the message, for every word except self_harm. A personal detail that appears only in the message is ok when the reply does not repeat it, and a reply that asks the person to keep such details to themselves is ok.',
+  'Judge the reply, not the message, for every word except self_harm and the second sexual line, which read the message too. A personal detail that appears only in the message is ok when the reply does not repeat it, and a reply that asks the person to keep such details to themselves is ok.',
+  '',
+  'A figure of speech is not self_harm: "I\'m dying for a coffee", "me muero de hambre" and "this list is killing me" are ok.',
 ].join('\n');
 
 /**
@@ -103,18 +112,31 @@ export function moderationRequest(input: {
 /**
  * The verdict in what the classifier wrote, or `error`.
  *
- * The first word decides, lowercased. Anything that is not `ok` or a category,
- * an empty answer included (a refusal reads as empty), is `error`, so a reply
- * the check did not clear never leaves.
+ * The answer is normalized first: lowercased, punctuation taken off both ends,
+ * and each run of spaces or hyphens made one underscore. So `self-harm`, `Self
+ * harm.` and `personal data` read as the categories they name. Keeping only
+ * the first word read them as `error`, and a child in distress was asked to
+ * rephrase instead of being given the emergency number (plan 0236, section 13).
+ *
+ * Then the leading word decides, when it is `ok` or a category and no letter or
+ * digit follows it. Anything else, an empty answer included (a refusal reads as
+ * empty), is `error`, so a reply the check did not clear never leaves.
  */
 export function readVerdict(text: string): 'ok' | ModerationCategory | 'error' {
-  const word = /[a-z_]+/.exec(text.trim().toLowerCase())?.[0] ?? '';
-  if (word === 'ok') {
-    return 'ok';
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/^[\p{P}\s]+|[\p{P}\s]+$/gu, '')
+    .replace(/[\s-]+/g, '_');
+  for (const word of ['ok', ...MODERATION_CATEGORIES] as const) {
+    if (
+      normalized.startsWith(word) &&
+      !/^[a-z0-9]/.test(normalized.slice(word.length))
+    ) {
+      return word;
+    }
   }
-  return (MODERATION_CATEGORIES as readonly string[]).includes(word)
-    ? (word as ModerationCategory)
-    : 'error';
+  return 'error';
 }
 
 /**
@@ -123,12 +145,19 @@ export function readVerdict(text: string): 'ok' | ModerationCategory | 'error' {
  * A thrown call, a 429, a 5xx and a call still running at `timeoutMs` are all
  * `error`. The provider aborts its own fetch at the same deadline; the race here
  * is what bounds a provider that does not, and it is what the specs drive.
+ *
+ * `usage` is what the check spent, when the call answered at all, so the turn
+ * record can count it (plan 0234 limits cost, and the check is a cost).
  */
 export async function checkReply(
   provider: ModelProvider,
   input: { said: string; replied: string; locale: SupportedLocale },
   timeoutMs: number = MODERATION_TIMEOUT_MS
-): Promise<{ verdict: 'ok' | ModerationCategory | 'error'; failure?: string }> {
+): Promise<{
+  verdict: 'ok' | ModerationCategory | 'error';
+  failure?: string;
+  usage?: ModelUsage | null;
+}> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(
@@ -143,8 +172,12 @@ export async function checkReply(
     ]);
     const verdict = readVerdict(reply.text);
     return verdict === 'error'
-      ? { verdict, failure: 'the check answered no verdict' }
-      : { verdict };
+      ? {
+          verdict,
+          failure: 'the check answered no verdict',
+          usage: reply.usage,
+        }
+      : { verdict, usage: reply.usage };
   } catch (error) {
     return {
       verdict: 'error',
@@ -171,4 +204,24 @@ export function replacementFor(
   return locale === 'es'
     ? 'Solo puedo ayudarte con tus listas de la compra.'
     : 'I can only help with your shopping lists.';
+}
+
+/**
+ * Whether a reply names the emergency number as a number of its own, so `112`
+ * counts in "call 112" and not in "1120 g" (plan 0236, section 13).
+ *
+ * The service reads it when a check failed: words that hold the number are a
+ * reply to someone in danger, and they get the distress sentence rather than
+ * the request to rephrase.
+ */
+export function namesEmergencyNumber(
+  text: string,
+  emergencyNumber: string
+): boolean {
+  const number = emergencyNumber.trim();
+  if (number === '') {
+    return false;
+  }
+  const escaped = number.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|\\D)${escaped}(\\D|$)`).test(text);
 }

@@ -621,9 +621,11 @@ lunaShopperBackend:
       # who believed that said it again and got two of everything.
       #
       # 120s is the turn budget (60s) plus one whole provider timeout (30s) plus
-      # slack, because the deadline stops the loop starting new work and does not
-      # abort a provider call already in flight. Raise the turn budget and this
-      # has to move with it, or the proxy starts giving up first again.
+      # the moderation check of the reply (8s, plan 0236) plus slack, because the
+      # deadline stops the loop starting new work and does not abort a provider
+      # call already in flight, and the check runs after that call. 98s in all.
+      # Raise the turn budget or the check's deadline and this has to move with
+      # it, or the proxy starts giving up first again.
       slowPaths:
         - path: /v1/assistant
           timeout: 120s

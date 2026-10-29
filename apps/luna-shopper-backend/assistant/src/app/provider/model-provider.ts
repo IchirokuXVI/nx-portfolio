@@ -115,8 +115,13 @@ export type ModelRequestPurpose = 'turn' | 'moderation';
  * How long a moderation request may take before the reply it checks is dropped
  * (plan 0236, section 4.2). The provider aborts its call at this deadline, and
  * the service fails closed.
+ *
+ * Eight seconds, not the five the build started with: in about 121 checks the
+ * build measured one at 4.3 s, one at 4.7 s and one that hit 5 s and dropped
+ * a good reply (section 13). The chart's `slowPaths` budget for the assistant
+ * counts it.
  */
-export const MODERATION_TIMEOUT_MS = 5000;
+export const MODERATION_TIMEOUT_MS = 8000;
 
 /** What the provider reports it spent, when it reports anything (section 10). */
 export interface ModelUsage {
