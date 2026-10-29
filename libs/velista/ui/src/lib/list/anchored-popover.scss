@@ -18,3 +18,13 @@
   font-size: var(--app-text-xs);
   line-height: 1.4;
 }
+
+// Rows to the edges (velista 0170): the padding moves into the content, so a row's
+// pressed tint and its divider reach the frame. The radius is the medium one the
+// note already has.
+.pop.choice {
+  gap: 0;
+  inline-size: var(--app-add-choice-width);
+  padding: var(--app-space-3) 0 var(--app-space-2);
+  overflow: hidden;
+}

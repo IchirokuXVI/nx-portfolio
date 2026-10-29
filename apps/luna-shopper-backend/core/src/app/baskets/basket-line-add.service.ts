@@ -101,6 +101,12 @@ export class BasketLineAddService {
       // Whether a person typed the name, as it arrived (plan 0207, section
       // 1.3). `LineService.add` keeps the two rules about it.
       named: req.named,
+      // The answer to the question a typed name can raise (plan 0228), as it
+      // arrived. The rule is the list's own, so the basket asks the same
+      // question the list page does and reads the same refusal.
+      askIfAmbiguous: req.askIfAmbiguous,
+      intoLineId: req.intoLineId,
+      newLine: req.newLine,
       // The basket the line arrived through, on the change record (plan 0138,
       // section 4). Here the actor and the authorized account are the same
       // person, because adding is the one gesture that is not delegated, and the

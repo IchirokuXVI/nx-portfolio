@@ -422,7 +422,7 @@ export class ListsController {
 
   @Post(':id/lines')
   @ApiContractResponse(LINE_PATTERNS.add, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, lineAddChoice: true })
   addLine(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
@@ -436,6 +436,9 @@ export class ListsController {
       itemIds: dto.itemIds,
       productGroupId: dto.productGroupId,
       named: dto.named,
+      askIfAmbiguous: dto.askIfAmbiguous,
+      intoLineId: dto.intoLineId,
+      newLine: dto.newLine,
     });
   }
 

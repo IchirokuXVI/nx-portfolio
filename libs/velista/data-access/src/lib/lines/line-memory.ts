@@ -1,9 +1,12 @@
 import { inject, Injectable, signal } from '@angular/core';
 import {
+  ADD_CHOICE_MAX,
   ALSO_ON_MAX_LISTS,
+  foldName,
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  type AddLineOptions,
   type AlsoOnPlaceVm,
   type AlsoOnVm,
   type HeldLine,
@@ -131,24 +134,28 @@ export class LineMemory implements LineServiceI {
    * The add that says what it did. Unlike {@link addLine} it models the merge
    * (backend plan 0091): a line of the same name, or holding exactly the same
    * products, is raised and answered instead of a second one being made.
+   *
+   * A free text add follows backend `0228`, target 1, in its order: the line the
+   * person chose, then a free text line of that name, then a new line when the
+   * person asked for one, and then the lines that hold a product under that name.
+   * One of those is raised. Two or more refuse the add with `line_add_needs_choice`
+   * when the caller can ask, and otherwise a line is made, as before `0228`.
    */
   async addLineResult(
     listId: string,
     content: string,
     quantity?: number,
     itemIds?: readonly string[],
-    named?: false
+    named?: false,
+    options?: AddLineOptions
   ): Promise<LineAddResult> {
     this._require(listId, 'WRITE');
 
-    const name = content.trim().toLocaleLowerCase();
-    const set = [...(itemIds ?? [])].sort().join(',');
-    const existing = this._lines(listId).find(
-      (held) =>
-        held.content.trim().toLocaleLowerCase() === name ||
-        (set !== '' && [...held.itemIds].sort().join(',') === set)
-    );
-    if (existing === undefined) {
+    const products = (itemIds ?? []).length > 0;
+    const existing = products
+      ? this._productAddTarget(listId, content, itemIds ?? [])
+      : this._typedAddTarget(listId, content, options);
+    if (existing === null) {
       return {
         line: await this.addLine(listId, content, quantity, itemIds, named),
         merged: false,
@@ -158,7 +165,12 @@ export class LineMemory implements LineServiceI {
     this._maybeFail();
     const raised: Line = {
       ...existing,
-      quantity: existing.quantity + (quantity ?? 1),
+      // Capped as `raiseForAdd` caps it, so a raise never answers a number the
+      // server would refuse.
+      quantity: Math.min(
+        LINE_QUANTITY_MAX,
+        existing.quantity + (quantity ?? 1)
+      ),
       version: existing.version + 1,
     };
     this._write(
@@ -168,12 +180,107 @@ export class LineMemory implements LineServiceI {
     return { line: raised, merged: true };
   }
 
+  /** A product add: a line of the same name, or holding exactly the same set. */
+  private _productAddTarget(
+    listId: string,
+    content: string,
+    itemIds: readonly string[]
+  ): Line | null {
+    const name = content.trim().toLocaleLowerCase();
+    const set = [...itemIds].sort().join(',');
+    return (
+      this._lines(listId).find(
+        (held) =>
+          held.content.trim().toLocaleLowerCase() === name ||
+          [...held.itemIds].sort().join(',') === set
+      ) ?? null
+    );
+  }
+
+  /**
+   * Where a free text add lands, or null for a new line (backend `0228`, target 1).
+   * Throws the refusal the server would send, and the not found the server answers
+   * a chosen line with when it is gone or turned down.
+   */
+  private _typedAddTarget(
+    listId: string,
+    content: string,
+    options: AddLineOptions | undefined
+  ): Line | null {
+    const lines = this._lines(listId);
+
+    if (options?.intoLineId !== undefined) {
+      const chosen = lines.find(
+        (held) =>
+          held.id === options.intoLineId && held.approvalStatus !== 'REJECTED'
+      );
+      if (chosen === undefined) {
+        throw memoryFailure('not_found', 404);
+      }
+      return chosen;
+    }
+
+    const typed = foldName(content);
+    const holdsProduct = (line: Line) =>
+      line.itemIds.length > 0 || line.productGroupId !== null;
+
+    // Plan 0091 first, and even over `newLine`: a free text line of that name always
+    // takes the add. A turned down line takes nothing, as `findEarliestLines` skips it.
+    const text = lines.find(
+      (held) =>
+        held.approvalStatus !== 'REJECTED' &&
+        !holdsProduct(held) &&
+        foldName(held.content) === typed
+    );
+    if (text !== undefined) {
+      return text;
+    }
+    if (options?.newLine === true) {
+      return null;
+    }
+
+    const candidates = [...lines]
+      .filter(
+        (held) =>
+          held.approvalStatus !== 'REJECTED' &&
+          holdsProduct(held) &&
+          foldName(held.content) === typed
+      )
+      .sort((a, b) => a.position - b.position);
+    if (candidates.length === 1) {
+      return candidates[0];
+    }
+    if (candidates.length > 1 && options?.askIfAmbiguous === true) {
+      throw new GatewayError({
+        code: 'line_add_needs_choice',
+        status: 409,
+        correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
+        detail: 'produced by LineMemory, no request was sent',
+        details: {
+          lines: candidates.slice(0, ADD_CHOICE_MAX).map((line) => ({
+            lineId: line.id,
+            content: line.content,
+            named: line.named,
+            quantity: line.quantity,
+            itemIds: [...line.itemIds],
+            productGroupId: line.productGroupId,
+            approvalStatus: line.approvalStatus,
+          })),
+        },
+      });
+    }
+    return null;
+  }
+
   async addLine(
     listId: string,
     content: string,
     quantity?: number,
     itemIds?: readonly string[],
-    named?: false
+    named?: false,
+    // Read by `addLineResult`, the add that models where a line lands. This one
+    // always makes a line, as it always has.
+    _options?: AddLineOptions
   ): Promise<Line> {
     const permissions = this._require(listId, 'WRITE');
     this._maybeFail();
