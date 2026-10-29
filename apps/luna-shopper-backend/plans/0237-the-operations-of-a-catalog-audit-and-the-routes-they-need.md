@@ -1,6 +1,6 @@
 > **PR:** [#863](https://github.com/IchirokuXVI/nx-portfolio/pull/863)
 
-# 0228: the operations of a catalog audit, and the routes they need
+# 0237: the operations of a catalog audit, and the routes they need
 
 > The catalog audit of 2026-10-27 read the 22,203 products of production and kept 879
 > proposals over 1,097 of them: new names, brands, sizes, units, pack counts, category
