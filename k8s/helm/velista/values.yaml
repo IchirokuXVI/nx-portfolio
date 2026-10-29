@@ -458,18 +458,19 @@ lunaShopperBackend:
   # one small stateless Node process with no database at all, so there is nothing
   # to gate: it deploys everywhere.
   #
-  # `provider` decides which model answers a turn (plan 0224): `gemini`, the
-  # default, or `claude`. Claude takes no audio, so with `claude` a spoken turn and
-  # a voice comment are still transcribed by Gemini.
+  # Claude answers every turn (plan 0236), and the transcriber below hears (plan
+  # 0235). There is no provider switch: Velista is for every age, and Claude is
+  # the provider whose terms allow a service that minors use, with the
+  # safeguards of plan 0236 (a child safety block in the prompt and a check of
+  # every reply).
   #
-  # What decides whether it can actually answer is the key of that provider in
-  # the Secret: `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`. With `claude`,
-  # `GEMINI_API_KEY` decides whether it can hear. An absent key is a supported
-  # deployment rather than a broken one. The pod boots, its health probes pass,
-  # and `/v1/assistant` answers 501 not_configured (plan 0026). That is also why
-  # both keys are in `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so `--check`
-  # keeps passing on a cluster where the assistant is simply unconfigured.
-  # Nothing here may be made required without breaking that property.
+  # What decides whether it can actually answer is `ANTHROPIC_API_KEY` in the
+  # Secret. An absent key is a supported deployment rather than a broken one.
+  # The pod boots, its health probes pass, and `/v1/assistant` answers 501
+  # not_configured (plan 0026). That is also why the key is in
+  # `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so `--check` keeps passing on
+  # a cluster where the assistant is simply unconfigured. Nothing here may be
+  # made required without breaking that property.
   #
   # There are **no environment values file changes for this service at all**,
   # because it is not routed: no host, no DNS record, no certificate and no CORS
@@ -483,22 +484,26 @@ lunaShopperBackend:
     # TLS and the ingress twice for a call that never leaves the cluster.
     gatewayInternalUrl: ''
 
-    # Which provider answers a turn: `gemini` or `claude` (plan 0224). Turning
-    # Claude on is this value and ANTHROPIC_API_KEY in the Secret, and a rollout.
-    provider: 'gemini'
-
     # A config value and not a literal, so changing it is an env edit and a
-    # restart. Empty means the provider's own default: `gemini-3.5-flash-lite` for
-    # Gemini, `claude-haiku-5-5` for Claude. Set it only together with
-    # `provider`, because a model name belongs to one provider.
+    # restart. Empty means `claude-haiku-5-5`.
     model: ''
 
-    # Claude only (plan 0224, section 10). Empty means the defaults the
-    # evaluation chose: effort `low` (`low`, `medium` or `high`) and thinking
-    # `adaptive` (`adaptive` or `off`). `off` on a Sonnet model is a 400 on the
-    # first turn.
+    # Empty means the defaults the evaluation chose (plan 0224, section 10):
+    # effort `low` (`low`, `medium` or `high`) and thinking `adaptive`
+    # (`adaptive` or `off`). `off` on a Sonnet model is a 400 on the first turn.
     claudeEffort: ''
     claudeThinking: ''
+
+    # The check of every reply before it leaves (plan 0236, section 4): one
+    # short call to `moderationModel` (empty means `claude-haiku-5-5`). A reply
+    # it flags is replaced, and a reply it could not check is dropped. `off` is
+    # only for a self hosted deployment that no minor uses. Quoted, because YAML
+    # reads a bare on as true (the template accepts either).
+    moderation: 'on'
+    moderationModel: ''
+    # The number the assistant names to a person in danger. Empty means 112, the
+    # emergency number of Spain and the whole EU.
+    emergencyNumber: ''
 
     # Voice input (plan 0041). A spoken turn is transcribed by the deployment's
     # own transcriber (plan 0235, `transcriber` below), and then runs the
@@ -521,11 +526,11 @@ lunaShopperBackend:
     maxChars: 8000
     maxToolCalls: 6
 
-    # Living inside a free tier (section 9). Google's limits are per Google Cloud
-    # project rather than per user, so at two replicas this WILL return 429 in
-    # ordinary use; that is accepted, and the requirement is only that it be
-    # legible, which is rule A5. Both numbers below are per instance and in
-    # memory: neither survives a restart and neither is shared across replicas.
+    # Living inside the provider's rate limit (section 9). It is per account
+    # rather than per user, so a 429 is an ordinary event; that is accepted, and
+    # the requirement is only that it be legible, which is rule A5. Both numbers
+    # below are per instance and in memory: neither survives a restart and
+    # neither is shared across replicas.
     turnsPerMinute: 8
     # A small gate in front of the provider call, so a burst queues briefly
     # instead of becoming a burst of 429s. Waiting two seconds is invisible,
@@ -616,9 +621,11 @@ lunaShopperBackend:
       # who believed that said it again and got two of everything.
       #
       # 120s is the turn budget (60s) plus one whole provider timeout (30s) plus
-      # slack, because the deadline stops the loop starting new work and does not
-      # abort a provider call already in flight. Raise the turn budget and this
-      # has to move with it, or the proxy starts giving up first again.
+      # the moderation check of the reply (8s, plan 0236) plus slack, because the
+      # deadline stops the loop starting new work and does not abort a provider
+      # call already in flight, and the check runs after that call. 98s in all.
+      # Raise the turn budget or the check's deadline and this has to move with
+      # it, or the proxy starts giving up first again.
       slowPaths:
         - path: /v1/assistant
           timeout: 120s
@@ -689,7 +696,7 @@ lunaShopperBackend:
     # depended on the number.
     #
     # No `optional:` gate, unlike the harvester. This one is meant to run, and the
-    # thing that decides whether it can answer is GEMINI_API_KEY: with the key
+    # thing that decides whether it can answer is ANTHROPIC_API_KEY: with the key
     # empty the pod boots healthy and answers 501 on its one route (plan 0026),
     # so an unconfigured cluster needs no chart change to stay up.
     - name: luna-shopper-backend-assistant

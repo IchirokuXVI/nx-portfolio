@@ -9,10 +9,14 @@
  * templates from the answer.
  */
 
-/** Who answers a typed assistant turn. Wire values; must stay stable. */
+/**
+ * Who answers a typed assistant turn. Wire values; must stay stable.
+ *
+ * Anthropic is the only one since plan 0236: Gemini's terms do not allow a
+ * service that minors use, so `google` left the union with the provider.
+ */
 export enum AiTextProvider {
   ANTHROPIC = 'anthropic',
-  GOOGLE = 'google',
 }
 
 /** The name the documents use when the operator sets none. */

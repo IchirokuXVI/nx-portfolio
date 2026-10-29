@@ -21,7 +21,7 @@ import {
 const ANSWER: AssistantCapabilities = {
   answers: true,
   hears: false,
-  textProvider: AiTextProvider.GOOGLE,
+  textProvider: AiTextProvider.ANTHROPIC,
 };
 
 function build() {

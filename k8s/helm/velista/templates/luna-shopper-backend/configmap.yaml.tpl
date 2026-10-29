@@ -206,20 +206,23 @@ part of the render and would trip that very check.
   # for a call that never leaves the cluster, and would put a user's turn through
   # the edge twice.
   #
-  # The model is a value rather than a literal, so changing it is an env edit and
-  # a restart. Empty means the default of the provider that answers (plan 0224,
-  # section 5): the default moved into the service because it depends on
-  # ASSISTANT_PROVIDER, and a Gemini name written here would reach Claude the day
-  # the switch flips.
+  # Claude answers every turn (plan 0236). The model is a value rather than a
+  # literal, so changing it is an env edit and a restart. Empty model, effort
+  # and thinking mean the service's own defaults (Haiku, adaptive thinking,
+  # effort low), which the evaluation of 2026-10-22 chose. The transcriber
+  # below hears (plan 0235).
   GATEWAY_INTERNAL_URL: {{ $assistant.gatewayInternalUrl | default (printf "http://luna-shopper-backend-gateway.%s.svc.cluster.local" .Release.Namespace) | quote }}
   ASSISTANT_MODEL: {{ $assistant.model | default "" | quote }}
-  # Which provider answers a turn (plan 0224). Neither hears: the transcriber
-  # below does (plan 0235). Empty effort and
-  # thinking mean the service's own defaults (Haiku, adaptive thinking, effort
-  # low), which the evaluation of 2026-10-22 chose.
-  ASSISTANT_PROVIDER: {{ $assistant.provider | default "gemini" | quote }}
   ASSISTANT_CLAUDE_EFFORT: {{ $assistant.claudeEffort | default "" | quote }}
   ASSISTANT_CLAUDE_THINKING: {{ $assistant.claudeThinking | default "" | quote }}
+  # The safety check on each reply (plan 0236, section 4). Empty means the
+  # service's defaults: on, with Haiku, and 112 as the emergency number the
+  # assistant names to a person in danger. YAML reads an unquoted on or off as a
+  # boolean, so a boolean is written back as the word the service accepts:
+  # without that, `moderation: off` would arrive empty and mean on.
+  ASSISTANT_MODERATION: {{ if kindIs "bool" $assistant.moderation }}{{ ternary "on" "off" $assistant.moderation | quote }}{{ else }}{{ $assistant.moderation | default "" | quote }}{{ end }}
+  ASSISTANT_MODERATION_MODEL: {{ $assistant.moderationModel | default "" | quote }}
+  ASSISTANT_EMERGENCY_NUMBER: {{ $assistant.emergencyNumber | default "" | quote }}
   # Voice input (plan 0235). The transcriber's address exactly when the chart
   # runs it, and empty otherwise, so the one value `transcriber.enabled` decides
   # whether the assistant hears and what `hears` reports (plan 0231, section 3).

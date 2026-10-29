@@ -513,7 +513,7 @@ const queryLists: AssistantTool = {
           zone: list.zoneName,
           // Named for what it counts (plan 0225, section 1). This used to be
           // `total`, and beside an empty `matches` a "total: 2" was read as two
-          // eggs by every Haiku and Gemini run of the evaluation. The name says
+          // eggs by every model of the evaluation, Haiku included. The name says
           // it is the size of the list, whatever `item` asked for.
           linesOnList: lines.length,
           // What `matches` holds, so a zero sits next to an empty array rather

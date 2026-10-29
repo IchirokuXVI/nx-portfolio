@@ -50,7 +50,7 @@ export const ERROR_CODES = [
    *
    * **A statement about the server, not about the caller.** Nobody did anything wrong
    * and retrying will not help, which is the whole reason it is not `internal`: an
-   * install with no `GEMINI_API_KEY` answers this on `/v1/assistant`, and one with no
+   * install with no `ANTHROPIC_API_KEY` answers this on `/v1/assistant`, and one with no
    * OAuth credentials answers it on Google sign in.
    *
    * It was missing from this list, which is the cost of the hand sync this file admits

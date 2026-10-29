@@ -3750,7 +3750,7 @@ export type EnumsAdapterKey =
 /**
  * `enums.AiTextProvider` in the gateway's OpenAPI document.
  */
-export type EnumsAiTextProvider = 'anthropic' | 'google';
+export type EnumsAiTextProvider = 'anthropic';
 
 /**
  * `enums.AuthProvider` in the gateway's OpenAPI document.

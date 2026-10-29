@@ -314,7 +314,7 @@ this way, which is why a rehearsal no longer disturbs the stack you are serving.
 ### A re-run never overwrites what you edited
 
 Every `.env` this script writes is a file somebody may have edited by hand: a
-pasted `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`, a `HARVEST_ENABLED` flipped on
+pasted `ANTHROPIC_API_KEY`, a `HARVEST_ENABLED` flipped on
 for a crawl, a `MERCADONA_BASE_URL` pointed at a local recording. Those are exactly the values
 nobody can regenerate, so only the keys the **slot** decides are rewritten.
 `DERIVED_KEYS`, at the top of `luna-slot.sh`, names them per file, and the rule is:
@@ -326,13 +326,13 @@ nobody can regenerate, so only the keys the **slot** decides are rewritten.
 | absent from the file on disk   | the template default, inserted |
 
 A key on disk that the script does not write is kept too, appended under a marked
-comment. **A blank value is a value**: `GEMINI_API_KEY=` present and empty means
+comment. **A blank value is a value**: `ANTHROPIC_API_KEY=` present and empty means
 "use no key, answer 501, and do not ask me again", so only a key that is genuinely
 absent takes the template default.
 
 `--reset-env` puts every non-derived key back to its shipped default, for the
 first time a preserved value is the thing that broke the stack.
-`--reset-env --keep-env GEMINI_API_KEY` spares the named ones. `--keep-env` on its
+`--reset-env --keep-env ANTHROPIC_API_KEY` spares the named ones. `--keep-env` on its
 own is an error rather than a silent no-op.
 
 **A key that is renamed is a key that is preserved stale.** Plan 0144 renamed

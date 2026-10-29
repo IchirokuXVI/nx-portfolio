@@ -194,7 +194,7 @@ describe('GET /legal/settings', () => {
     release({
       answers: true,
       hears: true,
-      textProvider: AiTextProvider.GOOGLE,
+      textProvider: AiTextProvider.ANTHROPIC,
     });
     await pending;
     await new Promise((resolve) => setImmediate(resolve));
@@ -204,7 +204,7 @@ describe('GET /legal/settings', () => {
       assistant: true,
       transcription: true,
     });
-    expect(after.body.processors.aiText).toBe(AiTextProvider.GOOGLE);
+    expect(after.body.processors.aiText).toBe(AiTextProvider.ANTHROPIC);
   });
 
   it('keeps the last answer when a later question fails', async () => {
@@ -216,7 +216,7 @@ describe('GET /legal/settings', () => {
       return {
         answers: true,
         hears: false,
-        textProvider: AiTextProvider.GOOGLE,
+        textProvider: AiTextProvider.ANTHROPIC,
       };
     });
     app = served.app;
@@ -225,6 +225,6 @@ describe('GET /legal/settings', () => {
     await served.probe.refresh();
 
     const { body } = await served.get();
-    expect(body.processors.aiText).toBe(AiTextProvider.GOOGLE);
+    expect(body.processors.aiText).toBe(AiTextProvider.ANTHROPIC);
   });
 });

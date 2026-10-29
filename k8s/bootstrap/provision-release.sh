@@ -182,17 +182,16 @@ OPERATOR_KEYS="LEGAL_APP_NAME LEGAL_CONTROLLER_NAME LEGAL_CONTACT_EMAIL LEGAL_HO
 
 # The only keys allowed to exist with no value. See the note above.
 #
-# GEMINI_API_KEY joins them for the same reason and by the same rule (plan 0039,
-# section 11): with it empty the assistant boots, its health probes pass, and
+# ANTHROPIC_API_KEY joins them for the same reason and by the same rule (plan
+# 0039, section 11; plan 0224): it is the assistant's only provider key since
+# plan 0236, and with it empty the assistant boots, its health probes pass, and
 # /v1/assistant answers 501 not_configured. An operator who never wanted an
 # assistant should not be told their deploy will fail when it will not.
-# ANTHROPIC_API_KEY joins by the same rule (plan 0224): it answers a turn only
-# when the values file sets `assistant.provider: claude`.
 #
 # The eight operator keys join by the same rule (plan 0231): a deployment that
 # has published nothing boots and answers `published: false`. The one empty
 # that is wrong is checked on its own below, after the loop.
-OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS GEMINI_API_KEY ANTHROPIC_API_KEY $OPERATOR_KEYS"
+OPTIONAL_EMPTY_KEYS="GOOGLE_CLIENT_SECRET SMTP_PASS ANTHROPIC_API_KEY $OPERATOR_KEYS"
 
 is_optional_empty() {
   case " $OPTIONAL_EMPTY_KEYS " in
@@ -842,7 +841,6 @@ fi
 # the service failing to boot.
 GOOGLE_CLIENT_SECRET="$(existing "$APP_SECRET" GOOGLE_CLIENT_SECRET)"
 SMTP_PASS="$(existing "$APP_SECRET" SMTP_PASS)"
-GEMINI_API_KEY="$(existing "$APP_SECRET" GEMINI_API_KEY)"
 ANTHROPIC_API_KEY="$(existing "$APP_SECRET" ANTHROPIC_API_KEY)"
 if [ -t 0 ]; then
   if [ -z "$GOOGLE_CLIENT_SECRET" ]; then
@@ -853,16 +851,12 @@ if [ -t 0 ]; then
     read -rsp "  SMTP password (blank to leave email unconfigured): " SMTP_PASS
     echo
   fi
-  if [ -z "$GEMINI_API_KEY" ]; then
-    read -rsp "  Gemini API key (blank to leave the assistant unconfigured): " GEMINI_API_KEY
-    echo
-  fi
   if [ -z "$ANTHROPIC_API_KEY" ]; then
-    read -rsp "  Anthropic API key (blank unless assistant.provider is claude): " ANTHROPIC_API_KEY
+    read -rsp "  Anthropic API key (blank to leave the assistant unconfigured): " ANTHROPIC_API_KEY
     echo
   fi
 else
-  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS, GEMINI_API_KEY and ANTHROPIC_API_KEY as they are"
+  echo "  not a terminal: leaving GOOGLE_CLIENT_SECRET, SMTP_PASS and ANTHROPIC_API_KEY as they are"
 fi
 
 # ---------------------------------------------------------------------------
@@ -906,7 +900,6 @@ apply_secret "$APP_SECRET" \
   --from-literal=AUTH_JWT_PUBLIC_KEY="$JWT_PUBLIC_KEY"   --from-literal=ADMIN_JWT_PRIVATE_KEY="$ADMIN_JWT_PRIVATE_KEY"   --from-literal=ADMIN_JWT_PUBLIC_KEY="$ADMIN_JWT_PUBLIC_KEY" \
   --from-literal=GOOGLE_CLIENT_SECRET="$GOOGLE_CLIENT_SECRET" \
   --from-literal=SMTP_PASS="$SMTP_PASS" \
-  --from-literal=GEMINI_API_KEY="$GEMINI_API_KEY" \
   --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY"
 
 # The operator's legal values (plan 0231). With --operator-file, exactly the
@@ -981,7 +974,6 @@ ${APP_SECRET}/HARVESTER_DB_URL: ${HARVESTER_DB_URL}
 ${APP_SECRET}/HARVESTER_ACTOR_ID: ${HARVESTER_ACTOR_ID}
 ${APP_SECRET}/GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
 ${APP_SECRET}/SMTP_PASS: ${SMTP_PASS}
-${APP_SECRET}/GEMINI_API_KEY: ${GEMINI_API_KEY}
 ${APP_SECRET}/ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
 
 ${APP_SECRET}/AUTH_JWT_PRIVATE_KEY:

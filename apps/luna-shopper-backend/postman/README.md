@@ -40,7 +40,7 @@ environment selected at all the collection falls back to slot 0.
 | 06b · Catalog (admin only) | Operator login, then write CRUD and the price join under `/v1/admin/catalog`. Skipped unless `catalogAdmin` is set |
 | 07 · Account | Global username change, and that `GLOBAL_ONLY` really is scoped |
 | 08 · Contract & errors | 401/404/400 paths return RFC7807 problem documents, not 500s |
-| 09 · Assistant | The typed and spoken assistant routes. With no `GEMINI_API_KEY` they answer `501`, and the tests accept that as a pass |
+| 09 · Assistant | The typed and spoken assistant routes. With no `ANTHROPIC_API_KEY` they answer `501`, and the tests accept that as a pass |
 | 10 · Cleanup | Deletes everything the run created |
 
 Two assertions run against **every** request in the collection:

@@ -7,7 +7,7 @@ import * as Joi from 'joi';
  *
  * Two things about this file are load bearing.
  *
- * **`GEMINI_API_KEY` may be empty**, and the schema says so rather than requiring
+ * **`ANTHROPIC_API_KEY` may be empty**, and the schema says so rather than requiring
  * it. That follows plan 0026: an operator with no key gets a service that boots
  * and answers 501 on its one route, not a pod stuck in
  * `CreateContainerConfigError` and a cluster that never comes up. It is also what
@@ -30,15 +30,12 @@ export const LOG_LEVELS = [
 ] as const;
 
 /**
- * Which provider answers a turn (plan 0224, section 1).
- *
- * `gemini` is the default and the behaviour from before the switch existed.
- * `claude` answers with Claude. Neither hears: a spoken turn and a voice comment
- * are transcribed by the deployment's own transcriber, whatever this says (plan
- * 0235).
+ * Claude answers every turn (plan 0236). There is no provider switch any more:
+ * the only other provider this service had does not allow a service that minors
+ * use, and Velista is for every age. A stale `ASSISTANT_PROVIDER` or old
+ * provider key in an environment is ignored, because the schema allows unknown
+ * keys and nothing reads them (section 1).
  */
-export const ASSISTANT_PROVIDERS = ['gemini', 'claude'] as const;
-export type AssistantProviderName = (typeof ASSISTANT_PROVIDERS)[number];
 
 /** `output_config.effort` on a Claude request (plan 0224, section 10). */
 export const CLAUDE_EFFORTS = ['low', 'medium', 'high'] as const;
@@ -54,28 +51,37 @@ export const CLAUDE_EFFORTS = ['low', 'medium', 'high'] as const;
 export const CLAUDE_THINKING_MODES = ['adaptive', 'off'] as const;
 
 /**
- * The Gemini model, as a config value rather than a literal, so changing it is an
- * env edit and a restart (section 9). `gemini-3.1-flash-lite` is the first thing
- * to try if quality disappoints, and the version numbers do not order those two
- * the way they look.
- */
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.5-flash-lite';
-
-/**
  * The Claude model, effort and thinking that the evaluation of 2026-10-22 chose
  * (plan 0224, section 10): Sonnet scored one point more for seventeen times the
- * cost, and effort `medium` scored the same as `low` and was slower.
+ * cost, and effort `medium` scored the same as `low` and was slower. The model
+ * is a config value rather than a literal, so changing it is an env edit and a
+ * restart.
  */
 export const DEFAULT_CLAUDE_MODEL = 'claude-haiku-5-5';
 export const DEFAULT_CLAUDE_EFFORT: (typeof CLAUDE_EFFORTS)[number] = 'low';
 export const DEFAULT_CLAUDE_THINKING: (typeof CLAUDE_THINKING_MODES)[number] =
   'adaptive';
 
-/** Google's public endpoint. Overridable so a fake can be pointed at in dev. */
-export const DEFAULT_GEMINI_BASE_URL =
-  'https://generativelanguage.googleapis.com/v1beta';
+/**
+ * The model that checks each reply before it leaves (plan 0236, section 4.1).
+ * One word of output with thinking off, so the smallest model is the right one.
+ */
+export const DEFAULT_MODERATION_MODEL = 'claude-haiku-5-5';
 
-/** Anthropic's public endpoint. Overridable for the same reason. */
+/**
+ * Whether each reply is checked (plan 0236, section 4.3). `off` is for a self
+ * hoster whose deployment no minor uses; Velista runs it `on`.
+ */
+export const MODERATION_SWITCH = ['on', 'off'] as const;
+
+/**
+ * The number the distress sentence names (plan 0236, section 3.2): the
+ * emergency number of Spain and the whole EU. A self hoster elsewhere sets
+ * their own.
+ */
+export const DEFAULT_EMERGENCY_NUMBER = '112';
+
+/** Anthropic's public endpoint. Overridable so a fake can be pointed at in dev. */
 export const DEFAULT_ANTHROPIC_BASE_URL = 'https://api.anthropic.com/v1';
 
 /**
@@ -128,28 +134,18 @@ export const assistantValidationSchema = Joi.object({
   GATEWAY_INTERNAL_URL: Joi.string().required(),
 
   /**
-   * Empty is a supported deployment, not a misconfiguration. See the file
-   * comment, and `OPTIONAL_EMPTY_KEYS` in provision-release.sh.
-   */
-  GEMINI_API_KEY: Joi.string().allow('').default(''),
-  GEMINI_BASE_URL: Joi.string().allow('').default(''),
-
-  /**
-   * The provider switch and the Claude keys (plan 0224, section 5).
+   * The Claude keys (plan 0224, section 5).
    *
    * Every one of them allows `''`, and empty means the shipped default. The
    * chart writes the effort and the thinking empty, and the slot script writes
    * all of them empty, so a `valid()` without `allow('')` would kill the service
-   * at boot on the ordinary configuration, the trap the transcription model's
-   * comment below describes.
+   * at boot on the ordinary configuration, the trap `TRANSCRIBER_URL`'s comment
+   * below describes.
    *
-   * `ANTHROPIC_API_KEY` may be empty by the rule `GEMINI_API_KEY` follows: with
-   * the switch on `claude` and no key, the turn answers 501 not_configured.
+   * An empty `ANTHROPIC_API_KEY` is a supported deployment, not a
+   * misconfiguration: every turn answers 501 not_configured. See the file
+   * comment, and `OPTIONAL_EMPTY_KEYS` in provision-release.sh.
    */
-  ASSISTANT_PROVIDER: Joi.string()
-    .valid(...ASSISTANT_PROVIDERS)
-    .allow('')
-    .default('gemini'),
   ANTHROPIC_API_KEY: Joi.string().allow('').default(''),
   ANTHROPIC_BASE_URL: Joi.string().allow('').default(''),
   ASSISTANT_CLAUDE_EFFORT: Joi.string()
@@ -161,12 +157,19 @@ export const assistantValidationSchema = Joi.object({
     .allow('')
     .default(DEFAULT_CLAUDE_THINKING),
 
-  /**
-   * The model that answers a turn. Empty means the provider's own default:
-   * {@link DEFAULT_GEMINI_MODEL} or {@link DEFAULT_CLAUDE_MODEL}. A literal
-   * default here would send a Gemini name to Claude the day the switch flips.
-   */
+  /** The model that answers a turn. Empty means {@link DEFAULT_CLAUDE_MODEL}. */
   ASSISTANT_MODEL: Joi.string().allow('').default(''),
+
+  /**
+   * The moderation pass after each turn (plan 0236, section 4). All three allow
+   * `''`, which means the shipped default, because the chart writes them empty.
+   */
+  ASSISTANT_MODERATION: Joi.string()
+    .valid(...MODERATION_SWITCH)
+    .allow('')
+    .default('on'),
+  ASSISTANT_MODERATION_MODEL: Joi.string().allow('').default(''),
+  ASSISTANT_EMERGENCY_NUMBER: Joi.string().allow('').default(''),
 
   /**
    * Where the deployment's own transcriber listens (plan 0235, section 7).
@@ -256,16 +259,18 @@ export interface AssistantConfig {
   natsUrl: string;
   logLevel: (typeof LOG_LEVELS)[number];
   gatewayInternalUrl: string;
-  geminiApiKey: string;
-  geminiBaseUrl: string;
-  /** Which provider answers a turn. Neither hears (plan 0235). */
-  provider: AssistantProviderName;
   anthropicApiKey: string;
   anthropicBaseUrl: string;
   claudeEffort: (typeof CLAUDE_EFFORTS)[number];
   claudeThinking: (typeof CLAUDE_THINKING_MODES)[number];
-  /** The model that answers a turn, already resolved for the provider. */
+  /** The model that answers a turn, already resolved to the default. */
   model: string;
+  /** Whether each reply is checked before it leaves (plan 0236, section 4). */
+  moderation: boolean;
+  /** The model that checks it, already resolved to the default. */
+  moderationModel: string;
+  /** The number the distress sentence names (plan 0236, section 3.2). */
+  emergencyNumber: string;
   /** The transcriber's base url, or empty where none runs (plan 0235). */
   transcriberUrl: string;
   transcriberTurnTimeoutMs: number;
@@ -291,23 +296,22 @@ function trimmed(raw: string | undefined, fallback: string): string {
 }
 
 /**
- * The model name, from the raw key and the provider (plan 0224, section 5).
+ * The model names, from the raw keys (plan 0224, section 5; plan 0236).
  *
- * An empty `ASSISTANT_MODEL` is the provider's own default. There is no second
- * name for transcription any more: no model provider hears since plan 0235, and
- * the transcriber names its own models.
+ * An empty `ASSISTANT_MODEL` is {@link DEFAULT_CLAUDE_MODEL}, and an empty
+ * `ASSISTANT_MODERATION_MODEL` is {@link DEFAULT_MODERATION_MODEL}. There is no
+ * name for transcription: no model provider hears since plan 0235, and the
+ * transcriber names its own models.
  *
  * Exported for its own spec.
  */
 export function resolveAssistantModels(env: {
-  provider: AssistantProviderName;
   model?: string;
-}): { model: string } {
+  moderationModel?: string;
+}): { model: string; moderationModel: string } {
   return {
-    model: trimmed(
-      env.model,
-      env.provider === 'claude' ? DEFAULT_CLAUDE_MODEL : DEFAULT_GEMINI_MODEL
-    ),
+    model: trimmed(env.model, DEFAULT_CLAUDE_MODEL),
+    moderationModel: trimmed(env.moderationModel, DEFAULT_MODERATION_MODEL),
   };
 }
 
@@ -339,10 +343,6 @@ export function normalizeMimeType(raw: string): string {
 export const assistantConfiguration = registerAs(
   'assistant',
   (): AssistantConfig => {
-    const provider = trimmed(
-      process.env.ASSISTANT_PROVIDER,
-      'gemini'
-    ) as AssistantProviderName;
     return {
       port: Number(process.env.PORT ?? 3006),
       natsUrl: process.env.NATS_URL as string,
@@ -354,12 +354,6 @@ export const assistantConfiguration = registerAs(
         /\/+$/,
         ''
       ),
-      geminiApiKey: (process.env.GEMINI_API_KEY ?? '').trim(),
-      geminiBaseUrl: trimmed(
-        process.env.GEMINI_BASE_URL,
-        DEFAULT_GEMINI_BASE_URL
-      ).replace(/\/+$/, ''),
-      provider,
       anthropicApiKey: (process.env.ANTHROPIC_API_KEY ?? '').trim(),
       anthropicBaseUrl: trimmed(
         process.env.ANTHROPIC_BASE_URL,
@@ -374,9 +368,14 @@ export const assistantConfiguration = registerAs(
         DEFAULT_CLAUDE_THINKING
       ) as AssistantConfig['claudeThinking'],
       ...resolveAssistantModels({
-        provider,
         model: process.env.ASSISTANT_MODEL,
+        moderationModel: process.env.ASSISTANT_MODERATION_MODEL,
       }),
+      moderation: trimmed(process.env.ASSISTANT_MODERATION, 'on') !== 'off',
+      emergencyNumber: trimmed(
+        process.env.ASSISTANT_EMERGENCY_NUMBER,
+        DEFAULT_EMERGENCY_NUMBER
+      ),
       transcriberUrl: (process.env.TRANSCRIBER_URL ?? '')
         .trim()
         .replace(/\/+$/, ''),

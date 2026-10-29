@@ -11,8 +11,9 @@
  * The shape here is deliberately close to what a tool calling chat API actually
  * exchanges (a conversation of typed parts, a catalog of function declarations,
  * a reply that is either text or a request to call something), rather than an
- * abstraction over "an assistant". Swapping Gemini for another provider is a new
- * implementation of this file's interface and nothing else.
+ * abstraction over "an assistant". Swapping Claude for another provider is a new
+ * implementation of this file's interface and nothing else, once that provider's
+ * terms allow a service that minors use (plan 0236, section 9).
  */
 
 /** The injection token, so nothing above this layer names a concrete provider. */
@@ -47,15 +48,17 @@ export interface ModelToolCall {
    * back, unread and unchanged, when the call's result is fed in.
    *
    * It is deliberately untyped beyond `string` and this layer never looks inside
-   * one. Gemini calls it a thought signature and **rejects the next request with
-   * a 400 when a replayed function call arrives without it**, which is what made
-   * every turn that actually did something answer 500; another provider may call
-   * it something else or nothing at all, which is why it is optional and why the
-   * name here describes the job rather than the vendor.
+   * one. Claude carries the raw content of its reply here, thinking blocks
+   * included, and **rejects the next request with a 400 when a replayed tool
+   * using turn has lost them**. The first provider this seam had did the same
+   * with what it called a thought signature, which is what made every turn that
+   * actually did something answer 500. Another provider may call it something
+   * else or nothing at all, which is why it is optional and why the name here
+   * describes the job rather than the vendor.
    *
-   * Not every call in a turn carries one: with several calls in one reply Gemini
-   * signs the first and leaves the rest bare. So this round trips **per call, as
-   * it arrived** — never invented, never copied from a sibling.
+   * Not every call in a turn carries one: Claude puts it on the first call of a
+   * reply and leaves the rest bare. So this round trips **per call, as it
+   * arrived**, never invented and never copied from a sibling.
    */
   signature?: string;
 }
@@ -94,7 +97,31 @@ export interface ModelRequest {
   tools: ModelToolDeclaration[];
   /** BCP 47, from `Accept-Language` (section 7). The reply is in this language. */
   locale: string;
+  /**
+   * `turn` (the default) when a person waits for the answer, `moderation` when
+   * the request checks a reply that is already written (plan 0236, section 4).
+   *
+   * Only the provider reads it, as only the transcriber reads a transcription's
+   * purpose: it picks the model, the ceiling, the thinking and the deadline. The
+   * service builds a moderation request with no tools and no history, so the
+   * neutral shape here needs nothing else to carry it.
+   */
+  purpose?: ModelRequestPurpose;
 }
+
+export type ModelRequestPurpose = 'turn' | 'moderation';
+
+/**
+ * How long a moderation request may take before the reply it checks is dropped
+ * (plan 0236, section 4.2). The provider aborts its call at this deadline, and
+ * the service fails closed.
+ *
+ * Eight seconds, not the five the build started with: in about 121 checks the
+ * build measured one at 4.3 s, one at 4.7 s and one that hit 5 s and dropped
+ * a good reply (section 13). The chart's `slowPaths` budget for the assistant
+ * counts it.
+ */
+export const MODERATION_TIMEOUT_MS = 8000;
 
 /** What the provider reports it spent, when it reports anything (section 10). */
 export interface ModelUsage {

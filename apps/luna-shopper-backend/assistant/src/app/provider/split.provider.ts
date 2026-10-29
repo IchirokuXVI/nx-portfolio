@@ -10,8 +10,9 @@ import type {
  * A provider that answers with one model and hears with another (plan 0224,
  * section 3; plan 0235, section 7).
  *
- * Every deployment is one of these since plan 0235. The text provider (Gemini
- * or Claude) answers, and the hearing is the self hosted transcriber
+ * Every deployment is one of these since plan 0235. The text provider (Claude,
+ * the only one since plan 0236) answers and checks each reply, and the hearing
+ * is the self hosted transcriber
  * (`WhisperProvider`) or, where none runs, `NoHearing`. No audio goes to a model
  * provider any more, and `AssistantService` needs no change to know that two
  * providers exist: it keeps reading one object.

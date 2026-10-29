@@ -140,7 +140,7 @@ On `luna-slot.sh`, `--down --keep-data` keeps the databases of this slot and **l
 
 **A second run never overwrites your edits.** The scripts rewrite only the keys that the slot decides. `DERIVED_KEYS` in each script names them. These edits thus survive a second run and a slot move:
 
-- A pasted `GEMINI_API_KEY`.
+- A pasted `ANTHROPIC_API_KEY`.
 - A `HARVEST_ENABLED` that you set for a crawl.
 - A base URL that points at a local recording.
 

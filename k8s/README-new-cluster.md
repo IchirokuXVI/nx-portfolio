@@ -28,8 +28,8 @@ and **root stays reachable until the replacement accounts are proven** (section
 - The VPS address and its root password or key.
 - Control of the domain's DNS records.
 - Admin on the GitHub repository and `gh auth login`, to create its environments (section 7).
-- Optionally, a Google OAuth client secret, an SMTP password and a Gemini API
-  key. All three are supported as blank: the Google routes and registration
+- Optionally, a Google OAuth client secret, an SMTP password and an Anthropic
+  API key. All three are supported as blank: the Google routes and registration
   answer 501, and so does `/v1/assistant`, rather than a service failing to
   start. A cluster with none of them is a working cluster with three features off.
 - An S3 compatible bucket and a key for backups, one bucket per environment
@@ -200,7 +200,7 @@ Two things `.app` adds that `ichirokuxvi.com` did not:
 ## 5. Secrets
 
 **In an interactive shell on the box, as the admin user.** The script prompts for
-the Google client secret, the SMTP password and the Gemini API key (each only when
+the Google client secret, the SMTP password and the Anthropic API key (each only when
 the Secret holds no value for it yet). A piped or `ssh host "..."` invocation
 takes its "not a terminal" branch and leaves all three as they are, which on a new
 cluster means unset.
@@ -521,8 +521,11 @@ deploy step. Chart owned objects are now checked against the render, so the
 preflight passes on a freshly provisioned cluster and the first deploy creates
 the ConfigMap. Fixed in the same change: `GOOGLE_CLIENT_SECRET` and `SMTP_PASS`
 left blank at the prompts were counted as failures, though plan 0026 makes both
-a supported configuration. `GEMINI_API_KEY` later joined them under the same rule
-(plan 0039). Only those three may be empty. Every other key must still carry a
+a supported configuration. The assistant's provider key later joined them under
+the same rule (plan 0039), and it is `ANTHROPIC_API_KEY` since plan 0236. The
+eight `LEGAL_*` keys of the operator Secret are optional too (plan 0231), so
+`OPTIONAL_EMPTY_KEYS` in `provision-release.sh` names eleven keys, and those
+eleven are the only ones that may be empty. Every other key must still carry a
 value, and one that does not now reads `EMPTY` rather than `MISSING`.
 
 **A step works by hand and fails from CI.** CI arrives through
