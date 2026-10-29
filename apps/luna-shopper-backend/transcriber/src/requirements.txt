@@ -5,7 +5,7 @@
 faster-whisper==1.2.1
 fastapi==0.115.12
 uvicorn==0.34.2
-python-multipart==0.0.20
+python-multipart==0.0.31
 psutil==7.0.0
 
 annotated-types==0.8.0
