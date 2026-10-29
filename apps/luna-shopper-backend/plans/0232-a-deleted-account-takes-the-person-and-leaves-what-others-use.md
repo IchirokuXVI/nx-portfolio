@@ -1,3 +1,5 @@
+> **PR:** [#854](https://github.com/IchirokuXVI/nx-portfolio/pull/854)
+
 # 0232: a deleted account takes the person and leaves what others use
 
 > Deleting an account removes the `users` row in auth, and the cascade there is complete.
