@@ -1,3 +1,5 @@
+> **PR:** [#864](https://github.com/IchirokuXVI/nx-portfolio/pull/864)
+
 # 0173: a person accepts the terms when an account is made
 
 > Asked for by the owner on 2026-10-27, with plan `0172` (the two documents) and backend
