@@ -1,3 +1,5 @@
+> **PR:** [#855](https://github.com/IchirokuXVI/nx-portfolio/pull/855)
+
 # 0170: a typed name already on the list
 
 > Asked for by the owner on 2026-10-27, with backend `0228`. The owner picked the mocks in

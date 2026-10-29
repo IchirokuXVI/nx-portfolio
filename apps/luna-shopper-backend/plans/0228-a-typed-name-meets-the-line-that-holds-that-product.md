@@ -1,3 +1,5 @@
+> **PR:** [#855](https://github.com/IchirokuXVI/nx-portfolio/pull/855)
+
 # 0228: a typed name meets the line that holds that product
 
 > Asked for by the owner on 2026-10-27: "if you have a single line with a specific product in
