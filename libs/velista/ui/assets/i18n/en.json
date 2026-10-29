@@ -797,6 +797,13 @@
         "alreadyQuantity": "How many of {{line}}"
       }
     },
+    "addChoice": {
+      "title": "{{name}} is already on your list",
+      "newLine": "A new line",
+      "row": "Add {{added}} to {{name}}, {{product}}: {{from}} to {{to}}",
+      "rowNoProduct": "Add {{added}} to {{name}}: {{from}} to {{to}}",
+      "merged": "{{name}}, {{quantity}}"
+    },
     "empty": {
       "title": "Nothing on this list yet",
       "body": "Write the first thing and everyone here sees it",
@@ -1904,6 +1911,10 @@
       "listCaption": "{{zone}} · {{count}} to buy",
       "resultsOnLists": "On your lists",
       "resultsNone": "Nothing on your lists says “{{query}}”"
+    },
+    "addChoice": {
+      "title": "{{name}} is already on this list",
+      "back": "{{list}}, pick another list"
     },
     "added": {
       "announced": "{{content}} added"

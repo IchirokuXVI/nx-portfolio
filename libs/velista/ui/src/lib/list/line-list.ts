@@ -94,6 +94,7 @@ interface RowBand {
             [line]="line"
             [match]="matchOf(line)"
             [reordering]="reordering()"
+            [took]="tookId() === line.id"
           />
         </li>
       }
@@ -127,6 +128,12 @@ export class LineList {
    * scroll to, which is a fact about the DOM that only this template can state.
    */
   readonly markedId = input<string | null>(null);
+
+  /**
+   * The line an add just raised, whose quantity takes an amber edge while it is set
+   * (velista `0170`, target 4). The container clears it, as it clears the mark.
+   */
+  readonly tookId = input<string | null>(null);
 
   /**
    * The search, folded, or the empty string (velista `0082`, section 6).

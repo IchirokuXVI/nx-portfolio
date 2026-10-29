@@ -121,4 +121,90 @@ describe('ListPicker', () => {
     expect(reasons).toEqual(['escape']);
     expect(document.activeElement).toBe(anchor);
   });
+
+  /**
+   * Velista `0170`, target 6: after a pick, the question of which line takes the
+   * popover's place, held against the same button, with the list as the way back.
+   */
+  describe('the second question', () => {
+    const CHOICE = {
+      name: 'Leche entera',
+      listName: 'Compra semanal',
+      added: 1,
+      rows: [
+        {
+          lineId: 'line-a',
+          name: 'Leche entera',
+          product: 'Hacendado · 1 L',
+          imageUrl: null,
+          from: 2,
+          to: 3,
+        },
+        {
+          lineId: 'line-b',
+          name: 'Leche entera',
+          product: null,
+          imageUrl: null,
+          from: 0,
+          to: 1,
+        },
+      ],
+    };
+    const lines = () => [
+      ...document.querySelectorAll<HTMLButtonElement>('.pop .row'),
+    ];
+
+    it('takes the place of the lists, in the same popover, labelled by its own title', async () => {
+      const fixture = await render();
+      open(fixture);
+
+      fixture.componentRef.setInput('choice', CHOICE);
+      fixture.detectChanges();
+
+      expect(options()).toHaveLength(0);
+      expect(lines()).toHaveLength(3);
+      expect(document.querySelectorAll('.pop')).toHaveLength(1);
+      expect(document.querySelector('.pop .back')?.textContent).toContain(
+        'Compra semanal'
+      );
+      const dialog = document.querySelector('[role="dialog"]');
+      const title = document.querySelector('.pop .title');
+      expect(title?.textContent).toContain('basket.addChoice.title');
+      expect(dialog?.getAttribute('aria-labelledby')).toBe(title?.id);
+    });
+
+    it('answers with the line, a new line, or back to the lists', async () => {
+      const fixture = await render();
+      const picked: string[] = [];
+      let fresh = 0;
+      let back = 0;
+      fixture.componentInstance.choseLine.subscribe((id) => picked.push(id));
+      fixture.componentInstance.choseNewLine.subscribe(() => (fresh += 1));
+      fixture.componentInstance.backToLists.subscribe(() => (back += 1));
+      open(fixture);
+      fixture.componentRef.setInput('choice', CHOICE);
+      fixture.detectChanges();
+
+      lines()[1]?.click();
+      lines()[2]?.click();
+      (document.querySelector('.pop .back') as HTMLButtonElement).click();
+
+      expect(picked).toEqual(['line-b']);
+      expect(fresh).toBe(1);
+      expect(back).toBe(1);
+    });
+
+    it('draws the lists again once the question is taken away', async () => {
+      const fixture = await render();
+      open(fixture);
+      fixture.componentRef.setInput('choice', CHOICE);
+      fixture.detectChanges();
+
+      fixture.componentRef.setInput('choice', null);
+      fixture.detectChanges();
+
+      expect(lines()).toHaveLength(0);
+      expect(options()).toHaveLength(2);
+    });
+  });
 });

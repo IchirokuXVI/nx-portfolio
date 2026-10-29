@@ -7983,6 +7983,16 @@
               }
             }
           },
+          "409": {
+            "description": "`line_add_needs_choice` — This list already has more than one line called \"{content}\". Choose the line to add to, or add a new line.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -11282,7 +11292,7 @@
             }
           },
           "409": {
-            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_add_needs_choice` — This list already has more than one line called \"{content}\". Choose the line to add to, or add a new line.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -30152,6 +30162,19 @@
             "type": "string",
             "format": "uuid",
             "description": "The catalog product group this set came from (plan 0070, section 9), which subscribes the line to it: products the group gains later appear on the line, and products it loses go, unless somebody has adopted or removed them. The server takes the set as sent and never re-derives it from the group, so the line holds exactly what the suggestion said it would add."
+          },
+          "askIfAmbiguous": {
+            "type": "boolean",
+            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "intoLineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "newLine": {
+            "type": "boolean",
+            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId."
           }
         },
         "required": [
@@ -30699,6 +30722,19 @@
             "type": "boolean",
             "default": true,
             "description": "Whether a person typed the content (plan 0207), as the list’s own add takes it. False is kept only when the line holds a product."
+          },
+          "askIfAmbiguous": {
+            "type": "boolean",
+            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "intoLineId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+          },
+          "newLine": {
+            "type": "boolean",
+            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId."
           }
         },
         "required": [
@@ -46294,6 +46330,7 @@
               "line_merge_required",
               "line_merge_needs_approval",
               "line_merge_too_many_products",
+              "line_add_needs_choice",
               "brand_label_empty",
               "brand_key_taken",
               "brand_link_to_self",
@@ -46369,7 +46406,7 @@
           "details": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Machine readable facts about this occurrence. Present only when `code` is `line_merge_required`. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null."
+            "description": "Machine readable facts about this occurrence. Present when `code` is `line_merge_required` or `line_add_needs_choice`, the two codes whose bag is described here. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null. For `line_add_needs_choice` it carries `lines`, the lines of the list that hold a product under the typed name, in list position order and at most 10 of them (`lineId`, `content`, `named`, `quantity`, `itemIds`, `productGroupId`, `approvalStatus`): send the add again with `intoLineId` set to one of them, or with `newLine` true."
           }
         }
       },
