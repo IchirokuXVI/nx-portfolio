@@ -1,4 +1,4 @@
-import { FakeModelProvider } from './fake-model.provider';
+import { FAKE_AUDIO_SECONDS, FakeModelProvider } from './fake-model.provider';
 import { ModelTurnRole } from './model-provider';
 import { SplitModelProvider } from './split.provider';
 
@@ -18,6 +18,7 @@ describe('SplitModelProvider', () => {
     audio: new Uint8Array([1, 2, 3]),
     mimeType: 'audio/webm',
     locale: 'es',
+    purpose: 'turn' as const,
   };
 
   it('answers a turn with the first provider only', async () => {
@@ -41,7 +42,10 @@ describe('SplitModelProvider', () => {
       RECORDING
     );
 
-    expect(heard).toBe('añade leche');
+    expect(heard).toEqual({
+      text: 'añade leche',
+      audioSeconds: FAKE_AUDIO_SECONDS,
+    });
     expect(hearing.transcriptions).toEqual([RECORDING]);
     expect(turns.transcriptions).toHaveLength(0);
   });
@@ -59,7 +63,7 @@ describe('SplitModelProvider', () => {
   });
 
   it('hears only when the hearing provider has a key and takes audio', () => {
-    // A Claude key and no Gemini key: an assistant with no microphone.
+    // A text key and no transcriber: an assistant with no microphone.
     const turns = new FakeModelProvider();
     turns.transcriptionSupported = false;
     const hearing = new FakeModelProvider();

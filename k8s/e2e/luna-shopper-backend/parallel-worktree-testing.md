@@ -49,7 +49,7 @@ workflow (no slot flag needed = slot 0).
 
 Within a block the offsets group by kind, so a slot stays readable: services at
 `+0`, databases at `+10`, the `test` profile's databases at `+14`, messaging at `+20`, cache at `+30`, mail at `+40`,
-observability at `+50`.
+observability at `+50`. The transcriber of `--voice` sits with the services at `+7`.
 
 |                     | slot 0 (yours)         | slot 1        | slot 2        | slot 3        | …   |
 | ------------------- | ---------------------- | ------------- | ------------- | ------------- | --- |
@@ -484,6 +484,29 @@ On the front end side the backend is worked out rather than assumed when
 `--backend-slot` is left off: a choice already recorded, else the luna slot this
 same worktree runs, else the only gateway listening, else slot 0. See
 `tools/dev/README.md`.
+
+### Voice, per slot: `--voice`
+
+Spoken turns and voice comments are transcribed by the transcriber (backend plan
+0235), a Python container under the `voice` profile of `compose.apps.yml`. A slot
+runs without it, and then its assistant's `TRANSCRIBER_URL` is empty, so the voice
+route answers 501 and a voice comment settles `UNAVAILABLE`, which is voice off and
+nothing broken. The transcriber takes two CPUs and about 2.5 GB, so start it only to
+work on voice:
+
+```sh
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --up --voice
+bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up 7 --services gateway,auth,core,assistant --voice
+```
+
+`--voice` builds the image from the checkout, starts it on the slot's port (`+7`,
+3007 on slot 0), waits for `/health/ready`, and writes its address into the
+assistant's `TRANSCRIBER_URL`, which is a derived key. An `--up` without `--voice`
+writes it empty again and stops the container. A `--restart` keeps what the slot
+had, and `--down` removes the container. The models live on one external volume,
+`luna-transcriber-models`, shared by every slot and never removed by a `--down`:
+the first start downloads about 2 GB into it, and every later start loads them in
+seconds.
 
 ### Traces and metrics, per slot
 

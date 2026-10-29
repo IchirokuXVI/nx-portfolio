@@ -11,6 +11,7 @@ import {
   type ModelToolCall,
   type ModelTurn,
   type ModelUsage,
+  type Transcription,
 } from './model-provider';
 
 /**
@@ -42,8 +43,9 @@ export interface ClaudeRequestOptions {
  * was written for, and nothing above it changed to admit it.
  *
  * **It cannot hear.** The Messages API has no audio content block, so
- * {@link transcriptionSupported} is false and a deployment that answers with
- * Claude wraps this class in a `SplitModelProvider` that transcribes with Gemini.
+ * {@link transcriptionSupported} is false, and the module wraps this class in a
+ * `SplitModelProvider` whose hearing is the deployment's own transcriber (plan
+ * 0235).
  */
 @Injectable()
 export class ClaudeProvider implements ModelProvider {
@@ -83,7 +85,7 @@ export class ClaudeProvider implements ModelProvider {
    * (plan 0224, section 2.5). It throws rather than answering an empty string,
    * because empty means "the recording had nothing in it", which would be a lie.
    */
-  async transcribe(): Promise<string> {
+  async transcribe(): Promise<Transcription> {
     throw new ProviderUnavailableError('this provider cannot transcribe');
   }
 

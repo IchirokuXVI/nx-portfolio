@@ -27,13 +27,25 @@ import { NatsClient } from '../messaging/nats-client';
 const ATTEMPTS = 2;
 
 /**
- * How long the second attempt waits. One short pause, not a backoff curve.
+ * How long the second attempt waits at least. One short pause, not a backoff
+ * curve.
  *
  * Exported so the spec waits on this number instead of a literal of its own: a
  * test that hard codes the pause passes for the wrong reason the moment somebody
  * tunes it, and fails for a reason that looks like a product bug.
  */
 export const RETRY_DELAY_MS = 1500;
+
+/**
+ * The longest the second attempt waits on a rate limit's own number.
+ *
+ * A `rate_limited` answer says how long to wait, and the transcriber's full
+ * queue says ten seconds (plan 0235, section 16). Waiting less makes the second
+ * attempt `busy` too, and the comment settles `FAILED` while the queue drains.
+ * The cap keeps a wrong number from holding this task open: each attempt still
+ * has its own `transcribeTimeoutMs`, and the pause between them is at most this.
+ */
+export const MAX_RETRY_DELAY_MS = 30_000;
 
 /**
  * The gateway's half of "store first, transcribe after" (plan 0045, section 4.1).
@@ -59,8 +71,8 @@ export const RETRY_DELAY_MS = 1500;
  * where the provider was never asked. A comment that stayed `PENDING` because
  * this service crashed between the two calls is the one bad state, and it is why
  * `UNAVAILABLE` is decided **before** the provider is called rather than inferred
- * from a failure: a deployment with no key settles every voice comment in the
- * same tick it was created.
+ * from a failure: a deployment with no transcriber settles every voice comment
+ * in the same tick it was created.
  */
 @Injectable()
 export class CommentTranscriptionService {
@@ -143,6 +155,10 @@ export class CommentTranscriptionService {
               // a NATS header because the assistant reads this one first: by the
               // time this runs the request that carried the header is answered.
               locale,
+              // Nobody is waiting on a comment's words, so the transcriber runs
+              // it on its accurate model and behind every spoken turn (plan
+              // 0235, section 4).
+              purpose: 'comment',
             }
           ),
           this.voice.transcribeTimeoutMs
@@ -163,7 +179,7 @@ export class CommentTranscriptionService {
         }
 
         if (attempt < ATTEMPTS) {
-          await delay(RETRY_DELAY_MS);
+          await delay(retryDelayMs(error));
         }
       }
     }
@@ -189,6 +205,35 @@ function isNotConfigured(error: unknown): boolean {
     (candidate) =>
       (candidate as { code?: unknown })?.code === ERROR_CODES.NOT_CONFIGURED
   );
+}
+
+/**
+ * The pause before the next attempt: the fixed one, or the wait a rate limit
+ * named when that is longer, up to {@link MAX_RETRY_DELAY_MS}.
+ *
+ * The assistant's `rate_limited` envelope carries `retryAfterSeconds` (rule
+ * A5), nested under `error` or not, the two shapes {@link isNotConfigured}
+ * reads.
+ */
+export function retryDelayMs(error: unknown): number {
+  const candidates = [error, (error as { error?: unknown })?.error];
+  for (const candidate of candidates) {
+    const problem = candidate as {
+      code?: unknown;
+      retryAfterSeconds?: unknown;
+    };
+    if (
+      problem?.code === ERROR_CODES.RATE_LIMITED &&
+      typeof problem.retryAfterSeconds === 'number' &&
+      Number.isFinite(problem.retryAfterSeconds)
+    ) {
+      return Math.min(
+        MAX_RETRY_DELAY_MS,
+        Math.max(RETRY_DELAY_MS, problem.retryAfterSeconds * 1000)
+      );
+    }
+  }
+  return RETRY_DELAY_MS;
 }
 
 function delay(ms: number): Promise<void> {

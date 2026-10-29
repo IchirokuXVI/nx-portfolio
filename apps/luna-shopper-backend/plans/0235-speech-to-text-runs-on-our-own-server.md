@@ -1,3 +1,5 @@
+> **PR:** [#858](https://github.com/IchirokuXVI/nx-portfolio/pull/858)
+
 # 0235: speech to text runs on our own server
 
 > Every recording a person makes in the app goes to Google today. A spoken assistant turn
@@ -132,8 +134,10 @@ describe the whole job.
 ### Acceptance criteria
 
 - [ ] `apps/luna-shopper-backend/transcriber` holds `project.json`, `src/app.py`,
-      `src/queue.py`, `src/requirements.txt`, `src/Dockerfile`, `src/test_app.py`, and a
-      README of what to set to run it.
+      `src/clip_queue.py`, `src/requirements.txt`, `src/requirements-test.txt`,
+      `src/Dockerfile`, `src/test_app.py`, and a README of what to set to run it. The
+      queue is not `queue.py`: a module of that name beside `app.py` shadows the
+      standard library `queue` that `concurrent.futures` imports (section 16).
 - [ ] The HTTP contract of section 3 and the queue of section 4, with tests.
 - [ ] `WhisperProvider` exists, with a spec; Gemini's `transcriptionSupported` is false and
       its `transcribe` is gone; the module always binds a split whose hearing is
@@ -174,12 +178,17 @@ output.
 ### 2.1 Where it lives
 
 `apps/luna-shopper-backend/transcriber`, project name `luna-shopper-backend-transcriber`,
-tags `["deploy:velista", "type:dynamic-docker"]`. Beside the other six backend services
-and not under `apps/docker`, because it is part of Luna Shopper's backend: a self hoster
-who deploys the backend deploys it with the rest, and the staging and release pipelines
-pick it up by the `deploy:velista` tag like every backend image (`stage-unit.yml:105`). The
-`type:dynamic-docker` tag says that it is a Dockerfile with no Nx build of its own, which
-is what `CLAUDE.md` asks of a non Node image.
+tags `["deploy:velista"]`. Beside the other six backend services and not under
+`apps/docker`, because it is part of Luna Shopper's backend: a self hoster who deploys
+the backend deploys it with the rest, and the staging and release pipelines pick it up
+by the `deploy:velista` tag like every backend image (`stage-unit.yml:105`).
+
+It carries no `type:dynamic-docker` tag, which this section first asked for. In
+`tools/deploy/units.mjs` that tag marks a workspace artifact outside every unit (the
+builder and the nginx base image, k8s plan 0014 D2): the project would leave
+`units.mjs images`, so the weekly image scan would never scan it and `redeploy.yml`
+would never check that its image exists at the version it deploys. No workflow reads
+the tag for anything else (section 16).
 
 ### 2.2 The image
 
@@ -295,7 +304,12 @@ downloaded on the first start and kept.
   `local-path`, 5 Gi, beside the Postgres volumes. The revisions are pinned
   (`TRANSCRIBER_MODEL_REVISIONS`, a Hugging Face commit per model, filled in by the
   builder), so a new upload of a model on Hugging Face cannot change the transcripts of a
-  running deployment.
+  running deployment. The build pinned the revisions already on the owner's bench:
+  `small` is `Systran/faster-whisper-small` at
+  `536b0662742c02347bc0e980a01041f333bce120`, and `large-v3-turbo` is
+  `mobiuslabsgmbh/faster-whisper-large-v3-turbo` at
+  `0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf`. They are the service's defaults, and
+  `TRANSCRIBER_MODEL_REVISIONS` (`name=commit,...`) adds to or replaces them.
 
 For a host with no internet access, the README says how to copy a `models` folder into
 the volume. That is documentation, not code.
@@ -318,8 +332,9 @@ Two CPUs because that is what the bench measured and `cpu_threads` 2 is tuned fo
 2,560 Mi because both models resident took 1.6 GB, decoding a five minute clip to float32
 is another 20 MB, and the rest is headroom against the OOM killer. The production node
 goes from 2,560m to 4,560m requested of eight cores. Whether its memory holds another
-2.5 Gi was **not verified**; the builder reads `kubectl describe node` on production
-before the first deploy and names the free memory in the PR.
+2.5 Gi was **not verified**, and the build did not verify it either: the builder had
+no access to any cluster. The owner reads `kubectl describe node` on production before
+the first deploy (section 16).
 
 `replicas: 1`, `strategy: Recreate`: two pods would each need the models in memory and
 the volume is `ReadWriteOnce`. A deploy is a minute without voice, which the assistant
@@ -333,15 +348,19 @@ already says as a failed transcription.
 | Assistant, `comment` | `TRANSCRIBER_COMMENT_TIMEOUT_MS`, 110,000 | A full queue of turns ahead of it, then 90 s of audio on turbo. |
 | Gateway, voice comment | `VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS`, raised from 45,000 to 120,000 | It must outlast the assistant's own deadline, or the gateway gives up on an answer that is still coming. |
 
-The assistant sends its remaining time as `X-Deadline-Ms`. A transcriber `503` or `504`
-is a `ProviderUnavailableError`, which the gateway's existing second attempt
-(`comment-transcription.service.ts:27`) already covers for a comment, and which a spoken
-turn answers with the sentence it already has for an unavailable provider.
+The assistant sends its remaining time as `X-Deadline-Ms`. A transcriber `503` (the
+queue is full) is a `ProviderRateLimitedError` with its `retryAfterSeconds`, as
+section 7 says, and a `504` is a `ProviderUnavailableError`. The gateway's existing
+second attempt (`comment-transcription.service.ts:27`) covers both for a comment, and
+after a rate limit it waits the seconds the limit named (section 16). A spoken turn
+answers a rate limit with its `rate_limited` problem and an unavailable transcriber
+with the sentence it already has for an unavailable provider.
 
-Whether the NATS request from the gateway carries a default timeout of its own shorter
-than 120 s was **not verified** (`gateway/src/app/messaging/nats-client.ts:30` to `:44`
-passes none). The builder checks it against `@nestjs/microservices` and the spec of
-section 11 covers it.
+The NATS request from the gateway carries no timeout of its own: `NatsClient.send`
+adds an rxjs `timeout` only when a caller passes `timeoutMs`, the comment path passes
+none, and Nest's `ClientProxy.send` waits forever. The gateway's own race against
+`VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS` is the only deadline on that leg, and the spec of
+section 11 asserts that its default stays above the assistant's 110,000.
 
 ## 7. The assistant
 
@@ -359,9 +378,14 @@ section 11 covers it.
   `transcriptionSupported` false. It is what the split holds when there is no transcriber.
 - `assistant.module.ts` always binds `SplitModelProvider(turns, hearing)`: `turns` is the
   configured text provider as today, `hearing` is `WhisperProvider` or `NoHearing`.
-  `GeminiProvider.transcriptionSupported` becomes `false` and its `transcribe`,
-  `toGeminiTranscriptionRequest` and their specs are deleted. `ASSISTANT_TRANSCRIPTION_MODEL`
-  is removed from `app-config.ts` and `resolveAssistantModels` (`:191`, `:299` to `:315`).
+  `GeminiProvider.transcriptionSupported` becomes `false`, and the Gemini audio code
+  is deleted with its specs: `toTranscriptionRequest` (the code's name for what this
+  plan called `toGeminiTranscriptionRequest`), `TRANSCRIPTION_INSTRUCTION` and
+  `readTranscription`. `ModelProvider` still requires a `transcribe`, so Gemini keeps
+  the one line `ClaudeProvider` has: it throws `ProviderUnavailableError` and is never
+  reached, because both callers read the flag first. `ASSISTANT_TRANSCRIPTION_MODEL`
+  is removed from `app-config.ts`, `resolveAssistantModels`, the chart, compose and the
+  slot script (`:191`, `:299` to `:315`).
 - `main.ts:79` to `:85` warns "the assistant answers and cannot hear" when
   `TRANSCRIBER_URL` is empty, instead of when `GEMINI_API_KEY` is.
 
@@ -409,7 +433,8 @@ caps are a second check, after decoding, that the assistant cannot do.
   `values.homelab.yaml`: nothing, so the default `false` holds.
 - `templates/luna-shopper-backend/transcriber.yaml.tpl`, new, wrapped in
   `if .Values.lunaShopperBackend.transcriber.enabled`: a Deployment, a ClusterIP Service
-  named `luna-shopper-backend-transcriber`, and the PVC. Its own template and not an entry
+  named `luna-shopper-backend-transcriber` on port 3007 (the other services listen on
+  80, and `TRANSCRIBER_URL` names 3007), and the PVC. Its own template and not an entry
   in the services list, because the shared Deployment template injects the Node
   environment and Node's probe paths (`deployment.yaml.tpl:98` to `:125`), none of which
   applies. It takes the shared `imagePullSecrets` and image tag helpers. The PVC carries
@@ -533,3 +558,164 @@ the new timeout.
 8. `transcribe` returns `{ text, audioSeconds }`.
 9. Tests in a Docker build stage, so CI needs no Python.
 10. No gateway key for the flag: it comes from `hears` over `0231`'s `assistant.capabilities`.
+
+## 16. What the build decided
+
+The builder's choices where the plan left room, and the measurements it asked for. Each
+choice is the owner's to change.
+
+1. **The project has the tag `deploy:velista` and no `type:dynamic-docker`** (section 2.1).
+   `tools/deploy/units.mjs` reads the `type:*-docker` tags as "workspace artifact, in no
+   unit" (`WORKSPACE_ARTIFACT_TAGS` at `:88`, skipped at `:120`), so the transcriber
+   would have left `units.mjs images`: the image scan would not scan it and
+   `redeploy.yml` would not check that its image exists. No workflow reads the tag for
+   anything else. `units.mjs check` passes with the velista unit at ten projects. The
+   review kept this, and `CLAUDE.md` now says the tag is for the `apps/docker` wrappers
+   only.
+2. **The queue is `src/clip_queue.py`, not `src/queue.py`.** `app.py` runs with its own
+   directory first on the import path, and a local `queue.py` replaces the standard
+   library module that `concurrent.futures` imports.
+3. **Every Python package is pinned, the transitive ones too.** `requirements.txt` is
+   the bench's five pins plus the 27 packages they pull in, installed with `--no-deps`
+   and checked with `pip check`, so a package missing from the list fails the build. The
+   test stage has its own pinned `requirements-test.txt` (pytest and httpx). The base is
+   `python:3.12-slim` pinned by digest, like the Node images. `ffmpeg` comes from apt at
+   build time and is the one unpinned part.
+4. **Two error codes beyond section 3.** `400 invalid_request` answers an unknown
+   purpose, an unknown language and a missing field: FastAPI's own 422 echoes the input,
+   and the input is a recording. `500 failed` answers a model error, logged by its
+   exception type only. The assistant maps every 400 to a `ValidationException`, so a
+   comment the transcriber cannot read is tried once more and then settles `FAILED`.
+5. **`503 busy` says `retryAfterSeconds: 10`**, a fixed number
+   (`TRANSCRIBER_BUSY_RETRY_SECONDS`), not an estimate from the queue.
+6. **The deadline is the assistant's own timeout for the purpose**: `X-Deadline-Ms` is
+   45,000 for a turn and 110,000 for a comment. A clip that started before its deadline
+   runs to the end and is answered, even late, because a running clip is never
+   interrupted.
+7. **The language is the first two letters of the locale**, and `auto` when the locale
+   has none. The transcriber accepts every code whisper knows, so a third locale needs no
+   change here.
+8. **`TRANSCRIBER_PRELOAD=false` means readiness does not wait**, and a model loads on its
+   first clip. With preload on (the default), a model that fails to load is logged by
+   error type and tried again every 30 seconds.
+9. **The pinned revisions load with no network.** A container with `--network none` and
+   the bench's models on its volume was ready in about 2 seconds. That is the path the
+   README describes for a host with no internet access.
+10. **Gemini keeps a one line `transcribe` that throws**, like `ClaudeProvider`, because
+    `ModelProvider` still requires it (section 7).
+11. **A transcription still needs the text provider configured.** `transcribe` checks
+    `configured` before `transcriptionSupported`, as before, so `hears` stays
+    `answers && transcriptionSupported` (plan `0231`, section 10.2). A deployment with a
+    transcriber and no text key transcribes nothing, and its policy says so.
+12. **The module exports `buildModelProvider` and `hearingFrom`.** The capability spec
+    builds its providers through the module's own factory, and `0236` names
+    `hearingFrom` for the same choice.
+13. **The chart's Service listens on 3007**, the port `TRANSCRIBER_URL` names, where the
+    other backend Services listen on 80. `TRANSCRIBER_THREADS` is the pod's CPU limit.
+    The pod has `fsGroup: 1000`, so the first download can write the volume. There is no
+    PodDisruptionBudget: with one replica, `minAvailable: 1` would block every node drain.
+14. **Compose builds the transcriber from the checkout** (tag
+    `luna-shopper-backend-transcriber:local`) with 2 CPUs and 2,560m, a healthcheck on
+    `/health/ready` and a `start_period` of 600 seconds for the first download. Without
+    the `voice` profile, compose neither builds it nor asks for its external volume: the
+    gate stack's `up` and `pull` were checked with the volume absent.
+15. **`--voice` in `luna-slot.sh`.** An `--up` with it writes `TRANSCRIBER_URL`, records
+    `LUNA_VOICE=1` in `.env.slot`, creates `luna-transcriber-models` when it is absent and
+    waits for the container's health. An `--up` without it writes the URL empty and stops
+    the container. A `--restart` keeps what the slot had, and `--restart --voice` turns it
+    on and restarts the assistant too. `--down` removes the container and keeps the
+    volume. The transcriber's port is reserved in `slot_ports`, so a slot running only the
+    transcriber is not free, and `--list` has no column for it. `--ephemeral` works with
+    all of it, because the compose call reads the slot's own descriptor.
+16. **The gateway spec of section 11 is in `lists/voice-comments.spec.ts`**, which is the
+    spec of `comment-transcription.service.ts`. It asserts `purpose: 'comment'` and that
+    the default `VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS` is 120,000, above the assistant's
+    110,000. `luna-slot.sh` writes 120,000 into a new gateway `.env`; an existing one
+    keeps its 45,000 until `--reset-env`.
+17. **The image is 1.47 GB unpacked and 366 MB compressed**: ffmpeg and its libraries are
+    457 MB, the Python packages 504 MB.
+18. **`vad_filter` stays on.** Measured with the transcriber image on this machine, at
+    the bench's settings (2 CPUs, int8, beam 1), and not in the bench's own container,
+    whose folder the build did not touch. Three runs each:
+
+    | Clip | Model | VAD on | VAD off |
+    | --- | --- | --- | --- |
+    | 10 s of silence | `small` | 10 to 38 ms, empty | 1,027 to 1,140 ms, "y y y y y y y y y y y y y y" |
+    | 10 s of silence | `large-v3-turbo` | 11 ms, empty | 2,930 to 3,146 ms, "Gracias por ver el video." |
+    | 6.4 s spoken turn | `small` | 1,018 to 1,149 ms | 1,011 to 1,124 ms |
+    | 59.5 s spoken comment | `large-v3-turbo` | 9,990 to 10,189 ms | 9,943 to 10,204 ms |
+
+    On speech the filter costs nothing measurable and the words are the same. On silence
+    it is the difference between an empty transcript and a sentence nobody said.
+19. **Through an ephemeral slot 7 with `--voice`** (gateway, auth, core and assistant):
+    - the spoken turn (6.4 s, `small`): `waitMs` 0, `transcribeMs` 1,210, the voice route
+      answered 201 in 1,416 ms;
+    - the voice comment (59.5 s, `large-v3-turbo`): `waitMs` 0, `transcribeMs` 10,094; the
+      upload answered 201 in 147 ms and the comment settled `READY` 12.3 s later;
+    - a spoken turn sent one second after a comment started: `waitMs` 9,212,
+      `transcribeMs` 1,060, the voice route answered in 10,433 ms, and the comment
+      settled `READY` as well;
+    - the transcriber held 1.27 GB with both models loaded and idle, and 1.51 GiB of its
+      2.5 GiB after the clips. Its log has no word of either transcript.
+
+    The slot had no text key, and a spoken turn answers 501 before it hears without one,
+    so the assistant there ran with a local stand in for Gemini's endpoint that answered
+    every turn with one fixed sentence. The transcription half was the real one.
+20. **The clips were synthesized**, with `espeak-ng`'s Spanish voice in a throwaway
+    container, encoded as Opus in WebM at 32 kbit/s; the silent clip is ffmpeg's
+    `anullsrc`. Nobody recorded them. `large-v3-turbo` wrote the 60 second comment almost
+    word for word; `small` got the robotic 6 second sentence badly wrong ("Ya no nos
+    litros, no leche..."), where `large-v3-turbo` got it right. Whether `small` is good
+    enough for real speech is a question for a human recording, before the first deploy.
+21. **The models on the slot came from the bench**, copied into `luna-transcriber-models`,
+    so the time of a first download was not measured.
+22. **Not verified, for the owner before the first production deploy:**
+    - the free memory of the production node (section 6.1): the build had no cluster;
+    - the first production deploy waits for `/health/ready` inside
+      `deploy-release.sh`'s `--wait --timeout 10m`, so a 2 GB download slower than about
+      nine minutes fails that deploy while the pod goes on downloading. Seeding the claim
+      first (README) or running the deploy again avoids it.
+
+The review added the rest. Items 23 and 24 change `.github/workflows`, which is
+**outside this plan's scope** (section "Scope" of the brief). They are in this build
+because without them the plan cannot deploy: every velista staging deploy and every
+velista release that names the transcriber would fail. The owner can reject the
+widening, and then the plan waits for a separate change to both files.
+
+23. **The pipelines check the Node bundles by target, not by name.** `stage-unit.yml` and
+    `release-unit.yml` built the list for `assert-runtime-manifest.mjs` with
+    `grep -E '^luna-shopper-backend-'` over the images, and the transcriber has no
+    `dist`, so the step failed with `ENOENT`. Both now ask Nx for the unit's projects
+    with a `manifest-check` target (`list --with-target manifest-check --projects
+    "tag:deploy:$UNIT"`, the affected scope included on staging), which names the seven
+    Node services and nothing else.
+24. **The transcriber's tests run on the runner in both pipelines.** The lint and test
+    job runs `nx run-many -t lint test` inside `BUILD_IMAGE`, which has no `docker`, and
+    the transcriber's `test` is a `docker build`. The in container run now passes
+    `--exclude luna-shopper-backend-transcriber`, and a step on the runner runs
+    `nx run luna-shopper-backend-transcriber:test` when the testable list names it, as
+    `pr.yml` already does. A failure of either half fails the job, so the deploy waits
+    on both as before.
+25. **A comment's second attempt waits as long as a rate limit says.** A full
+    transcriber queue answers `503` with `retryAfterSeconds: 10`, the assistant turns it
+    into `rate_limited` with that number, and the gateway waited a fixed 1.5 s, so the
+    second attempt found the queue full too and the comment settled `FAILED`. The
+    gateway now waits the larger of 1.5 s and the named seconds, at most 30 s
+    (`MAX_RETRY_DELAY_MS`). Each attempt keeps its own
+    `VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS`. Section 6.2 said a `503` was a
+    `ProviderUnavailableError`; it is a `ProviderRateLimitedError`, as section 7 and the
+    code have it, and 6.2 now says so.
+26. **The transcriber's deadline covers the body.** The abort timer was cleared when the
+    headers arrived, so a body that never ended had no deadline. It is now cleared after
+    the body is read, and a body cut by the deadline is a `ProviderUnavailableError`
+    that names the timeout.
+27. **`--voice` on a running slot leaves the slot consistent.** The transcriber starts or
+    stops only after the services started. A slot that already runs refuses them, so
+    `--up` then changes no container and prints the one command that applies the new
+    `TRANSCRIBER_URL`: `--restart --services assistant`, with `--voice` to turn voice
+    on. A `--restart` that restarts the assistant without voice also stops a transcriber
+    left from before.
+28. **`TRANSCRIBER_THREADS` reads a Kubernetes CPU quantity.** The chart passes the CPU
+    limit as written, and `int()` refused `1500m`. `cpu_threads` rounds up (`1500m` and
+    `1.5` are 2, `2` is 2) and refuses anything else with a message that names the
+    value, so a self hoster's `cpu: '1500m'` boots.

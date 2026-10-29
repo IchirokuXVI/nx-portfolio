@@ -6,8 +6,8 @@ import {
 } from './app-config';
 
 /**
- * The two model fallbacks of plan 0224, section 5, and the empty values the
- * chart and the slot script write.
+ * The model fallback of plan 0224, section 5, and the empty values the chart and
+ * the slot script write.
  */
 describe('resolveAssistantModels', () => {
   it('gives each provider its own default when ASSISTANT_MODEL is empty', () => {
@@ -20,27 +20,6 @@ describe('resolveAssistantModels', () => {
     expect(
       resolveAssistantModels({ provider: 'claude', model: 'claude-x' }).model
     ).toBe('claude-x');
-  });
-
-  it("transcribes with the turn's model when Gemini answers", () => {
-    expect(
-      resolveAssistantModels({ provider: 'gemini', model: 'gemini-x' })
-        .transcriptionModel
-    ).toBe('gemini-x');
-  });
-
-  it('transcribes with the default Gemini model when Claude answers', () => {
-    // A Claude name sent to the Gemini endpoint is a 404 on every spoken turn.
-    expect(
-      resolveAssistantModels({ provider: 'claude', model: 'claude-x' })
-        .transcriptionModel
-    ).toBe(DEFAULT_GEMINI_MODEL);
-    expect(
-      resolveAssistantModels({
-        provider: 'claude',
-        transcriptionModel: 'gemini-y',
-      }).transcriptionModel
-    ).toBe('gemini-y');
   });
 });
 
@@ -57,11 +36,22 @@ describe('assistantValidationSchema', () => {
         ASSISTANT_CLAUDE_EFFORT: '',
         ASSISTANT_CLAUDE_THINKING: '',
         ASSISTANT_MODEL: '',
+        TRANSCRIBER_URL: '',
       },
       { allowUnknown: true }
     );
 
     expect(error).toBeUndefined();
+  });
+
+  it('defaults to no transcriber, and to the timeouts of plan 0235', () => {
+    const { value } = assistantValidationSchema.validate(BASE, {
+      allowUnknown: true,
+    });
+
+    expect(value.TRANSCRIBER_URL).toBe('');
+    expect(value.TRANSCRIBER_TURN_TIMEOUT_MS).toBe(45000);
+    expect(value.TRANSCRIBER_COMMENT_TIMEOUT_MS).toBe(110000);
   });
 
   it('defaults to Gemini, and refuses a provider it does not know', () => {

@@ -159,8 +159,9 @@ export class ProviderUnavailableError extends Error {
  *
  * **Two callers, one seam.** A spoken assistant turn transcribes before running
  * the turn loop (plan 0041); a voice comment transcribes after the message is
- * already stored (plan 0045, section 4.1). Neither knows about the other, and
- * nothing here distinguishes them.
+ * already stored (plan 0045, section 4.1). Neither knows about the other.
+ * `purpose` is the one thing that tells them apart, and only the transcriber
+ * reads it: it picks the model and the lane (plan 0235, section 4).
  */
 export interface TranscriptionRequest {
   audio: Uint8Array;
@@ -168,6 +169,25 @@ export interface TranscriptionRequest {
   mimeType: string;
   /** BCP 47, the same locale the reply will be written in (section 2). */
   locale: string;
+  /**
+   * `turn` when somebody is waiting for an answer, `comment` when nobody is.
+   * A turn runs on the fast model and ahead of every comment (plan 0235).
+   */
+  purpose: TranscriptionPurpose;
+}
+
+export type TranscriptionPurpose = 'turn' | 'comment';
+
+/**
+ * What a recording said, and how long it was (plan 0235, section 7).
+ *
+ * `audioSeconds` is measured by the transcriber after decoding, so it is the
+ * length of the speech and not a guess from the byte count. Plan 0234 counts it
+ * against a person's allowance.
+ */
+export interface Transcription {
+  text: string;
+  audioSeconds: number;
 }
 
 export interface ModelProvider {
@@ -199,7 +219,7 @@ export interface ModelProvider {
   generate(request: ModelRequest): Promise<ModelReply>;
 
   /**
-   * The recording, as the words in it, or an empty string when the provider
+   * The recording, as the words in it, or an empty `text` when the provider
    * heard nothing.
    *
    * Empty is a real answer and not an error: it means the recording had nothing
@@ -213,5 +233,5 @@ export interface ModelProvider {
    * same problem body, with the same number in it, that a rate limited typed turn
    * produces.
    */
-  transcribe(request: TranscriptionRequest): Promise<string>;
+  transcribe(request: TranscriptionRequest): Promise<Transcription>;
 }

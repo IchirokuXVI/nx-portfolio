@@ -85,6 +85,13 @@ export interface AssistantTranscribeRequest {
   mimeType: string;
   /** BCP 47, the same locale a reply would be written in. */
   locale: string;
+  /**
+   * Who is waiting for the words (plan 0235, section 8). `comment` for a voice
+   * comment, which the transcriber runs on its accurate model and behind every
+   * spoken turn. Optional, and `turn` when absent, so a gateway one release
+   * behind the assistant still works.
+   */
+  purpose?: 'turn' | 'comment';
 }
 
 /**

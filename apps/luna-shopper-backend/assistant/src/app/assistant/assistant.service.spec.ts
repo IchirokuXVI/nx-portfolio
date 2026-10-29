@@ -30,6 +30,8 @@ import {
   ProviderRateLimitedError,
   type ModelProvider,
 } from '../provider/model-provider';
+import { NoHearing } from '../provider/no-hearing.provider';
+import { SplitModelProvider } from '../provider/split.provider';
 import {
   ANSWERED_WITHOUT_WORDS,
   AssistantService,
@@ -266,7 +268,9 @@ const CONFIG: AssistantConfig = {
   claudeEffort: 'low',
   claudeThinking: 'adaptive',
   model: DEFAULT_GEMINI_MODEL,
-  transcriptionModel: DEFAULT_GEMINI_MODEL,
+  transcriberUrl: 'http://transcriber.invalid',
+  transcriberTurnTimeoutMs: 45000,
+  transcriberCommentTimeoutMs: 110000,
   audioMaxBytes: 2 * 1024 * 1024,
   audioMimeTypes: ['audio/webm', 'audio/ogg', 'audio/mp4'],
   maxTurns: 20,
@@ -1453,6 +1457,8 @@ describe('AssistantService', () => {
       const answer = await service.voice(voiceRequest(2048));
 
       expect(provider.transcriptions).toHaveLength(1);
+      // Somebody is waiting: the fast model, ahead of every comment (plan 0235).
+      expect(provider.transcriptions[0].purpose).toBe('turn');
       expect(provider.requests).toHaveLength(1);
       // The transcription became the message, and nothing else came with it.
       const spoken = provider.requests[0];
@@ -1800,10 +1806,12 @@ describe('AssistantService.transcribe', () => {
       audio: AUDIO,
       mimeType: 'audio/webm;codecs=opus',
       locale: 'es',
+      purpose: 'comment',
     });
 
     expect(heard.text).toBe('Bring the big one');
     expect(provider.transcriptions).toHaveLength(1);
+    expect(provider.transcriptions[0].purpose).toBe('comment');
     // The negotiated type as the browser produced it, parameters and all: the
     // container is what decides whether this works, and tidying the string here
     // would only hide the answer.
@@ -1901,6 +1909,110 @@ describe('AssistantService.transcribe', () => {
     expect(retryAfterSecondsOf(error as never)).toBe(
       CONFIG.retryAfterFallbackSeconds
     );
+  });
+
+  it('takes a request with no purpose as a turn, so an older gateway still works', async () => {
+    const provider = new FakeModelProvider().willHear('hola');
+    const service = build(provider, new RecordingApi());
+
+    await service.transcribe({
+      audio: AUDIO,
+      mimeType: 'audio/webm',
+      locale: 'es',
+    });
+
+    expect(provider.transcriptions[0].purpose).toBe('turn');
+  });
+
+  it('does not wait on the provider gate (plan 0235, section 4)', async () => {
+    // One provider slot, held by a turn that has not answered. A transcription
+    // is not a provider call any more, so it completes while the slot is held.
+    const provider = new FakeModelProvider().willHear('hola', 'añade leche');
+    const service = build(provider, new RecordingApi(), { concurrency: 1 });
+    const gate = (
+      service as unknown as {
+        gate: { run<T>(task: () => Promise<T>): Promise<T> };
+      }
+    ).gate;
+    let release: () => void = () => undefined;
+    const held = gate.run(
+      () => new Promise<void>((resolve) => (release = resolve))
+    );
+
+    await expect(
+      service.transcribe({
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'es',
+        purpose: 'comment',
+      })
+    ).resolves.toEqual({ text: 'hola' });
+
+    // A spoken turn hears while the slot is held too; only its answer waits.
+    const spoken = service.voice(voiceRequest(512));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(provider.transcriptions).toHaveLength(2);
+    expect(provider.requests).toHaveLength(0);
+
+    release();
+    await held;
+    await spoken.catch(() => undefined);
+  });
+});
+
+/**
+ * A deployment with no transcriber (plan 0235, section 7): the module binds a
+ * split whose hearing is {@link NoHearing}. Voice is off and says so the way it
+ * always could, a 501 on both paths, while a typed turn still answers.
+ */
+describe('a deployment with no transcriber', () => {
+  const AUDIO = Buffer.from('not really audio').toString('base64');
+
+  function deaf(turns: FakeModelProvider): AssistantService {
+    return build(
+      new SplitModelProvider(turns, new NoHearing()),
+      new RecordingApi(),
+      { transcriberUrl: '' }
+    );
+  }
+
+  it('answers not_configured to a spoken turn', async () => {
+    const service = deaf(new FakeModelProvider());
+
+    const error = await service
+      .voice(voiceRequest(1024))
+      .catch((thrown: unknown) => thrown);
+
+    expect(isDomainException(error)).toBe(true);
+    expect((error as { code: string }).code).toBe('not_configured');
+  });
+
+  it('answers not_configured to a voice comment, so it settles UNAVAILABLE at once', async () => {
+    const service = deaf(new FakeModelProvider());
+
+    const error = await service
+      .transcribe({
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'es',
+        purpose: 'comment',
+      })
+      .catch((thrown: unknown) => thrown);
+
+    expect((error as { code: string }).code).toBe('not_configured');
+  });
+
+  it('still answers a typed turn, and says it cannot hear', async () => {
+    const turns = new FakeModelProvider([FakeModelProvider.says('Hola.')]);
+    const service = deaf(turns);
+
+    const answer = await service.turn(turnRequest('hola'));
+
+    expect(answer.reply).toBe('Hola.');
+    expect(service.capabilities()).toMatchObject({
+      answers: true,
+      hears: false,
+    });
   });
 });
 

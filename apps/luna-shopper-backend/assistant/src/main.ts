@@ -76,11 +76,13 @@ async function bootstrap() {
         'answers 501 not_configured. This is a supported deployment (plan 0026).'
     );
   }
-  if (config.provider === 'claude' && config.geminiApiKey.length === 0) {
+  // Voice is one value (plan 0235, section 9): the chart writes TRANSCRIBER_URL
+  // exactly where it runs the transcriber, and no model provider hears.
+  if (config.transcriberUrl.length === 0) {
     logger.warn(
-      'GEMINI_API_KEY is empty: the assistant answers and cannot hear. Claude ' +
-        'takes no audio, so the voice route answers 501 and a voice comment ' +
-        'settles UNAVAILABLE (plan 0224, section 3).'
+      'TRANSCRIBER_URL is empty: the assistant answers and cannot hear. The ' +
+        'voice route answers 501 and a voice comment settles UNAVAILABLE, which ' +
+        'is a supported deployment (plan 0235, section 7).'
     );
   }
   // A slot or deployment that switched to claude keeps the ASSISTANT_MODEL it
