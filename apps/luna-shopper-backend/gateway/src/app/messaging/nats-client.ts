@@ -5,10 +5,20 @@ import {
   getRequestContext,
   traceNatsSend,
 } from '@portfolio/luna-shopper/platform';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, timeout } from 'rxjs';
 
 /** Injection token for the gateway's NATS request/reply client. */
 export const NATS_CLIENT = 'NATS_CLIENT';
+
+/** How one {@link NatsClient.send} behaves beyond its subject and payload. */
+export interface NatsSendOptions {
+  /**
+   * Give up after this many milliseconds with an rxjs `TimeoutError`. Nest's
+   * client waits forever by default. The timeout runs inside the observable, so
+   * giving up also unsubscribes from the reply and nothing is left waiting.
+   */
+  timeoutMs?: number;
+}
 
 /**
  * The gateway's request/reply bridge to the backend services (plan 0004,
@@ -29,7 +39,8 @@ export class NatsClient {
 
   send<TResponse, TRequest extends object = object>(
     subject: string,
-    payload: TRequest
+    payload: TRequest,
+    options: NatsSendOptions = {}
   ): Promise<TResponse> {
     const context = getRequestContext();
     return traceNatsSend(subject, () => {
@@ -41,7 +52,12 @@ export class NatsClient {
           })
         )
         .build();
-      return firstValueFrom(this.client.send<TResponse>(subject, record));
+      const reply = this.client.send<TResponse>(subject, record);
+      return firstValueFrom(
+        options.timeoutMs === undefined
+          ? reply
+          : reply.pipe(timeout(options.timeoutMs))
+      );
     });
   }
 }

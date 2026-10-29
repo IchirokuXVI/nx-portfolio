@@ -16,9 +16,11 @@ export const CAPABILITIES_POLL_MS = 60 * 1000;
 
 /**
  * How long one question may take. Nest's NATS client waits forever, and a
- * question that never returns must not hold the next one back.
+ * question that never returns must not hold the next one back. The timeout
+ * runs inside the observable, so a question given up on is also unsubscribed:
+ * an assistant that takes the question and never answers leaves nothing behind.
  */
-const CAPABILITIES_TIMEOUT_MS = 5 * 1000;
+export const CAPABILITIES_TIMEOUT_MS = 5 * 1000;
 
 /**
  * What the assistant can do, asked once at boot and every minute after (plan
@@ -64,20 +66,12 @@ export class AssistantCapabilitiesProbe
       return;
     }
     this.inFlight = true;
-    let timeout: ReturnType<typeof setTimeout> | undefined;
     try {
-      this.last = await Promise.race([
-        this.nats.send<AssistantCapabilities>(
-          ASSISTANT_PATTERNS.capabilities,
-          {}
-        ),
-        new Promise<never>((_, reject) => {
-          timeout = setTimeout(
-            () => reject(new Error('no answer within 5 s')),
-            CAPABILITIES_TIMEOUT_MS
-          );
-        }),
-      ]);
+      this.last = await this.nats.send<AssistantCapabilities>(
+        ASSISTANT_PATTERNS.capabilities,
+        {},
+        { timeoutMs: CAPABILITIES_TIMEOUT_MS }
+      );
     } catch (error) {
       this.logger.warn(
         `Could not ask the assistant what it can do; ${
@@ -85,7 +79,6 @@ export class AssistantCapabilitiesProbe
         }: ${describeError(error).message}`
       );
     } finally {
-      clearTimeout(timeout);
       this.inFlight = false;
     }
   }

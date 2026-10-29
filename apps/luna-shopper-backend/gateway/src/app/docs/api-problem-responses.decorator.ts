@@ -124,12 +124,16 @@ export interface ProblemResponseOptions {
    */
   recovery?: 'signIn' | 'operator';
   /**
-   * The route can create an account, or accepts the Terms (plan 0231, section
-   * 4.3): a stale version is a 409 of its own code, and a missing one a 400
-   * where the deployment requires acceptance. Both carry
-   * `details.currentVersion`.
+   * The route takes a Terms version (plan 0231, section 4.3). Both codes
+   * carry `details.currentVersion`:
+   *
+   * - `true`: the route can create an account, and its version is optional.
+   *   A stale version is a 409 of its own code, and a missing one a 400 where
+   *   the deployment requires acceptance.
+   * - `stale`: the route requires the version in its body, so a missing one is
+   *   a validation 400 and only the 409 can be answered.
    */
-  terms?: boolean;
+  terms?: boolean | 'stale';
 }
 
 const problemName = hoistProblemDetails();
@@ -261,10 +265,10 @@ export function ApiProblemResponses(
     );
   }
   if (options.terms) {
-    codes.push(
-      ERROR_CODES.TERMS_VERSION_STALE,
-      ERROR_CODES.TERMS_ACCEPTANCE_MISSING
-    );
+    codes.push(ERROR_CODES.TERMS_VERSION_STALE);
+  }
+  if (options.terms === true) {
+    codes.push(ERROR_CODES.TERMS_ACCEPTANCE_MISSING);
   }
   if (options.throttled !== false) {
     codes.push(ERROR_CODES.RATE_LIMITED);

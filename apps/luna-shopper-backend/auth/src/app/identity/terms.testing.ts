@@ -26,21 +26,29 @@ export interface RecordedTermsAcceptance {
 export class InMemoryTermsService extends TermsService {
   readonly rows: RecordedTermsAcceptance[] = [];
 
+  /** The config object the parent reads, kept so a spec can move the version. */
+  private readonly settings: {
+    currentVersion: string;
+    acceptanceRequired: boolean;
+  };
+
   constructor(
     options: { currentVersion?: string; acceptanceRequired?: boolean } = {}
   ) {
-    super(
-      null as never,
-      {
-        getOrThrow: () => ({
-          terms: {
-            currentVersion:
-              options.currentVersion ?? LEGAL_TEMPLATES.terms.version,
-            acceptanceRequired: options.acceptanceRequired ?? false,
-          },
-        }),
-      } as never
-    );
+    const settings = {
+      currentVersion: options.currentVersion ?? LEGAL_TEMPLATES.terms.version,
+      acceptanceRequired: options.acceptanceRequired ?? false,
+    };
+    super(null as never, { getOrThrow: () => ({ terms: settings }) } as never);
+    this.settings = settings;
+  }
+
+  /**
+   * Moves the current version, as a redeploy with another template or
+   * revision does.
+   */
+  moveCurrentVersion(version: string): void {
+    this.settings.currentVersion = version;
   }
 
   override async record(

@@ -1510,12 +1510,24 @@ export class IdentityService {
   }
 
   /**
-   * The profile every write and read of it answers, with the newest Terms
-   * acceptance beside it (plan 0231, section 4.4). Read after the caller's
-   * transaction has committed, through the pool.
+   * The profile every write and read of it answers, with a Terms acceptance
+   * beside it (plan 0231, section 4.4). Read after the caller's transaction has
+   * committed, through the pool.
+   *
+   * The acceptance is the row for the current version when the account has
+   * one, and the newest row otherwise. The newest row alone is wrong when the
+   * current version moves back to one the account already accepted (a rollback
+   * past a template bump, or the operator clearing the revision): the gateway
+   * would ask again, and accepting again would change nothing, because the
+   * insert keeps the old row and the newer version stays the newest.
    */
   private async profileOf(user: User): Promise<UserProfileView> {
-    const accepted = await this.terms.latest(user.id);
+    const accepted =
+      (await this.terms.find(
+        this.dataSource.manager,
+        user.id,
+        this.terms.currentVersion
+      )) ?? (await this.terms.latest(user.id));
     return {
       userId: user.id,
       kind: user.kind,
