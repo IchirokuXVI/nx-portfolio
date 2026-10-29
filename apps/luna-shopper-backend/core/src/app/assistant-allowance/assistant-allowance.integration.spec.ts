@@ -247,6 +247,38 @@ describeIntegration('the assistant allowance (real Postgres)', () => {
     expect(comment.outcome).toBe(AllowanceReserveOutcome.RESERVED);
   });
 
+  it('gives one of twenty turns at once to one person, also when they straddle midnight', async () => {
+    // Two days of their own, and the midnight between them: half of the
+    // reserves land on each day, so each half locks a different day row and
+    // only the person's own lock keeps them apart.
+    freshNoon();
+    const after = freshNoon();
+    const midnight = Date.UTC(
+      after.getUTCFullYear(),
+      after.getUTCMonth(),
+      after.getUTCDate()
+    );
+    const userId = someone();
+
+    const answers = await Promise.all(
+      Array.from({ length: 20 }, (_, i) =>
+        service.reserve(
+          request(userId),
+          new Date(midnight + (i % 2 === 0 ? -500 : 500))
+        )
+      )
+    );
+
+    expect(
+      answers.filter((a) => a.outcome === AllowanceReserveOutcome.RESERVED)
+    ).toHaveLength(1);
+    expect(
+      answers.filter(
+        (a) => a.outcome === AllowanceReserveOutcome.TURN_IN_FLIGHT
+      )
+    ).toHaveLength(19);
+  });
+
   it('settles the real amounts on the reservation day, and releases the hold', async () => {
     const now = freshNoon();
     const day = now.toISOString().slice(0, 10);

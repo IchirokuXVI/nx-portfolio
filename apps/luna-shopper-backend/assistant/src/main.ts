@@ -10,7 +10,7 @@ import { NestFactory } from '@nestjs/core';
 import { MicroserviceOptions, Transport } from '@nestjs/microservices';
 import { bootstrapPlatform } from '@portfolio/luna-shopper/platform';
 import { Logger } from 'nestjs-pino';
-import { worstTurn } from './app/allowance/reserve-amount';
+import { worstOutputAtTypicalInput } from './app/allowance/reserve-amount';
 import { AppModule } from './app/app.module';
 import type { AssistantConfig } from './app/config/app-config';
 import { hasPriceRow } from './app/provider/prices';
@@ -90,9 +90,6 @@ async function bootstrap() {
         'Run it on wherever a minor may use the app (plan 0236, section 4).'
     );
   }
-  // A slot or deployment configured before plan 0236 can keep an ASSISTANT_MODEL
-  // that names another vendor's model, and the Messages API fails every turn
-  // with it.
   // The allowance prices every reply (plan 0234, section 2.2). A model with no
   // row of its own is priced at the dearest row, which counts too much rather
   // than too little, and is named here.
@@ -104,16 +101,20 @@ async function bootstrap() {
       );
     }
   }
-  // A reserve below the worst turn lets one turn run past a person's limit
-  // before the settle charges it in full (plan 0234, section 5.2).
-  const worst = worstTurn(config);
+  // A reserve below the worst output at the typical input lets an ordinary
+  // long turn run past a person's limit before the settle charges it in full
+  // (plan 0234, section 5.2).
+  const worst = worstOutputAtTypicalInput(config);
   if (worst.totalMicroUsd > config.allowance.turnReserveMicroUsd) {
     logger.warn(
       `ASSISTANT_TURN_RESERVE_MICRO_USD is ${config.allowance.turnReserveMicroUsd}, ` +
-        `below the worst turn of ${worst.totalMicroUsd} micro dollars on ` +
-        `${config.model} (plan 0234, section 5.2).`
+        `below the worst output at the typical input, ${worst.totalMicroUsd} ` +
+        `micro dollars on ${config.model} (plan 0234, section 5.2).`
     );
   }
+  // A slot or deployment configured before plan 0236 can keep an ASSISTANT_MODEL
+  // that names another vendor's model, and the Messages API fails every turn
+  // with it.
   if (!config.model.startsWith('claude-')) {
     logger.warn(
       `ASSISTANT_MODEL is ${config.model}, which is not a Claude model: every ` +

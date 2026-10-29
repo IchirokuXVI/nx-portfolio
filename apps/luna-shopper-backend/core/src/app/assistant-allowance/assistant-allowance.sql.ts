@@ -7,14 +7,28 @@ import type { EntityManager } from 'typeorm';
  * rows in ascending day, then the deployment's day rows in ascending day. The
  * reserve, the settle, the expiry sweep and the account deletion all take them
  * in that order, so no two of them can wait on each other in a circle. The
- * deployment row is what serializes reservations across people; a person's row
- * is what serializes one person's.
+ * deployment row is what serializes reservations across people.
+ *
+ * A reserve and a settle take {@link LOCK_PERSON_SQL} before all of those, and
+ * that is what serializes one person's, whatever the day: two reserves either
+ * side of midnight lock different day rows, and only the person's own lock
+ * keeps the one turn in flight rule true between them. Nothing takes it after
+ * a row lock, so it cannot close a circle.
  *
  * Every `date` is read back as `::text`. The driver would otherwise turn it
  * into a `Date` at local midnight of the process, which is the one day in the
  * year a timezone difference moves it. Every `bigint` arrives as a string and
  * goes through `Number`, which is exact far beyond any amount here.
  */
+
+/**
+ * The person's own lock, held to the end of the transaction, taken first by a
+ * reserve and a settle. The two key form keeps it apart from any one key
+ * advisory lock; a hash that two people share only makes them wait on each
+ * other, which is harmless.
+ */
+export const LOCK_PERSON_SQL = `
+  SELECT pg_advisory_xact_lock(hashtext('assistant_allowance'), hashtext($1::text))`;
 
 export const ENSURE_PERSON_DAY_SQL = `
   INSERT INTO "assistant_usage_days" ("userId", "day")

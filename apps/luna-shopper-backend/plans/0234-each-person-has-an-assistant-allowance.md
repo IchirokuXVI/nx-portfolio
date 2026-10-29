@@ -88,7 +88,10 @@ describe the whole job.
 - The core migration applies and reverts on a real Postgres (an ephemeral slot, per
   `luna-backend-spec-traps`), and the integration spec of section 10.2 passes there.
 - A person over any limit gets `429 assistant_allowance_reached` with `details.scope`,
-  `details.period` and `details.resetsAt`, and no provider call is made.
+  `details.period` and `details.resetsAt`, and no provider call is made. (Amended at the
+  build: over any limit the request would add to. A counter the reservation adds zero to
+  is not checked, so a person over their cost limit still gets a voice comment
+  transcribed, which costs no money; section 15, item 11.)
 - `GET /v1/assistant/allowance` answers the person's usage and limits.
 - `openapi.json` and `wire-types.ts` are regenerated and committed.
 - The `luna-shopper-backend-e2e` suite passes unchanged: with no key the assistant still
@@ -226,7 +229,8 @@ A transcription by the self hosted transcriber (`0235`) costs zero. Gemini is go
   allowance is a rule about a person. The assistant already talks NATS
   (`app-config.ts:121`). One more request per turn costs 2 to 12 ms in a cluster (measured
   for the backend's NATS hops, memory note `luna-slot-hop-stall-and-tracing`), against a
-  turn of 2.4 s.
+  turn of 2.4 s. (Amended at the build: two more requests per turn, the reserve and the
+  settle, so 4 to 24 ms; section 15, item 19.)
 
 Core does not learn what a turn said. It sees a user id, numbers and a day.
 
@@ -290,13 +294,18 @@ picks the limits by the person's kind and sends them, so core never sees the kin
 (section 15, item 6). In one transaction:
 
 1. Upsert today's person row and today's deployment row, then lock both with
-   `SELECT ... FOR UPDATE`, person first, always in that order.
+   `SELECT ... FOR UPDATE`, person first, always in that order. (Amended at the build:
+   before any row, the reserve and the settle take a transaction advisory lock on the
+   person, so two reserves either side of midnight, which lock different day rows, still
+   wait for each other; section 15, item 19.)
 2. Release any of this person's reservations past `expires_at` (section 5.4).
 3. Read the month's sums for the person and the deployment.
 4. Check, in this order, and stop at the first that does not fit: person turns per day,
    per month; person audio seconds per day, per month (assistant or comment audio by
    purpose); person cost per day, per month; deployment cost per day, per month. A
-   counter fits when `used + reserved + this <= limit`.
+   counter fits when `used + reserved + this <= limit`. (Amended at the build: a counter
+   the reservation adds zero to is not checked, so not every counter is; section 15, item
+   11.)
 5. If all fit, add `this` to the reserved columns, insert the reservation row, and answer
    `{ reservationId }`. If one does not, answer `{ refused: { scope, period, limit,
    resetsAt } }` and change nothing.
@@ -325,7 +334,12 @@ model calls (one plus `ASSISTANT_MAX_TOOL_CALLS` of 6, `app-config.ts:212`), eac
 4,096 output tokens and about 6,400 input tokens (`0224` section 10). At the Haiku row that
 is about $0.019. The builder recomputes this from the price table and the caps in a spec,
 so a cap or a price that moves fails a test instead of drifting. With the moderation call
-of `0236` the worst turn is 19,637 micro dollars (section 15, item 2).
+of `0236` the worst turn is 19,637 micro dollars (section 15, item 2). (Amended at the
+build: that number is the worst output at the typical input, not the worst turn. The
+6,400 input tokens are `0224`'s measured average and not a cap, and a later call of a
+turn reads the earlier calls' outputs again; with that growth a turn reaches about
+28,200 micro dollars at the Haiku row. The reserve is a typical worst case, and section
+15, item 2 says what bounds the rest.)
 
 ### 5.3 Settle
 
@@ -344,7 +358,8 @@ more) is charged in full: the settle never caps the real cost at the reservation
 
 A reservation expires `ASSISTANT_TURN_TIMEOUT_MS` plus 60 seconds after it was made
 (`app-config.ts:245`, default 60 s). A pod killed during a turn therefore holds a person's
-reservation for two minutes at most. Expiry releases the reserved amounts and charges
+reservation for two minutes at most. (Amended at the build: a voice comment's
+transcription holds for 170 s, its own deadline plus 60 s; section 15, item 13.) Expiry releases the reserved amounts and charges
 nothing: a pod that died mid turn may have spent money nobody recorded, and that is a gap
 of at most one reservation per killed turn, logged by the sweep.
 
@@ -486,7 +501,9 @@ itself, and the builder names them in the PR so that plan's builder sees them.
 - `prices.spec.ts`: the cost formula on the Haiku row, rounding up, `null` usage charged
   the reservation, an unknown model priced at the dearest row.
 - `reserve-amount.spec.ts`: the worst turn of section 5.2, recomputed from the caps and
-  the price table, is at most `ASSISTANT_TURN_RESERVE_MICRO_USD`.
+  the price table, is at most `ASSISTANT_TURN_RESERVE_MICRO_USD`. (Amended at the build:
+  what it proves is the worst output at the typical input, and the spec says so; section
+  15, item 2.)
 - `assistant.service.spec.ts`: a turn reserves after `takeTurn` and before the provider; a
   refusal makes no provider call and throws `AllowanceReachedException`; the settle runs
   on success, on a provider error and on a timeout; a 501 deployment reserves nothing;
@@ -580,15 +597,24 @@ and the moderation call counted inside the turn.
    `purpose` (with a check constraint), because `kind` already means `UserKind`; and a
    reservation has `createdAt`. Indexes: the day of the usage rows (retention), and the
    reservations' `expiresAt` and `userId`. Migration `1756004000000-AssistantAllowance`.
-2. **The worst turn, on today's caps and prices.** Seven calls at the Haiku row, each 6,400
-   input tokens priced as fresh and 4,096 output tokens: 640 + 2,048 = 2,688 micro dollars,
-   18,816 for seven. The moderation call reads its prompt (2,030 characters), the longest
-   typed message (2,000 characters, the gateway's cap) and the reply at its ceiling (4,096
-   tokens), each character counted as a token: 8,126 input tokens and 16 output, 821 micro
-   dollars. Total **19,637**, under the 20,000 reserve by 363. `reserve-amount.spec.ts`
-   recomputes it. The 6,400 is `0224`'s measured average and not a cap: a turn with a full
-   transcript and large tool results reads more, and the settle then charges what it cost.
-   The boot log warns when the configured model makes the worst turn exceed the reserve.
+2. **The worst output at the typical input, on today's caps and prices.** (Amended at the
+   review: the build called it the worst turn, and it is not.) Seven calls at the Haiku
+   row, each 6,400 input tokens priced as fresh and 4,096 output tokens: 640 + 2,048 =
+   2,688 micro dollars, 18,816 for seven. The moderation call reads its prompt (2,030
+   characters), the longest typed message (2,000 characters, the gateway's cap) and the
+   reply at its ceiling (4,096 tokens), each character counted as a token: 8,126 input
+   tokens and 16 output, 821 micro dollars. Total **19,637**, under the 20,000 reserve by
+   363. `reserve-amount.spec.ts` recomputes it as `worstOutputAtTypicalInput`. The 6,400 is
+   `0224`'s measured average and not a cap, and call k of a turn also reads the outputs of
+   the k calls before it: with that growth term the same turn is 130,816 input tokens and
+   about **28,239** micro dollars at the Haiku row. The spec computes that second number
+   and asserts only that it is finite; it is information, not a bound. **The reserve is a
+   typical worst case.** The settle never caps, so a turn that costs more is charged what it
+   cost. One turn in flight per person (item 19) and about four turns at once across two
+   pods (a concurrency of 2 each) bound the overrun to about one turn per person and about
+   4 × 8,000 micro dollars on the deployment ceiling. Raising the reserve is the owner's
+   call; this build kept 20,000. The boot log warns when the configured model makes this
+   number exceed the reserve.
 3. **The price table** (`provider/prices.ts`), in integer micro dollars per million tokens,
    checked on 2026-10-29 against the `claude-api` reference (cached 2026-10-06): Haiku 5.5
    0.10 in, 0.50 out, 0.01 cache read; Sonnet 5.5 2.00, 10.00 and **0.20** (plan `0226`
@@ -601,13 +627,18 @@ and the moderation call counted inside the turn.
    `cache_creation_input_tokens`, and the plan keeps the provider classes out of scope. A
    cold turn's write is about $0.0005; a follow up adds the field to `readUsage`.
 4. **What an unknown spend costs.** A reply with `usage: null` makes the turn cost at least
-   its reservation (section 2.2). A call that failed with a cause (a deadline, a dropped
-   connection) may have run, so it costs one call's worst case, 2,688; a moderation call
-   that threw costs its worst case, 821. A status the provider answered, a 429 included,
-   costs nothing. This keeps a provider outage from spending a whole reservation of every
+   its reservation (section 2.2). A call that failed may have run, so it costs one call's
+   worst case, 2,688, and counts the turn; a moderation call that threw costs its worst
+   case, 821. Only two failures are known to carry no bill and cost nothing: a status the
+   provider answered (a `ProviderUnavailableError` with no cause) and a 429. (Amended at
+   the review: the build charged only a failure with a cause, so a 200 whose body could not
+   be read, which the provider billed, settled zero.) This keeps a provider outage from spending a whole reservation of every
    person it touches. A turn counts one turn only when some model call was or may have been
    billed, so a turn refused by the provider's 429 counts none.
-5. **Audio.** A settle uses the transcriber's `audioSeconds`, rounded up. A clip the
+5. **Audio.** A settle uses the transcriber's `audioSeconds`, rounded up, when it is a
+   positive finite number, and the byte estimate otherwise: the transcriber client reads a
+   missing value as zero, and zero would make a heard recording free (amended at the
+   review). A clip the
    transcriber refused with a full queue counts zero seconds; any other failure keeps the
    estimate. A spoken turn that heard nothing counts its seconds and no turn.
 6. **The limits are chosen in the assistant.** Core receives `limits`, `timezone` and
@@ -626,7 +657,9 @@ and the moderation call counted inside the turn.
    the reserve amount would show five turns a day to a registered person with sixty.
 9. **Core not answering** is an `AllowanceUnavailableError`, which the filter answers as
    `internal` 500, logged as `assistant.allowance.unavailable`. There is no `unavailable`
-   code, and adding one is a client contract change this plan did not ask for.
+   code (`error-codes.ts` has no 503), and adding one is a client contract change this
+   plan did not ask for. A future `service_unavailable` would serve this and any other
+   dependency that does not answer.
 10. **One code, four sentences.** `assistant_allowance_reached` carries `messageArgs.variant`
     (`user.day`, `user.month`, `deployment.day`, `deployment.month`) and `messageArgs.time`;
     `ERROR_CATALOG_VARIANTS` in the platform picks the sentence, and an unknown variant falls
@@ -637,9 +670,11 @@ and the moderation call counted inside the turn.
     limit (a settle never caps a real cost) is not refused a voice comment's transcription,
     which costs no money.
 12. **Locks and chores.** Every write takes reservation rows first, then the person's day
-    rows in ascending day, then the deployment's. A reserve releases this person's expired
+    rows in ascending day, then the deployment's; a reserve and a settle take the person's
+    advisory lock before all of them (item 19). A reserve releases this person's expired
     reservations of any day (`SKIP LOCKED`). A sweep in core releases anybody's every minute,
-    logged as `assistant.allowance.reservationExpired`, so a killed pod does not leave the
+    logged as `assistant.allowance.reservationExpired` with the `microUsd` and
+    `audioSeconds` it released and nobody was charged, so a killed pod does not leave the
     deployment's day looking fuller. Once a day per pod it deletes a person's rows from
     before the first day of the previous month and deployment rows older than thirteen
     months; core has no timezone, so both cutoffs are a day earlier than the UTC date says.
@@ -668,3 +703,30 @@ and the moderation call counted inside the turn.
     `problem.ts` does not know the code yet and shows its generic sentence); an alert on the
     deployment ceiling (section 13); cache writes (item 3). No default of section 7 was
     changed.
+19. **Review fixes** (before the pull request; the rule behind each: counting too much is
+    the safe error, and a limit fails closed).
+    - **One turn in flight holds across midnight.** The day row lock alone let two `TURN`
+      reserves either side of midnight lock different rows and both pass. A reserve and a
+      settle now take `pg_advisory_xact_lock(hashtext('assistant_allowance'),
+      hashtext(userId))` as their first statement, so every reserve of a person waits for
+      the last whatever the day, and the order person then deployment holds for both. The
+      row locks stay. The integration spec sends twenty `TURN` reserves of one person at
+      once, half before and half after a midnight, and expects one reservation and nineteen
+      turns in flight.
+    - **Every limit is checked by name.** Core checked only the keys a request carried, so a
+      missing field left its counter unchecked. It now checks each field of
+      `AllowanceLimits` from a fixed record and refuses the request, logged as
+      `assistant.allowance.limitsRefused`, when one is missing or not a positive integer.
+    - **A settle is tried twice.** A settle that failed (the 2 s timeout, core down) is
+      tried once more after one second; only then is `settleFailed` logged, with the
+      `microUsd` and `audioSeconds` it would have counted. A first attempt that core
+      committed but whose answer was lost counts twice, which is the safe error. The person's
+      answer waits up to five seconds longer when core is down.
+    - **Two requests per turn**, the reserve and the settle, not one (section 3).
+    - **A reserve lost in flight** (core committed it, the assistant's 2 s timeout fired
+      first) refuses the turn with `internal` and leaves the reservation held. It holds the
+      person for the hold time at most (120 s for a turn, 170 s for a voice comment), then
+      expires and charges nothing; during that time the person's next turn is `rate_limited`.
+20. **Noted, not changed.** A settle that arrives after the `user.deleted` deletion can
+    insert a usage row for the deleted id again (`ENSURE_PERSON_DAY_SQL` creates it). `0232`'s
+    reconcile query surfaces such a row, because both tables are in `CORE_USER_IDS_SQL`.

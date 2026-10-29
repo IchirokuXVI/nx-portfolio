@@ -168,6 +168,26 @@ function quietly<T>(run: () => Promise<T>): Promise<T> {
   return run().finally(() => spies.forEach((spy) => spy.mockRestore()));
 }
 
+/** Like {@link quietly}, and answers what was logged as an error. */
+async function withErrorLog<T>(
+  run: () => Promise<T>
+): Promise<{ result: T; errors: string[] }> {
+  const errors: string[] = [];
+  const spies = (['log', 'warn'] as const).map((level) =>
+    jest.spyOn(Logger.prototype, level).mockImplementation(() => undefined)
+  );
+  spies.push(
+    jest.spyOn(Logger.prototype, 'error').mockImplementation((line) => {
+      errors.push(String(line));
+    })
+  );
+  try {
+    return { result: await run(), errors };
+  } finally {
+    spies.forEach((spy) => spy.mockRestore());
+  }
+}
+
 function inLocale<T>(locale: 'en' | 'es', run: () => Promise<T>): Promise<T> {
   return runWithRequestContext(
     { correlationId: 'allowance-spec', locale } as never,
@@ -403,6 +423,50 @@ describe('a turn and the allowance (plan 0234)', () => {
     });
   });
 
+  it('charges one call worst case for any other failure, a 200 whose body could not be read included', async () => {
+    const provider = new FakeModelProvider([
+      new SyntaxError('Unexpected end of JSON input'),
+    ]);
+    const { service, allowance } = build(provider);
+
+    await quietly(() => service.turn(turn())).catch(() => undefined);
+
+    expect(allowance.settles).toHaveLength(1);
+    expect(allowance.settles[0]).toMatchObject({ turns: 1, microUsd: 2688 });
+  });
+
+  it('tries a failed settle once more, and counts it when the second answers', async () => {
+    const provider = new FakeModelProvider([says('Hola.')]);
+    const { service, allowance } = build(provider);
+    allowance.settleFailures = 1;
+
+    const { errors } = await withErrorLog(() => service.turn(turn()));
+
+    expect(allowance.settles).toHaveLength(2);
+    expect(allowance.settles[1]).toEqual(allowance.settles[0]);
+    expect(errors).toEqual([]);
+  });
+
+  it('logs the settle as failed only after the retry failed too, and still answers', async () => {
+    const provider = new FakeModelProvider([says('Hola.')]);
+    const { service, allowance } = build(provider);
+    allowance.settleFailures = 2;
+
+    const { result, errors } = await withErrorLog(() => service.turn(turn()));
+
+    expect(result.reply).toBe('Hola.');
+    expect(allowance.settles).toHaveLength(2);
+    const failed = errors.filter((line) =>
+      line.includes('assistant.allowance.settleFailed')
+    );
+    expect(failed).toHaveLength(1);
+    expect(JSON.parse(failed[0])).toMatchObject({
+      userId: 'user-1',
+      purpose: AllowancePurpose.TURN,
+      audioSeconds: 0,
+    });
+  });
+
   it('settles a turn that ran out of time', async () => {
     const provider = new FakeModelProvider([
       FakeModelProvider.calls('query_lists', {}),
@@ -478,6 +542,23 @@ describe('a spoken turn and the allowance (plan 0234)', () => {
     });
   });
 
+  it('keeps the estimate when the transcriber measured no positive seconds', async () => {
+    for (const measured of [0, Number.NaN, -3]) {
+      const provider = new FakeModelProvider([says('Hecho.')]);
+      jest
+        .spyOn(provider, 'transcribe')
+        .mockResolvedValue({ text: 'añade leche', audioSeconds: measured });
+      const { service, allowance } = build(provider);
+
+      await quietly(() => service.voice(voice(9000)));
+
+      expect(allowance.settles[0]).toMatchObject({
+        turns: 1,
+        audioSeconds: estimateAudioSeconds(9000),
+      });
+    }
+  });
+
   it('counts no seconds when the transcriber refused the clip with a full queue', async () => {
     const provider = new FakeModelProvider().willHear(
       new ProviderRateLimitedError('queue full', 10)
@@ -523,6 +604,28 @@ describe('a voice comment and the allowance (plan 0234)', () => {
       audioSeconds: 3,
       microUsd: 0,
     });
+  });
+
+  it('keeps the estimate when the transcriber reported no seconds', async () => {
+    const provider = new FakeModelProvider();
+    jest
+      .spyOn(provider, 'transcribe')
+      .mockResolvedValue({ text: 'trae pan', audioSeconds: 0 });
+    const { service, allowance } = build(provider);
+
+    await quietly(() =>
+      service.transcribe({
+        audio: AUDIO,
+        mimeType: 'audio/webm',
+        locale: 'es',
+        purpose: 'comment',
+        userId: 'author-1',
+        kind: UserKind.REGISTERED,
+      })
+    );
+
+    expect(estimateAudioSeconds(4001)).toBe(3);
+    expect(allowance.settles[0]).toMatchObject({ turns: 0, audioSeconds: 3 });
   });
 
   it('refuses a transcription with no author, because the allowance fails closed', async () => {

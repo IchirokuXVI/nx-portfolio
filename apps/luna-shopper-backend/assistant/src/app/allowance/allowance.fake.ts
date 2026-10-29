@@ -73,9 +73,16 @@ export class FakeAllowance {
     };
   }
 
+  /** How many of the next settles fail as core not answering. */
+  settleFailures = 0;
+
   async settle(req: SettleAllowanceRequest): Promise<SettleAllowanceResponse> {
     this.log.push('settle');
     this.settles.push(req);
+    if (this.settleFailures > 0) {
+      this.settleFailures -= 1;
+      throw new AllowanceUnavailableError('core did not answer (fake)');
+    }
     return { found: true };
   }
 

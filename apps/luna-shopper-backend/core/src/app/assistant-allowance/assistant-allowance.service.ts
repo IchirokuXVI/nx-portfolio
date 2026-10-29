@@ -45,6 +45,7 @@ import {
   LOCK_EXPIRED_OF_PERSON_SQL,
   LOCK_ONE_EXPIRED_SQL,
   LOCK_PERSON_DAYS_SQL,
+  LOCK_PERSON_SQL,
   PERSON_MONTH_SQL,
   RELEASE_DEPLOYMENT_SQL,
   RELEASE_PERSON_SQL,
@@ -105,7 +106,7 @@ export class AssistantAllowanceService {
   ): Promise<ReserveAllowanceResponse> {
     checkTimeZone(req.timezone);
     checkPurpose(req.purpose);
-    checkLimits(req.limits);
+    checkLimits(req.limits, this.logger);
     checkCount('audioSeconds', req.audioSeconds);
     checkCount('microUsd', req.microUsd);
     checkCount('holdSeconds', req.holdSeconds);
@@ -114,6 +115,10 @@ export class AssistantAllowanceService {
     const amounts = amountsFor(req.purpose, req.audioSeconds, req.microUsd);
 
     return this.dataSource.transaction(async (manager) => {
+      // The person's own lock, before any row: every reserve of one person
+      // waits for the last, whatever its day (section 15, item 19).
+      await manager.query(LOCK_PERSON_SQL, [req.userId]);
+
       // Step 1, the rows. Created first, so the locks below have rows to take.
       await manager.query(ENSURE_PERSON_DAY_SQL, [req.userId, calendar.day]);
       await manager.query(ENSURE_DEPLOYMENT_DAY_SQL, [calendar.day]);
@@ -130,15 +135,7 @@ export class AssistantAllowanceService {
       await manager.query(LOCK_DEPLOYMENT_DAYS_SQL, [days]);
       for (const row of expired) {
         await releaseReservation(manager, row);
-      }
-      if (expired.length > 0) {
-        this.logger.warn(
-          JSON.stringify({
-            event: 'assistant.allowance.reservationExpired',
-            userId: req.userId,
-            released: expired.length,
-          })
-        );
+        this.logExpired(row);
       }
 
       // One turn in flight per person (section 5.1).
@@ -232,6 +229,9 @@ export class AssistantAllowanceService {
     }
 
     return this.dataSource.transaction(async (manager) => {
+      // The person's own lock first, as a reserve takes it, so the order
+      // person then deployment holds for both.
+      await manager.query(LOCK_PERSON_SQL, [req.userId]);
       const [held] = rowsOf<ReservationRow>(
         await manager.query(TAKE_RESERVATION_SQL, [
           req.reservationId,
@@ -296,7 +296,7 @@ export class AssistantAllowanceService {
     now: Date = new Date()
   ): Promise<AssistantAllowanceView> {
     checkTimeZone(req.timezone);
-    checkLimits(req.limits);
+    checkLimits(req.limits, this.logger);
     const calendar = calendarAt(now, req.timezone);
     const { personDay, personMonth, deploymentDay, deploymentMonth } =
       await this.totals(this.dataSource.manager, req.userId, calendar);
@@ -390,16 +390,26 @@ export class AssistantAllowanceService {
         break;
       }
       released += 1;
-      this.logger.warn(
-        JSON.stringify({
-          event: 'assistant.allowance.reservationExpired',
-          userId: row.userId,
-          purpose: row.purpose,
-          microUsd: Number(row.microUsd),
-        })
-      );
+      this.logExpired(row);
     }
     return released;
+  }
+
+  /**
+   * One line per released reservation, with what it held and nobody was
+   * charged: a pod that died mid turn, or a settle that failed twice, may have
+   * spent it. The sum of these lines is the size of that gap (section 5.4).
+   */
+  private logExpired(row: ReservationRow): void {
+    this.logger.warn(
+      JSON.stringify({
+        event: 'assistant.allowance.reservationExpired',
+        userId: row.userId,
+        purpose: row.purpose,
+        microUsd: Number(row.microUsd),
+        audioSeconds: Number(row.audioSeconds),
+      })
+    );
   }
 
   /**
@@ -517,17 +527,56 @@ function checkCount(name: string, value: unknown): void {
   }
 }
 
-function checkLimits(limits: AllowanceLimits | undefined): void {
-  if (!limits || typeof limits !== 'object') {
-    throw new ValidationException('limits are required');
+/**
+ * Every field of {@link AllowanceLimits}, by name. A record rather than a list,
+ * so a field added to the contract fails the build here until it is named.
+ */
+const LIMIT_FIELDS: Record<keyof AllowanceLimits, true> = {
+  turnsPerDay: true,
+  turnsPerMonth: true,
+  assistantAudioSecondsPerDay: true,
+  assistantAudioSecondsPerMonth: true,
+  commentAudioSecondsPerDay: true,
+  commentAudioSecondsPerMonth: true,
+  costPerDayMicroUsd: true,
+  costPerMonthMicroUsd: true,
+  deploymentCostPerDayMicroUsd: true,
+  deploymentCostPerMonthMicroUsd: true,
+};
+
+const LIMIT_NAMES = Object.keys(LIMIT_FIELDS) as (keyof AllowanceLimits)[];
+
+/**
+ * The limits fail closed: each field is checked by name, so one that is
+ * missing refuses the request rather than leaving its counter unchecked
+ * (`used + this > undefined` is false). Logged as an error, because only an
+ * assistant that sends a broken request reaches it.
+ */
+function checkLimits(
+  limits: AllowanceLimits | undefined,
+  logger: Logger
+): void {
+  const broken =
+    !limits || typeof limits !== 'object'
+      ? 'limits'
+      : LIMIT_NAMES.find((name) => {
+          const value: unknown = limits[name];
+          return !Number.isSafeInteger(value) || (value as number) < 1;
+        });
+  if (broken === undefined) {
+    return;
   }
-  for (const [name, value] of Object.entries(limits)) {
-    if (!Number.isSafeInteger(value) || (value as number) < 1) {
-      throw new ValidationException(
-        `${name} must be a whole number above zero`
-      );
-    }
-  }
+  logger.error(
+    JSON.stringify({
+      event: 'assistant.allowance.limitsRefused',
+      field: broken,
+    })
+  );
+  throw new ValidationException(
+    broken === 'limits'
+      ? 'limits are required'
+      : `${broken} must be a whole number above zero`
+  );
 }
 
 const PURPOSES: readonly string[] = Object.values(AllowancePurpose);

@@ -37,7 +37,10 @@ import {
   AllowanceClient,
   AllowanceUnavailableError,
 } from '../allowance/allowance.client';
-import { worstTurn, type WorstTurn } from '../allowance/reserve-amount';
+import {
+  worstOutputAtTypicalInput,
+  type TypicalWorstTurn,
+} from '../allowance/reserve-amount';
 import { TurnMeter } from '../allowance/turn-meter';
 import { normalizeMimeType, type AssistantConfig } from '../config/app-config';
 import {
@@ -141,6 +144,13 @@ export const GOT_STUCK =
 export const TURN_IN_FLIGHT_RETRY_SECONDS = 5;
 
 /**
+ * How long a failed settle waits before its one retry (plan 0234, section
+ * 15, item 19): long enough for a core pod to come back from a blip, short
+ * enough that the person's answer is not held much longer.
+ */
+export const SETTLE_RETRY_MS = 1000;
+
+/**
  * The length of a recording, estimated from its bytes as the length at 16
  * kbit/s, rounded up (plan 0234, section 2.1). A browser records Opus at a
  * higher rate than that, so the estimate counts more seconds than were spoken,
@@ -165,8 +175,11 @@ export class AssistantService {
   private readonly config: AssistantConfig;
   private readonly limiter: TurnLimiter;
   private readonly gate: ConcurrencyGate;
-  /** The worst case of one turn, call by call (plan 0234, section 5.2). */
-  private readonly worst: WorstTurn;
+  /**
+   * The worst output at the typical input, call by call (plan 0234, section
+   * 5.2): what a call that failed after it may have run is charged.
+   */
+  private readonly worst: TypicalWorstTurn;
 
   constructor(
     @Inject(ConfigService) configService: ConfigService,
@@ -179,7 +192,7 @@ export class AssistantService {
     this.config = configService.getOrThrow<AssistantConfig>('assistant');
     this.limiter = new TurnLimiter(this.config.turnsPerMinute);
     this.gate = new ConcurrencyGate(this.config.concurrency);
-    this.worst = worstTurn(this.config);
+    this.worst = worstOutputAtTypicalInput(this.config);
   }
 
   /**
@@ -289,7 +302,7 @@ export class AssistantService {
         locale: request.locale || locale,
         purpose,
       });
-      audioSeconds = Math.ceil(heard.audioSeconds);
+      audioSeconds = measuredOr(estimate, heard.audioSeconds);
       return { text: heard.text.trim() };
     } catch (error) {
       if (error instanceof ProviderRateLimitedError) {
@@ -440,7 +453,10 @@ export class AssistantService {
         { gated: false }
       );
       heard = transcription.text;
-      spent.audioSeconds = Math.ceil(transcription.audioSeconds);
+      spent.audioSeconds = measuredOr(
+        spent.audioSeconds,
+        transcription.audioSeconds
+      );
     } catch (error) {
       // A full queue refused the clip before it ran. Anything else keeps the
       // estimate, since the transcriber may have spent its time on it.
@@ -1017,10 +1033,12 @@ export class AssistantService {
 
   /**
    * The provider call, behind the concurrency gate, with 429 mapped to rule A5,
-   * and its usage on the meter (plan 0234, section 5.5). A call that failed
-   * with a cause (a deadline, a dropped connection) may have run at the
-   * provider, so it is charged one call's worst case; a status the provider
-   * answered, a 429 included, was not billed.
+   * and its usage on the meter (plan 0234, section 5.5). A call that failed is
+   * charged one call's worst case, and counts the turn, unless it is one of
+   * the two failures known to carry no bill: a status the provider answered
+   * and a 429. Any other failure may have run at the provider: a deadline, a
+   * dropped connection, or a 200 whose body could not be read. Counting too
+   * much is the safe error.
    */
   private async ask(
     request: Parameters<ModelProvider['generate']>[0],
@@ -1035,10 +1053,7 @@ export class AssistantService {
       meter.add(this.config.model, reply.usage);
       return reply;
     } catch (error) {
-      if (
-        error instanceof ProviderUnavailableError &&
-        (error as { cause?: unknown }).cause !== undefined
-      ) {
+      if (!answeredUnbilled(error)) {
         meter.addWorstCase(this.worst.perCallMicroUsd);
       }
       throw error;
@@ -1130,8 +1145,12 @@ export class AssistantService {
   /**
    * Releases a reservation and counts what happened (plan 0234, section 5.3).
    * Never throws: it runs in a `finally`, and a settle that failed must not
-   * replace the answer the person was about to get. The reservation then
-   * expires and charges nothing, and this line is how that gap is counted.
+   * replace the answer the person was about to get.
+   *
+   * A settle that failed is tried once more after {@link SETTLE_RETRY_MS}. A
+   * first attempt that core committed but whose answer was lost then counts
+   * twice, which is the safe error. A second failure leaves the reservation to
+   * expire, which charges nothing, and this line is how that gap is counted.
    */
   private async settle(
     held: Held,
@@ -1139,17 +1158,24 @@ export class AssistantService {
     meter: TurnMeter
   ): Promise<void> {
     const microUsd = meter.microUsd(held.microUsd);
+    const request = {
+      reservationId: held.id,
+      userId: held.userId,
+      purpose: held.purpose,
+      timezone: this.config.allowance.timezone,
+      turns: counted.turns,
+      audioSeconds: counted.audioSeconds,
+      microUsd,
+      ...meter.tokens(),
+    };
     try {
-      await this.allowance.settle({
-        reservationId: held.id,
-        userId: held.userId,
-        purpose: held.purpose,
-        timezone: this.config.allowance.timezone,
-        turns: counted.turns,
-        audioSeconds: counted.audioSeconds,
-        microUsd,
-        ...meter.tokens(),
-      });
+      await this.allowance.settle(request);
+      return;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_RETRY_MS));
+    }
+    try {
+      await this.allowance.settle(request);
     } catch (error) {
       this.logger.error(
         JSON.stringify({
@@ -1157,6 +1183,7 @@ export class AssistantService {
           userId: held.userId,
           purpose: held.purpose,
           microUsd,
+          audioSeconds: counted.audioSeconds,
           reason: error instanceof Error ? error.message : String(error),
         })
       );
@@ -1480,6 +1507,32 @@ function isRateLimited(error: unknown): boolean {
   return (
     error instanceof ProviderRateLimitedError ||
     error instanceof RateLimitedException
+  );
+}
+
+/**
+ * The seconds a settle counts for a recording (plan 0234, section 2.1): the
+ * transcriber's measure, rounded up, when it is a positive finite number, and
+ * otherwise the byte estimate. The transcriber client reads a missing
+ * `audioSeconds` as zero, and zero would count a heard recording as free.
+ */
+function measuredOr(estimate: number, measured: number): number {
+  return Number.isFinite(measured) && measured > 0
+    ? Math.ceil(measured)
+    : estimate;
+}
+
+/**
+ * Whether a failed provider call is known to carry no bill (plan 0234,
+ * section 15, item 4): a 429, or a status the provider answered, which is a
+ * {@link ProviderUnavailableError} with no cause. Every other failure may have
+ * been billed.
+ */
+function answeredUnbilled(error: unknown): boolean {
+  return (
+    isRateLimited(error) ||
+    (error instanceof ProviderUnavailableError &&
+      (error as { cause?: unknown }).cause === undefined)
   );
 }
 
