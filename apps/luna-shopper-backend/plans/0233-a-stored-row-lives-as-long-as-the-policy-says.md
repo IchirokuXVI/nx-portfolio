@@ -1,3 +1,5 @@
+> **PR:** [#857](https://github.com/IchirokuXVI/nx-portfolio/pull/857)
+
 # 0233: a stored row lives as long as the policy says
 
 > The privacy policy will tell people how long each kind of record is kept. Today nothing in
