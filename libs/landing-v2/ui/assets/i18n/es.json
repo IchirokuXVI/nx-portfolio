@@ -142,8 +142,8 @@
   "landingV2.detail.velista.sections.harvester.deep.p4": "Los folletos impresos también son una fuente. Una segunda CLI convierte las páginas del PDF en imágenes, y un modelo lee cada página y la convierte en el mismo documento que produce un rastreo. Una oferta espera hasta que se asocia con un producto, y una coincidencia aproximada nunca escribe un precio por sí sola. Cuando alguien introduce un código postal que Velista no ha visto nunca, se lanza una búsqueda de las tiendas de alrededor.",
 
   "landingV2.detail.velista.sections.assistant.title": "El asistente de IA",
-  "landingV2.detail.velista.sections.assistant.highlight.p1": "El botón de añadir de una lista es un micrófono. Dices o escribes lo que necesitas, y un asistente basado en Gemini añade las líneas, las cambia, las quita o las marca.",
-  "landingV2.detail.velista.sections.assistant.deep.p1": "El asistente es un servicio propio basado en Gemini. Dices o escribes algo como \"dos leches y lo que haga falta para una tortilla\", y añade, actualiza, quita o liquida líneas, o responde preguntas sobre tus listas. Las notas de voz se transcriben antes en el servidor.",
+  "landingV2.detail.velista.sections.assistant.highlight.p1": "El botón de añadir de una lista es un micrófono. Dices o escribes lo que necesitas, y un asistente de IA añade las líneas, las cambia, las quita o las marca.",
+  "landingV2.detail.velista.sections.assistant.deep.p1": "El asistente es un servicio propio, basado en un modelo de IA al que se le dice que quien lee puede ser un niño. Dices o escribes algo como \"dos leches y lo que haga falta para una tortilla\", y añade, actualiza, quita o liquida líneas, o responde preguntas sobre tus listas. Las notas de voz se transcriben antes en el servidor.",
   "landingV2.detail.velista.sections.assistant.deep.p2": "No tiene ningún acceso especial. Lee y escribe solo a través de la misma API del gateway que usa la app, con el token de quien lo usa, así que puede hacer exactamente lo que esa persona podría hacer con el dedo y nada más.",
 
   "landingV2.detail.velista.sections.baskets.title": "Cestas y listas",
