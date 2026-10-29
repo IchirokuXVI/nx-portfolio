@@ -1,4 +1,3 @@
-import { NgTemplateOutlet } from '@angular/common';
 import {
   afterNextRender,
   ChangeDetectionStrategy,
@@ -8,15 +7,12 @@ import {
   ElementRef,
   inject,
   Injector,
-  signal,
-  untracked,
 } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { OperatorSettingsStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import {
@@ -24,15 +20,14 @@ import {
   PageHeader,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
-import {
-  loadLegalDocument,
-  type LegalDocument,
-  type LegalDocumentKind,
-} from '../legal-document';
-import { renderLegalDocument } from '../render';
+import { type LegalDocumentKind } from '../legal-document';
+import { legalDocumentState } from '../legal-document-state';
+import { LegalSections } from '../legal-sections/legal-sections';
 
-/** What the page draws. */
-export type LegalPageState = 'loading' | 'failed' | 'unpublished' | 'ready';
+export {
+  formatCalendarDate,
+  type LegalPageState,
+} from '../legal-document-state';
 
 /**
  * The privacy policy or the terms (velista `0172`, target 5), told which by route
@@ -59,10 +54,9 @@ export type LegalPageState = 'loading' | 'failed' | 'unpublished' | 'ready';
   selector: 'lib-legal-page',
   imports: [
     ChevronDownIcon,
-    NgTemplateOutlet,
+    LegalSections,
     PageHeader,
     RokuTranslatorPipe,
-    RouterLink,
     SpinnerIcon,
   ],
   templateUrl: './legal-page.html',
@@ -71,7 +65,6 @@ export type LegalPageState = 'loading' | 'failed' | 'unpublished' | 'ready';
 })
 export class LegalPage {
   private readonly _route = inject(ActivatedRoute);
-  private readonly _store = inject(OperatorSettingsStore);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _pages = inject(PageNavigation);
@@ -85,80 +78,41 @@ export class LegalPage {
   /** The header's title, as a key. The same key titles the route and the links. */
   readonly titleKey = `legal.${this.document}.title`;
 
-  /**
-   * The line under the title, as a key. The terms name their version only when it is
-   * not the plain date of the line (an operator's revision, `YYYY-MM-DD+YYYY-MM-DD`);
-   * otherwise the line would print the same date twice.
-   */
-  readonly metaKey = computed(() => {
-    const terms = this._store.settings()?.terms;
-    return this.document === 'terms' &&
-      terms !== undefined &&
-      terms.version !== terms.updatedOn
-      ? 'legal.terms.metaVersion'
-      : `legal.${this.document}.meta`;
-  });
-
   /** The sentence of a deployment that has published nothing, as a key. */
   readonly unpublishedKey = `legal.${this.document}.unpublished`;
 
-  private readonly _doc = signal<LegalDocument | null>(null);
-  private readonly _docState = signal<'loading' | 'ready' | 'failed'>(
-    'loading'
+  /**
+   * The document and the settings, read the way the sheet of velista `0173` reads
+   * them. Its links go to the pages.
+   */
+  private readonly _reading = legalDocumentState(
+    this.document,
+    computed(() => ({
+      privacy: appPath(this._locale(), this._basePath, 'privacy'),
+      terms: appPath(this._locale(), this._basePath, 'terms'),
+    }))
   );
-  private _docRequest = 0;
+
   private _fragmentConsumed = false;
 
-  readonly settings = this._store.settings;
+  readonly settings = this._reading.settings;
 
-  readonly state = computed<LegalPageState>(() => {
-    const settings = this._store.settings();
-    const storeState = this._store.state();
-    if (settings === null) {
-      return storeState === 'failed' ? 'failed' : 'loading';
-    }
-    if (!settings.published) {
-      return 'unpublished';
-    }
-    const docState = this._docState();
-    return docState === 'ready' ? 'ready' : docState;
-  });
+  readonly state = this._reading.state;
 
   /** The document, filled with this deployment's values, or null until both exist. */
-  readonly view = computed(() => {
-    const settings = this._store.settings();
-    const doc = this._doc();
-    if (settings === null || doc === null || !settings.published) {
-      return null;
-    }
-    const locale = this._locale();
-    return renderLegalDocument(doc, settings, {
-      privacy: appPath(locale, this._basePath, 'privacy'),
-      terms: appPath(locale, this._basePath, 'terms'),
-    });
-  });
-
-  /** The version, for the terms' line. */
-  readonly version = computed(
-    () => this._store.settings()?.terms.version ?? ''
-  );
+  readonly view = this._reading.view;
 
   /**
-   * The date the document last changed, in the reader's language, or null to leave
-   * the line out. A calendar date: built in UTC and drawn in UTC, so no time zone can
-   * move it a day.
+   * The line under the title, as a key. The terms name their version only when it is
+   * not the plain date of the line.
    */
-  readonly changedOn = computed(() => {
-    const settings = this._store.settings();
-    if (settings === null) {
-      return null;
-    }
-    const date =
-      this.document === 'terms'
-        ? settings.terms.updatedOn
-        : settings.privacyUpdatedOn;
-    return formatCalendarDate(date, this._locale());
-  });
+  readonly metaKey = this._reading.metaKey;
+
+  /** The version, for the terms' line. */
+  readonly version = this._reading.version;
+
+  /** The date the document last changed, in the reader's language, or null. */
+  readonly changedOn = this._reading.changedOn;
 
   /** This page's own address, for the contents' links. */
   readonly pageUrl = computed(() =>
@@ -166,13 +120,6 @@ export class LegalPage {
   );
 
   constructor() {
-    // One document in the reader's language, again when the language changes. A later
-    // answer for an earlier language is dropped.
-    effect(() => {
-      const locale = this._locale();
-      untracked(() => void this._loadDocument(locale));
-    });
-
     // A cold arrival on `/en/privacy#rights` lands on that section once it is drawn.
     effect(() => {
       const view = this.view();
@@ -201,12 +148,7 @@ export class LegalPage {
 
   /** Try again: whichever half failed. */
   retry(): void {
-    if (this._store.state() === 'failed') {
-      this._store.reload();
-    }
-    if (this._docState() === 'failed') {
-      void this._loadDocument(this._locale());
-    }
+    this._reading.retry();
   }
 
   /**
@@ -233,50 +175,5 @@ export class LegalPage {
     if (focus) {
       heading.focus({ preventScroll: true });
     }
-  }
-
-  private async _loadDocument(locale: string): Promise<void> {
-    const request = ++this._docRequest;
-    this._docState.set('loading');
-    try {
-      const doc = await loadLegalDocument(this.document, locale);
-      if (request !== this._docRequest) {
-        return;
-      }
-      this._doc.set(doc);
-      this._docState.set(doc === null ? 'failed' : 'ready');
-    } catch {
-      if (request === this._docRequest) {
-        this._docState.set('failed');
-      }
-    }
-  }
-}
-
-/**
- * `YYYY-MM-DD` in the reader's language, or null. Through `Intl.DateTimeFormat` in a
- * `try`, never `DatePipe`: the language is runtime state and there is no `LOCALE_ID`.
- */
-export function formatCalendarDate(
-  date: string | null,
-  locale: string
-): string | null {
-  if (date === null) {
-    return null;
-  }
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
-  if (match === null) {
-    return null;
-  }
-  try {
-    const instant = new Date(
-      Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
-    );
-    return new Intl.DateTimeFormat(locale, {
-      dateStyle: 'long',
-      timeZone: 'UTC',
-    }).format(instant);
-  } catch {
-    return null;
   }
 }

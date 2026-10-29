@@ -116,13 +116,31 @@ describe('AuthApi', () => {
     it('sends two fields and never a display name', async () => {
       // The backend generates a username regardless of what is sent, and the display
       // name is not the public cross zone handle (section 5.1).
-      const result = api.register('marta@example.com', 'password123');
+      const result = api.register('marta@example.com', 'password123', null);
 
       const request = httpMock.expectOne(`${GATEWAY}/v1/auth/register`);
       expect(Object.keys(request.request.body as object)).toEqual([
         'email',
         'password',
       ]);
+      request.flush(pair());
+
+      await result;
+    });
+
+    it('sends the accepted version of the terms when there is one (velista 0173)', async () => {
+      const result = api.register(
+        'marta@example.com',
+        'password123',
+        '2026-10-29'
+      );
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/register`);
+      expect(request.request.body).toEqual({
+        email: 'marta@example.com',
+        password: 'password123',
+        acceptedTermsVersion: '2026-10-29',
+      });
       request.flush(pair());
 
       await result;
@@ -141,7 +159,11 @@ describe('AuthApi', () => {
         refreshToken: 'refresh-0',
       });
 
-      const result = api.upgrade('marta@example.com', 'password123');
+      const result = api.upgrade(
+        'marta@example.com',
+        'password123',
+        '2026-10-29'
+      );
 
       const request = httpMock.expectOne(`${GATEWAY}/v1/auth/upgrade`);
       expect(request.request.headers.get('Authorization')).toBe(
@@ -150,6 +172,7 @@ describe('AuthApi', () => {
       expect(request.request.body).toEqual({
         email: 'marta@example.com',
         password: 'password123',
+        acceptedTermsVersion: '2026-10-29',
       });
       request.flush(pair('u-guest'));
 
@@ -165,7 +188,7 @@ describe('AuthApi', () => {
         refreshToken: 'refresh-0',
       });
 
-      const result = api.upgrade('marta@example.com', 'password123');
+      const result = api.upgrade('marta@example.com', 'password123', null);
       httpMock
         .expectOne(`${GATEWAY}/v1/auth/upgrade`)
         .flush(pair('u-guest', 'REGISTERED'));
@@ -422,10 +445,13 @@ describe('AuthApi', () => {
 
     it('mints a state with the challenge, carrying the bearer of a guest', async () => {
       guest();
-      const result = api.mintGoogleState('c'.repeat(43));
+      const result = api.mintGoogleState('c'.repeat(43), '2026-10-29');
 
       const request = httpMock.expectOne(`${GATEWAY}/v1/auth/google/state`);
-      expect(request.request.body).toEqual({ codeChallenge: 'c'.repeat(43) });
+      expect(request.request.body).toEqual({
+        codeChallenge: 'c'.repeat(43),
+        acceptedTermsVersion: '2026-10-29',
+      });
       expect(request.request.headers.get('Authorization')).toBe(
         `Bearer ${tokens.tokens()?.accessToken}`
       );
@@ -435,10 +461,12 @@ describe('AuthApi', () => {
     });
 
     it('mints with no bearer when nobody is signed in', async () => {
-      const result = api.mintGoogleState('c'.repeat(43));
+      const result = api.mintGoogleState('c'.repeat(43), null);
 
       const request = httpMock.expectOne(`${GATEWAY}/v1/auth/google/state`);
       expect(request.request.headers.has('Authorization')).toBe(false);
+      // No terms published, no version: the field is left out, never sent empty.
+      expect(request.request.body).toEqual({ codeChallenge: 'c'.repeat(43) });
       request.flush({ state: 's1' });
 
       await expect(result).resolves.toBe('s1');

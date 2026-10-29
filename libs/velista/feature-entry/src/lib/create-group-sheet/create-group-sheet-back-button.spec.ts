@@ -21,6 +21,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   fakeZoneStore,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   TokenStore,
@@ -96,6 +97,7 @@ async function arrive(): Promise<{
       provideVelistaTesting({ basePath: '/velista' }),
       startCountingHistory(),
       provideFakeZoneStore(fakeZoneStore()),
+      provideFakeOperatorSettingsStore(),
       provideFakeSessionStore('REGISTERED'),
       { provide: TokenStore, useValue: { clear: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
@@ -261,6 +263,7 @@ describe('the back button, over a sheet', () => {
         provideVelistaTesting({ basePath: '/velista' }),
         startCountingHistory(),
         provideFakeZoneStore(fakeZoneStore()),
+        provideFakeOperatorSettingsStore(),
         provideFakeSessionStore('REGISTERED'),
         { provide: TokenStore, useValue: { clear: jest.fn() } },
         { provide: RokuLocaleStore, useValue: { locale: signal('en') } },

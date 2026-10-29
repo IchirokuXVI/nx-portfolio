@@ -2813,6 +2813,28 @@
       "meta": "Actualizadas el {{date}}",
       "metaVersion": "Versión {{version}}, actualizadas el {{date}}",
       "unpublished": "Quien gestiona esta copia de {{appName}} todavía no ha publicado sus condiciones del servicio."
+    },
+    "accept": {
+      "checkbox": "Acepto las [Condiciones]",
+      "privacy": "Lee cómo usamos tus datos en la [Política de privacidad]",
+      "unticked": "Marca la casilla para aceptar las Condiciones",
+      "google": "Si continúas con Google, aceptas las [Condiciones]",
+      "createNotice": "Al crear el grupo, te creamos una cuenta en este teléfono y aceptas las [Condiciones]",
+      "joinNotice": "Al pedir entrar, te creamos una cuenta en este teléfono y aceptas las [Condiciones]",
+      "stale": "Las [Condiciones] han cambiado mientras tenías esta página abierta. Léelas de nuevo y acéptalas",
+      "missing": "Lee las [Condiciones] y acéptalas"
+    },
+    "prompt": {
+      "title": "Antes de seguir",
+      "titleChanged": "Tenemos nuevas Condiciones",
+      "body": "Lee las [Condiciones del servicio] y acéptalas para seguir",
+      "bodyChanged": "Hemos cambiado las [Condiciones del servicio]. Léelas y acéptalas para seguir",
+      "accept": "Aceptar y continuar",
+      "failed": "No se ha guardado. Inténtalo de nuevo"
+    },
+    "sheet": {
+      "fullPage": "Abrir la página completa",
+      "close": "Cerrar"
     }
   }
 }

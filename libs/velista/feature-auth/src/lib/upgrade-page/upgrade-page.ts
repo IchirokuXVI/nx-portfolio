@@ -2,11 +2,11 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  ElementRef,
   inject,
   signal,
+  viewChild,
 } from '@angular/core';
-import { Router } from '@angular/router';
+import { Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -15,24 +15,21 @@ import {
 import {
   AccountNotice,
   AUTH_SERVICE,
+  GoogleSignIn,
+  ProfileStore,
   TokenStore,
   ZoneStore,
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
 import { appPath, PageNavigation } from '@portfolio/velista/platform';
+import { AuthScreen, LegalLinks, SuccessNote } from '@portfolio/velista/ui';
 import {
-  AuthScreen,
-  EmailField,
-  FormError,
-  LegalLinks,
-  PasswordField,
-  SpinnerIcon,
-  SuccessNote,
-} from '@portfolio/velista/ui';
+  AccountForm,
+  type AccountFormValue,
+} from '../account-form/account-form';
 import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
-
-const ERROR_ID = 'upgrade-error';
+import { authTerms } from '../auth-terms';
 
 /**
  * Turning the guest account somebody already has into one they cannot lose.
@@ -57,21 +54,21 @@ const ERROR_ID = 'upgrade-error';
  * than hiding it, because the alternative is a form with no visible reason to fill it
  * in.
  *
- * There is no Google button here. Since backend `0230` a guest who continues with
- * Google from sign in, register or the front door is linked in place and keeps every
- * group, so losing them is no longer the reason. Offering it on this screen as well is
- * a separate decision that nobody has taken.
+ * ## Google, and the terms
+ *
+ * Google is offered here as on register (velista `0173`, D6): the state is minted with
+ * this guest's bearer, so `googleLogin` converts the guest in place and every group
+ * stays (backend `0230`). The form, the checkbox and the Google option are
+ * `AccountForm`, shared with register.
  */
 @Component({
   selector: 'lib-upgrade-page',
   imports: [
     RokuTranslatorPipe,
+    AccountForm,
     AuthScreen,
-    EmailField,
-    FormError,
     LegalLinks,
-    PasswordField,
-    SpinnerIcon,
+    RouterOutlet,
     SuccessNote,
   ],
   templateUrl: './upgrade-page.html',
@@ -82,6 +79,8 @@ export class UpgradePage {
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _zones = inject(ZoneStore);
   private readonly _tokens = inject(TokenStore);
+  private readonly _profile = inject(ProfileStore);
+  private readonly _google = inject(GoogleSignIn);
   private readonly _notice = inject(AccountNotice);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
@@ -94,27 +93,19 @@ export class UpgradePage {
     terms: appPath(this._locale(), this._basePath, 'terms'),
   }));
   private readonly _t = inject(RokuTranslatorService);
-  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly _form = viewChild(AccountForm);
 
-  readonly errorId = ERROR_ID;
+  /** The terms over this form, Google, and the version a press accepts (velista `0173`). */
+  readonly terms = authTerms(['auth', 'upgrade']);
 
-  readonly email = signal('');
-  readonly password = signal('');
-  readonly confirmPassword = signal('');
   readonly submitting = signal(false);
   readonly error = signal<AuthErrorCopy | null>(null);
 
-  /**
-   * All three fields non empty, and nothing else. The match is answered by `submit`
-   * rather than by a disabled button, for the reason `RegisterPage.canSubmit` gives.
-   */
-  readonly canSubmit = computed(
-    () =>
-      this.email() !== '' &&
-      this.password() !== '' &&
-      this.confirmPassword() !== '' &&
-      !this.submitting()
-  );
+  /** See `SignInPage.googleStarting`. */
+  readonly googleStarting = signal(false);
+
+  /** See `SignInPage.googleError`. */
+  readonly googleError = signal<AuthErrorCopy | null>(null);
 
   /**
    * The promise, with their own number in it.
@@ -137,45 +128,63 @@ export class UpgradePage {
     });
   });
 
-  /** See `SignInPage.onSubmit` for why this is `(submit)` and not `(ngSubmit)`. */
-  onSubmit(event: Event): void {
-    event.preventDefault();
-    void this.submit();
-  }
-
-  async submit(): Promise<void> {
-    if (!this.canSubmit()) {
+  /**
+   * The form passed its own checks: secure the account. The version sent is the one
+   * the settings name at this press (velista `0173`).
+   */
+  async submit(value: AccountFormValue): Promise<void> {
+    if (this.submitting()) {
       return;
     }
 
-    // The same check `RegisterPage` makes, for the same reason: the server sees one
-    // password and cannot know it was mistyped. Here a typo costs more than on
-    // register, because the account being locked is the one holding every group.
-    if (this.password() !== this.confirmPassword()) {
-      this.error.set({
-        key: 'auth.error.passwordMismatch',
-        placement: 'password',
-      });
-      this._focusConfirmField();
-      return;
-    }
-
-    const email = this.email().trim();
     this.submitting.set(true);
     this.error.set(null);
 
     try {
-      await this._auth.upgrade(email, this.password());
-      await this._finish(email);
+      await this._auth.upgrade(
+        value.email,
+        value.password,
+        this.terms.version()
+      );
+      await this._finish(value.email);
     } catch (error) {
       if (await this._alreadyRegistered(error)) {
-        await this._finish(email);
+        await this._finish(value.email);
         return;
       }
 
       this.submitting.set(false);
-      this.error.set(authErrorCopy(error, 'auth.upgrade'));
-      this._focusFirstField();
+      const copy = authErrorCopy(error, 'auth.upgrade');
+      this.error.set(copy);
+      if (copy.placement === 'terms') {
+        this.terms.reload();
+      } else {
+        this._form()?.focusFirst();
+      }
+    }
+  }
+
+  /**
+   * Continue with Google, linking this guest in place (backend `0230`). The same as
+   * `RegisterPage.continueWithGoogle`.
+   */
+  async continueWithGoogle(): Promise<void> {
+    if (this.googleStarting()) {
+      return;
+    }
+
+    this.googleStarting.set(true);
+    this.googleError.set(null);
+
+    try {
+      await this._google.start({ acceptedTermsVersion: this.terms.version() });
+    } catch (error) {
+      this.googleStarting.set(false);
+      const copy = authErrorCopy(error, 'auth.google');
+      if (copy.placement === 'terms') {
+        this.terms.reload();
+      }
+      this.googleError.set(copy);
     }
   }
 
@@ -209,24 +218,20 @@ export class UpgradePage {
     return refreshed?.kind === 'REGISTERED';
   }
 
-  /** The one way out of this screen, however it was reached. */
+  /**
+   * The one way out of this screen, however it was reached.
+   *
+   * A profile this document already read is read again: the upgrade changed the
+   * account's kind and its address, and the one held still names a guest with no
+   * address. The read also brings the acceptance the upgrade recorded (velista `0173`).
+   */
   private async _finish(email: string): Promise<void> {
     this._notice.set('upgraded', email);
+    if (this._profile.profile() !== null) {
+      void this._profile.load();
+    }
     await this._router.navigateByUrl(
       appPath(this._locale(), this._basePath, 'home')
     );
-  }
-
-  private _focusFirstField(): void {
-    this._host.nativeElement
-      .querySelector<HTMLInputElement>('input[type="email"]')
-      ?.focus();
-  }
-
-  /** By id, because the reveal toggle swaps the input's type. See `RegisterPage`. */
-  private _focusConfirmField(): void {
-    this._host.nativeElement
-      .querySelector<HTMLInputElement>('#upgrade-confirm-password')
-      ?.focus();
   }
 }

@@ -16,6 +16,7 @@ export * from './lib/auth/impersonation-session';
 export * from './lib/auth/pending-recovery-link';
 export * from './lib/auth/session-store';
 export * from './lib/auth/session-validation';
+export * from './lib/auth/terms-refusal';
 export * from './lib/auth/token-store';
 export * from './lib/auth/unproven-session';
 export * from './lib/baskets/basket-api';

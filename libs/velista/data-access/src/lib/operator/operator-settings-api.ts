@@ -22,10 +22,15 @@ export class OperatorSettingsApi implements OperatorSettingsServiceI {
   private readonly _http = inject(HttpClient);
   private readonly _urls = inject(ApiUrl);
 
-  async read(): Promise<OperatorSettings | null> {
+  async read(
+    options: { readonly fresh?: boolean } = {}
+  ): Promise<OperatorSettings | null> {
     const body = await firstValueFrom(
       this._http.get<unknown>(this._urls.gateway('/v1/legal/settings'), {
         context: anonymous('legal.settings'),
+        // Revalidated with the server rather than read from the browser's cache,
+        // for a read that follows a refusal about the terms (velista `0173`).
+        ...(options.fresh === true ? { cache: 'no-cache' as const } : {}),
       })
     );
 

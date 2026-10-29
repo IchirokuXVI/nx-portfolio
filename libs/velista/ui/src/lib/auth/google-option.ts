@@ -6,6 +6,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import { GoogleIcon } from '../icons/icons';
+import { LinkedText } from '../legal/linked-text';
 
 /**
  * The other way in, under a divider: Continue with Google.
@@ -36,12 +37,19 @@ import { GoogleIcon } from '../icons/icons';
  * account in place, so the groups it holds stay.
  *
  * It is never drawn inside the native shell, where Google refuses to sign anybody in
- * from an embedded WebView. The container asks `APP_RUNTIME` and leaves this out, divider
- * and all.
+ * from an embedded WebView, nor in a deployment with no Google client
+ * (`features.googleSignIn`). The container asks both and leaves this out, divider and all.
+ *
+ * ## The line under it is part of it
+ *
+ * "By continuing with Google you accept the Terms" (velista `0173`, target 4): the press
+ * is the acceptance, so the line is drawn by this component and a fifth Google button
+ * cannot be added without it. It is left out only when the deployment published no
+ * terms, which the container says with a null {@link termsUrl}.
  */
 @Component({
   selector: 'lib-google-option',
-  imports: [RokuTranslatorPipe, GoogleIcon],
+  imports: [RokuTranslatorPipe, GoogleIcon, LinkedText],
   template: `
     <div aria-hidden="true" class="divider">
       <span class="rule"></span>
@@ -59,6 +67,16 @@ import { GoogleIcon } from '../icons/icons';
       <lib-google-icon class="glyph" />
       {{ 'home.action.google' | rokuT }}
     </button>
+
+    @if (termsUrl(); as url) {
+      <p class="terms-line">
+        <lib-linked-text
+          [href]="url"
+          [keepQuery]="true"
+          [text]="'legal.accept.google' | rokuT"
+        />
+      </p>
+    }
   `,
   styleUrl: './google-option.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,4 +89,10 @@ export class GoogleOption {
 
   /** The id of the message a refused start shows, or null when there is none. */
   readonly describedBy = input<string | null>(null);
+
+  /**
+   * Where the line under the button sends the terms, or null when the deployment
+   * published none and there is nothing to accept.
+   */
+  readonly termsUrl = input<string | null>(null);
 }

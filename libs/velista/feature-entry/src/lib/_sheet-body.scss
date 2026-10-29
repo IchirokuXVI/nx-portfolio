@@ -158,6 +158,24 @@
     color: var(--app-text-secondary);
   }
 
+  // What a press makes when no session is held: an account on this phone, and the
+  // terms accepted (velista 0173). A standing line above the primary, read on the way
+  // to the button, with no container: the icon and the secondary text carry it.
+  .terms-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--app-space-3);
+    margin: var(--app-space-4) 0 0;
+    font-size: var(--app-text-xs);
+    line-height: var(--app-leading-body);
+    color: var(--app-text-secondary);
+    text-wrap: pretty;
+
+    .glyph {
+      margin-block-start: var(--app-space-hair);
+    }
+  }
+
   .glyph {
     font-size: var(--app-icon-sm);
     flex: none;

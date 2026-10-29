@@ -50,7 +50,25 @@
         [title]="'update.required.title' | rokuT"
       />
     } @else if (rendersNow()) {
-      <router-outlet></router-outlet>
+      @if (termsPrompt()) {
+        <!--
+          The terms to accept before the app goes on (velista 0173, D3). In place of the
+          outlet, as the update screen is, so no press reaches a page below it. Never in
+          a support session, and never on a page somebody must read first: TermsGate
+          answers both, and the pages say so in route data.
+        -->
+        <lib-terms-prompt
+          (accepted)="acceptTerms()"
+          (signedOut)="signOutInstead()"
+          [acceptedBefore]="termsAcceptedBefore()"
+          [canSignOut]="termsCanSignOut()"
+          [privacyUrl]="legalUrls().privacy"
+          [state]="termsState()"
+          [termsUrl]="legalUrls().terms"
+        />
+      } @else {
+        <router-outlet></router-outlet>
+      }
     } @else {
       <!--
       The startup gate (plan 0071 D3). The outlet is **not created** while the app is
@@ -73,7 +91,7 @@
     }
   </div>
 
-  @if (rendersNow() && !mustUpdate()) {
+  @if (rendersNow() && !mustUpdate() && !termsPrompt()) {
     <!--
       The bar at the bottom of the app (plan 0097). **After the page slot**, which is
       what puts it after the page in the focus order without anything carrying a

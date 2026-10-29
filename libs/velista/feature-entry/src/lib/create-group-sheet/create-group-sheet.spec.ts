@@ -8,10 +8,14 @@ import {
 import {
   fakeZoneStore,
   GatewayError,
+  MEMORY_OPERATOR_SETTINGS,
+  OperatorSettingsStore,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   TokenStore,
   type FakeIdentity,
+  type FakeOperatorSettingsStore,
   type FakeZoneStore,
   type ZoneEntryOutcome,
   type ZoneMutationCall,
@@ -53,6 +57,7 @@ async function render(options: Options = {}): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
       provideFakeZoneStore(store),
+      provideFakeOperatorSettingsStore(),
       provideFakeSessionStore(options.identity ?? 'TEMPORARY'),
       { provide: SheetNavigation, useValue: sheets },
       { provide: TokenStore, useValue: tokens },
@@ -148,21 +153,67 @@ describe('CreateGroupSheet', () => {
       expect(sheets.leaveTo).toHaveBeenCalledWith('/velista/en/home');
     });
 
-    it('tells a guest that an account is being made, while it happens', async () => {
-      // Told afterwards, it is news about something that already went ahead without
-      // asking. The notice is only on screen while the request is in flight.
+    it('tells somebody with no account, before the press, that one is made and the terms accepted', async () => {
+      // Velista 0173, target 5: told afterwards, it is news about something that
+      // already went ahead without asking. So the line stands before the press, and
+      // stays the same while the request runs.
       const { fixture } = await render({
         identity: 'anonymous',
         respond: inFlight,
       });
       type(fixture, 'Flat 3B');
 
-      expect(query(fixture, '.notice')).toBeNull();
+      expect(query(fixture, '.terms-notice')?.textContent).toContain(
+        'legal.accept.createNotice'
+      );
+      expect(query(fixture, '.primary')?.getAttribute('aria-describedby')).toBe(
+        'create-zone-notice'
+      );
 
       (query(fixture, '.primary') as HTMLButtonElement).click();
       fixture.detectChanges();
 
-      expect(query(fixture, '.notice')).not.toBeNull();
+      expect(query(fixture, '.terms-notice')).not.toBeNull();
+      expect(query(fixture, '.notice')).toBeNull();
+    });
+
+    it('sends the version of the terms only when the press makes an account', async () => {
+      const anonymous = await render({ identity: 'anonymous' });
+      type(anonymous.fixture, 'Flat 3B');
+      (query(anonymous.fixture, '.primary') as HTMLButtonElement).click();
+      await anonymous.fixture.whenStable();
+      expect(anonymous.store.termsVersions).toEqual([
+        MEMORY_OPERATOR_SETTINGS.terms.version,
+      ]);
+
+      const guest = await render({ identity: 'TEMPORARY' });
+      type(guest.fixture, 'Flat 3B');
+      (query(guest.fixture, '.primary') as HTMLButtonElement).click();
+      await guest.fixture.whenStable();
+      expect(guest.store.termsVersions).toEqual([null]);
+    });
+
+    it('keeps the old line while submitting when no terms were published', async () => {
+      const { fixture, store } = await render({
+        identity: 'anonymous',
+        respond: inFlight,
+      });
+      (
+        TestBed.inject(
+          OperatorSettingsStore
+        ) as unknown as FakeOperatorSettingsStore
+      ).land({ ...MEMORY_OPERATOR_SETTINGS, published: false });
+      type(fixture, 'Flat 3B');
+
+      expect(query(fixture, '.terms-notice')).toBeNull();
+
+      (query(fixture, '.primary') as HTMLButtonElement).click();
+      fixture.detectChanges();
+
+      expect(query(fixture, '.notice')?.textContent).toContain(
+        'entry.createZone.mintingAccount'
+      );
+      expect(store.termsVersions).toEqual([null]);
     });
 
     it('says nothing about an account to somebody who already has one', async () => {
@@ -172,10 +223,41 @@ describe('CreateGroupSheet', () => {
       });
       type(fixture, 'Flat 3B');
 
+      expect(query(fixture, '.terms-notice')).toBeNull();
+
       (query(fixture, '.primary') as HTMLButtonElement).click();
       fixture.detectChanges();
 
       expect(query(fixture, '.notice')).toBeNull();
+      expect(query(fixture, '.terms-notice')).toBeNull();
+    });
+
+    it('reads the settings again when the terms changed while the sheet was open', async () => {
+      const { fixture } = await render({
+        identity: 'anonymous',
+        respond: () => ({
+          state: 'failed',
+          error: new GatewayError({
+            code: 'terms_version_stale',
+            status: 409,
+            correlationId: 'c1',
+            details: { currentVersion: 'next' },
+          }),
+        }),
+      });
+      type(fixture, 'Flat 3B');
+
+      (query(fixture, '.primary') as HTMLButtonElement).click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      const settings = TestBed.inject(
+        OperatorSettingsStore
+      ) as unknown as FakeOperatorSettingsStore;
+      expect(settings.reloads()).toBe(1);
+      expect(query(fixture, '#create-zone-error')?.textContent).toContain(
+        'legal.accept.stale'
+      );
     });
 
     it('cannot be dismissed or cancelled once the request has gone', async () => {

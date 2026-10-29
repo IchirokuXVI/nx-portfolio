@@ -1,0 +1,123 @@
+// A document in a sheet: the sheet's own title and the page's sections, and a foot with
+// the full page and Close. No tinted container: the footer is the sheet's own bar.
+//
+// The mixin is copied rather than imported: Sass cannot cross a library boundary.
+
+@mixin focus-ring {
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.title {
+  margin: 0 0 var(--app-space-2);
+  font-size: var(--app-text-xl);
+  font-weight: 650;
+  line-height: var(--app-leading-heading);
+  color: var(--app-text-primary);
+}
+
+.meta {
+  margin: 0 0 var(--app-space-6);
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+lib-legal-sections {
+  padding-block-end: var(--app-space-6);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-primary);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  margin: 0;
+  padding-block: var(--app-space-8);
+  color: var(--app-text-secondary);
+}
+
+.spinner {
+  font-size: var(--app-icon-lg);
+}
+
+.failed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--app-space-4);
+  margin: 0;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+}
+
+.unpublished {
+  margin: 0;
+  color: var(--app-text-secondary);
+  text-wrap: pretty;
+}
+
+.quiet {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-3);
+  background: transparent;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-button-radius);
+  color: var(--app-text-primary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+// The full page on the left, Close on the right, each a full touch target.
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--app-space-4);
+  min-block-size: var(--app-touch-target);
+  padding-block-start: var(--app-space-3);
+}
+
+.page-link {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: var(--app-touch-target);
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  color: var(--app-action-quiet-fg);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+
+  @include focus-ring;
+}
+
+.close {
+  min-block-size: var(--app-touch-target);
+  padding-inline: var(--app-space-4);
+  border: none;
+  background: transparent;
+  color: var(--app-text-secondary);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 500;
+  cursor: pointer;
+
+  @include focus-ring;
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

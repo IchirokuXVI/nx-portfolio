@@ -51,9 +51,16 @@ export class OperatorSettingsMemory implements OperatorSettingsServiceI {
   settings: OperatorSettings | null = MEMORY_OPERATOR_SETTINGS;
   failNext = false;
   reads = 0;
+  /** How many reads asked past the cache (velista `0173`). */
+  freshReads = 0;
 
-  async read(): Promise<OperatorSettings | null> {
+  async read(
+    options: { readonly fresh?: boolean } = {}
+  ): Promise<OperatorSettings | null> {
     this.reads += 1;
+    if (options.fresh === true) {
+      this.freshReads += 1;
+    }
     if (this.failNext) {
       this.failNext = false;
       throw new Error('operator settings: no answer');

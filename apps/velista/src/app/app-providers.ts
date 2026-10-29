@@ -12,7 +12,11 @@ import {
   type EnvironmentProviders,
   type Provider,
 } from '@angular/core';
-import { APP_MOUNT_PATH } from '@portfolio/localization/rokutranslator-angular';
+import { Router } from '@angular/router';
+import {
+  APP_MOUNT_PATH,
+  RokuLocaleStore,
+} from '@portfolio/localization/rokutranslator-angular';
 import { provideService } from '@portfolio/shared/data-access';
 import {
   ACCOUNT_SERVICE,
@@ -70,6 +74,7 @@ import {
   ShopSectionsApi,
   ShopWalkApi,
   StartupProbe,
+  TokenStore,
   TRIP_SERVICE,
   TripApi,
   VELISTA_DATA_ACCESS_PROVIDERS,
@@ -87,9 +92,11 @@ import {
 } from '@portfolio/velista/models';
 import {
   AppHistory,
+  appPath,
   AppUpdates,
   InstallStore,
   NavChrome,
+  TermsGate,
   tourHoldingsOf,
   TourStore,
   VELISTA_PLATFORM_PROVIDERS,
@@ -464,6 +471,53 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
       if (tour.ended() > 0) {
         untracked(() => profile.markTourSeen());
       }
+    });
+  }),
+
+  // Tell the terms gate where the account stands, and give it its two acts (velista
+  // `0173`, target 8). Here for the tour's reason: `TermsGate` lives in `platform`,
+  // which may not import the stores, and `AppLayout`, which draws the prompt, may not
+  // either.
+  //
+  // - **Where the account stands**, from `ProfileStore.terms`, whenever it changes. A
+  //   profile with no terms block, or no session at all, asks nothing. The version the
+  //   press accepts is the one the account was asked for.
+  // - **Accepting** is the data-access call and then a read of the profile, which is
+  //   what takes the prompt away (or redraws it, when the terms moved meanwhile).
+  // - **Sign out**, offered to an account with credentials and never to a guest, who
+  //   would lose the account with it: the pair and the profile cleared, as the account
+  //   page does, then the front door.
+  provideEnvironmentInitializer(() => {
+    const profile = inject(ProfileStore);
+    const session = inject(SessionStore);
+    const tokens = inject(TokenStore);
+    const gate = inject(TermsGate);
+    const router = inject(Router);
+    const locale = inject(RokuLocaleStore).locale;
+    // At the press, not here: the mount sits beside these providers on the app's
+    // route, not in this list (`app-root-route.ts`).
+    const injector = inject(Injector);
+
+    gate.handleAccept((version) => profile.acceptTerms(version));
+    gate.handleSignOut(() => {
+      tokens.clear();
+      profile.clear();
+      void router.navigateByUrl(appPath(locale(), injector.get(APP_BASE_PATH)));
+    });
+
+    effect(() => {
+      const terms = profile.terms();
+      const signedIn = session.isAuthenticated();
+      gate.report(
+        signedIn && terms?.acceptanceRequired === true,
+        terms === null || terms.currentVersion === ''
+          ? null
+          : terms.currentVersion,
+        {
+          acceptedBefore: (terms?.acceptedVersion ?? null) !== null,
+          canSignOut: signedIn && !session.isGuest(),
+        }
+      );
     });
   }),
 ];

@@ -16,6 +16,8 @@ import {
   AccountNotice,
   GatewayError,
   GoogleSignIn,
+  OperatorSettingsStore,
+  termsRefusal,
 } from '@portfolio/velista/data-access';
 import {
   APP_BASE_PATH,
@@ -80,12 +82,29 @@ export class LandingPage {
   private readonly _readiness = inject(BackendReadiness);
   private readonly _google = inject(GoogleSignIn);
   private readonly _basePath = inject(APP_BASE_PATH);
+  private readonly _settings = inject(OperatorSettingsStore);
+  private readonly _native = inject(APP_RUNTIME) === 'native';
 
   /**
-   * Whether to offer Google: everywhere but the native shell, where Google refuses to
-   * sign anybody in from an embedded WebView (velista `0166`).
+   * Whether to offer Google: where the deployment has a Google client
+   * (`features.googleSignIn`, velista `0173`) and never in the native shell, where
+   * Google refuses to sign anybody in from an embedded WebView (velista `0166`).
    */
-  readonly googleOffered = inject(APP_RUNTIME) !== 'native';
+  readonly googleOffered = computed(
+    () =>
+      !this._native && this._settings.settings()?.features.googleSignIn === true
+  );
+
+  /**
+   * The terms' page, for the line under the Google button and a refusal about them, or
+   * null when the deployment published no terms (velista `0173`). The page and not a
+   * sheet: the front door holds nothing typed.
+   */
+  readonly termsUrl = computed(() =>
+    this._settings.settings()?.published === true
+      ? appPath(this.locale(), this._basePath, 'terms')
+      : null
+  );
 
   /** True from a tap on Google until the document leaves, or until the start fails. */
   readonly googleStarting = signal(false);
@@ -287,9 +306,18 @@ export class LandingPage {
     this.googleError.set(null);
 
     try {
-      await this._google.start();
+      const settings = this._settings.settings();
+      await this._google.start({
+        acceptedTermsVersion:
+          settings?.published === true ? settings.terms.version : null,
+      });
     } catch (error) {
       this.googleStarting.set(false);
+      if (termsRefusal(error) !== null) {
+        // The terms changed while the page was open: read them again, so the next
+        // press sends the new version (velista `0173`, target 7).
+        this._settings.reload();
+      }
       this.googleError.set(googleFailureKey(error));
     }
   }
@@ -311,6 +339,13 @@ export class LandingPage {
  * this page would then load every auth page with it.
  */
 function googleFailureKey(error: unknown): string {
+  const terms = termsRefusal(error);
+  if (terms !== null) {
+    return terms.kind === 'stale'
+      ? 'legal.accept.stale'
+      : 'legal.accept.missing';
+  }
+
   if (error instanceof GatewayError) {
     if (error.code === 'impersonation_not_allowed') {
       return 'support.refused';

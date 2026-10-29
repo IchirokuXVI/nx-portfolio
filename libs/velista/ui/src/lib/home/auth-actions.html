@@ -48,6 +48,14 @@
       <lib-google-icon class="glyph" />
       {{ 'home.action.google' | rokuT }}
     </button>
+
+    <!-- What the press means, drawn with the button so no Google button is ever
+         without it (velista 0173). Left out when the deployment published no terms. -->
+    @if (termsUrl(); as url) {
+      <p class="terms-line">
+        <lib-linked-text [href]="url" [text]="'legal.accept.google' | rokuT" />
+      </p>
+    }
   }
 
   <button
@@ -66,6 +74,10 @@
     is an explanation, not an interruption.
   -->
   @if (message(); as sentence) {
-    <p aria-live="polite" class="held-message" role="status">{{ sentence }}</p>
+    <p aria-live="polite" class="held-message" role="status">
+      <!-- A refusal about the terms links them (velista 0173); any other sentence
+           has no brackets and is drawn as text. -->
+      <lib-linked-text [href]="termsUrl()" [text]="sentence" />
+    </p>
   }
 </div>

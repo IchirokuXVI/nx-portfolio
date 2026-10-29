@@ -1,4 +1,4 @@
-import { GatewayError } from '@portfolio/velista/data-access';
+import { GatewayError, termsRefusal } from '@portfolio/velista/data-access';
 
 /**
  * Which sentence a failure gets, keyed on the error code **and the operation**.
@@ -24,6 +24,16 @@ export function entryErrorKey(
   error: unknown,
   operation: EntryOperation
 ): string {
+  // A refusal about the terms, on either route (velista `0173`, target 7). The
+  // sentence links the terms, and the screen reads the settings again so the next
+  // press sends the version the server now asks for.
+  const terms = termsRefusal(error);
+  if (terms !== null) {
+    return terms.kind === 'stale'
+      ? 'legal.accept.stale'
+      : 'legal.accept.missing';
+  }
+
   if (!(error instanceof GatewayError)) {
     // A `NetworkError`, or something that never reached the transport. The blocking
     // connection screen owns the first of those, so all that is needed here is a

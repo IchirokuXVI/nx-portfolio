@@ -6,7 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorPipe,
@@ -17,11 +17,7 @@ import {
   type AuthServiceI,
 } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import {
-  APP_RUNTIME,
-  appPath,
-  PageNavigation,
-} from '@portfolio/velista/platform';
+import { appPath, PageNavigation } from '@portfolio/velista/platform';
 import {
   AuthScreen,
   EmailField,
@@ -32,6 +28,7 @@ import {
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { authErrorCopy, type AuthErrorCopy } from '../auth-error-copy';
+import { authTerms } from '../auth-terms';
 import { RETURN_URL_PARAM, safeReturnUrl } from '../return-url';
 
 /** The id the rejection carries, and the id both fields are described by. */
@@ -61,6 +58,7 @@ const GOOGLE_ERROR_ID = 'sign-in-google-error';
     GoogleOption,
     LegalLinks,
     PasswordField,
+    RouterOutlet,
     SpinnerIcon,
   ],
   templateUrl: './sign-in-page.html',
@@ -124,14 +122,15 @@ export class SignInPage {
   );
 
   /**
-   * Whether to offer Google at all: everywhere except the native shell.
+   * The terms over this page, and whether to offer Google at all (velista `0173`).
    *
-   * Google refuses to sign anybody in from an embedded WebView, so inside the Android
-   * app the button and its divider are not drawn (velista `0166`). A guest is offered
+   * Google is drawn where the deployment has a Google client and never in the native
+   * shell, where Google refuses an embedded WebView (velista `0166`). A guest is offered
    * it like anybody else, because backend `0230` links the guest account in place and
-   * keeps its groups.
+   * keeps its groups. Continuing with Google can make an account, so the line under the
+   * button names the terms and the start sends their version.
    */
-  readonly googleOffered = inject(APP_RUNTIME) !== 'native';
+  readonly terms = authTerms(['auth', 'login']);
 
   /** True from a tap on Google until the document leaves, or until the start fails. */
   readonly googleStarting = signal(false);
@@ -223,10 +222,14 @@ export class SignInPage {
     this.googleError.set(null);
 
     try {
-      await this._google.start();
+      await this._google.start({ acceptedTermsVersion: this.terms.version() });
     } catch (error) {
       this.googleStarting.set(false);
-      this.googleError.set(authErrorCopy(error, 'auth.google'));
+      const copy = authErrorCopy(error, 'auth.google');
+      if (copy.placement === 'terms') {
+        this.terms.reload();
+      }
+      this.googleError.set(copy);
     }
   }
 

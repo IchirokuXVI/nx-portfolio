@@ -21,10 +21,12 @@ import {
   AccountLostPanel,
   AlertIcon,
   InfoIcon,
+  LinkedText,
   SheetShell,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
 import { entryErrorKey } from '../entry-error-copy';
+import { entryTerms, isTermsSentence } from '../entry-terms';
 import { returnPath, type EntryReturnTo } from '../entry-urls';
 
 /** The gateway's own limit on a zone name, so the field cannot overrun it. */
@@ -51,6 +53,7 @@ const NAME_MAX_LENGTH = 80;
     AccountLostPanel,
     AlertIcon,
     InfoIcon,
+    LinkedText,
     SheetShell,
     SpinnerIcon,
   ],
@@ -68,6 +71,12 @@ export class CreateGroupSheet {
   private readonly _basePath = inject(APP_BASE_PATH);
 
   readonly maxLength = NAME_MAX_LENGTH;
+
+  /** The terms the notice names, and the version a press sends (velista `0173`). */
+  private readonly _terms = entryTerms();
+
+  /** The terms' page, or null when the deployment published none. */
+  readonly termsUrl = this._terms.termsUrl;
 
   readonly name = signal('');
   readonly submitting = signal(false);
@@ -88,8 +97,8 @@ export class CreateGroupSheet {
    *
    * True for anybody not signed in, which the gateway answers by minting a temporary
    * user to own the zone. Read before the request rather than after, because the
-   * notice has to be on screen **while** it happens: told afterwards, it is news about
-   * something that already went ahead without asking.
+   * notice has to be on screen **before** it happens (velista `0173`): told
+   * afterwards, it is news about something that already went ahead without asking.
    */
   readonly mintingAccount = computed(() => !this._session.isAuthenticated());
 
@@ -105,7 +114,12 @@ export class CreateGroupSheet {
     this.submitting.set(true);
     this.errorKey.set(null);
 
-    const outcome = await this._zones.createZone(this.name().trim());
+    // The version the notice names, read at the press. `ZoneApi` sends it only if this
+    // call makes an account.
+    const outcome = await this._zones.createZone(
+      this.name().trim(),
+      this.mintingAccount() ? this._terms.version() : null
+    );
 
     if (outcome.state === 'created') {
       // Straight to the dashboard, where the group is already listed and the invite
@@ -126,7 +140,11 @@ export class CreateGroupSheet {
     }
 
     if (outcome.state === 'failed') {
-      this.errorKey.set(entryErrorKey(outcome.error, 'zones.create'));
+      const key = entryErrorKey(outcome.error, 'zones.create');
+      if (isTermsSentence(key)) {
+        this._terms.reload();
+      }
+      this.errorKey.set(key);
     }
   }
 

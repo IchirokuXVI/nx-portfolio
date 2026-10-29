@@ -1,0 +1,146 @@
+<!-- `novalidate`, so the app's own sentence answers a bad address, in the app's
+     language, and not the browser's tooltip (velista 0160). -->
+<form (submit)="onSubmit($event)" class="form" novalidate>
+  <lib-email-field
+    [(value)]="email"
+    [describedBy]="describes('email')"
+    [fieldId]="ids().email"
+    [invalid]="invalid('email')"
+    [label]="'auth.field.email' | rokuT"
+    [placeholder]="'auth.field.emailPlaceholder' | rokuT"
+    [readOnly]="submitting()"
+  />
+
+  <!-- The minimum is on screen from the start rather than only on rejection: a
+       person choosing a password they are about to be told is too short has been
+       made to do the work twice (plan 0009, section 5.1). -->
+  <lib-password-field
+    [(value)]="password"
+    [describedBy]="describes('password')"
+    [fieldId]="ids().password"
+    [hideLabel]="'auth.field.hidePassword' | rokuT"
+    [invalid]="invalid('password')"
+    [label]="'auth.field.password' | rokuT"
+    [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
+    [readOnly]="submitting()"
+    [rule]="'auth.field.passwordRule' | rokuT"
+    [showLabel]="'auth.field.showPassword' | rokuT"
+    autocomplete="new-password"
+  />
+
+  <!-- Typed twice: the server sees one string and cannot know it was mistyped. No
+       rule sentence under it, because the rule is stated once above. -->
+  <lib-password-field
+    [(value)]="confirmPassword"
+    [describedBy]="describes('confirm')"
+    [fieldId]="ids().confirm"
+    [hideLabel]="'auth.field.hidePassword' | rokuT"
+    [invalid]="invalid('confirm')"
+    [label]="'auth.field.confirmPassword' | rokuT"
+    [placeholder]="'auth.field.confirmPasswordPlaceholder' | rokuT"
+    [readOnly]="submitting()"
+    [showLabel]="'auth.field.showPassword' | rokuT"
+    autocomplete="new-password"
+  />
+
+  @if (fieldProblem(); as rejection) {
+    <!-- A `conflict` on register offers a route rather than only a refusal, and the
+         route carries the typed address with it. -->
+    <lib-form-error
+      (action)="errorAction.emit()"
+      [actionLabel]="
+        rejection.action === 'signIn'
+          ? ('auth.error.emailTakenAction' | rokuT)
+          : null
+      "
+      [linkUrl]="rejection.link === 'terms' ? termsUrl() : null"
+      [message]="rejection.key | rokuT"
+      [messageId]="ids().error"
+    />
+  }
+
+  @if (termsUrl(); as terms) {
+    <!-- The terms are accepted here, and only here: a native box with its own label,
+         the link inside the label. The privacy policy is linked under it, outside the
+         label, and is never accepted (velista 0173, target 3). -->
+    <div class="terms">
+      <div class="check-row">
+        <input
+          (change)="onTermsChange($event)"
+          [attr.aria-describedby]="termsFlagged() ? ids().termsError : null"
+          [attr.aria-invalid]="termsFlagged() ? 'true' : null"
+          [checked]="accepted()"
+          [id]="ids().terms"
+          class="check"
+          type="checkbox"
+        />
+        <label [for]="ids().terms" class="check-label">
+          <lib-linked-text
+            [href]="terms"
+            [keepQuery]="true"
+            [text]="'legal.accept.checkbox' | rokuT"
+          />
+        </label>
+      </div>
+
+      @if (termsProblem(); as problem) {
+        <p [id]="ids().termsError" class="terms-error" role="alert">
+          <lib-alert-icon aria-hidden="true" class="glyph" />
+          <span>
+            @if (problem.link === 'terms') {
+              <lib-linked-text
+                [href]="terms"
+                [keepQuery]="true"
+                [text]="problem.key | rokuT"
+              />
+            } @else {
+              {{ problem.key | rokuT }}
+            }
+          </span>
+        </p>
+      }
+
+      @if (privacyUrl(); as privacy) {
+        <p class="privacy-line">
+          <lib-linked-text
+            [href]="privacy"
+            [keepQuery]="true"
+            [text]="'legal.accept.privacy' | rokuT"
+          />
+        </p>
+      }
+    </div>
+  }
+
+  <button
+    [attr.aria-busy]="submitting()"
+    [disabled]="!canSubmit()"
+    class="primary"
+    type="submit"
+  >
+    @if (submitting()) {
+      <lib-spinner-icon class="glyph" />
+    }
+    {{ submitLabel() | rokuT }}
+  </button>
+</form>
+
+@if (googleOffered()) {
+  <!-- The line under the button is drawn by the option itself, so it is never left
+       out (velista 0173, target 4). A guest on upgrade is linked in place: the state
+       carries their bearer (backend 0230). -->
+  <lib-google-option
+    (continueWithGoogle)="continueWithGoogle.emit()"
+    [busy]="googleBusy()"
+    [describedBy]="googleError() === null ? null : ids().google"
+    [termsUrl]="termsUrl()"
+  />
+
+  @if (googleError(); as rejection) {
+    <lib-form-error
+      [linkUrl]="rejection.link === 'terms' ? termsUrl() : null"
+      [message]="rejection.key | rokuT"
+      [messageId]="ids().google"
+    />
+  }
+}

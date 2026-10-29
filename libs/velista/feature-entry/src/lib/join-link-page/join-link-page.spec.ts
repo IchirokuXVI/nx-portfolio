@@ -8,10 +8,14 @@ import {
 import {
   fakeZoneStore,
   GatewayError,
+  MEMORY_OPERATOR_SETTINGS,
+  OperatorSettingsStore,
+  provideFakeOperatorSettingsStore,
   provideFakeSessionStore,
   provideFakeZoneStore,
   TokenStore,
   type FakeIdentity,
+  type FakeOperatorSettingsStore,
   type FakeZoneStore,
   type ZoneEntryOutcome,
   type ZoneMutationCall,
@@ -77,6 +81,7 @@ async function render(options: Options = {}): Promise<{
         },
       },
       provideFakeZoneStore(store),
+      provideFakeOperatorSettingsStore(),
       // Anonymous by default, which is the whole point of this page: it is reached
       // from somebody else's message by a person with no account.
       provideFakeSessionStore(options.identity ?? 'anonymous'),
@@ -139,18 +144,52 @@ describe('JoinLinkPage', () => {
       expect(query(fixture, '.decline')).not.toBeNull();
     });
 
-    it('says that asking will make an account on this phone', async () => {
+    it('says, before the press, that asking makes an account and accepts the terms', async () => {
+      // Velista 0173, target 5: it replaces the account note at the foot, and stands
+      // above the buttons.
       const { fixture } = await render();
 
+      expect(query(fixture, '.terms-notice')?.textContent).toContain(
+        'legal.accept.joinNotice'
+      );
+      expect(query(fixture, '.notice')).toBeNull();
+      const notice = query(fixture, '.terms-notice') as Element;
+      const primary = query(fixture, '.primary') as Element;
+      expect(notice.compareDocumentPosition(primary)).toBe(
+        Node.DOCUMENT_POSITION_FOLLOWING
+      );
+    });
+
+    it('keeps the old account note when no terms were published', async () => {
+      const { fixture } = await render();
+      (
+        TestBed.inject(
+          OperatorSettingsStore
+        ) as unknown as FakeOperatorSettingsStore
+      ).land({ ...MEMORY_OPERATOR_SETTINGS, published: false });
+      fixture.detectChanges();
+
+      expect(query(fixture, '.terms-notice')).toBeNull();
       expect(query(fixture, '.notice')?.textContent).toContain(
         'entry.joinLink.guestNotice'
       );
+    });
+
+    it('sends the version of the terms with the join', async () => {
+      const { fixture, store } = await render();
+
+      await fixture.componentInstance.submit();
+
+      expect(store.termsVersions).toEqual([
+        MEMORY_OPERATOR_SETTINGS.terms.version,
+      ]);
     });
 
     it('says nothing about an account to somebody who has one', async () => {
       const { fixture } = await render({ identity: 'REGISTERED' });
 
       expect(query(fixture, '.notice')).toBeNull();
+      expect(query(fixture, '.terms-notice')).toBeNull();
     });
 
     it('does not claim to know whose group it is', async () => {

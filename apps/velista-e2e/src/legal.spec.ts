@@ -85,12 +85,14 @@ test.describe('the legal pages', () => {
     await page.goto('/en');
 
     // At the foot, beside the version, under the ways in: on a short phone the
-    // reader scrolls to it, as to the version.
-    const privacy = page.getByRole('link', { name: 'Privacy', exact: true });
+    // reader scrolls to it, as to the version. Scoped to the foot's own row, because
+    // the line under the Google button links the terms too (velista 0173).
+    const foot = page.getByRole('navigation', { name: 'Privacy and terms' });
+    const privacy = foot.getByRole('link', { name: 'Privacy', exact: true });
     await privacy.scrollIntoViewIfNeeded();
     await expect(privacy).toBeInViewport();
     await expect(
-      page.getByRole('link', { name: 'Terms', exact: true })
+      foot.getByRole('link', { name: 'Terms', exact: true })
     ).toBeVisible();
 
     await privacy.click();

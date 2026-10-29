@@ -23,8 +23,17 @@ export interface AuthServiceI {
    * only credential was the token this call is about to replace. `guestOnlyGuard` and
    * `anonymousOnlyGuard` are what enforce that at the route, which is where it can be
    * tested.
+   *
+   * `acceptedTermsVersion` is the version of the terms the person ticked the box for,
+   * read from the operator's settings at the press, or null when the deployment has
+   * published no terms and nothing was drawn to accept (velista `0173`). A null sends
+   * no field at all.
    */
-  register(email: string, password: string): Promise<SessionTokens>;
+  register(
+    email: string,
+    password: string,
+    acceptedTermsVersion: string | null
+  ): Promise<SessionTokens>;
 
   /** Sign in. One rejection for a wrong password and for an unknown email alike. */
   login(email: string, password: string): Promise<SessionTokens>;
@@ -34,8 +43,14 @@ export interface AuthServiceI {
    *
    * Returns tokens for **the same `userId`**, which is the property the whole flow
    * exists for: memberships are keyed by it, so every group survives.
+   *
+   * `acceptedTermsVersion` as on {@link register}.
    */
-  upgrade(email: string, password: string): Promise<SessionTokens>;
+  upgrade(
+    email: string,
+    password: string,
+    acceptedTermsVersion: string | null
+  ): Promise<SessionTokens>;
 
   /** Consume a confirmation link. Answers whose account it confirmed. */
   verifyEmail(token: string): Promise<VerifiedEmail>;

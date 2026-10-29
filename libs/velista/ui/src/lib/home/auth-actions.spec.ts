@@ -201,4 +201,35 @@ describe('AuthActions', () => {
       expect(fixture.componentInstance.message()).toBe(CONNECTING);
     });
   });
+
+  describe('the line under Google (velista 0173)', () => {
+    function line(fixture: ComponentFixture<AuthActions>): Element | null {
+      return (fixture.nativeElement as HTMLElement).querySelector(
+        '.terms-line'
+      );
+    }
+
+    it('names the terms under the button when there are terms', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput('termsUrl', '/en/terms');
+      fixture.detectChanges();
+
+      expect(line(fixture)?.textContent?.trim()).toBe('legal.accept.google');
+    });
+
+    it('draws no line when the deployment published no terms', async () => {
+      const fixture = await createFixture();
+
+      expect(line(fixture)).toBeNull();
+    });
+
+    it('goes with the button when Google is not offered', async () => {
+      const fixture = await createFixture();
+      fixture.componentRef.setInput('termsUrl', '/en/terms');
+      fixture.componentRef.setInput('googleOffered', false);
+      fixture.detectChanges();
+
+      expect(line(fixture)).toBeNull();
+    });
+  });
 });

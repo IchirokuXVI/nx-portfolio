@@ -1,3 +1,5 @@
+> **PR:** [#864](https://github.com/IchirokuXVI/nx-portfolio/pull/864)
+
 # 0173: a person accepts the terms when an account is made
 
 > Asked for by the owner on 2026-10-27, with plan `0172` (the two documents) and backend
@@ -114,8 +116,10 @@ to read first. A stale version is answered by showing the new terms, never by a 
      `{ version }` and maps the 201 body (`TermsAcceptanceView { version, acceptedAt }`) from
      `unknown`.
    - The account mapper reads `terms` into the profile model as
-     `terms: { currentVersion: string; acceptedVersion: string | null; acceptanceRequired: boolean }`;
-     a missing block maps to `acceptanceRequired: false` (an older backend asks nothing).
+     `terms?: { currentVersion: string; acceptedVersion: string | null; acceptanceRequired: boolean }`;
+     a missing block is left off and reads as nothing required (an older backend asks
+     nothing; a rename's answer has none either, so `ProfileStore` keeps the one it held,
+     section 7).
    - `GatewayError` already carries `details` (`errors.ts` L40). A small pure function
      `termsRefusal(error): { kind: 'stale' | 'missing'; currentVersion: string } | null`
      reads `terms_version_stale` (409) and `terms_acceptance_missing` (400) and their
@@ -149,7 +153,9 @@ to read first. A stale version is answered by showing the new terms, never by a 
    - The button is drawn when `features.googleSignIn` is true, on the front door, sign in,
      register and upgrade. Upgrade's guest is linked in place, because the state carries
      their bearer. Remove the upgrade comment at L68 to L70 and `GoogleOption`'s "records
-     rather than navigates" section, and their `pendingRoutes` recordings.
+     rather than navigates" section, and their `pendingRoutes` recordings. (As built:
+     PR #846 had already removed the recordings and that section; what was left was the
+     upgrade page's "a separate decision that nobody has taken", now replaced.)
    - Under every Google button, one line: "By continuing with Google you accept the
      [Terms]". `GoogleOption` and `AuthActions` take a `termsUrl` input and draw it; the
      line is part of the button's component so a fifth button cannot be added without it.
@@ -161,6 +167,8 @@ to read first. A stale version is answered by showing the new terms, never by a 
    accept the [Terms]" (the join screens say "join"). It replaces `entry.joinLink.guestNotice`
    and stands before the press on create (the `mintingAccount` line during submit may stay
    or merge; decide in the mock). The calls pass the version. No checkbox (the owner).
+   (As built: both older lines are kept for a deployment that published no terms, where
+   the new notice is not drawn; section 7.)
 6. **The documents as sheets.** `feature-legal` (plan `0172`) gains `LegalSheet`: the same
    renderer and document inside `SheetShell`, with a link at its foot to the full page.
    `routes.ts` declares `sheet({ path: 'privacy' })` and `sheet({ path: 'terms' })`
@@ -177,7 +185,9 @@ to read first. A stale version is answered by showing the new terms, never by a 
    Keys in `auth-error-copy.ts` and `entry-error-copy.ts`, with specs.
 8. **The prompt.** A root service `TermsGate` in `libs/velista/platform/src/lib/terms-gate.ts`
    with `required: Signal<boolean>` (default false), `version: Signal<string | null>`,
-   `state: Signal<'idle' | 'accepting' | 'failed'>`, `report(required, version)` and
+   `state: Signal<'idle' | 'accepting' | 'failed'>`, `report(required, version, details?)`
+   (the details say whether an older version was accepted and whether sign out is
+   offered, section 7) and
    `accept(): Promise<void>`, which calls an acceptor registered once by `app-providers.ts`
    (the data-access call, then a reread of `ProfileStore`). `app-providers.ts` feeds
    `report` from `ProfileStore.profile().terms`, as it feeds the tour (L443).
@@ -298,6 +308,9 @@ create a group signed out, the prompt for a seeded user, a stale version (change
   settings stub (`features.googleSignIn`, false when the stub is absent). I found no spec of
   `velista-e2e` that names the Google button; `startup-gate.spec.ts` L26 and L70 find the
   create button by name, which the guest notice does not change. Run all three files.
+  (As built: `legal.spec.ts`, which `0172` added after this was written, named the front
+  door's "Terms" link by role, and the line under Google is a second one; the spec now
+  scopes both links to the "Privacy and terms" row.)
 - The review battery (`apps/velista-luna-e2e/reviews/2026-10-27-session-tokens`) registers
   through the API with no version. It is not in the gate; it breaks only once acceptance is
   on, and its `register` helper then needs `acceptedTermsVersion` read from
@@ -325,9 +338,23 @@ for each demo user the specs sign in as, `POST /v1/auth/login` then
 the stubbed spec. Do this in the same PR, after the UI sends the version everywhere, never
 before (the gate would turn red for a UI that does not exist).
 
+(As built: the gate runs with acceptance on. The gate's Luna services are declared in
+`k8s/e2e/luna-shopper-backend/compose.apps.yml`, which states every variable by hand, and
+`k8s/e2e/velista-luna/compose.yml` holds only velista and its proxy, so the keys went
+there and not into the two files this paragraph names. `compose.apps.yml` reads
+`TERMS_ACCEPTANCE_REQUIRED` on `gateway` and `auth`, and `LEGAL_CONTROLLER_NAME` and
+`LEGAL_CONTACT_EMAIL` on `gateway`, each from the environment with a default of off and
+empty, so the backend gate that shares the file runs as before. `gate.sh` exports
+`TERMS_ACCEPTANCE_REQUIRED=true`, `LEGAL_CONTROLLER_NAME="Jane Example"` and
+`LEGAL_CONTACT_EMAIL=privacy@example.invalid` when `velista-luna-e2e` runs. Those two
+values are the least the gateway boots with: its schema refuses acceptance on with
+either empty. The global setup accepts for the demo users on every run, seeded or not.
+See section 7, item 31.)
+
 ## 5. Decisions that are the owner's
 
-- **O1.** Whether the gate runs with acceptance on (section 4.3) or keeps the default.
+- **O1.** Whether the gate runs with acceptance on (section 4.3) or keeps the default. As
+  built it runs with acceptance on; the three exports in `gate.sh` turn it back.
 - **O2.** The order on the day: this plan deployed, then `termsAcceptanceRequired: true` with
   the `minClientVersion` raise, staging then production (`0231` section 6).
 - **O3.** Google offered on all four screens once PR #846 lands (D6).
@@ -345,3 +372,190 @@ before (the gate would turn red for a UI that does not exist).
 - The checkbox answered on submit rather than disabling the button.
 - Accepting the e2e demo users in global setup rather than in the seed (the seed is backend
   tooling outside velista's scope; a later backend change may move it there).
+
+## 7. What the build decided
+
+The builder's choices where the plan left room, written on 2026-10-29. Each is the owner's
+to change.
+
+### 7.1 The mock
+
+1. **Seven artboards in `mocks/terms/`, Night only.** No new colour role: the box takes the
+   accent, the refusals take the danger colour the auth forms already use.
+2. **The checkbox row** is a native box a touch target tall, its label "I accept the
+   [Terms]" with the link inside, and the privacy line under it indented to the label's
+   text, in the secondary colour, outside the label. No container.
+3. **The Google line** is small secondary text centred under the button, as its caption.
+4. **The guest notice stands above the primary (A)**, read on the way to the button; the
+   artboard `GuestNoticeAfter` keeps the one under it (B) for the owner to compare. It is a
+   plain line with the info icon, not the tinted `.notice` box.
+5. **The prompt** is the blocking screen's layout: the display face title at the top, two
+   sentences with their links, the primary and a quiet "Sign out" at the foot in thumb
+   reach. It is an `h2`, as the update screen's is: `one-page-header.spec.ts` allows an `h1`
+   only inside `PageHeader`.
+
+### 7.2 The wire and the data
+
+6. **`acceptedTermsVersion: string | null`** on `register` and `upgrade`, required so every
+   caller decides; null leaves the field out, and so does an empty string
+   (`withTermsVersion`), because the gateway refuses an empty one.
+7. **`GoogleSignIn.start({ acceptedTermsVersion })`** with a null for a deployment that
+   published nothing. `AuthApi.mintGoogleState(challenge, version)` puts it beside the
+   challenge.
+8. **`ZoneApi` sends the version only on `authorized.state === 'anonymous'`**, the branch on
+   which the gateway mints a guest. `ZoneStore.createZone(name, version)` and `joinZone(code,
+   version)` pass it through; the screens send null for a caller who holds a session.
+9. **`terms` is optional on `UserProfile`**, left off when the body has no block, for
+   `appState`'s reason: a rename answers no terms, and `ProfileStore.rename` keeps the block
+   it held. Unreadable values read as nothing required.
+10. **`ProfileStore.acceptTerms(version)`** is the acceptor: the write through `Mutations`,
+    then a read of the profile. A `terms_version_stale` answer is not a failure: the profile
+    is read again and the prompt redraws with the new version. Any other failure rejects.
+11. **`termsRefusal`** lives in `data-access/src/lib/auth/terms-refusal.ts`, beside the
+    error classes it reads. The two codes joined `ERROR_CODES` in `models/problem.ts` (the
+    note of backend `0231`, section 10.8).
+12. **A read after a refusal asks past the browser's cache.** The settings route answers
+    `Cache-Control: max-age=300`, so the walk's second press after a stale refusal sent the
+    old version again: the reload was served from the cache. `OperatorSettingsStore.reload()`
+    now reads with `cache: 'no-cache'` (`OperatorSettingsServiceI.read({ fresh })`); the
+    first read of a document still may come from the cache. This touches
+    `data-access/src/lib/operator/`, which section 2's scope list did not name; without it
+    target 7's "the new version is the one sent next time" does not hold for five minutes.
+13. **The upgrade page reads a held profile again after it succeeds**, because the upgrade
+    changed the account's kind and its address, and the profile this document read before
+    still names a guest with no address. It is not about the terms: a guest who owes them
+    never sees this form, because `auth/upgrade` is not flagged `READ_BEFORE_TERMS` and the
+    prompt replaces it. The read also brings the acceptance the upgrade recorded.
+
+### 7.3 The form, Google and the sheets
+
+14. **`AccountForm` owns the three checks before the request** (address shape, length, the
+    two passwords) for both modes, then the box. Upgrade did only the mismatch before; it
+    now also answers the address and the length before the request, as plan `0160` asks of
+    register. The checks run in field order, so the box is checked last.
+15. **A refusal about the terms is an `AuthErrorCopy` placed on `terms`** with `link:
+    'terms'`: the form clears the box, draws the sentence under it with the link, and moves
+    focus to the box. The pages call `reload()` on the settings when they see one.
+16. **One helper per screen family**: `authTerms(over)` in `feature-auth` (the sheet
+    addresses, Google offered, the version at the press, reload) and `entryTerms()` in
+    `feature-entry` (the page address, the version, reload). `termsRefusalCopy` in
+    `auth-error-copy.ts` and the first branch of `entryErrorKey` map the codes.
+17. **Google is drawn where `features.googleSignIn` is true and never in the native shell**
+    (both conditions), on the front door, sign in, register and upgrade.
+18. **`LinkedText` in `ui/src/lib/legal/`** draws a translated sentence with one bracketed
+    link ("I accept the [Terms]"), with no injected markup, so each language places its own
+    link. Its template is one line under `prettier-ignore`: a line break before the link
+    drew a space before a full stop ("servicio ."), which its spec now guards.
+    `FormError` gained a `linkUrl` input that uses it. Neither file is in section 2's list;
+    every line of copy with a link needs one or the other.
+19. **The sheets cover sign in too**, not only register and upgrade (target 6 names
+    `auth/login`): its Google line links the terms. Each sheet reads the page it covers from
+    its parent route's path, so the route data names only the document. A link from one
+    document to the other opens the other sheet over the same form; the sheet's foot links
+    the full page and closes. Both sheets carry `NO_NAV_CHROME` and `READ_BEFORE_TERMS`.
+20. **`LegalSheet` shares the page's reading** through `legalDocumentState` and its sections
+    through `LegalSections`, both extracted from `LegalPage`, so the two cannot disagree.
+
+### 7.4 The guest notice
+
+21. **Above the primary, before the press, and the same while the request runs.** On
+    create it replaces the `mintingAccount` line; on the shared link it replaces the
+    `guestNotice` at the foot and moves above the buttons. The primary names it in
+    `aria-describedby`.
+22. **With no terms published, both older lines stay**: the create sheet's `mintingAccount`
+    while submitting, and the link page's `guestNotice`. Target 9 says the new notice is
+    not drawn; the account is still made, and saying so is not about the terms.
+23. **The join code sheet reads "a session is held" from `SessionStore.isAuthenticated`**,
+    as the other two screens do.
+
+### 7.5 The prompt
+
+24. **`TermsGate.promptShown`** combines the three conditions (required, not a support
+    session through `ImpersonationState.active`, no `READ_BEFORE_TERMS` on the deepest
+    route), so the spec of the rule lives in `platform` and `AppLayout` only reads it. The
+    route flag is read the way `StartupGate` reads its flags, with a copy of its small
+    `readsFlag`, because `startup-gate.ts` is outside the scope.
+25. **While the prompt stands, the bottom bar and the tour are not drawn**, as under the
+    update screen.
+26. **"Sign out" is offered only to an account with credentials**, never to a guest: a
+    guest who signed out would lose the account (rule A1's reasoning). A guest sees Accept
+    alone. Sign out clears the pair and the profile and goes to the front door, as the
+    account page does.
+27. **`report(required, version, details)`**: the heading reads "We have new Terms" when
+    an older version was accepted (`acceptedBefore`), and a new version clears a failure.
+28. **Copy.** English: "Before you go on" / "We have new Terms", "Read the [Terms of
+    Service], then accept them to go on", "We changed the [Terms of Service]. Read them,
+    then accept them to go on", the privacy line, "Accept and continue", "That did not
+    save. Try again". Spanish written in its own words: "Antes de seguir" / "Tenemos nuevas
+    Condiciones", "Aceptar y continuar". Every key is under `legal.accept`, `legal.prompt`
+    and `legal.sheet`.
+
+### 7.6 e2e
+
+29. **`velista-e2e/src/terms.spec.ts`** stubs every other gateway route with an empty page
+    (and answers preflights), so the app never reads as offline under the prompt.
+30. **`velista-luna-e2e`**: `support/api.ts` gained `legalSettings`, `accountTerms`,
+    `acceptTerms` and `acceptTermsForDemoUsers` (Alice and Dana, the two users a spec signs
+    in as); `global-setup.ts` calls the last on every run, after the seed or with none, and
+    it does nothing where the deployment asks nothing. `terms.spec.ts` registers through the UI and creates a group
+    signed out, then reads `acceptedVersion` with the tab's own token; both skip on a
+    deployment that published no terms.
+31. **The gate runs with acceptance on (O1).** The gate's Luna services take their
+    environment from `k8s/e2e/luna-shopper-backend/compose.apps.yml`, and `gate.env` is not
+    an environment file, so the edit is in those two files, outside section 2's scope list.
+    `compose.apps.yml` gained `TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}`
+    on `gateway` and `auth`, and `LEGAL_CONTROLLER_NAME: ${LEGAL_CONTROLLER_NAME:-}` and
+    `LEGAL_CONTACT_EMAIL: ${LEGAL_CONTACT_EMAIL:-}` on `gateway`: of the eight `LEGAL_*`
+    keys of `0231` section 5.1, only those two are needed, because the gateway's schema
+    refuses acceptance on with either empty and defaults the rest. Auth reads only the
+    switch. `gate.sh` exports the three values inside its `with_luna` block. The defaults
+    keep the backend gate, which shares `compose.apps.yml`, as it was. The new
+    `velista-luna-e2e/terms.spec.ts` stops skipping there. Before this edit the suite was
+    run with acceptance on against an ephemeral slot (7.7).
+32. **The review battery** (`apps/velista-luna-e2e/reviews/2026-10-27-session-tokens`)
+    registers through the API with no version. It is not in the gate and was not changed.
+    Once acceptance is on where it runs, its `register` helper needs `acceptedTermsVersion`
+    read from `GET /v1/legal/settings`, or each register answers
+    `terms_acceptance_missing`.
+
+### 7.7 Verification
+
+- `npx nx build velista`: pass. `nx lint`: 0 errors on every touched project
+  (`velista/data-access` keeps its 3 warnings and `velista-luna-e2e` its 18, all in files
+  this plan does not touch).
+- `nx test`: `velista/models` 633, `velista/data-access` 1,746, `velista/platform` 374,
+  `velista/ui` 1,264, `velista/feature-legal` 59, `velista/feature-auth` 177,
+  `velista/feature-entry` 72, `velista/feature-landing` 33, `velista/feature-shell` 239,
+  `velista` 62.
+- `velista-e2e` with the stub, against velista slot 1: 100 passed (five browsers,
+  `terms.spec.ts` included).
+- `velista-luna-e2e` on ephemeral Luna slot 7 with `TERMS_ACCEPTANCE_REQUIRED=true` and
+  invented operator values: 10 of 10 (gateway, auth, core, realtime, assistant and
+  catalog; the catalog specs need the catalog service).
+- The walk at 360 px, Night, in both languages, on the same slots: register refused with
+  the box clear (focus on the box), the terms as a sheet with the typed address kept,
+  register with the box ticked (a `REGISTER` row), a group created signed out (a `GUEST`
+  row), that guest upgraded with Google offered on the page, the join code sheet and the
+  shared link page, the prompt for Alice with her row deleted (the terms page under it,
+  then Accept, a `PROMPT` row), and the terms moved to `2026-10-29+2026-12-15` with the
+  pages open: register cleared its box and said the terms changed, the next press went
+  through; Google on sign in was refused beside the button; Alice's reload drew "We have
+  new Terms".
+
+### 7.8 The review round
+
+33. **A sentence about the terms never shows brackets or a link to nowhere.** While the
+    settings are unread or their read failed, the terms have no address. `LinkedText`
+    takes a null `href` and draws the bracketed words as plain text, the entry screens
+    and the front door pass the null through, and `FormError` always draws its message
+    through `LinkedText`, also in the account form's field slot.
+34. **A tick answers a refusal on the box.** After the server refuses for the terms,
+    ticking the box takes away its `aria-invalid` and `aria-describedby`; the sentence
+    stays until the next press, and a new answer from the page marks the box again.
+35. **The sections of a document sit one level under its title**: `LegalSections` takes
+    a `headingLevel`, 2 on the page under its `h1` and 3 in the sheet under its `h2`.
+36. **The prompt takes focus on its heading** once drawn, since it replaces the page and
+    the element that held focus is gone.
+37. **The wiring in `app-providers.ts` has its own spec** (`terms-gate-wiring.spec.ts`),
+    against a faked `ProfileStore` and `SessionStore`; `fakeProfileStore` gained `terms`
+    and `acceptTerms` for it.

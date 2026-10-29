@@ -48,6 +48,7 @@ export * from './lib/silence-detector';
 export * from './lib/startup-gate';
 export * from './lib/storage-keys';
 export * from './lib/system-bars';
+export * from './lib/terms-gate';
 export * from './lib/testing/velista-testing';
 export * from './lib/theme-store';
 export * from './lib/tour/tour-anchor';

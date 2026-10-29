@@ -14,8 +14,14 @@ export interface OperatorSettingsServiceI {
   /**
    * The settings (`GET /v1/legal/settings`), or null when the answer is one this
    * build cannot read. A request that fails rejects.
+   *
+   * `fresh` asks past the browser's cache. The server lets an answer be kept for five
+   * minutes, which is right for the first read and wrong right after the server said
+   * the terms moved: a cached answer would send the old version again (velista `0173`).
    */
-  read(): Promise<OperatorSettings | null>;
+  read(options?: {
+    readonly fresh?: boolean;
+  }): Promise<OperatorSettings | null>;
 }
 
 /**

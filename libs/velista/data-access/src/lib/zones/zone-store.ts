@@ -297,9 +297,14 @@ export class ZoneStore {
    * overlay: an overlay describes a pending edit to a record that already exists, and
    * this record does not exist anywhere until the server answers.
    */
-  async createZone(name: string): Promise<ZoneEntryOutcome> {
+  async createZone(
+    name: string,
+    acceptedTermsVersion: string | null = null
+  ): Promise<ZoneEntryOutcome> {
+    // The version of the terms the sheet's notice named, sent only if this call makes
+    // an account (velista `0173`). `ZoneApi` decides that, at the moment it knows.
     const outcome = await this._mutations.run(null, () =>
-      this._zones.createZone(name)
+      this._zones.createZone(name, undefined, acceptedTermsVersion)
     );
 
     if (outcome.state === 'failed') {
@@ -346,9 +351,12 @@ export class ZoneStore {
    * and inner joins the zone row for both, so a membership that is still waiting comes
    * back as a full `MyZoneView` (section 5.6).
    */
-  async joinZone(joinCode: string): Promise<ZoneEntryOutcome> {
+  async joinZone(
+    joinCode: string,
+    acceptedTermsVersion: string | null = null
+  ): Promise<ZoneEntryOutcome> {
     const outcome = await this._mutations.run(null, () =>
-      this._zones.joinZone(joinCode)
+      this._zones.joinZone(joinCode, undefined, acceptedTermsVersion)
     );
 
     if (outcome.state === 'failed') {

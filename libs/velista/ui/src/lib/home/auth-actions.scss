@@ -111,3 +111,14 @@
   letter-spacing: 0.06em;
   color: var(--app-text-muted);
 }
+
+// What a press on Google means (velista 0173), as the button's caption: the column's
+// gap above it, the explainer's size, and the secondary colour, so it stays readable.
+.terms-line {
+  margin: 0;
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+  text-align: center;
+  text-wrap: pretty;
+}

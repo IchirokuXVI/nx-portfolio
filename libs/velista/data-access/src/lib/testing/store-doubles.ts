@@ -224,6 +224,8 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
     joinCode?: string;
   }[] = [];
 
+  const termsVersions: (string | null)[] = [];
+
   const respond =
     options.respond ??
     ((call: ZoneMutationCall): ZoneEntryOutcome =>
@@ -259,12 +261,23 @@ export function fakeZoneStore(options: FakeZoneStateOptions = {}) {
     },
     upsert: (zone: MyZone) => zones.update((current) => [zone, ...current]),
 
-    createZone: async (name: string): Promise<ZoneEntryOutcome> => {
+    /** The version of the terms each create or join sent, in order (velista `0173`). */
+    termsVersions: termsVersions as readonly (string | null)[],
+
+    createZone: async (
+      name: string,
+      acceptedTermsVersion: string | null = null
+    ): Promise<ZoneEntryOutcome> => {
       calls.push({ method: 'createZone', name });
+      termsVersions.push(acceptedTermsVersion);
       return respond({ method: 'createZone', name });
     },
-    joinZone: async (joinCode: string): Promise<ZoneEntryOutcome> => {
+    joinZone: async (
+      joinCode: string,
+      acceptedTermsVersion: string | null = null
+    ): Promise<ZoneEntryOutcome> => {
       calls.push({ method: 'joinZone', joinCode });
+      termsVersions.push(acceptedTermsVersion);
       return respond({ method: 'joinZone', joinCode });
     },
     clearLastEntry: () => lastEntry.set(null),
@@ -500,6 +513,8 @@ export interface FakeAuthOptions {
 export function fakeAuthService(options: FakeAuthOptions = {}) {
   const userId = options.userId ?? 'u1';
   const calls: AuthCall[] = [];
+  /** The version of the terms each register or upgrade sent, in order (velista `0173`). */
+  const termsVersions: (string | null)[] = [];
 
   const answer = (call: AuthCall, kind: UserKind): SessionTokens => {
     calls.push(call);
@@ -512,12 +527,24 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
   };
 
   const service: AuthServiceI = {
-    register: async (email: string) =>
-      answer({ method: 'register', email }, 'REGISTERED'),
+    register: async (
+      email: string,
+      _password: string,
+      acceptedTermsVersion: string | null
+    ) => {
+      termsVersions.push(acceptedTermsVersion);
+      return answer({ method: 'register', email }, 'REGISTERED');
+    },
     login: async (email: string) =>
       answer({ method: 'login', email }, 'REGISTERED'),
-    upgrade: async (email: string) =>
-      answer({ method: 'upgrade', email }, 'REGISTERED'),
+    upgrade: async (
+      email: string,
+      _password: string,
+      acceptedTermsVersion: string | null
+    ) => {
+      termsVersions.push(acceptedTermsVersion);
+      return answer({ method: 'upgrade', email }, 'REGISTERED');
+    },
 
     verifyEmail: async (token: string): Promise<VerifiedEmail> => {
       calls.push({ method: 'verifyEmail', token });
@@ -574,6 +601,8 @@ export function fakeAuthService(options: FakeAuthOptions = {}) {
     ...service,
     /** Everything the page asked for, in order. */
     calls: calls as readonly AuthCall[],
+    /** The version of the terms each register or upgrade sent, in order. */
+    termsVersions: termsVersions as readonly (string | null)[],
   };
 }
 
@@ -1931,6 +1960,7 @@ export type ProfileCall =
   | { readonly method: 'remove' }
   | { readonly method: 'completeSetup' }
   | { readonly method: 'suggestUsername' }
+  | { readonly method: 'acceptTerms'; readonly version: string }
   | { readonly method: 'clear' };
 
 /**
@@ -2010,6 +2040,13 @@ export function fakeProfileStore(options: FakeProfileOptions = {}) {
     clear: () => {
       calls.push({ method: 'clear' });
       profile.set(null);
+    },
+
+    /** The real rule: the held profile's terms block, or null (velista `0173`). */
+    terms: computed(() => profile()?.terms ?? null),
+
+    acceptTerms: async (version: string) => {
+      calls.push({ method: 'acceptTerms', version });
     },
 
     /** Everything the page asked for, in order. */

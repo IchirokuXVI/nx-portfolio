@@ -124,6 +124,14 @@ services:
       # transcription settles as UNAVAILABLE without a provider call and this
       # deadline is never reached; a long one would only slow a failing suite.
       VOICE_COMMENT_TRANSCRIBE_TIMEOUT_MS: '5000'
+      # The terms (backend plan 0231, velista plan 0173 section 4.3). Off and
+      # unpublished by default, so the backend gate runs as before. The browser
+      # gate (k8s/e2e/velista-luna/gate.sh) turns acceptance on and names an
+      # invented operator, because the gateway refuses to boot with acceptance
+      # on and either of the two values empty. Auth reads the same switch.
+      TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}
+      LEGAL_CONTROLLER_NAME: ${LEGAL_CONTROLLER_NAME:-}
+      LEGAL_CONTACT_EMAIL: ${LEGAL_CONTACT_EMAIL:-}
       # Names this container on every span and metric (plan 0016, section 4.2).
       # Tracing stays off unless OTEL_ENABLED and an endpoint are supplied, so
       # this tier runs unchanged without a collector.
@@ -213,6 +221,9 @@ services:
       # Auth alone reads it. It defaults to false, and this tier states its
       # environment by hand, so it is named here.
       IMPERSONATION_ENABLED: 'true'
+      # Refuses an account made with no version of the terms (backend plan
+      # 0231). From the environment, for the reason the gateway above states.
+      TERMS_ACCEPTANCE_REQUIRED: ${TERMS_ACCEPTANCE_REQUIRED:-false}
       SMTP_HOST: mailpit
       SMTP_PORT: '1025'
       SMTP_USER: ''

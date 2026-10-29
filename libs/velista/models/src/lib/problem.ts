@@ -184,6 +184,18 @@ export const ERROR_CODES = [
    * before it sends the link again with `switchAccount` (velista `0148`).
    */
   'recovery_other_account',
+  /**
+   * A version of the terms was sent and it is not the current one (backend `0231`), as
+   * a 409. `details.currentVersion` names the current one. The screen reads the
+   * settings again and shows the new terms (velista `0173`, target 7).
+   */
+  'terms_version_stale',
+  /**
+   * No version was sent where the deployment requires acceptance (backend `0231`), as a
+   * 400, with `details.currentVersion`. A build from before velista `0173` meets it;
+   * `minClientVersion` is what keeps one from reaching it.
+   */
+  'terms_acceptance_missing',
   'internal',
 ] as const;
 

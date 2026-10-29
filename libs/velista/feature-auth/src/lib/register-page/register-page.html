@@ -4,99 +4,23 @@
   [lede]="'auth.register.body' | rokuT"
   [title]="'auth.register.title' | rokuT"
 >
-  <!-- `novalidate`, so the app's own sentence answers a bad address, in the app's
-       language, and not the browser's tooltip (velista 0160). -->
-  <form (submit)="onSubmit($event)" class="form" novalidate>
-    <lib-email-field
-      [(value)]="email"
-      [describedBy]="error()?.placement === 'password' ? null : errorId"
-      [invalid]="error() !== null && error()?.placement !== 'password'"
-      [label]="'auth.field.email' | rokuT"
-      [placeholder]="'auth.field.emailPlaceholder' | rokuT"
-      [readOnly]="submitting()"
-      fieldId="register-email"
-    />
-
-    <!-- The minimum is on screen from the start rather than only on rejection: a
-         person choosing a password they are about to be told is too short has been
-         made to do the work twice (section 5.1). -->
-    <lib-password-field
-      [(value)]="password"
-      [describedBy]="error()?.placement === 'email' ? null : errorId"
-      [hideLabel]="'auth.field.hidePassword' | rokuT"
-      [invalid]="
-        error() !== null &&
-        error()?.placement !== 'email' &&
-        error()?.key !== 'auth.error.passwordMismatch'
-      "
-      [label]="'auth.field.password' | rokuT"
-      [placeholder]="'auth.field.passwordPlaceholder' | rokuT"
-      [readOnly]="submitting()"
-      [rule]="'auth.field.passwordRule' | rokuT"
-      [showLabel]="'auth.field.showPassword' | rokuT"
-      autocomplete="new-password"
-      fieldId="register-password"
-    />
-
-    <!-- The only check on a password anywhere in this product: the server sees one
-         string and cannot know it was mistyped. No rule sentence under it, because
-         the rule it has to meet is stated once above and repeating it would read as
-         a second, different requirement. -->
-    <lib-password-field
-      [(value)]="confirmPassword"
-      [describedBy]="error()?.placement === 'email' ? null : errorId"
-      [hideLabel]="'auth.field.hidePassword' | rokuT"
-      [invalid]="error() !== null && error()?.placement !== 'email'"
-      [label]="'auth.field.confirmPassword' | rokuT"
-      [placeholder]="'auth.field.confirmPasswordPlaceholder' | rokuT"
-      [readOnly]="submitting()"
-      [showLabel]="'auth.field.showPassword' | rokuT"
-      autocomplete="new-password"
-      fieldId="register-confirm-password"
-    />
-
-    @if (error(); as rejection) {
-      <!-- A `conflict` offers a route rather than only a refusal, and the route
-           carries the typed address with it. -->
-      <lib-form-error
-        (action)="signIn()"
-        [actionLabel]="
-          rejection.action === 'signIn'
-            ? ('auth.error.emailTakenAction' | rokuT)
-            : null
-        "
-        [message]="rejection.key | rokuT"
-        [messageId]="errorId"
-      />
-    }
-
-    <button
-      [attr.aria-busy]="submitting()"
-      [disabled]="!canSubmit()"
-      class="primary"
-      type="submit"
-    >
-      @if (submitting()) {
-        <lib-spinner-icon class="glyph" />
-      }
-      {{ 'auth.register.submit' | rokuT }}
-    </button>
-  </form>
-
-  @if (googleOffered) {
-    <lib-google-option
-      (continueWithGoogle)="continueWithGoogle()"
-      [busy]="googleStarting()"
-      [describedBy]="googleError() === null ? null : googleErrorId"
-    />
-
-    @if (googleError(); as rejection) {
-      <lib-form-error
-        [message]="rejection.key | rokuT"
-        [messageId]="googleErrorId"
-      />
-    }
-  }
+  <!-- The one form register and upgrade share (velista 0173): the fields, the
+       checkbox for the terms, the privacy line, the error, the submit, and Google with
+       its line. What is register's own stays here: the call, the conflict's route to
+       sign in, and the footer. -->
+  <lib-account-form
+    (continueWithGoogle)="continueWithGoogle()"
+    (errorAction)="signIn()"
+    (submitted)="submit($event)"
+    [error]="error()"
+    [googleBusy]="googleStarting()"
+    [googleError]="googleError()"
+    [googleOffered]="terms.googleOffered()"
+    [privacyUrl]="terms.privacyUrl()"
+    [submitting]="submitting()"
+    [termsUrl]="terms.termsUrl()"
+    mode="register"
+  />
 
   <p authFooter class="footer">
     {{ 'auth.register.haveOne' | rokuT }}
@@ -112,3 +36,6 @@
     authFooter
   />
 </lib-auth-screen>
+
+<!-- The terms and the privacy policy as sheets over this form (velista 0173, D5). -->
+<router-outlet />
