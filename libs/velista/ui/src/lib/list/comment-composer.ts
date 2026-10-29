@@ -282,7 +282,9 @@ export class CommentComposer {
   /**
    * Start recording, and say so when it did not start.
    *
-   * The microphone is drawn even where it cannot work, which is a change from plan
+   * Where the deployment transcribes (`voice` true), the microphone is drawn even on
+   * a browser that cannot record; where it does not, no microphone is drawn at all
+   * (velista `0174`). The first half is a change from plan
    * `0039` section 6: that plan drew no button at all on a browser that cannot
    * record, and it could, because the microphone sat beside a send button. With one
    * button doing both jobs there is nothing left to draw on an empty field, so the

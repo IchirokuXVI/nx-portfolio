@@ -65,7 +65,7 @@ export function allowanceReturn(
   const options: Intl.DateTimeFormatOptions =
     period === 'month'
       ? { day: 'numeric', month: 'long' }
-      : { hour: '2-digit', minute: '2-digit' };
+      : { hour: 'numeric', minute: '2-digit' };
 
   try {
     const hourPart = build(locale, { hour: 'numeric', hourCycle: 'h23' })

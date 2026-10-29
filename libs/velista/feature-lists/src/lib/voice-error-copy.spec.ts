@@ -132,7 +132,7 @@ describe('voiceFailureCopy', () => {
           allowance({ scope: 'user', period: 'day', resetsAt: one }),
           'es'
         ).messageArgs
-      ).toEqual({ time: '01:00', count: 1 });
+      ).toEqual({ time: '1:00', count: 1 });
     });
 
     it('names a date for a month', () => {

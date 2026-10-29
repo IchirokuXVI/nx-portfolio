@@ -268,7 +268,9 @@ to change. No target's text was amended.
    the list page asks `transcription && assistant` (D3), the comments sheet and the
    assistant page ask `transcription`. Each is false while `settings()` is null, whether
    the read is out or failed (D2). A spec for each page covers on, off, unanswered then
-   landing, and failed.
+   landing, and failed. For the list page that meant editing `list-page.spec.ts`, which
+   the scope list does not name (it names `list-page.ts` and `.html` only): the spec gained
+   the fake settings store and the microphone specs.
 2. **Both new `voice` inputs follow `LineComposer`.** With `voice` false the button is
    always send, disabled while the field is empty, `press()` never reaches the recorder,
    and the recorder is injected `{ optional: true }`. The templates read the recorder
@@ -289,7 +291,10 @@ to change. No target's text was amended.
    is `idle` or `loading` the holdings are null, so the tour waits (up to the existing
    `TOUR_HOLDINGS_WAIT_MS`) rather than planning five cards for a deployment that offers a
    microphone; a failed read plans without the card (D2). The voice card needs the same two
-   flags as the list page, because it lights the list's microphone.
+   flags as the list page, because it lights the list's microphone. The review round added
+   `apps/velista/src/app/tour-holdings-wiring.spec.ts`, which drives this effect: loading
+   keeps the holdings null, a failed read lands `voice: false`, and both flags on land
+   `voice: true`.
 7. **`tour-store.spec.ts` gained `voice: true` on its two fixtures.** The type change makes
    the field required, and that spec is outside the scope list; the edit is the two
    literals and nothing else, so its expectations (six cards) still hold.
@@ -308,7 +313,9 @@ to change. No target's text was amended.
 10. **`allowanceRefusal(error)`** is in `data-access/src/lib/assistant/allowance-refusal.ts`,
     exported from the barrel. Unknown `scope` reads `user`, unknown `period` reads `day`,
     unknown `limit` reads `turns` (the sentence that says the assistant is done for the
-    period, not one that invites typing), and an unparseable `resetsAt` reads null.
+    period, not one that invites typing), and an unparseable `resetsAt` reads null. So does
+    one that is not an ISO date-time, because `Date` alone accepts `'12'` (2001) and
+    `'2026'` (New Year) and would show a confident wrong time.
 11. **The panel's sentence is two keys joined**: the reason, then the way back, left out
     when the time is null. The reason is `assistant.allowance.resting` for any deployment
     refusal, `assistant.allowance.speaking.{day,month}` for the person's `assistantAudio`,
@@ -316,7 +323,9 @@ to change. No target's text was amended.
     included. Money is never named.
 12. **The hour goes in as the plural count.** Spanish says "a la 1:00" and "a las 2:00", so
     `backAt`, `speakAgainAt` and the list's `at` keys have `_one` and `_other` forms; the
-    English forms are the same sentence twice.
+    English forms are the same sentence twice. The time is formatted with
+    `hour: 'numeric'`, so it carries no leading zero: Spanish reads "a la 1:00" and English
+    "9:05 PM".
 13. **The sentences differ from target 5's examples**, as section 5 allows: "You have used
     the assistant as much as you can for today." reads more plainly than "as much as it
     allows". The speaking sentence keeps "You can still type." and adds "You can speak to
@@ -332,17 +341,22 @@ to change. No target's text was amended.
     under `list.add.allowance.{usedDay,usedMonth,speakingDay,speakingMonth,resting}` with
     `plain`, `at` or `on`. `voiceFailureCopy(error, locale)` takes the reader's locale for
     the time; the strip keeps the time it was given if the language changes afterwards.
+    The English speaking forms put the way back in a sentence of its own ("You can still
+    type it. You can speak to the assistant again at {{time}}"), so "it" never changes
+    referent inside one sentence.
 16. **Target 7 needed no copy.** A spec in the comments sheet sends an upload that answers
-    429 `assistant_allowance_reached`: it falls to `list.error.failed` in the sheet and in
-    the composer, which keeps the recording. A spec in `comment-row` asserts the player and
-    `noTranscript` for `FAILED` and for `UNAVAILABLE`.
+    429 `assistant_allowance_reached` through the composer (record, stop, the upload
+    refused): it falls to `list.error.failed` in the sheet and in the composer, which keeps
+    the recording and draws its retry, both asserted. A spec in `comment-row` asserts the
+    player and `noTranscript` for `FAILED` and for `UNAVAILABLE`.
 
 ### 7.4 The disclosure
 
 17. **`assistant.disclosure`** is a `<p class="disclosure">` between `PageHeader` and the
-    column, in `--app-text-muted` at `--app-text-xs`, with the column's side padding and no
-    icon or box. English is the plan's line. Spanish is "Te responde un asistente
-    automático, y puede equivocarse.", written as a sentence rather than the two fragments
+    column, in `--app-text-muted` at `--app-text-xs`, with the column's side padding, a
+    small bottom padding (`--app-space-2`) so a scrolled bubble is cut clear of the text,
+    and no icon or box. English is the plan's line. Spanish is "Te responde un asistente
+    automático que puede equivocarse.", written as a sentence rather than the two fragments
     of the English. At 360 px both fit on one line.
 18. **The header spec now looks two siblings back** for `PageHeader` from the column,
     because the disclosure sits between them; both stay outside the scroller.

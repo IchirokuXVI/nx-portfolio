@@ -50,9 +50,16 @@ export function allowanceRefusal(error: unknown): AssistantAllowance | null {
   return { scope, period, limit, resetsAt: dateOf(details['resetsAt']) };
 }
 
+/**
+ * The contract publishes `resetsAt` as an ISO date-time. `Date` alone also accepts
+ * `'12'` (2001) and `'2026'` (New Year), which would show a confident wrong time, so
+ * the shape is checked before the parse.
+ */
+const ISO_DATE_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
+
 function dateOf(raw: unknown): Date | null {
   const text = str(raw);
-  if (text === null || text.trim() === '') {
+  if (text === null || !ISO_DATE_TIME.test(text.trim())) {
     return null;
   }
 

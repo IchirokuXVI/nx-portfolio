@@ -8,7 +8,7 @@ describe('allowanceReturn (velista 0174)', () => {
 
   it('says a time of day for a day, with its hour', () => {
     expect(allowanceReturn({ period: 'day', resetsAt: evening }, 'en')).toEqual(
-      { when: expect.stringMatching(/21:05|09:05/), hour: 21 }
+      { when: expect.stringMatching(/^(21:05|9:05\sPM)$/), hour: 21 }
     );
     expect(allowanceReturn({ period: 'day', resetsAt: evening }, 'es')).toEqual(
       { when: '21:05', hour: 21 }
@@ -21,13 +21,13 @@ describe('allowanceReturn (velista 0174)', () => {
         { period: 'day', resetsAt: new Date(2026, 9, 29, 1, 0) },
         'es'
       )
-    ).toEqual({ when: '01:00', hour: 1 });
+    ).toEqual({ when: '1:00', hour: 1 });
     expect(
       allowanceReturn(
         { period: 'day', resetsAt: new Date(2026, 9, 29, 0, 0) },
         'es'
       )
-    ).toEqual({ when: '00:00', hour: 0 });
+    ).toEqual({ when: '0:00', hour: 0 });
   });
 
   it('says a date for a month', () => {

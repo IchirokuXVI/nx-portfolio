@@ -54,6 +54,16 @@ describe('allowanceRefusal (velista 0174)', () => {
     });
   });
 
+  it('reads a date Date would accept but the contract does not publish as no time', () => {
+    // `new Date('12')` and `new Date('2026')` are both valid dates, and both wrong.
+    for (const resetsAt of ['12', '2026', '2026-11-01', 'Nov 1 2026 00:00']) {
+      expect(
+        allowanceRefusal(refused('assistant_allowance_reached', { resetsAt }))
+          ?.resetsAt
+      ).toBeNull();
+    }
+  });
+
   it('reads a refusal with no details at all', () => {
     expect(allowanceRefusal(refused('assistant_allowance_reached'))).toEqual({
       scope: 'user',

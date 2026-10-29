@@ -15,9 +15,11 @@
 // The standing disclosure (velista `0174`, target 8). A line of quiet text between the
 // header and the column, in the muted caption colour, with no box and no icon: it says
 // what answers here and nothing more, so it must not compete with the conversation.
+// The bottom padding keeps the scroll edge of the column clear of the text, so a
+// bubble scrolled up under it is cut below the line and not flush against it.
 .disclosure {
   margin: 0;
-  padding: var(--app-space-3) var(--app-space-5) 0;
+  padding: var(--app-space-3) var(--app-space-5) var(--app-space-2);
   color: var(--app-text-muted);
   font-size: var(--app-text-xs);
   line-height: var(--app-leading-body);

@@ -775,12 +775,12 @@
         },
         "speakingDay": {
           "plain": "You have used today's time for speaking to the assistant, so nothing was added. You can still type it",
-          "at_one": "You have used today's time for speaking to the assistant, so nothing was added. You can still type it, and speak to it again at {{time}}",
-          "at_other": "You have used today's time for speaking to the assistant, so nothing was added. You can still type it, and speak to it again at {{time}}"
+          "at_one": "You have used today's time for speaking to the assistant, so nothing was added. You can still type it. You can speak to the assistant again at {{time}}",
+          "at_other": "You have used today's time for speaking to the assistant, so nothing was added. You can still type it. You can speak to the assistant again at {{time}}"
         },
         "speakingMonth": {
           "plain": "You have used this month's time for speaking to the assistant, so nothing was added. You can still type it",
-          "on": "You have used this month's time for speaking to the assistant, so nothing was added. You can still type it, and speak to it again on {{date}}"
+          "on": "You have used this month's time for speaking to the assistant, so nothing was added. You can still type it. You can speak to the assistant again on {{date}}"
         },
         "resting": {
           "plain": "The assistant is resting for now, so nothing was added. You can still type it",

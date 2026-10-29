@@ -645,9 +645,10 @@ describe('CommentsSheet', () => {
       expect(added).toHaveBeenCalled();
     });
 
-    it('answers an allowance refusal on an upload with the generic line, not a crash', async () => {
+    it('answers an allowance refusal on an upload with the generic line, and keeps the recording', async () => {
       // Backend `0234` never refuses the upload itself, so this is the future case
-      // target 7 asks about: it falls to the existing generic sentence.
+      // target 7 asks about: it falls to the existing generic sentence, and the
+      // recording stays held for the retry like any other failed send.
       const { fixture } = await render({
         addVoice: async () => {
           throw new GatewayError({
@@ -660,15 +661,18 @@ describe('CommentsSheet', () => {
       });
       const composer = componentOf(fixture);
 
-      await fixture.componentInstance.sendVoice({
-        blob: new Blob(['audio'], { type: 'audio/webm' }),
-        mimeType: 'audio/webm',
-        durationSeconds: 3,
-      });
+      composer.press();
+      await flush();
+      void composer.stopAndSend();
+      await flush();
       fixture.detectChanges();
 
       expect(fixture.componentInstance.errorKey()).toBe('list.error.failed');
       expect(composer.errorKey()).toBe('list.error.failed');
+      expect(composer.hasHeldRecording()).toBe(true);
+      expect(
+        fixture.debugElement.query(By.css('lib-comment-composer .retry'))
+      ).not.toBeNull();
     });
   });
 

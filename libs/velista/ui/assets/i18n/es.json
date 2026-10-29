@@ -775,12 +775,12 @@
         },
         "speakingDay": {
           "plain": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo",
-          "at_one": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo, y volver a hablarle a la {{time}}",
-          "at_other": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo, y volver a hablarle a las {{time}}"
+          "at_one": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo y volver a hablarle a la {{time}}",
+          "at_other": "Ya has gastado el tiempo de hoy para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo y volver a hablarle a las {{time}}"
         },
         "speakingMonth": {
           "plain": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo",
-          "on": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo, y volver a hablarle el {{date}}"
+          "on": "Ya has gastado el tiempo de este mes para hablar con el asistente, así que no se ha añadido nada. Puedes escribirlo y volver a hablarle el {{date}}"
         },
         "resting": {
           "plain": "El asistente está descansando un rato, así que no se ha añadido nada. Puedes escribirlo",
@@ -1346,7 +1346,7 @@
   "assistant": {
     "title": "Asistente",
     "back": "Atrás",
-    "disclosure": "Te responde un asistente automático, y puede equivocarse.",
+    "disclosure": "Te responde un asistente automático que puede equivocarse.",
     "intro": {
       "lead": "Dime qué necesitas. Por ejemplo:",
       "add": {
