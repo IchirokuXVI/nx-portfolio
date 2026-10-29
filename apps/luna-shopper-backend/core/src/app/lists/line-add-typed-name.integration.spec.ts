@@ -39,11 +39,10 @@ import { ListAccessService } from './list-access.service';
  * 0228, progress evidence).
  *
  * **Two adds of one typed name, racing on a list with one candidate, both
- * raise that line.** What is asserted is that the candidate read runs under
- * the list lock the add already takes: without it, both adds could read the
- * list while the other is half written, and the second lookup would have to
- * be right about a list it did not hold. A mock has no row and no lock, so
- * this is the only place the claim can be checked.
+ * raise that line.** Both answer `merged: true` with that line, the list
+ * still holds one row of the name, and its quantity is 4: the 1 it was
+ * created with plus the 1 and the 2 of the two adds. A mock has no row and no
+ * lock, so two adds that overlap can only be run here.
  *
  * The rest are the reads a mock cannot prove: the products in the refusal's
  * `details` come from an `In` query, and a chosen line of another list or a

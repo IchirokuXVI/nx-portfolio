@@ -522,7 +522,7 @@ export class LineService {
    */
   private validateReference(
     value: string | null | undefined,
-    field: 'favoriteItemId' | 'preferredSupermarketId'
+    field: 'favoriteItemId' | 'preferredSupermarketId' | 'intoLineId'
   ): string | null | undefined {
     if (value === undefined || value === null) {
       return value;
@@ -1004,10 +1004,19 @@ export class LineService {
           req.content
         );
         if (candidates.length === 1) {
-          return raise(await this.lockLine(manager, candidates[0].id));
+          // A candidate deleted since the read is no candidate, and the add
+          // creates, as {@link findEarliestLines} does on the same miss.
+          const line = await this.lockCandidateLine(
+            manager,
+            req.listId,
+            candidates[0].id
+          );
+          if (line !== null) {
+            return raise(line);
+          }
         }
         if (candidates.length > 1 && choice.askIfAmbiguous) {
-          throw await this.needsChoice(manager, req.content, candidates);
+          throw await this.needsChoice(manager, req.content.trim(), candidates);
         }
       }
 
@@ -1381,7 +1390,8 @@ export class LineService {
    * so a message that names a flag by any other value asks for nothing.
    * `intoLineId` beside `newLine: true` is two answers to one question and is
    * refused on every add, a product add included: the request is malformed
-   * whatever it carries.
+   * whatever it carries. So is an `intoLineId` that is not a uuid, which
+   * {@link validateReference} refuses before it reaches a `uuid` column.
    */
   private validateAddChoice(req: AddLineRequest): {
     askIfAmbiguous: boolean;
@@ -1389,7 +1399,8 @@ export class LineService {
     newLine: boolean;
   } {
     const newLine = req.newLine === true;
-    const intoLineId = req.intoLineId ?? undefined;
+    const intoLineId =
+      this.validateReference(req.intoLineId, 'intoLineId') ?? undefined;
     if (intoLineId !== undefined && newLine) {
       throw new ValidationException(
         'intoLineId cannot be sent beside newLine true',
@@ -1406,7 +1417,7 @@ export class LineService {
    * another list, a deleted line and a rejected line are all the one line not
    * found refusal, so the route says nothing about lines the list does not
    * hold. The line need not carry the typed name, because the person picked
-   * it. The gateway refuses a value that is not a uuid before it gets here.
+   * it. A value that is not a uuid never gets here ({@link validateAddChoice}).
    */
   private async lockChosenLine(
     manager: EntityManager,
@@ -1428,6 +1439,36 @@ export class LineService {
   }
 
   /**
+   * The one candidate of a typed name, read again whole and locked (plan 0228,
+   * target 1.4), or null when it is gone.
+   *
+   * {@link findNamedProductLines} reads with no lock, and a delete does not
+   * take the list lock, so the line can be deleted between that read and this
+   * one. A miss is then no candidate and the add creates, as
+   * {@link findEarliestLines} does on the same miss: the person asked for a
+   * plain add and gets one, never a line not found refusal. The list is in the
+   * filter so the row read is one of this list.
+   */
+  private async lockCandidateLine(
+    manager: EntityManager,
+    listId: string,
+    lineId: string
+  ): Promise<ListLine | null> {
+    const line = await manager.getRepository(ListLine).findOne({
+      where: { id: lineId, listId },
+      lock: { mode: 'pessimistic_write' },
+    });
+    if (
+      !line ||
+      line.listId !== listId ||
+      line.approvalStatus === LineApprovalStatus.REJECTED
+    ) {
+      return null;
+    }
+    return line;
+  }
+
+  /**
    * The lines of a list that hold a product or a group under a typed name
    * (plan 0228, target 1.4), in list position order.
    *
@@ -1440,7 +1481,8 @@ export class LineService {
    *
    * The same rows {@link findEarliestLines} reads, read under the list lock the
    * add already holds, so no other add to this list can change the answer
-   * before the add writes.
+   * before the add writes. A delete does not take that lock, which is why the
+   * one candidate is read again by {@link lockCandidateLine}.
    */
   private async findNamedProductLines(
     manager: EntityManager,

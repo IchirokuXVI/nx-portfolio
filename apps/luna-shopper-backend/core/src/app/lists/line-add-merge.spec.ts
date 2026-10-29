@@ -80,6 +80,16 @@ const OAT = '3f1a0c5e-2b7d-4a6f-8c91-000000000002';
 const GROUP = '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f52';
 const OTHER_GROUP = '7c2b4d1a-8e35-4f90-b6a2-1d4c7e9b0f53';
 
+/**
+ * Line ids that `intoLineId` names (plan 0228), as uuids, because core refuses
+ * any other shape before it reads.
+ */
+const WHOLE_LINE = '5d8e2a14-6c3b-4f71-9a0e-00000000000a';
+const OAT_LINE = '5d8e2a14-6c3b-4f71-9a0e-00000000000b';
+const ELSEWHERE_LINE = '5d8e2a14-6c3b-4f71-9a0e-00000000000c';
+const REJECTED_LINE = '5d8e2a14-6c3b-4f71-9a0e-00000000000d';
+const GONE_LINE = '5d8e2a14-6c3b-4f71-9a0e-00000000000e';
+
 interface Seed {
   id: string;
   content: string;
@@ -109,6 +119,11 @@ function build(options: {
   products?: { lineId: string; itemId: string; position: number }[];
   /** Purchases already recorded against a held line. */
   settled?: { lineId: string; quantity: number }[];
+  /**
+   * Lines that a read with no lock still finds and a locked read no longer
+   * does, as a delete between the two leaves them.
+   */
+  goneBeforeLock?: string[];
 }): Harness {
   const list = {
     id: LIST_ID,
@@ -156,8 +171,16 @@ function build(options: {
   const lineRepo = {
     // By id, because a merge reads its target back whole and locked, and more
     // than one line is held in most cases here.
-    findOne: async ({ where }: { where: { id: string } }) =>
-      held.find((row) => row.id === where.id) ?? null,
+    findOne: async ({
+      where,
+      lock,
+    }: {
+      where: { id: string };
+      lock?: unknown;
+    }) =>
+      lock !== undefined && options.goneBeforeLock?.includes(where.id)
+        ? null
+        : (held.find((row) => row.id === where.id) ?? null),
     // What the add folds over to decide whether the name is already on the list.
     // By position, as the query asks for, which is what decides the target when
     // the list already holds two lines of one name.
@@ -883,9 +906,9 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
   /** Two lines called "Leche entera", one per product. */
   const twoMilks = {
     holds: [
-      { id: 'li-whole', content: 'Leche entera', quantity: 2, position: 1 },
+      { id: WHOLE_LINE, content: 'Leche entera', quantity: 2, position: 1 },
       {
-        id: 'li-oat',
+        id: OAT_LINE,
         content: 'Leche entera',
         quantity: 1,
         position: 2,
@@ -894,8 +917,8 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
       },
     ],
     products: [
-      { lineId: 'li-whole', itemId: WHOLE, position: 0 },
-      { lineId: 'li-oat', itemId: OAT, position: 0 },
+      { lineId: WHOLE_LINE, itemId: WHOLE, position: 0 },
+      { lineId: OAT_LINE, itemId: OAT, position: 0 },
     ],
   };
 
@@ -948,7 +971,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     const w = build({
       holds: [
         {
-          id: 'li-rejected',
+          id: REJECTED_LINE,
           content: 'Leche entera',
           position: 1,
           approvalStatus: LineApprovalStatus.REJECTED,
@@ -956,7 +979,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
         { id: 'li1', content: 'Leche entera', position: 2 },
       ],
       products: [
-        { lineId: 'li-rejected', itemId: OAT, position: 0 },
+        { lineId: REJECTED_LINE, itemId: OAT, position: 0 },
         { lineId: 'li1', itemId: WHOLE, position: 0 },
       ],
     });
@@ -1042,7 +1065,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(exception.details).toEqual({
       lines: [
         {
-          lineId: 'li-whole',
+          lineId: WHOLE_LINE,
           content: 'Leche entera',
           named: true,
           quantity: 2,
@@ -1051,7 +1074,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           approvalStatus: LineApprovalStatus.APPROVED,
         },
         {
-          lineId: 'li-oat',
+          lineId: OAT_LINE,
           content: 'Leche entera',
           named: false,
           quantity: 1,
@@ -1107,7 +1130,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     const result = await add(w, 'Leche entera');
 
     expect(result.merged).toBe(false);
-    expect(['li-whole', 'li-oat']).not.toContain(result.line.id);
+    expect([WHOLE_LINE, OAT_LINE]).not.toContain(result.line.id);
     expect(result.line.itemIds).toEqual([]);
   });
 
@@ -1122,6 +1145,24 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(result.merged).toBe(false);
   });
 
+  it('creates a line when the one candidate is deleted before it is locked', async () => {
+    // The candidate read takes no lock and a delete does not take the list
+    // lock, so the only line of the name can be gone by the locked read.
+    const w = build({
+      holds: [{ id: 'li1', content: 'Leche entera', quantity: 2 }],
+      products: [{ lineId: 'li1', itemId: WHOLE, position: 0 }],
+      goneBeforeLock: ['li1'],
+    });
+
+    const result = await add(w, 'Leche entera');
+
+    expect(result.merged).toBe(false);
+    expect(result.line.id).not.toBe('li1');
+    expect(result.line).toMatchObject({ content: 'Leche entera', itemIds: [] });
+    expect(w.saved.map((row) => row.id)).toEqual([result.line.id]);
+    expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineAdded]);
+  });
+
   it('raises the line the person chose, whatever its name', async () => {
     const w = build({
       ...twoMilks,
@@ -1134,26 +1175,26 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     // Chosen over the free text line of the name, because the person picked
     // it (target 1.1).
     const result = await add(w, 'Leche', {
-      intoLineId: 'li-oat',
+      intoLineId: OAT_LINE,
       quantity: 2,
     });
 
     expect(result.merged).toBe(true);
-    expect(result.line).toMatchObject({ id: 'li-oat', quantity: 3 });
-    expect(w.saved.map((row) => row.id)).toEqual(['li-oat']);
+    expect(result.line).toMatchObject({ id: OAT_LINE, quantity: 3 });
+    expect(w.saved.map((row) => row.id)).toEqual([OAT_LINE]);
   });
 
   it('refuses a chosen line of another list, and never creates instead', async () => {
     const w = build({
       holds: [
         ...twoMilks.holds,
-        { id: 'li-elsewhere', content: 'Leche entera', listId: 'l2' },
+        { id: ELSEWHERE_LINE, content: 'Leche entera', listId: 'l2' },
       ],
       products: twoMilks.products,
     });
 
     await expect(
-      add(w, 'Leche entera', { intoLineId: 'li-elsewhere' })
+      add(w, 'Leche entera', { intoLineId: ELSEWHERE_LINE })
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(w.saved).toEqual([]);
     expect(w.events).toEqual([]);
@@ -1163,7 +1204,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     const w = build({
       holds: [
         {
-          id: 'li-rejected',
+          id: REJECTED_LINE,
           content: 'Leche entera',
           approvalStatus: LineApprovalStatus.REJECTED,
         },
@@ -1171,10 +1212,10 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     });
 
     await expect(
-      add(w, 'Leche entera', { intoLineId: 'li-rejected' })
+      add(w, 'Leche entera', { intoLineId: REJECTED_LINE })
     ).rejects.toBeInstanceOf(NotFoundException);
     await expect(
-      add(w, 'Leche entera', { intoLineId: 'li-gone' })
+      add(w, 'Leche entera', { intoLineId: GONE_LINE })
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(w.saved).toEqual([]);
   });
@@ -1183,8 +1224,20 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     const w = build(twoMilks);
 
     await expect(
-      add(w, 'Leche entera', { intoLineId: 'li-oat', newLine: true })
+      add(w, 'Leche entera', { intoLineId: OAT_LINE, newLine: true })
     ).rejects.toBeInstanceOf(ValidationException);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('refuses an intoLineId that is not a uuid as a validation error', async () => {
+    const w = build(twoMilks);
+
+    await expect(
+      add(w, 'Leche entera', { intoLineId: 'li-oat' })
+    ).rejects.toMatchObject({
+      constructor: ValidationException,
+      messageArgs: { field: 'intoLineId' },
+    });
     expect(w.saved).toEqual([]);
   });
 
@@ -1196,7 +1249,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     const third = await add(w, 'Leche entera', {
       itemIds: [GROUP],
       askIfAmbiguous: true,
-      intoLineId: 'li-whole',
+      intoLineId: WHOLE_LINE,
     });
     // The product of a line of the name, met by plan 0091's identities.
     const same = await add(w, 'Leche entera', {
@@ -1208,7 +1261,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(third.merged).toBe(false);
     expect(third.line.itemIds).toEqual([GROUP]);
     expect(same.merged).toBe(true);
-    expect(same.line.id).toBe('li-whole');
+    expect(same.line.id).toBe(WHOLE_LINE);
   });
 
   it('leaves a batch as it was: a typed name beside a product line creates', async () => {

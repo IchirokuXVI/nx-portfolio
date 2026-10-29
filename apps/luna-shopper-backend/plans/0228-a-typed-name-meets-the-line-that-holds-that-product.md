@@ -206,9 +206,9 @@ free text line of that name added meanwhile takes a `newLine` answer (target 1.2
   never a true. Core reads `=== true` as well.
 - **B3. A chosen line is read by id and list, locked.** A line of another list, a
   deleted line, a `REJECTED` line and an id that matches nothing are the one
-  `NotFoundException('Line not found')`. Core does not check that the id is a uuid: the
-  gateway refuses one that is not, and the Postgres backstop answers any other caller with
-  a 400.
+  `NotFoundException('Line not found')`. Core checks that the id is a uuid as well, with the
+  `validateReference` helper that `favoriteItemId` uses, so a NATS caller that is not the
+  gateway gets a validation error and not a failed cast in Postgres.
 - **B4. The candidate read is its own `SELECT`** (`findNamedProductLines`) after the
   identity read, not a widening of `findEarliestLines`, so the `lineIdentities` keys and
   the rename's lookup are untouched. It runs only for a free text add that missed the free
@@ -218,9 +218,9 @@ free text line of that name added meanwhile takes a `newLine` answer (target 1.2
   it refuses. `details.lines[].itemIds` is the set in attachment order, `productGroupId`
   is null when absent, and `content` is the row's own spelling. The cap applies to the
   details only: twelve candidates still refuse, and name the first ten by position.
-- **B6. `messageArgs.content` is the typed name**, so the server's sentence reads "This
-  list already has more than one line called "{content}"". The client writes its own
-  question from `details`.
+- **B6. `messageArgs.content` is the typed name, trimmed**, so the server's sentence
+  reads "This list already has more than one line called "{content}"". The client writes
+  its own question from `details`.
 - **B7. Two existing unit cases changed meaning on purpose.** "keeps free text apart from
   a line that names a product" and "never takes a group line with no product for free
   text" in `line-add-merge.spec.ts` now assert the raise of target 1.4.
@@ -234,3 +234,9 @@ free text line of that name added meanwhile takes a `newLine` answer (target 1.2
 - **B10. Who else gets the one candidate merge.** Every caller of `line.add` with no
   flags: old velista builds, as the plan intends, and the basket add. `addMany` is
   unchanged, which a unit case asserts.
+- **B11. A candidate deleted during the add is no candidate.** The candidate read takes no
+  lock, and a delete does not take the list lock, so the one candidate can be gone when the
+  add reads it again by id and list under `pessimistic_write` (`lockCandidateLine`). The add
+  then creates a line and answers `merged: false`, as `findEarliestLines` does on the same
+  miss, and never refuses a plain add with line not found. A chosen line that is gone stays
+  the not found refusal (B3).
