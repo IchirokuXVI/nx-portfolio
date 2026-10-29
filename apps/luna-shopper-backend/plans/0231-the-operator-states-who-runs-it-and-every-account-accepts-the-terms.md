@@ -371,7 +371,10 @@ these are what a client without its own sentence shows.
 ### 4.4 The read and the accept route
 
 `UserProfileView` gains `termsAcceptedVersion: string | null` and `termsAcceptedAt: string |
-null`, from `latest`. `AccountMeView` gains:
+null`, from the account's row for the current version when it has one, and from `latest`
+otherwise. The newest row alone would ask forever once the current version moves back to one
+the account already accepted (a rollback, or the operator clearing the revision): accepting
+again keeps the old row, so the newer version stays the newest. `AccountMeView` gains:
 
 ```ts
 terms: {
@@ -606,3 +609,12 @@ The builder's choices where the plan left room. Each is the owner's to change.
    the deploy preflight refuses a cluster that does not have it. Run
    `provision-release.sh --unit velista --env staging` on the host before the staging deploy,
    and the same with `--env production` before the next release (section 6, step 1).
+10. **The profile answers the row for the current version, not only the newest row**
+    (review fix, PR [#856](https://github.com/IchirokuXVI/nx-portfolio/pull/856)). With the newest row alone, a current version that moved back
+    to one the account already accepted (a `redeploy.yml` rollback past a template bump, or
+    the operator clearing `LEGAL_TERMS_REVISION`) read as `acceptanceRequired: true` forever,
+    because accepting again keeps the old row and the newer version stays the newest. Section
+    4.4 says so now. The same PR refuses an empty `acceptedTermsVersion`, renders an explicit
+    0 for the three day keys of the chart, ends a timed out capability question inside the
+    observable so nothing stays subscribed, and documents only `terms_version_stale` on the
+    accept route.

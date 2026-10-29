@@ -23319,7 +23319,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -29606,6 +29606,7 @@
           },
           "acceptedTermsVersion": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
             "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
@@ -29700,6 +29701,7 @@
           },
           "acceptedTermsVersion": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
             "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
@@ -29719,6 +29721,7 @@
           },
           "acceptedTermsVersion": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
             "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
@@ -29982,6 +29985,7 @@
           },
           "acceptedTermsVersion": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
             "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
@@ -30003,6 +30007,7 @@
           },
           "acceptedTermsVersion": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
             "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
           }
@@ -32085,6 +32090,7 @@
         "properties": {
           "version": {
             "type": "string",
+            "minLength": 1,
             "maxLength": 64,
             "description": "The `terms.version` of `GET /v1/legal/settings` the person accepted. Any other answers `terms_version_stale`."
           }

@@ -178,7 +178,7 @@ export class AccountController {
   @ApiProblemResponses({
     auth: true,
     body: true,
-    terms: true,
+    terms: 'stale',
     impersonation: 'refused',
   })
   acceptTerms(
