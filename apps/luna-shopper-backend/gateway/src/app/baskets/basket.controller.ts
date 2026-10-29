@@ -776,6 +776,7 @@ export class BasketController {
     membership: true,
     notFound: true,
     finishedBasket: true,
+    lineAddChoice: true,
   })
   addLine(
     @Participant() participant: BasketParticipantContext,
@@ -791,6 +792,9 @@ export class BasketController {
       quantity: dto.quantity,
       itemIds: dto.itemIds,
       named: dto.named,
+      askIfAmbiguous: dto.askIfAmbiguous,
+      intoLineId: dto.intoLineId,
+      newLine: dto.newLine,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.lineAdd, req);
   }

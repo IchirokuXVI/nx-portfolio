@@ -793,6 +793,10 @@ const addLineRequest = object(
     quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
     itemIds: array(nonEmptyString()),
     named: boolean(),
+    // Handed to the list's own add as they arrived (plan 0228).
+    askIfAmbiguous: boolean(),
+    intoLineId: nonEmptyString(),
+    newLine: boolean(),
   },
   ['basketId', 'participantId', 'userId', 'targetListId', 'content']
 );
