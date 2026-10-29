@@ -170,7 +170,9 @@ WHERE "id" IN (
   has not locked, and neither waits. The same clause makes the harvester's schedule claim safe
   (plan `0206`).
 - Each `DELETE` is its own short transaction. A batch of 1000 rows of these narrow tables is
-  milliseconds; the batch limit is about lock time and WAL, not memory.
+  milliseconds; the batch limit is about lock time and WAL, not memory. For `refresh_tokens`
+  that holds only with the seventh index of section 5: without it one batch took 1713 ms on
+  50,000 rows.
 - The tick logs one line per target that deleted something: `{ table, deleted }`. A target
   that deleted nothing logs nothing.
 
@@ -230,7 +232,18 @@ CREATE INDEX "ix_email_verifications_expires_at" ON "email_verifications" ("expi
 CREATE INDEX "ix_oauth_states_expires_at" ON "oauth_states" ("expiresAt");
 CREATE INDEX "ix_impersonation_sessions_expires_at" ON "impersonation_sessions" ("expiresAt");
 CREATE INDEX "ix_admin_login_failures_created" ON "admin_login_failures" ("createdAt");
+CREATE INDEX "ix_refresh_tokens_replaced_by" ON "refresh_tokens" ("replacedById")
+  WHERE "replacedById" IS NOT NULL;
 ```
+
+The seventh is not about finding rows to delete. `fk_refresh_tokens_replaced_by` (plan `0229`,
+`1773000000000-RefreshTokenSuccessor.ts`) is `ON DELETE SET NULL` onto the same table, so for
+each deleted token Postgres runs `UPDATE "refresh_tokens" SET "replacedById" = NULL WHERE
+"replacedById" = $1`. Plan `0229` left the column without an index on purpose, when nothing
+deleted tokens in bulk. Under the sweep each of those lookups is a scan of the whole table: the
+review measured one batch of 1000 at 1713 ms on 50,000 rows without the index, and 12 ms with
+it. It is partial because only a rotated row has a successor. Section 10 records it as beyond
+the plan's list of six.
 
 Not `CONCURRENTLY`: migrations run inside a transaction (the probe specs run them with
 `transaction: 'each'`, for example `core/src/app/db/basket-shop.migration.integration.spec.ts:120`;
@@ -303,13 +316,23 @@ The builder's choices where the plan left room. Each is the owner's to change.
 3. **A failing table does not stop the tick.** Its error is logged with the table name, the
    walk goes on to the next table, and the table is tried again on the next tick. `sweep()`
    answers `{ table, deleted, failed }` for each table, which the specs assert.
-4. **Two replicas can still wait on each other in one case.** `refresh_tokens.replacedById` is
-   `ON DELETE SET NULL` onto the same table, and deleting a support session cascades to its
-   refresh tokens. A delete can therefore have to update or delete a row the other replica's
-   batch holds, and wait for that batch to commit (milliseconds). A deadlock between the two is
-   possible in principle; Postgres aborts one statement, which is decision 3. The concurrency
-   spec proves the plain case (2,500 unchained rows in `refresh_tokens` and in `auth_audit`),
-   not a chain of rotations.
+4. **Two replicas can still wait on each other in one case: a rotation chain split across two
+   batches.** `refresh_tokens.replacedById` is `ON DELETE SET NULL` onto the same table, so a
+   delete updates the rows that name the deleted token. Every row of one rotation chain carries
+   the same `expiresAt`, so a chain can be split between the batches of two replicas, and each
+   delete can then have to update a row the other batch holds. The two wait on each other;
+   Postgres detects the deadlock and aborts one statement, that table reports `failed` for that
+   tick (decision 3), and its rows go on the next tick. The acceptance criterion still holds:
+   both sweeps finish, and no row is deleted twice. With the seventh index of section 5 each of
+   those updates is an index lookup, so the batches are short and the window is small.
+   The cascade from a support session to its refresh tokens cannot cause it in steady state. A
+   session's tokens carry the session's own `expiresAt` (`auth/src/app/tokens/token.service.ts:230`
+   to `:231`), so the 14 day grant sweep removes them about 166 days before the session reaches
+   its 180 day cutoff. The concurrency spec proves the plain case (2,500 unchained rows in
+   `refresh_tokens` and in `auth_audit`, with a held row each sweep must pass by), not a chain of
+   rotations. If the owner wants no such abort at all, each batch can first take
+   `pg_try_advisory_xact_lock(hashtext(<table>))` and skip the table when it is taken, so that one
+   replica sweeps a table at a time. The build does not do that.
 5. **The count comes from the driver**, which answers a `DELETE` through `query()` as
    `[rows, rowCount]`. No `RETURNING`, so a batch moves no ids back. Any other shape throws,
    rather than reading as zero and ending the loop with rows left.
@@ -325,9 +348,12 @@ The builder's choices where the plan left room. Each is the owner's to change.
    at least 7d`; a value with no unit (`180`) is `"RETENTION_AUDIT" must be a duration such as
    180d`. `RETENTION_SWEEP_INTERVAL` uses the same rule with a floor of `1m`. The batch keys use
    `min(1)`.
-9. **The gateway's validation of the three keys is unchanged.** Plan `0231` gave it a pattern
-   with no floor. A value under a floor still cannot reach the policy unnoticed: auth, core or
-   catalog refuses to boot on it, and the rollout fails.
+9. **The gateway refuses the same floors.** Plan `0231` gave it a pattern with no floor, so a
+   value under a floor crashlooped auth while a gateway that had rolled out printed it, and the
+   gateway compared nothing but whole days. Now all four services refuse the same floors (`7d`,
+   `1d`, `1d`) on the exact value, with the same message (`"RETENTION_AUDIT" must be at least
+   7d`). The policy still prints whole days rounded down, which is the contract of plan `0231`:
+   `36h` prints one day while auth keeps a day and a half.
 10. **Order of the auth walk**: `auth_audit`, `impersonation_sessions`, `admin_login_failures`,
     `refresh_tokens`, `password_resets`, `email_verifications`, `oauth_states`. Sessions go
     before refresh tokens, so the tokens a session takes by cascade are gone before the token
@@ -349,3 +375,9 @@ The builder's choices where the plan left room. Each is the owner's to change.
     `logger.log({ table, deleted }, 'retention sweep deleted rows past their lifetime')`, the
     reaper's shape, and `nestjs-pino` files the trailing string under `context`. A search for
     the sweep in the logs matches that field.
+16. **A seventh index, beyond the plan's list of six**: `ix_refresh_tokens_replaced_by` on
+    `refresh_tokens ("replacedById") WHERE "replacedById" IS NOT NULL`, in the same migration
+    and named in the `RefreshToken` entity. Section 5 gives the reason and the measurement
+    (1713 ms against 12 ms for one batch of 1000 on 50,000 rows). The comment in
+    `1773000000000-RefreshTokenSuccessor.ts` that said "no index" now points here. The owner
+    can drop it only together with a sweep that never deletes tokens in bulk.

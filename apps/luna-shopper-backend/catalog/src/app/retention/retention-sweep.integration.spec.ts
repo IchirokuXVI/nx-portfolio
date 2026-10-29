@@ -12,8 +12,14 @@ import { RetentionSweepService } from './retention-sweep.service';
  * The retention sweep of catalog against real Postgres (plan 0233, section 7).
  *
  * That the statement deletes exactly the audit rows past the cutoff and keeps
- * a row one minute younger, and that two sweeps at once both finish and
- * delete each row once.
+ * a row one minute younger, that a sweep passes by a row another transaction
+ * holds instead of waiting for it (the `SKIP LOCKED` that lets two replicas
+ * sweep at once), and that two sweeps started together both finish and delete
+ * each row once.
+ *
+ * The held row is what proves the clause. Two sweeps started together may
+ * still run their batches one after the other, so on their own they would
+ * pass with a plain `FOR UPDATE` too.
  *
  * It works in a scratch schema of its own and drops it afterwards.
  *
@@ -36,6 +42,21 @@ const CONFIG: RetentionConfig = {
     maxBatches: 50,
   },
 };
+
+/**
+ * Fails when `work` has not settled within `ms`. A sweep that waited for a
+ * locked row would hang here; `SKIP LOCKED` passes the row by.
+ */
+function within<T>(ms: number, work: Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`the sweeps still waited after ${ms} ms`)),
+      ms
+    );
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(timer));
+}
 
 const OLD = new Date(NOW.getTime() - CONFIG.auditMs - MINUTE);
 const YOUNG = new Date(NOW.getTime() - CONFIG.auditMs + MINUTE);
@@ -126,20 +147,43 @@ describeIntegration('the catalog retention sweep (real Postgres)', () => {
     ]);
   });
 
-  it('lets two sweeps at once both finish and delete each row once', async () => {
+  it('passes a held row by, and lets two sweeps at once both finish and delete each row once', async () => {
     await seed(OLD, 2500);
     const [young] = await seed(YOUNG, 1);
 
     const small = { ...CONFIG, sweep: { ...CONFIG.sweep, batchSize: 500 } };
-    const [[first], [second]] = await Promise.all([
-      sweeper(small).sweep(NOW),
-      sweeper(small).sweep(NOW),
-    ]);
 
-    expect(first.failed).toBe(false);
-    expect(second.failed).toBe(false);
-    expect(first.deleted + second.deleted).toBe(2500);
+    // A third transaction holds the oldest row, as the batch of another
+    // replica would. Both sweeps must finish while it is held.
+    const holder = dataSource.createQueryRunner();
+    await holder.connect();
+    await holder.startTransaction();
+    try {
+      const rows = (await holder.query(
+        `SELECT "id" FROM "catalog_audit" ORDER BY "at" LIMIT 1 FOR UPDATE`
+      )) as Array<{ id: string }>;
+      const held = rows[0].id;
+
+      const [[first], [second]] = await within(
+        10_000,
+        Promise.all([sweeper(small).sweep(NOW), sweeper(small).sweep(NOW)])
+      );
+
+      expect(first.failed).toBe(false);
+      expect(second.failed).toBe(false);
+      expect(first.deleted + second.deleted).toBe(2499);
+      expect(await ids()).toEqual([held, young].sort());
+    } finally {
+      await holder.rollbackTransaction();
+      await holder.release();
+    }
+
+    // Released, the held row goes on the next sweep.
+    const after = await sweeper(small).sweep(NOW);
+    expect(after).toEqual([
+      { table: 'catalog_audit', deleted: 1, failed: false },
+    ]);
     expect(await ids()).toEqual([young]);
     expect(logger.error).not.toHaveBeenCalled();
-  });
+  }, 30_000);
 });

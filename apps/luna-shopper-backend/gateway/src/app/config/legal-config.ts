@@ -20,7 +20,9 @@ import * as Joi from 'joi';
  *   periods, `LEGAL_OFFSITE_BACKUPS`, `IMPERSONATION_ENABLED`): the shape of
  *   the deployment, fine to commit.
  * - **The retention periods** (`RETENTION_*`), the very keys plan 0233
- *   enforces with, reported here in whole days.
+ *   enforces with, reported here in whole days. The gateway refuses the same
+ *   floors as auth, core and catalog, on the exact value, so it never prints
+ *   a period that those services would refuse.
  *
  * Every key defaults so that a deployment that sets none of them boots and
  * answers `published: false` (the plan 0026 rule). The one combination refused
@@ -33,11 +35,49 @@ const revision = Joi.string()
   .allow('')
   .default('');
 
+const UNIT_MS: Record<string, number> = {
+  s: 1000,
+  m: 60 * 1000,
+  h: 60 * 60 * 1000,
+  d: 24 * 60 * 60 * 1000,
+  w: 7 * 24 * 60 * 60 * 1000,
+};
+
 /** A short duration (`180d`, `90d`, `14d`, `24h`), as auth's `parseDurationMs` reads it. */
-const duration = (fallback: string) =>
-  Joi.string()
-    .pattern(/^\d+\s*[smhdw]$/)
-    .default(fallback);
+function durationMs(value: string): number {
+  const match = /^(\d+)\s*([smhdw])$/.exec(value.trim());
+  if (!match) {
+    throw new Error(`Invalid duration: ${value}`);
+  }
+  return Number(match[1]) * UNIT_MS[match[2]];
+}
+
+/**
+ * A retention period that refuses a value below `floor`, with the floors and
+ * messages of auth, core and catalog (plan 0233, section 3). The floor is
+ * compared on the exact value, before the policy rounds it down to days.
+ */
+const durationAtLeast = (fallback: string, floor: string) => {
+  const floorMs = durationMs(floor);
+  return Joi.string()
+    .default(fallback)
+    .custom((value: string, helpers) => {
+      let ms: number;
+      try {
+        ms = durationMs(value);
+      } catch {
+        return helpers.message({
+          custom: `{{#label}} must be a duration such as ${fallback}`,
+        });
+      }
+      if (ms < floorMs) {
+        return helpers.message({
+          custom: `{{#label}} must be at least ${floor}`,
+        });
+      }
+      return value;
+    });
+};
 
 const days = (fallback: number) =>
   Joi.number().integer().min(0).default(fallback);
@@ -71,9 +111,9 @@ export const legalValidationSchema = {
   LEGAL_BACKUP_RETENTION_DAYS: days(14),
   LEGAL_APPLICATION_LOG_DAYS: days(30),
   LEGAL_ASSISTANT_LOG_DAYS: days(7),
-  RETENTION_AUDIT: duration('180d'),
-  RETENTION_ADMIN_LOGIN_FAILURES: duration('90d'),
-  RETENTION_EXPIRED_GRANTS: duration('14d'),
+  RETENTION_AUDIT: durationAtLeast('180d', '7d'),
+  RETENTION_ADMIN_LOGIN_FAILURES: durationAtLeast('90d', '1d'),
+  RETENTION_EXPIRED_GRANTS: durationAtLeast('14d', '1d'),
   // Reported to the policy only. Auth alone enforces support sessions (plan
   // 0194); the chart gives both services the same value.
   IMPERSONATION_ENABLED: Joi.boolean().default(false),
@@ -106,21 +146,9 @@ export interface LegalConfig {
   };
 }
 
-const UNIT_MS: Record<string, number> = {
-  s: 1000,
-  m: 60 * 1000,
-  h: 60 * 60 * 1000,
-  d: 24 * 60 * 60 * 1000,
-  w: 7 * 24 * 60 * 60 * 1000,
-};
-
 /** A validated duration in whole days, rounded down. */
 export function durationDays(value: string): number {
-  const match = /^(\d+)\s*([smhdw])$/.exec(value.trim());
-  if (!match) {
-    throw new Error(`Invalid duration: ${value}`);
-  }
-  return Math.floor((Number(match[1]) * UNIT_MS[match[2]]) / UNIT_MS['d']);
+  return Math.floor(durationMs(value) / UNIT_MS['d']);
 }
 
 /** Empty reads as null. */
