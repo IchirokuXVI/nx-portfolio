@@ -2799,7 +2799,8 @@
     },
     "terms": {
       "title": "Condiciones del servicio",
-      "meta": "Versión {{version}}, actualizadas el {{date}}",
+      "meta": "Actualizadas el {{date}}",
+      "metaVersion": "Versión {{version}}, actualizadas el {{date}}",
       "unpublished": "Quien gestiona esta copia de {{appName}} todavía no ha publicado sus condiciones del servicio."
     }
   }

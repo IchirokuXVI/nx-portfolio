@@ -58,7 +58,6 @@ export interface LegalDocumentView {
 const AI_TEXT_PROVIDER_NAMES: Readonly<Record<OperatorAiTextProvider, string>> =
   {
     anthropic: 'Anthropic',
-    google: 'Google',
   };
 
 /**
@@ -97,6 +96,8 @@ export function legalFeatureOn(
       );
     case 'aiTextProvider':
       return settings.features.assistant && settings.processors.aiText !== null;
+    case 'termsAcceptance':
+      return settings.terms.acceptanceRequired;
     default:
       return settings.features[feature];
   }

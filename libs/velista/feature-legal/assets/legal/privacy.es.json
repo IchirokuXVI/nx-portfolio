@@ -4,7 +4,7 @@
   "sections": [
     {
       "id": "who",
-      "heading": "Quién somos",
+      "heading": "Quiénes somos",
       "blocks": [
         {
           "kind": "paragraph",
@@ -70,6 +70,24 @@
                 "Para que no tengas que entrar cada vez.",
                 "Contrato.",
                 "Se borra {{expiredGrantDays}} días después de caducar."
+              ]
+            },
+            {
+              "cells": [
+                "Condiciones aceptadas",
+                "Qué versión de las condiciones del servicio aceptaste y cuándo.",
+                "Para saber qué condiciones se te aplican.",
+                "Contrato.",
+                "Hasta que borres la cuenta."
+              ]
+            },
+            {
+              "cells": [
+                "Lo que la app recuerda de ti",
+                "Si ya viste la configuración inicial y la visita guiada, y cuándo.",
+                "Para enseñártelas una sola vez y no cada vez que entras.",
+                "Contrato.",
+                "Hasta que borres la cuenta."
               ]
             },
             {
@@ -166,9 +184,19 @@
               ]
             },
             {
+              "when": "assistant",
+              "cells": [
+                "Uso del asistente",
+                "Por cada día: cuántos mensajes le enviaste, cuántos segundos de voz pasó a texto, cuánto texto procesó y cuánto costó.",
+                "Para que cada persona no pase de su límite de uso.",
+                "Interés legítimo.",
+                "Hasta que acaba el mes siguiente, o hasta que borres la cuenta si es antes."
+              ]
+            },
+            {
               "cells": [
                 "Registros de seguridad",
-                "Cambios en las cuentas, con el valor de antes y el de después: un cambio de nombre, una petición para confirmar un correo o para cambiar una contraseña olvidada, o una cuenta que borró quien gestiona {{appName}}.",
+                "Cambios en las cuentas, con el valor de antes y el de después: un cambio de nombre, una petición para confirmar un correo o para cambiar una contraseña olvidada, una cuenta que borró quien gestiona {{appName}}, o un cambio que quien gestiona {{appName}} hizo en tus grupos o listas.",
                 "Para proteger las cuentas e investigar abusos.",
                 "Interés legítimo.",
                 "{{auditTrailDays}} días."
@@ -187,7 +215,7 @@
               "when": "googleSignIn",
               "cells": [
                 "Entrada con Google",
-                "Registros de corta duración que se crean mientras entras con Google.",
+                "Registros de corta duración que se crean mientras entras con Google. Durante los pocos minutos que tarda la entrada, guardan también el identificador de tu cuenta de Google, tu correo y tu nombre, tal como los envía Google.",
                 "Para comprobar que la petición es tuya.",
                 "Contrato.",
                 "Se borran {{expiredGrantDays}} días después de caducar."
@@ -352,12 +380,11 @@
     },
     {
       "id": "transfers",
-      "when": "assistant",
       "heading": "Fuera del Espacio Económico Europeo",
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Alguno de los proveedores que se nombran aquí puede estar fuera del Espacio Económico Europeo. En ese caso, el envío de datos se apoya en una decisión de adecuación (como el Marco de Privacidad de Datos entre la UE y EE. UU.) o en cláusulas contractuales tipo."
+          "text": "Alguna de las empresas que se nombran más arriba puede tratar tus datos fuera del Espacio Económico Europeo. En ese caso, el envío de datos se apoya en una decisión de adecuación de la Comisión Europea (como el Marco de Privacidad de Datos entre la UE y EE. UU.) o en las cláusulas contractuales tipo que aprobó la Comisión."
         }
       ]
     },
@@ -373,6 +400,10 @@
         {
           "kind": "paragraph",
           "text": "No leemos tus contactos, tu correo ni nada más de tu cuenta de Google, y no compartimos con nadie lo que Google nos da."
+        },
+        {
+          "kind": "paragraph",
+          "text": "El uso que hace {{appName}} de la información que recibe de las API de Google, y cualquier transferencia de esa información, cumple la Política de Datos de Usuario de los Servicios de API de Google (Google API Services User Data Policy), incluidos sus requisitos de Uso Limitado (Limited Use)."
         }
       ]
     },
@@ -529,7 +560,7 @@
           "items": [
             "Lo que viaja entre tu dispositivo y nuestros servidores va cifrado.",
             "Las contraseñas se guardan solo transformadas (hash), nunca tal cual.",
-            "Solo quien gestiona {{appName}} puede acceder a los datos."
+            "Solo pueden acceder a los datos quien gestiona {{appName}} y las empresas que se nombran más arriba, cada una según el contrato que tiene con nosotros."
           ]
         }
       ]
@@ -559,7 +590,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "La fecha de arriba indica cuándo cambió esta política por última vez. Si hacemos un cambio importante, lo avisaremos en la app."
+          "text": "Cuando cambiamos esta política, cambiamos también la fecha que aparece arriba, para que siempre sepas cuándo cambió por última vez."
         }
       ]
     }

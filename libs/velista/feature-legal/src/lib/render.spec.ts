@@ -54,6 +54,28 @@ describe('renderLegalDocument (velista 0172, target 4)', () => {
     expect(on.sections.map((section) => section.id)).toEqual(['who', 'voice']);
   });
 
+  it('draws a block about accepting the terms only where the deployment asks for it', () => {
+    const input = doc([
+      {
+        id: 'accept',
+        heading: 'Accepting',
+        blocks: [
+          paragraph('Using it means you agree.'),
+          paragraph('The app asks you to accept.', 'termsAcceptance'),
+        ],
+      },
+    ]);
+    const asking = (acceptanceRequired: boolean) =>
+      renderLegalDocument(
+        input,
+        settings((base) => ({ terms: { ...base.terms, acceptanceRequired } })),
+        LINKS
+      ).sections[0].blocks.length;
+
+    expect(asking(false)).toBe(1);
+    expect(asking(true)).toBe(2);
+  });
+
   it('draws an operator value holding markup as its characters', () => {
     const view = renderLegalDocument(
       doc([

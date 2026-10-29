@@ -85,8 +85,19 @@ export class LegalPage {
   /** The header's title, as a key. The same key titles the route and the links. */
   readonly titleKey = `legal.${this.document}.title`;
 
-  /** The line under the title, as a key. */
-  readonly metaKey = `legal.${this.document}.meta`;
+  /**
+   * The line under the title, as a key. The terms name their version only when it is
+   * not the plain date of the line (an operator's revision, `YYYY-MM-DD+YYYY-MM-DD`);
+   * otherwise the line would print the same date twice.
+   */
+  readonly metaKey = computed(() => {
+    const terms = this._store.settings()?.terms;
+    return this.document === 'terms' &&
+      terms !== undefined &&
+      terms.version !== terms.updatedOn
+      ? 'legal.terms.metaVersion'
+      : `legal.${this.document}.meta`;
+  });
 
   /** The sentence of a deployment that has published nothing, as a key. */
   readonly unpublishedKey = `legal.${this.document}.unpublished`;

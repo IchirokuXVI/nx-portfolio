@@ -18,11 +18,15 @@ export type LegalDocumentKind = 'privacy' | 'terms';
 /**
  * A condition on a section, a block or a table row: drawn only while it holds (D3).
  *
- * The first five are the deployment's feature flags. The last four hold while the
+ * The first five are the deployment's feature flags. The next four hold while the
  * operator has named that processor, so a sentence that prints a name sits behind the
  * condition that the name exists. `backupProvider` and `aiTextProvider` were added by
  * the build beside the plan's `emailProvider` and `hostingProvider`, for the same
  * reason: a backup host and an AI provider can be on with no name to print.
+ *
+ * `termsAcceptance` holds while the deployment asks people to accept the terms
+ * (`terms.acceptanceRequired`), so a sentence about the app asking is drawn only
+ * where the app asks.
  */
 export type LegalFeature =
   | 'googleSignIn'
@@ -33,7 +37,8 @@ export type LegalFeature =
   | 'emailProvider'
   | 'hostingProvider'
   | 'backupProvider'
-  | 'aiTextProvider';
+  | 'aiTextProvider'
+  | 'termsAcceptance';
 
 export const LEGAL_FEATURES: readonly LegalFeature[] = [
   'googleSignIn',
@@ -45,6 +50,7 @@ export const LEGAL_FEATURES: readonly LegalFeature[] = [
   'hostingProvider',
   'backupProvider',
   'aiTextProvider',
+  'termsAcceptance',
 ];
 
 export interface LegalRow {

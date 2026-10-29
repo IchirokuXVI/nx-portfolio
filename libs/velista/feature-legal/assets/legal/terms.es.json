@@ -18,16 +18,21 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Aceptas estas condiciones al crear una cuenta. Eso incluye la cuenta de invitado que se crea cuando creas un grupo o te unes a uno."
+          "text": "Si usas {{appName}}, aceptas estas condiciones."
+        },
+        {
+          "kind": "paragraph",
+          "when": "termsAcceptance",
+          "text": "Antes de crearte una cuenta, la app te pide que las aceptes. También pasa con la cuenta de invitado que se crea cuando creas un grupo o te unes a uno."
         },
         {
           "kind": "paragraph",
           "when": "googleSignIn",
-          "text": "También las aceptas si continúas con Google."
+          "text": "Lo mismo vale si continúas con Google."
         },
         {
           "kind": "paragraph",
-          "text": "Esta es la versión {{termsVersion}}. Cuando cambien, la app te pedirá que aceptes la nueva versión."
+          "text": "Esta es la versión {{termsVersion}}."
         },
         {
           "kind": "paragraph",
@@ -122,7 +127,7 @@
         },
         {
           "kind": "paragraph",
-          "text": "Para que el servicio funcione, nos permites guardarlo y mostrarlo a las personas con las que lo compartes. También nos permites conservarlo sin tu nombre cuando te vas, tal como explica la [[privacy]]."
+          "text": "Para que el servicio funcione, nos permites guardarlo y mostrarlo a las personas con las que lo compartes. También nos permites conservarlo sin tu nombre cuando borras tu cuenta, tal como explica la [[privacy]]."
         }
       ]
     },
@@ -154,7 +159,7 @@
     },
     {
       "id": "ending",
-      "heading": "Baja y suspensión",
+      "heading": "Baja y cierre de cuentas",
       "blocks": [
         {
           "kind": "paragraph",
@@ -162,7 +167,7 @@
         },
         {
           "kind": "paragraph",
-          "text": "Si una cuenta incumple estas condiciones, podemos suspenderla."
+          "text": "Si una cuenta incumple estas condiciones, podemos cerrarla. Cerrar una cuenta es borrarla."
         }
       ]
     },
@@ -186,7 +191,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Estas condiciones se rigen por la ley del país de {{controllerName}}. Si eres consumidor, puedes acudir a los tribunales del lugar donde vives."
+          "text": "Estas condiciones se rigen por la ley del país donde está establecido {{controllerName}}. Si eres consumidor, puedes acudir a los tribunales del lugar donde vives."
         }
       ]
     },
@@ -196,7 +201,12 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Si cambiamos estas condiciones, lo avisaremos en la app. Antes de seguir, la app te pedirá que aceptes la nueva versión."
+          "text": "Si cambiamos estas condiciones, cambia la fecha que aparece arriba."
+        },
+        {
+          "kind": "paragraph",
+          "when": "termsAcceptance",
+          "text": "Antes de seguir usando la app, te pedirá que aceptes la nueva versión."
         }
       ]
     },

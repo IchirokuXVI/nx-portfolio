@@ -2799,7 +2799,8 @@
     },
     "terms": {
       "title": "Terms of Service",
-      "meta": "Version {{version}}, changed on {{date}}",
+      "meta": "Changed on {{date}}",
+      "metaVersion": "Version {{version}}, changed on {{date}}",
       "unpublished": "Whoever runs this copy of {{appName}} has not published terms of service yet."
     }
   }

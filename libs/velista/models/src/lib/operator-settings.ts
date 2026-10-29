@@ -2,11 +2,12 @@
  * Who answers a typed assistant turn, as this app names it (velista `0172`, target 1).
  *
  * Velista's own union rather than the backend's enum (rule D4). The backend serves
- * `anthropic` alone since backend `0236`; `google` stays here so a deployment that still
- * names it is drawn by name. Anything else maps to null, which the documents read as
+ * `anthropic` alone since backend `0236`, and the privacy policy's sentence about
+ * training was checked against Anthropic's terms only, so a provider is named exactly
+ * when that sentence holds. Anything else maps to null, which the documents read as
  * "the provider's name is not known" and leave out.
  */
-export type OperatorAiTextProvider = 'anthropic' | 'google';
+export type OperatorAiTextProvider = 'anthropic';
 
 /**
  * What a deployment states about itself for its privacy policy and its terms
@@ -58,7 +59,11 @@ export interface OperatorSettings {
   /** Whole days, each read by the server from the key that enforces it. */
   readonly retention: {
     readonly auditTrailDays: number;
-    readonly adminLoginFailureDays: number;
+    /**
+     * The operator's own failed logins. No document prints it, so a body without it
+     * reads as null rather than failing the store.
+     */
+    readonly adminLoginFailureDays: number | null;
     readonly expiredGrantDays: number;
     readonly applicationLogDays: number;
     readonly assistantLogDays: number;

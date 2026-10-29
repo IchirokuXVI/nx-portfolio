@@ -42,7 +42,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "The table lists everything we keep about you. The legal basis is the reason the GDPR allows us to keep it: a contract (article 6(1)(b)) when we need it to give you the service you asked for, and a legitimate interest (article 6(1)(f)) when we need it to keep the service safe and working, or because other people rely on it."
+          "text": "The table lists what we keep about you. The legal basis is the reason the GDPR allows us to keep it: a contract (article 6(1)(b)) when we need it to give you the service you asked for, and a legitimate interest (article 6(1)(f)) when we need it to keep the service safe and working, or because other people rely on it."
         },
         {
           "kind": "table",
@@ -64,6 +64,24 @@
                 "To keep you signed in.",
                 "Contract.",
                 "Removed {{expiredGrantDays}} days after it expires."
+              ]
+            },
+            {
+              "cells": [
+                "The terms you accepted",
+                "Which version of the terms of service you accepted, and when.",
+                "To know which terms apply to you.",
+                "Contract.",
+                "Until you delete the account."
+              ]
+            },
+            {
+              "cells": [
+                "What the app remembers about you",
+                "Whether you have seen the first setup and the guided tour, and when.",
+                "So the app shows them to you once and not every time.",
+                "Contract.",
+                "Until you delete the account."
               ]
             },
             {
@@ -160,9 +178,19 @@
               ]
             },
             {
+              "when": "assistant",
+              "cells": [
+                "How much you used the assistant",
+                "For each day: how many messages you sent it, how many seconds of voice it turned into text, how much text it handled, and what that cost.",
+                "To keep each person within their allowance.",
+                "Legitimate interest.",
+                "Until the end of the following month, or until you delete the account if that comes first."
+              ]
+            },
+            {
               "cells": [
                 "Security records",
-                "Changes to accounts, with the values before and after: a new user name, a request to confirm an email address or reset a password, an account deleted by whoever runs {{appName}}.",
+                "Changes, with the values before and after: a new user name, a request to confirm an email address or reset a password, an account deleted by whoever runs {{appName}}, and a change that whoever runs {{appName}} makes to your groups or lists.",
                 "To protect accounts and look into abuse.",
                 "Legitimate interest.",
                 "{{auditTrailDays}} days."
@@ -181,7 +209,7 @@
               "when": "googleSignIn",
               "cells": [
                 "Signing in with Google",
-                "A short record we keep while you sign in with Google.",
+                "A short record we keep while you sign in with Google. For the few minutes it takes to finish, it also holds the Google account number, email address and name that Google sent back.",
                 "To make sure the sign in that comes back from Google is the one you started.",
                 "Contract.",
                 "Removed {{expiredGrantDays}} days after it expires."
@@ -344,7 +372,6 @@
     },
     {
       "id": "transfers",
-      "when": "assistant",
       "heading": "Outside the European Economic Area",
       "blocks": [
         {
@@ -365,6 +392,10 @@
         {
           "kind": "paragraph",
           "text": "We do not read your contacts, your mail or anything else in your Google account, and we do not share what Google gives us with anyone."
+        },
+        {
+          "kind": "paragraph",
+          "text": "{{appName}}'s use and transfer of information received from Google APIs adheres to the Google API Services User Data Policy, including the Limited Use requirements."
         }
       ]
     },
@@ -508,7 +539,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "Everything between your device and our servers travels encrypted. Passwords are stored only as hashes, so nobody can read them. Only whoever runs {{appName}} can reach the data on the servers."
+          "text": "Everything between your device and our servers travels encrypted. Passwords are stored only as hashes, so nobody can read them. Only whoever runs {{appName}}, and the companies named above under their agreements with us, can reach the data on the servers."
         }
       ]
     },
@@ -537,7 +568,7 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "The date at the top of this page says when the policy last changed. If we change something that matters to you, the app tells you."
+          "text": "When we change this policy, we change the date at the top of this page, so you can always see when it last changed."
         }
       ]
     }

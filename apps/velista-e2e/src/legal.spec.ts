@@ -38,6 +38,29 @@ test.describe('the legal pages', () => {
     await expect(page.getByText('Example Controller').first()).toBeVisible();
     await expect(page).toHaveURL(/\/es\/terms$/);
     await expect(page.locator('#sign-in-email')).toHaveCount(0);
+    // The stub asks nobody to accept, so the terms promise no asking.
+    await expect(page.getByText('Si usas Example Shopper')).toBeVisible();
+    await expect(page.getByText(/te pide que las aceptes/)).toHaveCount(0);
+  });
+
+  test('the terms say the app asks for acceptance where the deployment asks', async ({
+    page,
+  }) => {
+    await stubBackendReady(page, {
+      ...STUB_LEGAL_SETTINGS,
+      terms: { ...STUB_LEGAL_SETTINGS.terms, acceptanceRequired: true },
+    });
+    await page.goto('/en/terms');
+
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Terms of Service' })
+    ).toBeVisible();
+    await expect(
+      page.getByText(/Before the app makes an account for you/)
+    ).toBeVisible();
+    await expect(
+      page.getByText(/asks you to accept the new version/)
+    ).toBeVisible();
   });
 
   test('a deployment with no transcriber says nothing about voice', async ({

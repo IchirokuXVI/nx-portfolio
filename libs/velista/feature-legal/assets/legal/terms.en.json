@@ -18,16 +18,21 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "You accept these terms when you create an account. That includes the guest account the app makes for you when you create or join a group."
+          "text": "By using {{appName}}, you agree to these terms."
+        },
+        {
+          "kind": "paragraph",
+          "when": "termsAcceptance",
+          "text": "Before the app makes an account for you, it asks you to accept them. That includes the guest account it makes when you create or join a group."
         },
         {
           "kind": "paragraph",
           "when": "googleSignIn",
-          "text": "You also accept them when you continue with Google."
+          "text": "The same goes for continuing with Google."
         },
         {
           "kind": "paragraph",
-          "text": "This is version {{termsVersion}}. When the terms change, the app asks you to accept the new version."
+          "text": "This is version {{termsVersion}}."
         },
         {
           "kind": "paragraph",
@@ -156,7 +161,7 @@
         },
         {
           "kind": "paragraph",
-          "text": "We can suspend an account that breaks these terms."
+          "text": "If an account breaks these terms, we can close it. Closing an account deletes it."
         }
       ]
     },
@@ -186,7 +191,12 @@
       "blocks": [
         {
           "kind": "paragraph",
-          "text": "When we change these terms, the app tells you, and asks you to accept the new version before you go on."
+          "text": "When we change these terms, the date at the top of this page changes."
+        },
+        {
+          "kind": "paragraph",
+          "when": "termsAcceptance",
+          "text": "The app then asks you to accept the new version before you go on."
         }
       ]
     },

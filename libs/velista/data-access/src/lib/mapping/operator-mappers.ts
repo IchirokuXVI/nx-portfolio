@@ -15,6 +15,8 @@ import { isRecord, oneOfOrNull } from './primitives';
  * - a `retention` number that is not a whole number of days, because the policy
  *   prints each one as a period, and a period this build cannot read is a sentence it
  *   must not draw. `backupDays` may be null, which means off site backups are off.
+ *   `adminLoginFailureDays` is the exception: no document prints it, so it reads as
+ *   null when it is missing or unreadable.
  *
  * What does not: a missing feature flag reads as `false`, so a field the server did
  * not send never offers a feature; an unreadable date reads as null and the page
@@ -41,6 +43,8 @@ export function toOperatorSettings(raw: unknown): OperatorSettings | null {
     return null;
   }
   const auditTrailDays = days(retention['auditTrailDays']);
+  // Not printed by either document, so it never fails the store: a missing or
+  // unreadable value is null, and the flags plans 0173 and 0174 read stay readable.
   const adminLoginFailureDays = days(retention['adminLoginFailureDays']);
   const expiredGrantDays = days(retention['expiredGrantDays']);
   const applicationLogDays = days(retention['applicationLogDays']);
@@ -52,7 +56,6 @@ export function toOperatorSettings(raw: unknown): OperatorSettings | null {
       : days(rawBackupDays);
   if (
     auditTrailDays === null ||
-    adminLoginFailureDays === null ||
     expiredGrantDays === null ||
     applicationLogDays === null ||
     assistantLogDays === null ||
@@ -93,7 +96,7 @@ export function toOperatorSettings(raw: unknown): OperatorSettings | null {
     processors: {
       hosting: text(processors['hosting']),
       email: text(processors['email']),
-      aiText: oneOfOrNull(processors['aiText'], ['anthropic', 'google']),
+      aiText: oneOfOrNull(processors['aiText'], ['anthropic']),
       offsiteBackups: text(processors['offsiteBackups']),
     },
     retention: {

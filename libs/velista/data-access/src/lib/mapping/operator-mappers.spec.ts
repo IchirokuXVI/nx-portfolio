@@ -116,6 +116,22 @@ describe('toOperatorSettings (velista 0172, target 1)', () => {
     expect(toOperatorSettings(body({ retention: undefined }))).toBeNull();
   });
 
+  it('reads a missing or unreadable admin login period as null, not as a failure', () => {
+    const retention = body()['retention'] as Record<string, unknown>;
+    const missing = toOperatorSettings(
+      body({ retention: { ...retention, adminLoginFailureDays: undefined } })
+    );
+    const unreadable = toOperatorSettings(
+      body({ retention: { ...retention, adminLoginFailureDays: 1.5 } })
+    );
+
+    // No document prints it, so the flags plans 0173 and 0174 read stay readable.
+    expect(missing).not.toBeNull();
+    expect(missing?.retention.adminLoginFailureDays).toBeNull();
+    expect(missing?.features.googleSignIn).toBe(true);
+    expect(unreadable?.retention.adminLoginFailureDays).toBeNull();
+  });
+
   it('reads a null backup period as off site backups being off', () => {
     const retention = body()['retention'] as Record<string, unknown>;
 
@@ -152,11 +168,13 @@ describe('toOperatorSettings (velista 0172, target 1)', () => {
         body({ processors: { ...processors, aiText: 'other' } })
       )?.processors.aiText
     ).toBeNull();
+    // The wire has served `anthropic` alone since backend 0236, and the policy's
+    // training sentence holds for Anthropic only, so `google` is not named either.
     expect(
       toOperatorSettings(
         body({ processors: { ...processors, aiText: 'google' } })
       )?.processors.aiText
-    ).toBe('google');
+    ).toBeNull();
   });
 
   it('is unpublished, not failed, when the operator published nothing', () => {

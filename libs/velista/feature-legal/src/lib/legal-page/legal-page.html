@@ -36,7 +36,7 @@
       @if (view(); as doc) {
         @if (changedOn(); as date) {
           <p class="meta">
-            {{ metaKey | rokuT: { date: date, version: version() } }}
+            {{ metaKey() | rokuT: { date: date, version: version() } }}
           </p>
         }
 

@@ -154,7 +154,7 @@ describe('LegalPage (velista 0172, target 5)', () => {
 
   it('draws the date line on the terms, and none when the date is unknown', async () => {
     const dated = await render({ document: 'terms' });
-    expect(dated.root.querySelector('.meta')?.textContent).toContain(
+    expect(dated.root.querySelector('.meta')?.textContent?.trim()).toBe(
       'legal.terms.meta'
     );
 
@@ -166,6 +166,39 @@ describe('LegalPage (velista 0172, target 5)', () => {
       },
     });
     expect(undated.root.querySelector('.meta')).toBeNull();
+  });
+
+  it('names the terms version only when it is not the plain date', async () => {
+    // The template's version is its date, so the line says the date once.
+    const plain = await render({ document: 'terms' });
+    expect(MEMORY_OPERATOR_SETTINGS.terms.version).toBe(
+      MEMORY_OPERATOR_SETTINGS.terms.updatedOn
+    );
+    expect(plain.root.querySelector('.meta')?.textContent?.trim()).toBe(
+      'legal.terms.meta'
+    );
+
+    // An operator's revision appends its own date, and the version says which text.
+    const revised = await render({
+      document: 'terms',
+      settings: {
+        ...MEMORY_OPERATOR_SETTINGS,
+        terms: {
+          ...MEMORY_OPERATOR_SETTINGS.terms,
+          version: '2026-10-29+2026-11-05',
+          updatedOn: '2026-11-05',
+        },
+      },
+    });
+    expect(revised.root.querySelector('.meta')?.textContent?.trim()).toBe(
+      'legal.terms.metaVersion'
+    );
+
+    // The policy has no version.
+    const policy = await render();
+    expect(policy.root.querySelector('.meta')?.textContent?.trim()).toBe(
+      'legal.privacy.meta'
+    );
   });
 
   it('draws one sentence and no document when the operator published nothing', async () => {
