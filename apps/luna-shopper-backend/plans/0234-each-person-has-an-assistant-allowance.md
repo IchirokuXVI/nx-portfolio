@@ -1,3 +1,5 @@
+> **PR:** [#861](https://github.com/IchirokuXVI/nx-portfolio/pull/861)
+
 # 0234: each person has an assistant allowance
 
 > The assistant pays a model provider for every turn, and the only limits in front of
