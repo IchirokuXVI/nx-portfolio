@@ -807,6 +807,44 @@ describe('AppShellRoutes', () => {
   });
 
   /**
+   * The privacy policy and the terms (velista `0172`, target 6). The same three
+   * assertions as the install page, and the middle one is again the deliberate part:
+   * Google's review opens the policy signed out, and `0173`'s prompt links here.
+   */
+  describe('the legal pages', () => {
+    const legal = (['privacy', 'terms'] as const).map((document) => ({
+      document,
+      route: pages.find((route) => route.path === document),
+    }));
+
+    it('are declared, before the empty front door', () => {
+      const paths = pages.map((route) => route.path);
+
+      for (const { document, route } of legal) {
+        expect(route).toBeDefined();
+        expect(paths.indexOf(document)).toBeLessThan(paths.indexOf(''));
+      }
+    });
+
+    it('are public, with no guard of any kind', () => {
+      for (const { route } of legal) {
+        expect(route?.canActivate).toBeUndefined();
+        expect(route?.canMatch).toBeUndefined();
+      }
+    });
+
+    it('are destinations, lazy, without the bar, and told which document by data', () => {
+      for (const { document, route } of legal) {
+        expect(route?.children).toBeUndefined();
+        expect(route?.loadComponent).toBeDefined();
+        expect(route?.data?.['document']).toBe(document);
+        expect(route?.data?.[NAV_CHROME]).toBe(NO_NAV_CHROME);
+        expect(route?.title).toBeDefined();
+      }
+    });
+  });
+
+  /**
    * The account (plan 0015). A route rather than a sheet, by the same test `0009`
    * section 4.1 used: it is deep linkable, it has its own scroll, and it is where
    * somebody goes deliberately.
@@ -1529,6 +1567,10 @@ describe('the bottom bar', () => {
     'zones/:zoneId/lists/:listId/lines/:lineId/products/supermarket',
     'zones/:zoneId/lists/:listId/lines/:lineId/products/categories',
     'zones/:zoneId/lists/:listId/lines/:lineId/products/categories/:parentSlug',
+    // Velista 0172: the two documents, read by somebody who may have no account,
+    // with the chevron as the way out.
+    'privacy',
+    'terms',
     // The 404, drawn inside the layout with no bar, like the front door.
     '**',
   ];

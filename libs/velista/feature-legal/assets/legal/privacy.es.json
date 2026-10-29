@@ -1,0 +1,598 @@
+{
+  "templateVersion": "2026-10-29",
+  "title": "Política de privacidad",
+  "sections": [
+    {
+      "id": "who",
+      "heading": "Quiénes somos",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} lo gestiona {{controllerName}}, que es el responsable del tratamiento de tus datos. Es decir, decide para qué se usan y responde de ellos."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Si tienes cualquier pregunta sobre tus datos, escribe a {{contactEmail}}."
+        },
+        {
+          "kind": "paragraph",
+          "text": "El programa se llama Luna Shopper y es de código abierto, así que cualquiera puede poner en marcha su propia copia. Esta copia la gestiona el responsable que se nombra aquí, no las personas que escribieron el programa."
+        }
+      ]
+    },
+    {
+      "id": "summary",
+      "heading": "En pocas palabras",
+      "blocks": [
+        {
+          "kind": "list",
+          "items": [
+            "Guardamos lo que necesitas para usar la app: tu cuenta, tus grupos y listas, y tus compras.",
+            "Lo usamos para darte el servicio, para protegerlo y para arreglar fallos.",
+            "No vendemos tus datos y no mostramos publicidad.",
+            "No usamos herramientas de analítica ni de seguimiento.",
+            "Si quieres una copia de tus datos o que los borremos, escribe a {{contactEmail}}."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "heading": "Qué datos guardamos, para qué y cuánto tiempo",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "La ley solo nos deja tratar un dato si hay una razón válida para ello, que se llama base jurídica. Aquí usamos dos. El contrato (art. 6.1.b del RGPD): el dato hace falta para darte el servicio que pides. El interés legítimo (art. 6.1.f del RGPD): lo necesitamos para que el servicio funcione y esté protegido, o para que otras personas sigan usando lo que compartiste."
+        },
+        {
+          "kind": "table",
+          "head": [
+            "Categoría",
+            "Qué",
+            "Para qué",
+            "Base jurídica",
+            "Cuánto tiempo"
+          ],
+          "rows": [
+            {
+              "cells": [
+                "Cuenta",
+                "Tu correo electrónico; un nombre de usuario (la app te pone uno y puedes cambiarlo); tu contraseña, que no se guarda tal cual sino transformada (hash); si la cuenta es de invitado o registrada; y la fecha en que se creó.",
+                "Para darte una cuenta y que puedas entrar en ella.",
+                "Contrato.",
+                "Hasta que borres la cuenta."
+              ]
+            },
+            {
+              "cells": [
+                "Sesiones abiertas",
+                "Un código por dispositivo que mantiene tu sesión iniciada.",
+                "Para que no tengas que entrar cada vez.",
+                "Contrato.",
+                "Se borra {{expiredGrantDays}} días después de caducar."
+              ]
+            },
+            {
+              "cells": [
+                "Condiciones aceptadas",
+                "Qué versión de las condiciones del servicio aceptaste y cuándo.",
+                "Para saber qué condiciones se te aplican.",
+                "Contrato.",
+                "Hasta que borres la cuenta."
+              ]
+            },
+            {
+              "cells": [
+                "Lo que la app recuerda de ti",
+                "Si ya viste la configuración inicial y la visita guiada, y cuándo.",
+                "Para enseñártelas una sola vez y no cada vez que entras.",
+                "Contrato.",
+                "Hasta que borres la cuenta."
+              ]
+            },
+            {
+              "cells": [
+                "Cuenta de invitado",
+                "Un nombre que inventa la app. No lleva correo.",
+                "Para que puedas crear un grupo o unirte a uno sin registrarte.",
+                "Contrato.",
+                "Hasta que la borres, o cuando lleve un tiempo sin pertenecer a ningún grupo."
+              ]
+            },
+            {
+              "when": "googleSignIn",
+              "cells": [
+                "Cuenta de Google",
+                "El identificador de tu cuenta de Google, tu correo y tu nombre.",
+                "Para que puedas entrar con Google.",
+                "Contrato.",
+                "Hasta que borres la cuenta."
+              ]
+            },
+            {
+              "cells": [
+                "Grupos y listas",
+                "Tus grupos y sus miembros, las listas y sus líneas, las cantidades y los comentarios escritos.",
+                "Son el propio servicio.",
+                "Contrato.",
+                "Hasta que se borren. Si borras tu cuenta, se quedan para los demás miembros, sin tu nombre."
+              ]
+            },
+            {
+              "when": "transcription",
+              "cells": [
+                "Comentarios de voz",
+                "La grabación y su transcripción escrita.",
+                "Para que el grupo pueda oír y leer lo que dijiste.",
+                "Contrato.",
+                "La grabación se borra con tu cuenta. La transcripción se queda para el grupo, sin tu nombre."
+              ]
+            },
+            {
+              "cells": [
+                "Perfiles de compra",
+                "Códigos postales, un lugar o una dirección que escribes, los supermercados y tiendas que eliges, y tus preferencias.",
+                "Para mostrarte las tiendas y los precios de tu zona.",
+                "Contrato.",
+                "Hasta que borres el perfil o la cuenta."
+              ]
+            },
+            {
+              "cells": [
+                "Tu ubicación",
+                "Tus coordenadas. Solo se envían cuando pulsas el botón que busca tiendas cerca de ti.",
+                "Para encontrar las tiendas que tienes cerca.",
+                "Contrato.",
+                "Se usan para esa respuesta y no se guardan."
+              ]
+            },
+            {
+              "cells": [
+                "Compras",
+                "Tus compras (las cestas): qué se compró, en qué tienda y a qué precio.",
+                "Para guardar tu historial y el historial de lo que se compró en el grupo.",
+                "Contrato. Para lo que se queda después de borrar la cuenta, interés legítimo (art. 6.1.f del RGPD).",
+                "Tus compras se borran con tu cuenta. Lo que marcaste como comprado en la lista de un grupo se queda para el grupo, sin tu nombre."
+              ]
+            },
+            {
+              "cells": [
+                "Mapas de tiendas",
+                "Los recorridos que grabas dentro de una tienda para hacer su mapa: pasos, giros, marcas y el nombre que le pones.",
+                "Para dibujar el mapa de esa tienda para todo el mundo.",
+                "Interés legítimo.",
+                "Se conservan. Si borras tu cuenta, se quedan sin tu nombre."
+              ]
+            },
+            {
+              "cells": [
+                "Personas en una cesta compartida",
+                "El nombre que escribe quien se une a una cesta compartida, y los datos con los que su navegador se identifica (agente de usuario).",
+                "Para mostrar quién está comprando y guardarle su sitio.",
+                "Contrato.",
+                "Mientras exista la cesta."
+              ]
+            },
+            {
+              "when": "assistant",
+              "cells": [
+                "Conversaciones con el asistente",
+                "Lo que escribes o dices al asistente, y su respuesta.",
+                "Para responderte.",
+                "Contrato.",
+                "{{assistantLogDays}} días en nuestros registros."
+              ]
+            },
+            {
+              "when": "assistant",
+              "cells": [
+                "Uso del asistente",
+                "Por cada día: cuántos mensajes le enviaste, cuántos segundos de voz pasó a texto, cuánto texto procesó y cuánto costó.",
+                "Para que cada persona no pase de su límite de uso.",
+                "Interés legítimo.",
+                "Hasta que acaba el mes siguiente, o hasta que borres la cuenta si es antes."
+              ]
+            },
+            {
+              "cells": [
+                "Registros de seguridad",
+                "Cambios en las cuentas, con el valor de antes y el de después: un cambio de nombre, una petición para confirmar un correo o para cambiar una contraseña olvidada, una cuenta que borró quien gestiona {{appName}}, o un cambio que quien gestiona {{appName}} hizo en tus grupos o listas.",
+                "Para proteger las cuentas e investigar abusos.",
+                "Interés legítimo.",
+                "{{auditTrailDays}} días."
+              ]
+            },
+            {
+              "cells": [
+                "Enlaces por correo",
+                "Los enlaces que te enviamos para confirmar tu correo o para cambiar una contraseña olvidada.",
+                "Para comprobar que la petición es tuya.",
+                "Contrato.",
+                "Se borran {{expiredGrantDays}} días después de caducar."
+              ]
+            },
+            {
+              "when": "googleSignIn",
+              "cells": [
+                "Entrada con Google",
+                "Registros de corta duración que se crean mientras entras con Google. Durante los pocos minutos que tarda la entrada, guardan también el identificador de tu cuenta de Google, tu correo y tu nombre, tal como los envía Google.",
+                "Para comprobar que la petición es tuya.",
+                "Contrato.",
+                "Se borran {{expiredGrantDays}} días después de caducar."
+              ]
+            },
+            {
+              "cells": [
+                "Registros del servidor",
+                "Las peticiones que llegan a nuestros servidores, que pueden incluir tu dirección IP.",
+                "Para que el servicio funcione y para arreglar fallos.",
+                "Interés legítimo.",
+                "{{applicationLogDays}} días."
+              ]
+            },
+            {
+              "when": "supportAccess",
+              "cells": [
+                "Sesiones de ayuda",
+                "Que alguien que gestiona {{appName}} abrió la app como si fuera tú: cuándo, durante cuánto tiempo y por qué.",
+                "Para ayudarte cuando nos avisas de un problema.",
+                "Interés legítimo.",
+                "{{auditTrailDays}} días."
+              ]
+            },
+            {
+              "when": "offsiteBackups",
+              "cells": [
+                "Copias de seguridad",
+                "Copias de todo lo anterior.",
+                "Para recuperar los datos después de una avería.",
+                "Interés legítimo.",
+                "{{backupDays}} días."
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "when": "assistant",
+      "heading": "El asistente",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "El asistente es un programa automático, no una persona. Para entender lo que le pides y hacer cambios en tus listas, envía tu mensaje a un proveedor de inteligencia artificial, que lo procesa."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Con cada mensaje, el proveedor recibe:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Tu mensaje.",
+            "La conversación que se ve en la pantalla.",
+            "Los nombres de los grupos, las listas y las líneas que el asistente consulta para esa respuesta.",
+            "El nombre que usas en la app, solo si le pides que lo cambie."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "No recibe tu correo electrónico ni el identificador de tu cuenta."
+        },
+        {
+          "kind": "paragraph",
+          "when": "aiTextProvider",
+          "text": "El proveedor es {{aiTextProvider}}. Según sus condiciones comerciales, no puede usar lo que envías para entrenar sus modelos."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Quien escribe al asistente puede ser un niño. Por eso cada petición le indica al proveedor que puede estar hablando con un menor, y las respuestas se revisan de forma automática antes de que las veas."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Cada persona tiene un límite de uso al día y otro al mes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "En nuestros registros guardamos lo que dijiste y la respuesta durante {{assistantLogDays}} días."
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "when": "transcription",
+      "heading": "Comentarios de voz",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Cuando dejas un comentario de voz, la grabación se convierte en texto en nuestros propios servidores. Ninguna otra empresa la recibe."
+        }
+      ]
+    },
+    {
+      "id": "processors",
+      "heading": "Quién más trata los datos",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Algunas empresas nos ayudan a dar el servicio. Son encargados del tratamiento: solo pueden tratar los datos siguiendo nuestras instrucciones, y con un contrato de encargo del tratamiento firmado con nosotros."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Una empresa de alojamiento mantiene los servidores en los que funciona {{appName}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "hostingProvider",
+          "text": "Esa empresa es {{hostingProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "emailProvider",
+          "text": "Los correos que te enviamos salen a través de {{emailProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "offsiteBackups",
+          "text": "Las copias de seguridad se guardan fuera de nuestros servidores."
+        },
+        {
+          "kind": "paragraph",
+          "when": "backupProvider",
+          "text": "Esas copias las guarda {{backupProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "assistant",
+          "text": "El asistente usa un proveedor de inteligencia artificial, como se explica en el apartado del asistente."
+        },
+        {
+          "kind": "paragraph",
+          "when": "aiTextProvider",
+          "text": "Ese proveedor es {{aiTextProvider}}."
+        },
+        {
+          "kind": "paragraph",
+          "when": "googleSignIn",
+          "text": "Google interviene solo para que puedas entrar con tu cuenta de Google. En lo que toca a tu cuenta de Google, Google es responsable del tratamiento por su cuenta, no un encargado nuestro."
+        },
+        {
+          "kind": "paragraph",
+          "when": "transcription",
+          "text": "Ninguna otra empresa oye tu voz: las grabaciones se pasan a texto en nuestros propios servidores."
+        }
+      ]
+    },
+    {
+      "id": "photos",
+      "heading": "Fotos de productos",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Muchas fotos de productos se cargan directamente desde las webs de los supermercados. Cuando tu navegador carga una de esas fotos, esa web recibe tu dirección IP, igual que cualquier web que visitas."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Le pedimos a tu navegador que no le diga a esa web qué página estabas leyendo."
+        }
+      ]
+    },
+    {
+      "id": "transfers",
+      "heading": "Fuera del Espacio Económico Europeo",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Alguna de las empresas que se nombran más arriba puede tratar tus datos fuera del Espacio Económico Europeo. En ese caso, el envío de datos se apoya en una decisión de adecuación de la Comisión Europea (como el Marco de Privacidad de Datos entre la UE y EE. UU.) o en las cláusulas contractuales tipo que aprobó la Comisión."
+        }
+      ]
+    },
+    {
+      "id": "google",
+      "when": "googleSignIn",
+      "heading": "Entrar con Google",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Si entras con Google, solo le pedimos a Google tu dirección de correo y tu perfil básico (tu nombre). Los usamos únicamente para que puedas entrar."
+        },
+        {
+          "kind": "paragraph",
+          "text": "No leemos tus contactos, tu correo ni nada más de tu cuenta de Google, y no compartimos con nadie lo que Google nos da."
+        },
+        {
+          "kind": "paragraph",
+          "text": "El uso que hace {{appName}} de la información que recibe de las API de Google, y cualquier transferencia de esa información, cumple la Política de Datos de Usuario de los Servicios de API de Google (Google API Services User Data Policy), incluidos sus requisitos de Uso Limitado (Limited Use)."
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "heading": "Lo que se guarda en tu dispositivo",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Para funcionar, la app guarda en tu dispositivo solo lo que necesita:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Tu sesión.",
+            "El tema y el idioma que elegiste.",
+            "Cómo prefieres ver las listas.",
+            "Lo último que tenías abierto.",
+            "Los avisos que ya has visto.",
+            "Un mapa que todavía estás grabando en una tienda.",
+            "Copias de la propia app, para que funcione sin conexión."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "No hay analítica, ni publicidad, ni seguimiento, ni nada que venga de la web de otra empresa."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Como todo esto es estrictamente necesario para que la app funcione, no hace falta pedirte permiso, y por eso no te mostramos ningún aviso de cookies (art. 5.3 de la Directiva sobre la privacidad electrónica y, en España, art. 22.2 de la LSSI)."
+        }
+      ]
+    },
+    {
+      "id": "rights",
+      "heading": "Tus derechos",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Los datos son tuyos, así que en cualquier momento puedes pedirnos:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Ver qué datos tenemos sobre ti.",
+            "Una copia de tus datos.",
+            "Que corrijamos lo que esté mal.",
+            "Que los borremos.",
+            "Que limitemos su uso.",
+            "Dejar de usarlos, si te opones.",
+            "Recibirlos en un formato que puedas llevar a otro servicio (portabilidad)."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "text": "Para pedirlo, escribe a {{contactEmail}} desde el correo de tu cuenta y dinos qué quieres. Te responderemos en el plazo de un mes."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Tu cuenta la puedes borrar tú directamente, desde la página de tu cuenta."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Si crees que no tratamos bien tus datos, puedes reclamar ante la autoridad de protección de datos de tu país. En España es la Agencia Española de Protección de Datos (AEPD), en aepd.es."
+        }
+      ]
+    },
+    {
+      "id": "deletion",
+      "heading": "Si borras tu cuenta",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Cuando borras tu cuenta, se elimina:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Tu cuenta, tu dirección de correo y tu contraseña.",
+            "Tus sesiones abiertas en cada dispositivo.",
+            "Tus perfiles de compra.",
+            "Tus propias compras.",
+            "Lo que la app recuerda de ti, como la configuración inicial o la visita guiada.",
+            "El registro de qué versión de las [[terms]] aceptaste."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "when": "googleSignIn",
+          "text": "También se elimina la conexión con tu cuenta de Google."
+        },
+        {
+          "kind": "paragraph",
+          "when": "transcription",
+          "text": "También se borran tus grabaciones de voz."
+        },
+        {
+          "kind": "paragraph",
+          "when": "assistant",
+          "text": "También se borra la cuenta de cuánto has usado el asistente."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Otras cosas se quedan, porque otras personas las usan, pero sin tu nombre:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Lo que escribiste en los grupos: listas, líneas y comentarios escritos. Ahí aparecerás como exmiembro del grupo.",
+            "Lo que marcaste como comprado en la lista de un grupo.",
+            "Los mapas de tiendas."
+          ]
+        },
+        {
+          "kind": "paragraph",
+          "when": "transcription",
+          "text": "También se quedan, sin tu nombre, las transcripciones de tus comentarios de voz."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Tu correo y tu nombre se borran también de los registros de seguridad."
+        },
+        {
+          "kind": "paragraph",
+          "when": "offsiteBackups",
+          "text": "Una cuenta borrada puede seguir en las copias de seguridad durante {{backupDays}} días como máximo, hasta que esas copias caducan."
+        }
+      ]
+    },
+    {
+      "id": "minors",
+      "heading": "Menores",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} es para todo el mundo. Si tienes menos de 14 años, úsala con permiso de tus padres o de tu tutor legal (art. 7 de la LOPDGDD)."
+        },
+        {
+          "kind": "paragraph",
+          "text": "No recogemos a sabiendas más datos de un menor que de cualquier otra persona. Sus padres o su tutor pueden pedirnos que borremos su cuenta."
+        }
+      ]
+    },
+    {
+      "id": "security",
+      "heading": "Seguridad",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Protegemos tus datos así:"
+        },
+        {
+          "kind": "list",
+          "items": [
+            "Lo que viaja entre tu dispositivo y nuestros servidores va cifrado.",
+            "Las contraseñas se guardan solo transformadas (hash), nunca tal cual.",
+            "Solo pueden acceder a los datos quien gestiona {{appName}} y las empresas que se nombran más arriba, cada una según el contrato que tiene con nosotros."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "support",
+      "when": "supportAccess",
+      "heading": "Cuando pides ayuda",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Cuando nos avisas de un problema o nos pides ayuda, quien gestiona {{appName}} puede abrir la app como si fuera tú, para ver lo mismo que ves tú."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Cada sesión dura como mucho dos horas y no se puede alargar. Durante la sesión no se puede borrar tu cuenta ni aceptar las [[terms]] en tu nombre."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Cada sesión queda registrada: quién la abrió, cuándo y por qué. Ese registro se guarda {{auditTrailDays}} días."
+        }
+      ]
+    },
+    {
+      "id": "changes",
+      "heading": "Cambios en esta política",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Cuando cambiamos esta política, cambiamos también la fecha que aparece arriba, para que siempre sepas cuándo cambió por última vez."
+        }
+      ]
+    }
+  ]
+}

@@ -2791,5 +2791,28 @@
       "body": "Puedes cerrar esta pestaña."
     },
     "refused": "Esto no se puede hacer en una sesión de soporte"
+  },
+  "legal": {
+    "back": "Volver",
+    "contents": "Índice",
+    "loading": "Cargando",
+    "failed": "No se ha podido cargar esta página.",
+    "retry": "Inténtalo de nuevo",
+    "links": "Privacidad y condiciones",
+    "link": {
+      "privacy": "Privacidad",
+      "terms": "Condiciones"
+    },
+    "privacy": {
+      "title": "Política de privacidad",
+      "meta": "Actualizada el {{date}}",
+      "unpublished": "Quien gestiona esta copia de {{appName}} todavía no ha publicado su política de privacidad."
+    },
+    "terms": {
+      "title": "Condiciones del servicio",
+      "meta": "Actualizadas el {{date}}",
+      "metaVersion": "Versión {{version}}, actualizadas el {{date}}",
+      "unpublished": "Quien gestiona esta copia de {{appName}} todavía no ha publicado sus condiciones del servicio."
+    }
   }
 }

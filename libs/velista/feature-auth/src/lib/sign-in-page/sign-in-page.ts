@@ -27,6 +27,7 @@ import {
   EmailField,
   FormError,
   GoogleOption,
+  LegalLinks,
   PasswordField,
   SpinnerIcon,
 } from '@portfolio/velista/ui';
@@ -58,6 +59,7 @@ const GOOGLE_ERROR_ID = 'sign-in-google-error';
     EmailField,
     FormError,
     GoogleOption,
+    LegalLinks,
     PasswordField,
     SpinnerIcon,
   ],
@@ -73,6 +75,12 @@ export class SignInPage {
   private readonly _route = inject(ActivatedRoute);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /** Where the two legal links at the foot of the screen go (velista `0172`). */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly errorId = ERROR_ID;

@@ -2791,5 +2791,28 @@
       "body": "You can close this tab."
     },
     "refused": "This cannot be done in a support session"
+  },
+  "legal": {
+    "back": "Back",
+    "contents": "Contents",
+    "loading": "Loading",
+    "failed": "This page could not be loaded.",
+    "retry": "Try again",
+    "links": "Privacy and terms",
+    "link": {
+      "privacy": "Privacy",
+      "terms": "Terms"
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "meta": "Changed on {{date}}",
+      "unpublished": "Whoever runs this copy of {{appName}} has not published a privacy policy yet."
+    },
+    "terms": {
+      "title": "Terms of Service",
+      "meta": "Changed on {{date}}",
+      "metaVersion": "Version {{version}}, changed on {{date}}",
+      "unpublished": "Whoever runs this copy of {{appName}} has not published terms of service yet."
+    }
   }
 }

@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -14,6 +15,7 @@ import {
 } from '@portfolio/velista/data-access';
 import type { MyZone, SessionTokens } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { LegalLinks } from '@portfolio/velista/ui';
 import { UpgradePage } from './upgrade-page';
 
 const GUEST_ID = 'u-guest';
@@ -347,5 +349,15 @@ describe('UpgradePage', () => {
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('lib-google-option')
     ).toBeNull();
+  });
+
+  it('links the privacy policy and the terms at its foot (velista 0172)', async () => {
+    const { fixture } = await render();
+
+    const found = fixture.debugElement.query(By.directive(LegalLinks));
+    expect(found).not.toBeNull();
+    const links = found.componentInstance as LegalLinks;
+    expect(links.privacyUrl()).toMatch(/\/privacy$/);
+    expect(links.termsUrl()).toMatch(/\/terms$/);
   });
 });

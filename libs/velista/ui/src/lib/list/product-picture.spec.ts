@@ -51,6 +51,14 @@ async function settle(
 const PHOTO = 'https://img.example/milk.jpg';
 
 describe('ProductPicture', () => {
+  it('asks the chain for the photo with no referrer (velista 0172, D5)', async () => {
+    const fixture = await render({ imageUrl: PHOTO });
+
+    expect(query(fixture, 'img')?.getAttribute('referrerpolicy')).toBe(
+      'no-referrer'
+    );
+  });
+
   it('loads lazily, and eagerly where the host asks (velista 0162)', async () => {
     const lazy = await render({ imageUrl: PHOTO });
     expect(query(lazy, 'img')?.getAttribute('loading')).toBe('lazy');

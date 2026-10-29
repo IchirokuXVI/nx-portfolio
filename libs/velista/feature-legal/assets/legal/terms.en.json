@@ -1,0 +1,214 @@
+{
+  "templateVersion": "2026-10-29",
+  "title": "Terms of Service",
+  "sections": [
+    {
+      "id": "who",
+      "heading": "Who provides the service",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} is provided by {{controllerName}}. You can reach them at {{contactEmail}}."
+        }
+      ]
+    },
+    {
+      "id": "accept",
+      "heading": "Accepting these terms",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "By using {{appName}}, you agree to these terms."
+        },
+        {
+          "kind": "paragraph",
+          "when": "termsAcceptance",
+          "text": "Before the app makes an account for you, it asks you to accept them. That includes the guest account it makes when you create or join a group."
+        },
+        {
+          "kind": "paragraph",
+          "when": "googleSignIn",
+          "text": "The same goes for continuing with Google."
+        },
+        {
+          "kind": "paragraph",
+          "text": "This is version {{termsVersion}}."
+        },
+        {
+          "kind": "paragraph",
+          "text": "How we handle your data is explained in the [[privacy]]. It is a separate document: you are told about it, not asked to accept it."
+        }
+      ]
+    },
+    {
+      "id": "service",
+      "heading": "What the service is",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} gives you shopping lists you can share, prices gathered from supermarkets, and maps of shops. It is free."
+        },
+        {
+          "kind": "paragraph",
+          "text": "We cannot promise that it will always be available."
+        }
+      ]
+    },
+    {
+      "id": "prices",
+      "heading": "Prices are information, not offers",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Prices and photos come from supermarket websites and from people who use the app. They can be wrong or out of date. The price the shop charges you at the till is the one that counts."
+        }
+      ]
+    },
+    {
+      "id": "minors",
+      "heading": "Age",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Anyone may use {{appName}}. If you are under 14, you need permission from a parent or guardian. The app does not check anyone's age."
+        }
+      ]
+    },
+    {
+      "id": "account",
+      "heading": "Your account",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "Keep your password to yourself."
+        },
+        {
+          "kind": "paragraph",
+          "text": "A guest account lives only on the device where it was made, until you add an email address to it."
+        }
+      ]
+    },
+    {
+      "id": "conduct",
+      "heading": "What you must not do",
+      "blocks": [
+        {
+          "kind": "list",
+          "items": [
+            "Post anything unlawful.",
+            "Harass or threaten other people.",
+            "Send spam.",
+            "Copy data from the service with automated tools.",
+            "Attack the service."
+          ]
+        },
+        {
+          "kind": "list",
+          "when": "assistant",
+          "items": [
+            "Use the assistant to run up costs, or to make it produce harmful content."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "heading": "What you write",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "What you write in the app stays yours. You allow us to store it and to show it to the people you share it with."
+        },
+        {
+          "kind": "paragraph",
+          "text": "If you delete your account, what you wrote in a group stays for the other members with your name removed, as the [[privacy]] explains."
+        }
+      ]
+    },
+    {
+      "id": "assistant",
+      "when": "assistant",
+      "heading": "The assistant can be wrong",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "The assistant is a program and it makes mistakes. Check what it wrote or changed on your lists."
+        },
+        {
+          "kind": "paragraph",
+          "text": "Each person can use it only a limited amount."
+        }
+      ]
+    },
+    {
+      "id": "voice",
+      "when": "transcription",
+      "heading": "Voice",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "When your voice is turned into text, some words can come out wrong. Read the transcript before you rely on it."
+        }
+      ]
+    },
+    {
+      "id": "ending",
+      "heading": "Ending",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "You can delete your account at any time, on the account page."
+        },
+        {
+          "kind": "paragraph",
+          "text": "If an account breaks these terms, we can close it. Closing an account deletes it."
+        }
+      ]
+    },
+    {
+      "id": "liability",
+      "heading": "Liability",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "We are responsible for the service only as far as the law requires. Nothing in these terms takes away the rights a consumer has under the law of their country."
+        }
+      ]
+    },
+    {
+      "id": "law",
+      "heading": "Which law applies",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "These terms are governed by the law of the country where {{controllerName}} is established. If you use the service as a consumer, you can always go to the courts where you live."
+        }
+      ]
+    },
+    {
+      "id": "changes",
+      "heading": "Changes to these terms",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "When we change these terms, the date at the top of this page changes."
+        },
+        {
+          "kind": "paragraph",
+          "when": "termsAcceptance",
+          "text": "The app then asks you to accept the new version before you go on."
+        }
+      ]
+    },
+    {
+      "id": "open-source",
+      "heading": "The software",
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "text": "{{appName}} is built on Luna Shopper, which is open source software published under its own licence. These terms cover this service, {{appName}}, and not the software's code."
+        }
+      ]
+    }
+  ]
+}

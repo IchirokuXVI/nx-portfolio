@@ -1,5 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
 import {
   RokuLocaleStore,
@@ -18,6 +19,7 @@ import {
   provideVelistaTesting,
   type AppRuntime,
 } from '@portfolio/velista/platform';
+import { LegalLinks } from '@portfolio/velista/ui';
 import { LandingPage } from './landing-page';
 
 /**
@@ -481,5 +483,15 @@ describe('LandingPage', () => {
 
       expect(notice.notice()).toBeNull();
     });
+  });
+
+  it('links the privacy policy and the terms at its foot (velista 0172)', async () => {
+    const { fixture } = await render();
+
+    const found = fixture.debugElement.query(By.directive(LegalLinks));
+    expect(found).not.toBeNull();
+    const links = found.componentInstance as LegalLinks;
+    expect(links.privacyUrl()).toBe('/en/privacy');
+    expect(links.termsUrl()).toBe('/en/terms');
   });
 });

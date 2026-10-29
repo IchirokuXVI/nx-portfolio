@@ -45,6 +45,9 @@ import {
   ListApi,
   MEMBERSHIP_SERVICE,
   MembershipApi,
+  OPERATOR_SETTINGS_SERVICE,
+  OperatorSettingsApi,
+  OperatorSettingsStore,
   ProfileStore,
   PURCHASE_SERVICE,
   PurchaseApi,
@@ -296,6 +299,10 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // A shop's walks and their logs (velista 0122), for accounts that map shops.
   provideService(SHOP_WALK_SERVICE, ShopWalkApi),
 
+  // What this deployment states about itself (velista 0172): the operator's name for
+  // the legal pages, and the flags plans 0173 and 0174 read.
+  provideService(OPERATOR_SETTINGS_SERVICE, OperatorSettingsApi),
+
   // The live connection (plan 0016). Bound here for the same reason as every line
   // above: talking to a real server is the app's call, and `RealtimeSocket` reaches
   // `ApiUrl`, `TokenStore` and `SessionStore`, which exist only in this injector.
@@ -342,6 +349,10 @@ export const appProviders: (Provider | EnvironmentProviders)[] = [
   // sit in storage forever, booting every load into a signed-in app whose every
   // request fails, with nothing that ever clears it.
   provideEnvironmentInitializer(() => void inject(SessionValidation)),
+
+  // Read what the operator states (velista 0172) the first time the backend answers,
+  // so the legal pages, and the screens of 0173 and 0174, find it already there.
+  provideEnvironmentInitializer(() => void inject(OperatorSettingsStore)),
 
   // A support session in this tab (velista `0133`): the strip's name and deadline, the
   // clock that ends the session, and what "End" does. Nothing injects it, so without

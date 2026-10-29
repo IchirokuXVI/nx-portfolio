@@ -17,9 +17,14 @@ import {
   GatewayError,
   GoogleSignIn,
 } from '@portfolio/velista/data-access';
-import { APP_KEY, type PreviewLineVm } from '@portfolio/velista/models';
+import {
+  APP_BASE_PATH,
+  APP_KEY,
+  type PreviewLineVm,
+} from '@portfolio/velista/models';
 import {
   APP_RUNTIME,
+  appPath,
   BackendReadiness,
   sheetSegments,
 } from '@portfolio/velista/platform';
@@ -28,6 +33,7 @@ import {
   AppVersion,
   AuthActions,
   HomeHero,
+  LegalLinks,
   ListPreviewCard,
 } from '@portfolio/velista/ui';
 
@@ -57,6 +63,7 @@ import {
     AppVersion,
     AuthActions,
     HomeHero,
+    LegalLinks,
     ListPreviewCard,
   ],
   templateUrl: './landing-page.html',
@@ -72,6 +79,7 @@ export class LandingPage {
   private readonly _notice = inject(AccountNotice);
   private readonly _readiness = inject(BackendReadiness);
   private readonly _google = inject(GoogleSignIn);
+  private readonly _basePath = inject(APP_BASE_PATH);
 
   /**
    * Whether to offer Google: everywhere but the native shell, where Google refuses to
@@ -138,6 +146,16 @@ export class LandingPage {
    * the news does not change while the screen is up.
    */
   readonly accountDeleted = this._readDeletedNotice();
+
+  /**
+   * Where the two legal links go (velista `0172`). The front door is the home page
+   * Google's consent screen names, and its review looks for the policy link here,
+   * in view without signing in.
+   */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this.locale(), this._basePath, 'privacy'),
+    terms: appPath(this.locale(), this._basePath, 'terms'),
+  }));
 
   /** Uppercased here rather than in the app bar, which keeps taking a plain string. */
   readonly localeLabel = computed(() => this.locale().toLocaleUpperCase());

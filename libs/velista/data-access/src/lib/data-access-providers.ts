@@ -37,6 +37,8 @@ import { ListStore } from './lists/list-store';
 import { MemberNames } from './memberships/member-names';
 import { MembershipMemory } from './memberships/membership-memory';
 import { MembershipStore } from './memberships/membership-store';
+import { OperatorSettingsMemory } from './operator/operator-settings-memory';
+import { OperatorSettingsStore } from './operator/operator-settings-store';
 import { PresenceStore } from './presence/presence-store';
 import { ShoppingProfileMemory } from './profiles/shopping-profile-memory';
 import { ShoppingProfileStore } from './profiles/shopping-profile-store';
@@ -221,6 +223,14 @@ import { ZoneStore } from './zones/zone-store';
  * here is a second one beside the token's, which costs nothing because `AuthApi` holds
  * no state of its own. The Google flow has no in-memory twin, because a redirect to
  * Google has nothing to fake.
+ *
+ * `OperatorSettingsStore` (velista `0172`) joins for `ZoneStore`'s reason: it resolves
+ * `OPERATOR_SETTINGS_SERVICE`, which the app binds. It is app scoped because three
+ * plans read the one answer (the legal pages, `0173`'s acceptance and `0174`'s voice),
+ * and `app-providers.ts` constructs it with an environment initializer so the read goes
+ * out when the backend first answers. `OperatorSettingsMemory` joins for
+ * `AccountMemory`'s reason, and `OperatorSettingsApi` stays out like every other real
+ * transport.
  */
 export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ApiUrl,
@@ -280,4 +290,6 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ImpersonationSession,
   AuthApi,
   GoogleSignIn,
+  OperatorSettingsMemory,
+  OperatorSettingsStore,
 ];

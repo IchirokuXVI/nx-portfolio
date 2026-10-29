@@ -1,6 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
@@ -32,6 +33,7 @@ import {
   TourStore,
   type InstallState,
 } from '@portfolio/velista/platform';
+import { LegalLinks } from '@portfolio/velista/ui';
 import { of } from 'rxjs';
 import { AccountPage } from './account-page';
 
@@ -764,5 +766,16 @@ describe('AccountPage', () => {
       expect(row?.querySelector('button')).toBeNull();
       expect(opened).toEqual([]);
     });
+  });
+
+  it('links the privacy policy and the terms at its foot (velista 0172)', async () => {
+    const { fixture } = await render();
+
+    const found = fixture.debugElement.query(By.directive(LegalLinks));
+    expect(found).not.toBeNull();
+    const links = found.componentInstance as LegalLinks;
+    // These specs run the app under the portfolio's mount, and the links keep it.
+    expect(links.privacyUrl()).toBe('/velista/en/privacy');
+    expect(links.termsUrl()).toBe('/velista/en/terms');
   });
 });

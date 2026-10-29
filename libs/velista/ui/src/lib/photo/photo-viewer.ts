@@ -46,7 +46,16 @@ import { CloseIcon } from '../icons/icons';
       tabindex="-1"
     >
       <figure class="panel">
-        <img [alt]="name()" [src]="src()" class="photo" decoding="async" />
+        <!-- No referrer (velista 0172, D5): the photo is fetched from the chain's
+             own site, and the address of the page somebody is reading is not its
+             business. -->
+        <img
+          [alt]="name()"
+          [src]="src()"
+          class="photo"
+          decoding="async"
+          referrerpolicy="no-referrer"
+        />
         <figcaption class="name">{{ name() }}</figcaption>
       </figure>
       <button

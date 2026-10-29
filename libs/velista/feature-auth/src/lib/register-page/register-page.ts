@@ -28,6 +28,7 @@ import {
   EmailField,
   FormError,
   GoogleOption,
+  LegalLinks,
   PASSWORD_MIN_LENGTH,
   PasswordField,
   SpinnerIcon,
@@ -96,6 +97,7 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     EmailField,
     FormError,
     GoogleOption,
+    LegalLinks,
     PasswordField,
     SpinnerIcon,
   ],
@@ -111,6 +113,12 @@ export class RegisterPage {
   private readonly _pages = inject(PageNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /** Where the two legal links at the foot of the screen go (velista `0172`). */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   /** The page to come back to, carried on from sign in (velista `0154`). */

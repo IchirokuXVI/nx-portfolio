@@ -1,3 +1,5 @@
+> **PR:** [#862](https://github.com/IchirokuXVI/nx-portfolio/pull/862)
+
 # 0172: the privacy policy and the terms are public pages
 
 > Asked for by the owner on 2026-10-27. Google will not publish the OAuth consent screen of
@@ -122,11 +124,11 @@ as a translation.
    | `terms: { version, updatedOn, acceptanceRequired }` | `terms.version`, `terms.updatedOn` (`YYYY-MM-DD`), `terms.acceptanceRequired` |
    | `privacyUpdatedOn: string` | `privacy.updatedOn` (`YYYY-MM-DD`) |
    | `features: { googleSignIn, assistant, transcription, offsiteBackups, supportAccess }` | `features.*` |
-   | `processors: { hosting, email, aiText, offsiteBackups }` | `processors.*`; `aiText` is mapped to velista's own union `'anthropic' \| 'google' \| null`, an unknown value to null |
-   | `retention: { auditTrailDays, adminLoginFailureDays, expiredGrantDays, applicationLogDays, assistantLogDays, backupDays }` | `retention.*`; `backupDays` null when off site backups are off |
+   | `processors: { hosting, email, aiText, offsiteBackups }` | `processors.*`; `aiText` is mapped to velista's own union `'anthropic' \| null`, an unknown value to null (review fix: `'google'` left the union, section 10.8) |
+   | `retention: { auditTrailDays, adminLoginFailureDays, expiredGrantDays, applicationLogDays, assistantLogDays, backupDays }` | `retention.*`; `backupDays` null when off site backups are off; `adminLoginFailureDays` is `number \| null`, null when missing or unreadable, because no document prints it (review fix, section 10.8) |
 
-   A body that lacks `appName` or `terms.version`, or whose `retention` numbers are not whole
-   numbers, maps to null and the store answers `failed`. A missing flag maps to `false`, so a
+   A body that lacks `appName` or `terms.version`, or whose printed `retention` numbers are
+   not whole numbers, maps to null and the store answers `failed`. A missing flag maps to `false`, so a
    missing field never offers a feature. `published: false` is **not** a failure: it is a
    supported deployment that has published no documents (`0231` section 2, the 0026 rule),
    and the page says so (target 5).
@@ -158,7 +160,8 @@ as a translation.
      blocks: LegalBlock[];
    }
    type LegalFeature = 'googleSignIn' | 'assistant' | 'transcription'
-     | 'offsiteBackups' | 'supportAccess' | 'emailProvider' | 'hostingProvider';
+     | 'offsiteBackups' | 'supportAccess' | 'emailProvider' | 'hostingProvider'
+     | 'backupProvider' | 'aiTextProvider' | 'termsAcceptance';
    type LegalBlock =
      | { kind: 'paragraph'; text: string; when?: LegalFeature }
      | { kind: 'list'; items: string[]; when?: LegalFeature }
@@ -167,10 +170,13 @@ as a translation.
    ```
 
    `emailProvider` counts as on when `processors.email` is not null, `hostingProvider` when
-   `processors.hosting` is not null. Text holds placeholders `{{appName}}`,
+   `processors.hosting` is not null, and `termsAcceptance` when `terms.acceptanceRequired`
+   is true (review fix, section 10.8: a sentence about the app asking for acceptance is
+   drawn only where the app asks). Text holds placeholders `{{appName}}`,
    `{{controllerName}}`, `{{contactEmail}}`, `{{termsVersion}}`, `{{emailProvider}}`,
    `{{hostingProvider}}`, `{{backupProvider}}`, `{{aiTextProvider}}` (the provider's name,
-   drawn from a fixed velista table: `anthropic` is "Anthropic", `google` is "Google"), and
+   drawn from a fixed velista table: `anthropic` is "Anthropic", the only provider since
+   backend `0236`), and
    one per retention number (`{{auditTrailDays}}`, `{{expiredGrantDays}}`,
    `{{applicationLogDays}}`, `{{assistantLogDays}}`, `{{backupDays}}`), so **every period
    the policy states is the number the deployment enforces** (`0231` section 2 reads each from
@@ -193,7 +199,8 @@ as a translation.
    (`PageNavigation.back(fallbackUrl)`, fallback the front door `appPath(locale, base)`, which
    sends a signed in reader on to home through `anonymousOnlyGuard`), the title, one line
    "Version {{termsVersion}}, changed on {date}" on the terms and "Changed on {date}" on the
-   policy (the date through `Intl.DateTimeFormat` in a `try`, never `DatePipe`; the line is
+   policy (review fix, section 10.8: the terms name the version only when it is not the plain
+   `updatedOn` date, so an unrevised template says "Changed on {date}" too; the date through `Intl.DateTimeFormat` in a `try`, never `DatePipe`; the line is
    left out when the date is null), a short table of contents of the drawn sections as in
    page anchors, and the sections as `h2` with their blocks. The dates are `terms.updatedOn`
    and `privacyUpdatedOn`, parsed as calendar dates (no time zone shift). One component
@@ -409,15 +416,18 @@ in "What the build decided" any row the code contradicts.
    When your browser loads one, that website receives your IP address, as with any website.
    We tell your browser not to send which page you were reading. Name the category
    ("supermarket websites that product photos load from"), never a list.
-8. `transfers` (`when: assistant`) **Outside the European Economic Area.** If a provider
-   above is outside the EEA, transfers rely on an adequacy decision (such as the EU US Data
-   Privacy Framework) or standard contractual clauses. The builder states this generically
-   and marks it for the owner (section 8, O4).
+8. `transfers` **Outside the European Economic Area.** Unconditional (review fix, section
+   10.8: a hosting or email provider can be outside the EEA too, not only the AI
+   provider). If any company above handles data outside the EEA, transfers rely on an
+   adequacy decision (such as the EU US Data Privacy Framework) or standard contractual
+   clauses. The builder states this generically and marks it for the owner (section 8, O4).
 9. `google` (`when: googleSignIn`) **Sign in with Google.** We ask Google only for your email
    address and your basic profile, and we use them only to sign you in. We do not read your
    contacts, your mail or anything else in your Google account, and we do not share what
    Google gives us. This wording mirrors Google's "Limited Use" disclosure, which the review
-   checks for.
+   checks for, and the section also carries that disclosure literally: the app's use and
+   transfer of information received from Google APIs adheres to the Google API Services User
+   Data Policy, including the Limited Use requirements (review fix, section 10.8).
 10. `storage` **Storage on your device. No cookie banner.** The app keeps on your device only
     what it needs to work: your session, your theme and language, what you last had open, and
     offline copies of the app. No analytics, no advertising, no tracking. Because all of it is
@@ -435,12 +445,14 @@ in "What the build decided" any row the code contradicts.
     guardian's permission (LOPDGDD art. 7). We do not knowingly collect more from children
     than from anybody else, and a parent can ask us to delete a child's account.
 14. `security` **Security.** In transit encryption, passwords stored as hashes, access limited
-    to the operator.
+    to the operator and the companies of `processors` under their agreements (review fix,
+    section 10.8).
 15. `support` (`when: supportAccess`) **When you ask for help.** An operator can open the
     app as you, for a limited time, to see what you see. A strip at the top of the screen
     shows it the whole time, and it is recorded (plan `0194`; the builder words it from
     that plan's rules).
-16. `changes` **Changes.** The date at the top. A change that matters is announced in the app.
+16. `changes` **Changes.** The date at the top. (Review fix, section 10.8: no code announces a
+    policy change in the app, so the text says only that the date changes.)
 
 ### 4.2 Terms of service, sections in order
 
@@ -450,7 +462,9 @@ in "What the build decided" any row the code contradicts.
    you create or join a group, or by continuing with Google, you accept these terms. Version
    `{{termsVersion}}`. When they change, the app asks you to accept the new version. The
    privacy policy is a separate document that explains how data is used ([[privacy]]); it is
-   not part of what you accept.
+   not part of what you accept. (Review fix, section 10.8: every sentence about the app
+   asking sits behind `when: termsAcceptance`, and an unconditional sentence says that using
+   the service means agreeing to the terms.)
 3. `service` **What the service is.** Shared shopping lists, prices gathered from supermarkets,
    shop maps. Free. No guarantee of availability.
 4. `prices` **Prices are information, not offers.** Prices and photos come from supermarket
@@ -467,14 +481,16 @@ in "What the build decided" any row the code contradicts.
 9. `assistant` (`when: assistant`) **The assistant can be wrong.** Check what it wrote. It has
    limits on how much one person can use it.
 10. `voice` (`when: transcription`) **Voice.** A transcript can mishear.
-11. `ending` **Ending.** You can delete your account at any time. We can suspend an account
-    that breaks these terms.
+11. `ending` **Ending.** You can delete your account at any time. We can close (delete) an
+    account that breaks these terms. (Review fix, section 10.8: auth has no suspension of a
+    person's account; `disabledAt` exists only on `admin_users`.)
 12. `liability` **Liability.** As far as the law allows. Nothing here limits the rights a
     consumer has under the law of their country.
 13. `law` **Law.** The law of the controller's country; consumers keep the courts of their
     residence. The builder keeps this generic: the template does not name a country, and the
     owner decides (section 8, O3).
-14. `changes` **Changes.** How a new version is announced and accepted.
+14. `changes` **Changes.** How a new version is announced (the date at the top) and, behind
+    `when: termsAcceptance`, accepted.
 15. `open-source` **The software.** Luna Shopper is open source under its licence; these terms
     cover this instance, not the code.
 
@@ -578,3 +594,356 @@ this plan is deployed to production:
   unpublished deployment draws one sentence instead of a document.
 - Legal pages without the bottom bar.
 - The outline of section 4 and the order of sections.
+
+## 10. What the build decided
+
+The builder's choices where the plan left room, written on 2026-10-29. Each is the owner's to
+change.
+
+### 10.1 The store, the documents and the page
+
+1. **`OperatorSettingsStore` is app scoped, not root** (rule D5), listed in
+   `VELISTA_DATA_ACCESS_PROVIDERS` like every other store. At the root it would resolve its
+   transport with no `HttpClient` behind it. It reads through `OPERATOR_SETTINGS_SERVICE`
+   (`OperatorSettingsApi` over HTTP, bound by the app; `OperatorSettingsMemory` for specs), so
+   `app-providers.ts` gains two lines, the binding and the initializer, not one.
+2. **The read is `anonymous()`**, so a signed out reader pays no token refresh.
+3. **The two dates are `string | null` in the model.** An unreadable date maps to null and the
+   page leaves its date line out (target 5), rather than failing the store.
+4. **`published` is the server's flag and both operator values present.** A body that says
+   published with a blank controller reads as unpublished, so no page prints a hole.
+5. **A failed reload keeps an answer the store already had** and stays `ready`.
+6. **`fakeOperatorSettingsStore` and `provideFakeOperatorSettingsStore`** in
+   `operator/operator-settings-testing.ts`, exported, for the screen specs of `0173` and `0174`.
+7. **`LegalFeature` gained `backupProvider` and `aiTextProvider`** beside `emailProvider` and
+   `hostingProvider`: off site backups and the assistant can be on with no name to print, and the
+   rule of target 4 ("a placeholder whose value is null needs its `when`") needed a condition
+   that guarantees the name. A table has no `when` of its own; its rows do.
+8. **The renderer drops what it cannot fill.** A text whose placeholder has no value, or whose
+   placeholder or token is unknown, is dropped (an item, a block, a row, or a section for its
+   heading), never drawn with a blank. `legalDocumentProblems` is the static check the documents
+   spec runs over all four files: known placeholders and tokens, every nullable placeholder
+   behind its `when`, one cell per column, no repeated id.
+9. **The page's `h1` is the translation key `legal.<document>.title`**, the same key as the route
+   title and the link text; `documents.spec.ts` asserts each file's `title` equals it, so the
+   `LegalSheet` of `0173` (which draws the file's title) cannot drift from the page.
+10. **The contents are folded in a `details`**, one touch target tall: sixteen anchors at 44 px
+    each would push the first section two screens down. Each link carries the real address
+    (`/en/privacy#rights`) for a copy or a long press; a press scrolls the page's own scroller
+    and focuses the heading, because a router fragment scrolls the window, not `.page`. A cold
+    arrival on a fragment scrolls to that section without focusing it.
+11. **The table is one block per row** (an `h3` and a `dl` of column name and cell), separated by
+    a hairline: five columns do not fit 360 px. No tinted container anywhere.
+12. **Retry retries whichever half failed**: the settings read, or the document's chunk.
+13. **The reading width is `AppLayout`'s 480 px column**, which already caps every page; the page
+    adds no width of its own. It works at 320 px (no horizontal overflow, measured).
+14. **The page keeps `main`** for its scroller, as the install and profiles pages do, although
+    `AppLayout` has a `main` too. A page level fix for every page is not this plan's.
+15. **An unknown locale draws the English text.**
+
+### 10.2 The links and the photos
+
+16. **On sign in, register and upgrade, `LegalLinks` is projected as a second `authFooter`
+    element.** `AuthScreen` projects every `[authFooter]` in order, so the links land after the
+    footer paragraph with no change to `AuthScreen`.
+17. **The links are small secondary text, underlined, each a touch target tall**, in a `nav`
+    named "Privacy and terms" / "Privacidad y condiciones". The copy stayed "Privacy" / "Terms"
+    and "Privacidad" / "Condiciones".
+18. **The front door: on the same line as the version.** Measured in the browser at 360 x 640
+    the four ways in already end at 775 px (English) and 816 px (Spanish), so the page does not
+    fit with or without the links. A row of their own would have added 44 px under the fold; on
+    the version's line it costs 12 px. At 390 x 844 the English foot ends at 844 (in view) and
+    the Spanish at 870; at 412 x 915 both are in view. `landing-page.scss` gained the `.foot`
+    rule (outside the plan's file list, inside the same component).
+19. **`ChainLogo` has no spec of its own**; the attribute is asserted on `ProductPicture` and on a
+    new `photo-viewer.spec.ts`, as target 8 asks.
+
+### 10.3 The e2e stub, the routes and the version
+
+20. **`stubBackendReady(page, legalSettings?)`** answers `/v1/legal/settings` with
+    `STUB_LEGAL_SETTINGS` (exported, invented values) and an
+    `access-control-allow-origin: *` header, because the gateway is another origin.
+21. **The legal routes carry `NO_NAV_CHROME`**, so `routes.spec.ts`'s bottom bar list gained
+    `privacy` and `terms`.
+22. **The template version is `2026-10-29`** in all four files and in both constants of
+    `legal-documents.ts`. The contracts spec does not pin the date; the backend specs that name a
+    version read the constant (`legal-config.spec.ts`, `legal.controller.http.spec.ts`,
+    `terms.testing.ts`). `npx nx run luna-shopper-backend-gateway:openapi` left a line ending
+    only diff, restored: the document does not carry the date.
+23. **`template-version.spec.ts` imports `LEGAL_TEMPLATES` from
+    `@portfolio/luna-shopper/contracts`**; lint's module boundaries accept it, so nothing needed
+    solving.
+
+### 10.4 The texts
+
+24. **Rows of section 4.1's inventory that the code contradicts**, and what the texts say
+    instead:
+    - Account, "sign in dates": no table keeps them. The texts say when the account was made, and
+      add a row for the token that keeps each device signed in (removed `{{expiredGrantDays}}`
+      days after it expires, `RETENTION_EXPIRED_GRANTS` on `refresh_tokens`).
+    - Security records, "sign ins": `auth_audit` records no sign in. It records a name change, a
+      confirmation or reset request, an operator's deletion and support sessions; the texts list
+      those.
+    - Shopping trips, "the prices others see": nothing a person buys changes a price today (0232
+      section 2, catalog). The texts say "your history and the group's". Your own trips are
+      deleted with the account (0232 deletes the person's baskets); what you marked as bought on a
+      group's list stays with the name removed.
+    - Support sessions, "a strip at the top of the screen shows it": the strip is on the
+      operator's screen, not the person's. The texts say instead: two hours at most, not
+      extendable, no deletion and no acceptance on the person's behalf (`@RefuseImpersonation()`
+      on both routes), recorded with who, when and why.
+    - Links we email: the Google sign in state got its own row behind `googleSignIn`.
+    - Your position: not stored. `shop-finder.ts` sends it once; the gateway copies three fields
+      into the NATS request (`catalog/nearby-shops.ts`) and catalog answers from them
+      (`nearby-shops.controller.ts`); no entity has a coordinate (`shopping_profiles` keeps
+      `addressText` only).
+25. **`adminLoginFailureDays` is not printed**: it is about the operator's own failed logins,
+    not a person's data.
+26. **The training sentence stays, behind `aiTextProvider`**, worded as the provider's commercial
+    terms. It is verified only for Anthropic, by the builder of backend `0236` on 2026-10-29
+    (Commercial Terms, section B). The wire serves no other provider since `0236`. Owner: confirm
+    before publishing (O4).
+27. **The number "two hours" and "one month" are written as words**, and "14" stays: they are
+    the code's and the law's numbers, not the operator's.
+28. **Article 6(1)(c), legal obligation, is not used**: no row of the inventory rests on it.
+
+### 10.5 The claims of section 4.3, checked on this branch
+
+| Claim | Where the code does it |
+| --- | --- |
+| `auditTrailDays` is enforced | `RETENTION_AUDIT` in `auth`, `core` and `catalog` `retention/retention-sweep.service.ts` (plan 0233) |
+| `expiredGrantDays` is enforced | `RETENTION_EXPIRED_GRANTS` on `refresh_tokens`, `password_resets`, `email_verifications`, `oauth_states` in auth's sweep (0233). `oauth_handoffs` joins the sweep in a review follow up on PR #857 (section 10.8) |
+| `adminLoginFailureDays` is enforced | `RETENTION_ADMIN_LOGIN_FAILURES` in auth's sweep (0233); not printed |
+| `applicationLogDays` is enforced | **Not done yet.** The gateway reports the chart value `LEGAL_APPLICATION_LOG_DAYS`; k8s `0018` is a plan file only, and nothing deletes logs |
+| `assistantLogDays` is enforced | **Not done yet.** Same: `LEGAL_ASSISTANT_LOG_DAYS` is reported, k8s `0018` unbuilt |
+| `backupDays` is enforced | The bucket's lifecycle rule, outside the repository; the chart reports `backups.retentionDays` |
+| What deletion removes and unlinks | `core/src/app/account/account-deletion.service.ts` (tombstones per zone), `catalog/src/app/account/account-deletion.service.ts`, `AuthAuditService.scrubUser` in `auth/src/app/audit/auth-audit.service.ts` (0232) |
+| The assistant sends a child safety instruction | `assistant/src/app/assistant/child-safety.ts`, first in both prompts; replies checked by `assistant/moderation.ts` (0236) |
+| No analytics script | `apps/velista/src/index.html` loads only the favicon, manifest and touch icon; no analytics name in `libs/velista` or `apps/velista/src` |
+| The position is not stored | See 10.4, "Your position" |
+| Google is asked for `email` and `profile` only | `gateway/src/app/auth/google.strategy.ts`, `scope: ['email', 'profile']` |
+| Transcription runs on the operator's servers | `assistant/src/app/provider/whisper.provider.ts`; `hears` is true only with `TRANSCRIBER_URL` (`assistant.service.ts`), which is what `features.transcription` reports (0235) |
+
+O5 stands: the policy states `{{applicationLogDays}}` and `{{assistantLogDays}}`, which no code
+enforces until k8s `0018` is built. The owner decides whether to publish before it.
+
+### 10.6 The meaning comparison of section 5.3
+
+The Spanish was written by a fresh agent that never saw the English; a third fresh agent read
+both and built these tables. Each mismatch was fixed on the side that was wrong against section 4
+and the checked facts, in that language's own words. Both files have the same section ids in the
+same order under the same conditions, the same placeholders, and no dash used as punctuation.
+
+**Privacy policy**
+
+| id | Claim | EN | ES | Result |
+| --- | --- | --- | --- | --- |
+| who | controller is `{{controllerName}}` | "the data controller under the GDPR" | "responsable del tratamiento" | match |
+| who | contact | "write to {{contactEmail}}" | "escribe a {{contactEmail}}" | match |
+| who | Luna Shopper, open source, run by the controller, not the authors | present | present | match |
+| summary | what we keep, why | account, groups, trips, shops | cuenta, grupos, listas, compras | match (scope differs, both within section 4) |
+| summary | no selling, no ads, no analytics | present | present | match |
+| summary | copy or deletion by email | present, plus self deletion | present | match |
+| data | contract, art. 6(1)(b) | present | "art. 6.1.b del RGPD" | match |
+| data | legitimate interest, art. 6(1)(f), its scope | run, protect, others rely on it | protect, others use it | **fixed in ES**: "para que el servicio funcione y esté protegido" |
+| data | account: email, user name, hash, kind, made; until deletion | present | present | match |
+| data | signed in devices; `{{expiredGrantDays}}` after expiry | present | present | match |
+| data | guest: made up name; until deleted or idle without a group | present | present | match |
+| data | Google identity (`googleSignIn`) | present | present | match |
+| data | groups and lists; kept without name after deletion | present | present | match |
+| data | voice (`transcription`): recording deleted, transcript kept | present | present | match |
+| data | shopping profiles | present | present | match |
+| data | position: on the button, not stored | present | present | match |
+| data | shopping trips: contract, legitimate interest after deletion | present | present | match |
+| data | shop maps: legitimate interest, name removed | present | present | match |
+| data | shared basket: name and user agent; with the basket | present | present | match |
+| data | assistant (`assistant`): `{{assistantLogDays}}` | present | present | match |
+| data | security records: name change, requests, operator deletion; `{{auditTrailDays}}` | present | present | match |
+| data | links we email; `{{expiredGrantDays}}` | present | present | match |
+| data | Google sign in record (`googleSignIn`) | in the email row, no condition | own row, `googleSignIn` | **fixed in EN**: own row behind `googleSignIn` |
+| data | server logs: IP; `{{applicationLogDays}}` | present | present | match |
+| data | support sessions (`supportAccess`) | present | present | match |
+| data | backups (`offsiteBackups`): `{{backupDays}}` | present | present | match |
+| assistant | automated, not a person | present | present | match |
+| assistant | what the provider receives, four items | present | present | match |
+| assistant | no email, no account id | "anything that identifies your account" | "ni el identificador de tu cuenta" | **fixed in EN**: "the number that identifies your account" |
+| assistant | provider named, no training (`aiTextProvider`) | present | present | match |
+| assistant | child instruction, replies checked, allowance, logs | present | present | match |
+| voice | transcribed on our servers, no other company | present | present | match |
+| processors | processing agreement, only on our instructions | present | present | match |
+| processors | hosting always, named (`hostingProvider`) | present | present | match |
+| processors | email (`emailProvider`), backups (`offsiteBackups`, `backupProvider`) | present | present | match |
+| processors | AI provider (`assistant`, `aiTextProvider`), Google own controller (`googleSignIn`), no one hears voice (`transcription`) | present | present | match |
+| photos | supermarket sites get the IP, no referrer | present | present | match |
+| transfers | adequacy decision or standard clauses | present | present | match |
+| google | email and basic profile only, sign in only, no reading, no sharing | present | present | match |
+| storage | what the device keeps | six items | seven items | match (same things, split differently) |
+| storage | nothing for analytics, ads or tracking | "loads nothing from other companies' sites" | "nada que venga de la web de otra empresa" | **fixed in EN**: the old wording contradicted `photos`; now "none of it comes from another company's site" |
+| storage | no banner, ePrivacy 5(3), LSSI 22.2 | present | present | match |
+| rights | seven rights, by email, one month, self deletion, AEPD | present | present | match |
+| deletion | what is removed, with the same three conditions | present | present | match |
+| deletion | kept with the name removed | "and no link back to you" | "pero sin tu nombre" | **fixed in EN**: the added clause went |
+| deletion | security records lose email and name; backups `{{backupDays}}` | present | present | match |
+| minors | for everyone, under 14 with permission, LOPDGDD art. 7, parent may delete | present | present | match |
+| security | encryption in transit, hashes, operator only | present | present | match |
+| support | open as you; two hours; no deletion or acceptance; recorded | present | present | match |
+| changes | date at the top; change announced in the app | present | present | match |
+
+**Terms of service**
+
+| id | Claim | EN | ES | Result |
+| --- | --- | --- | --- | --- |
+| who | `{{appName}}` by `{{controllerName}}`, contact | present | present | match |
+| accept | accepted on any account, guests included | present | present | match |
+| accept | accepted by continuing with Google (`googleSignIn`) | present | present | match |
+| accept | version `{{termsVersion}}`; the app asks again | present | present | match |
+| accept | the policy is separate, not accepted | present | present | match |
+| service | lists, prices, maps; free | present | present | match |
+| service | no availability guarantee | "or work without faults" | "disponible siempre" | **fixed in EN**: "We cannot promise that it will always be available." |
+| prices | from supermarkets and people; may be wrong; the till counts | present | present | match |
+| minors | everyone; under 14 with permission; no age check | present | present | match |
+| account | keep the password to yourself | present | present | match |
+| account | a guest lives on one device until an email | present | present | match |
+| account | a lost device loses the guest | present | absent | **fixed in EN**: the unsupported sentence went |
+| conduct | unlawful, harassment, spam, scraping, attacks; assistant misuse (`assistant`) | present | present | match |
+| content | yours; stored and shown to whom you share with | present | present | match |
+| content | kept without the name after you leave | "leave a group or delete your account" | "cuando te vas" | **fixed in EN**: on account deletion only |
+| assistant | can be wrong; per person limit | present | present | match |
+| voice | a transcript can mishear | present | present | match |
+| ending | delete any time; suspension | present | present | match |
+| liability | as far as the law allows; consumer rights stay | present | present | match |
+| law | the controller's country; consumers keep their courts | plus "your own country's law" | present | **fixed in EN**: the repeat of `liability` went |
+| changes | announced in the app, accepted before going on | "a new version number and date", "shows you the change" | present | **fixed in EN**: "the app tells you, and asks you to accept the new version" |
+| open-source | Luna Shopper, its licence; terms cover this service | present | present | match |
+
+Claims both languages agree on that section 4 states only implicitly, kept: Google is its own
+controller "and its own privacy policy applies" (EN), the hosting company "stores the data" (EN),
+"cualquiera puede poner en marcha su propia copia" (ES), and acceptance through Google behind
+`googleSignIn` in both.
+
+### 10.7 Verification
+
+- `npx nx build velista`: pass. `nx lint`: 0 errors on `velista`, `velista/feature-legal`,
+  `velista/data-access` (3 warnings, all in files this plan does not touch), `velista/models`,
+  `velista/ui`, `velista/feature-shell`, `velista/feature-auth`, `velista/feature-account`,
+  `velista/feature-landing`, `velista-e2e`, `luna-shopper/contracts`.
+- `nx test`: `velista/feature-legal` 50 (4 suites), `velista/data-access` 1,722 (81),
+  `velista/models` 633, `velista/ui` 1,248, `velista/feature-shell` 237, `velista/feature-auth`
+  150, `velista/feature-account` 183, `velista/feature-landing` 29, `luna-shopper/contracts` 611.
+- `velista-e2e` with the stub, against a velista slot: 85 passed (5 browsers, `legal.spec.ts`
+  included).
+- `velista-luna-e2e` on ephemeral Luna slot 7 with invented operator values
+  (`published: true`): 8 of 8.
+- Screenshots at 360 x 640 of `/en/privacy`, `/es/privacy`, `/en/terms`, `/es/terms`, and of the
+  foot of the front door, sign in, register, upgrade and account, in both languages and both
+  themes; `/privacy` with no locale lands on `/en/privacy`; no horizontal overflow at 320 or
+  360 px; no console error.
+
+### 10.8 Review fixes
+
+A review on 2026-10-29 found the documents saying things the deployment does not do. Each
+finding was confirmed against the code before it was changed. Where this section and the
+sections above disagree, this one is newer.
+
+1. **The terms promised an acceptance flow that does not exist yet.** Plan `0173` builds it,
+   and `TERMS_ACCEPTANCE_REQUIRED` defaults to false (`auth/src/app/config/app-config.ts`).
+   `LegalFeature` gained `termsAcceptance`, on when `terms.acceptanceRequired` is true
+   (`legal-document.ts`, `legalFeatureOn` in `render.ts`, target 3's list). In `terms.*.json`
+   the sentences about the app asking (section `accept`: before an account is made; section
+   `changes`: before going on after a change) sit behind it. An unconditional sentence says
+   that using the service means agreeing to these terms, and the Google sentence ("the same
+   goes for continuing with Google") reads true after either. The sentence "when they change,
+   the app asks you" left `accept`; `changes` says it once. `documents.spec.ts` renders both
+   terms files with acceptance off and on and asserts each language's "asks you to accept"
+   wording appears only when on; `render.spec.ts` covers the condition; `legal.spec.ts` (e2e)
+   checks the Spanish terms with the stub (off) and the English terms with
+   `acceptanceRequired: true`. After `0173` ships, account creation asks for acceptance
+   whether or not the flag is on (`0173` draws the checkbox regardless); the text with the
+   flag off then says less than the app does, never more. `0173`'s builder may widen the
+   condition.
+2. **Privacy `changes` said "the app tells you".** No code announces a policy change. Both
+   languages now say only that the date at the top changes with every change.
+3. **"Quién somos"** is now "Quiénes somos". Every other Spanish heading of both documents was
+   read for the same slip (a singular `quién` with a plural verb): none.
+4. **The data table said it lists everything.** Rows added in both languages: the terms
+   accepted (`terms_acceptances`: version and date, until the account is deleted), what the
+   app remembers (`user_app_state`: setup and tour seen, until the account is deleted), the
+   assistant use per day (`assistant_usage_days`, `when: assistant`: messages, seconds of
+   voice, text handled and cost; until the end of the following month, by
+   `AssistantAllowanceService.deleteOldRows`, or the account's deletion), and the security
+   records row now also names an operator's change to a person's groups or lists
+   (`core_audit`, written by `CoreAuditService` for every `/v1/admin/zones/**` and
+   `/v1/admin/lists/**` write). The Google sign in handoff (`oauth_handoffs`: Google id, email
+   and name for the two minutes of a sign in, `OAUTH_HANDOFF_TTL_MS`) is folded into the
+   existing "Signing in with Google" row (`when: googleSignIn`), which already states its
+   period; a second row with the same purpose would read as two records to a person. Its
+   backend half is a follow up on PR #857 (plan 0233), which sweeps `oauth_handoffs` by
+   `expiresAt` with the other grants. The table's intro now says "what we keep": the entity
+   list holds tables this audit did not map row by row (`merge_requests`,
+   `list_line_changes`, `basket_share_links`), so "everything" was not proven.
+5. **`security` said only the operator can reach the data** while `processors` says a hosting
+   company stores it. Both languages: the operator and the companies named above, under their
+   agreements.
+6. **The training sentence was behind `aiTextProvider`, which also held for `google`.**
+   Backend `0236` removed `google` from the wire enum (`AiTextProvider` has `ANTHROPIC` only),
+   so velista's `OperatorAiTextProvider` is `'anthropic'` alone, the mapper maps anything else
+   to null (its spec now expects null for `google`), and the name table holds Anthropic only.
+   The sentence holds exactly when a provider is named. Target 1's table is amended.
+7. **`ending` said "we can suspend an account".** Auth has no suspension of a person
+   (`disabledAt` exists only on `admin_users`). Both languages: we can close an account that
+   breaks the terms, and closing deletes it. The Spanish heading is "Baja y cierre de
+   cuentas".
+8. **Spanish terms wording.** `content`: "cuando te vas" read as leaving a group; it says
+   "cuando borras tu cuenta". `law`: "la ley del país de {{controllerName}}" read as
+   nationality; it says "del país donde está establecido".
+9. **The terms date line printed the date twice.** `LegalPage.metaKey` is now a computed: the
+   terms use `legal.terms.metaVersion` ("Version {{version}}, changed on {{date}}") only when
+   `terms.version` differs from `terms.updatedOn` (an operator revision,
+   `YYYY-MM-DD+YYYY-MM-DD`), and `legal.terms.meta`, now "Changed on {{date}}", otherwise.
+   `legal-page.spec.ts` covers the plain version, a revision and the policy.
+10. **Owner notes acted on.** The `google` section carries Google's Limited Use sentence
+    literally in English and in Spanish words with the policy's English name in brackets.
+    `transfers` is unconditional and generic (any company above outside the EEA; adequacy
+    decision or standard contractual clauses), because a hosting or email provider can be
+    outside the EEA too (section 4.1 item 8 amended). Left for the owner in the PR: whether
+    the LSSI asks for the controller's domicile on the page, the statement that every
+    processor works under a data processing agreement, and whether any row should rest on
+    consent.
+11. **`adminLoginFailureDays` failed the whole store when missing** although no document
+    prints it, which would also have blanked the flags `0173` and `0174` read. It is
+    `number | null` in the model and the mapper; the mapper spec covers a missing and an
+    unreadable value. Target 1's table is amended.
+12. **The template version stays `2026-10-29`.** The meaning changed on the same day the
+    texts were first written, before anything was published or accepted, so no deployment
+    has an acceptance of the earlier wording to invalidate.
+
+**The meaning comparison of section 5.3, again, for the changed claims.** Both sides were
+written in their own words; the old rows above that these replace are marked.
+
+| doc | id | Claim | EN | ES | Result |
+| --- | --- | --- | --- | --- | --- |
+| privacy | who | heading | "Who we are" | "Quiénes somos" | match (ES fixed) |
+| privacy | data | the table's scope | "what we keep about you" | (no scope claim) | match |
+| privacy | data | terms accepted: version and date; until deletion | present | present | match |
+| privacy | data | app memory: setup and tour seen; until deletion | present | present | match |
+| privacy | data | assistant use per day (`assistant`): messages, voice seconds, text, cost; legitimate interest; end of the following month or deletion | present | present | match |
+| privacy | data | Google sign in (`googleSignIn`): the record, plus Google id, email and name for minutes; `{{expiredGrantDays}}` | present | present | match (replaces the 10.6 row) |
+| privacy | data | security records include an operator's change to groups or lists | present | present | match |
+| privacy | transfers | unconditional; any company above; adequacy or standard clauses | present | present | match |
+| privacy | google | Limited Use, User Data Policy | literal | own words, English names in brackets | match |
+| privacy | security | operator and the named companies under their agreements | present | present | match |
+| privacy | changes | the date at the top changes; no in app notice | present | present | match (replaces the 10.6 row) |
+| terms | accept | using means agreeing | "By using {{appName}}, you agree" | "Si usas {{appName}}, aceptas" | match |
+| terms | accept | asked before an account is made, guests included (`termsAcceptance`) | present | present | match |
+| terms | accept | the same with Google (`googleSignIn`) | present | present | match |
+| terms | accept | version `{{termsVersion}}` | present | present | match |
+| terms | content | kept without the name after the account is deleted | present | "cuando borras tu cuenta" | match (ES fixed; replaces the 10.6 row) |
+| terms | ending | delete any time; we can close (delete) an account | present | present | match (replaces the 10.6 row) |
+| terms | law | the country where the controller is established | present | "donde está establecido" | match (ES fixed) |
+| terms | changes | the date changes; asked to accept before going on (`termsAcceptance`) | present | present | match (replaces the 10.6 row) |
+
+**Verification of the review fixes.** `npx nx build velista`: pass. `nx test`:
+`velista/feature-legal` 54 (4 suites), `velista/data-access` 1,723 (81), `velista/models`
+633. `nx lint`: 0 errors on `velista/feature-legal`, `velista/data-access` (the same three
+warnings in files this plan does not touch) and `velista-e2e`. `velista-e2e` with the stub,
+against velista slot 1: 90 passed (five browsers, the new acceptance case included).

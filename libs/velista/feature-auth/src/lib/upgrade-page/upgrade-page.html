@@ -73,4 +73,11 @@
       {{ 'auth.upgrade.later' | rokuT }}
     </button>
   </p>
+  <!-- The privacy policy and the terms (velista 0172), projected as a second footer
+       so they sit where the front door keeps its version: last on the screen. -->
+  <lib-legal-links
+    [privacyUrl]="legalUrls().privacy"
+    [termsUrl]="legalUrls().terms"
+    authFooter
+  />
 </lib-auth-screen>

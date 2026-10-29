@@ -25,6 +25,7 @@ import {
   AuthScreen,
   EmailField,
   FormError,
+  LegalLinks,
   PasswordField,
   SpinnerIcon,
   SuccessNote,
@@ -68,6 +69,7 @@ const ERROR_ID = 'upgrade-error';
     AuthScreen,
     EmailField,
     FormError,
+    LegalLinks,
     PasswordField,
     SpinnerIcon,
     SuccessNote,
@@ -85,6 +87,12 @@ export class UpgradePage {
   private readonly _pages = inject(PageNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
+
+  /** Where the two legal links at the foot of the screen go (velista `0172`). */
+  readonly legalUrls = computed(() => ({
+    privacy: appPath(this._locale(), this._basePath, 'privacy'),
+    terms: appPath(this._locale(), this._basePath, 'terms'),
+  }));
   private readonly _t = inject(RokuTranslatorService);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
