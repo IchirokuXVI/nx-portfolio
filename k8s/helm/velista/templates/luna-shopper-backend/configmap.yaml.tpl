@@ -53,9 +53,17 @@ data:
   TERMS_ACCEPTANCE_REQUIRED: {{ $cfg.termsAcceptanceRequired | default false | quote }}
   # True exactly where the backup CronJobs run nightly.
   LEGAL_OFFSITE_BACKUPS: {{ and .Values.lunaShopperBackend.backups.enabled (not .Values.lunaShopperBackend.backups.suspend) | quote }}
-  LEGAL_BACKUP_RETENTION_DAYS: {{ .Values.lunaShopperBackend.backups.retentionDays | default 14 | quote }}
-  LEGAL_APPLICATION_LOG_DAYS: {{ ($cfg.legal | default dict).applicationLogDays | default 30 | quote }}
-  LEGAL_ASSISTANT_LOG_DAYS: {{ ($cfg.legal | default dict).assistantLogDays | default 7 | quote }}
+  {{- /*
+  The three periods in days. Not `default`: Sprig reads 0 as empty, so an
+  explicit 0 would render the default, and the policy would state a period that
+  k8s plan 0018 does not enforce. Only an absent or null key falls back. A Go
+  template comment, so the render (and the config checksum) stays as it was.
+  */}}
+  {{- $legalDays := $cfg.legal | default dict }}
+  {{- $backupDays := .Values.lunaShopperBackend.backups.retentionDays }}
+  LEGAL_BACKUP_RETENTION_DAYS: {{ if kindIs "invalid" $backupDays }}"14"{{ else }}{{ $backupDays | quote }}{{ end }}
+  LEGAL_APPLICATION_LOG_DAYS: {{ if kindIs "invalid" $legalDays.applicationLogDays }}"30"{{ else }}{{ $legalDays.applicationLogDays | quote }}{{ end }}
+  LEGAL_ASSISTANT_LOG_DAYS: {{ if kindIs "invalid" $legalDays.assistantLogDays }}"7"{{ else }}{{ $legalDays.assistantLogDays | quote }}{{ end }}
   # The retention periods (plan 0233), given to the gateway to report.
   RETENTION_AUDIT: {{ ($cfg.retention | default dict).audit | default "180d" | quote }}
   RETENTION_ADMIN_LOGIN_FAILURES: {{ ($cfg.retention | default dict).adminLoginFailures | default "90d" | quote }}

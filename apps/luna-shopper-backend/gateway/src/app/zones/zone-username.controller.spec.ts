@@ -104,3 +104,37 @@ describe('ZoneController username defaulting', () => {
     expect(result.tokens?.userId).toBe('guest');
   });
 });
+
+describe('ZoneController Terms version (plan 0231, section 4.2)', () => {
+  const VERSION = '2026-10-28';
+
+  it('an anonymous caller has the version forwarded to the guest it is given', async () => {
+    const { controller, send } = build();
+
+    await controller.create(undefined, {
+      name: 'Home',
+      acceptedTermsVersion: VERSION,
+    });
+
+    expect(sentTo(send, AUTH_PATTERNS.createTemporaryUser)).toEqual({
+      acceptedTermsVersion: VERSION,
+    });
+    expect(sentTo(send, ZONE_PATTERNS.create)).not.toHaveProperty(
+      'acceptedTermsVersion'
+    );
+  });
+
+  it('a token holder has the version of the body sent nowhere', async () => {
+    const { controller, send } = build();
+
+    await controller.join(authenticated, {
+      joinCode: 'ABCD1234',
+      acceptedTermsVersion: VERSION,
+    });
+
+    expect(calledWith(send, AUTH_PATTERNS.createTemporaryUser)).toBe(false);
+    for (const [, payload] of (send as jest.Mock).mock.calls) {
+      expect(payload).not.toHaveProperty('acceptedTermsVersion');
+    }
+  });
+});

@@ -473,3 +473,44 @@ describe('the accept route', () => {
     ).rejects.toMatchObject({ code: ERROR_CODES.NOT_FOUND });
   });
 });
+
+describe('the accepted version of the profile', () => {
+  it('answers the newest row while none is for the current version', async () => {
+    const { service, terms, addGuest } = build();
+    addGuest('guest');
+    await terms.record(null as never, 'guest', STALE, TermsAcceptanceVia.GUEST);
+
+    await expect(
+      service.getProfile({ userId: 'guest' })
+    ).resolves.toMatchObject({ termsAcceptedVersion: STALE });
+  });
+
+  it('answers the current version again when the version moves back to one the account accepted', async () => {
+    const { service, terms, addGuest } = build({ acceptanceRequired: true });
+    addGuest('guest');
+    terms.moveCurrentVersion(STALE);
+    const first = await service.acceptTerms({
+      userId: 'guest',
+      version: STALE,
+    });
+    terms.moveCurrentVersion(CURRENT);
+    await service.acceptTerms({ userId: 'guest', version: CURRENT });
+
+    // A rollback past a template bump, or the operator clearing the revision.
+    terms.moveCurrentVersion(STALE);
+
+    // The gateway asks again only when this differs from the current version,
+    // so answering the newest row here would ask forever: accepting STALE again
+    // keeps its first row and CURRENT stays the newest.
+    await expect(
+      service.getProfile({ userId: 'guest' })
+    ).resolves.toMatchObject({
+      termsAcceptedVersion: STALE,
+      termsAcceptedAt: first.acceptedAt,
+    });
+    await expect(
+      service.acceptTerms({ userId: 'guest', version: STALE })
+    ).resolves.toEqual(first);
+    expect(terms.rows.map((row) => row.version)).toEqual([STALE, CURRENT]);
+  });
+});

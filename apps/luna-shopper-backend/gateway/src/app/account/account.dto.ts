@@ -46,6 +46,7 @@ export class UpdateProfileDto {
  */
 export class AcceptTermsDto {
   @ApiProperty({
+    minLength: 1,
     maxLength: ACCEPTED_TERMS_VERSION_MAX_LENGTH,
     description:
       'The `terms.version` of `GET /v1/legal/settings` the person accepted. Any other answers `terms_version_stale`.',

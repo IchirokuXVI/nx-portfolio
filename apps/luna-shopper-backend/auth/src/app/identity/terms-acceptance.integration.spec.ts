@@ -209,6 +209,47 @@ describeIntegration('terms acceptances (real Postgres)', () => {
     expect(await acceptances.count({ where: { userId: user.id } })).toBe(0);
   });
 
+  it('answers the row of the current version when the version moves back', async () => {
+    const OLDER = '2026-10-28';
+    const at = (currentVersion: string) => {
+      const config = {
+        getOrThrow: () => ({
+          smtp: { enabled: false },
+          google: { enabled: true },
+          impersonation: { enabled: false },
+          terms: { currentVersion, acceptanceRequired: true },
+        }),
+      } as never;
+      return new IdentityService(
+        dataSource,
+        {} as never,
+        new TokenGrantService(),
+        {} as never,
+        {} as never,
+        {} as never,
+        new UsernameGenerator(),
+        fakeAudit([]).service,
+        config,
+        {} as never,
+        new TermsService(dataSource, config)
+      );
+    };
+    const user = await guest();
+    const first = await at(OLDER).acceptTerms({
+      userId: user.id,
+      version: OLDER,
+    });
+    await at(CURRENT).acceptTerms({ userId: user.id, version: CURRENT });
+
+    // A rollback past a template bump, or the operator clearing the revision.
+    const back = at(OLDER);
+    await expect(back.getProfile({ userId: user.id })).resolves.toMatchObject({
+      termsAcceptedVersion: OLDER,
+      termsAcceptedAt: first.acceptedAt,
+    });
+    expect((await terms.latest(user.id))?.version).toBe(CURRENT);
+  });
+
   it('undoes cleanly and applies again', async () => {
     const target = AUTH_MIGRATIONS.indexOf(TermsAcceptances1773100000000);
     // In a loop, so a later migration does not break this spec.
