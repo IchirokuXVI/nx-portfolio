@@ -63,7 +63,7 @@ export type AssistantCapabilitiesRequest = Record<string, never>;
 
 /** What the assistant can do, computed with the checks that decide its 501s. */
 export interface AssistantCapabilities {
-  /** A typed turn can be answered: the selected provider has its key. */
+  /** A typed turn can be answered: the text provider has its key. */
   answers: boolean;
   /** A recording can be transcribed by whatever transcribes in this deployment. */
   hears: boolean;

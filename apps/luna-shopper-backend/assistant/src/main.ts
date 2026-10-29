@@ -63,16 +63,11 @@ async function bootstrap() {
   logger.log(
     `luna-shopper-backend-assistant bound to NATS; health on http://localhost:${config.port}/health/live`
   );
-  // The key of the provider that answers, named, because with the switch on
-  // `claude` an empty GEMINI_API_KEY no longer means "no assistant" (plan 0224,
-  // section 5).
-  const turnKey =
-    config.provider === 'claude'
-      ? { name: 'ANTHROPIC_API_KEY', value: config.anthropicApiKey }
-      : { name: 'GEMINI_API_KEY', value: config.geminiApiKey };
-  if (turnKey.value.length === 0) {
+  // Claude answers every turn (plan 0236, section 1), so its key is the one
+  // that decides whether there is an assistant at all.
+  if (config.anthropicApiKey.length === 0) {
     logger.warn(
-      `${turnKey.name} is empty: the service is up and healthy, and every turn ` +
+      'ANTHROPIC_API_KEY is empty: the service is up and healthy, and every turn ' +
         'answers 501 not_configured. This is a supported deployment (plan 0026).'
     );
   }
@@ -85,13 +80,22 @@ async function bootstrap() {
         'is a supported deployment (plan 0235, section 7).'
     );
   }
-  // A slot or deployment that switched to claude keeps the ASSISTANT_MODEL it
-  // had, and a Gemini name sent to the Messages API fails every turn.
-  if (config.provider === 'claude' && config.model.startsWith('gemini')) {
+  // Off is for a deployment no minor uses (plan 0236, section 4.3), and it is
+  // said at boot so nobody runs it that way by accident.
+  if (!config.moderation) {
     logger.warn(
-      `ASSISTANT_PROVIDER is claude and the model is ${config.model}, a Gemini ` +
-        'model: every turn will fail. Blank ASSISTANT_MODEL to use the Claude ' +
-        'default (plan 0224, section 5).'
+      'ASSISTANT_MODERATION is off: replies leave without the safety check. ' +
+        'Run it on wherever a minor may use the app (plan 0236, section 4).'
+    );
+  }
+  // A slot or deployment configured before plan 0236 can keep an ASSISTANT_MODEL
+  // that names another vendor's model, and the Messages API fails every turn
+  // with it.
+  if (!config.model.startsWith('claude-')) {
+    logger.warn(
+      `ASSISTANT_MODEL is ${config.model}, which is not a Claude model: every ` +
+        'turn will fail. Blank ASSISTANT_MODEL to use the default (plan 0236, ' +
+        'section 1).'
     );
   }
 }

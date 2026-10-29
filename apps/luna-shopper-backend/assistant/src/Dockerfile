@@ -2,7 +2,7 @@
 #
 # A long running Node process holding one credential nothing else in the system
 # needs, and no database connection at all. Every value comes from the runtime
-# environment, including GEMINI_API_KEY, which is deliberately allowed to be
+# environment, including ANTHROPIC_API_KEY, which is deliberately allowed to be
 # empty: a cluster with no key deploys, boots, and answers 501 on the assistant
 # route (plan 0026's rule, applied here in section 11).
 #

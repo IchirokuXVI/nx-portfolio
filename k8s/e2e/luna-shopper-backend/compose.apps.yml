@@ -347,9 +347,8 @@ services:
   # produces one dead service while the gateway stays up and returns 500s, which
   # is a slow thing to diagnose from the outside. Keep the two in step by hand.
   #
-  # GEMINI_API_KEY and ANTHROPIC_API_KEY are empty on purpose and the suite needs
-  # them to stay that way:
-  # rule A4 forbids any test in this repository from reaching a model provider, so
+  # ANTHROPIC_API_KEY is empty on purpose and the suite needs it to stay that
+  # way: rule A4 forbids any test in this repository from reaching a model provider, so
   # a stack that could answer a real turn is a stack that could spend somebody's
   # quota from CI. Empty means /v1/assistant answers 501, which is exactly what an
   # e2e suite should assert.
@@ -363,11 +362,8 @@ services:
       NATS_URL: nats://nats:4222
       LOG_LEVEL: debug
       GATEWAY_INTERNAL_URL: http://gateway:3000
-      ASSISTANT_PROVIDER: gemini
-      GEMINI_API_KEY: ''
       ANTHROPIC_API_KEY: ''
-      ASSISTANT_MODEL: gemini-3.5-flash-lite
-      # Voice input (plan 0235). Empty on purpose, like the keys above: the gate
+      # Voice input (plan 0235). Empty on purpose, like the key above: the gate
       # stack runs no transcriber, so the voice route answers 501 and a voice
       # comment settles UNAVAILABLE, which is what the e2e suite asserts. The
       # `transcriber` service below is opt in, under the `voice` profile.

@@ -9,7 +9,7 @@ import { gateOnStack } from './support/db';
  * Rule A4 forbids any test here from reaching a model, and the compose stack runs the
  * assistant with an empty `TRANSCRIBER_URL` on purpose: no transcriber runs there, so
  * nothing can hear (plan 0235, section 10). Since plan 0235 that, and not an empty
- * `GEMINI_API_KEY`, is what answers 501 here, whatever key is set: no model provider
+ * provider key, is what answers 501 here, whatever key is set: no model provider
  * hears any more. What can be asserted is everything up to the transcriber, which is
  * where all the machinery this plan added actually lives: multer parses the body, the
  * interceptor enforces the byte cap, the DTO validates the transcript, the gateway

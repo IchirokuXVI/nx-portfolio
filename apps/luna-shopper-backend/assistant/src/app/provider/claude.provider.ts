@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AssistantConfig } from '../config/app-config';
 import {
+  MODERATION_TIMEOUT_MS,
   ModelTurnRole,
   ProviderRateLimitedError,
   ProviderUnavailableError,
@@ -27,20 +28,34 @@ export const ANTHROPIC_VERSION = '2023-06-01';
  */
 export const CLAUDE_MAX_TOKENS = 4096;
 
+/**
+ * The ceiling on a moderation answer (plan 0236, section 4.1): one word, `ok`
+ * or a category, and room for nothing else.
+ */
+export const MODERATION_MAX_TOKENS = 16;
+
 /** What {@link toClaudeRequest} needs beyond the neutral request. */
 export interface ClaudeRequestOptions {
   model: string;
   effort: AssistantConfig['claudeEffort'];
   thinking: AssistantConfig['claudeThinking'];
+  /** {@link CLAUDE_MAX_TOKENS} when absent. */
+  maxTokens?: number;
 }
 
 /**
- * Claude, over the Messages API with Node's global fetch (plan 0224).
+ * Claude, over the Messages API with Node's global fetch (plan 0224), and the
+ * only provider that answers since plan 0236.
  *
- * **No SDK**, for the reason {@link GeminiProvider} gives: the repository's third
- * party clients are fetch and fixtures, and the {@link ModelProvider} interface is
- * where a swap happens. This class is the second implementation that interface
- * was written for, and nothing above it changed to admit it.
+ * **No SDK**: the repository's third party clients are fetch and fixtures, and
+ * the {@link ModelProvider} interface is where a swap happens. This class was the
+ * second implementation that interface was written for, and nothing above it
+ * changed to admit it.
+ *
+ * **It checks replies too** (plan 0236, section 4). A request whose `purpose`
+ * is `moderation` goes to the moderation model with thinking off, effort low,
+ * a ceiling of {@link MODERATION_MAX_TOKENS} and a deadline of
+ * {@link MODERATION_TIMEOUT_MS}, through the same request code as a turn.
  *
  * **It cannot hear.** The Messages API has no audio content block, so
  * {@link transcriptionSupported} is false, and the module wraps this class in a
@@ -69,13 +84,22 @@ export class ClaudeProvider implements ModelProvider {
   }
 
   async generate(request: ModelRequest): Promise<ModelReply> {
+    if (request.purpose === 'moderation') {
+      return readClaudeReply(
+        await this.post(
+          toClaudeRequest(request, moderationOptions(this.config)),
+          MODERATION_TIMEOUT_MS
+        )
+      );
+    }
     return readClaudeReply(
       await this.post(
         toClaudeRequest(request, {
           model: this.config.model,
           effort: this.config.claudeEffort,
           thinking: this.config.claudeThinking,
-        })
+        }),
+        this.config.providerTimeoutMs
       )
     );
   }
@@ -90,19 +114,18 @@ export class ClaudeProvider implements ModelProvider {
   }
 
   /**
-   * One request to the Messages API, with the deadline and the error mapping of
-   * the Gemini one: a hung socket must not hold a NATS reply open until the
-   * client gives up.
+   * One request to the Messages API, with a deadline and the error mapping: a
+   * hung socket must not hold a NATS reply open until the client gives up.
    *
    * The key goes in `x-api-key` and nowhere else. It is never in the url, so it
    * cannot reach an access log, and never in an error message.
    */
-  private async post(body: Record<string, unknown>): Promise<unknown> {
+  private async post(
+    body: Record<string, unknown>,
+    timeoutMs: number
+  ): Promise<unknown> {
     const abort = new AbortController();
-    const deadline = setTimeout(
-      () => abort.abort(),
-      this.config.providerTimeoutMs
-    );
+    const deadline = setTimeout(() => abort.abort(), timeoutMs);
 
     let response: Response;
     try {
@@ -119,7 +142,7 @@ export class ClaudeProvider implements ModelProvider {
     } catch (error) {
       throw new ProviderUnavailableError(
         abort.signal.aborted
-          ? `the model did not answer within ${this.config.providerTimeoutMs}ms`
+          ? `the model did not answer within ${timeoutMs}ms`
           : 'the model could not be reached',
         { cause: error }
       );
@@ -128,7 +151,7 @@ export class ClaudeProvider implements ModelProvider {
     }
 
     if (!response.ok) {
-      throw await this.readError(response);
+      throw await this.readError(response, body);
     }
 
     return response.json();
@@ -140,7 +163,10 @@ export class ClaudeProvider implements ModelProvider {
    * did not (rule A5). A 529 (overloaded) and every other status become
    * {@link ProviderUnavailableError}.
    */
-  private async readError(response: Response): Promise<Error> {
+  private async readError(
+    response: Response,
+    sent: Record<string, unknown>
+  ): Promise<Error> {
     const body = await response.text();
 
     if (response.status === 429) {
@@ -154,11 +180,15 @@ export class ClaudeProvider implements ModelProvider {
     // go in the log, and never the body: it can echo the prompt, and the prompt
     // carries what a person typed about their groceries. The settings are there
     // because the one 400 an operator can cause is a pairing (thinking `off` on a
-    // model that refuses it), and this line has to name it.
+    // model that refuses it), and this line has to name it. They are read off the
+    // request that was sent, so a failed moderation call names its own model.
+    const thinking = (sent['thinking'] as { type?: unknown } | undefined)?.type;
+    const effort = (sent['output_config'] as { effort?: unknown } | undefined)
+      ?.effort;
     this.logger.warn(
       `claude responded ${response.status} ${readErrorType(body)} ` +
-        `(model ${this.config.model}, thinking ${this.config.claudeThinking}, ` +
-        `effort ${this.config.claudeEffort})`
+        `(model ${String(sent['model'])}, thinking ${String(thinking)}, ` +
+        `effort ${String(effort)})`
     );
     return new ProviderUnavailableError(
       `the model provider answered ${response.status}`
@@ -199,7 +229,7 @@ export function toClaudeRequest(
 
   return {
     model: options.model,
-    max_tokens: CLAUDE_MAX_TOKENS,
+    max_tokens: options.maxTokens ?? CLAUDE_MAX_TOKENS,
     system: [{ type: 'text', text: request.system }],
     ...(tools.length > 0 ? { tools } : {}),
     messages: firstUser === -1 ? [] : messages.slice(firstUser),
@@ -209,8 +239,24 @@ export function toClaudeRequest(
   };
 }
 
-// `ModelTurn` itself rather than the shape written out again, for the reason the
-// Gemini mapping gives: a copy goes stale the day a field is added.
+/**
+ * The settings of a moderation request (plan 0236, section 4.1): the
+ * moderation model, thinking off, effort low and a ceiling of one word. Thinking
+ * off is accepted by Haiku at effort `high` or below. Exported for its own spec.
+ */
+export function moderationOptions(
+  config: Pick<AssistantConfig, 'moderationModel'>
+): ClaudeRequestOptions {
+  return {
+    model: config.moderationModel,
+    effort: 'low',
+    thinking: 'off',
+    maxTokens: MODERATION_MAX_TOKENS,
+  };
+}
+
+// `ModelTurn` itself rather than the shape written out again: a copy goes stale
+// the day a field is added.
 function toClaudeMessage(turn: ModelTurn): Record<string, unknown> | null {
   if (turn.role === ModelTurnRole.TOOL) {
     return {
@@ -236,8 +282,7 @@ function toClaudeMessage(turn: ModelTurn): Record<string, unknown> | null {
 
   // The raw content the model produced, back unchanged (section 2.3). It carries
   // the thinking blocks that precede a tool call, and the API refuses to continue
-  // a tool using turn whose replayed assistant message has lost them, exactly as
-  // Gemini refuses a call that lost its thought signature.
+  // a tool using turn whose replayed assistant message has lost them.
   const raw = readRawContent(turn.toolCalls?.[0]?.signature);
   if (raw) {
     return { role: 'assistant', content: raw };

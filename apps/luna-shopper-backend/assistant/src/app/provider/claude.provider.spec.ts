@@ -2,12 +2,15 @@ import { ConfigService } from '@nestjs/config';
 import type { AssistantConfig } from '../config/app-config';
 import {
   ClaudeProvider,
+  MODERATION_MAX_TOKENS,
+  moderationOptions,
   readClaudeReply,
   readRetryAfterSeconds,
   toClaudeRequest,
   type ClaudeRequestOptions,
 } from './claude.provider';
 import {
+  MODERATION_TIMEOUT_MS,
   ModelTurnRole,
   ProviderRateLimitedError,
   ProviderUnavailableError,
@@ -17,7 +20,7 @@ import {
 /**
  * The Claude wire mapping (plan 0224, section 9).
  *
- * Rule A4 holds here as it does for Gemini: nothing reaches the API. What is
+ * Rule A4 holds here as everywhere: nothing reaches the API. What is
  * checked is that the request we build is the shape the Messages API documents,
  * that what we read back survives the payloads it sends, and that the raw content
  * of a reply makes the round trip the API requires of it. `fetch` is stubbed
@@ -500,5 +503,64 @@ describe('ClaudeProvider', () => {
       ProviderUnavailableError
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends a moderation request to the moderation model with thinking off and a one word ceiling', async () => {
+    respond(200, {
+      content: [{ type: 'text', text: 'ok' }],
+      stop_reason: 'end_turn',
+    });
+
+    const reply = await provider({
+      moderationModel: 'claude-haiku-5-5',
+      model: 'claude-sonnet-5-5',
+      claudeThinking: 'adaptive',
+      claudeEffort: 'high',
+    }).generate(request({ purpose: 'moderation', system: 'classify' }));
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+    expect(body['model']).toBe('claude-haiku-5-5');
+    expect(body['max_tokens']).toBe(MODERATION_MAX_TOKENS);
+    expect(body['thinking']).toEqual({ type: 'disabled' });
+    expect(body['output_config']).toEqual({ effort: 'low' });
+    expect(body).not.toHaveProperty('tools');
+    expect(reply.text).toBe('ok');
+  });
+
+  it('gives a moderation request its own five second deadline', async () => {
+    jest.useFakeTimers();
+    try {
+      fetchMock.mockImplementation(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new Error('aborted'))
+            );
+          })
+      );
+
+      const pending = provider({ providerTimeoutMs: 30000 })
+        .generate(request({ purpose: 'moderation' }))
+        .catch((e) => e);
+      await jest.advanceTimersByTimeAsync(MODERATION_TIMEOUT_MS);
+
+      const error = await pending;
+      expect(error).toBeInstanceOf(ProviderUnavailableError);
+      expect(error.message).toContain(`${MODERATION_TIMEOUT_MS}ms`);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('moderationOptions', () => {
+  it('is the moderation model, thinking off, effort low and sixteen tokens', () => {
+    expect(moderationOptions({ moderationModel: 'claude-haiku-5-5' })).toEqual({
+      model: 'claude-haiku-5-5',
+      effort: 'low',
+      thinking: 'off',
+      maxTokens: 16,
+    });
   });
 });

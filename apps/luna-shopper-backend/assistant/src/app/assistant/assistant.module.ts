@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AssistantConfig } from '../config/app-config';
 import { ClaudeProvider } from '../provider/claude.provider';
-import { GeminiProvider } from '../provider/gemini.provider';
 import { MODEL_PROVIDER, type ModelProvider } from '../provider/model-provider';
 import { NoHearing } from '../provider/no-hearing.provider';
 import { SplitModelProvider } from '../provider/split.provider';
@@ -25,22 +24,21 @@ export function hearingFrom(configService: ConfigService): ModelProvider {
 }
 
 /**
- * The provider the service reads, always a split (plan 0235, section 7).
+ * The provider the service reads, always a split (plan 0235, section 7; plan
+ * 0236, section 2).
  *
- * `ASSISTANT_PROVIDER` picks what answers (plan 0224, section 4): `claude` is
- * Claude, anything else is Gemini, the behaviour from before the switch existed.
- * {@link hearingFrom} picks what hears. Exported so the capability spec wires
- * the providers exactly as the module does.
+ * Claude answers every turn and checks every reply (plan 0236). The split stays
+ * with one text provider, because it is the one place that says "this answers,
+ * that hears". {@link hearingFrom} picks what hears. Exported so the capability
+ * spec wires the providers exactly as the module does.
  */
 export function buildModelProvider(
   configService: ConfigService
 ): ModelProvider {
-  const config = configService.getOrThrow<AssistantConfig>('assistant');
-  const turns =
-    config.provider === 'claude'
-      ? new ClaudeProvider(configService)
-      : new GeminiProvider(configService);
-  return new SplitModelProvider(turns, hearingFrom(configService));
+  return new SplitModelProvider(
+    new ClaudeProvider(configService),
+    hearingFrom(configService)
+  );
 }
 
 /**

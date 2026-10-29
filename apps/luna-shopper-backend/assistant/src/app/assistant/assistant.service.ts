@@ -36,6 +36,11 @@ import {
 import { ConcurrencyGate, TurnLimiter } from '../provider/turn-limiter';
 import { GatewayApiClient } from './gateway-api.client';
 import { ChoiceCollector, ListLinkCollector } from './link-and-choices';
+import {
+  checkReply,
+  replacementFor,
+  type ModerationVerdict,
+} from './moderation';
 import { plainText } from './plain-text';
 import { buildSystemPrompt, namesZones } from './prompt';
 import {
@@ -99,6 +104,16 @@ export const RAN_OUT_OF_TIME =
 export const ANSWERED_WITHOUT_WORDS =
   'I did that, but lost the words for it. Have a look at the list to see what changed.';
 
+/**
+ * What a turn that ran no tools and has no words to show is answered with: an
+ * empty reply, a refusal, or a reply whose moderation could not run (plan 0236,
+ * section 4.2).
+ *
+ * English, for `NOTHING_HEARD`'s reason.
+ */
+export const GOT_STUCK =
+  'Sorry, I got stuck on that one. Could you say it a different way?';
+
 @Injectable()
 export class AssistantService {
   private readonly logger = new Logger(AssistantService.name);
@@ -133,11 +148,8 @@ export class AssistantService {
     return {
       answers,
       hears: answers && this.provider.transcriptionSupported,
-      textProvider: answers
-        ? this.config.provider === 'claude'
-          ? AiTextProvider.ANTHROPIC
-          : AiTextProvider.GOOGLE
-        : null,
+      // Anthropic is the only text provider since plan 0236.
+      textProvider: answers ? AiTextProvider.ANTHROPIC : null,
     };
   }
 
@@ -281,6 +293,8 @@ export class AssistantService {
         gatewayMs: 0,
         totalMs: Date.now() - startedAtMs,
         outcome: 'unheard',
+        // One of the service's own sentences, plain by construction.
+        moderation: 'skipped',
       });
 
       return { reply: NOTHING_HEARD, link: null, choices: [], heard };
@@ -407,7 +421,11 @@ export class AssistantService {
       { role: ModelTurnRole.USER, text: request.message },
     ];
 
-    const system = buildSystemPrompt({ context, locale });
+    const system = buildSystemPrompt({
+      context,
+      locale,
+      emergencyNumber: this.config.emergencyNumber,
+    });
     // The catalog is assembled from the scope rather than filtered inside a
     // tool, because an absent capability is a much harder boundary than an
     // instruction (plan 0044, section 2.2).
@@ -458,6 +476,7 @@ export class AssistantService {
         // small or the provider is too slow, and both are worth knowing before
         // somebody reports a duplicated shopping list.
         outcome: 'timedout',
+        moderation: 'skipped',
       });
 
       return {
@@ -513,32 +532,45 @@ export class AssistantService {
         //
         // The text is made plain before the record and the response, so both
         // carry what the person reads (plan 0225, section 2).
+        const toolsRan = calledTools.length > 0;
         const { text, stripped } = plainText(
-          reply.text ||
-            (calledTools.length > 0
-              ? ANSWERED_WITHOUT_WORDS
-              : 'Sorry, I got stuck on that one. Could you say it a different way?')
+          reply.text || (toolsRan ? ANSWERED_WITHOUT_WORDS : GOT_STUCK)
         );
+
+        // Words the model wrote are checked before they leave (plan 0236,
+        // section 4). The service's own sentences are not: they are plain by
+        // construction, as `plainText` already treats them.
+        const checked = reply.text
+          ? await this.moderate(request.message, text, locale, toolsRan)
+          : { verdict: 'skipped' as const, ms: 0 };
+        const shown = checked.replacement ?? text;
 
         this.record({
           userId: request.userId,
           locale,
           said: request.message,
-          replied: text,
+          replied: shown,
           calledTools,
           listResolution,
           usage,
           providerMs,
           gatewayMs: contextReadyAtMs - startedAtMs,
           totalMs: Date.now() - startedAtMs,
-          outcome: calledTools.length === 0 ? 'talked' : 'acted',
+          outcome: toolsRan ? 'acted' : 'talked',
           strippedMarkdown: stripped,
+          moderation: checked.verdict,
+          moderationMs: checked.ms,
+          ...(checked.replacement !== undefined ? { withheld: text } : {}),
         });
 
         return {
-          reply: text,
-          link: link.link(),
-          choices: choices.all(),
+          reply: shown,
+          // A flagged reply loses its link and its choices (section 4.2). A
+          // reply whose check could not run keeps the link, because the work it
+          // points at was done, and loses the choices, which answered a
+          // question nobody will now read.
+          link: checked.keepLink === false ? null : link.link(),
+          choices: checked.keepChoices === false ? [] : choices.all(),
           ...(listResolution ? { listResolution } : {}),
         };
       }
@@ -625,6 +657,65 @@ export class AssistantService {
     }
 
     return results;
+  }
+
+  /**
+   * The moderation pass over one reply the model wrote (plan 0236, section 4).
+   *
+   * `replacement` is absent when the reply goes out as written. A category
+   * replaces it with a fixed sentence in the reply language and drops the link
+   * and the choices. A check that could not run fails closed: the model's words
+   * are dropped for the sentence the service already says when it has none.
+   *
+   * **Not behind the concurrency gate**, unlike a turn's call. The check is one
+   * word long with a five second deadline, and queuing it behind other people's
+   * whole turns would turn ordinary load into dropped replies.
+   */
+  private async moderate(
+    said: string,
+    replied: string,
+    locale: SupportedLocale,
+    toolsRan: boolean
+  ): Promise<{
+    verdict: ModerationVerdict;
+    ms: number;
+    replacement?: string;
+    keepLink?: boolean;
+    keepChoices?: boolean;
+  }> {
+    if (!this.config.moderation) {
+      return { verdict: 'skipped', ms: 0 };
+    }
+
+    const startedAtMs = Date.now();
+    const { verdict, failure } = await checkReply(this.provider, {
+      said,
+      replied,
+      locale,
+    });
+    const ms = Date.now() - startedAtMs;
+
+    if (verdict === 'ok') {
+      return { verdict, ms };
+    }
+    if (verdict === 'error') {
+      // The reason, and never the classifier's prompt or the texts it read.
+      this.logger.warn(`assistant moderation failed closed: ${failure}`);
+      return {
+        verdict,
+        ms,
+        replacement: toolsRan ? ANSWERED_WITHOUT_WORDS : GOT_STUCK,
+        keepLink: true,
+        keepChoices: false,
+      };
+    }
+    return {
+      verdict,
+      ms,
+      replacement: replacementFor(verdict, locale, this.config.emergencyNumber),
+      keepLink: false,
+      keepChoices: false,
+    };
   }
 
   /** Plan 0026's rule, in one place because two entry points now apply it. */
@@ -822,6 +913,15 @@ export class AssistantService {
      * sentences, which are plain by construction, and logged as zero there.
      */
     strippedMarkdown?: number;
+    /** The verdict on the reply (plan 0236, section 4.3). */
+    moderation: ModerationVerdict;
+    /** How long the check took, zero when it did not run. */
+    moderationMs?: number;
+    /**
+     * The model's words that a verdict kept from the person, so the owner can
+     * read what was flagged (section 4.4). Absent when the reply went out.
+     */
+    withheld?: string;
   }): void {
     this.logger.log(
       JSON.stringify({
@@ -838,11 +938,16 @@ export class AssistantService {
         // How often the prompt's plain text rule still loses, so the rule can be
         // judged from the logs rather than from a hunch.
         strippedMarkdown: entry.strippedMarkdown ?? 0,
+        // Anything but `ok` and `skipped` is a line the owner counts (plan
+        // 0236, section 4.4). The classifier's prompt is never here.
+        moderation: entry.moderation,
+        ...(entry.withheld !== undefined ? { withheld: entry.withheld } : {}),
         tokens: entry.usage,
         latencyMs: {
           total: entry.totalMs,
           gateway: entry.gatewayMs,
           provider: entry.providerMs,
+          moderation: entry.moderationMs ?? 0,
         },
       })
     );

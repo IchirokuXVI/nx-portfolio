@@ -21,7 +21,8 @@ import {
   runWithRequestContext,
 } from '@portfolio/luna-shopper/platform';
 import {
-  DEFAULT_GEMINI_MODEL,
+  DEFAULT_CLAUDE_MODEL,
+  DEFAULT_MODERATION_MODEL,
   type AssistantConfig,
 } from '../config/app-config';
 import { FakeModelProvider } from '../provider/fake-model.provider';
@@ -260,14 +261,14 @@ const CONFIG: AssistantConfig = {
   natsUrl: 'nats://unused',
   logLevel: 'silent',
   gatewayInternalUrl: 'http://gateway.invalid',
-  geminiApiKey: 'not-used-by-the-fake',
-  geminiBaseUrl: 'http://provider.invalid',
-  provider: 'gemini',
-  anthropicApiKey: '',
+  anthropicApiKey: 'not-used-by-the-fake',
   anthropicBaseUrl: 'http://provider.invalid',
   claudeEffort: 'low',
   claudeThinking: 'adaptive',
-  model: DEFAULT_GEMINI_MODEL,
+  model: DEFAULT_CLAUDE_MODEL,
+  moderation: true,
+  moderationModel: DEFAULT_MODERATION_MODEL,
+  emergencyNumber: '112',
   transcriberUrl: 'http://transcriber.invalid',
   transcriberTurnTimeoutMs: 45000,
   transcriberCommentTimeoutMs: 110000,
@@ -1182,9 +1183,10 @@ describe('AssistantService', () => {
     it('carries the id and the continuity token of a call back into the next round', async () => {
       // The turn loop is what sits between a reply and the request that follows
       // it, so this is where a provider's own handles are kept or lost. Losing
-      // the token is not a degradation: Gemini 3 rejects the second round with a
-      // 400 and the caller sees a bare 500 on every turn that did anything, which
-      // is the defect this test exists to keep out.
+      // the token is not a degradation: Claude rejects the second round with a
+      // 400 when the replayed turn lost its thinking blocks, and the caller sees
+      // a bare 500 on every turn that did anything, which is the defect this
+      // test exists to keep out.
       const api = new RecordingApi();
       const provider = new FakeModelProvider([
         FakeModelProvider.calls(

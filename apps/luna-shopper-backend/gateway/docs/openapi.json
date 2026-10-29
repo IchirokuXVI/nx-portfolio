@@ -41046,8 +41046,7 @@
       "enums.AiTextProvider": {
         "type": "string",
         "enum": [
-          "anthropic",
-          "google"
+          "anthropic"
         ]
       },
       "enums.AuthProvider": {

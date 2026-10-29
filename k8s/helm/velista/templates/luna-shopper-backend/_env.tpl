@@ -265,25 +265,19 @@ deployment's answer.
 # application data only through the API carrying the caller's own token, and it
 # holds no credential of its own beyond the provider key below.
 #
-# GEMINI_API_KEY is in `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so an
-# operator with no key gets a service that boots and answers 501 on its one route
-# rather than a pod stuck in CreateContainerConfigError and a cluster that never
-# comes up (plan 0026). Nothing here may be made required without breaking that.
-- name: GEMINI_API_KEY
-  valueFrom:
-    secretKeyRef:
-      name: {{ $sec }}
-      key: GEMINI_API_KEY
-# The Claude key (plan 0224), optional by the same rule and in the same list. It
-# answers a turn only when ASSISTANT_PROVIDER is `claude`. No key hears: the
+# The Claude key (plan 0224), the only provider key since plan 0236. It is in
+# `OPTIONAL_EMPTY_KEYS` in provision-release.sh, so an operator with no key gets
+# a service that boots and answers 501 on its one route rather than a pod stuck
+# in CreateContainerConfigError and a cluster that never comes up (plan 0026).
+# Nothing here may be made required without breaking that. No key hears: the
 # transcriber does, at TRANSCRIBER_URL below (plan 0235). ANTHROPIC_BASE_URL is
-# not here, like GEMINI_BASE_URL: a stand in is a development thing.
+# not here: a stand in is a development thing.
 - name: ANTHROPIC_API_KEY
   valueFrom:
     secretKeyRef:
       name: {{ $sec }}
       key: ANTHROPIC_API_KEY
-{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_PROVIDER" "ASSISTANT_CLAUDE_EFFORT" "ASSISTANT_CLAUDE_THINKING" "ASSISTANT_MODEL" "TRANSCRIBER_URL" "TRANSCRIBER_TURN_TIMEOUT_MS" "TRANSCRIBER_COMMENT_TIMEOUT_MS" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK" "ASSISTANT_TURN_TIMEOUT_MS") }}
+{{- range $key := (list "GATEWAY_INTERNAL_URL" "ASSISTANT_CLAUDE_EFFORT" "ASSISTANT_CLAUDE_THINKING" "ASSISTANT_MODEL" "ASSISTANT_MODERATION" "ASSISTANT_MODERATION_MODEL" "ASSISTANT_EMERGENCY_NUMBER" "TRANSCRIBER_URL" "TRANSCRIBER_TURN_TIMEOUT_MS" "TRANSCRIBER_COMMENT_TIMEOUT_MS" "ASSISTANT_AUDIO_MAX_BYTES" "ASSISTANT_AUDIO_MIME_TYPES" "ASSISTANT_MAX_TURNS" "ASSISTANT_MAX_CHARS" "ASSISTANT_MAX_TOOL_CALLS" "ASSISTANT_TURNS_PER_MINUTE" "ASSISTANT_CONCURRENCY" "ASSISTANT_RETRY_AFTER_FALLBACK" "ASSISTANT_TURN_TIMEOUT_MS") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

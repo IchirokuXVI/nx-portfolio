@@ -178,13 +178,10 @@ lunaShopperBackend:
     # back office; neither is in this file.
     schedulerEnabled: true
 
-  # Claude answers a turn in production (plan 0224), and the transcriber below
-  # hears (plan 0235). The key is ANTHROPIC_API_KEY in the Secret, from the
+  # Claude answers every turn in every cluster (plan 0236), so the assistant
+  # needs nothing here. The key is ANTHROPIC_API_KEY in the Secret, from the
   # Velista workspace of the Anthropic Console, whose monthly spend limit is the
-  # cost ceiling. The model, effort and thinking stay empty, so the service's own
-  # Claude defaults apply.
-  assistant:
-    provider: 'claude'
+  # cost ceiling.
 
   # Voice (plan 0235): the transcriber runs here and nowhere else. It holds two
   # cores and 2.5 Gi of this node, and downloads about 2 GB of models on its

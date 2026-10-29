@@ -42,7 +42,7 @@ cd "$root"
 #
 # The assistant (plan 0039) IS here, and the difference is exactly the test
 # above: it answers a subject the app calls, on a route the client reaches at
-# /v1/assistant. With GEMINI_API_KEY empty, which is what luna-slot.sh writes, it
+# /v1/assistant. With ANTHROPIC_API_KEY empty, which is what luna-slot.sh writes, it
 # boots healthy and answers 501 not_configured — so it costs one boot and gives
 # the suite a real route to assert against, and it can never reach a provider
 # from CI (rule A4).
