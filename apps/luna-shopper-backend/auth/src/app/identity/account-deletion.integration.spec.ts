@@ -377,18 +377,25 @@ describeIntegration('an account deletion in auth (real Postgres, NATS)', () => {
     expect(woken).not.toHaveBeenCalled();
   });
 
-  it('answers auth.existingUserIds with only the ids that are accounts', async () => {
+  it('answers auth.existingUserIds with only the ids auth knows', async () => {
     const kept = await person();
     const gone = await person();
     await identity.deleteAccount({ userId: gone.id });
     await publisher.publishPending();
+    // An operator: core holds their id where they edited a list, and the
+    // release task must not take it for a deleted account.
+    const [operator]: Array<{ id: string }> = await dataSource.query(
+      `INSERT INTO "admin_users" ("username", "passwordHash")
+       VALUES ($1, 'not-a-hash') RETURNING "id"`,
+      [`operator-${randomUUID()}`]
+    );
     const reconciliation = new ReconciliationController(dataSource);
 
     await expect(
       reconciliation.existingUserIds({
-        userIds: [gone.id, 'not-a-uuid', kept.id, randomUUID()],
+        userIds: [gone.id, 'not-a-uuid', kept.id, operator.id, randomUUID()],
       })
-    ).resolves.toEqual({ userIds: [kept.id] });
+    ).resolves.toEqual({ userIds: [kept.id, operator.id] });
   });
 
   it('undoes the outbox table cleanly and applies it again', async () => {

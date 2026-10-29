@@ -138,6 +138,13 @@ deletion, written into the user columns of the kept rows, and stored nowhere els
 nothing in auth, because auth never had it, and it is not derived from the user id, so nobody
 holding the old id can find the rows.
 
+As built, a tombstone is `00000000-` followed by the last 96 random bits of a fresh v4 uuid
+(`TOMBSTONE_PREFIX` and `tombstoneId()` in `core/src/app/account/account-deletion.service.ts`).
+It is still random and still derived from nothing, and a reader can tell it from a user id,
+which starts with eight zeros once in four billion. That is what lets the reconcile command of
+section 7 skip rows that were already unlinked, so a second run of its release task finds
+nothing to do. Auth's audit scrub uses a plain random uuid, because nothing reconciles it.
+
 One tombstone **per zone** in core, and one per deletion in catalog. Within a zone, the
 person's comments, lines and membership keep pointing at one another, so the zone keeps
 saying "former member" for all of them exactly as it does today for a `KICKED` membership.
@@ -153,7 +160,7 @@ invited) are set to null instead.
 
 | Table | Personal | Decision |
 |---|---|---|
-| `users`, `credentials`, `refresh_tokens`, `oauth_identities`, `email_verifications`, `password_resets`, `oauth_states`, `impersonation_sessions`, `terms_acceptances` (plan `0231`) | yes | Deleted by the existing cascade. No change. |
+| `users`, `credentials`, `refresh_tokens`, `oauth_identities`, `email_verifications`, `password_resets`, `oauth_states`, `oauth_handoffs` (`1772900000000-OAuthHandoffs.ts:41`), `impersonation_sessions`, `terms_acceptances` (plan `0231`) | yes | Deleted by the existing cascade. No change. |
 | `auth_audit` | yes, in `before` and `after` | Scrubbed, section 4 |
 | `admin_login_failures` | an operator's typed username and IP, not linked to accounts | Untouched here. Plan `0233` gives it 90 days. |
 
@@ -163,7 +170,7 @@ invited) are set to null instead.
 |---|---|---|
 | `shopping_profiles` and, by cascade, `profile_postal_codes`, `profile_supermarket_preferences`, `profile_location_preferences`, `profile_generation_sources` | `name`, `addressText`, postal codes and their labels | **Delete** |
 | `user_app_state` | setup and tour times | **Delete** |
-| `comment_audio` of the person's comments | the voice | **Delete**, and null the three audio columns of the comment (`audioContentType`, `audioByteLength`, `audioDurationSeconds`, `core/src/app/entities/line-comment.entity.ts:46` to `:62`) so it reads as a comment with no recording. `transcription` stays: it is the transcript's state, and the owner keeps transcripts. The builder checks how velista draws a comment whose transcription state says voice but which has no audio, and names any gap in the PR. |
+| `comment_audio` of the person's comments | the voice | **Delete**, and null the three audio columns of the comment (`audioContentType`, `audioByteLength`, `audioDurationSeconds`, `core/src/app/entities/line-comment.entity.ts:46` to `:62`) so it reads as a comment with no recording. `transcription` stays: it is the transcript's state, and the owner keeps transcripts. A `PENDING` state becomes `FAILED`, because the recording it waited on is gone and `setTranscription` refuses once the author is a tombstone, so it would stay pending forever. The builder checks how velista draws a comment whose transcription state says voice but which has no audio, and names any gap in the PR. |
 | `line_comments` | `authorUserId` | **Keep**, `authorUserId` to the zone's tombstone. The body and any transcript stay: they are part of the list's conversation. |
 | `list_lines` | `createdByUserId`, `approvedByUserId`, `deletedByUserId` | **Keep**, the three to the tombstone |
 | `list_line_changes` | `actorUserId` | **Keep**, to the tombstone |
@@ -205,15 +212,25 @@ since 2026-10-27, and adds any new one to this table before building.
    person's `basket_participants` rows on baskets of that zone; then the membership itself
    (anonymized username, `KICKED`, `userId = t`) and the owned zone fallback, as today.
 3. Outside any zone: delete `comment_audio` of every comment the person wrote (before step 2
-   rewrote the author, so select those comment ids first), null their audio columns, null
-   `line_settlements.settledByUserId` and `basket_participants.invitedByUserId`, delete
-   `shopping_profiles` and `user_app_state`.
+   rewrote the author, so select those comment ids first), null their audio columns and turn
+   a `PENDING` transcription of those comments into `FAILED`, give any
+   `line_settlements.settledByUserId` that step 2 did not reach a tombstone of the deletion
+   (step 2 already gave each settlement of a zone that zone's tombstone; section 2 says why it
+   cannot be null), null `basket_participants.invitedByUserId`, delete `shopping_profiles`
+   and `user_app_state`.
 4. Scrub `core_audit` (section 4).
-5. Insert the idempotency key (section 5).
+5. Insert the idempotency key (section 5). As built, `runOnce` writes it **first**, on the
+   transaction's manager, before step 1. A second delivery of the same id at the same moment
+   then waits on the unique key and finds it, instead of rewriting the same rows beside the
+   first. A rollback still takes the key back. The deletion also removes the old
+   `user.deleted:<userId>` key of plan `0011`, and the reconcile command of section 7 reads
+   those old keys as candidates.
 
 Then, after the commit, emit the events the loop emits today (`MemberKicked`, coverage moved,
 zone counts), from a list the transaction collected. An event for a write that rolled back is
-the defect this order prevents.
+the defect this order prevents. A failure while announcing is logged and swallowed: the
+deletion is committed, and a throw would make the consumer nak a finished deletion whose
+redelivery does nothing.
 
 A comment written outside any membership the person still holds (they left the zone before
 deleting the account) is caught by step 2 only if the membership row still exists. A `LEFT`
@@ -234,7 +251,11 @@ of account was lost and who removed it, with nothing that identifies the person.
   user id or whose `before` or `after` holds the user id as a value, set `email`,
   `displayName`, `username`, `reasonNote` and `userAgent` keys to null in both columns, replace
   the user id wherever it is a value with a tombstone generated for the deletion, and set
-  `entityId` to the same tombstone. In the user facing path this runs inside the delete's
+  `entityId` to the same tombstone where `entityId` is the user id. As built, a row about one
+  of the person's child rows (a verification, a reset, a support session) keeps its own
+  `entityId`: the cascade removed that row, so the id leads nowhere, and it is what ties a
+  session's opening row to the row that ended it. A text `LIKE` on each column rules out the
+  rows that cannot hold the id before `jsonb_each` expands them. In the user facing path this runs inside the delete's
   transaction, which becomes a transaction for the first time (today it is a bare statement on
   `dataSource.manager`, `identity.service.ts:1082`).
 - Core, `CoreAuditService.scrubUser(manager, userId, tombstoneOfZone)`: the same, with the
@@ -287,7 +308,10 @@ Core and catalog hold rows of accounts that no longer exist in auth. A release t
 than a ceiling the builder sets from a staging count:
 
 - A reconciliation subject in auth, `auth.existingUserIds`, takes up to 500 ids and answers the
-  ones that exist (the mirror of `RECONCILIATION_PATTERNS.usersWithoutMemberships`).
+  ones that exist (the mirror of `RECONCILIATION_PATTERNS.usersWithoutMemberships`). An id
+  exists when it is a `users` row or an `admin_users` row: an operator's line edit writes the
+  operator's id into `list_line_changes.actorUserId`, and an operator is not a deleted
+  account.
 - The task's `post.sh` runs a one off command in core and in catalog that collects the distinct
   user ids of the tables in section 2, asks auth in batches, and runs the same deletion for
   each id auth does not know.
@@ -320,8 +344,12 @@ service's DB URL on the slot's port, `npx nx run luna-shopper-backend-<svc>:test
   plan works whether or not it is built.
 - Plan `0233` sweeps the audit trails after 180 days. It does not replace section 4: a deleted
   person's name must leave the trail at deletion, not half a year later.
-- Velista needs nothing new: a comment with no audio already draws as typed, a former member
-  already has a label.
+- Velista needs no change, and draws one case differently. With the audio columns null, core
+  sends `recording: null`, and velista's mapper
+  (`libs/velista/data-access/src/lib/mapping/mappers.ts:980`) then drops `transcription`. A
+  kept transcript thus draws as a typed comment by "former member", without the auto
+  transcribed line. A voice comment with an empty body draws the "no transcript" placeholder
+  with no player. Nothing breaks.
 
 ## 10. Decisions
 

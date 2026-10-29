@@ -144,7 +144,7 @@ export class AccountDeletionPublisher
   }
 
   private async publishAll(): Promise<number> {
-    const js = this.js;
+    const js = await this.jetstream();
     if (!js) {
       // Not connected yet: the first pass after boot picks the rows up.
       return 0;
@@ -178,6 +178,35 @@ export class AccountDeletionPublisher
         return published;
       }
     }
+  }
+
+  /**
+   * The client for this pass, or none before boot and during shutdown. A
+   * connection the client closed for good (it gave up reconnecting, or the
+   * server closed it) is replaced here, so a broker outage delays the outbox
+   * and never strands it until auth restarts. The stream is ensured again on
+   * the new connection, because a broker that lost its store lost it too.
+   */
+  private async jetstream(): Promise<JetStreamClient | undefined> {
+    if (!this.connection || !this.js || this.closing) {
+      return undefined;
+    }
+    if (this.connection.isClosed()) {
+      this.logger.warn(
+        'The NATS connection for account deletions was closed; reconnecting'
+      );
+      const connection = await this.options.connect();
+      try {
+        await this.ensureStream(await connection.jetstreamManager());
+      } catch (err) {
+        // Keep the closed one, so the next pass tries all of this again.
+        await connection.close().catch(() => undefined);
+        throw err;
+      }
+      this.connection = connection;
+      this.js = connection.jetstream();
+    }
+    return this.js;
   }
 
   /** Create the stream, or bring an existing one to this configuration. */

@@ -170,6 +170,28 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
        VALUES ($1, 'audio/webm', '\\x01020304'::bytea)`,
       [voice]
     );
+    // A voice comment whose transcript was still being made: the recording
+    // goes, and nothing can finish the transcript after that.
+    const pendingVoice = await insert(
+      `INSERT INTO "line_comments"
+         ("lineId", "authorUserId", "body", "audioContentType",
+          "audioByteLength", "audioDurationSeconds", "transcription")
+       VALUES ($1, $2, '', 'audio/webm', 4, 2, 'PENDING')`,
+      [theirLine, person]
+    );
+    await sql(
+      `INSERT INTO "comment_audio" ("commentId", "contentType", "audio")
+       VALUES ($1, 'audio/webm', '\\x05060708'::bytea)`,
+      [pendingVoice]
+    );
+    // The friend's own pending voice comment is not theirs to end.
+    const friendPending = await insert(
+      `INSERT INTO "line_comments"
+         ("lineId", "authorUserId", "body", "audioContentType",
+          "audioByteLength", "audioDurationSeconds", "transcription")
+       VALUES ($1, $2, '', 'audio/webm', 4, 2, 'PENDING')`,
+      [theirLine, friend]
+    );
     const friendComment = await insert(
       `INSERT INTO "line_comments" ("lineId", "authorUserId", "body")
        VALUES ($1, $2, 'ok')`,
@@ -298,6 +320,8 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
       lineB,
       typed,
       voice,
+      pendingVoice,
+      friendPending,
       friendComment,
       change,
       merge,
@@ -469,9 +493,32 @@ describeIntegration('an account deletion in core (real Postgres)', () => {
       ])
     ).resolves.toEqual({ authorUserId: friend });
 
+    // A transcript still pending ends as FAILED, because the recording it
+    // waited on is gone. Only the person's: the friend's stays PENDING.
+    await expect(
+      one(
+        `SELECT "authorUserId", "audioContentType", "transcription"
+           FROM "line_comments" WHERE "id" = $1`,
+        [s.pendingVoice]
+      )
+    ).resolves.toEqual({
+      authorUserId: tA,
+      audioContentType: null,
+      transcription: 'FAILED',
+    });
+    await expect(
+      one(
+        `SELECT "authorUserId", "transcription" FROM "line_comments"
+          WHERE "id" = $1`,
+        [s.friendPending]
+      )
+    ).resolves.toEqual({ authorUserId: friend, transcription: 'PENDING' });
+
     // comment_audio: the voice is gone.
     await expect(
-      sql(`SELECT 1 FROM "comment_audio" WHERE "commentId" = $1`, [s.voice])
+      sql(`SELECT 1 FROM "comment_audio" WHERE "commentId" = ANY($1::uuid[])`, [
+        [s.voice, s.pendingVoice],
+      ])
     ).resolves.toEqual([]);
 
     // list_line_changes.

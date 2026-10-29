@@ -1,4 +1,6 @@
+import { Logger } from '@nestjs/common';
 import {
+  CommentTranscription,
   MembershipStatus,
   RealtimeEvent,
   ZoneStatus,
@@ -27,6 +29,8 @@ function build(opts: {
   memberships: Partial<ZoneMembership>[];
   ownedZones?: Partial<Zone>[];
   touchedZones?: string[];
+  /** The ids the read of the person's comments answers. */
+  voicedComments?: string[];
   firstSeen?: boolean;
 }) {
   // Every read model carries timestamps (plan 0017, section 7), so the stand in
@@ -50,6 +54,9 @@ function build(opts: {
       order.push('query');
       if (sql.includes('SELECT DISTINCT t."zoneId"')) {
         return (opts.touchedZones ?? []).map((zoneId) => ({ zoneId }));
+      }
+      if (sql.includes('SELECT c."id" FROM "line_comments"')) {
+        return (opts.voicedComments ?? []).map((id) => ({ id }));
       }
       return [];
     }),
@@ -231,6 +238,54 @@ describe('AccountDeletionService.handleUserDeleted', () => {
     expect([...tombstones.keys()].sort()).toEqual(['z1', 'z9']);
     expect([...names.keys()]).toEqual(['z1']);
     expect(deletion.membershipIds).toEqual(['m1aaaaaa-1']);
+  });
+
+  it('ends a pending transcript as FAILED with the recording it waited on', async () => {
+    const { svc, manager } = build({
+      memberships: [],
+      voicedComments: ['c1', 'c2'],
+    });
+
+    await svc.handleUserDeleted('u1');
+
+    // The statement itself runs on real Postgres in the integration spec; here,
+    // that it is the one that clears the audio of those comments and moves
+    // PENDING, and only PENDING, to FAILED.
+    const call = manager.query.mock.calls.find(
+      (c: unknown[]) =>
+        typeof c[0] === 'string' &&
+        c[0].includes('UPDATE "line_comments"') &&
+        c[0].includes('"audioContentType" = NULL')
+    ) as unknown as [string, unknown[]];
+    expect(call[0]).toContain(
+      '"transcription" = CASE WHEN "transcription" = $2'
+    );
+    expect(call[1]).toEqual([
+      ['c1', 'c2'],
+      CommentTranscription.PENDING,
+      CommentTranscription.FAILED,
+    ]);
+  });
+
+  it('answers done when only the announcement fails, so the message is acked', async () => {
+    const error = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const { svc, zoneCounts, order } = build({
+      memberships: [
+        { id: 'm1', zoneId: 'z1', userId: 'u1', username: 'Alice' },
+      ],
+    });
+    zoneCounts.emitZoneCounts.mockRejectedValueOnce(new Error('redis down'));
+
+    await expect(svc.handleUserDeleted('u1')).resolves.toBe(true);
+
+    expect(order).toContain('commit');
+    expect(error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      expect.stringContaining('announcing it to open screens failed')
+    );
+    error.mockRestore();
   });
 
   it('announces nothing when the transaction throws', async () => {

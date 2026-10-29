@@ -9,8 +9,10 @@ export const RECONCILIATION_PATTERNS = {
   usersWithoutMemberships: 'core.usersWithoutMemberships',
   /**
    * Given candidate userIds, return the subset auth still holds (plan 0232,
-   * section 7). The release task that cleans what earlier deletions left in core
-   * and catalog asks it, at most {@link EXISTING_USER_IDS_MAX} ids at a time.
+   * section 7): a person in `users` or an operator in `admin_users`, because
+   * core stores both in the same actor columns. The release task that cleans
+   * what earlier deletions left in core and catalog asks it, at most
+   * {@link EXISTING_USER_IDS_MAX} ids at a time.
    */
   existingUserIds: 'auth.existingUserIds',
 } as const;
@@ -35,6 +37,6 @@ export interface ExistingUserIdsRequest {
 }
 
 export interface ExistingUserIdsResponse {
-  /** The subset of the input that is still a user in auth. */
+  /** The subset of the input that is still a user or an operator in auth. */
   userIds: string[];
 }

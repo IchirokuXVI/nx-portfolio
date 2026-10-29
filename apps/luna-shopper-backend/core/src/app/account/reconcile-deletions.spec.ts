@@ -58,6 +58,20 @@ describe('reconcileDeletions', () => {
     expect(d.lines).toEqual(['candidates 3', 'unknown 2', 'applied 2']);
   });
 
+  it('leaves an operator alone, whose id auth answers from admin_users', async () => {
+    // `list_line_changes.actorUserId` holds an operator's id after an edit
+    // from the back office, so the operator is a candidate like any person.
+    const operator = '44444444-4444-4444-8444-444444444444';
+    const gone = '55555555-5555-4555-8555-555555555555';
+    const d = deps([operator, gone], () => [operator]);
+
+    await expect(
+      reconcileDeletions(d.value, { countOnly: false, max: null })
+    ).resolves.toBe(1);
+
+    expect(d.deleted).toEqual([gone]);
+  });
+
   it('counts and changes nothing with --count', async () => {
     const d = deps(['a', 'b'], () => []);
 

@@ -79,11 +79,21 @@ function scrubbedJson(column: string): string {
   ) ELSE ${column} END`;
 }
 
-/** Whether a jsonb column holds the user id (`$1`) as a top level value. */
+/**
+ * Whether a jsonb column holds the user id (`$1`) as a top level value.
+ *
+ * The `LIKE` on the column's text runs first and rules out almost every row
+ * before `jsonb_each` expands it. It never rules out a match: a value equal to
+ * the id prints the id, and a uuid holds no `%` or `_`. The exact test is still
+ * `jsonb_each`, so an id under a nested key or inside a longer string does not
+ * count.
+ */
 function holdsValue(column: string): string {
-  return `(jsonb_typeof(${column}) = 'object' AND EXISTS (
-    SELECT 1 FROM jsonb_each(${column}) AS e WHERE e.value = to_jsonb($1::text)
-  ))`;
+  return `(jsonb_typeof(${column}) = 'object'
+    AND ${column}::text LIKE ('%' || $1::text || '%')
+    AND EXISTS (
+      SELECT 1 FROM jsonb_each(${column}) AS e WHERE e.value = to_jsonb($1::text)
+    ))`;
 }
 
 /**
@@ -167,7 +177,9 @@ export class AuthAuditService {
    *
    * No index serves the jsonb match, so it scans the table. Deletions are rare
    * and the trail is small, and an index for this one query would be written on
-   * every audited change.
+   * every audited change. A text `LIKE` on each column rules out the rows that
+   * cannot match before any is expanded with `jsonb_each`, which matters when
+   * the orphan reaper deletes temporary accounts in a batch.
    *
    * Answers how many rows it changed.
    */

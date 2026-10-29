@@ -1,6 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import {
+  CommentTranscription,
   MembershipStatus,
   RealtimeEvent,
   ZoneStatus,
@@ -93,6 +94,8 @@ interface CommentIdRow {
  */
 @Injectable()
 export class AccountDeletionService {
+  private readonly logger = new Logger(AccountDeletionService.name);
+
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
     @InjectRepository(ZoneMembership)
@@ -128,7 +131,18 @@ export class AccountDeletionService {
     if (!announcements) {
       return false;
     }
-    await this.announce(announcements);
+    // The deletion is committed. A failure to tell open screens is logged and
+    // swallowed: thrown, it would make the consumer nak a deletion that is
+    // done, whose redelivery finds the key and does nothing, under a log line
+    // that says it rolled back.
+    try {
+      await this.announce(announcements);
+    } catch (err) {
+      this.logger.error(
+        { err },
+        'account deletion committed, but announcing it to open screens failed'
+      );
+    }
     return true;
   }
 
@@ -253,14 +267,19 @@ export class AccountDeletionService {
         [commentIds]
       );
       // So it reads as a comment with no recording. `transcription` stays: it
-      // is the transcript's state, and the owner keeps transcripts.
+      // is the transcript's state, and the owner keeps transcripts. A pending
+      // one becomes FAILED: the recording it would be made from is gone, and
+      // `setTranscription` refuses once the author is a tombstone, so PENDING
+      // would never end.
       await manager.query(
         `UPDATE "line_comments"
             SET "audioContentType" = NULL,
                 "audioByteLength" = NULL,
-                "audioDurationSeconds" = NULL
+                "audioDurationSeconds" = NULL,
+                "transcription" = CASE WHEN "transcription" = $2
+                                       THEN $3 ELSE "transcription" END
           WHERE "id" = ANY($1::uuid[])`,
-        [commentIds]
+        [commentIds, CommentTranscription.PENDING, CommentTranscription.FAILED]
       );
     }
     // A settlement whose list names no zone above, which a line always has, is

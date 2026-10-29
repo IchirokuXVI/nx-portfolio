@@ -11,13 +11,19 @@ import { isUuid, ValidationException } from '@portfolio/luna-shopper/platform';
 import { DataSource } from 'typeorm';
 
 /**
- * Which of a list of ids are still accounts (plan 0232, section 7).
+ * Which of a list of ids auth still knows (plan 0232, section 7).
  *
  * The mirror of core's `core.usersWithoutMemberships`. The release task that
  * cleans what earlier deletions left in core and catalog collects the user ids
  * those services hold and asks here, at most {@link EXISTING_USER_IDS_MAX} at a
  * time, which of them auth still knows. Every id it does not get back is an
  * account that was deleted.
+ *
+ * An id is known when it is a `users` row **or** an `admin_users` row. Core
+ * stores an operator's id in the same columns as a person's: an operator's
+ * line edit writes it into `list_line_changes.actorUserId`. Answering only
+ * `users` would make every operator who ever edited a list look like a deleted
+ * account, and the release task would unlink their rows.
  *
  * An id that is not a uuid cannot be an account, so it is left out of the
  * query rather than handed to Postgres, which would refuse the whole request
@@ -54,7 +60,9 @@ export class ReconciliationController {
       return { userIds: [] };
     }
     const rows: Array<{ id: string }> = await this.dataSource.query(
-      `SELECT "id" FROM "users" WHERE "id" = ANY($1::uuid[])`,
+      `SELECT "id" FROM "users" WHERE "id" = ANY($1::uuid[])
+       UNION
+       SELECT "id" FROM "admin_users" WHERE "id" = ANY($1::uuid[])`,
       [candidates]
     );
     // In the order asked, so a caller that pairs the answer with its batch

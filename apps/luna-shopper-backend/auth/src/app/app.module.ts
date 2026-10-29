@@ -163,6 +163,10 @@ import { UsernameController } from './username/username.controller';
           connect({
             servers: [config.getOrThrow<AuthConfig>('auth').natsUrl],
             name: 'luna-shopper-backend-auth-account-deletions',
+            // Reconnect for as long as the process lives. The default gives
+            // up after ten tries two seconds apart, and a closed connection
+            // would leave the outbox growing until auth restarts.
+            maxReconnectAttempts: -1,
           }),
         intervalMs: ACCOUNT_DELETION_PUBLISH_INTERVAL_MS,
       }),

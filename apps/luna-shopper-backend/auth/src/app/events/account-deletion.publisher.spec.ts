@@ -48,19 +48,35 @@ function build(
     },
   };
   const publish = options.publish ?? jest.fn(async () => ({ seq: 1 }));
-  const connection = {
+  /** A double of one connection; `closed` says the client gave it up. */
+  const open = () => ({
+    closed: false,
+    isClosed() {
+      return this.closed;
+    },
     jetstreamManager: jest.fn(async () => jsm),
     jetstream: jest.fn(() => ({ publish })),
     drain: jest.fn(async () => undefined),
-  };
+    close: jest.fn(async () => undefined),
+  });
+  const connections: Array<ReturnType<typeof open>> = [];
+  const connect = jest.fn(async () => {
+    const next = open();
+    connections.push(next);
+    return next as never;
+  });
   const publisher = new AccountDeletionPublisher(
     { getRepository: () => outbox } as never,
-    {
-      connect: async () => connection as never,
-      intervalMs: 30_000,
-    }
+    { connect, intervalMs: 30_000 }
   );
-  return { publisher, outbox, jsm, publish, connection };
+  return {
+    publisher,
+    outbox,
+    jsm,
+    publish,
+    connect,
+    connections,
+  };
 }
 
 describe('AccountDeletionPublisher', () => {
@@ -165,7 +181,7 @@ describe('AccountDeletionPublisher', () => {
       .fn()
       .mockRejectedValueOnce(new Error('broker down'))
       .mockResolvedValue({ seq: 1 });
-    const { publisher, outbox, connection } = build({
+    const { publisher, outbox, connections } = build({
       rows: ['u1'],
       publish,
     });
@@ -177,10 +193,48 @@ describe('AccountDeletionPublisher', () => {
     expect(outbox.rows).toEqual([]);
 
     await publisher.onApplicationShutdown();
-    expect(connection.drain).toHaveBeenCalled();
+    expect(connections[0].drain).toHaveBeenCalled();
     outbox.rows.push({ userId: 'u2', deletedAt: new Date() });
     await jest.advanceTimersByTimeAsync(60_000);
     expect(publish).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a new connection when the client closed the old one for good', async () => {
+    const { publisher, outbox, jsm, connect, connections } = build();
+    await publisher.onModuleInit();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(connect).toHaveBeenCalledTimes(1);
+
+    // The broker was away longer than the client would retry.
+    connections[0].closed = true;
+    outbox.rows.push({ userId: 'u1', deletedAt: new Date() });
+    await publisher.publishPending();
+
+    expect(connect).toHaveBeenCalledTimes(2);
+    expect(jsm.streams.add).toHaveBeenCalledTimes(2);
+    expect(connections[1].jetstream).toHaveBeenCalled();
+    expect(outbox.rows).toEqual([]);
+
+    await publisher.onApplicationShutdown();
+    expect(connections[1].drain).toHaveBeenCalled();
+  });
+
+  it('keeps trying when the new connection cannot ensure the stream', async () => {
+    const { publisher, outbox, jsm, connect, connections } = build();
+    await publisher.onModuleInit();
+    await jest.advanceTimersByTimeAsync(0);
+    connections[0].closed = true;
+    outbox.rows.push({ userId: 'u1', deletedAt: new Date() });
+    jsm.streams.add.mockRejectedValueOnce(new Error('no jetstream'));
+
+    await expect(publisher.publishPending()).rejects.toThrow('no jetstream');
+    expect(connections[1].close).toHaveBeenCalled();
+    expect(outbox.rows).toHaveLength(1);
+
+    await publisher.publishPending();
+    expect(connect).toHaveBeenCalledTimes(3);
+    expect(outbox.rows).toEqual([]);
+    await publisher.onApplicationShutdown();
   });
 
   it('hashes the user id into the dedupe id', () => {
