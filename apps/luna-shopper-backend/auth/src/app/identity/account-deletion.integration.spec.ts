@@ -98,7 +98,10 @@ describeIntegration('an account deletion in auth (real Postgres, NATS)', () => {
 
   beforeAll(async () => {
     const url = requiredEnv('AUTH_DB_URL');
-    const natsUrl = requiredEnv('NATS_URL');
+    // NATS_URL is a shared key (luna-slot writes it beside the services, not in
+    // auth's .env), so Nx does not load it for this target. Unset means slot 0's
+    // broker, which is what CI runs; on another slot export it.
+    const natsUrl = process.env['NATS_URL'] ?? 'nats://localhost:4222';
 
     const bootstrap = new DataSource({ type: 'postgres', url });
     await bootstrap.initialize();
