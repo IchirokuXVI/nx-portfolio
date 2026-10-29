@@ -171,7 +171,7 @@ invited) are set to null instead.
 | `baskets` of the person, with their participants, share links, sources, skips, trip rows | yes | **Delete**, as today |
 | `basket_participants` on other people's baskets | `userId`, `displayName`, `username`, `userAgent`, `sessionSecretHash` | **Keep the row**, because settlements, skips and trip rows of somebody else's basket point at it. `userId`, `userAgent` and `sessionSecretHash` to null, `username` and `displayName` to the zone's anonymized name. |
 | `basket_participants.invitedByUserId` pointing at the person | a link | To null |
-| `line_settlements` | `settledByUserId` (nullable) | **Keep**, to null. The purchase is the household's (plan `0047` section 3.1). This also empties the person's recent shops, which are read from it. |
+| `line_settlements` | `settledByUserId` (nullable) | **Keep**, to the tombstone of the settlement's zone. Not null: `ck_line_settlements_actor` holds exactly one of the user and the participant, and a row settled from the list page has no participant (found while building). The purchase is the household's (plan `0047` section 3.1). This also empties the person's recent shops, which are read from it. |
 | `zones` owned by the person | `ownerUserId` | As today: null, marked for deletion, reaped later |
 | `core_audit` | yes, in `before` and `after` | Scrubbed, section 4 |
 | `processed_events` | the key `user.deleted:<userId>` | The key becomes `user.deleted:<sha256 of the id>`, section 5 |

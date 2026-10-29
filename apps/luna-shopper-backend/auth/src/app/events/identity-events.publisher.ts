@@ -4,7 +4,6 @@ import {
   IDENTITY_EVENTS,
   IMPERSONATION_EVENTS,
   type ImpersonationEndedEvent,
-  type UserDeletedEvent,
   type UserEmailVerifiedEvent,
   type UserRegisteredEvent,
   type UserUpgradedEvent,
@@ -23,6 +22,10 @@ export const NATS_EVENTS = 'NATS_EVENTS';
  * Each event carries the active correlation id on its NATS headers so one id
  * threads the originating action through to any downstream consumer (plan 0004,
  * section 3). Consumers are free to ignore these.
+ *
+ * `user.deleted` is not here. Since plan 0232 it travels through an outbox to a
+ * JetStream stream (`AccountDeletionPublisher`), and a plain publish on
+ * the same subject would be captured by that stream as a second copy.
  */
 @Injectable()
 export class IdentityEventsPublisher {
@@ -49,10 +52,6 @@ export class IdentityEventsPublisher {
 
   userEmailVerified(event: UserEmailVerifiedEvent): void {
     this.emit(IDENTITY_EVENTS.userEmailVerified, event);
-  }
-
-  userDeleted(event: UserDeletedEvent): void {
-    this.emit(IDENTITY_EVENTS.userDeleted, event);
   }
 
   userUsernameChanged(event: UserUsernameChangedEvent): void {

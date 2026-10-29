@@ -11,12 +11,12 @@ import {
 import type { Basket } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import type { ProfileService } from '../profiles/profile.service';
+import { BasketSweepService } from './basket-sweep.service';
 import {
   fakeBasketTripRows,
   fakeUpdateDataSource,
   type FakeBasketTripRows,
 } from './basket-trip-rows.fake';
-import { BasketSweepService } from './basket-sweep.service';
 import { BasketService } from './basket.service';
 import { fakeLineClaims, type FakeLineClaims } from './line-claims.fake';
 
@@ -169,14 +169,17 @@ describe('what the permanent basket refuses (section 2)', () => {
   });
 
   it('is deleted with its owner’s account, like every other basket', async () => {
-    // `deleteForUser` is unchanged (section 2): an account's deletion takes
-    // every basket it owns, and the permanent one is one of them.
+    // An account's deletion takes every basket it owns (section 2), and the
+    // permanent one is one of them. Since backend plan 0232 it runs on the
+    // deletion's own transaction, so the delete goes through that manager.
     const { service } = build([liveBasket()]);
     const deleted = jest.fn(async () => ({ affected: 1 }));
-    (service as unknown as { lists: { delete: unknown } }).lists.delete =
-      deleted;
+    const manager = {
+      query: jest.fn(async () => []),
+      getRepository: () => ({ delete: deleted }),
+    };
 
-    await service.deleteForUser(OWNER);
+    await service.deleteForUserIn(manager as never, OWNER);
 
     expect(deleted).toHaveBeenCalledWith({ ownerUserId: OWNER });
   });

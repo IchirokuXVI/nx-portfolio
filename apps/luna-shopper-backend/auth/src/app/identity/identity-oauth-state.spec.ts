@@ -111,7 +111,8 @@ function build() {
       }),
     } as never,
     undefined as never,
-    new InMemoryTermsService()
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
   return { service, stores };
 }

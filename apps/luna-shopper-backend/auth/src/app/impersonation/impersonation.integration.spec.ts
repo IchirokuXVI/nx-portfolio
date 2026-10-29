@@ -158,7 +158,8 @@ describeIntegration('support sessions (real Postgres)', () => {
       audit,
       config(true),
       impersonation,
-      new InMemoryTermsService()
+      new InMemoryTermsService(),
+      { publishSoon: () => undefined } as never
     );
   }, 120_000);
 

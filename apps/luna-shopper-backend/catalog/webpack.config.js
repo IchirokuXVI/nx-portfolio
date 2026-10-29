@@ -39,5 +39,19 @@ module.exports = {
       outputHashing: 'none',
       generatePackageJson: false,
     }),
+    // The one off reconcile command (plan 0232, section 7). A third entry, for
+    // the same reason as the second: release task 0005 runs `node
+    // reconcile-deletions.js` inside the catalog pod, so it has to be in the
+    // image.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/reconcile-deletions.ts',
+      outputFileName: 'reconcile-deletions.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
   ],
 };

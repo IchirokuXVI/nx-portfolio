@@ -178,7 +178,8 @@ function build() {
       }),
     } as never,
     undefined as never,
-    new InMemoryTermsService()
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
 
   const addGuest = (id: string) =>

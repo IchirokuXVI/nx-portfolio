@@ -1,8 +1,14 @@
 /**
  * Idempotency building blocks (plan 0004, section 9).
  *
- * JetStream delivers at least once, so every event consumer must be idempotent:
- * a redelivered event has no extra effect. And orchestrated commands that span
+ * Delivery differs by path, and both shapes need this. An event on a JetStream
+ * stream is delivered at least once, so its consumer must be idempotent: a
+ * redelivered event has no extra effect. Since backend plan 0232 that is true
+ * of `user.deleted`, and of the domain events realtime fans out. An event on
+ * plain NATS (`ClientProxy.emit` to an `@EventPattern`) is delivered at most
+ * once: nothing redelivers it, and a consumer that was not connected never sees
+ * it. A dedupe there guards against a duplicate publish, and nothing guards
+ * against a lost one. And orchestrated commands that span
  * services carry an idempotency key so a retry after a partial failure does not
  * create a duplicate. These are the shared primitives the consumer and saga code
  * in later plans build on; the concrete store (a table, a Redis set) is chosen

@@ -389,6 +389,49 @@ CATALOG_PSQL='docker exec -i my-catalog-db psql -U luna_catalog -d my_copy' \
   bash k8s/release-tasks/tasks/0004-remove-chain-sections/post.sh
 ```
 
+## Task 0005
+
+`0005-unlink-deleted-accounts` cleans what the accounts deleted before backend
+plan `0232` left in core and catalog (section 7 of that plan). Profiles, voice
+recordings and app state go. Lines, comments, purchases and shop walks stay,
+with a tombstone in place of the user id.
+
+- **It runs a command inside the pods, not SQL.** `post.sh` runs
+  `node reconcile-deletions.js` in the core pod and then in the catalog pod.
+  The command collects the user ids of the tables of section 2, asks auth
+  `auth.existingUserIds` in batches of 500, and runs the deletion that a
+  `user.deleted` on the stream runs, for each id that auth does not know. One
+  deletion, two ways in.
+- **It is armed for staging and for production.** Both windows end on
+  2026-11-12, and `PRODUCTION_RELEASE` is `0.16.0`. A release published after
+  that date needs the dates moved in a commit before it.
+- **It states one ceiling per environment, per service**:
+  `MAX_UNKNOWN_IDS_<ENVIRONMENT>`, 2000 in both. Neither cluster was read when
+  it was written. `check.sh` counts with `--count` and refuses above it.
+  `post.sh` counts again before it changes anything, and passes the ceiling as
+  `--max`, so the command refuses too.
+- **Its `check.sh` passes where the pods do not have the command yet.** The
+  check runs before `helm upgrade`, and this release is the one that adds the
+  command and the auth subject. `post.sh` runs after the rollout, and it is the
+  one that refuses: above the ceiling, and where a pod has no
+  `reconcile-deletions.js`, because the rollout did not happen there.
+- **It leaves no marker, and it does not need one.** A deleted id is gone from
+  every table, and a tombstone starts with `00000000-`, which the command never
+  takes for an account. A second run finds nothing to do.
+- **It has a `post.sh` and no `pre.sh`**, because it needs the new pods.
+
+To rehearse it, point the overrides at the built bundles and at databases that
+you made for the rehearsal. Each command needs the service's database URL and
+`NATS_URL` in its environment, and an auth on that NATS that answers
+`auth.existingUserIds`:
+
+```sh
+ENVIRONMENT=staging \
+  CORE_RECONCILE='node dist/apps/luna-shopper-backend-core/reconcile-deletions.js' \
+  CATALOG_RECONCILE='node dist/apps/luna-shopper-backend-catalog/reconcile-deletions.js' \
+  bash k8s/release-tasks/tasks/0005-unlink-deleted-accounts/check.sh
+```
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote

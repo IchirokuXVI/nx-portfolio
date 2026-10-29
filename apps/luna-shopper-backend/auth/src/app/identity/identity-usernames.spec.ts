@@ -40,7 +40,8 @@ function build(users: Partial<User>[]) {
     fakeAudit([]).service,
     { getOrThrow: () => ({}) } as never,
     undefined as never,
-    new InMemoryTermsService()
+    new InMemoryTermsService(),
+    { publishSoon: () => undefined } as never
   );
   return { service, find };
 }

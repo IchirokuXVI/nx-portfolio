@@ -19,6 +19,8 @@ export interface RecordedChange {
 export interface FakeAudit {
   service: AuthAuditService;
   recorded: RecordedChange[];
+  /** Every user id {@link AuthAuditService.scrubUser} was called for. */
+  scrubbed: string[];
 }
 
 /**
@@ -46,6 +48,7 @@ export function fakeAudit(
 ): FakeAudit {
   const bound = new Map(bindings);
   const recorded: RecordedChange[] = [];
+  const scrubbed: string[] = [];
 
   function bindingFor(target: EntityTarget<ObjectLiteral>) {
     const found = bound.get(target);
@@ -80,7 +83,27 @@ export function fakeAudit(
     return fields;
   }
 
+  /** The named fields, as the real `recordDelete` reads them with `only`. */
+  function picked(
+    row: ObjectLiteral,
+    keys: readonly string[]
+  ): Record<string, unknown> {
+    const fields: Record<string, unknown> = {};
+    for (const key of keys) {
+      const value = row[key];
+      fields[key] =
+        value instanceof Date ? value.toISOString() : (value ?? null);
+    }
+    return fields;
+  }
+
   const service = {
+    // Records whom it was asked to scrub. The SQL itself is proven against
+    // real Postgres (plan 0232, section 4), never against a double.
+    scrubUser: async (_manager: unknown, userId: string): Promise<number> => {
+      scrubbed.push(userId);
+      return 0;
+    },
     write: async <T>(
       actorId: string,
       work: (tx: AuditedWrite) => Promise<T>
@@ -204,14 +227,15 @@ export function fakeAudit(
         recordDelete: async (
           target: EntityTarget<ObjectLiteral>,
           row: ObjectLiteral,
-          entityId: string
+          entityId: string,
+          only?: readonly string[]
         ) => {
           recorded.push({
             actorId,
             action: 'DELETE',
             entity: bindingFor(target).name,
             entityId,
-            before: snapshot(row),
+            before: only ? picked(row, only) : snapshot(row),
             after: null,
           });
         },
@@ -223,5 +247,5 @@ export function fakeAudit(
     },
   } as unknown as AuthAuditService;
 
-  return { service, recorded };
+  return { service, recorded, scrubbed };
 }
