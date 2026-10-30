@@ -938,7 +938,7 @@ describe('AppShellRoutes', () => {
       expect(account?.canMatch).toBeUndefined();
     });
 
-    it('offers the rename, the confirm email and the delete confirm as sheets', () => {
+    it('offers the rename, the confirm email, the language and the delete confirm as sheets', () => {
       // Rule E1: children, so the screen underneath keeps its scroll and Android's
       // back button dismisses them.
       //
@@ -948,6 +948,7 @@ describe('AppShellRoutes', () => {
       expect(account?.children?.map((route) => route.path)).toEqual([
         'sheet/name',
         'sheet/email',
+        'sheet/language',
         'sheet/confirm/delete',
       ]);
     });
@@ -1509,7 +1510,9 @@ describe('the sheets and their exit animation', () => {
     //
     // `0173` added six: the privacy policy and the terms over sign in, register and
     // upgrade.
-    expect(sheets).toHaveLength(71);
+    //
+    // The language sheet added one, over the account page.
+    expect(sheets).toHaveLength(72);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

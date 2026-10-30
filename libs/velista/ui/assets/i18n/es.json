@@ -1276,6 +1276,12 @@
     "row": {
       "profiles": "Perfiles de compra"
     },
+    "language": {
+      "label": "Idioma",
+      "change": "Cambiar idioma",
+      "title": "¿Qué idioma?",
+      "body": "Velista se muestra en este idioma en este teléfono"
+    },
     "tour": {
       "again": "Enséñamela otra vez"
     }
