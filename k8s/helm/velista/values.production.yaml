@@ -51,7 +51,17 @@ lunaShopperBackend:
     # Raise it when a later wire change needs to retire builds again; never set
     # it above the version actually deployed, or the floor refuses the client
     # it was meant to serve.
-    minClientVersion: '0.5.2'
+    #
+    # Raised to velista 0.17.0 by the PR that turned termsAcceptanceRequired on
+    # (backend plan 0231, section 6, step 4). A build from before velista plan
+    # 0173 would meet terms_acceptance_missing on register with no screen that
+    # understands it, and 0.17.0 is the first release that carries the screen.
+    minClientVersion: '0.17.0'
+    # Every account accepts the Terms (backend plan 0231, section 5.3). On since
+    # velista 0.17.0 shipped the acceptance UI; an existing account is asked on
+    # its next load. The gateway refuses to boot with it true and no published
+    # controller or contact, which the operator Secret of this cluster names.
+    termsAcceptanceRequired: true
     # Three origins. Two of them serve velista: velista's own host, `velista.app`,
     # and the portfolio, where the Gateway serves the same image at `/velista`
     # (plan 0165). The app there calls this API from the portfolio origin, so the
