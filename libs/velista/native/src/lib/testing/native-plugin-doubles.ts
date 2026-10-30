@@ -20,6 +20,11 @@ export class NativePluginDoubles {
   positionOptions: unknown[] = [];
   opened: string[] = [];
   styles: string[] = [];
+  /** What `VelistaGoogle.getIdToken` answers, or what it rejects with. */
+  googleAnswer: unknown = { idToken: 'id-token' };
+  googleError: unknown = null;
+  googleRequests: unknown[] = [];
+  forgets = 0;
   loads = 0;
 
   readonly plugins: NativePlugins = {
@@ -68,6 +73,18 @@ export class NativePluginDoubles {
     systemBars: {
       setStyle: async ({ style }) => {
         this.styles.push(style);
+      },
+    },
+    google: {
+      getIdToken: async (options) => {
+        this.googleRequests.push(options);
+        if (this.googleError !== null) {
+          throw this.googleError;
+        }
+        return this.googleAnswer as { idToken: string };
+      },
+      forget: async () => {
+        this.forgets++;
       },
     },
   };

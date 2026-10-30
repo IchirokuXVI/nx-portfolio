@@ -200,3 +200,19 @@ test('a row in the old flat shape is told where each key moved', () => {
     problems.some((message) => message.startsWith('leaflet is missing'))
   );
 });
+
+test('a doubt is optional, and when written it has to be text or null', () => {
+  assert.deepEqual(rowProblems(GOOD_ROW), []);
+  const doubted = {
+    ...GOOD_ROW,
+    leaflet: { ...GOOD_ROW.leaflet, doubt: 'the label says €/g' },
+  };
+  assert.deepEqual(rowProblems(doubted), []);
+  const none = { ...GOOD_ROW, leaflet: { ...GOOD_ROW.leaflet, doubt: null } };
+  assert.deepEqual(rowProblems(none), []);
+  const wrong = { ...GOOD_ROW, leaflet: { ...GOOD_ROW.leaflet, doubt: 3 } };
+  assert.deepEqual(
+    rowProblems(wrong).map((problem) => problem.path),
+    ['leaflet.doubt']
+  );
+});

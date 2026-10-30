@@ -64,12 +64,37 @@ export interface NativeSystemBarsPlugin {
   setStyle(options: { style: 'DARK' | 'LIGHT' }): Promise<void>;
 }
 
+/**
+ * The codes `VelistaGoogle` rejects with (velista `0177`): the person closed the sheet,
+ * no account on the phone can answer, the phone has no Play services, or anything else.
+ */
+export type NativeGoogleErrorCode =
+  | 'cancelled'
+  | 'no_credential'
+  | 'unavailable'
+  | 'failed';
+
+/**
+ * The app's own plugin over Android's Credential Manager (velista `0177`, D2), in
+ * `apps/velista/android` as `VelistaGooglePlugin.java`. A local plugin and not a
+ * package, so no third party code holds the credential.
+ */
+export interface NativeGooglePlugin {
+  getIdToken(options: {
+    serverClientId: string;
+    nonce: string;
+    silent: boolean;
+  }): Promise<{ readonly idToken: string }>;
+  forget(): Promise<void>;
+}
+
 export interface NativePlugins {
   readonly app: NativeAppPlugin;
   readonly share: NativeSharePlugin;
   readonly geolocation: NativeGeolocationPlugin;
   readonly browser: NativeBrowserPlugin;
   readonly systemBars: NativeSystemBarsPlugin;
+  readonly google: NativeGooglePlugin;
 }
 
 /**
@@ -104,6 +129,9 @@ export async function loadCapacitorPlugins(): Promise<NativePlugins> {
               : core.SystemBarsStyle.Light,
         }),
     },
+    // Registered by name: the Java class is in the APK and has no npm package, so the
+    // bridge is the only way to it. `MainActivity` registers the native half.
+    google: core.registerPlugin<NativeGooglePlugin>('VelistaGoogle'),
   };
 }
 

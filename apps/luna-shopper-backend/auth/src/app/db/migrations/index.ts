@@ -9,6 +9,7 @@ import { RefreshTokenSuccessor1773000000000 } from './1773000000000-RefreshToken
 import { TermsAcceptances1773100000000 } from './1773100000000-TermsAcceptances';
 import { AccountDeletions1773200000000 } from './1773200000000-AccountDeletions';
 import { RetentionIndexes1773300000000 } from './1773300000000-RetentionIndexes';
+import { OAuthNonces1773400000000 } from './1773400000000-OAuthNonces';
 
 /**
  * Every auth migration, in the order TypeORM must apply them (plan 0027,
@@ -57,4 +58,7 @@ export const AUTH_MIGRATIONS = [
   // Six indexes the retention sweep reads by (plan 0233, section 5). It only
   // adds, so no existing row changes.
   RetentionIndexes1773300000000,
+  // One new grant table, the nonce of a Google sign in from the Android app
+  // (plan 0238). It only adds, so no existing row changes.
+  OAuthNonces1773400000000,
 ];

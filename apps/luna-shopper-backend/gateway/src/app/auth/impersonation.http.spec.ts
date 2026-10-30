@@ -170,6 +170,12 @@ describe('a support session at the gateway', () => {
       AUTH_PATTERNS.mintOAuthState,
     ],
     [
+      'POST /auth/google/nonce',
+      'POST',
+      '/auth/google/nonce',
+      AUTH_PATTERNS.mintGoogleNonce,
+    ],
+    [
       'POST /zones/:id/members/:mid/transfer-ownership',
       'POST',
       `/zones/${ZONE}/members/${MEMBERSHIP}/transfer-ownership`,
@@ -319,6 +325,37 @@ describe('a support session at the gateway', () => {
           payload: { code: 'the-code' },
         },
       ]);
+    });
+  });
+
+  describe('POST /auth/google/id-token', () => {
+    // Not in REFUSED: the route needs an idToken, and that table posts `{}`.
+    const signIn = (token: string) =>
+      fetch(`${origin}/auth/google/id-token`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ idToken: 'x' }),
+      });
+
+    it('answers 403 impersonation_not_allowed to a support session', async () => {
+      const res = await signIn(supported());
+
+      expect(res.status).toBe(403);
+      expect(((await res.json()) as Problem).code).toBe(
+        ERROR_CODES.IMPERSONATION_NOT_ALLOWED
+      );
+      // The handler never ran: the one message is the liveness question.
+      expect(subjects()).toEqual([IMPERSONATION_PATTERNS.check]);
+    });
+
+    it('answers as it always did to the person', async () => {
+      const res = await signIn(ordinary());
+
+      expect(res.status).toBe(201);
+      expect(subjects()).toEqual([AUTH_PATTERNS.signInWithGoogleIdToken]);
     });
   });
 });

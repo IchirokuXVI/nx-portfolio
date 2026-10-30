@@ -53,6 +53,16 @@ export const AUTH_PATTERNS = {
    * The one place a Google sign in creates or links an account.
    */
   exchangeGoogleSignIn: 'auth.exchangeGoogleSignIn',
+  /**
+   * Mint the single use nonce the Android app hands to Credential Manager
+   * before it asks for a Google ID token (plan 0238, target state 1).
+   */
+  mintGoogleNonce: 'auth.mintGoogleNonce',
+  /**
+   * Verify a Google ID token, spend the nonce inside it, and sign in through
+   * the same login the redirect flow ends in (plan 0238, target state 2).
+   */
+  signInWithGoogleIdToken: 'auth.signInWithGoogleIdToken',
   /** Delete the authenticated user's account and all personal identity data. */
   deleteAccount: 'auth.deleteAccount',
   /** Change the caller's global username, optionally propagating to zones. */
@@ -493,5 +503,41 @@ export interface StageGoogleSignInResult {
 export interface ExchangeGoogleSignInRequest {
   code: string;
   codeVerifier: string;
+  callerUserId?: string;
+}
+
+/**
+ * Mint the nonce of a Google sign in from the Android app (plan 0238, target
+ * state 1). `userId` and `locale` are set by the gateway, from the verified
+ * bearer and the request context, never from a body: as on the state mint, a
+ * caller who could name the user would choose the account a link lands on.
+ *
+ * `silent` marks a nonce that may only open an account this Google identity
+ * already opens (decision D3). A silent nonce refuses a Terms version.
+ */
+export interface MintGoogleNonceRequest extends AcceptedTermsField {
+  userId?: string;
+  locale?: string;
+  silent?: boolean;
+}
+
+/**
+ * The raw nonce, returned exactly once and stored only as its hash, and the
+ * web client id the app passes to Android as the server client id (decision
+ * D2). The audience the app asks for and the audience auth checks are then the
+ * same value.
+ */
+export interface MintGoogleNonceResult {
+  nonce: string;
+  clientId: string;
+}
+
+/**
+ * Sign in with a Google ID token (plan 0238, target state 2). `callerUserId`
+ * is set by the gateway from the verified bearer and never from a body: a
+ * nonce that names a user is spent only by that user.
+ */
+export interface SignInWithGoogleIdTokenRequest {
+  idToken: string;
   callerUserId?: string;
 }

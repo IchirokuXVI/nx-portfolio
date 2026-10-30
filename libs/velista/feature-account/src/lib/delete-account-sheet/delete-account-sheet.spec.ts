@@ -11,6 +11,7 @@ import {
   fakeProfileStore,
   fakeZoneStore,
   GatewayError,
+  GoogleSignIn,
   profileFor,
   provideFakeProfileStore,
   provideFakeSessionStore,
@@ -58,6 +59,7 @@ async function render(options: Options = {}): Promise<{
   tokens: TokenStore;
   notice: AccountNotice;
   sheets: { dismiss: jest.Mock; leaveTo: jest.Mock };
+  google: { stopAutoSignIn: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
@@ -70,6 +72,8 @@ async function render(options: Options = {}): Promise<{
     dismiss: jest.fn().mockResolvedValue(undefined),
     leaveTo: jest.fn().mockResolvedValue(undefined),
   };
+  // What the switch writes is `GoogleSignIn`'s own spec; here it is that it is pulled.
+  const google = { stopAutoSignIn: jest.fn() };
 
   await TestBed.configureTestingModule({
     imports: [DeleteAccountSheet, RokuTranslatorTestingModule.forTesting()],
@@ -83,6 +87,7 @@ async function render(options: Options = {}): Promise<{
       provideFakeZoneStore(fakeZoneStore({ zones: options.zones ?? [] })),
       provideFakeSessionStore('REGISTERED', { userId: ME, username }),
       { provide: SheetNavigation, useValue: sheets },
+      { provide: GoogleSignIn, useValue: google },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
     ],
   }).compileComponents();
@@ -98,6 +103,7 @@ async function render(options: Options = {}): Promise<{
     tokens: TestBed.inject(TokenStore),
     notice: TestBed.inject(AccountNotice),
     sheets,
+    google,
   };
 }
 
@@ -168,11 +174,7 @@ describe('DeleteAccountSheet', () => {
   describe('the consequences it states', () => {
     it('counts owned groups from the cache, with no request', async () => {
       const { fixture } = await render({
-        zones: [
-          zone('z1', 'OWNER'),
-          zone('z2', 'OWNER'),
-          zone('z3', 'MEMBER'),
-        ],
+        zones: [zone('z1', 'OWNER'), zone('z2', 'OWNER'), zone('z3', 'MEMBER')],
       });
 
       // `myRole` is the caller's own role on a record already on the device.
@@ -235,12 +237,23 @@ describe('DeleteAccountSheet', () => {
 
       expect(profile.calls).toContainEqual({ method: 'clear' });
     });
+
+    /** velista 0177: the account is gone, so the front door must not try to open it. */
+    it('switches the automatic Google sign in off', async () => {
+      const { fixture, google } = await render();
+
+      type(fixture, 'Marta');
+      primary(fixture).click();
+      await fixture.whenStable();
+
+      expect(google.stopAutoSignIn).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('when it fails', () => {
     it('does not clear the session', async () => {
       // A failed delete must never look like a successful one (section 3.4).
-      const { fixture, tokens } = await render({
+      const { fixture, tokens, google } = await render({
         removeRejectsWith: new GatewayError({
           code: 'internal',
           status: 500,
@@ -260,6 +273,7 @@ describe('DeleteAccountSheet', () => {
       await fixture.whenStable();
 
       expect(tokens.tokens()).not.toBeNull();
+      expect(google.stopAutoSignIn).not.toHaveBeenCalled();
     });
 
     it('stays open with the correlation id', async () => {

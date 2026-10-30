@@ -136,7 +136,8 @@ describeIntegration('reset grants (real Postgres)', () => {
       config,
       {} as never,
       new InMemoryTermsService(),
-      { publishSoon: () => undefined } as never
+      { publishSoon: () => undefined } as never,
+      undefined as never
     );
   }, 120_000);
 

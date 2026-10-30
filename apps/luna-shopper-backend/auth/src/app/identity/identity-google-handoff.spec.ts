@@ -90,6 +90,12 @@ function makeRepo(store: Row[]) {
       rows.forEach((row) => Object.assign(row, patch));
       return { affected: rows.length };
     },
+    delete: async (where: Row) => {
+      const kept = store.filter((candidate) => !matches(candidate, where));
+      const affected = store.length - kept.length;
+      store.splice(0, store.length, ...kept);
+      return { affected };
+    },
   };
 }
 
@@ -179,7 +185,8 @@ function build() {
     } as never,
     undefined as never,
     new InMemoryTermsService(),
-    { publishSoon: () => undefined } as never
+    { publishSoon: () => undefined } as never,
+    undefined as never
   );
 
   const addGuest = (id: string) =>
@@ -226,12 +233,26 @@ function build() {
     return code;
   }
 
+  /** An account registered with a password under the victim's address. */
+  const addRegistered = (id: string, confirmed: boolean) => {
+    stores.users.push({
+      id,
+      kind: UserKind.REGISTERED,
+      username: 'Bruma Audaz',
+      email: victim.email,
+      emailVerifiedAt: confirmed ? new Date('2026-01-01') : null,
+      displayName: null,
+    });
+    stores.credentials.push({ id: `cred-${id}`, userId: id });
+  };
+
   return {
     service,
     stores,
     tokens,
     events,
     addGuest,
+    addRegistered,
     addSession,
     liveSessions,
     throughCallback,
@@ -551,6 +572,63 @@ describe('9. an upgrade ends the other sessions', () => {
 
     expect(liveSessions(GUEST_A).map((row) => row['tokenHash'])).toEqual([
       tokens.refreshToken,
+    ]);
+  });
+});
+
+describe('10. an address that already has an account', () => {
+  const OWNER = 'user-owner';
+
+  async function signIn(build_: ReturnType<typeof build>) {
+    return build_.service.exchangeGoogleSignIn({
+      code: await build_.throughCallback(),
+      codeVerifier: VERIFIER,
+    });
+  }
+
+  it('confirmed: links Google onto it and keeps its password and sessions', async () => {
+    const built = build();
+    const { stores, events, addRegistered, addSession, liveSessions } = built;
+    addRegistered(OWNER, true);
+    addSession(OWNER, 'rt-phone');
+
+    const tokens = await signIn(built);
+
+    expect(tokens.userId).toBe(OWNER);
+    expect(stores.users).toHaveLength(1);
+    expect(stores.identities).toEqual([
+      expect.objectContaining({
+        userId: OWNER,
+        provider: AuthProvider.GOOGLE,
+        providerUserId: victim.providerUserId,
+      }),
+    ]);
+    expect(stores.credentials).toHaveLength(1);
+    expect(liveSessions(OWNER).map((row) => row['id'])).toEqual([
+      'rt-phone',
+      expect.any(String),
+    ]);
+    expect(events.userRegistered).not.toHaveBeenCalled();
+    expect(events.userUpgraded).not.toHaveBeenCalled();
+  });
+
+  it('unconfirmed: links Google, drops the password and every older session', async () => {
+    const built = build();
+    const { stores, addRegistered, addSession, liveSessions } = built;
+    addRegistered(OWNER, false);
+    addSession(OWNER, 'rt-squatter');
+
+    const tokens = await signIn(built);
+
+    expect(tokens.userId).toBe(OWNER);
+    expect(stores.users).toHaveLength(1);
+    expect(stores.users[0]['emailVerifiedAt']).toBeInstanceOf(Date);
+    expect(stores.credentials).toEqual([]);
+    expect(liveSessions(OWNER).map((row) => row['tokenHash'])).toEqual([
+      tokens.refreshToken,
+    ]);
+    expect(stores.identities).toEqual([
+      expect.objectContaining({ userId: OWNER }),
     ]);
   });
 });

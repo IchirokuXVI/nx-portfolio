@@ -114,7 +114,8 @@ describeIntegration('roles on an account (real Postgres)', () => {
       config,
       undefined as never,
       new InMemoryTermsService(),
-      { publishSoon: () => undefined } as never
+      { publishSoon: () => undefined } as never,
+      undefined as never
     );
     directory = new AdminDirectoryService(
       users,

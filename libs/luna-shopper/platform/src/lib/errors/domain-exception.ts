@@ -728,6 +728,24 @@ export class TermsAcceptanceMissingException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/**
+ * A Google ID token signed nobody in (plan 0238, decision D4). Every check of
+ * the token and of its nonce answers with this one class, so the answer says
+ * nothing about which check failed. Its message never carries the token.
+ */
+export class InvalidGoogleTokenException extends DomainException {
+  readonly code = ERROR_CODES.INVALID_GOOGLE_TOKEN;
+}
+
+/**
+ * A silent Google sign in met a Google account that opens no account here yet
+ * (plan 0238, decision D3). Nothing was written; the person has to press the
+ * button.
+ */
+export class GoogleSignInNeedsConsentException extends DomainException {
+  readonly code = ERROR_CODES.GOOGLE_SIGN_IN_NEEDS_CONSENT;
+}
+
 /** The `details` key a {@link WalkChangedException} publishes the walk's `lastSeq` under. */
 export const WALK_CHANGED_LAST_SEQ_DETAIL = 'lastSeq';
 

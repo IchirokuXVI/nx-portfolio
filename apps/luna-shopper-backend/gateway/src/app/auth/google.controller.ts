@@ -16,9 +16,12 @@ import {
   type AuthTokens,
   type ExchangeGoogleSignInRequest,
   type GoogleProfile,
+  type MintGoogleNonceRequest,
+  type MintGoogleNonceResult,
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
   type OAuthStatePayload,
+  type SignInWithGoogleIdTokenRequest,
   type StageGoogleSignInRequest,
   type StageGoogleSignInResult,
 } from '@portfolio/luna-shopper/contracts';
@@ -32,7 +35,12 @@ import type { GatewayConfig } from '../config/app-config';
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { appUrl } from './app-url';
-import { ExchangeGoogleSignInDto, MintOAuthStateDto } from './auth.dto';
+import {
+  ExchangeGoogleSignInDto,
+  MintGoogleNonceDto,
+  MintOAuthStateDto,
+  SignInWithGoogleIdTokenDto,
+} from './auth.dto';
 import { AuthUser } from './current-user.decorator';
 import {
   GoogleAuthGuard,
@@ -66,6 +74,11 @@ const APP_CALLBACK_PATH = 'auth/callback';
  * back to the app with a single use code. `POST /v1/auth/google/exchange` trades
  * that code and the verifier only the minting browser holds for the pair, and
  * only there does an account change (plan 0230).
+ *
+ * The Android app has a second way in, with no redirect (plan 0238):
+ * `POST /v1/auth/google/nonce` mints a single use nonce, Credential Manager
+ * asks Google for an ID token that carries it, and
+ * `POST /v1/auth/google/id-token` trades the token for the pair.
  *
  * The routes stay registered whether or not Google is configured, so the
  * published OpenAPI document describes the same API in every environment; what is
@@ -315,6 +328,100 @@ export class GoogleController {
     };
     return this.nats.send<AuthTokens>(
       AUTH_PATTERNS.exchangeGoogleSignIn,
+      request
+    );
+  }
+
+  /**
+   * Mint the nonce of a Google sign in from the Android app (plan 0238, target
+   * state 1).
+   *
+   * The Android app cannot run the redirect above: Google refuses its sign in
+   * page inside a WebView. Credential Manager asks Google for an ID token
+   * instead, and this nonce goes into it, so the token is single use and names
+   * the caller who asked. The answer also carries the web client id the app
+   * passes to Android as the server client id (decision D2).
+   *
+   * Guarded as the state mint is, for the reasons given there: the caller is
+   * the verified bearer or nobody, a guest who mints names the account an
+   * interactive sign in links onto, and a stale bearer is refused rather than
+   * quietly read as nobody.
+   */
+  @Post('nonce')
+  // A support session cannot start a link either (plan 0194): the identity
+  // would be the operator's.
+  @RefuseImpersonation()
+  @UseGuards(GoogleConfiguredGuard, OptionalJwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiContractResponse(AUTH_PATTERNS.mintGoogleNonce, {
+    status: HttpStatus.CREATED,
+    description:
+      'A single use nonce valid for ten minutes, and the web client id. Ask Credential Manager for a Google ID token with both, then send the token to `POST /v1/auth/google/id-token`.',
+  })
+  @ApiProblemResponses({
+    body: true,
+    auth: true,
+    notConfigured: true,
+    impersonation: 'refused',
+    terms: true,
+  })
+  mintNonce(
+    @Body() dto: MintGoogleNonceDto,
+    @AuthUser() user?: CurrentUser
+  ): Promise<MintGoogleNonceResult> {
+    const request: MintGoogleNonceRequest = {
+      // From the verified token or not at all, as on the state mint.
+      userId: user?.userId,
+      locale: getRequestContext()?.locale,
+      ...(dto.silent === undefined ? {} : { silent: dto.silent }),
+      // Checked by auth now, and refused there on a silent nonce: a silent
+      // sign in accepts nothing on the person's behalf.
+      ...(dto.acceptedTermsVersion
+        ? { acceptedTermsVersion: dto.acceptedTermsVersion }
+        : {}),
+    };
+    return this.nats.send(AUTH_PATTERNS.mintGoogleNonce, request);
+  }
+
+  /**
+   * Trade a Google ID token for the pair (plan 0238, target state 2).
+   *
+   * Auth verifies the token against Google's keys and `GOOGLE_CLIENT_ID`,
+   * spends the nonce inside it, checks the bearer against the caller the nonce
+   * names, and signs in through the login the exchange ends in. Every failed
+   * check is one answer, 401 `invalid_google_token` (decision D4). A silent
+   * nonce that meets a Google account which opens no account here is 409
+   * `google_sign_in_needs_consent`, and the app shows its button.
+   *
+   * Guarded by the optional guard for the reason the exchange is: the bearer
+   * auth compares is a current one or none.
+   */
+  @Post('id-token')
+  // A support session cannot finish a link either (plan 0194).
+  @RefuseImpersonation()
+  @UseGuards(GoogleConfiguredGuard, OptionalJwtAuthGuard)
+  @ApiBearerAuth('access-token')
+  @ApiContractResponse(AUTH_PATTERNS.signInWithGoogleIdToken, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({
+    body: true,
+    auth: true,
+    notConfigured: true,
+    impersonation: 'refused',
+    googleIdToken: true,
+  })
+  signInWithIdToken(
+    @Body() dto: SignInWithGoogleIdTokenDto,
+    @AuthUser() user?: CurrentUser
+  ): Promise<AuthTokens> {
+    const request: SignInWithGoogleIdTokenRequest = {
+      idToken: dto.idToken,
+      // From the verified token or not at all, as on the exchange.
+      callerUserId: user?.userId,
+    };
+    return this.nats.send<AuthTokens>(
+      AUTH_PATTERNS.signInWithGoogleIdToken,
       request
     );
   }

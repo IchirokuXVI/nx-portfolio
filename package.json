@@ -54,6 +54,7 @@
     "d3-scale": "4.0.2",
     "d3-shape": "3.2.0",
     "deep-equal": "^2.2.3",
+    "google-auth-library": "11.3.1",
     "handlebars": "^4.7.9",
     "ioredis": "^5.11.1",
     "joi": "^17.13.6",

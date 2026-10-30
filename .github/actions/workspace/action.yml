@@ -16,7 +16,7 @@ runs:
     # must not silently reuse a tree built by the previous one.
     - name: Restore node_modules
       id: node-modules
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: node_modules
         key: node-modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ inputs.build-image }}
@@ -29,7 +29,7 @@ runs:
     # commit; the prefix falls back to the most recent cache on the branch, which is
     # the previous run.
     - name: Restore the Nx cache
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: .nx/cache
         key: nx-cache-${{ runner.os }}-${{ github.sha }}

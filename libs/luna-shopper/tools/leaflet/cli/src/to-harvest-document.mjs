@@ -252,6 +252,14 @@ export function toHarvestDocument(leaflet, options = {}) {
         extra: compact({ page: num(offer.page) }),
       });
     }
+    const doubt = str(offer.doubt);
+    if (doubt) {
+      warnings.push({
+        message: `${label}: the reader was unsure of this tile: ${doubt}`,
+        product_id: id,
+        extra: compact({ page: num(offer.page) }),
+      });
+    }
 
     return compact({
       id,
@@ -300,6 +308,7 @@ export function toHarvestDocument(leaflet, options = {}) {
         loyalty: offer.loyalty ?? null,
         category: str(offer.category),
         validity_text: str(offer.validity_text),
+        doubt,
         validity_assumption: str(offer.validity_assumption),
         legal_note: str(offer.legal_note),
         read_by: str(offer.source),

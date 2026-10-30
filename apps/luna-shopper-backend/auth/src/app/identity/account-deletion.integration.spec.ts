@@ -92,7 +92,8 @@ describeIntegration('an account deletion in auth (real Postgres, NATS)', () => {
       } as never,
       {} as never,
       new InMemoryTermsService(),
-      deletions as never
+      deletions as never,
+      undefined as never
     );
   }
 

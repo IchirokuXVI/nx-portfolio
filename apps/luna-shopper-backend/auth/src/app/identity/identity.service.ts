@@ -22,6 +22,8 @@ import {
   type GoogleLoginRequest,
   type ImpersonationEndedEvent,
   type LoginRequest,
+  type MintGoogleNonceRequest,
+  type MintGoogleNonceResult,
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
   type OAuthStatePayload,
@@ -34,6 +36,7 @@ import {
   type RetryAfterResult,
   type SendAdminPasswordResetResult,
   type SetUsernameRequest,
+  type SignInWithGoogleIdTokenRequest,
   type StageGoogleSignInRequest,
   type StageGoogleSignInResult,
   type TermsAcceptanceView,
@@ -43,9 +46,11 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   ConflictException,
+  GoogleSignInNeedsConsentException,
   GuestHasNoRolesException,
   ImpersonationEndedException,
   ImpersonationNotAllowedException,
+  InvalidGoogleTokenException,
   NotConfiguredException,
   NotFoundException,
   RecoveryNeedsEmailException,
@@ -70,6 +75,7 @@ import {
   EmailVerification,
   OAuthHandoff,
   OAuthIdentity,
+  OAuthNonce,
   OAuthState,
   PasswordReset,
   PasswordResetChannel,
@@ -85,6 +91,7 @@ import { PasswordService } from '../password/password.service';
 import { TokenGrantService } from '../tokens/token-grant.service';
 import { TokenService, type RecordedTokens } from '../tokens/token.service';
 import { UsernameGenerator } from '../username/username-generator.service';
+import { GoogleIdTokenVerifier } from './google-id-token-verifier';
 import { TermsService } from './terms.service';
 
 /** Hours an email verification link stays valid. */
@@ -148,6 +155,19 @@ const OAUTH_HANDOFF_TTL_MS = 2 * 60 * 1000;
 const INVALID_GOOGLE_CODE = 'Invalid or expired sign in code';
 
 /**
+ * How long the nonce of a Google sign in from the Android app lives (plan
+ * 0238, target state 1). Ten minutes, the life of a state, for the same
+ * reason: the account picker and a tap, not a lunch break.
+ */
+const GOOGLE_NONCE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The one message every refused Google ID token gets (plan 0238, decision D4),
+ * whichever check refused it. It never names the token.
+ */
+const INVALID_GOOGLE_TOKEN = 'Invalid Google sign in';
+
+/**
  * The identity domain (plan 0005, section 4). Every way a user comes to exist
  * lives here: temporary tokens, email/password registration and login, Google
  * login, in place upgrade, email verification and refresh rotation. Writes that
@@ -193,7 +213,10 @@ export class IdentityService {
     private readonly terms: TermsService,
     // Last, for the same reason (plan 0232). Both delete paths wake it after
     // their transaction commits, and nothing else reaches it.
-    private readonly deletions: AccountDeletionPublisher
+    private readonly deletions: AccountDeletionPublisher,
+    // Last, for the same reason (plan 0238). Only the sign in with a Google
+    // ID token reaches it, and every spec hands in a double.
+    private readonly googleIdTokens: GoogleIdTokenVerifier
   ) {
     this.config = configService.getOrThrow<AuthConfig>('auth');
   }
@@ -1815,16 +1838,206 @@ export class IdentityService {
   }
 
   /**
+   * Mint the nonce of a Google sign in from the Android app (plan 0238, target
+   * state 1).
+   *
+   * The `oauth_states` of this flow: the raw value goes back once and only its
+   * hash is stored, beside the caller, the Terms version and whether the sign
+   * in is silent. `userId` arrives already established by the gateway's
+   * optional guard, as on the state mint, so an absent one means the caller
+   * held no token at all.
+   *
+   * The Terms version is checked now, as the state mint checks it, so a stale
+   * one is refused before Android is asked. **A silent nonce takes no version
+   * and is not checked**: a silent sign in accepts nothing on the person's
+   * behalf (decision D3), and it only opens an account that already exists, so
+   * a deployment that requires acceptance does not refuse it here either.
+   *
+   * The answer carries `GOOGLE_CLIENT_ID` (decision D2): the app passes it to
+   * Android as the server client id, so the audience it asks for and the
+   * audience {@link signInWithGoogleIdToken} checks are one value.
+   */
+  async mintGoogleNonce(
+    req: MintGoogleNonceRequest
+  ): Promise<MintGoogleNonceResult> {
+    this.requireGoogle();
+    const silent = req.silent === true;
+    if (silent) {
+      if (req.acceptedTermsVersion !== undefined) {
+        throw new ValidationException(
+          'A silent Google sign in accepts no Terms',
+          { messageArgs: { field: 'acceptedTermsVersion' } }
+        );
+      }
+    } else {
+      this.terms.assertAcceptable(req.acceptedTermsVersion);
+    }
+    const nonce = await this.dataSource.transaction((manager) =>
+      this.grants.issue(
+        manager,
+        OAuthNonce,
+        {
+          userId: req.userId ?? null,
+          silent,
+          termsVersion: req.acceptedTermsVersion ?? null,
+          locale: req.locale ?? null,
+        },
+        GOOGLE_NONCE_TTL_MS
+      )
+    );
+    return { nonce, clientId: this.config.google.clientId };
+  }
+
+  /**
+   * Sign in with a Google ID token from the Android app (plan 0238, target
+   * state 2).
+   *
+   * The token is verified first, outside any transaction, by
+   * {@link GoogleIdTokenVerifier}: signature, audience, issuer and expiry. An
+   * address Google has not verified signs in to nothing, and neither does a
+   * token without a nonce. Then one transaction spends the nonce the token
+   * carries, checks the caller against the user the nonce names, and runs
+   * {@link googleLogin}, the same login the redirect flow ends in, so whatever
+   * it does for an exchange it does here.
+   *
+   * **A silent nonce only opens what this Google identity already opens**
+   * (decision D3). That is the first branch of `googleLogin`, and it is
+   * checked here, before `googleLogin` is called, so `googleLogin` itself does
+   * not change: without an `oauth_identities` row for `sub`, or with one that
+   * belongs to an account other than the caller the nonce names, the answer is
+   * `google_sign_in_needs_consent` and no account, link, claim by address or
+   * Terms row is written. A silent nonce carries no version, so the branch it
+   * reaches records none either.
+   *
+   * Every other refusal is one answer, `invalid_google_token` (decision D4):
+   * a bad token, an unverified address, and a missing, unknown, expired or
+   * spent nonce, and a caller who is not the user the nonce names. Refusals
+   * after the spend are returned out of the transaction rather than thrown
+   * inside it, as in {@link exchangeGoogleSignIn}, so the spend commits and a
+   * token that met a refusal cannot be tried again. A failure of the login
+   * itself rolls the spend back with it.
+   *
+   * The conditional spend of {@link TokenGrantService.spend} is what makes two
+   * requests with one token produce one pair; a read and then a save would let
+   * both through (finding F1 of the token review).
+   */
+  async signInWithGoogleIdToken(
+    req: SignInWithGoogleIdTokenRequest
+  ): Promise<AuthTokens> {
+    this.requireGoogle();
+    const claims = await this.googleIdTokens.verify(req.idToken ?? '');
+    if (!claims) {
+      return this.refuseGoogleIdToken('invalid_token');
+    }
+    if (!claims.emailVerified || !claims.email) {
+      return this.refuseGoogleIdToken('email_unverified');
+    }
+    if (!claims.nonce) {
+      return this.refuseGoogleIdToken('no_nonce');
+    }
+    const nonce = claims.nonce;
+    const email = claims.email;
+
+    const outcome = await this.dataSource.transaction(
+      async (manager): Promise<GoogleIdTokenOutcome> => {
+        const grant = await this.grants.spend(
+          manager,
+          OAuthNonce,
+          this.grants.hash(nonce)
+        );
+        if (!grant) {
+          return { refused: 'unknown_nonce' };
+        }
+        if (grant.userId && req.callerUserId !== grant.userId) {
+          return { refused: 'caller_mismatch', nonceId: grant.id };
+        }
+        if (grant.silent) {
+          // Held as a read lock until the commit. Two plain reads, this one and
+          // the first one of `googleLogin`, would let an account deletion commit
+          // between them, and `googleLogin` would then create an account for a
+          // silent nonce, which D3 forbids.
+          const identity = await manager.getRepository(OAuthIdentity).findOne({
+            where: {
+              provider: AuthProvider.GOOGLE,
+              providerUserId: claims.sub,
+            },
+            lock: { mode: 'pessimistic_read' },
+          });
+          if (!identity || (grant.userId && identity.userId !== grant.userId)) {
+            return { needsConsent: true, nonceId: grant.id };
+          }
+        }
+        return {
+          login: await this.googleLogin(manager, {
+            providerUserId: claims.sub,
+            email,
+            ...(claims.name ? { displayName: claims.name } : {}),
+            ...(grant.userId ? { linkUserId: grant.userId } : {}),
+            ...(grant.termsVersion
+              ? { acceptedTermsVersion: grant.termsVersion }
+              : {}),
+          }),
+        };
+      }
+    );
+
+    if ('refused' in outcome) {
+      return this.refuseGoogleIdToken(outcome.refused, outcome.nonceId);
+    }
+    if ('needsConsent' in outcome) {
+      this.logger.log(
+        `Google sign in via google_id_token needs consent (nonce ${outcome.nonceId})`
+      );
+      throw new GoogleSignInNeedsConsentException(
+        'This Google account opens no account here yet'
+      );
+    }
+
+    const { user, created, upgraded } = outcome.login;
+    if (created) {
+      this.events.userRegistered({ userId: user.id });
+    }
+    if (upgraded) {
+      this.events.userUpgraded({ userId: user.id });
+    }
+    this.logger.log(
+      `Google sign in via google_id_token: user ${user.id}` +
+        (created ? ' (created)' : upgraded ? ' (upgraded)' : '')
+    );
+    return this.tokens.issueTokens(user);
+  }
+
+  /**
+   * Log why a Google ID token was refused and throw the one answer every
+   * refusal gets (plan 0238, decision D4). The reason and the nonce row, and
+   * never the token, the nonce or a claim: a log line is not a place to keep a
+   * credential.
+   */
+  private refuseGoogleIdToken(
+    reason: GoogleIdTokenRefusal,
+    nonceId?: string
+  ): never {
+    this.logger.warn(
+      `Google sign in via google_id_token refused: ${reason}` +
+        (nonceId ? ` (nonce ${nonceId})` : '')
+    );
+    throw new InvalidGoogleTokenException(INVALID_GOOGLE_TOKEN);
+  }
+
+  /**
    * Google login: find, link, or create (plan 0005, section 4.4), on the
    * caller's transaction.
    *
-   * The one place that knows the three branches. Since plan 0230 its one
+   * The one place that knows the branches. An address that already has an
+   * account links onto that account rather than creating a second one, which
+   * the unique index on `users.email` would refuse ({@link claimByEmail}).
+   * Since plan 0230 its one
    * caller is {@link exchangeGoogleSignIn}, after the verifier and the bearer
    * were checked. It answers the user and what happened to it, and the caller
    * publishes the events and issues the pair after the commit, because a pair
    * issued inside the transaction would name a user that may not exist yet.
    *
-   * All three branches record the Terms version the sign in page drew, under
+   * Every branch records the Terms version the sign in page drew, under
    * `GOOGLE` (plan 0231, section 4.2): continuing with Google is accepting. A
    * version that went stale inside the state's ten minutes records nothing,
    * and the sign in still succeeds; `GET /v1/account/me` then asks.
@@ -1872,6 +2085,20 @@ export class IdentityService {
       return { user, created: false, upgraded: true };
     }
 
+    const owner = req.email
+      ? await this.claimByEmail(manager, this.normalizeEmail(req.email))
+      : null;
+    if (owner) {
+      await this.linkGoogle(manager, owner.id, req.providerUserId);
+      await this.recordTerms(
+        manager,
+        owner.id,
+        req.acceptedTermsVersion,
+        TermsAcceptanceVia.GOOGLE
+      );
+      return { user: owner, created: false, upgraded: false };
+    }
+
     const created = await manager.getRepository(User).save(
       manager.getRepository(User).create({
         kind: UserKind.REGISTERED,
@@ -1892,6 +2119,33 @@ export class IdentityService {
     );
     return { user: created, created: true, upgraded: false };
   }
+
+  /**
+   * The account that already holds the address Google verified, ready for the
+   * Google identity to be linked onto it, or null when no account holds it.
+   *
+   * Google proved the address, so its holder is the person signing in. An
+   * account that never confirmed the address is not proof that whoever made
+   * it owns the address: somebody could have registered it first with a
+   * password of their own. So that account loses its password and every
+   * session, and its address counts as confirmed from now on. The person
+   * keeps the account and can set a password again through a reset link.
+   */
+  private async claimByEmail(
+    manager: EntityManager,
+    email: string
+  ): Promise<User | null> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { email } });
+    if (!user || user.emailVerifiedAt) {
+      return user;
+    }
+    await manager.getRepository(Credential).delete({ userId: user.id });
+    await this.tokens.revokeAllForUser(user.id, manager);
+    user.emailVerifiedAt = new Date();
+    return manager.getRepository(User).save(user);
+  }
 }
 
 /** What {@link IdentityService.googleLogin} did, for the caller to finish. */
@@ -1908,6 +2162,23 @@ type ExchangeOutcome =
       refused: 'unknown_code' | 'verifier_mismatch' | 'caller_mismatch';
       handoffId?: string;
     };
+
+/** Why a Google ID token signed nobody in, for the log line only (plan 0238). */
+type GoogleIdTokenRefusal =
+  | 'invalid_token'
+  | 'email_unverified'
+  | 'no_nonce'
+  | 'unknown_nonce'
+  | 'caller_mismatch';
+
+/**
+ * The answer of the sign in's transaction: a login, a refusal, or a silent
+ * nonce that met a Google account it may not open (plan 0238).
+ */
+type GoogleIdTokenOutcome =
+  | { login: GoogleLoginOutcome }
+  | { refused: 'unknown_nonce' | 'caller_mismatch'; nonceId?: string }
+  | { needsConsent: true; nonceId: string };
 
 /** base64url of 32 bytes or of a SHA-256: 43 characters, no padding. */
 function isPkceValue(value: unknown): value is string {

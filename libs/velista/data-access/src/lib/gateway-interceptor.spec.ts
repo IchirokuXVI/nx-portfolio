@@ -518,6 +518,31 @@ describe('gatewayInterceptor', () => {
       expect(storage.has(StorageKeys.session)).toBe(true);
     });
 
+    it('keeps a guest signed in when the gateway refuses the Google token it posted', async () => {
+      // velista 0177: a guest who picks Google in the app posts the ID token with
+      // their bearer. The 401 is about the Google token, so no refresh and no retry,
+      // whose second refusal would read as a dead account and sign the guest out.
+      const held = pair(freshToken(), 'TEMPORARY');
+      tokens.set(held);
+
+      const failure = expectFailure(
+        http.post(`${GATEWAY}/v1/auth/google/id-token`, { idToken: 't' })
+      );
+
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/google/id-token`)
+        .flush(
+          { code: 'invalid_google_token' },
+          { status: 401, statusText: 'Unauthorized' }
+        );
+
+      const error = (await failure) as GatewayError;
+      expect(error.code).toBe('invalid_google_token');
+      httpMock.expectNone(`${GATEWAY}/v1/auth/refresh`);
+      expect(tokens.tokens()).toEqual(held);
+      expect(storage.has(StorageKeys.session)).toBe(true);
+    });
+
     it('deletes the stored credentials when a token that still looks valid is refused', async () => {
       // The database behind the API was reset under a client that is still holding a
       // pair from before it. Nothing about that pair looks wrong from here: the

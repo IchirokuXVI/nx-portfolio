@@ -144,6 +144,11 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
         // other because the account behind it is in perfect health, and signing
         // somebody out of velista because their twelve hours on a flatmate's
         // basket elapsed is exactly the bug above with a different cause.
+        //
+        // `invalid_google_token` is a 401 about the Google ID token a native sign in
+        // posted, not about the bearer beside it (backend `0238`). A guest who picks
+        // Google sends both, and a retry would post the same refused token again,
+        // whose second refusal would sign the guest out and lose their groups.
         const refused = toGatewayError(
           error.error,
           error.status,
@@ -151,7 +156,8 @@ export const gatewayInterceptor: HttpInterceptorFn = (req, next) => {
         );
         if (
           refused.code === 'not_a_participant' ||
-          refused.code === 'participant_expired'
+          refused.code === 'participant_expired' ||
+          refused.code === 'invalid_google_token'
         ) {
           return throwError(() => refused);
         }

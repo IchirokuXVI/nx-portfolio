@@ -124,8 +124,8 @@ export class SignInPage {
   /**
    * The terms over this page, and whether to offer Google at all (velista `0173`).
    *
-   * Google is drawn where the deployment has a Google client and never in the native
-   * shell, where Google refuses an embedded WebView (velista `0166`). A guest is offered
+   * Google is drawn where the deployment has a Google client, in the native shell too,
+   * where the press asks Android's account picker (velista `0177`). A guest is offered
    * it like anybody else, because backend `0230` links the guest account in place and
    * keeps its groups. Continuing with Google can make an account, so the line under the
    * button names the terms and the start sends their version.
@@ -211,7 +211,8 @@ export class SignInPage {
    * Google, which sends the document to the gateway (velista `0171`).
    *
    * On success the page is leaving, so the busy state stays on. A refusal comes back
-   * as a sentence beside the button, and a second tap tries again.
+   * as a sentence beside the button, and a second tap tries again. In the Android app
+   * a closed system sheet lets go of the busy state and says nothing (velista `0177`).
    */
   async continueWithGoogle(): Promise<void> {
     if (this.googleStarting()) {
@@ -222,7 +223,12 @@ export class SignInPage {
     this.googleError.set(null);
 
     try {
-      await this._google.start({ acceptedTermsVersion: this.terms.version() });
+      const outcome = await this._google.start({
+        acceptedTermsVersion: this.terms.version(),
+      });
+      if (outcome === 'cancelled') {
+        this.googleStarting.set(false);
+      }
     } catch (error) {
       this.googleStarting.set(false);
       const copy = authErrorCopy(error, 'auth.google');

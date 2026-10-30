@@ -125,7 +125,8 @@ function build(users: Row[] = []) {
     } as never,
     undefined as never,
     new InMemoryTermsService(),
-    { publishSoon: () => undefined } as never
+    { publishSoon: () => undefined } as never,
+    undefined as never
   );
   return { service, stores, events, mail };
 }

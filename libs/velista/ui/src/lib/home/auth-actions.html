@@ -28,8 +28,8 @@
 
   <p class="explainer">{{ 'home.zoneExplainer' | rokuT }}</p>
 
-  <!-- Not drawn in the native shell, divider and all: Google refuses to sign anybody
-       in from an embedded WebView (velista 0166). -->
+  <!-- Not drawn, divider and all, where the deployment has no Google client
+       (velista 0173). -->
   @if (googleOffered()) {
     <div aria-hidden="true" class="divider">
       <span class="rule"></span>

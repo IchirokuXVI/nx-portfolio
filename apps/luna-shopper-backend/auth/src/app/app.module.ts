@@ -33,6 +33,7 @@ import {
   IdentityEventsPublisher,
   NATS_EVENTS,
 } from './events/identity-events.publisher';
+import { GoogleIdTokenVerifier } from './identity/google-id-token-verifier';
 import { IdentityController } from './identity/identity.controller';
 import { IdentityService } from './identity/identity.service';
 import { StatsService } from './identity/stats.service';
@@ -134,6 +135,9 @@ import { UsernameController } from './username/username.controller';
     IdentityService,
     // The Terms rule every path that creates an account applies (plan 0231).
     TermsService,
+    // The one wrapper of google-auth-library (plan 0238), so every spec of the
+    // sign in with an ID token hands in a double.
+    GoogleIdTokenVerifier,
     StatsService,
     TokenService,
     TokenGrantService,

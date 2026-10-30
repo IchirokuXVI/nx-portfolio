@@ -13,6 +13,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   AUTH_SERVICE,
+  GoogleSignIn,
   ProfileStore,
   SessionStore,
   TokenStore,
@@ -38,6 +39,7 @@ import {
   AccountRow,
   AppVersion,
   LegalLinks,
+  localeName,
   PageHeader,
   SectionHeading,
 } from '@portfolio/velista/ui';
@@ -108,6 +110,7 @@ export class AccountPage {
   private readonly _profile = inject(ProfileStore);
   private readonly _zones = inject(ZoneStore);
   private readonly _tokens = inject(TokenStore);
+  private readonly _google = inject(GoogleSignIn);
   private readonly _auth = inject<AuthServiceI>(AUTH_SERVICE);
   private readonly _router = inject(Router);
   private readonly _pages = inject(PageNavigation);
@@ -184,6 +187,9 @@ export class AccountPage {
       emailVerified: profile?.emailVerified === true,
     };
   });
+
+  /** The current language, named in itself, for the language row. */
+  readonly languageName = computed(() => localeName(this._locale()));
 
   /** The product's own name, for the row that reports it is installed (rule N1). */
   readonly productName = this._brand.name;
@@ -304,6 +310,13 @@ export class AccountPage {
     });
   }
 
+  /** The language sheet, the one switch inside the app (the landing has the other). */
+  openLanguage(): void {
+    void this._router.navigate(sheetSegments('language'), {
+      relativeTo: this._route,
+    });
+  }
+
   openDelete(): void {
     void this._router.navigate(sheetSegments('confirm', 'delete'), {
       relativeTo: this._route,
@@ -338,10 +351,15 @@ export class AccountPage {
    * `ProfileStore` is cleared alongside the pair, and it has to be: it holds an email
    * address and a name, and leaving them behind would let the next screen render the
    * previous person's details to whoever picks the phone up.
+   *
+   * In the Android app it also switches the automatic Google sign in off until the
+   * person picks Google again (velista `0177`, D4). Without that, the front door signs
+   * them straight back in on the next open, which reads as a sign out that did nothing.
    */
   async signOut(): Promise<void> {
     this._tokens.clear();
     this._profile.clear();
+    void this._google.stopAutoSignIn();
     await this._toFrontDoor();
   }
 

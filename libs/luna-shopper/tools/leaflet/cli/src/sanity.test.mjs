@@ -211,3 +211,59 @@ test('nothing is edited and nothing is dropped', () => {
   assert.equal(JSON.stringify(rows), before);
   assert.equal(rows.length, 1);
 });
+
+test('a name that joins two varieties with "o" is named', () => {
+  // Sonnet 5.5 on the LIDL region 43 leaflet, page 22: two products at one
+  // price, read as one, so the strawberry pack never reached the catalog.
+  const merged = { ...clean, name: 'L-Casei natural o fresa' };
+  const warnings = sanityPass(page([merged]));
+  assert.deepEqual(
+    warnings.map((entry) => entry.name),
+    ['name joins two products with "o"']
+  );
+  assert.deepEqual(sanityPass(page([{ ...clean, name: 'Ron oscuro' }])), []);
+});
+
+test('a per gram label on a per kilo figure is named, and a true per gram one is not', () => {
+  // The LIDL region 43 leaflet, page 10: 7.79 for 350 g printed "22,26 €/g".
+  const misprint = {
+    ...clean,
+    name: 'Lomo bajo de raza frisona',
+    price: 7.79,
+    unitSize: 350,
+    sizeFormat: 'g',
+    unitPrice: 22.26,
+    unitPriceLabel: '22,26 €/g',
+  };
+  const warnings = sanityPass(page([misprint]));
+  assert.deepEqual(
+    warnings.map((entry) => entry.name),
+    ['per gram label on a per kilo figure']
+  );
+  const perKilo = { ...misprint, unitPriceLabel: '22,26 €/kg' };
+  assert.deepEqual(sanityPass(page([perKilo])), []);
+});
+
+test('a price and a was price with no cents are named as possible points', () => {
+  // Sonnet 5.5 on the LIDL region 43 leaflet, page 32: "92 puntos" under a
+  // struck "185 puntos" read as 92 euros, down from 185.
+  const points = {
+    ...clean,
+    name: 'Aceite de girasol',
+    price: 92,
+    unitPrice: null,
+    unitPriceLabel: null,
+    leaflet: { ...clean.leaflet, wasPrice: 185 },
+  };
+  const warnings = sanityPass(page([points]));
+  assert.deepEqual(
+    warnings.map((entry) => entry.name),
+    ['whole number price and was price']
+  );
+  const cut = {
+    ...points,
+    price: 3.99,
+    leaflet: { ...clean.leaflet, wasPrice: 4.49 },
+  };
+  assert.deepEqual(sanityPass(page([cut])), []);
+});

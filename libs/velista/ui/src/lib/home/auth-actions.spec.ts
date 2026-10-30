@@ -149,7 +149,7 @@ describe('AuthActions', () => {
       expect(host.querySelector('button.google')).not.toBeNull();
     });
 
-    // The native shell: Google refuses to sign anybody in from an embedded WebView.
+    // A deployment with no Google client (velista 0173).
     it('leaves out the button and its divider when not offered', async () => {
       const fixture = await createFixture();
       fixture.componentRef.setInput('googleOffered', false);
