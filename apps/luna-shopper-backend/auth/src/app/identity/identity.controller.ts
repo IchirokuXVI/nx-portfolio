@@ -15,6 +15,8 @@ import {
   type GetUsernamesRequest,
   type IdentityStats,
   type LoginRequest,
+  type MintGoogleNonceRequest,
+  type MintGoogleNonceResult,
   type MintOAuthStateRequest,
   type MintOAuthStateResult,
   type MintParticipantTokenRequest,
@@ -29,6 +31,7 @@ import {
   type ResetPasswordRequest,
   type RetryAfterResult,
   type SetUsernameRequest,
+  type SignInWithGoogleIdTokenRequest,
   type StageGoogleSignInRequest,
   type StageGoogleSignInResult,
   type TermsAcceptanceView,
@@ -148,6 +151,22 @@ export class IdentityController {
     @Payload() req: ExchangeGoogleSignInRequest
   ): Promise<AuthTokens> {
     return this.identity.exchangeGoogleSignIn(req);
+  }
+
+  // The Android app's way in (plan 0238): a nonce, then a Google ID token
+  // that carries it. The redirect flow above stays as it is.
+  @MessagePattern(AUTH_PATTERNS.mintGoogleNonce)
+  mintGoogleNonce(
+    @Payload() req: MintGoogleNonceRequest
+  ): Promise<MintGoogleNonceResult> {
+    return this.identity.mintGoogleNonce(req);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.signInWithGoogleIdToken)
+  signInWithGoogleIdToken(
+    @Payload() req: SignInWithGoogleIdTokenRequest
+  ): Promise<AuthTokens> {
+    return this.identity.signInWithGoogleIdToken(req);
   }
 
   @MessagePattern(AUTH_PATTERNS.deleteAccount)

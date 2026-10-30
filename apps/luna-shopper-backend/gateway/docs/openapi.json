@@ -859,6 +859,218 @@
         ]
       }
     },
+    "/v1/auth/google/nonce": {
+      "post": {
+        "operationId": "GoogleController_mintNonce_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MintGoogleNonceDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A single use nonce valid for ten minutes, and the web client id. Ask Credential Manager for a Google ID token with both, then send the token to `POST /v1/auth/google/id-token`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.MintGoogleNonceResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`terms_acceptance_missing` — Accept the Terms to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`terms_version_stale` — The Terms changed while this page was open. Read the new version and accept it to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/v1/auth/google/id-token": {
+      "post": {
+        "operationId": "GoogleController_signInWithIdToken_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignInWithGoogleIdTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `auth.signInWithGoogleIdToken` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/auth.AuthTokens"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.\n\n`invalid_google_token` — Google sign in did not work. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`impersonation_not_allowed` — A support session cannot do that. Only the owner of the account can.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`google_sign_in_needs_consent` — Choose your Google account to continue.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "`not_configured` — That sign in method is not available on this server.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "auth"
+        ]
+      }
+    },
     "/v1/auth/impersonation/exchange": {
       "post": {
         "operationId": "ImpersonationController_exchange_v1",
@@ -29815,6 +30027,34 @@
           "codeVerifier"
         ]
       },
+      "MintGoogleNonceDto": {
+        "type": "object",
+        "properties": {
+          "silent": {
+            "type": "boolean",
+            "description": "True for a sign in nobody pressed for. It signs in only to an account this Google account already opens, and creates, links and accepts nothing. A silent nonce takes no `acceptedTermsVersion`."
+          },
+          "acceptedTermsVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "description": "The `terms.version` of `GET /v1/legal/settings` the person was shown beside this action. A version that is not the current one answers `terms_version_stale`; none, where the deployment requires acceptance, answers `terms_acceptance_missing`."
+          }
+        }
+      },
+      "SignInWithGoogleIdTokenDto": {
+        "type": "object",
+        "properties": {
+          "idToken": {
+            "type": "string",
+            "description": "The Google ID token from Credential Manager, requested with the `clientId` and the `nonce` of `POST /v1/auth/google/nonce`.",
+            "maxLength": 4096
+          }
+        },
+        "required": [
+          "idToken"
+        ]
+      },
       "ExchangeImpersonationDto": {
         "type": "object",
         "properties": {
@@ -35315,6 +35555,26 @@
         "required": [
           "userId",
           "deleted"
+        ],
+        "additionalProperties": false
+      },
+      "auth.MintGoogleNonceResult": {
+        "type": "object",
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Single use, valid for ten minutes. Pass it to Credential Manager as the nonce of the Google ID token request."
+          },
+          "clientId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The web client id of the Google project. Pass it to Credential Manager as the server client id: it is the audience the ID token must name."
+          }
+        },
+        "required": [
+          "nonce",
+          "clientId"
         ],
         "additionalProperties": false
       },
@@ -46497,6 +46757,8 @@
               "recovery_needs_password",
               "terms_version_stale",
               "terms_acceptance_missing",
+              "invalid_google_token",
+              "google_sign_in_needs_consent",
               "assistant_allowance_reached",
               "internal"
             ],

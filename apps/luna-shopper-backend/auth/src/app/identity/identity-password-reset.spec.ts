@@ -190,7 +190,8 @@ function build(users: Row[] = [], credentials: Row[] = []) {
     } as never,
     undefined as never,
     new InMemoryTermsService(),
-    { publishSoon: () => undefined } as never
+    { publishSoon: () => undefined } as never,
+    undefined as never
   );
   return {
     service,

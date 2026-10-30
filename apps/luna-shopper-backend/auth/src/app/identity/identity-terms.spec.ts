@@ -148,7 +148,8 @@ function build(options: { acceptanceRequired?: boolean } = {}) {
     } as never,
     undefined as never,
     terms,
-    { publishSoon: () => undefined } as never
+    { publishSoon: () => undefined } as never,
+    undefined as never
   );
 
   const addGuest = (id: string) =>

@@ -592,6 +592,14 @@ export type MapSourceLocationDto = {
 };
 
 /**
+ * `MintGoogleNonceDto` in the gateway's OpenAPI document.
+ */
+export type MintGoogleNonceDto = {
+  silent?: boolean;
+  acceptedTermsVersion?: string;
+};
+
+/**
  * `MintOAuthStateDto` in the gateway's OpenAPI document.
  */
 export type MintOAuthStateDto = {
@@ -688,6 +696,8 @@ export type ProblemDetails = {
     | 'recovery_needs_password'
     | 'terms_version_stale'
     | 'terms_acceptance_missing'
+    | 'invalid_google_token'
+    | 'google_sign_in_needs_consent'
     | 'assistant_allowance_reached'
     | 'internal';
   detail?: string;
@@ -1030,6 +1040,13 @@ export type SettleLineDto = {
  * `SettlementOutcome` in the gateway's OpenAPI document.
  */
 export type SettlementOutcome = 'BOUGHT' | 'NOT_AVAILABLE';
+
+/**
+ * `SignInWithGoogleIdTokenDto` in the gateway's OpenAPI document.
+ */
+export type SignInWithGoogleIdTokenDto = {
+  idToken: string;
+};
 
 /**
  * `SkipBasketRowDto` in the gateway's OpenAPI document.
@@ -2010,6 +2027,14 @@ export type AuthAuthTokens = {
 export type AuthDeleteAccountResult = {
   userId: string;
   deleted: boolean;
+};
+
+/**
+ * `auth.MintGoogleNonceResult` in the gateway's OpenAPI document.
+ */
+export type AuthMintGoogleNonceResult = {
+  nonce: string;
+  clientId: string;
 };
 
 /**

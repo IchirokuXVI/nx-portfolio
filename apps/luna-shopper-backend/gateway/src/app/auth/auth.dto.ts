@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { GOOGLE_ID_TOKEN_MAX_LENGTH } from '@portfolio/luna-shopper/contracts';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
@@ -199,4 +200,48 @@ export class ExchangeGoogleSignInDto {
   @IsString()
   @Matches(PKCE_VALUE)
   codeVerifier!: string;
+}
+
+/**
+ * Mint the nonce of a Google sign in from the Android app (plan 0238, target
+ * state 1). The caller is read from the verified bearer and never from here,
+ * as on the state mint.
+ *
+ * `silent` is read as it was spelled in the JSON, as `switchAccount` is: the
+ * global pipe converts types, and a string would otherwise arrive as a
+ * boolean the app never sent. Only a JSON `true` or `false` passes.
+ */
+export class MintGoogleNonceDto {
+  @ApiPropertyOptional({
+    description:
+      'True for a sign in nobody pressed for. It signs in only to an account this Google account already opens, and creates, links and accepts nothing. A silent nonce takes no `acceptedTermsVersion`.',
+  })
+  @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['silent'])
+  @IsOptional()
+  @IsBoolean()
+  silent?: boolean;
+
+  /**
+   * Checked here, at the mint, and recorded at the sign in (plan 0231,
+   * section 4.2). Auth refuses it on a silent nonce.
+   */
+  @AcceptedTermsVersion()
+  acceptedTermsVersion?: string;
+}
+
+/**
+ * Sign in with the Google ID token Credential Manager handed the app (plan
+ * 0238, target state 2). The token carries the nonce of the mint; the caller
+ * is read from the verified bearer.
+ */
+export class SignInWithGoogleIdTokenDto {
+  @ApiProperty({
+    description:
+      'The Google ID token from Credential Manager, requested with the `clientId` and the `nonce` of `POST /v1/auth/google/nonce`.',
+    maxLength: GOOGLE_ID_TOKEN_MAX_LENGTH,
+  })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(GOOGLE_ID_TOKEN_MAX_LENGTH)
+  idToken!: string;
 }

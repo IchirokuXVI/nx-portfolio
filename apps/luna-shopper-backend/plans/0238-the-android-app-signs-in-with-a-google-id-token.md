@@ -1,3 +1,5 @@
+> **PR:** [#876](https://github.com/IchirokuXVI/nx-portfolio/pull/876)
+
 # 0238: the Android app signs in with a Google ID token
 
 > The Android app (velista `0166` and `0167`) hides "Continue with Google". Google refuses
@@ -10,7 +12,7 @@
 > This plan adds the server half: a single use nonce that the app mints before it asks
 > Android, and a route that takes the ID token, verifies it, spends the nonce inside the
 > token, and signs in through the same `googleLogin` that the redirect flow uses. Velista
-> `0175` builds the client half, including the automatic sign in that the owner asked
+> `0177` builds the client half, including the automatic sign in that the owner asked
 > for on 2026-10-30.
 >
 > **Google Cloud is ready.** Project `velista-512817` holds the web client `velista-web`
@@ -30,7 +32,7 @@
 > `auth/src/app/identity/identity.service.ts` (`mintOAuthState`, `exchangeGoogleSignIn`,
 > `googleLogin`), `libs/luna-shopper/contracts/src/lib/messages/auth.messages.ts`.
 >
-> **Build order.** Before velista `0175`. Independent of every other open plan. Open PR
+> **Build order.** Before velista `0177`. Independent of every other open plan. Open PR
 > [#871](https://github.com/IchirokuXVI/nx-portfolio/pull/871) adds a branch to
 > `googleLogin` (link onto the account that already holds the address). This plan calls
 > `googleLogin` and does not edit it, so the two merge in either order.
@@ -109,7 +111,7 @@ anything. Regenerate the OpenAPI document and the admin wire types.
 In: the two routes, the grant table and its migration, the verifier wrapper, the error
 codes, specs, the OpenAPI document and the wire types.
 
-Out: any client code (velista `0175`), the redirect flow, `googleLogin` itself, the Google
+Out: any client code (velista `0177`), the redirect flow, `googleLogin` itself, the Google
 Cloud project, the publishing status of the consent screen.
 
 ### Constraints
@@ -163,3 +165,39 @@ setting. Do not add an environment variable. If the silent rule seems to need a 
 - If the app ever ships through Google Play with Play App Signing, Play signs with its own
   key. Add that key's SHA1 (Play Console, App integrity) as one more Android client for
   `app.velista`, or Google sign in fails in the store build only.
+
+## What the build decided
+
+- **The version of `google-auth-library` is 11.3.1, pinned exactly.** 11.3.2 was one day
+  old at build time, and `renovate.json` holds each dependency for three days. The package
+  is also in the runtime manifest of the auth image.
+- **The verifier seam is the class itself.** `GoogleIdTokenVerifier`
+  (`auth/src/app/identity/google-id-token-verifier.ts`) is the last positional argument of
+  `IdentityService`, and each spec passes a double. No environment variable and no test
+  switch exist. The slot run used a `node -r` preload that replaced only the fetch of
+  Google's keys with a key made for the run. Thus the real verifier and all the checks of
+  the library ran.
+- **A refusal of the verifier is `null`.** The library writes the token, or its payload,
+  into most of its error messages. The verifier logs only the name of the error class. A
+  failure to fetch Google's keys is an error (500) and not a 401, because the token is not
+  at fault.
+- **The issuers are stated in the code:** `accounts.google.com` and
+  `https://accounts.google.com`. The default list of the library also accepts
+  `googleapis.com`.
+- **A caller that is not the user of the nonce gets `invalid_google_token`**, like every
+  other refusal of the sign in (D4). A refusal after the spend commits the spend, as in the
+  exchange.
+- **A silent nonce with a caller** signs in only when the identity belongs to that caller.
+  Thus a guest caller always gets `google_sign_in_needs_consent`.
+- **A silent nonce skips the Terms check at the mint.** Otherwise a deployment that
+  requires acceptance refuses it for the missing version, and a silent sign in never
+  creates an account.
+- **`silent` is read as the JSON spells it**, as `switchAccount` is. Otherwise the global
+  pipe turns the string `"false"` into `true`.
+- **`oauth_nonces` is in the retention sweep** of plan 0233, and its migration creates the
+  expiry index. A nonce with no caller has no `userId`, so no account deletion removes it.
+- **Error copy.** `invalid_google_token`: "Google sign in did not work. Please try again." /
+  "No se ha podido entrar con Google. Inténtalo de nuevo." `google_sign_in_needs_consent`:
+  "Choose your Google account to continue." / "Elige tu cuenta de Google para continuar."
+- **The doc comment of `googleLogin` still names the exchange as its one caller.** The
+  action boundaries forbid any change to `googleLogin`, so it is not updated.
