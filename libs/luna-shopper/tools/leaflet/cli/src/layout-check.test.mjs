@@ -122,3 +122,12 @@ test('an answer that cannot be read is handed to keep, and the path comes back',
   });
   assert.equal(ok.kept, null);
 });
+
+test('the model is told that a point it checked and found in order is not a difference', () => {
+  // Sonnet 5.5 on the LIDL region 43 leaflet answered matches false with seven
+  // "differences", six of which said the page matched.
+  const prompt = layoutPrompt('The badge is orange.');
+  assert.match(prompt, /List ONLY contradictions/);
+  assert.match(prompt, /"notes"/);
+  assert.match(prompt, /an example, not a rule/);
+});

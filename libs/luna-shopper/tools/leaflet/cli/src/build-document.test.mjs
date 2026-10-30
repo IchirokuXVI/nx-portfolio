@@ -456,3 +456,45 @@ test('readPer reads the words, the abbreviations and the flat enum', () => {
   assert.equal(readPer('el litro le sale a', '100ml'), '100ml');
   assert.equal(readPer('sale a', null), null);
 });
+
+test("the reader's doubt travels with the tile and becomes a warning", async () => {
+  const row = {
+    name: 'Pizza prémium sobrasada y miel',
+    brand: 'DELUXE',
+    unitSize: 250,
+    sizeFormat: 'g',
+    price: 3.99,
+    unitPrice: 15.96,
+    unitPriceLabel: '15,96 €/kg',
+    category: 'Pizza',
+    categoryPath: [],
+    leaflet: {
+      format: '250 g',
+      basis: 'unit',
+      wasPrice: null,
+      loyalty: false,
+      validUntil: null,
+      validityText: null,
+      promotion: null,
+      doubt: 'the second word of the name is blurred, read as sobrasada',
+    },
+  };
+  const { document, unknownKeys: unknown } = await build('lidl', [row]);
+  assert.deepEqual(unknown, []);
+  const product = document.products[0];
+  assert.equal(product.price.amount, 3.99);
+  assert.equal(
+    product.extra.doubt,
+    'the second word of the name is blurred, read as sobrasada'
+  );
+  assert.ok(
+    document.warnings.some(
+      (warning) =>
+        warning.product_id === product.id && /blurred/.test(warning.message)
+    )
+  );
+
+  const sure = { ...row, leaflet: { ...row.leaflet, doubt: null } };
+  const second = await build('lidl', [sure]);
+  assert.equal(second.document.products[0].extra.doubt, undefined);
+});

@@ -528,6 +528,11 @@ function buildPage({ page, rows, sections, fixedSections, leafletFrom }) {
     if (read.validityText) {
       offer.validity_text = read.validityText;
     }
+    // What the reader said it was unsure of. The tile is kept as read, and the
+    // doubt travels with it so the person checking the page looks there first.
+    if (read.doubt) {
+      offer.doubt = read.doubt;
+    }
     if (warning) {
       warnings.push({ page, message: warning });
     }

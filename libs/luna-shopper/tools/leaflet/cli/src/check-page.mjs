@@ -71,6 +71,9 @@ const LEAFLET_FIELDS = [
   ['validUntil', 'day?'],
   ['validityText', 'text?'],
   ['promotion', 'object?'],
+  // The one key a row may leave out: a prompt that does not ask for a doubt
+  // still reads, and a row with nothing to doubt writes null or nothing.
+  ['doubt', 'text?', { optional: true }],
 ];
 
 const PROMOTION_FIELDS = [
@@ -147,8 +150,11 @@ function fault(value, rule) {
 /** Each field of one object against its rules, as `{ path, message }`. */
 function checkFields(bag, fields, prefix) {
   const out = [];
-  for (const [key, rule] of fields) {
+  for (const [key, rule, { optional = false } = {}] of fields) {
     if (!(key in bag)) {
+      if (optional) {
+        continue;
+      }
       out.push({
         path: prefix.replace(/\.$/, ''),
         message: `${prefix}${key} is missing. Every row carries every key, and null says the page printed none`,

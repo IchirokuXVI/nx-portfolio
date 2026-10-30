@@ -54,6 +54,8 @@ const LEAFLET_KEYS = new Set([
   'promotion',
   'validUntil',
   'validityText',
+  // Optional: what the reader itself was unsure of on this tile.
+  'doubt',
 ]);
 
 /** The keys a promotion may carry, in either spelling. */
@@ -131,6 +133,7 @@ export function readRow(row) {
     loyalty: first(leaflet.loyalty, row?.loyalty) === true,
     validUntil: text(leaflet.validUntil),
     validityText: text(leaflet.validityText),
+    doubt: text(leaflet.doubt),
     promotion: isObject(promotion)
       ? {
           type: text(promotion.type),

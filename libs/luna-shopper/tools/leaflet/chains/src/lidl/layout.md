@@ -8,8 +8,9 @@ it will misread quietly rather than loudly.
 - **The page is tall and narrow** (467 x 794 pt, A4 portrait at a slightly
   narrow width), one page at a time and never a two page spread. It is cut
   into full bleed colour panels, red, yellow, blue or a photograph, and each
-  panel holds one product tile. Two to eight tiles a page, five on a typical
-  grocery page and two on a fresh food page that gives half the sheet to a
+  panel holds one product tile, though the cover and a few photograph pages
+  group several small tiles in one panel or a side column. Two to eight
+  tiles a page, five on a typical grocery page and two on a fresh food page that gives half the sheet to a
   photograph.
 - **Every page carries a text layer.** All 55 pages of the September 2026
   leaflet did, so the census is a check rather than a filter. The text layer is
@@ -30,6 +31,8 @@ it will misread quietly rather than loudly.
   whole page will get one of the two families wrong.
 - **A trailing dash means no cents.** `1.-` is 1.00, `7.-` is 7.00, and in the
   comparison line `29,- €/kg` is 29.00 per kilo.
+- **A `Plus` box in the Lidl Plus colours can sit right beside the price** on a
+  Lidl Plus tile. It is the loyalty flag, not a price badge.
 - **A small struck through number sits to the right of the price.** What it
   means depends on the flag above it, and that is the single most important
   distinction on the page. See the two flags below.
@@ -68,8 +71,8 @@ Plus`. **The logo is what tells them apart, and reading the struck number as
   (`KILO`, `LITRO`). The shared `PER_WORDS` table in `build-document.mjs`
   reads both, so the prompt asks for the figure verbatim: `5,70 €/kg`.
 - The leaflet misprints one of its own: page 12 of the September 2026 leaflet
-  reads `13,99 €/g` for a 350 g pack priced at 4.90. Copy what is printed and
-  do not correct it.
+  reads `13,99 €/g` for a 350 g pack priced at 4.90. Copy what is printed, do
+  not correct it, and say so in the row's `leaflet.doubt`.
 
 ## Promotions
 
@@ -115,8 +118,9 @@ bocadillo`, `Cuidarte por dentro vale la pena.` Each names a product family
   category path rather than a slogan.
 - **The banner spans a spread and only the left page prints it.** Roughly half
   the pages, most of the odd numbered ones, carry no banner of their own and
-  continue the one before. A page reader sees one page and cannot know that, so
-  those pages give an empty category path too. Naming them belongs to the
+  continue the one before. A slogan banner such as `¡Los Nº1 de la
+semana!` can also repeat on two pages in a row. A page reader sees one
+  page and cannot know that, so those pages give an empty category path too. Naming them belongs to the
   leaflet's own `fixed_sections` if the owner wants them categorised.
 - The banner sits at the very top, in 30 to 90 pt type, above every tile.
 
@@ -146,14 +150,17 @@ Lidl Plus`, sits in the footer of most pages. It is a legal note, not a
 Four kinds, and all four still look like leaflet pages:
 
 - **The cover** (page 1 in September 2026) carries the LIDL roundel, the
-  campaign headline and, unlike Deza's, seven priced tiles. Read them.
+  campaign headline and, unlike Deza's, a handful of priced tiles (seven in
+  September 2026, six in October). Read them.
 - **The back cover** (page 55) is the same: a full page of tiles with no
   banner and no page number.
 - **There is no index page.** Nothing in the leaflet lists its own contents.
 - **Adverts**, on pages 2, 32, 33 and 53 in September 2026: a basket price
   comparison against another supermarket, two Lidl Plus points pages and a Lidl
-  Pay page. They print large numbers (`81.77`, `102.30`, `20€`) that are not
-  product prices. They read as an empty array.
+  Pay page. A points page can show products priced in points (`92 puntos`
+  under a struck `185 puntos`): those are app rewards, not offers, and they
+  are not rows either. They print large numbers (`81.77`, `102.30`, `20€`)
+  that are not product prices. They read as an empty array.
 
 ## Stop and report if
 
