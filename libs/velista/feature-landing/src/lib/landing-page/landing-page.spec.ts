@@ -8,20 +8,27 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
+  ApiUrl,
+  AuthApi,
   fakeOperatorSettingsStore,
   GatewayError,
+  GOOGLE_SILENT_DEADLINE_MS,
   GoogleSignIn,
   MEMORY_OPERATOR_SETTINGS,
   NetworkError,
   provideFakeOperatorSettingsStore,
+  TokenStore,
+  type FakeOperatorSettingsStore,
 } from '@portfolio/velista/data-access';
 import type { OperatorSettings } from '@portfolio/velista/models';
 import { APP_KEY } from '@portfolio/velista/models';
 import {
   APP_RUNTIME,
   BackendReadiness,
+  GOOGLE_CREDENTIAL,
   provideVelistaTesting,
   type AppRuntime,
+  type GoogleCredentialI,
 } from '@portfolio/velista/platform';
 import { LegalLinks } from '@portfolio/velista/ui';
 import { LandingPage } from './landing-page';
@@ -66,18 +73,35 @@ interface Options {
    * gate's own specs pass false and assert that they are held.
    */
   readonly backendReady?: boolean;
-  readonly google?: { readonly start: jest.Mock };
+  readonly google?: Partial<GoogleDouble>;
+  /**
+   * Provide the real `GoogleSignIn` over this picker instead of a double, for the one
+   * question only it can answer: how long the front door is held (velista 0175).
+   */
+  readonly realGoogle?: { readonly credential: GoogleCredentialI };
   readonly runtime?: AppRuntime;
   /** The operator's settings (velista 0173). */
   readonly settings?: OperatorSettings;
+  /** The settings store itself, for a spec that lands the answer late. */
+  readonly settingsStore?: FakeOperatorSettingsStore;
+}
+
+/**
+ * The parts of `GoogleSignIn` this page calls. By default no silent attempt is
+ * allowed, so every spec that is not about the automatic sign in reads as before.
+ */
+interface GoogleDouble {
+  readonly start: jest.Mock;
+  readonly silentSignInAllowed: jest.Mock;
+  readonly trySilent: jest.Mock;
 }
 
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<LandingPage>;
   store: FakeLocaleStore;
-  router: { navigate: jest.Mock };
+  router: { navigate: jest.Mock; navigateByUrl: jest.Mock };
   notice: AccountNotice;
-  google: { readonly start: jest.Mock };
+  google: GoogleDouble;
 }> {
   TestBed.resetTestingModule();
 
@@ -92,17 +116,44 @@ async function render(options: Options = {}): Promise<{
   // destination this page asks for, not what the router does with it. The real table
   // lives in `feature-shell`, which this library must not import, so a real router
   // here could only be given an empty table and would answer "no route matched".
-  const router = { navigate: jest.fn().mockResolvedValue(true) };
-  const google = options.google ?? {
-    start: jest.fn().mockResolvedValue(undefined),
+  const router = {
+    navigate: jest.fn().mockResolvedValue(true),
+    navigateByUrl: jest.fn().mockResolvedValue(true),
   };
+  const google: GoogleDouble = {
+    start: jest.fn().mockResolvedValue('leaving'),
+    silentSignInAllowed: jest.fn(() => false),
+    trySilent: jest.fn().mockResolvedValue(false),
+    ...options.google,
+  };
+  const googleProviders =
+    options.realGoogle === undefined
+      ? [{ provide: GoogleSignIn, useValue: google }]
+      : [
+          GoogleSignIn,
+          ApiUrl,
+          {
+            provide: GOOGLE_CREDENTIAL,
+            useValue: options.realGoogle.credential,
+          },
+          {
+            provide: AuthApi,
+            useValue: {
+              mintGoogleNonce: async () => ({ nonce: 'n1', clientId: 'c1' }),
+            },
+          },
+          { provide: TokenStore, useValue: { hasSession: () => false } },
+        ];
 
   await TestBed.configureTestingModule({
     imports: [LandingPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting(),
       provideFakeOperatorSettingsStore(
-        fakeOperatorSettingsStore(options.settings ?? MEMORY_OPERATOR_SETTINGS)
+        options.settingsStore ??
+          fakeOperatorSettingsStore(
+            options.settings ?? MEMORY_OPERATOR_SETTINGS
+          )
       ),
       // The real `AccountNotice` rather than a double, matching `provideAccountNotice`:
       // it is one signal and two setters with no dependencies, so faking it would mean
@@ -111,7 +162,7 @@ async function render(options: Options = {}): Promise<{
       AccountNotice,
       { provide: RokuLocaleStore, useValue: store },
       { provide: Router, useValue: router },
-      { provide: GoogleSignIn, useValue: google },
+      ...googleProviders,
       { provide: APP_RUNTIME, useValue: options.runtime ?? 'web' },
       {
         provide: ActivatedRoute,
@@ -393,13 +444,158 @@ describe('LandingPage', () => {
         );
       });
 
-      /** Google refuses to sign anybody in from an embedded WebView (velista 0166). */
-      it('is not drawn in the native shell, divider included', async () => {
+      /** The press asks Android's account picker there (velista 0175, target 4). */
+      it('is drawn in the native shell too, divider included', async () => {
         const { fixture } = await render({ runtime: 'native' });
 
-        expect(googleButton(fixture)).toBeNull();
-        expect(query(fixture, 'lib-auth-actions .divider')).toBeNull();
-        expect(queryAll(fixture, 'lib-auth-actions button')).toHaveLength(3);
+        expect(googleButton(fixture)).not.toBeNull();
+        expect(query(fixture, 'lib-auth-actions .divider')).not.toBeNull();
+        expect(queryAll(fixture, 'lib-auth-actions button')).toHaveLength(4);
+      });
+
+      it('lets go and says nothing when the system sheet is closed (velista 0175)', async () => {
+        const { fixture } = await render({
+          runtime: 'native',
+          google: { start: jest.fn().mockResolvedValue('cancelled') },
+        });
+
+        await fixture.componentInstance.continueWithGoogle();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.googleStarting()).toBe(false);
+        expect(fixture.componentInstance.googleError()).toBeNull();
+        expect(query(fixture, 'lib-auth-actions [role="status"]')).toBeNull();
+      });
+    });
+
+    /**
+     * Velista 0175, target 5. In the Android app, signed out, the front door tries
+     * once to sign in with no tap, and holds the four ways in while it does.
+     */
+    describe('the automatic Google sign in', () => {
+      function heldButtons(fixture: ComponentFixture<LandingPage>) {
+        return (
+          queryAll(fixture, 'lib-auth-actions button') as HTMLButtonElement[]
+        ).filter((button) => button.getAttribute('aria-disabled') === 'true');
+      }
+
+      it('tries once, holding the ways in until it answers', async () => {
+        let answer: (signedIn: boolean) => void = () => undefined;
+        const { fixture, google } = await render({
+          runtime: 'native',
+          google: {
+            silentSignInAllowed: jest.fn(() => true),
+            trySilent: jest.fn(
+              () => new Promise<boolean>((resolve) => (answer = resolve))
+            ),
+          },
+        });
+
+        expect(google.trySilent).toHaveBeenCalledTimes(1);
+        expect(fixture.componentInstance.signingInSilently()).toBe(true);
+        expect(heldButtons(fixture)).toHaveLength(4);
+        expect(
+          query(fixture, 'lib-auth-actions button.google')?.getAttribute(
+            'aria-busy'
+          )
+        ).toBe('true');
+
+        answer(false);
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        // No sentence about it: the front door is simply as it was.
+        expect(fixture.componentInstance.signingInSilently()).toBe(false);
+        expect(heldButtons(fixture)).toHaveLength(0);
+        expect(query(fixture, 'lib-auth-actions [role="status"]')).toBeNull();
+      });
+
+      it('stays busy on success, because GoogleSignIn is taking the app home', async () => {
+        const { fixture } = await render({
+          runtime: 'native',
+          google: {
+            silentSignInAllowed: jest.fn(() => true),
+            trySilent: jest.fn().mockResolvedValue(true),
+          },
+        });
+        await fixture.whenStable();
+
+        expect(fixture.componentInstance.signingInSilently()).toBe(true);
+      });
+
+      it('asks once however often the settings arrive', async () => {
+        const settingsStore = fakeOperatorSettingsStore(null);
+        const { fixture, google } = await render({
+          runtime: 'native',
+          settingsStore,
+          google: { silentSignInAllowed: jest.fn(() => true) },
+        });
+
+        // Nothing before the settings: the feature switch is in them.
+        expect(google.trySilent).not.toHaveBeenCalled();
+
+        settingsStore.land(MEMORY_OPERATOR_SETTINGS);
+        fixture.detectChanges();
+        await fixture.whenStable();
+        settingsStore.land({ ...MEMORY_OPERATOR_SETTINGS });
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(google.trySilent).toHaveBeenCalledTimes(1);
+      });
+
+      it('does not try when a sign out switched it off, or on the web', async () => {
+        // `silentSignInAllowed` is false for both: no picker on the web, and the flag
+        // in storage after a sign out (asserted in `google-sign-in.spec.ts`).
+        const { fixture, google } = await render({
+          runtime: 'native',
+          google: { silentSignInAllowed: jest.fn(() => false) },
+        });
+
+        expect(google.trySilent).not.toHaveBeenCalled();
+        expect(heldButtons(fixture)).toHaveLength(0);
+      });
+
+      it('does not try where the deployment has no Google client', async () => {
+        const { google } = await render({
+          runtime: 'native',
+          settings: {
+            ...MEMORY_OPERATOR_SETTINGS,
+            features: {
+              ...MEMORY_OPERATOR_SETTINGS.features,
+              googleSignIn: false,
+            },
+          },
+          google: { silentSignInAllowed: jest.fn(() => true) },
+        });
+
+        expect(google.trySilent).not.toHaveBeenCalled();
+      });
+
+      describe('with a picker that never answers', () => {
+        beforeEach(() => jest.useFakeTimers());
+        afterEach(() => jest.useRealTimers());
+
+        it('gives up after four seconds and lets the front door go', async () => {
+          const credential: GoogleCredentialI = {
+            getIdToken: () => new Promise<string | null>(() => undefined),
+            forget: async () => undefined,
+          };
+          const { fixture } = await render({
+            runtime: 'native',
+            realGoogle: { credential },
+          });
+
+          await jest.advanceTimersByTimeAsync(GOOGLE_SILENT_DEADLINE_MS - 1);
+          fixture.detectChanges();
+          expect(fixture.componentInstance.signingInSilently()).toBe(true);
+          expect(heldButtons(fixture)).toHaveLength(4);
+
+          await jest.advanceTimersByTimeAsync(1);
+          fixture.detectChanges();
+          expect(fixture.componentInstance.signingInSilently()).toBe(false);
+          expect(heldButtons(fixture)).toHaveLength(0);
+        });
       });
     });
 

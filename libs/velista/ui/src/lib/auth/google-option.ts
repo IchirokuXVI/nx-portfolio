@@ -36,9 +36,9 @@ import { LinkedText } from '../legal/linked-text';
  * `0171`). A guest is offered it like anybody else: backend `0230` links the guest
  * account in place, so the groups it holds stay.
  *
- * It is never drawn inside the native shell, where Google refuses to sign anybody in
- * from an embedded WebView, nor in a deployment with no Google client
- * (`features.googleSignIn`). The container asks both and leaves this out, divider and all.
+ * It is never drawn in a deployment with no Google client (`features.googleSignIn`).
+ * The container asks and leaves this out, divider and all. Inside the native shell it
+ * is drawn, and the press asks Android's account picker (velista `0175`).
  *
  * ## The line under it is part of it
  *

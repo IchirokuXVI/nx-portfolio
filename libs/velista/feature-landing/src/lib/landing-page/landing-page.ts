@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, Router, RouterOutlet } from '@angular/router';
 import {
@@ -25,7 +27,6 @@ import {
   type PreviewLineVm,
 } from '@portfolio/velista/models';
 import {
-  APP_RUNTIME,
   appPath,
   BackendReadiness,
   sheetSegments,
@@ -83,17 +84,25 @@ export class LandingPage {
   private readonly _google = inject(GoogleSignIn);
   private readonly _basePath = inject(APP_BASE_PATH);
   private readonly _settings = inject(OperatorSettingsStore);
-  private readonly _native = inject(APP_RUNTIME) === 'native';
 
   /**
    * Whether to offer Google: where the deployment has a Google client
-   * (`features.googleSignIn`, velista `0173`) and never in the native shell, where
-   * Google refuses to sign anybody in from an embedded WebView (velista `0166`).
+   * (`features.googleSignIn`, velista `0173`). In the native shell too, where the
+   * press asks Android's account picker (velista `0175`).
    */
   readonly googleOffered = computed(
-    () =>
-      !this._native && this._settings.settings()?.features.googleSignIn === true
+    () => this._settings.settings()?.features.googleSignIn === true
   );
+
+  /**
+   * True while the app tries to sign in by itself (velista `0175`, target 5): four
+   * seconds at most, then the attempt is abandoned and the front door is as it was.
+   *
+   * It draws the busy state the actions already have and no new copy: they are held,
+   * so nobody taps "Sign in" over a sign in that is about to land, and the Google
+   * button says it is busy.
+   */
+  readonly signingInSilently = signal(false);
 
   /**
    * The terms' page, for the line under the Google button and a refusal about them, or
@@ -175,6 +184,25 @@ export class LandingPage {
     privacy: appPath(this.locale(), this._basePath, 'privacy'),
     terms: appPath(this.locale(), this._basePath, 'terms'),
   }));
+
+  constructor() {
+    // The automatic sign in waits for the operator's settings, because the feature
+    // switch is in them, and they only arrive once the backend answered, so the
+    // attempt never runs against a backend nobody has heard from. Once per document:
+    // `GoogleSignIn` refuses a second try whoever asks, so a second visit to this page
+    // does not try again, and this page asks once however often the settings reload.
+    let asked = false;
+    effect(() => {
+      const googleOn =
+        this._settings.settings()?.features.googleSignIn === true;
+      untracked(() => {
+        if (!asked && googleOn && this._google.silentSignInAllowed()) {
+          asked = true;
+          void this._signInSilently();
+        }
+      });
+    });
+  }
 
   /** Uppercased here rather than in the app bar, which keeps taking a plain string. */
   readonly localeLabel = computed(() => this.locale().toLocaleUpperCase());
@@ -307,10 +335,14 @@ export class LandingPage {
 
     try {
       const settings = this._settings.settings();
-      await this._google.start({
+      const outcome = await this._google.start({
         acceptedTermsVersion:
           settings?.published === true ? settings.terms.version : null,
       });
+      // The system sheet closed in the Android app (velista `0175`): nothing to say.
+      if (outcome === 'cancelled') {
+        this.googleStarting.set(false);
+      }
     } catch (error) {
       this.googleStarting.set(false);
       if (termsRefusal(error) !== null) {
@@ -319,6 +351,19 @@ export class LandingPage {
         this._settings.reload();
       }
       this.googleError.set(googleFailureKey(error));
+    }
+  }
+
+  /**
+   * See {@link signingInSilently}. `trySilent` never throws, ends within its four
+   * seconds, and goes home itself on success, so the page stays busy then: it is
+   * leaving. On `false` the front door is let go as it was, with nothing said.
+   */
+  private async _signInSilently(): Promise<void> {
+    this.signingInSilently.set(true);
+    const signedIn = await this._google.trySilent();
+    if (!signedIn) {
+      this.signingInSilently.set(false);
     }
   }
 

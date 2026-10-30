@@ -30,6 +30,9 @@
     one screen that draws before the startup probe has answered, so it is also the one
     place where a control could act on a backend nobody has heard from yet, and the
     first of these four creates an account.
+
+    Held too while the app signs in by itself (velista 0175, target 5), with the same
+    sentence: nobody taps "Sign in" over a sign in that is about to land.
   -->
   <lib-auth-actions
     (continueWithGoogle)="continueWithGoogle()"
@@ -38,9 +41,9 @@
     (signInWithEmail)="signInWithEmail()"
     [connectingMessage]="'startup.actions.connecting' | rokuT"
     [failureMessage]="googleError() === null ? '' : (googleError()! | rokuT)"
-    [googleBusy]="googleStarting()"
+    [googleBusy]="googleStarting() || signingInSilently()"
     [googleOffered]="googleOffered()"
-    [held]="actionsHeld()"
+    [held]="actionsHeld() || signingInSilently()"
     [slow]="startupSlow()"
     [slowMessage]="'startup.actions.slow' | rokuT"
     [termsUrl]="termsUrl()"

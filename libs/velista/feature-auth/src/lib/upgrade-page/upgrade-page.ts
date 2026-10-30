@@ -177,7 +177,12 @@ export class UpgradePage {
     this.googleError.set(null);
 
     try {
-      await this._google.start({ acceptedTermsVersion: this.terms.version() });
+      const outcome = await this._google.start({
+        acceptedTermsVersion: this.terms.version(),
+      });
+      if (outcome === 'cancelled') {
+        this.googleStarting.set(false);
+      }
     } catch (error) {
       this.googleStarting.set(false);
       const copy = authErrorCopy(error, 'auth.google');
