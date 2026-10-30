@@ -142,6 +142,12 @@ export interface ProblemResponseOptions {
    */
   terms?: boolean | 'stale';
   /**
+   * The route signs in with a Google ID token (plan 0238). A token that fails
+   * any check is a 401 of its own code, and a silent sign in that meets a
+   * Google account it may not open a 409 of its own code.
+   */
+  googleIdToken?: boolean;
+  /**
    * The route spends the caller's assistant allowance (plan 0234, section
    * 8.1), so it can answer 429 with a code of its own beside `rate_limited`.
    * It carries `details.scope`, `period`, `limit` and `resetsAt`, and no
@@ -286,6 +292,12 @@ export function ApiProblemResponses(
   }
   if (options.terms === true) {
     codes.push(ERROR_CODES.TERMS_ACCEPTANCE_MISSING);
+  }
+  if (options.googleIdToken) {
+    codes.push(
+      ERROR_CODES.INVALID_GOOGLE_TOKEN,
+      ERROR_CODES.GOOGLE_SIGN_IN_NEEDS_CONSENT
+    );
   }
   if (options.allowance) {
     codes.push(ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED);

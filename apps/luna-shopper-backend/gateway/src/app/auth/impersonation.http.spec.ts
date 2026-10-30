@@ -170,6 +170,12 @@ describe('a support session at the gateway', () => {
       AUTH_PATTERNS.mintOAuthState,
     ],
     [
+      'POST /auth/google/nonce',
+      'POST',
+      '/auth/google/nonce',
+      AUTH_PATTERNS.mintGoogleNonce,
+    ],
+    [
       'POST /zones/:id/members/:mid/transfer-ownership',
       'POST',
       `/zones/${ZONE}/members/${MEMBERSHIP}/transfer-ownership`,
