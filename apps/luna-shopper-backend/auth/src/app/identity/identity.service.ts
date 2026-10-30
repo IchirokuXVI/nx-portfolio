@@ -1818,13 +1818,16 @@ export class IdentityService {
    * Google login: find, link, or create (plan 0005, section 4.4), on the
    * caller's transaction.
    *
-   * The one place that knows the three branches. Since plan 0230 its one
+   * The one place that knows the branches. An address that already has an
+   * account links onto that account rather than creating a second one, which
+   * the unique index on `users.email` would refuse ({@link claimByEmail}).
+   * Since plan 0230 its one
    * caller is {@link exchangeGoogleSignIn}, after the verifier and the bearer
    * were checked. It answers the user and what happened to it, and the caller
    * publishes the events and issues the pair after the commit, because a pair
    * issued inside the transaction would name a user that may not exist yet.
    *
-   * All three branches record the Terms version the sign in page drew, under
+   * Every branch records the Terms version the sign in page drew, under
    * `GOOGLE` (plan 0231, section 4.2): continuing with Google is accepting. A
    * version that went stale inside the state's ten minutes records nothing,
    * and the sign in still succeeds; `GET /v1/account/me` then asks.
@@ -1872,6 +1875,20 @@ export class IdentityService {
       return { user, created: false, upgraded: true };
     }
 
+    const owner = req.email
+      ? await this.claimByEmail(manager, this.normalizeEmail(req.email))
+      : null;
+    if (owner) {
+      await this.linkGoogle(manager, owner.id, req.providerUserId);
+      await this.recordTerms(
+        manager,
+        owner.id,
+        req.acceptedTermsVersion,
+        TermsAcceptanceVia.GOOGLE
+      );
+      return { user: owner, created: false, upgraded: false };
+    }
+
     const created = await manager.getRepository(User).save(
       manager.getRepository(User).create({
         kind: UserKind.REGISTERED,
@@ -1891,6 +1908,33 @@ export class IdentityService {
       TermsAcceptanceVia.GOOGLE
     );
     return { user: created, created: true, upgraded: false };
+  }
+
+  /**
+   * The account that already holds the address Google verified, ready for the
+   * Google identity to be linked onto it, or null when no account holds it.
+   *
+   * Google proved the address, so its holder is the person signing in. An
+   * account that never confirmed the address is not proof that whoever made
+   * it owns the address: somebody could have registered it first with a
+   * password of their own. So that account loses its password and every
+   * session, and its address counts as confirmed from now on. The person
+   * keeps the account and can set a password again through a reset link.
+   */
+  private async claimByEmail(
+    manager: EntityManager,
+    email: string
+  ): Promise<User | null> {
+    const user = await manager
+      .getRepository(User)
+      .findOne({ where: { email } });
+    if (!user || user.emailVerifiedAt) {
+      return user;
+    }
+    await manager.getRepository(Credential).delete({ userId: user.id });
+    await this.tokens.revokeAllForUser(user.id, manager);
+    user.emailVerifiedAt = new Date();
+    return manager.getRepository(User).save(user);
   }
 }
 
