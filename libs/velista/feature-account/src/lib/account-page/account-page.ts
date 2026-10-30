@@ -38,6 +38,7 @@ import {
   AccountRow,
   AppVersion,
   LegalLinks,
+  localeName,
   PageHeader,
   SectionHeading,
 } from '@portfolio/velista/ui';
@@ -185,6 +186,9 @@ export class AccountPage {
     };
   });
 
+  /** The current language, named in itself, for the language row. */
+  readonly languageName = computed(() => localeName(this._locale()));
+
   /** The product's own name, for the row that reports it is installed (rule N1). */
   readonly productName = this._brand.name;
 
@@ -300,6 +304,13 @@ export class AccountPage {
   /** The other sheets, as children of this route (rule E1). */
   openRename(): void {
     void this._router.navigate(sheetSegments('name'), {
+      relativeTo: this._route,
+    });
+  }
+
+  /** The language sheet, the one switch inside the app (the landing has the other). */
+  openLanguage(): void {
+    void this._router.navigate(sheetSegments('language'), {
       relativeTo: this._route,
     });
   }

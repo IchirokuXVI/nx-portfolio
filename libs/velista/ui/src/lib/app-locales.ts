@@ -18,3 +18,19 @@ export { APP_KEY } from '@portfolio/velista/models';
 
 export const APP_AVAILABLE_LOCALES: string[] = ['en', 'es'];
 export const APP_DEFAULT_LOCALE = 'en';
+
+/**
+ * Each locale's name written in that language: "Español" whatever language the app
+ * is in right now. These are endonyms and not translation keys on purpose. Somebody
+ * who opened the app in a language they cannot read has to be able to find their own
+ * among the choices, and only its own name is sure to be readable to them.
+ */
+export const APP_LOCALE_NAMES: Readonly<Record<string, string>> = {
+  en: 'English',
+  es: 'Español',
+};
+
+/** The name of `locale` in its own language, or the code itself when unknown. */
+export function localeName(locale: string): string {
+  return APP_LOCALE_NAMES[locale] ?? locale;
+}

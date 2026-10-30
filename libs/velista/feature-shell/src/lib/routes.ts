@@ -1216,6 +1216,16 @@ export const AppShellRoutes: Route[] = [
                   ),
               }),
               sheet({
+                // The language, a radio list where a press switches and closes. A sheet
+                // over the account screen rather than a page, because it is one
+                // decision about a row on it.
+                path: 'language',
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-account').then(
+                    (m) => m.LanguageSheet
+                  ),
+              }),
+              sheet({
                 // `confirm/delete`, matching the shape `0010` gave a member action, so
                 // the two typed confirmations in this app are addressed the same way.
                 path: 'confirm/delete',
