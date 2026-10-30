@@ -32,21 +32,31 @@ describe('velista assetlinks.json', () => {
     expect(packages).toEqual(['app.velista', 'app.velista.staging']);
   });
 
-  it('hands every URL to an Android app signed with one SHA-256 certificate', () => {
+  const fingerprintsOf = (packageName: string) =>
+    statements.find((s) => s.target.package_name === packageName)?.target
+      .sha256_cert_fingerprints;
+
+  it('hands every URL to an Android app, by SHA-256 certificate', () => {
     for (const statement of statements) {
       expect(statement.relation).toEqual([
         'delegate_permission/common.handle_all_urls',
       ]);
       expect(statement.target.namespace).toBe('android_app');
-      expect(statement.target.sha256_cert_fingerprints).toHaveLength(1);
-      expect(statement.target.sha256_cert_fingerprints[0]).toMatch(
-        /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/
-      );
+      for (const fingerprint of statement.target.sha256_cert_fingerprints) {
+        expect(fingerprint).toMatch(/^([0-9A-F]{2}:){31}[0-9A-F]{2}$/);
+      }
     }
+  });
 
-    const fingerprints = new Set(
-      statements.map((s) => s.target.sha256_cert_fingerprints[0])
-    );
-    expect(fingerprints.size).toBe(1);
+  // Our release key signs both flavors' own builds. Google Play re-signs what it
+  // installs with its app signing key, so production also names that one.
+  it('trusts the release key for both flavors and the Play key for production', () => {
+    const staging = fingerprintsOf('app.velista.staging') ?? [];
+    const production = fingerprintsOf('app.velista') ?? [];
+
+    expect(staging).toHaveLength(1);
+    expect(production).toHaveLength(2);
+    expect(production[0]).toBe(staging[0]);
+    expect(production[1]).not.toBe(staging[0]);
   });
 });

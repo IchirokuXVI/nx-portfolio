@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "app.velista",
       "sha256_cert_fingerprints": [
-        "08:96:62:0D:8C:9E:B8:A9:10:C8:3C:AD:D0:7D:6B:15:F3:2B:0E:42:AB:D0:EC:31:2B:D6:B7:1B:B3:C0:B1:92"
+        "08:96:62:0D:8C:9E:B8:A9:10:C8:3C:AD:D0:7D:6B:15:F3:2B:0E:42:AB:D0:EC:31:2B:D6:B7:1B:B3:C0:B1:92",
+        "F2:3D:04:67:81:AE:5D:D3:68:F1:A6:AD:40:10:35:DA:67:CF:71:3C:62:4A:09:31:C0:75:97:05:C1:4B:18:6E"
       ]
     }
   },
