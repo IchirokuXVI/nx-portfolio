@@ -1,3 +1,5 @@
+> **PR:** [#877](https://github.com/IchirokuXVI/nx-portfolio/pull/877)
+
 # 0175: the Android app signs in with Google, and does it alone when it can
 
 > In the Android app, email and password sign in already works: the WebView runs on the
@@ -155,3 +157,33 @@ comes before UI changes here.
 
 - The busy state on the front door during the silent attempt is the existing one. If it
   reads wrong on the phone, a mock follows.
+
+## What the build decided
+
+- **Plugin options.** Silent: `GetGoogleIdOption` with `filterByAuthorizedAccounts(true)`,
+  `autoSelectEnabled(true)`, the server client and the nonce. Interactive:
+  `GetSignInWithGoogleOption` with the server client and the nonce. A provider
+  configuration or unsupported error is `unavailable`. Pinned: `androidx.credentials`
+  1.6.0 with `credentials-play-services-auth`, and `googleid` 1.2.1.
+- **R8.** The release build type has `minifyEnabled false`, so nothing is shrunk and no
+  keep rules are needed. The built APK holds `VelistaGooglePlugin`, `CredentialManager`
+  and `GetSignInWithGoogleOption`.
+- **`start()` answers `'leaving' | 'cancelled'`.** The four Google buttons kept their busy
+  state after a successful start, because the web document leaves. On `'cancelled'` they
+  let go of it. Their refusal handling is unchanged.
+- **The four seconds live in `GoogleSignIn.trySilent`**, where the pair is stored. A token
+  or a pair that arrives after the deadline is dropped. The attempt starts when the
+  operator settings arrive, and they arrive only after the backend answered.
+- **The busy state is the existing held state** (the four ways in dimmed, with "Connecting.
+  This will work in a moment."), plus `aria-busy` on the Google button. `googleBusy` alone
+  does not stop a tap on "Sign in". No new copy.
+- **No silent attempt while a session is held**, a guest included (D3).
+- **`invalid_google_token` skips the refresh and retry of the interceptor**, as
+  `not_a_participant` does. Without that, a guest whose token is refused is refreshed,
+  refused again and signed out. Both new codes joined `ERROR_CODES`.
+- **A silent request can still show a picker** when more than one approved account is on
+  the phone. The app then drops an answer that comes after four seconds.
+- **Emulator.** `Medium_Phone_API_37.0` has a Play image. With no Google account, the
+  staging APK opened on the front door, held the ways in for about two seconds and let them
+  go with no message, and drew "Continue with Google". Staging had no nonce route yet (404),
+  so a press showed the page's refusal sentence and the system sheet was not reached.
