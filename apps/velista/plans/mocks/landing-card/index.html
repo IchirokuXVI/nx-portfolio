@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing list picture</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+:root {
+  --page: #e9ebf2; --page-ink: #111420; --page-ink-2: #525a78;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --page: #12141c; --page-ink: #eef0f7; --page-ink-2: #a8afc8; }
+}
+:root[data-theme="dark"] { --page: #12141c; --page-ink: #eef0f7; --page-ink-2: #a8afc8; }
+body { margin: 0; background: var(--page); color: var(--page-ink); font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+.wrap { max-width: 1760px; margin: 0 auto; padding: 32px 16px 64px; }
+h1 { margin: 0 0 8px; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 30px; letter-spacing: 0.02em; }
+.lede { margin: 0 0 32px; max-width: 76ch; color: var(--page-ink-2); line-height: 1.5; }
+.boards { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 40px 40px; }
+.board { flex: none; max-width: 100%; }
+.board h2 { margin: 0 0 4px; font-size: 16px; }
+.board p.cap { margin: 0 0 12px; max-width: 390px; min-height: 60px; font-size: 13px; line-height: 1.45; color: var(--page-ink-2); }
+.frame { position: relative; overflow: hidden; border-radius: 28px; box-shadow: 0 1px 0 rgba(17,20,32,.06), 0 12px 40px rgba(17,20,32,.14); }
+.frame img.shot { width: 390px; display: block; }
+.lang-h { margin: 48px 0 16px; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: 24px; }
+.notes { margin-top: 40px; max-width: 80ch; color: var(--page-ink-2); font-size: 14px; line-height: 1.55; }
+.notes h3 { color: var(--page-ink); font-size: 15px; margin: 24px 0 6px; }
+.notes ul { margin: 0; padding-left: 20px; }
+@media (max-width: 440px) { .frame { zoom: .88; } }
+
+/* ---- the app, Day tokens copied from libs/velista/ui/src/lib/styles ---- */
+.vel {
+  --ground: #f7f8fc; --raised: #ffffff; --sunken: #eef0f7;
+  --ink: #111420; --ink-2: #525a78; --ink-3: #616a8a;
+  --line: #dde1ed; --line-strong: #6f7899;
+  --amber: #ffb454; --amber-text: #8a5a12;
+  --ok: #0b7a4f; --danger: #b3261e; --info-bg: #e7ecfd; --info: #2747c9;
+  /* exactly one screen: nothing on this page scrolls */
+  height: 100%; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; container: page / size;
+  background: var(--ground); color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+}
+.vel svg { display: block; width: 100%; height: 100%; }
+.bar { flex: none; display: flex; align-items: center; justify-content: space-between; height: 64px; padding: 0 20px; }
+.mark { display: flex; align-items: center; gap: 10px; font-family: Marcellus, Georgia, serif; font-size: 28px; letter-spacing: .04em; }
+.mark i { width: 20px; height: 24px; }
+.lang svg { width: 14px; height: 14px; }
+.lang { height: 40px; padding: 0 14px; display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; font-size: 14px; font-weight: 600; }
+.hero { flex: none; padding: 8px 20px 0; }
+.hero h2 { margin-bottom: 0; }
+.hero h2 { margin: 0 0 8px; font-family: Marcellus, Georgia, serif; font-weight: 400; font-size: clamp(2rem, 9.6cqw, 2.5625rem); line-height: 1.08; }
+.hero p { margin: 0; font-size: 16px; line-height: 1.5; color: var(--ink-2); }
+
+/* The card takes the room that is left and shows as many rows as fit. The slot is a
+   size container, so each row hides by the slot's height, never by the screen's. */
+.slot { flex: 1 1 auto; min-height: 166px; container-type: size; overflow: hidden; padding: 0 20px; }
+.card { margin-top: 14px; padding: 10px 12px 2px; background: var(--raised); border: 1px solid var(--line); border-radius: 16px; }
+.head { display: flex; align-items: center; justify-content: space-between; gap: 10px; height: 22px; }
+.titles { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.titles b { flex: none; font-size: 15px; white-space: nowrap; }
+.titles span { min-width: 0; font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.here { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.faces { display: flex; }
+.face { width: 22px; height: 22px; border-radius: 50%; background: var(--info-bg); color: var(--info); font-size: 10px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--raised); }
+.face + .face { margin-left: -6px; background: #fdecd3; color: var(--amber-text); }
+.prog { margin: 8px 0 2px; }
+.prog .cap { display: flex; justify-content: space-between; font-size: 12px; line-height: 16px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.prog .cap b { color: var(--ink); font-weight: 600; }
+.track { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--sunken); overflow: hidden; }
+.track i { display: block; height: 100%; background: var(--amber); }
+
+.row { display: flex; align-items: center; gap: 10px; height: 50px; border-top: 1px solid var(--line); }
+.prog + .row { border-top: 0; }
+.pic { flex: none; width: 36px; height: 36px; box-sizing: border-box; border-radius: 9px; background: #fff; border: 1px solid var(--line); overflow: hidden; }
+.pic img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.l1, .l2 { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.l1 .name { flex: 0 1 auto; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l1 .price { margin-left: auto; flex: none; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.l2 { font-size: 12px; color: var(--ink-2); }
+.l2 .prod { flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l2 .bs { flex: none; color: var(--ink-3); white-space: nowrap; }
+.word { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.word i { width: 14px; height: 14px; }
+.word.ok { color: var(--ok); }
+.word.na { color: var(--danger); }
+.row.settled .name, .row.settled .price { color: var(--ink-3); font-weight: 400; }
+.qty { flex: none; width: 44px; height: 30px; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--raised); display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.row.settled .qty { border-color: transparent; background: transparent; color: var(--ink-3); font-weight: 400; }
+
+/* Card chrome (margin, padding, head, progress, border) is 84px, each row 50px, and 12px stays
+   free above the buttons. Two rows always stay, bought and not in the shop: the wanted
+   rows go first, then the progress line. The count, the total and the bar describe the
+   rows that are drawn, never the ones hidden. */
+.prog .p3, .prog .p2 { display: none; }
+.track i { width: 25%; }
+@container (height < 296px) { .row.r4, .prog .p4 { display: none; } .prog .p3 { display: flex; } .track i { width: 33.3%; } }
+@container (height < 246px) { .row.r2, .prog .p3 { display: none; } .prog .p2 { display: flex; } .track i { width: 50%; } }
+@container (height < 196px) { .prog { display: none; } }
+
+/* On a narrow phone the group name goes rather than show two letters of it. */
+@container (width < 340px) { .titles span { display: none; } }
+
+/* the ways in, tightened: 48px buttons, one 8px rhythm */
+.ways { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 0 20px 4px; }
+.btn { height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; font-weight: 600; }
+.btn i { width: 20px; height: 20px; }
+.btn.primary { background: var(--amber); color: #0a0c14; }
+.btn.secondary { border: 1px solid var(--line-strong); color: var(--ink); font-weight: 500; }
+.hint { margin: 0; text-align: center; font-size: 12px; line-height: 1.45; color: var(--ink-3); }
+.or { display: flex; align-items: center; gap: 12px; height: 16px; font-size: 11px; letter-spacing: .06em; color: var(--ink-3); }
+.or::before, .or::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+.btn.google { height: 44px; font-size: 14px; color: var(--ink); background: #fff; border: 1px solid var(--line); }
+.btn.google i { width: 18px; height: 18px; }
+.terms-line { margin: -2px 0 0; text-align: center; font-size: 12px; line-height: 16px; color: var(--ink-2); }
+.terms-line u, .foot u { text-underline-offset: 3px; }
+.terms-line u { color: var(--amber-text); font-weight: 600; }
+.btn.email { height: 40px; color: var(--amber-text); font-size: 14px; font-weight: 500; }
+/* A short screen keeps the card before the words: the explainer and OR go first. */
+@container page (height < 700px) { .hint, .or { display: none; } }
+.foot { flex: none; height: 32px; display: flex; justify-content: center; align-items: center; gap: 22px; padding-bottom: 6px; font-size: 12px; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Landing list picture</h1>
+  <p class="lede">Variant C, round 6, in English and in Spanish, at the five screen sizes the overflow test will check (844 down to 640 px tall). One screen tall at every size, never scrolling, the foot always at the bottom. The paragraph under the headline is gone, so the card keeps at least two rows on the smallest phone. The second line of each row names the kind and the size of the product, not a brand and not the name again. Products, prices and people are sample values. Drawn on Day.</p>
+
+  <div class="boards">
+    <section class="board">
+      <h2>Today (production, 390 × 844)</h2>
+      <p class="cap">Production already scrolls by 8 px here: the version line sits under the bottom edge. On a 360 by 640 phone it scrolls by 205 px.</p>
+      <div class="frame" style="width:390px;height:844px"><img class="shot" src="today/landing-prod-844.png" alt="The production landing page in a 390 by 844 window"></div>
+    </section>
+  </div>
+  <h2 class="lang-h">English</h2>
+  <div class="boards" data-lang="en"></div>
+  <h2 class="lang-h">Español</h2>
+  <div class="boards" data-lang="es"></div>
+
+  <div class="notes">
+    <h3>Changes since round 5</h3>
+    <ul>
+      <li>Spanish beside English, with the copy the app already ships. Only "Ana y Marc están aquí" and the row details are new.</li>
+      <li>Five sizes per language, the ones the overflow test will check: 390 × 844, 375 × 812, 360 × 800, 375 × 667 and 360 × 640.</li>
+      <li>The headline scales with the screen width a little less (9.6% of the width instead of 10.5%, same 41 px cap). At 10.5% "Comparte y apunta." broke onto a third line on 375 and 360 px wide phones and pushed Spanish 1 px past the screen at 360 × 640. English is unchanged at 390 and above, a little smaller below.</li>
+      <li>Measured in every frame: no scroll, the foot ends at the bottom edge, nothing cut sideways, at least 20 px between the card and the first button, and the count matches the rows drawn.</li>
+    </ul>
+    <h3>Changes since round 4</h3>
+    <ul>
+      <li>A fourth row, Bananas (Canary Islands · 1 kg), on screens with room for it, such as 390 by 844.</li>
+      <li>The count, the total and the bar match the rows on screen: 3 of 4 with four rows, 2 of 3 with three, 1 of 2 with two.</li>
+    </ul>
+    <h3>Changes since round 3</h3>
+    <ul>
+      <li>The paragraph under the headline ("Shared shopping lists for the people you actually shop with...") is removed.</li>
+      <li>The card never shows fewer than two rows: bought and not in the shop. The wanted row goes first, and on a screen too short for both, nothing else is left to remove before the buttons.</li>
+      <li>Line 2 of a row is the kind and the size ("Semi-skimmed · 1 L", "Free range · 12 units", "Extra virgin · 1 L"), so it never repeats the name and names no brand.</li>
+    </ul>
+    <h3>Still open</h3>
+    <ul>
+      <li>The photos. The ones drawn are Open Food Facts photos with real packaging and labels on them (CC BY-SA). For the landing they should be replaced with photos that show no brand: your own, or plain produce shots.</li>
+      <li>"Ana and Marc are here" is a new string in English and Spanish ("Ana y Marc están aquí").</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+const ICON = {
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.4 12.4l3.2 3.2 6.2-6.4"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.8"/><path d="m9.3 9.3 5.4 5.4M14.7 9.3l-5.4 5.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  code: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.2" y="6.2" width="17.6" height="11.6" rx="2.6"/><path d="M7.6 12h1.6M11.2 12h1.6M14.8 12h1.6"/></svg>',
+  boat: '<svg viewBox="0 0 22 26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M10 2v17M10 4l8 13h-8M3 21h16l-2 3H5z"/></svg>',
+  chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m7 10 5 5 5-5"/></svg>',
+  google: '<svg viewBox="0 0 18 18"><path d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" fill="#4285f4"/><path d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z" fill="#34a853"/><path d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z" fill="#fbbc05"/><path d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.9 11.43 0 9 0A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z" fill="#ea4335"/></svg>',
+};
+
+const T = {
+  en: {
+    lang: 'EN', top: 'One list.', bottom: 'Everyone in sync.', list: 'Weekly shop', zone: 'Home',
+    here: 'Ana and Marc are here', pending: (p, t) => `${p} of ${t} pending`, money: (n) => `€${n.toFixed(2)}`,
+    bought: 'Bought', na: 'Not in the shop', create: 'Create a group', join: 'Join with a code',
+    hint: 'A group is the household or flatmates you share lists with. You can start without an account.',
+    or: 'OR', google: 'Continue with Google', terms: 'By continuing with Google you accept the <u>Terms</u>',
+    email: 'Sign in with email', privacy: 'Privacy', termsLink: 'Terms', version: 'Version 0.16.0',
+    lines: ['Milk', 'Eggs', 'Bananas', 'Olive oil'],
+    details: ['Semi-skimmed · 1 L', 'Free range · 12 units', 'Canary Islands · 1 kg', 'Extra virgin · 1 L'],
+  },
+  es: {
+    lang: 'ES', top: 'Crea listas.', bottom: 'Comparte y apunta.', list: 'Compra semanal', zone: 'Casa',
+    here: 'Ana y Marc están aquí', pending: (p, t) => `${p} de ${t} pendientes`, money: (n) => `${n.toFixed(2).replace('.', ',')} €`,
+    bought: 'Comprado', na: 'No había en la tienda', create: 'Crear un grupo', join: 'Unirse con un código',
+    hint: 'Un grupo es la casa o los compañeros de piso con quienes compartes listas. Puedes empezar sin cuenta.',
+    or: 'O', google: 'Continuar con Google', terms: 'Si continúas con Google, aceptas las <u>Condiciones</u>',
+    email: 'Entrar con correo', privacy: 'Privacidad', termsLink: 'Condiciones', version: 'Versión 0.16.0',
+    lines: ['Leche', 'Huevos', 'Plátanos', 'Aceite de oliva'],
+    details: ['Semidesnatada · 1 L', 'Camperos · 12 uds.', 'Canarias · 1 kg', 'Virgen extra · 1 L'],
+  },
+};
+
+// Sample lines. r1..r4 is the order rows stay in as the room shrinks.
+const LINES = [
+  { cls: 'r1', price: 0.94, qty: 0, word: 'ok', photo: 'milk-puleva' },
+  { cls: 'r2', price: 2.35, qty: 1, photo: 'eggs' },
+  { cls: 'r4', price: 1.79, qty: 2, photo: 'bananas' },
+  { cls: 'r3', price: 8.95, qty: 1, word: 'na', photo: 'olive-oil' },
+];
+
+const SIZES = [
+  [390, 844, 'Four rows. The room left over sits above the buttons, in thumb reach as today.'],
+  [375, 812, 'Four rows.'],
+  [360, 800, 'Four rows.'],
+  [375, 667, 'Under 700 px tall the explainer and OR go. Two rows: bought and not in the shop.'],
+  [360, 640, 'The shortest size. Two rows and the progress line, 12 px clear above the buttons.'],
+];
+
+function row(l, i, t) {
+  const word = l.word === 'ok'
+    ? `<span class="word ok"><i>${ICON.check}</i>${t.bought}</span>`
+    : l.word === 'na' ? `<span class="word na"><i>${ICON.x}</i>${t.na}</span>` : '';
+  const l2 = `<span class="prod">${t.details[i]}</span>${word}`;
+  return `<div class="row ${l.cls}${l.qty === 0 ? ' settled' : ''}"><span class="pic"><img src="photos/${l.photo}.jpg" alt=""></span>
+    <span class="body"><span class="l1"><span class="name">${t.lines[i]}</span><span class="price">${t.money(l.price)}</span></span><span class="l2">${l2}</span></span>
+    <span class="qty">${l.qty}</span></div>`;
+}
+
+// What the head says for the rows drawn: pending lines and their estimated cost.
+function cap(cls, rows, t) {
+  const pending = rows.filter((l) => l.qty > 0);
+  const total = pending.reduce((sum, l) => sum + l.price * l.qty, 0);
+  return `<div class="cap ${cls}"><span>${t.pending(pending.length, rows.length)}</span><b>~${t.money(total)}</b></div>`;
+}
+
+function page(t) {
+  const shown3 = LINES.filter((l) => l.cls !== 'r4');
+  const shown2 = shown3.filter((l) => l.cls !== 'r2');
+  return `<div class="vel">
+    <div class="bar"><span class="mark"><i>${ICON.boat}</i>Velista</span><span class="lang">${t.lang} ${ICON.chev}</span></div>
+    <div class="hero"><h2>${t.top}<br>${t.bottom}</h2></div>
+    <div class="slot"><div class="card" aria-hidden="true">
+      <div class="head"><span class="titles"><b>${t.list}</b><span>${t.zone}</span></span>
+        <span class="here"><span class="faces"><span class="face">A</span><span class="face">M</span></span>${t.here}</span></div>
+      <div class="prog">${cap('p4', LINES, t)}${cap('p3', shown3, t)}${cap('p2', shown2, t)}<div class="track"><i></i></div></div>
+      ${LINES.map((l, i) => row(l, i, t)).join('')}
+    </div></div>
+    <div class="ways">
+      <span class="btn primary"><i>${ICON.plus}</i>${t.create}</span>
+      <span class="btn secondary"><i>${ICON.code}</i>${t.join}</span>
+      <p class="hint">${t.hint}</p>
+      <div class="or">${t.or}</div>
+      <span class="btn google"><i>${ICON.google}</i>${t.google}</span>
+      <p class="terms-line">${t.terms}</p>
+      <span class="btn email">${t.email}</span>
+    </div>
+    <div class="foot"><u>${t.privacy}</u><u>${t.termsLink}</u><span>${t.version}</span></div>
+  </div>`;
+}
+
+document.querySelectorAll('[data-lang]').forEach((boards) => {
+  const t = T[boards.dataset.lang];
+  boards.innerHTML = SIZES.map(([w, h, note]) => `<section class="board" style="width:${w}px">
+      <h2>${w} × ${h}</h2><p class="cap">${note}</p>
+      <div class="frame" style="width:${w}px;height:${h}px">${page(t)}</div></section>`).join('');
+});
+</script>
+</body>
+</html>
