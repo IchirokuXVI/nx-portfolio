@@ -12,7 +12,7 @@
 > This plan adds the server half: a single use nonce that the app mints before it asks
 > Android, and a route that takes the ID token, verifies it, spends the nonce inside the
 > token, and signs in through the same `googleLogin` that the redirect flow uses. Velista
-> `0175` builds the client half, including the automatic sign in that the owner asked
+> `0177` builds the client half, including the automatic sign in that the owner asked
 > for on 2026-10-30.
 >
 > **Google Cloud is ready.** Project `velista-512817` holds the web client `velista-web`
@@ -32,7 +32,7 @@
 > `auth/src/app/identity/identity.service.ts` (`mintOAuthState`, `exchangeGoogleSignIn`,
 > `googleLogin`), `libs/luna-shopper/contracts/src/lib/messages/auth.messages.ts`.
 >
-> **Build order.** Before velista `0175`. Independent of every other open plan. Open PR
+> **Build order.** Before velista `0177`. Independent of every other open plan. Open PR
 > [#871](https://github.com/IchirokuXVI/nx-portfolio/pull/871) adds a branch to
 > `googleLogin` (link onto the account that already holds the address). This plan calls
 > `googleLogin` and does not edit it, so the two merge in either order.
@@ -111,7 +111,7 @@ anything. Regenerate the OpenAPI document and the admin wire types.
 In: the two routes, the grant table and its migration, the verifier wrapper, the error
 codes, specs, the OpenAPI document and the wire types.
 
-Out: any client code (velista `0175`), the redirect flow, `googleLogin` itself, the Google
+Out: any client code (velista `0177`), the redirect flow, `googleLogin` itself, the Google
 Cloud project, the publishing status of the consent screen.
 
 ### Constraints
