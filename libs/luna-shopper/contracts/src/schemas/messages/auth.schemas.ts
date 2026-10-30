@@ -47,6 +47,12 @@ export const AUTH_SCHEMA_IDS = {
   exchangeGoogleSignInRequest: schemaId(
     'msg/auth.exchangeGoogleSignIn/request'
   ),
+  // The Android app signs in with a Google ID token (plan 0238).
+  mintGoogleNonceRequest: schemaId('msg/auth.mintGoogleNonce/request'),
+  mintGoogleNonceResult: schemaId('auth/MintGoogleNonceResult'),
+  signInWithGoogleIdTokenRequest: schemaId(
+    'msg/auth.signInWithGoogleIdToken/request'
+  ),
   // The basket scoped socket token (plan 0051, section 9): the one token auth
   // signs that names no user.
   mintParticipantTokenRequest: schemaId('auth/MintParticipantTokenRequest'),
@@ -310,6 +316,50 @@ const exchangeGoogleSignInRequest = object(
   ['code', 'codeVerifier']
 );
 
+/**
+ * The longest Google ID token a request may carry (plan 0238). A real one is
+ * a JWT of one to two kilobytes; the bound only keeps a body of megabytes from
+ * reaching the signature check.
+ */
+export const GOOGLE_ID_TOKEN_MAX_LENGTH = 4096;
+
+// The mint request of plan 0238, target state 1. `userId` and `locale` come
+// from the gateway, never from the body of the route.
+const mintGoogleNonceRequest = object(
+  AUTH_SCHEMA_IDS.mintGoogleNonceRequest,
+  {
+    userId: string(),
+    locale: string(),
+    silent: boolean(),
+    acceptedTermsVersion: termsVersion(),
+  },
+  []
+);
+
+const mintGoogleNonceResult = object(
+  AUTH_SCHEMA_IDS.mintGoogleNonceResult,
+  {
+    nonce: nonEmptyString({
+      description:
+        'Single use, valid for ten minutes. Pass it to Credential Manager as the nonce of the Google ID token request.',
+    }),
+    clientId: nonEmptyString({
+      description:
+        'The web client id of the Google project. Pass it to Credential Manager as the server client id: it is the audience the ID token must name.',
+    }),
+  },
+  ['nonce', 'clientId']
+);
+
+const signInWithGoogleIdTokenRequest = object(
+  AUTH_SCHEMA_IDS.signInWithGoogleIdTokenRequest,
+  {
+    idToken: nonEmptyString({ maxLength: GOOGLE_ID_TOKEN_MAX_LENGTH }),
+    callerUserId: string(),
+  },
+  ['idToken']
+);
+
 const mintOAuthStateResult = object(
   AUTH_SCHEMA_IDS.mintOAuthStateResult,
   { state: nonEmptyString() },
@@ -453,6 +503,9 @@ export const authSchemas: JsonSchema[] = [
   stageGoogleSignInRequest,
   stageGoogleSignInResult,
   exchangeGoogleSignInRequest,
+  mintGoogleNonceRequest,
+  mintGoogleNonceResult,
+  signInWithGoogleIdTokenRequest,
   mintParticipantTokenRequest,
   mintParticipantTokenResult,
   setUsernameRequest,
@@ -530,6 +583,15 @@ export const authMessageContracts: Record<
   },
   [AUTH_PATTERNS.exchangeGoogleSignIn]: {
     request: AUTH_SCHEMA_IDS.exchangeGoogleSignInRequest,
+    response: AUTH_SCHEMA_IDS.authTokens,
+  },
+  [AUTH_PATTERNS.mintGoogleNonce]: {
+    request: AUTH_SCHEMA_IDS.mintGoogleNonceRequest,
+    response: AUTH_SCHEMA_IDS.mintGoogleNonceResult,
+  },
+  [AUTH_PATTERNS.signInWithGoogleIdToken]: {
+    request: AUTH_SCHEMA_IDS.signInWithGoogleIdTokenRequest,
+    // The pair the exchange answers, issued the same way.
     response: AUTH_SCHEMA_IDS.authTokens,
   },
   [AUTH_PATTERNS.setUsername]: {

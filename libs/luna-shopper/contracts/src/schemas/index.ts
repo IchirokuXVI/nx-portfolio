@@ -19,6 +19,7 @@ export { ASSISTANT_ALLOWANCE_SCHEMA_IDS } from './messages/assistant-allowance.s
 export {
   ACCEPTED_TERMS_VERSION_MAX_LENGTH,
   AUTH_SCHEMA_IDS,
+  GOOGLE_ID_TOKEN_MAX_LENGTH,
 } from './messages/auth.schemas';
 export { BASKET_SHARING_SCHEMA_IDS } from './messages/basket-sharing.schemas';
 export { BASKET_SCHEMA_IDS } from './messages/basket.schemas';

@@ -313,6 +313,17 @@ export const ERROR_CATALOG: Record<
     en: 'Accept the Terms to continue.',
     es: 'Acepta los Términos para continuar.',
   },
+  // Google sign in from the Android app (plan 0238). The first says nothing
+  // about which check failed (decision D4). The app never shows the second:
+  // a silent attempt that meets it shows the Google button instead.
+  [ERROR_CODES.INVALID_GOOGLE_TOKEN]: {
+    en: 'Google sign in did not work. Please try again.',
+    es: 'No se ha podido entrar con Google. Inténtalo de nuevo.',
+  },
+  [ERROR_CODES.GOOGLE_SIGN_IN_NEEDS_CONSENT]: {
+    en: 'Choose your Google account to continue.',
+    es: 'Elige tu cuenta de Google para continuar.',
+  },
   // The sentence a client without its own reads (plan 0234, section 8.1). The
   // assistant names one of the variants below in `messageArgs.variant`, and
   // this one is what is left when it names none.

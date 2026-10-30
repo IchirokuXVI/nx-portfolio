@@ -497,6 +497,21 @@ export const ERROR_CODES = {
    */
   TERMS_ACCEPTANCE_MISSING: 'terms_acceptance_missing',
   /**
+   * A Google ID token from the Android app could not sign anybody in (plan
+   * 0238, decision D4): a bad signature, another audience or issuer, a token
+   * past its expiry, an address Google has not verified, a nonce that is
+   * missing, unknown or spent, or a caller who is not the one the nonce names.
+   * One code for every check, so a caller learns nothing about which failed.
+   */
+  INVALID_GOOGLE_TOKEN: 'invalid_google_token',
+  /**
+   * A silent Google sign in met a Google account that does not already open
+   * an account here (plan 0238, decision D3). Nothing was created, linked or
+   * accepted. The app shows its Google button, and a sign in the person
+   * presses can do what a silent one may not.
+   */
+  GOOGLE_SIGN_IN_NEEDS_CONSENT: 'google_sign_in_needs_consent',
+  /**
    * A person's assistant allowance, or the deployment's ceiling, would not
    * fit this turn (plan 0234, section 8.1). No provider was called.
    *
@@ -683,6 +698,11 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // request is incomplete for this deployment (plan 0231, section 4.3).
   [ERROR_CODES.TERMS_VERSION_STALE]: HttpStatus.CONFLICT,
   [ERROR_CODES.TERMS_ACCEPTANCE_MISSING]: HttpStatus.BAD_REQUEST,
+  // 401: the credential the app presented proves nobody. 409: the request is
+  // well formed, and what refuses it is the state of the accounts, which only
+  // a sign in the person presses may change (plan 0238).
+  [ERROR_CODES.INVALID_GOOGLE_TOKEN]: HttpStatus.UNAUTHORIZED,
+  [ERROR_CODES.GOOGLE_SIGN_IN_NEEDS_CONSENT]: HttpStatus.CONFLICT,
   // 429 beside `rate_limited` and apart from it by code: both say "not now",
   // and only that one says how many seconds (plan 0234, section 8.1).
   [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: HttpStatus.TOO_MANY_REQUESTS,
