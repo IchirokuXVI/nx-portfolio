@@ -488,6 +488,50 @@ describe('a silent sign in', () => {
     expect(terms.rows).toEqual([]);
   });
 
+  it('signs in a registered caller whose own identity this is, and writes no row', async () => {
+    const {
+      service,
+      stores,
+      events,
+      terms,
+      addRegistered,
+      linkPerson,
+      tokenFor,
+    } = build();
+    addRegistered(USER_B);
+    linkPerson(USER_B);
+    const { nonce } = await service.mintGoogleNonce({
+      userId: USER_B,
+      silent: true,
+    });
+    // The pair writes its refresh token; nothing else may change.
+    const before = JSON.stringify({
+      users: stores.users,
+      credentials: stores.credentials,
+      identities: stores.identities,
+      terms: terms.rows,
+    });
+
+    const pair = await service.signInWithGoogleIdToken({
+      idToken: tokenFor(nonce),
+      callerUserId: USER_B,
+    });
+
+    expect(pair.userId).toBe(USER_B);
+    expect(pair.accessToken).toBeTruthy();
+    expect(pair.refreshToken).toBeTruthy();
+    expect(
+      JSON.stringify({
+        users: stores.users,
+        credentials: stores.credentials,
+        identities: stores.identities,
+        terms: terms.rows,
+      })
+    ).toBe(before);
+    expect(events.userRegistered).not.toHaveBeenCalled();
+    expect(events.userUpgraded).not.toHaveBeenCalled();
+  });
+
   it('needs consent for a Google account this deployment has never seen, and writes no row', async () => {
     const { service, stores, snapshot, tokenFor } = build();
     const { nonce } = await service.mintGoogleNonce({ silent: true });

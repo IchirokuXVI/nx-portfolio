@@ -1952,11 +1952,16 @@ export class IdentityService {
           return { refused: 'caller_mismatch', nonceId: grant.id };
         }
         if (grant.silent) {
+          // Held as a read lock until the commit. Two plain reads, this one and
+          // the first one of `googleLogin`, would let an account deletion commit
+          // between them, and `googleLogin` would then create an account for a
+          // silent nonce, which D3 forbids.
           const identity = await manager.getRepository(OAuthIdentity).findOne({
             where: {
               provider: AuthProvider.GOOGLE,
               providerUserId: claims.sub,
             },
+            lock: { mode: 'pessimistic_read' },
           });
           if (!identity || (grant.userId && identity.userId !== grant.userId)) {
             return { needsConsent: true, nonceId: grant.id };
