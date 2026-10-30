@@ -162,9 +162,12 @@ setting. Do not add an environment variable. If the silent rule seems to need a 
 - The consent screen of project `velista-512817` is in **Testing**: only the seven test
   users on its Audience page can sign in with Google, on the web and in the app alike.
   To open Google sign in to everyone, complete the Branding page and press "Publish app".
-- If the app ever ships through Google Play with Play App Signing, Play signs with its own
-  key. Add that key's SHA1 (Play Console, App integrity) as one more Android client for
-  `app.velista`, or Google sign in fails in the store build only.
+- The app ships through Google Play with Play App Signing (internal testing since
+  2026-10-30), and Play signs with its own key. Done on 2026-10-30: the third Android
+  client `velista-android-play` (`app.velista`) carries that key's SHA1
+  (`5C:9B:39:8A:19:07:F0:0D:89:F0:FD:BE:AC:AB:95:C7:A0:33:CD:EC`, Play Console, App
+  signing). Without it Google sign in fails in the store build only. The Play testers and
+  the test users of the consent screen are the same people: keep both lists in step.
 
 ## What the build decided
 
