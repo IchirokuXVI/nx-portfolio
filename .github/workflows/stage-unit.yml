@@ -56,14 +56,14 @@ jobs:
       UNIT: ${{ inputs.unit }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       # Node on the runner only for `nx show projects`, whose --affected shells
       # out to git, which node:24-slim lacks. Nothing is compiled here.
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
@@ -145,7 +145,7 @@ jobs:
       TRANSCRIBER: ${{ contains(format(',{0},', needs.setup.outputs.testable), ',luna-shopper-backend-transcriber,') }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Restore the workspace
         uses: ./.github/actions/workspace
@@ -166,7 +166,7 @@ jobs:
 
       - name: Setup Node.js
         if: env.TRANSCRIBER == 'true'
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
@@ -188,25 +188,25 @@ jobs:
       IMAGES: ${{ needs.setup.outputs.images }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       # The docker executor calls buildx itself, so the gha cache needs the
       # runtime variables exposed.
       - name: Expose GitHub Actions runtime for the gha cache
-        uses: crazy-max/ghaction-github-runtime@v3
+        uses: crazy-max/ghaction-github-runtime@3cb05d89e1f492524af3d41a1c98c83bc3025124 # v3
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
@@ -279,10 +279,10 @@ jobs:
       E2E_IMAGE_TAG: staging
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 
@@ -292,7 +292,7 @@ jobs:
           build-image: ${{ env.BUILD_IMAGE }}
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -306,14 +306,14 @@ jobs:
 
       - name: Cache Playwright browsers
         if: matrix.browsers == 'playwright' || matrix.browsers == 'both'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ steps.browsers.outputs.playwright }}
 
       - name: Cache Cypress binary
         if: matrix.browsers == 'cypress' || matrix.browsers == 'both'
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.cache/Cypress
           key: cypress-${{ runner.os }}-${{ steps.browsers.outputs.cypress }}
@@ -348,7 +348,7 @@ jobs:
 
       - name: Upload the gate diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: gate-${{ matrix.gate }}-${{ github.run_id }}
           if-no-files-found: ignore
@@ -394,12 +394,12 @@ jobs:
       # The whole history, because check-tasks.mjs measures each window from
       # the commit that last changed its task.env.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
 

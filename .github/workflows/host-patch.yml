@@ -82,7 +82,7 @@ jobs:
           fi
 
       - name: Checkout the bootstrap scripts
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           sparse-checkout: k8s/bootstrap
 
@@ -102,7 +102,7 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
+        uses: webfactory/ssh-agent@e83874834305fe9a4a2997156cb26c5de65a8555 # v0.10.0
         with:
           ssh-private-key: ${{ secrets.SSH_DEPLOY_KEY }}
 
