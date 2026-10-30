@@ -17,6 +17,14 @@ import { anonymous, operation } from './http-context';
 import { TokenStore } from './token-store';
 import { refuseUnprovenSession } from './unproven-session';
 
+/** What the gateway mints for a native Google sign in (velista `0175`, backend `0238`). */
+export interface GoogleNonce {
+  /** Single use, ten minutes. Android puts it in the token it returns. */
+  readonly nonce: string;
+  /** The web client of the Google project, which Android takes as the server client. */
+  readonly clientId: string;
+}
+
 /**
  * Credentials, over HTTP. The default behind `AUTH_SERVICE`.
  *
@@ -328,6 +336,67 @@ export class AuthApi implements AuthServiceI {
     const tokens = toSessionTokens(body);
     if (tokens === null) {
       throw new Error('auth.googleExchange returned an unusable token pair');
+    }
+
+    return tokens;
+  }
+
+  /**
+   * `POST /v1/auth/google/nonce` (backend `0238`): mint the single use nonce a native
+   * Google sign in hands to Android, and the web client Android names as the audience.
+   *
+   * The ordinary context, as the state mint: a guest's bearer goes out, so the nonce
+   * names the account an interactive sign in links onto. A silent nonce sends no terms
+   * version, because the server refuses one: nobody pressed anything, so nothing is
+   * accepted on anybody's behalf. An answer without both strings rejects (rule D4).
+   */
+  async mintGoogleNonce(options: {
+    readonly silent: boolean;
+    readonly acceptedTermsVersion: string | null;
+  }): Promise<GoogleNonce> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/auth/google/nonce'),
+        options.silent
+          ? { silent: true }
+          : {
+              silent: false,
+              ...withTermsVersion(options.acceptedTermsVersion),
+            },
+        { context: operation('auth.googleNonce') }
+      )
+    );
+
+    const nonce = str(isRecord(body) ? body['nonce'] : null);
+    const clientId = str(isRecord(body) ? body['clientId'] : null);
+    if (nonce === null || clientId === null) {
+      throw new Error('auth.googleNonce returned no nonce or client id');
+    }
+
+    return { nonce, clientId };
+  }
+
+  /**
+   * `POST /v1/auth/google/id-token` (backend `0238`): trade the ID token Android
+   * returned for the pair.
+   *
+   * Never anonymous, for the exchange's reason: when the nonce named a guest, the
+   * server refuses a caller that is not that guest. The pair is handed back unstored,
+   * because `GoogleSignIn` decides whether the sign in still counts (a silent one that
+   * ran past its deadline does not). The token goes in the body and nowhere else.
+   */
+  async signInWithGoogleIdToken(idToken: string): Promise<SessionTokens> {
+    const body = await firstValueFrom(
+      this._http.post<unknown>(
+        this._urls.gateway('/v1/auth/google/id-token'),
+        { idToken },
+        { context: operation('auth.googleIdToken') }
+      )
+    );
+
+    const tokens = toSessionTokens(body);
+    if (tokens === null) {
+      throw new Error('auth.googleIdToken returned an unusable token pair');
     }
 
     return tokens;
