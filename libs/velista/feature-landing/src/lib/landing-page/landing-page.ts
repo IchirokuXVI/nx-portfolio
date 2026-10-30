@@ -23,6 +23,7 @@ import {
   APP_BASE_PATH,
   APP_KEY,
   type PreviewLineVm,
+  type PreviewTallyVm,
 } from '@portfolio/velista/models';
 import {
   APP_RUNTIME,
@@ -38,6 +39,7 @@ import {
   LegalLinks,
   ListPreviewCard,
 } from '@portfolio/velista/ui';
+import { PREVIEW_SAMPLE, previewTallies } from './preview-sample';
 
 /**
  * The front door: what somebody who is not signed in sees at the app's mount.
@@ -180,18 +182,18 @@ export class LandingPage {
   readonly localeLabel = computed(() => this.locale().toLocaleUpperCase());
 
   /**
-   * The illustrative list.
+   * The illustrative list (velista 0175): four rows drawn as the zone list draws them.
    *
    * Invented, and it stays invented: it exists to show what the product is in one
    * glance. It shows what a line can be on purpose, because "some of these are dealt with
    * and somebody else did them" is the whole idea of the product and is hard to say in
    * a sentence.
    *
-   * `0003` argued these strings should stay in English, on the grounds that a
-   * translator asked to localize "Milk" would wonder what it was for. `0007` reverses
-   * that: they are the only words on the front door that describe what the product
-   * does, and a Spanish speaker reading `Milk / Bread / Tomatoes` is looking at an
-   * English app. The keys are named for their purpose, which answers the worry.
+   * `0003` argued these strings should stay in English. `0007` reversed that: they are
+   * the only words on the front door that describe what the product does, and a Spanish
+   * speaker reading `Milk / Eggs` is looking at an English app. The second line names
+   * the kind and the size and never a brand (0175, D4): the landing is marketing, and
+   * a real brand there reads as an endorsement.
    *
    * Translated from the `.ts` rather than the template because this is one typed
    * `PreviewLineVm[]` handed to `ListPreviewCard` as a single input, so
@@ -205,36 +207,49 @@ export class LandingPage {
     // resolver on the parent route, so this component cannot be created before the
     // namespace is ready, which is exactly the guarantee that lets a `.ts` caller use
     // `t()` at all.
-    this.locale();
+    const money = this._money();
 
-    return [
-      {
-        content: this._t.t('home.preview.line.milk.content'),
-        // Zero, and bought. The one line on the card that shows what the whole
-        // product is: you wanted some, somebody got them, the line stays where it
-        // is at nought rather than being ticked off or deleted.
-        quantity: '0',
-        indicator: 'bought',
-        by: 'A',
-      },
-      {
-        content: this._t.t('home.preview.line.bread.content'),
-        quantity: '2',
-        indicator: null,
-        by: null,
-      },
-      // The `by` initials stay hardcoded on all three lines: they stand for people
-      // rather than words, and a letter is not translatable.
-      {
-        content: this._t.t('home.preview.line.tomatoes.content'),
-        // Still wanted, and the shop had none. Not having found something is not the
-        // same as no longer needing it, which is why the number is untouched.
-        quantity: '6',
-        indicator: 'notAvailable',
-        by: 'M',
-      },
-    ];
+    return PREVIEW_SAMPLE.map((line) => ({
+      content: this._t.t(`home.preview.line.${line.key}.content`),
+      detail: this._t.t(`home.preview.line.${line.key}.detail`),
+      price: money.format(line.price),
+      quantity: String(line.quantity),
+      // The glyph tile until the owner supplies four photos with no brand on them
+      // (0175, O1). A photo goes here, resolved against the document's base.
+      imageUrl: null,
+      indicator: line.indicator,
+      givesWay: line.givesWay,
+    }));
   });
+
+  /** The progress line of the card, once per number of rows it can draw (0175, 6). */
+  readonly previewTallies = computed<readonly PreviewTallyVm[]>(() => {
+    const money = this._money();
+
+    return previewTallies(PREVIEW_SAMPLE).map((tally) => ({
+      ...tally,
+      label: this._t.t('home.progress.pending', undefined, undefined, {
+        pending: tally.pending,
+        total: tally.rows,
+      }),
+      total: money.format(tally.total),
+    }));
+  });
+
+  /**
+   * The two people in the card's head. Letters for names, the same names in every
+   * locale, so never translated.
+   */
+  readonly previewFaces: readonly string[] = ['A', 'M'];
+
+  /** Euros in the page's locale. A dependency on the locale, like the lines. */
+  private readonly _money = computed(
+    () =>
+      new Intl.NumberFormat(this.locale(), {
+        style: 'currency',
+        currency: 'EUR',
+      })
+  );
 
   /**
    * Switches the app's language in place.

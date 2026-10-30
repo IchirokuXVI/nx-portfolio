@@ -175,8 +175,8 @@ describe('LandingPage', () => {
     });
 
     it('hides the illustrative list from assistive technology', async () => {
-      // Three invented groceries read out before the two buttons that matter is
-      // noise; the hero already says what the product does in words.
+      // Four invented groceries read out before the buttons that matter is noise;
+      // the headline already says what the product does in words.
       const { fixture } = await render();
 
       expect(
@@ -228,19 +228,23 @@ describe('LandingPage', () => {
   });
 
   describe('the preview lines', () => {
-    it('asks for a translated string per line', async () => {
+    it('asks for a translated name and detail per row', async () => {
       // The testing translator returns the key, so this asserts *which* keys the card
-      // is fed rather than copy a translator is free to change. They render as the
-      // keys themselves until rokutranslator 0004 and velista 0006 have merged, which
-      // plan 0007 section 8 says is the expected result until then.
+      // is fed rather than copy a translator is free to change.
       const { fixture } = await render();
 
       expect(
-        fixture.componentInstance.previewLines().map((line) => line.content)
+        fixture.componentInstance
+          .previewLines()
+          .map((line) => [line.content, line.detail])
       ).toEqual([
-        'home.preview.line.milk.content',
-        'home.preview.line.bread.content',
-        'home.preview.line.tomatoes.content',
+        ['home.preview.line.milk.content', 'home.preview.line.milk.detail'],
+        ['home.preview.line.eggs.content', 'home.preview.line.eggs.detail'],
+        [
+          'home.preview.line.bananas.content',
+          'home.preview.line.bananas.detail',
+        ],
+        ['home.preview.line.oil.content', 'home.preview.line.oil.detail'],
       ]);
     });
 
@@ -253,12 +257,36 @@ describe('LandingPage', () => {
       expect(fixture.componentInstance.previewLines()).not.toBe(before);
     });
 
-    it('leaves the initials alone, because a letter is not translatable', async () => {
-      const { fixture } = await render();
+    it('formats the prices in euros in the page locale', async () => {
+      const { fixture, store } = await render({ locale: 'en' });
+
+      expect(fixture.componentInstance.previewLines()[3]?.price).toBe('€8.95');
+
+      store.locale.set('es');
 
       expect(
-        fixture.componentInstance.previewLines().map((line) => line.by)
-      ).toEqual(['A', null, 'M']);
+        fixture.componentInstance.previewLines()[3]?.price.replace(/\s/g, ' ')
+      ).toBe('8,95 €');
+    });
+
+    it('draws one progress line per step the rows give way to', async () => {
+      const { fixture } = await render();
+
+      const tallies = queryAll(fixture, '.tally');
+      expect(
+        tallies.map((tally) => [
+          tally.getAttribute('data-rows'),
+          tally.getAttribute('data-pending'),
+        ])
+      ).toEqual([
+        ['4', '3'],
+        ['3', '2'],
+        ['2', '1'],
+      ]);
+      expect(queryAll(fixture, '[data-preview-row]')).toHaveLength(4);
+      expect(
+        queryAll(fixture, '[data-preview-row][data-settled]')
+      ).toHaveLength(1);
     });
   });
 

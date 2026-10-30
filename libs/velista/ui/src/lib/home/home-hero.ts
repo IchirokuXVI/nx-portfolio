@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 
 /**
- * The headline and one paragraph on the anonymous screen.
+ * The headline on the anonymous screen, and nothing else since velista 0175: the
+ * paragraph under it went so the card below keeps its rows on a short phone, and the
+ * card says what the paragraph said.
  *
  * No navigation and no actions: the entry actions sit in the bottom third, in thumb
  * reach, and this is the only part of the screen that is purely persuasion.
@@ -23,7 +25,6 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
           {{ 'home.hero.headline.bottom' | rokuT }}
         </div>
       </h1>
-      <p class="body">{{ 'home.hero.body' | rokuT }}</p>
     </div>
   `,
   styleUrl: './home-hero.scss',

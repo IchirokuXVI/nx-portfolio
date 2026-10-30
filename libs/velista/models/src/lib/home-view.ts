@@ -99,36 +99,56 @@ export interface ZoneCardVm {
  */
 
 /**
- * One line in the illustrative preview on the anonymous screen.
+ * One row of the illustrative list on the landing page (velista 0175).
  *
  * It **advertised a checkbox** until velista plan 0043: a `LineStatus` per line, drawn
- * as a tick, a circle or a cross. The product has no ticks any more, so a front door
- * showing them would be a picture of a different app, and the first thing a visitor
- * did after signing up would be to look for a control that does not exist.
+ * as a tick, a circle or a cross. Since 0175 it is drawn as the zone list draws a row:
+ * a picture, the name and the price of one, the kind and the size with one status
+ * word, and the quantity in its chip.
  *
- * What it shows instead is what the product actually is: a quantity per line, one of
- * them at zero because it has been bought, and one the shop did not have.
+ * Everything in it is already a string, because this is decoration rather than data:
+ * nothing downstream may treat the quantity as one it could add to.
  */
 export interface PreviewLineVm {
   readonly content: string;
-  /**
-   * The number, as a **string**, because this is decoration rather than data.
-   *
-   * It stays a string so the card can show "0" and "2" without anything downstream
-   * treating them as a quantity it could add to.
-   */
+  /** The kind and the size ("Semi-skimmed · 1 L"). Never a brand, never the name. */
+  readonly detail: string;
+  /** The price of one, already formatted in the page's locale. */
+  readonly price: string;
   readonly quantity: string;
+  /** The photo, or null for the product glyph a list draws for a product with none. */
+  readonly imageUrl: string | null;
   /**
-   * What to draw beside it, or null for an ordinary wanted line.
-   *
-   * The same two words the real row uses, so the picture and the product agree. The
-   * third indicator, somebody out buying it, is deliberately absent: it is a live fact
-   * about a real basket and an invented one would be the only thing on this card
-   * pretending to be current.
+   * The one status word, or null for an ordinary wanted line. The same two words the
+   * real row uses. Somebody out buying it is absent on purpose: it is a live fact about
+   * a real basket, and an invented one would pretend to be current.
    */
   readonly indicator: 'bought' | 'notAvailable' | null;
-  /** The initial in the little avatar, or null for a line nobody has touched. */
-  readonly by: string | null;
+  /**
+   * When the row gives way as the card loses room: 1 first, then 2. Null for a row
+   * that always stays, which is the bought one and the one the shop did not have,
+   * because those two are the states that explain the product (0175, D3).
+   */
+  readonly givesWay: 1 | 2 | null;
+}
+
+/**
+ * The progress line of the landing card for one number of drawn rows (velista 0175,
+ * target 6). The card holds one of these per step its rows can give way to, and its
+ * `@container` rules show the one that matches the rows on screen, so the count, the
+ * total and the bar never describe a hidden row.
+ */
+export interface PreviewTallyVm {
+  /** How many rows have given way when this tally is the one shown: 0, 1 or 2. */
+  readonly givenWay: number;
+  readonly rows: number;
+  readonly pending: number;
+  /** "3 of 4 pending", translated. */
+  readonly label: string;
+  /** The estimated cost of the pending rows, formatted. */
+  readonly total: string;
+  /** The share of the drawn rows that are settled, from 0 to 1. */
+  readonly settledShare: number;
 }
 
 /**

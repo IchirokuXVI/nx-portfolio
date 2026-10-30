@@ -1,10 +1,15 @@
+@use '../styles/tokens' as tokens;
+
+// One 8 px rhythm through the block and buttons a step under the app's (velista 0175,
+// target 9): the landing is exactly one screen, and every pixel here is one the card
+// above does not get.
 .actions {
   display: flex;
   flex-direction: column;
   gap: var(--app-space-3);
   // No safe area inset: the page that draws these carries it, under whatever comes
   // last, which on landing is the version line below this block.
-  padding: 0 var(--app-space-5) var(--app-space-6);
+  padding: 0 var(--app-space-5) var(--app-space-2);
 }
 
 .button {
@@ -12,7 +17,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--app-space-2);
-  min-height: var(--app-button-height);
+  min-height: var(--app-landing-button-height);
   padding: 0 var(--app-space-4);
   border: none;
   border-radius: var(--app-button-radius);
@@ -74,10 +79,11 @@
   background: var(--app-google-button-bg);
   color: var(--app-google-button-fg);
   font-size: var(--app-text-sm);
+  min-height: var(--app-landing-google-height);
 }
 
 .link {
-  min-height: var(--app-touch-target);
+  min-height: var(--app-landing-link-height);
   background: transparent;
   color: var(--app-action-quiet-fg);
   font-size: var(--app-text-sm);
@@ -97,7 +103,6 @@
   display: flex;
   align-items: center;
   gap: var(--app-space-3);
-  padding: var(--app-space-3) 0;
 }
 
 .rule {
@@ -121,4 +126,14 @@
   color: var(--app-text-secondary);
   text-align: center;
   text-wrap: pretty;
+}
+
+// Only the landing draws these, and there the page is the screen. On a short one the
+// two sentences of explanation go before the card gives up a row (velista 0175,
+// target 8): the card shows the product, the explainer only describes it.
+@media (max-height: #{tokens.$app-landing-short}) {
+  .explainer,
+  .divider {
+    display: none;
+  }
 }

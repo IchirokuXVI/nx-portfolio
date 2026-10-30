@@ -41,6 +41,26 @@ $app-breakpoint-md: 768px;
 // A shopping list stretched to 1900px is unusable.
 $app-content-max: 480px;
 
+// The landing card (velista 0175). It is a size container that drops rows by its own
+// height, and a container query cannot read a custom property, so its geometry is
+// written once here in Sass and both the tokens below and the card's `@container`
+// rules are computed from it. Change a number here and the rules follow.
+//
+// The chrome is everything that is not a row: the gap above the card (12), its two
+// borders, its top padding (8), the head (22) and the progress line (8 + 16 + 4 + 4).
+$app-preview-row: 50px;
+$app-preview-head: 22px;
+$app-preview-chrome: 76px;
+$app-preview-chrome-without-progress: 44px;
+// What stays free between the card and the first way in, so the card never touches
+// the button under it.
+$app-preview-clear: 12px;
+// Under this width the group's name is not drawn rather than cut to two letters.
+$app-preview-narrow: 340px;
+// Under this height the landing drops the group explainer and the OR divider before
+// the card gives up a row (velista 0175, target 8). The page is the screen there.
+$app-landing-short: 700px;
+
 /// Media query helper, so a component never writes a raw breakpoint value.
 /// @param {Length} $from - one of the two breakpoints above.
 @mixin app-from($from) {
@@ -235,6 +255,27 @@ $app-content-max: 480px;
   // The presence dot. No artwork, so it is a token and a CSS circle rather than an
   // icon component and an SVG file.
   --app-dot-size: 6px;
+
+  // The landing card (velista 0175): the zone list's row in small. The picture is a
+  // step under a line row's, the quantity a chip rather than a reel.
+  --app-preview-row-height: #{$app-preview-row};
+  --app-preview-head-height: #{$app-preview-head};
+  --app-preview-picture-size: 36px;
+  --app-preview-picture-radius: 9px;
+  --app-preview-quantity-width: 44px;
+  --app-preview-quantity-height: 30px;
+  --app-preview-quantity-radius: 10px;
+  --app-preview-name-size: 15px;
+  --app-preview-price-size: 13px;
+  --app-preview-caption-height: 16px;
+  --app-preview-face-size: var(--app-avatar-sm);
+  --app-preview-face-text: 10px;
+  // The ways in on the landing, a step tighter than a button elsewhere so the card
+  // keeps its rows on a short phone. Google keeps a touch target; the email link,
+  // which sits on its own line, is a little shorter still.
+  --app-landing-button-height: 48px;
+  --app-landing-google-height: var(--app-touch-target);
+  --app-landing-link-height: 40px;
   // The recording dot beside the elapsed length (plan 0032, section 4.3). Larger than
   // the presence dot and a token of its own rather than a reuse of it: presence is
   // ambient information glanced at, and this one says whether the microphone is open,
@@ -263,7 +304,6 @@ $app-content-max: 480px;
   // Rows. A list row inside a card is shorter than a standalone line row, because
   // it is a preview of a list rather than a thing being worked on.
   --app-list-row-height: 40px;
-  --app-preview-row-height: 38px;
   --app-attention-row-height: 36px;
   // A member row is a whole row about a person rather than a preview, and it has to
   // hold a 44 square menu button with air around it (plan 0010, section 7). Its own
@@ -314,9 +354,6 @@ $app-content-max: 480px;
   --app-choice-card-check-radius: 7px;
   --app-choice-card-tick-width: 11px;
   --app-choice-card-tick-height: 6px;
-  // Narrower inside a preview row, which is 38px tall and is a picture rather than a
-  // control.
-  --app-preview-quantity-width: 34px;
 
   // **The one number that decides how the reel feels.** It is positional, one to one
   // with the finger, so this is the distance a thumb travels per unit. 40px leaves

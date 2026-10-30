@@ -1,75 +1,96 @@
 <!--
   aria-hidden, and that is deliberate. This is decoration: every line in it is
   invented, none of it is actionable, and a screen reader user gets nothing from
-  hearing three fake groceries read out before the two buttons that matter. The hero
+  hearing four fake groceries read out before the buttons that matter. The headline
   above already says what the product does in words.
 -->
 <div aria-hidden="true" class="card">
   <div class="head">
-    <div class="titles">
+    <span class="titles">
       <span class="list-name">{{ listName() }}</span>
       <span class="zone-name">{{ zoneName() }}</span>
-    </div>
+    </span>
 
-    @if (shoppingNow() > 0) {
-      <div class="presence">
-        <span class="dot"></span>
-        <span class="presence-text">{{
-          'home.presence.hereCount' | rokuT: { count: shoppingNow() }
-        }}</span>
+    @if (presence()) {
+      <span class="here">
+        <span class="faces">
+          @for (face of faces(); track $index) {
+            <span class="face">{{ face }}</span>
+          }
+        </span>
+        <span>{{ presence() }}</span>
+      </span>
+    }
+  </div>
+
+  <!--
+    One per step the rows can give way to. The `@container` rules show the one whose
+    rows are the rows on screen, so the count never describes a hidden row.
+  -->
+  <div class="progress">
+    @for (tally of tallies(); track tally.givenWay) {
+      <div
+        [attr.data-given-way]="tally.givenWay"
+        [attr.data-pending]="tally.pending"
+        [attr.data-rows]="tally.rows"
+        class="tally"
+      >
+        <span class="caption">
+          <span>{{ tally.label }}</span>
+          <span class="total">~{{ tally.total }}</span>
+        </span>
+        <span class="track">
+          <span
+            [style.inline-size.%]="tally.settledShare * 100"
+            class="fill"
+          ></span>
+        </span>
       </div>
     }
   </div>
 
-  <div class="lines">
-    @for (line of lines(); track line.content) {
-      <!--
-        No control at the head of the row any more, because there is none on the real
-        row either (velista plan 0043, section 1.1). What used to sit here was a tick,
-        a circle or a cross, which is a picture of a checkbox this product does not
-        have. The indicator sits under the content where the real row puts it, and the
-        quantity carries the state.
-      -->
-      <div class="line">
-        <div class="content">
-          <span [class.settled]="line.indicator === 'bought'" class="text">{{
-            line.content
-          }}</span>
+  @for (line of lines(); track line.content) {
+    <!--
+      No control at the head of the row, because there is none on the real row either
+      (velista plan 0043, section 1.1). The quantity carries the state.
+    -->
+    <div
+      [attr.data-gives-way]="line.givesWay"
+      [attr.data-settled]="line.indicator === 'bought' ? '' : null"
+      [class.settled]="line.indicator === 'bought'"
+      class="row"
+      data-preview-row
+    >
+      <lib-product-picture [imageUrl]="line.imageUrl" class="picture" />
 
-          <!--
-            The indicator is a word as well as a colour and a glyph. Plan 0002 section
-            11: colour is never the only carrier of meaning, which also covers reading
-            a red and green list with colour blindness. It is a word here where the
-            status chip was commented out, because these two say something the number
-            beside them does not: a line at zero and a line at zero having been bought
-            look identical otherwise, and that is the distinction the whole plan turns
-            on.
-          -->
+      <span class="body">
+        <span class="line-1">
+          <span class="name">{{ line.content }}</span>
+          <span class="price">{{ line.price }}</span>
+        </span>
+
+        <!--
+          The kind and the size, then one status word. A word as well as a colour and
+          a glyph: colour is never the only carrier of meaning (plan 0002, section 11).
+        -->
+        <span class="line-2">
+          <span class="detail">{{ line.detail }}</span>
           @if (line.indicator === 'bought') {
-            <span class="mark mark-bought">
-              <lib-check-icon class="mark-glyph" />
+            <span class="status status-bought">
+              <lib-check-icon class="status-glyph" />
               {{ 'line.indicator.bought' | rokuT }}
             </span>
           } @else if (line.indicator === 'notAvailable') {
-            <span class="mark mark-missing">
-              <lib-x-circle-icon class="mark-glyph" />
-              {{ 'line.indicator.notAvailable' | rokuT }}
+            <span class="status status-missing">
+              <lib-x-circle-icon class="status-glyph" />
+              {{ 'list.trips.row.notAvailable' | rokuT }}
             </span>
           }
-        </div>
+        </span>
+      </span>
 
-        <!--
-          Drawn on every line, zero included, exactly as the real row draws it. It
-          stopped being an annotation and became the thing the line says.
-        -->
-        <span [class.zero]="line.quantity === '0'" class="quantity">{{
-          line.quantity
-        }}</span>
-
-        @if (line.by; as initial) {
-          <span class="by">{{ initial }}</span>
-        }
-      </div>
-    }
-  </div>
+      <!-- On every row, zero included, exactly as the real row draws it. -->
+      <span class="quantity">{{ line.quantity }}</span>
+    </div>
+  }
 </div>
