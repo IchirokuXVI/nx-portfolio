@@ -508,6 +508,102 @@ describe('AuthApi', () => {
     });
   });
 
+  describe('Google sign in in the Android app (velista 0177, backend 0238)', () => {
+    it('mints an interactive nonce with the terms version and the bearer of a guest', async () => {
+      tokens.set(pair('u-guest', 'TEMPORARY'));
+      const result = api.mintGoogleNonce({
+        silent: false,
+        acceptedTermsVersion: '2026-10-29',
+      });
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/google/nonce`);
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({
+        silent: false,
+        acceptedTermsVersion: '2026-10-29',
+      });
+      expect(request.request.headers.get('Authorization')).toBe(
+        `Bearer ${tokens.tokens()?.accessToken}`
+      );
+      request.flush({ nonce: 'n1', clientId: 'web-client' });
+
+      await expect(result).resolves.toEqual({
+        nonce: 'n1',
+        clientId: 'web-client',
+      });
+    });
+
+    it('mints a silent nonce with no terms version, bare when nobody is signed in', async () => {
+      // The server refuses a version on a silent nonce: nobody pressed anything.
+      const result = api.mintGoogleNonce({
+        silent: true,
+        acceptedTermsVersion: '2026-10-29',
+      });
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/google/nonce`);
+      expect(request.request.body).toEqual({ silent: true });
+      expect(request.request.headers.has('Authorization')).toBe(false);
+      request.flush({ nonce: 'n1', clientId: 'web-client' });
+
+      await expect(result).resolves.toEqual({
+        nonce: 'n1',
+        clientId: 'web-client',
+      });
+    });
+
+    it('rejects a nonce answer without both strings (rule D4)', async () => {
+      const result = api.mintGoogleNonce({
+        silent: false,
+        acceptedTermsVersion: null,
+      });
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/google/nonce`)
+        .flush({ nonce: 'n1' });
+
+      await expect(result).rejects.toThrow();
+    });
+
+    it('posts the ID token and hands the pair back unstored', async () => {
+      tokens.set(pair('u-guest', 'TEMPORARY'));
+      const result = api.signInWithGoogleIdToken('id-token-1');
+
+      const request = httpMock.expectOne(`${GATEWAY}/v1/auth/google/id-token`);
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({ idToken: 'id-token-1' });
+      expect(request.request.headers.get('Authorization')).toBe(
+        `Bearer ${tokens.tokens()?.accessToken}`
+      );
+      request.flush(pair('u-guest', 'REGISTERED'));
+
+      expect((await result).kind).toBe('REGISTERED');
+      // `GoogleSignIn` stores it, because only it knows whether the sign in still counts.
+      expect(tokens.tokens()?.kind).toBe('TEMPORARY');
+    });
+
+    it('rejects a pair it could not map (rule D4)', async () => {
+      const result = api.signInWithGoogleIdToken('id-token-1');
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/google/id-token`)
+        .flush({ userId: 'u1' });
+
+      await expect(result).rejects.toThrow();
+    });
+
+    it('answers the refusal codes as gateway errors', async () => {
+      const result = api.signInWithGoogleIdToken('id-token-1');
+      httpMock
+        .expectOne(`${GATEWAY}/v1/auth/google/id-token`)
+        .flush(
+          { code: 'google_sign_in_needs_consent' },
+          { status: 409, statusText: 'Conflict' }
+        );
+
+      const error = await result.catch((thrown: unknown) => thrown);
+      expect(error).toBeInstanceOf(GatewayError);
+      expect((error as GatewayError).code).toBe('google_sign_in_needs_consent');
+    });
+  });
+
   describe('rule D4, on the token pair', () => {
     it('refuses to store a pair it could not map', async () => {
       // A half stored session is worse than none: the app would look signed in and

@@ -161,6 +161,17 @@ export const StorageKeys = {
    * is minted, and the callback page removes it before it posts the exchange.
    */
   googleVerifier: `google-verifier:${APP_KEY}`,
+  /**
+   * That a sign out on this device switched the automatic Google sign in off
+   * (velista `0177`, D4).
+   *
+   * In `localStorage`, because it has to outlive the app being closed: without it, a
+   * person who signs out is signed in again on the next open, which reads as a sign out
+   * that did nothing. Written only where a native Google picker exists. A Google sign
+   * in somebody pressed removes it, and clearing the app's data removes it with
+   * everything else, which is the case the automatic sign in is for.
+   */
+  googleAutoSignInOff: `google-auto-sign-in-off:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

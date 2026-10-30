@@ -14,6 +14,7 @@ export * from './lib/catalog-paths';
 export * from './lib/column-scroll';
 export * from './lib/connection-state';
 export * from './lib/geolocation-reader';
+export * from './lib/google-credential';
 export * from './lib/impersonation-state';
 export * from './lib/install-state';
 export * from './lib/install-store';

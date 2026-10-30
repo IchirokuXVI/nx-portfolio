@@ -9,9 +9,11 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   ApiUrl,
+  AuthApi,
   fakeAuthService,
   fakeProfileStore,
   fakeZoneStore,
+  GoogleSignIn,
   profileFor,
   provideFakeAuthService,
   provideFakeProfileStore,
@@ -25,10 +27,12 @@ import {
 import type { MyZone, ProfileLoad, ZoneRole } from '@portfolio/velista/models';
 import { APP_STANDALONE_ORIGIN } from '@portfolio/velista/models';
 import {
+  GOOGLE_CREDENTIAL,
   InstallStore,
   PageNavigation,
   provideFakeBrowserFacade,
   provideVelistaTesting,
+  StorageKeys,
   TEST_BRAND,
   TourStore,
   type InstallState,
@@ -73,6 +77,8 @@ interface Options {
   readonly emailVerified?: boolean;
   readonly profileState?: ProfileLoad;
   readonly zones?: readonly MyZone[];
+  /** Whether the app runs where a native Google picker exists (velista 0177). */
+  readonly googleCredential?: boolean;
   readonly forgotPassword?: Parameters<
     typeof fakeAuthService
   >[0] extends infer O
@@ -92,6 +98,8 @@ async function render(options: Options = {}): Promise<{
   install: { prompt: jest.Mock };
   tour: { start: jest.Mock };
   opened: string[];
+  storage: Map<string, string>;
+  credential: { getIdToken: jest.Mock; forget: jest.Mock };
 }> {
   TestBed.resetTestingModule();
 
@@ -127,12 +135,19 @@ async function render(options: Options = {}): Promise<{
   // A double, because the real store reads the router's events and this spec's router
   // is a pair of mocks. What the row does is start it; `tour-store.spec.ts` owns the rest.
   const tour = { start: jest.fn().mockResolvedValue(undefined) };
+  // The real `GoogleSignIn` over a picker double, because what sign out owes it is a
+  // fact about the device: the flag in storage and the call to Android (velista 0177).
+  const storage = new Map<string, string>();
+  const credential = {
+    getIdToken: jest.fn(),
+    forget: jest.fn().mockResolvedValue(undefined),
+  };
 
   await TestBed.configureTestingModule({
     imports: [AccountPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: options.basePath ?? '/velista' }),
-      provideFakeBrowserFacade(undefined, {
+      provideFakeBrowserFacade(storage, {
         openExternal: (url: string) => void opened.push(url),
       }),
       {
@@ -167,6 +182,12 @@ async function render(options: Options = {}): Promise<{
       }),
       { provide: Router, useValue: router },
       { provide: TourStore, useValue: tour },
+      GoogleSignIn,
+      { provide: AuthApi, useValue: {} },
+      {
+        provide: GOOGLE_CREDENTIAL,
+        useValue: options.googleCredential === true ? credential : null,
+      },
       {
         provide: RokuLocaleStore,
         useValue: { locale: signal(options.locale ?? 'en') },
@@ -197,6 +218,8 @@ async function render(options: Options = {}): Promise<{
     install,
     tour,
     opened,
+    storage,
+    credential,
   };
 }
 
@@ -434,6 +457,32 @@ describe('AccountPage', () => {
 
       expect(tokens.tokens()).toBeNull();
       expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
+    });
+
+    /** velista 0177, D4: otherwise the next open signs the person straight back in. */
+    it('switches the automatic Google sign in off in the Android app', async () => {
+      const { fixture, storage, credential } = await render({
+        googleCredential: true,
+      });
+
+      (rowWith(fixture, 'account.signOut.action') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+      await fixture.whenStable();
+
+      expect(credential.forget).toHaveBeenCalledTimes(1);
+      expect(storage.get(StorageKeys.googleAutoSignInOff)).toBe('true');
+    });
+
+    it('writes no flag on the web, where there is no automatic sign in', async () => {
+      const { fixture, storage } = await render();
+
+      (rowWith(fixture, 'account.signOut.action') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+      await fixture.whenStable();
+
+      expect(storage.has(StorageKeys.googleAutoSignInOff)).toBe(false);
     });
 
     it('drops the held profile, so the next person sees no address of theirs', async () => {

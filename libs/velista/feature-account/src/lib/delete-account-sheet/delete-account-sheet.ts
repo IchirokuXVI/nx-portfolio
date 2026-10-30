@@ -11,6 +11,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   AccountNotice,
+  GoogleSignIn,
   ProfileStore,
   SessionStore,
   TokenStore,
@@ -81,6 +82,7 @@ export class DeleteAccountSheet {
   private readonly _session = inject(SessionStore);
   private readonly _zones = inject(ZoneStore);
   private readonly _tokens = inject(TokenStore);
+  private readonly _google = inject(GoogleSignIn);
   private readonly _notice = inject(AccountNotice);
   private readonly _sheet = inject(SheetNavigation);
   private readonly _locale = inject(RokuLocaleStore).locale;
@@ -161,6 +163,9 @@ export class DeleteAccountSheet {
 
       this._tokens.clear();
       this._profile.clear();
+      // The account is gone, so a Google account on the phone that still remembers
+      // approving it must not try to open it from the front door (velista `0177`).
+      void this._google.stopAutoSignIn();
       // The front door says it once. Through `AccountNotice`, which is where every
       // other piece of news about an account already lives and which survives exactly
       // one navigation: router state would survive a reload too, and coming back to

@@ -608,12 +608,23 @@ describe('RegisterPage', () => {
       expect(query(fixture, 'lib-google-option')).not.toBeNull();
     });
 
-    /** Google refuses to sign anybody in from an embedded WebView (velista 0166). */
-    it('is not drawn at all in the native shell, divider included', async () => {
+    /** The press asks Android's account picker there (velista 0177, target 4). */
+    it('is drawn in the native shell too', async () => {
       const { fixture } = await render({ runtime: 'native' });
 
-      expect(query(fixture, 'lib-google-option')).toBeNull();
-      expect(query(fixture, '.divider')).toBeNull();
+      expect(query(fixture, 'lib-google-option')).not.toBeNull();
+    });
+
+    it('lets go and says nothing when the system sheet is closed (velista 0177)', async () => {
+      const { fixture } = await render({
+        runtime: 'native',
+        google: { start: jest.fn().mockResolvedValue('cancelled') },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleStarting()).toBe(false);
+      expect(fixture.componentInstance.googleError()).toBeNull();
     });
   });
 

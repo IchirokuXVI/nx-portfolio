@@ -23,9 +23,9 @@ import { LinkedText } from '../legal/linked-text';
  * The Google button is drawn here rather than by Google's own script: the exchange is
  * owned entirely by the backend, and no Google library is loaded into this app (user
  * decision, 2026-08-26). A tap is an output, and the container starts the sign in
- * (velista `0171`). The container also says whether to draw it at all: inside the
- * native shell it is left out with its divider, because Google refuses to sign anybody
- * in from an embedded WebView, or when the deployment has no Google client.
+ * (velista `0171`). The container also says whether to draw it at all: it is left out
+ * with its divider when the deployment has no Google client. Inside the native shell
+ * the press asks Android's account picker instead (velista `0177`).
  *
  * ## Held, while the app cannot reach the backend
  *
@@ -54,7 +54,7 @@ export class AuthActions {
   /** Whether the wait has gone on long enough to say what is wrong, per D8. */
   readonly slow = input(false);
 
-  /** False in the native shell, where Google and its divider are not drawn. */
+  /** False where the deployment has no Google client: no button and no divider. */
   readonly googleOffered = input(true);
 
   /**

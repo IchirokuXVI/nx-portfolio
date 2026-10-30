@@ -2,11 +2,7 @@ import { computed, inject, type Signal } from '@angular/core';
 import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import { OperatorSettingsStore } from '@portfolio/velista/data-access';
 import { APP_BASE_PATH } from '@portfolio/velista/models';
-import {
-  APP_RUNTIME,
-  appPath,
-  sheetSegments,
-} from '@portfolio/velista/platform';
+import { appPath, sheetSegments } from '@portfolio/velista/platform';
 
 /** What a credential screen needs to know about the terms (velista `0173`). */
 export interface AuthTerms {
@@ -18,8 +14,9 @@ export interface AuthTerms {
   /** The privacy policy as a sheet over this screen, or null on the same terms. */
   readonly privacyUrl: Signal<string | null>;
   /**
-   * Whether to draw the Google button: the deployment has a Google client, and this is
-   * not the native shell, where Google refuses an embedded WebView.
+   * Whether to draw the Google button: the deployment has a Google client. In the
+   * native shell too, where the press asks Android's account picker instead of sending
+   * the WebView to Google, which refuses it (velista `0177`).
    */
   readonly googleOffered: Signal<boolean>;
   /**
@@ -43,7 +40,6 @@ export function authTerms(over: readonly string[]): AuthTerms {
   const settings = inject(OperatorSettingsStore);
   const locale = inject(RokuLocaleStore).locale;
   const basePath = inject(APP_BASE_PATH);
-  const native = inject(APP_RUNTIME) === 'native';
 
   const published = computed(() => settings.settings()?.published === true);
   const sheet = (kind: 'privacy' | 'terms') =>
@@ -57,7 +53,7 @@ export function authTerms(over: readonly string[]): AuthTerms {
     termsUrl: sheet('terms'),
     privacyUrl: sheet('privacy'),
     googleOffered: computed(
-      () => !native && settings.settings()?.features.googleSignIn === true
+      () => settings.settings()?.features.googleSignIn === true
     ),
     version: () => {
       const current = settings.settings();
