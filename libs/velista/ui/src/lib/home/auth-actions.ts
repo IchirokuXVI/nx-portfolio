@@ -25,7 +25,7 @@ import { LinkedText } from '../legal/linked-text';
  * decision, 2026-08-26). A tap is an output, and the container starts the sign in
  * (velista `0171`). The container also says whether to draw it at all: it is left out
  * with its divider when the deployment has no Google client. Inside the native shell
- * the press asks Android's account picker instead (velista `0175`).
+ * the press asks Android's account picker instead (velista `0177`).
  *
  * ## Held, while the app cannot reach the backend
  *

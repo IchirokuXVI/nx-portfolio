@@ -238,7 +238,7 @@ describe('DeleteAccountSheet', () => {
       expect(profile.calls).toContainEqual({ method: 'clear' });
     });
 
-    /** velista 0175: the account is gone, so the front door must not try to open it. */
+    /** velista 0177: the account is gone, so the front door must not try to open it. */
     it('switches the automatic Google sign in off', async () => {
       const { fixture, google } = await render();
 

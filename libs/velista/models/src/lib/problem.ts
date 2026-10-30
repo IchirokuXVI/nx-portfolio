@@ -211,13 +211,13 @@ export const ERROR_CODES = [
    *
    * **Not a statement about the account.** A guest who picks Google posts the token
    * with their bearer, so `gatewayInterceptor` passes this straight to the caller
-   * instead of refreshing, as it does `not_a_participant` (velista `0175`).
+   * instead of refreshing, as it does `not_a_participant` (velista `0177`).
    */
   'invalid_google_token',
   /**
    * A silent Google sign in met a Google account this app does not know yet (backend
    * `0238`, D3), as a 409. Nothing was made or linked. `GoogleSignIn.trySilent` reads
-   * it as one more `false`, and the front door stays as it was (velista `0175`).
+   * it as one more `false`, and the front door stays as it was (velista `0177`).
    */
   'google_sign_in_needs_consent',
   'internal',

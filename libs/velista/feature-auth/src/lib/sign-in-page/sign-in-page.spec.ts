@@ -465,14 +465,14 @@ describe('SignInPage', () => {
       expect(query(fixture, 'lib-google-option')).not.toBeNull();
     });
 
-    /** The press asks Android's account picker there (velista 0175, target 4). */
+    /** The press asks Android's account picker there (velista 0177, target 4). */
     it('is drawn in the native shell too', async () => {
       const { fixture } = await render({ runtime: 'native' });
 
       expect(query(fixture, 'lib-google-option')).not.toBeNull();
     });
 
-    it('lets go and says nothing when the system sheet is closed (velista 0175)', async () => {
+    it('lets go and says nothing when the system sheet is closed (velista 0177)', async () => {
       const { fixture } = await render({
         runtime: 'native',
         google: { start: jest.fn().mockResolvedValue('cancelled') },

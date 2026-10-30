@@ -16,7 +16,7 @@ export interface AuthTerms {
   /**
    * Whether to draw the Google button: the deployment has a Google client. In the
    * native shell too, where the press asks Android's account picker instead of sending
-   * the WebView to Google, which refuses it (velista `0175`).
+   * the WebView to Google, which refuses it (velista `0177`).
    */
   readonly googleOffered: Signal<boolean>;
   /**

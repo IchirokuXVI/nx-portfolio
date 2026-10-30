@@ -17,7 +17,7 @@ import { anonymous, operation } from './http-context';
 import { TokenStore } from './token-store';
 import { refuseUnprovenSession } from './unproven-session';
 
-/** What the gateway mints for a native Google sign in (velista `0175`, backend `0238`). */
+/** What the gateway mints for a native Google sign in (velista `0177`, backend `0238`). */
 export interface GoogleNonce {
   /** Single use, ten minutes. Android puts it in the token it returns. */
   readonly nonce: string;

@@ -125,7 +125,7 @@ export class SignInPage {
    * The terms over this page, and whether to offer Google at all (velista `0173`).
    *
    * Google is drawn where the deployment has a Google client, in the native shell too,
-   * where the press asks Android's account picker (velista `0175`). A guest is offered
+   * where the press asks Android's account picker (velista `0177`). A guest is offered
    * it like anybody else, because backend `0230` links the guest account in place and
    * keeps its groups. Continuing with Google can make an account, so the line under the
    * button names the terms and the start sends their version.
@@ -212,7 +212,7 @@ export class SignInPage {
    *
    * On success the page is leaving, so the busy state stays on. A refusal comes back
    * as a sentence beside the button, and a second tap tries again. In the Android app
-   * a closed system sheet lets go of the busy state and says nothing (velista `0175`).
+   * a closed system sheet lets go of the busy state and says nothing (velista `0177`).
    */
   async continueWithGoogle(): Promise<void> {
     if (this.googleStarting()) {

@@ -88,14 +88,14 @@ export class LandingPage {
   /**
    * Whether to offer Google: where the deployment has a Google client
    * (`features.googleSignIn`, velista `0173`). In the native shell too, where the
-   * press asks Android's account picker (velista `0175`).
+   * press asks Android's account picker (velista `0177`).
    */
   readonly googleOffered = computed(
     () => this._settings.settings()?.features.googleSignIn === true
   );
 
   /**
-   * True while the app tries to sign in by itself (velista `0175`, target 5): four
+   * True while the app tries to sign in by itself (velista `0177`, target 5): four
    * seconds at most, then the attempt is abandoned and the front door is as it was.
    *
    * It draws the busy state the actions already have and no new copy: they are held,
@@ -339,7 +339,7 @@ export class LandingPage {
         acceptedTermsVersion:
           settings?.published === true ? settings.terms.version : null,
       });
-      // The system sheet closed in the Android app (velista `0175`): nothing to say.
+      // The system sheet closed in the Android app (velista `0177`): nothing to say.
       if (outcome === 'cancelled') {
         this.googleStarting.set(false);
       }

@@ -1,6 +1,6 @@
 import { InjectionToken } from '@angular/core';
 
-/** What the app asks the operating system for (velista `0175`). */
+/** What the app asks the operating system for (velista `0177`). */
 export interface GoogleCredentialRequest {
   /**
    * The web client of the Google project, from the gateway's nonce answer (backend
@@ -18,7 +18,7 @@ export interface GoogleCredentialRequest {
 
 /**
  * The operating system's Google account picker, behind a seam a native shell provides
- * (velista `0175`).
+ * (velista `0177`).
  *
  * Google refuses its sign in page inside an embedded WebView, so the native app cannot
  * run the redirect flow of `0171`. Android's Credential Manager hands the app a Google

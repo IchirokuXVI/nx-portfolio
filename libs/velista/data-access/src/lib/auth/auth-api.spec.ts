@@ -508,7 +508,7 @@ describe('AuthApi', () => {
     });
   });
 
-  describe('Google sign in in the Android app (velista 0175, backend 0238)', () => {
+  describe('Google sign in in the Android app (velista 0177, backend 0238)', () => {
     it('mints an interactive nonce with the terms version and the bearer of a guest', async () => {
       tokens.set(pair('u-guest', 'TEMPORARY'));
       const result = api.mintGoogleNonce({

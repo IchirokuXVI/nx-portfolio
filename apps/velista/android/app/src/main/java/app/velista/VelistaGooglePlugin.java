@@ -28,7 +28,7 @@ import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import java.util.concurrent.Executor;
 
 /**
- * Google sign in through Android's Credential Manager (velista plan 0175).
+ * Google sign in through Android's Credential Manager (velista plan 0177).
  *
  * Google refuses its sign in page inside an embedded WebView, so the app asks Android for a
  * Google ID token instead and the gateway trades it for the pair (backend plan 0238). A local

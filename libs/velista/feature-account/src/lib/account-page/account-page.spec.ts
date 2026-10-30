@@ -77,7 +77,7 @@ interface Options {
   readonly emailVerified?: boolean;
   readonly profileState?: ProfileLoad;
   readonly zones?: readonly MyZone[];
-  /** Whether the app runs where a native Google picker exists (velista 0175). */
+  /** Whether the app runs where a native Google picker exists (velista 0177). */
   readonly googleCredential?: boolean;
   readonly forgotPassword?: Parameters<
     typeof fakeAuthService
@@ -136,7 +136,7 @@ async function render(options: Options = {}): Promise<{
   // is a pair of mocks. What the row does is start it; `tour-store.spec.ts` owns the rest.
   const tour = { start: jest.fn().mockResolvedValue(undefined) };
   // The real `GoogleSignIn` over a picker double, because what sign out owes it is a
-  // fact about the device: the flag in storage and the call to Android (velista 0175).
+  // fact about the device: the flag in storage and the call to Android (velista 0177).
   const storage = new Map<string, string>();
   const credential = {
     getIdToken: jest.fn(),
@@ -459,7 +459,7 @@ describe('AccountPage', () => {
       expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en');
     });
 
-    /** velista 0175, D4: otherwise the next open signs the person straight back in. */
+    /** velista 0177, D4: otherwise the next open signs the person straight back in. */
     it('switches the automatic Google sign in off in the Android app', async () => {
       const { fixture, storage, credential } = await render({
         googleCredential: true,

@@ -63,7 +63,7 @@ export function provideNativeShell(): EnvironmentProviders {
     },
     {
       // Null on the web, where `GoogleSignIn` keeps the redirect flow (velista
-      // `0175`, target 2): the web has no picker of its own to offer.
+      // `0177`, target 2): the web has no picker of its own to offer.
       provide: GOOGLE_CREDENTIAL,
       useFactory: () => (isNative() ? inject(NativeGoogleCredential) : null),
     },

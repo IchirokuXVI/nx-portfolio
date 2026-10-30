@@ -519,7 +519,7 @@ describe('gatewayInterceptor', () => {
     });
 
     it('keeps a guest signed in when the gateway refuses the Google token it posted', async () => {
-      // velista 0175: a guest who picks Google in the app posts the ID token with
+      // velista 0177: a guest who picks Google in the app posts the ID token with
       // their bearer. The 401 is about the Google token, so no refresh and no retry,
       // whose second refusal would read as a dead account and sign the guest out.
       const held = pair(freshToken(), 'TEMPORARY');

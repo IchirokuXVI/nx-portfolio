@@ -62,7 +62,7 @@ describe('provideNativeShell', () => {
       NativeBrowserFacade
     );
     expect(TestBed.inject(APP_STORE_URL)).toBeNull();
-    // No picker on the web, so `GoogleSignIn` keeps the redirect flow (velista 0175).
+    // No picker on the web, so `GoogleSignIn` keeps the redirect flow (velista 0177).
     expect(TestBed.inject(GOOGLE_CREDENTIAL)).toBeNull();
   }
 

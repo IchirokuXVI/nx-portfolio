@@ -353,7 +353,7 @@ export class AccountPage {
    * previous person's details to whoever picks the phone up.
    *
    * In the Android app it also switches the automatic Google sign in off until the
-   * person picks Google again (velista `0175`, D4). Without that, the front door signs
+   * person picks Google again (velista `0177`, D4). Without that, the front door signs
    * them straight back in on the next open, which reads as a sign out that did nothing.
    */
   async signOut(): Promise<void> {

@@ -164,7 +164,7 @@ export class DeleteAccountSheet {
       this._tokens.clear();
       this._profile.clear();
       // The account is gone, so a Google account on the phone that still remembers
-      // approving it must not try to open it from the front door (velista `0175`).
+      // approving it must not try to open it from the front door (velista `0177`).
       this._google.stopAutoSignIn();
       // The front door says it once. Through `AccountNotice`, which is where every
       // other piece of news about an account already lives and which survives exactly

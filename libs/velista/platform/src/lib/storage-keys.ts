@@ -163,7 +163,7 @@ export const StorageKeys = {
   googleVerifier: `google-verifier:${APP_KEY}`,
   /**
    * That a sign out on this device switched the automatic Google sign in off
-   * (velista `0175`, D4).
+   * (velista `0177`, D4).
    *
    * In `localStorage`, because it has to outlive the app being closed: without it, a
    * person who signs out is signed in again on the next open, which reads as a sign out

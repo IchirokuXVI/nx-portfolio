@@ -76,7 +76,7 @@ interface Options {
   readonly google?: Partial<GoogleDouble>;
   /**
    * Provide the real `GoogleSignIn` over this picker instead of a double, for the one
-   * question only it can answer: how long the front door is held (velista 0175).
+   * question only it can answer: how long the front door is held (velista 0177).
    */
   readonly realGoogle?: { readonly credential: GoogleCredentialI };
   readonly runtime?: AppRuntime;
@@ -444,7 +444,7 @@ describe('LandingPage', () => {
         );
       });
 
-      /** The press asks Android's account picker there (velista 0175, target 4). */
+      /** The press asks Android's account picker there (velista 0177, target 4). */
       it('is drawn in the native shell too, divider included', async () => {
         const { fixture } = await render({ runtime: 'native' });
 
@@ -453,7 +453,7 @@ describe('LandingPage', () => {
         expect(queryAll(fixture, 'lib-auth-actions button')).toHaveLength(4);
       });
 
-      it('lets go and says nothing when the system sheet is closed (velista 0175)', async () => {
+      it('lets go and says nothing when the system sheet is closed (velista 0177)', async () => {
         const { fixture } = await render({
           runtime: 'native',
           google: { start: jest.fn().mockResolvedValue('cancelled') },
@@ -469,7 +469,7 @@ describe('LandingPage', () => {
     });
 
     /**
-     * Velista 0175, target 5. In the Android app, signed out, the front door tries
+     * Velista 0177, target 5. In the Android app, signed out, the front door tries
      * once to sign in with no tap, and holds the four ways in while it does.
      */
     describe('the automatic Google sign in', () => {

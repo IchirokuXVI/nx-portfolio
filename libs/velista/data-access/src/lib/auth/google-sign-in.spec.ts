@@ -183,7 +183,7 @@ describe('GoogleSignIn', () => {
         'assign https://gateway.example/v1/auth/google?state=state%2F1%2B',
       ]);
       expect(facade.assignDocument).toHaveBeenCalledTimes(1);
-      // The native routes are never asked on the web (velista 0175).
+      // The native routes are never asked on the web (velista 0177).
       expect(api.mintGoogleNonce).not.toHaveBeenCalled();
     });
 
@@ -213,7 +213,7 @@ describe('GoogleSignIn', () => {
     });
   });
 
-  describe('in the Android app (velista 0175)', () => {
+  describe('in the Android app (velista 0177)', () => {
     it('mints a nonce, asks Android with it, stores the pair and goes home', async () => {
       const credential = picker();
       const { google, api, tokens, router, facade, calls } = setup(undefined, {

@@ -24,7 +24,7 @@ const VERIFIER_BYTES = 32;
 
 /**
  * How long a silent sign in may hold the front door before it is abandoned (velista
- * `0175`, target 5). An answer that arrives later is dropped, so nobody is moved off a
+ * `0177`, target 5). An answer that arrives later is dropped, so nobody is moved off a
  * screen they already started to use.
  */
 export const GOOGLE_SILENT_DEADLINE_MS = 4_000;
@@ -51,7 +51,7 @@ export type GoogleStartOutcome = 'leaving' | 'cancelled';
  * ## In the Android app
  *
  * Google refuses its sign in page inside an embedded WebView, so the native shell
- * provides `GOOGLE_CREDENTIAL`, Android's own account picker (velista `0175`). With one,
+ * provides `GOOGLE_CREDENTIAL`, Android's own account picker (velista `0177`). With one,
  * {@link start} mints a nonce instead of a state, asks Android for an ID token with it,
  * and trades the token for the pair (backend `0238`). {@link trySilent} does the same
  * with no tap, for the front door. With none, which is the web, nothing here changes.
@@ -71,7 +71,7 @@ export class GoogleSignIn {
   private readonly _locale = inject(RokuLocaleStore).locale;
   private readonly _basePath = inject(APP_BASE_PATH);
 
-  /** Whether this document already spent its one silent attempt (velista `0175`, D3). */
+  /** Whether this document already spent its one silent attempt (velista `0177`, D3). */
   private _silentSpent = false;
 
   /**
@@ -91,7 +91,7 @@ export class GoogleSignIn {
 
   /**
    * Sign in with no tap, when one Google account on the phone already approved this
-   * app (velista `0175`, target 3). Answers whether the app is now signed in and on
+   * app (velista `0177`, target 3). Answers whether the app is now signed in and on
    * its way home.
    *
    * Never throws and never shows anything: a refusal of any kind is `false`, and
@@ -153,7 +153,7 @@ export class GoogleSignIn {
 
   /**
    * Stop the automatic sign in on this device until the person picks Google again
-   * (velista `0175`, D4). Called by sign out and by the account deletion that clears
+   * (velista `0177`, D4). Called by sign out and by the account deletion that clears
    * the pair; without it, the next open signs the person straight back in.
    *
    * Nothing on the web, where there is no picker and no automatic sign in. Android is
@@ -224,7 +224,7 @@ export class GoogleSignIn {
   }
 
   /**
-   * A press on Google in the Android app (velista `0175`, target 3).
+   * A press on Google in the Android app (velista `0177`, target 3).
    *
    * The nonce carries what the state carries on the web: the guest's bearer goes with
    * the mint through the interceptor, so a guest is linked in place, and the version

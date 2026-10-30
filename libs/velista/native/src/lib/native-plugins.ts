@@ -65,7 +65,7 @@ export interface NativeSystemBarsPlugin {
 }
 
 /**
- * The codes `VelistaGoogle` rejects with (velista `0175`): the person closed the sheet,
+ * The codes `VelistaGoogle` rejects with (velista `0177`): the person closed the sheet,
  * no account on the phone can answer, the phone has no Play services, or anything else.
  */
 export type NativeGoogleErrorCode =
@@ -75,7 +75,7 @@ export type NativeGoogleErrorCode =
   | 'failed';
 
 /**
- * The app's own plugin over Android's Credential Manager (velista `0175`, D2), in
+ * The app's own plugin over Android's Credential Manager (velista `0177`, D2), in
  * `apps/velista/android` as `VelistaGooglePlugin.java`. A local plugin and not a
  * package, so no third party code holds the credential.
  */
