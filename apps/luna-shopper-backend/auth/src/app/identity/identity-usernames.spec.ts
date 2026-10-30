@@ -41,7 +41,8 @@ function build(users: Partial<User>[]) {
     { getOrThrow: () => ({}) } as never,
     undefined as never,
     new InMemoryTermsService(),
-    { publishSoon: () => undefined } as never
+    { publishSoon: () => undefined } as never,
+    undefined as never
   );
   return { service, find };
 }

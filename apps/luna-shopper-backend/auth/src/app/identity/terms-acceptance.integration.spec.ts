@@ -92,7 +92,8 @@ describeIntegration('terms acceptances (real Postgres)', () => {
       config,
       {} as never,
       terms,
-      { publishSoon: () => undefined } as never
+      { publishSoon: () => undefined } as never,
+      undefined as never
     );
   }, 120_000);
 
@@ -175,7 +176,8 @@ describeIntegration('terms acceptances (real Postgres)', () => {
       } as never,
       {} as never,
       terms,
-      { publishSoon: () => undefined } as never
+      { publishSoon: () => undefined } as never,
+      undefined as never
     );
     const created = (await withTokens.createTemporaryUser({
       acceptedTermsVersion: CURRENT,

@@ -52,7 +52,8 @@ describe('IdentityService with a feature unconfigured', () => {
       { getOrThrow: () => config } as never,
       undefined as never,
       new InMemoryTermsService(),
-      { publishSoon: () => undefined } as never
+      { publishSoon: () => undefined } as never,
+      undefined as never
     );
 
     return { service, dataSource, mail };

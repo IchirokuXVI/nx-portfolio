@@ -129,7 +129,8 @@ function build(users: Partial<User>[] = []) {
     } as never,
     undefined as never,
     new InMemoryTermsService(),
-    deletions as never
+    deletions as never,
+    undefined as never
   );
   return {
     service,

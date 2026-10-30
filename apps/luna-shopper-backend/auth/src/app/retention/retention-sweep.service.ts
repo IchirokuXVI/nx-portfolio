@@ -89,6 +89,14 @@ export function authRetentionTargets(
       column: 'expiresAt',
       retainMs: cfg.expiredGrantsMs,
     },
+    {
+      // The nonce of a Google sign in from the Android app (plan 0238). A
+      // nonce minted with no caller has no `userId`, so no account deletion
+      // ever removes it: only this does.
+      table: 'oauth_nonces',
+      column: 'expiresAt',
+      retainMs: cfg.expiredGrantsMs,
+    },
   ];
 }
 

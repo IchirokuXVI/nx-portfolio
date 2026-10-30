@@ -7,6 +7,7 @@ import { EmailVerification } from './email-verification.entity';
 import { ImpersonationSession } from './impersonation-session.entity';
 import { OAuthHandoff } from './oauth-handoff.entity';
 import { OAuthIdentity } from './oauth-identity.entity';
+import { OAuthNonce } from './oauth-nonce.entity';
 import { OAuthState } from './oauth-state.entity';
 import { PasswordReset } from './password-reset.entity';
 import { RefreshToken } from './refresh-token.entity';
@@ -27,6 +28,7 @@ export { EmailVerification } from './email-verification.entity';
 export { ImpersonationSession } from './impersonation-session.entity';
 export { OAuthHandoff } from './oauth-handoff.entity';
 export { OAuthIdentity } from './oauth-identity.entity';
+export { OAuthNonce } from './oauth-nonce.entity';
 export { OAuthState } from './oauth-state.entity';
 export {
   PasswordReset,
@@ -48,6 +50,9 @@ export const AUTH_ENTITIES = [
   // A Google sign in staged at the callback (plan 0230), beside the state it
   // was copied from.
   OAuthHandoff,
+  // The nonce of a Google sign in from the Android app (plan 0238), the
+  // state of that flow.
+  OAuthNonce,
   // A support session (plan 0194), before the refresh tokens that may name
   // one.
   ImpersonationSession,

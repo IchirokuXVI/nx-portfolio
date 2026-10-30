@@ -50,8 +50,12 @@ const CONFIG: RetentionConfig = {
   },
 };
 
-/** The eight indexes of `1773300000000-RetentionIndexes`. */
+/**
+ * The eight indexes of `1773300000000-RetentionIndexes`, and the expiry index
+ * `1773400000000-OAuthNonces` created with its table (plan 0238).
+ */
 const INDEXES = [
+  'ix_oauth_nonces_expires_at',
   'ix_refresh_tokens_replaced_by',
   'ix_refresh_tokens_expires_at',
   'ix_password_resets_expires_at',
@@ -160,7 +164,7 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
 
   beforeEach(async () => {
     await dataSource.query(
-      `TRUNCATE "auth_audit", "admin_login_failures", "refresh_tokens", "password_resets", "email_verifications", "oauth_states", "oauth_handoffs", "impersonation_sessions"`
+      `TRUNCATE "auth_audit", "admin_login_failures", "refresh_tokens", "password_resets", "email_verifications", "oauth_states", "oauth_handoffs", "oauth_nonces", "impersonation_sessions"`
     );
     logger.log.mockClear();
     logger.error.mockClear();
@@ -265,6 +269,16 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
     await handoff(grants.old);
     const handoffYoung = await handoff(grants.young);
 
+    // A nonce minted with no caller (plan 0238), for the reason above.
+    const nonce = (expiresAt: Date) =>
+      one(
+        `INSERT INTO "oauth_nonces" ("userId", "tokenHash", "expiresAt")
+         VALUES (NULL, gen_random_uuid()::text, $1) RETURNING "id"`,
+        [expiresAt]
+      );
+    await nonce(grants.old);
+    const nonceYoung = await nonce(grants.young);
+
     const results = await sweeper(CONFIG).sweep(NOW);
 
     expect(results).toEqual([
@@ -276,6 +290,7 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
       { table: 'email_verifications', deleted: 1, failed: false },
       { table: 'oauth_states', deleted: 1, failed: false },
       { table: 'oauth_handoffs', deleted: 1, failed: false },
+      { table: 'oauth_nonces', deleted: 1, failed: false },
     ]);
     expect(await ids('auth_audit')).toEqual([auditYoung]);
     expect(await ids('impersonation_sessions')).toEqual([sessionYoung]);
@@ -287,6 +302,7 @@ describeIntegration('the auth retention sweep (real Postgres)', () => {
     expect(await ids('email_verifications')).toEqual([verificationYoung]);
     expect(await ids('oauth_states')).toEqual([stateYoung]);
     expect(await ids('oauth_handoffs')).toEqual([handoffYoung]);
+    expect(await ids('oauth_nonces')).toEqual([nonceYoung]);
     expect(logger.error).not.toHaveBeenCalled();
 
     // A second sweep at the same instant finds nothing.

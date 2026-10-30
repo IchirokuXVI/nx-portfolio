@@ -185,7 +185,8 @@ function build() {
     } as never,
     undefined as never,
     new InMemoryTermsService(),
-    { publishSoon: () => undefined } as never
+    { publishSoon: () => undefined } as never,
+    undefined as never
   );
 
   const addGuest = (id: string) =>
