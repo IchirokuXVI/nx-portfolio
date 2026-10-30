@@ -104,7 +104,11 @@ function setup(
     }),
     hasSession: () => held !== null,
   };
-  const router = { navigateByUrl: jest.fn().mockResolvedValue(true) };
+  // Starts on the front door, which a late silent answer checks (velista 0177).
+  const router = {
+    url: '/velista/en',
+    navigateByUrl: jest.fn().mockResolvedValue(true),
+  };
 
   TestBed.configureTestingModule({
     providers: [
@@ -148,6 +152,11 @@ function picker(answer: () => Promise<string | null> = async () => 'id-1') {
     forget: jest.fn().mockResolvedValue(undefined),
   };
 }
+
+/** A native fixture that also hands back its picker double. */
+type LateFixture = ReturnType<typeof setup> & {
+  readonly credential: ReturnType<typeof picker>;
+};
 
 function needsConsent(): GatewayError {
   return new GatewayError({
@@ -206,7 +215,7 @@ describe('GoogleSignIn', () => {
 
       expect(google.silentSignInAllowed()).toBe(false);
       await expect(google.trySilent()).resolves.toBe(false);
-      google.stopAutoSignIn();
+      await google.stopAutoSignIn();
 
       expect(api.mintGoogleNonce).not.toHaveBeenCalled();
       expect(storage.size).toBe(0);
@@ -446,33 +455,84 @@ describe('GoogleSignIn', () => {
           expect(answer).toBe(false);
         });
 
-        it('drops a token that arrives after it, and posts nothing', async () => {
+        /**
+         * What can happen on the front door after it let go, each of which makes a
+         * late answer unwanted: the person signed in some other way, pressed Google
+         * themselves, or went somewhere else.
+         */
+        const unwanted: [string, (fixture: LateFixture) => Promise<void>][] = [
+          [
+            'a session appeared',
+            async ({ tokens }) => {
+              tokens.set(PAIR);
+              tokens.set.mockClear();
+            },
+          ],
+          [
+            'the person pressed Google',
+            async ({ google, credential }) => {
+              // They closed the sheet, so this press stored nothing either.
+              credential.getIdToken.mockImplementationOnce(async () => null);
+              await expect(
+                google.start({ acceptedTermsVersion: null })
+              ).resolves.toBe('cancelled');
+            },
+          ],
+          [
+            'the person left the front door',
+            async ({ router }) => {
+              router.url = '/velista/en/auth/login?returnUrl=%2F';
+            },
+          ],
+        ];
+
+        /** A fixture whose silent token arrives when the spec releases it. */
+        function lateToken() {
           let release: (token: string) => void = () => undefined;
-          const { google, api, tokens } = setup(undefined, {
-            credential: picker(
-              () => new Promise<string | null>((resolve) => (release = resolve))
-            ),
-          });
+          const credential = picker(
+            () => new Promise<string | null>((resolve) => (release = resolve))
+          );
+          const fixture = setup(undefined, { credential });
+          return {
+            ...fixture,
+            credential,
+            release: (token: string) => release(token),
+          };
+        }
+
+        /** A fixture whose pair arrives when the spec releases it. */
+        function latePair() {
+          let release: (pair: SessionTokens) => void = () => undefined;
+          const credential = picker();
+          const fixture = setup(undefined, { credential });
+          fixture.api.signInWithGoogleIdToken.mockReturnValueOnce(
+            new Promise<SessionTokens>((resolve) => (release = resolve))
+          );
+          return {
+            ...fixture,
+            credential,
+            release: (pair: SessionTokens) => release(pair),
+          };
+        }
+
+        it('still signs in with a token picked after it, while the front door waits', async () => {
+          const { google, api, tokens, router, release } = lateToken();
 
           const answer = google.trySilent();
           await jest.advanceTimersByTimeAsync(GOOGLE_SILENT_DEADLINE_MS);
+          // The front door lets go at the deadline, whatever comes later.
           await expect(answer).resolves.toBe(false);
 
           release('id-late');
           await jest.advanceTimersByTimeAsync(0);
 
-          expect(api.signInWithGoogleIdToken).not.toHaveBeenCalled();
-          expect(tokens.set).not.toHaveBeenCalled();
+          expect(api.signInWithGoogleIdToken).toHaveBeenCalledWith('id-late');
+          expect(tokens.set).toHaveBeenCalledWith(PAIR);
+          expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
         });
 
-        it('drops a pair that arrives after it, so nobody is moved off the front door', async () => {
-          let release: (pair: SessionTokens) => void = () => undefined;
-          const { google, api, tokens, router } = setup(undefined, {
-            credential: picker(),
-          });
-          api.signInWithGoogleIdToken.mockReturnValueOnce(
-            new Promise<SessionTokens>((resolve) => (release = resolve))
-          );
+        it('still stores a pair that arrives after it, while the front door waits', async () => {
+          const { google, tokens, router, release } = latePair();
 
           const answer = google.trySilent();
           await jest.advanceTimersByTimeAsync(GOOGLE_SILENT_DEADLINE_MS);
@@ -481,9 +541,46 @@ describe('GoogleSignIn', () => {
           release(PAIR);
           await jest.advanceTimersByTimeAsync(0);
 
-          expect(tokens.set).not.toHaveBeenCalled();
-          expect(router.navigateByUrl).not.toHaveBeenCalled();
+          expect(tokens.set).toHaveBeenCalledWith(PAIR);
+          expect(router.navigateByUrl).toHaveBeenCalledWith('/velista/en/home');
         });
+
+        it.each(unwanted)(
+          'drops a late token and posts nothing when %s',
+          async (_name, arrange) => {
+            const fixture = lateToken();
+
+            const answer = fixture.google.trySilent();
+            await jest.advanceTimersByTimeAsync(GOOGLE_SILENT_DEADLINE_MS);
+            await expect(answer).resolves.toBe(false);
+
+            await arrange(fixture);
+            fixture.release('id-late');
+            await jest.advanceTimersByTimeAsync(0);
+
+            expect(fixture.api.signInWithGoogleIdToken).not.toHaveBeenCalled();
+            expect(fixture.tokens.set).not.toHaveBeenCalled();
+            expect(fixture.router.navigateByUrl).not.toHaveBeenCalled();
+          }
+        );
+
+        it.each(unwanted)(
+          'drops a late pair, so nobody is moved, when %s',
+          async (_name, arrange) => {
+            const fixture = latePair();
+
+            const answer = fixture.google.trySilent();
+            await jest.advanceTimersByTimeAsync(GOOGLE_SILENT_DEADLINE_MS);
+            await expect(answer).resolves.toBe(false);
+
+            await arrange(fixture);
+            fixture.release(PAIR);
+            await jest.advanceTimersByTimeAsync(0);
+
+            expect(fixture.tokens.set).not.toHaveBeenCalled();
+            expect(fixture.router.navigateByUrl).not.toHaveBeenCalled();
+          }
+        );
       });
     });
 
@@ -499,14 +596,16 @@ describe('GoogleSignIn', () => {
         expect(google.silentSignInAllowed()).toBe(false);
       });
 
-      it('keeps the flag when Android refuses to forget', async () => {
+      it('swallows a refusal from Android and keeps the flag', async () => {
         const credential = picker();
         credential.forget.mockRejectedValueOnce(new Error('failed'));
         const { google, storage } = setup(undefined, { credential });
 
-        google.stopAutoSignIn();
-        await Promise.resolve();
+        // Resolves rather than rejects: a caller that leaves it unawaited gets no
+        // unhandled rejection, and sign out goes on.
+        await expect(google.stopAutoSignIn()).resolves.toBeUndefined();
 
+        expect(credential.forget).toHaveBeenCalledTimes(1);
         expect(storage.get(StorageKeys.googleAutoSignInOff)).toBe('true');
       });
     });

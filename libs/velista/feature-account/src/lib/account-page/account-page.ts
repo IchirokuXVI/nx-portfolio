@@ -359,7 +359,7 @@ export class AccountPage {
   async signOut(): Promise<void> {
     this._tokens.clear();
     this._profile.clear();
-    this._google.stopAutoSignIn();
+    void this._google.stopAutoSignIn();
     await this._toFrontDoor();
   }
 

@@ -23,9 +23,9 @@ export const GOOGLE_VERIFIER_KEY = StorageKeys.googleVerifier;
 const VERIFIER_BYTES = 32;
 
 /**
- * How long a silent sign in may hold the front door before it is abandoned (velista
- * `0177`, target 5). An answer that arrives later is dropped, so nobody is moved off a
- * screen they already started to use.
+ * How long a silent sign in may hold the front door before it lets go (velista `0177`,
+ * target 5). The attempt goes on behind it: a later answer still signs in while the
+ * front door waits untouched, and is dropped once somebody started to use it.
  */
 export const GOOGLE_SILENT_DEADLINE_MS = 4_000;
 
@@ -75,6 +75,13 @@ export class GoogleSignIn {
   private _silentSpent = false;
 
   /**
+   * How many presses took the native path in this document. A silent answer that
+   * arrives after its deadline compares it with the count when it started, so it never
+   * lands over a sign in somebody pressed.
+   */
+  private _interactiveStarts = 0;
+
+  /**
    * Whether the front door should try {@link trySilent}: a native picker exists, this
    * document has not tried yet, nobody holds a session (a guest included: a session
    * that exists is kept by its refresh token, D3), and no sign out switched it off. The
@@ -96,10 +103,14 @@ export class GoogleSignIn {
    *
    * Never throws and never shows anything: a refusal of any kind is `false`, and
    * `google_sign_in_needs_consent` (an account Google knows but this app does not) is
-   * just one more. Once per document, whoever calls it. Abandoned after
-   * {@link GOOGLE_SILENT_DEADLINE_MS}: the answer is then `false`, and a token or a
-   * pair that arrives later is dropped rather than signing somebody in under a screen
-   * they have started to use.
+   * just one more. Once per document, whoever calls it.
+   *
+   * After {@link GOOGLE_SILENT_DEADLINE_MS} the answer is `false`, so the front door
+   * lets go, but the attempt goes on: Android shows a picker for a silent request when
+   * two approved accounts are on the phone, and a person may pick after the deadline.
+   * A token or a pair that arrives late is still used while the app holds no session,
+   * nobody pressed Google since, and the router is still on the front door. Otherwise
+   * it is dropped, so nobody is moved off a screen they started to use.
    */
   async trySilent(): Promise<boolean> {
     const credential = this._credential;
@@ -107,6 +118,7 @@ export class GoogleSignIn {
       return false;
     }
     this._silentSpent = true;
+    const interactiveStartsBefore = this._interactiveStarts;
 
     let abandoned = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -116,6 +128,15 @@ export class GoogleSignIn {
         resolve(false);
       }, GOOGLE_SILENT_DEADLINE_MS);
     });
+
+    // A session that appeared meanwhile is never replaced by one nobody asked for.
+    // Before the deadline the front door is held, so that is the only risk. After it
+    // the person has the screen back, and a press or a navigation is theirs to keep.
+    const stillWanted = (): boolean =>
+      !this._tokens.hasSession() &&
+      (!abandoned ||
+        (this._interactiveStarts === interactiveStartsBefore &&
+          this._onFrontDoor()));
 
     const attempt = (async (): Promise<boolean> => {
       // No terms version: a silent sign in accepts nothing on anybody's behalf, and
@@ -129,13 +150,12 @@ export class GoogleSignIn {
         nonce,
         silent: true,
       });
-      if (idToken === null || abandoned) {
+      if (idToken === null || !stillWanted()) {
         return false;
       }
 
       const tokens = await this._api.signInWithGoogleIdToken(idToken);
-      // A session that appeared meanwhile is never replaced by one nobody asked for.
-      if (abandoned || this._tokens.hasSession()) {
+      if (!stillWanted()) {
         return false;
       }
 
@@ -158,16 +178,17 @@ export class GoogleSignIn {
    *
    * Nothing on the web, where there is no picker and no automatic sign in. Android is
    * told to forget the account too, and its refusal changes nothing here: the flag is
-   * what the front door reads.
+   * what the front door reads. The flag is written at once; the promise only says when
+   * Android has answered, and it never rejects, so a caller may leave it unawaited.
    */
-  stopAutoSignIn(): void {
+  async stopAutoSignIn(): Promise<void> {
     const credential = this._credential;
     if (credential === null) {
       return;
     }
 
     this._browser.writeStorage(StorageKeys.googleAutoSignInOff, 'true');
-    void credential.forget().catch(() => undefined);
+    await credential.forget().catch(() => undefined);
   }
 
   /**
@@ -239,6 +260,9 @@ export class GoogleSignIn {
     credential: GoogleCredentialI,
     acceptedTermsVersion: string | null
   ): Promise<GoogleStartOutcome> {
+    // Counted at the press, before anything is awaited, so a silent answer that
+    // arrives during this sign in is already refused (see trySilent).
+    this._interactiveStarts++;
     const { nonce, clientId } = await this._api.mintGoogleNonce({
       silent: false,
       acceptedTermsVersion,
@@ -261,6 +285,15 @@ export class GoogleSignIn {
 
   private _home(): string {
     return appPath(this._locale(), this._basePath, 'home');
+  }
+
+  /**
+   * Whether the router still shows the front door itself: not a sheet over it, not
+   * sign in, not any other page. The query and the fragment do not count.
+   */
+  private _onFrontDoor(): boolean {
+    const path = this._router.url.split(/[?#]/, 1)[0];
+    return path === appPath(this._locale(), this._basePath);
   }
 }
 

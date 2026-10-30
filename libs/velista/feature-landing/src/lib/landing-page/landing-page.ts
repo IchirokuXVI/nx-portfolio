@@ -96,7 +96,8 @@ export class LandingPage {
 
   /**
    * True while the app tries to sign in by itself (velista `0177`, target 5): four
-   * seconds at most, then the attempt is abandoned and the front door is as it was.
+   * seconds at most, then the front door is let go as it was. A later answer still
+   * signs in only while this page waits untouched (see `GoogleSignIn.trySilent`).
    *
    * It draws the busy state the actions already have and no new copy: they are held,
    * so nobody taps "Sign in" over a sign in that is about to land, and the Google

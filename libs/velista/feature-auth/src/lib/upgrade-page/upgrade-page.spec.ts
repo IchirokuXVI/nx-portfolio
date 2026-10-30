@@ -70,6 +70,8 @@ interface Options {
   readonly settings?: OperatorSettings;
   /** The profile this document already read, or null. */
   readonly heldProfile?: UserProfile | null;
+  /** The Google start double, when a case needs a particular outcome. */
+  readonly google?: { readonly start: jest.Mock };
 }
 
 async function render(options: Options = {}) {
@@ -90,7 +92,9 @@ async function render(options: Options = {}) {
     refresh: jest.fn(async () => options.refreshTo ?? null),
   };
 
-  const google = { start: jest.fn().mockResolvedValue(undefined) };
+  const google = options.google ?? {
+    start: jest.fn().mockResolvedValue(undefined),
+  };
   const settings = fakeOperatorSettingsStore(
     options.settings ?? MEMORY_OPERATOR_SETTINGS
   );
@@ -418,6 +422,17 @@ describe('UpgradePage', () => {
           'lib-google-option'
         )
       ).toBeNull();
+    });
+
+    it('lets go and says nothing when the system sheet is closed (velista 0177)', async () => {
+      const { fixture } = await render({
+        google: { start: jest.fn().mockResolvedValue('cancelled') },
+      });
+
+      await fixture.componentInstance.continueWithGoogle();
+
+      expect(fixture.componentInstance.googleStarting()).toBe(false);
+      expect(fixture.componentInstance.googleError()).toBeNull();
     });
   });
 

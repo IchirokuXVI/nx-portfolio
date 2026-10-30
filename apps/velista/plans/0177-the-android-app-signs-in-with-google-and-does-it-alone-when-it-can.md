@@ -171,9 +171,9 @@ comes before UI changes here.
 - **`start()` answers `'leaving' | 'cancelled'`.** The four Google buttons kept their busy
   state after a successful start, because the web document leaves. On `'cancelled'` they
   let go of it. Their refusal handling is unchanged.
-- **The four seconds live in `GoogleSignIn.trySilent`**, where the pair is stored. A token
-  or a pair that arrives after the deadline is dropped. The attempt starts when the
-  operator settings arrive, and they arrive only after the backend answered.
+- **The four seconds live in `GoogleSignIn.trySilent`**, where the pair is stored. The
+  attempt starts when the operator settings arrive, and they arrive only after the
+  backend answered.
 - **The busy state is the existing held state** (the four ways in dimmed, with "Connecting.
   This will work in a moment."), plus `aria-busy` on the Google button. `googleBusy` alone
   does not stop a tap on "Sign in". No new copy.
@@ -181,8 +181,11 @@ comes before UI changes here.
 - **`invalid_google_token` skips the refresh and retry of the interceptor**, as
   `not_a_participant` does. Without that, a guest whose token is refused is refreshed,
   refused again and signed out. Both new codes joined `ERROR_CODES`.
-- **A silent request can still show a picker** when more than one approved account is on
-  the phone. The app then drops an answer that comes after four seconds.
+- **A late silent answer still signs in when that is safe.** A silent request can show a
+  picker when two approved accounts are on the phone, so a person may pick after four
+  seconds. The front door lets go at four seconds, but the attempt goes on. The app uses
+  a late token or pair only when no session exists, nobody pressed Google since, and the
+  router still shows the front door. In all other cases the app drops it.
 - **Emulator.** `Medium_Phone_API_37.0` has a Play image. With no Google account, the
   staging APK opened on the front door, held the ways in for about two seconds and let them
   go with no message, and drew "Continue with Google". Staging had no nonce route yet (404),
