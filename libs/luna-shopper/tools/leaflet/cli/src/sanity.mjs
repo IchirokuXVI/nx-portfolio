@@ -1,5 +1,5 @@
 /**
- * Six checks against what a printed page can support, run over every reading
+ * Nine checks against what a printed page can support, run over every reading
  * whatever produced it.
  *
  * A warning that says a reading may be wrong is worth much less than one that
@@ -35,7 +35,9 @@ const CENT = 0.005;
 const label = (read, index) => read.name ?? `row ${index + 1}`;
 
 /**
- * The six checks, each named exactly as the plan's table names it.
+ * The checks. The first six are named exactly as the plan's table names them;
+ * the last three came from the LIDL review of 2026-10-30
+ * (`records/2026-10-30-lidl-region-43.md`).
  *
  * Each one takes one page's rows and answers warnings. They are separate
  * functions because each is tested against a reading built to break exactly
@@ -206,7 +208,100 @@ export const CHECKS = [
       return out;
     },
   },
+  {
+    name: 'name joins two products with "o"',
+    run(page, rows) {
+      const out = [];
+      rows.forEach((row, index) => {
+        const read = readRow(row);
+        if (read.name === null || !/\s[oO]\s/.test(read.name)) {
+          return;
+        }
+        out.push(
+          warning(
+            this.name,
+            page,
+            'a tile that names two varieties either side of "o" is two products at one price, and this row reads them as one, so the second never reaches the catalog',
+            label(read, index)
+          )
+        );
+      });
+      return out;
+    },
+  },
+  {
+    name: 'per gram label on a per kilo figure',
+    run(page, rows) {
+      const out = [];
+      rows.forEach((row, index) => {
+        const read = readRow(row);
+        const grams = gramsOf(read);
+        if (
+          read.unitPrice === null ||
+          read.price === null ||
+          grams === null ||
+          !/€\s*\/\s*g\b/i.test(read.unitPriceLabel ?? '')
+        ) {
+          return;
+        }
+        const perKilo = read.price / (grams / 1000);
+        if (Math.abs(perKilo - read.unitPrice) > read.unitPrice * 0.02) {
+          return;
+        }
+        out.push(
+          warning(
+            this.name,
+            page,
+            `the label "${read.unitPriceLabel}" says per gram, and ${read.unitPrice} is the price per kilo of ${grams} g, so the leaflet misprinted its basis`,
+            label(read, index)
+          )
+        );
+      });
+      return out;
+    },
+  },
+  {
+    name: 'whole number price and was price',
+    run(page, rows) {
+      const out = [];
+      rows.forEach((row, index) => {
+        const read = readRow(row);
+        if (
+          read.price === null ||
+          read.wasPrice === null ||
+          !Number.isInteger(read.price) ||
+          !Number.isInteger(read.wasPrice)
+        ) {
+          return;
+        }
+        out.push(
+          warning(
+            this.name,
+            page,
+            `price ${read.price} and was price ${read.wasPrice} have no cents, which is how a tile priced in loyalty points reads, and points are not a price`,
+            label(read, index)
+          )
+        );
+      });
+      return out;
+    },
+  },
 ];
+
+/** The row's size in grams, when it states one in g or kg. */
+function gramsOf(read) {
+  if (read.unitSize === null) {
+    return null;
+  }
+  switch (read.sizeFormat?.toLowerCase()) {
+    case 'g':
+      return read.unitSize;
+    case 'kg':
+      return read.unitSize * 1000;
+    default:
+      return null;
+  }
+}
 
 /**
  * Every check over every page, in page order.
