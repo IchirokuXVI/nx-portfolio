@@ -47,6 +47,10 @@ lunaShopperBackend:
     # Support sessions (plan 0194). On in staging, where the people are the
     # owner's own test accounts. Production does not set this.
     impersonationEnabled: true
+    # Every account accepts the Terms (backend plan 0231, section 5.3). On since
+    # velista 0.17.0 shipped the acceptance UI. Staging clients send `staging` as
+    # their version and meet no floor, so no minClientVersion raise goes with it.
+    termsAcceptanceRequired: true
     # The web client velista-web in Google Cloud project velista-512817, owned by
     # admin@velista.app. Its secret is GOOGLE_CLIENT_SECRET in the Secret.
     googleClientId: 717012688744-diupovqba48a48vpjpbta5caipv9bn16.apps.googleusercontent.com
