@@ -84,6 +84,19 @@
   <section aria-labelledby="account-app" class="group">
     <lib-section-heading headingId="account-app" key="account.app.section" />
 
+    <!--
+      The language, here because an installed app has no landing page to switch it on.
+      The value is the language's own name, never a translation of it.
+    -->
+    <lib-account-row
+      (activate)="openLanguage()"
+      [actionLabel]="'account.language.change' | rokuT"
+      [chevron]="true"
+      [hasAction]="true"
+      [label]="'account.language.label' | rokuT"
+      [value]="languageName()"
+    />
+
     @switch (appRow()) {
       @case ('installed') {
         <!--

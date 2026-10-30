@@ -1,0 +1,49 @@
+<lib-sheet-shell
+  (dismiss)="dismiss()"
+  [dismissible]="!leaving()"
+  #shell
+  labelledBy="account-language-title"
+>
+  <h2 class="title" id="account-language-title">
+    {{ 'account.language.title' | rokuT }}
+  </h2>
+  <p class="body">{{ 'account.language.body' | rokuT }}</p>
+
+  <!--
+    Real radios in one group, so the arrow keys move between the rows. Each name is
+    written in its own language and carries its own `lang`, so a screen reader reads
+    "Español" with Spanish sounds from an English page.
+  -->
+  <div
+    [attr.aria-busy]="leaving()"
+    aria-labelledby="account-language-title"
+    class="choices"
+    role="radiogroup"
+  >
+    @for (choice of choices(); track choice.locale) {
+      <label [class.is-waiting]="leaving()" class="choice">
+        <input
+          (change)="pick(choice.locale)"
+          (click)="pressed(choice)"
+          [checked]="choice.selected"
+          [disabled]="leaving()"
+          [value]="choice.locale"
+          class="control"
+          name="account-language"
+          type="radio"
+        />
+        <span [attr.lang]="choice.locale" class="name">{{ choice.name }}</span>
+      </label>
+    }
+  </div>
+
+  <!--
+    Through the shell rather than emitting straight out, so Cancel plays the same fall
+    the scrim and Escape do.
+  -->
+  @if (!leaving()) {
+    <button (click)="shell.requestDismiss()" class="cancel" type="button">
+      {{ 'entry.cancel' | rokuT }}
+    </button>
+  }
+</lib-sheet-shell>

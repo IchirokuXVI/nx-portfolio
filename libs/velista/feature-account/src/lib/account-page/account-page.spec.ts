@@ -71,6 +71,8 @@ interface Options {
   /** The address of the standalone origin, or empty for none configured. */
   readonly standaloneOrigin?: string;
   readonly username?: string;
+  /** The language the app is in. */
+  readonly locale?: string;
   readonly email?: string | null;
   readonly emailVerified?: boolean;
   readonly profileState?: ProfileLoad;
@@ -186,7 +188,10 @@ async function render(options: Options = {}): Promise<{
         provide: GOOGLE_CREDENTIAL,
         useValue: options.googleCredential === true ? credential : null,
       },
-      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      {
+        provide: RokuLocaleStore,
+        useValue: { locale: signal(options.locale ?? 'en') },
+      },
       {
         provide: ActivatedRoute,
         useValue: {
@@ -604,6 +609,30 @@ describe('AccountPage', () => {
     });
   });
 
+  describe('the language row', () => {
+    it('names the current language in itself', async () => {
+      const { fixture } = await render();
+
+      expect(rowWith(fixture, 'account.language.label')?.textContent).toContain(
+        'English'
+      );
+    });
+
+    it('says Español for Spanish, whatever the copy around it', async () => {
+      const { fixture } = await render({ locale: 'es' });
+
+      expect(rowWith(fixture, 'account.language.label')?.textContent).toContain(
+        'Español'
+      );
+    });
+
+    it('is there for a guest too', async () => {
+      const { fixture } = await render({ guest: true });
+
+      expect(rowWith(fixture, 'account.language.label')).toBeDefined();
+    });
+  });
+
   describe('the sheets', () => {
     it('opens the rename over this screen rather than navigating away', async () => {
       const { fixture, router } = await render();
@@ -615,6 +644,19 @@ describe('AccountPage', () => {
       expect(router.navigate).toHaveBeenCalledWith(
         ['sheet', 'name'],
         expect.anything()
+      );
+    });
+
+    it('opens the language sheet over this screen', async () => {
+      const { fixture, router } = await render();
+
+      (rowWith(fixture, 'account.language.label') as HTMLElement)
+        .querySelector('button')
+        ?.click();
+
+      expect(router.navigate).toHaveBeenCalledWith(
+        ['sheet', 'language'],
+        expect.objectContaining({ relativeTo: TestBed.inject(ActivatedRoute) })
       );
     });
 

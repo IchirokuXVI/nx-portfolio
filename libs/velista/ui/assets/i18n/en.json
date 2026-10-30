@@ -1276,6 +1276,12 @@
     "row": {
       "profiles": "Shopping profiles"
     },
+    "language": {
+      "label": "Language",
+      "change": "Change language",
+      "title": "Which language?",
+      "body": "Velista shows everything in this language on this phone"
+    },
     "tour": {
       "again": "Show me around again"
     }
