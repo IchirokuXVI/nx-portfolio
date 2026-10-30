@@ -13,6 +13,7 @@ import {
   BrowserGeolocationReader,
   detectNativeShell,
   GEOLOCATION_READER,
+  GOOGLE_CREDENTIAL,
   SHARE_TARGET,
   SYSTEM_BARS,
   WebShareTarget,
@@ -20,6 +21,7 @@ import {
 } from '@portfolio/velista/platform';
 import { NativeBrowserFacade } from './native-browser-facade';
 import { NativeGeolocationReader } from './native-geolocation-reader';
+import { NativeGoogleCredential } from './native-google-credential';
 import { NativeShareTarget } from './native-share-target';
 import { NativeShell, storeUrlFor } from './native-shell';
 import { NativeSystemBars } from './native-system-bars';
@@ -58,6 +60,12 @@ export function provideNativeShell(): EnvironmentProviders {
         isNative()
           ? inject(NativeGeolocationReader)
           : new BrowserGeolocationReader(),
+    },
+    {
+      // Null on the web, where `GoogleSignIn` keeps the redirect flow (velista
+      // `0175`, target 2): the web has no picker of its own to offer.
+      provide: GOOGLE_CREDENTIAL,
+      useFactory: () => (isNative() ? inject(NativeGoogleCredential) : null),
     },
     {
       provide: SYSTEM_BARS,

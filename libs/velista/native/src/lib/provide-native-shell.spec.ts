@@ -7,6 +7,7 @@ import {
   BrowserFacade,
   BrowserGeolocationReader,
   GEOLOCATION_READER,
+  GOOGLE_CREDENTIAL,
   SHARE_TARGET,
   SYSTEM_BARS,
   WebShareTarget,
@@ -14,6 +15,7 @@ import {
 } from '@portfolio/velista/platform';
 import { NativeBrowserFacade } from './native-browser-facade';
 import { NativeGeolocationReader } from './native-geolocation-reader';
+import { NativeGoogleCredential } from './native-google-credential';
 import { NATIVE_PLUGINS } from './native-plugins';
 import { NativeShareTarget } from './native-share-target';
 import { NativeSystemBars } from './native-system-bars';
@@ -60,6 +62,8 @@ describe('provideNativeShell', () => {
       NativeBrowserFacade
     );
     expect(TestBed.inject(APP_STORE_URL)).toBeNull();
+    // No picker on the web, so `GoogleSignIn` keeps the redirect flow (velista 0175).
+    expect(TestBed.inject(GOOGLE_CREDENTIAL)).toBeNull();
   }
 
   describe('on the web', () => {
@@ -104,6 +108,9 @@ describe('provideNativeShell', () => {
       );
       expect(TestBed.inject(SYSTEM_BARS)).toBeInstanceOf(NativeSystemBars);
       expect(TestBed.inject(BrowserFacade)).toBeInstanceOf(NativeBrowserFacade);
+      expect(TestBed.inject(GOOGLE_CREDENTIAL)).toBeInstanceOf(
+        NativeGoogleCredential
+      );
     });
 
     it('registers the back and link listeners at startup', async () => {
