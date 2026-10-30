@@ -49,14 +49,17 @@ describe('velista assetlinks.json', () => {
   });
 
   // Our release key signs both flavors' own builds. Google Play re-signs what it
-  // installs with its app signing key, so production also names that one.
+  // installs with its app signing key (Play Console, App signing), so production also
+  // names that one.
   it('trusts the release key for both flavors and the Play key for production', () => {
-    const staging = fingerprintsOf('app.velista.staging') ?? [];
-    const production = fingerprintsOf('app.velista') ?? [];
+    const releaseKey =
+      '08:96:62:0D:8C:9E:B8:A9:10:C8:3C:AD:D0:7D:6B:15:F3:2B:0E:42:AB:D0:EC:31:2B:D6:B7:1B:B3:C0:B1:92';
+    const playKey =
+      'F2:3D:04:67:81:AE:5D:D3:68:F1:A6:AD:40:10:35:DA:67:CF:71:3C:62:4A:09:31:C0:75:97:05:C1:4B:18:6E';
 
-    expect(staging).toHaveLength(1);
-    expect(production).toHaveLength(2);
-    expect(production[0]).toBe(staging[0]);
-    expect(production[1]).not.toBe(staging[0]);
+    expect(fingerprintsOf('app.velista.staging')).toEqual([releaseKey]);
+    expect([...(fingerprintsOf('app.velista') ?? [])].sort()).toEqual(
+      [releaseKey, playKey].sort()
+    );
   });
 });

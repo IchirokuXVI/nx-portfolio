@@ -131,6 +131,12 @@ const flavor = flavorArg();
 const bundle = process.argv.includes('--bundle');
 const Flavor = flavor[0].toUpperCase() + flavor.slice(1);
 const version = process.env.VELISTA_APP_VERSION || defaultAppVersion();
+// Play takes each version code once, so a bundle never falls back to the default.
+if (bundle && !process.env.VELISTA_ANDROID_VERSION_CODE) {
+  fail(
+    '--bundle needs VELISTA_ANDROID_VERSION_CODE, above the last one uploaded to Play'
+  );
+}
 const versionCode = process.env.VELISTA_ANDROID_VERSION_CODE || '1';
 if (!/^[1-9][0-9]*$/.test(versionCode)) {
   fail(
