@@ -3,7 +3,9 @@
 // environment's hosts, `cap sync`, then Gradle. Plain Node 22 and no dependency, so it
 // runs before anything else is installed for Android.
 //
-//   node apps/velista/scripts/build-android.mjs --flavor staging|production
+//   node apps/velista/scripts/build-android.mjs --flavor staging|production [--bundle]
+//
+// --bundle also builds the Android App Bundle (.aab) that Google Play takes, beside the APK.
 //
 // Environment it reads, all optional:
 //   VELISTA_APP_VERSION                  the bundle's version and the APK's versionName
@@ -126,6 +128,7 @@ function certificateDigest(signer, apk, env) {
 }
 
 const flavor = flavorArg();
+const bundle = process.argv.includes('--bundle');
 const Flavor = flavor[0].toUpperCase() + flavor.slice(1);
 const version = process.env.VELISTA_APP_VERSION || defaultAppVersion();
 const versionCode = process.env.VELISTA_ANDROID_VERSION_CODE || '1';
@@ -170,6 +173,12 @@ const keystoreProperties = process.env.VELISTA_ANDROID_KEYSTORE_PROPERTIES
   ? resolve(process.env.VELISTA_ANDROID_KEYSTORE_PROPERTIES)
   : join(androidRoot, 'keystore.properties');
 const releaseKey = existsSync(keystoreProperties);
+// Play refuses a bundle signed with the debug key, so a bundle needs the release key.
+if (bundle && !releaseKey) {
+  fail(
+    `--bundle needs the release key, and ${keystoreProperties} does not exist`
+  );
+}
 
 console.log(`velista ${flavor} ${version} (${versionCode})`);
 for (const [key, value] of Object.entries(hosts)) {
@@ -188,6 +197,7 @@ run('npx', ['cap', 'sync', 'android'], { cwd: appRoot, env });
 
 const gradleArgs = [
   `assemble${Flavor}Release`,
+  ...(bundle ? [`bundle${Flavor}Release`] : []),
   `-PvelistaVersionName=${version}`,
   `-PvelistaVersionCode=${versionCode}`,
 ];
@@ -225,3 +235,18 @@ console.log(
 console.log(
   `Certificate SHA-256: ${certificateDigest(apksigner(sdk), apk, env)}`
 );
+
+if (bundle) {
+  const builtBundle = join(
+    androidRoot,
+    'app/build/outputs/bundle',
+    `${flavor}Release`,
+    `app-${flavor}-release.aab`
+  );
+  if (!existsSync(builtBundle)) {
+    fail(`Gradle finished but ${builtBundle} does not exist`);
+  }
+  const aab = join(outDir, `velista-${flavor}-${version}.aab`);
+  copyFileSync(builtBundle, aab);
+  console.log(`\nBundle: ${relative(workspaceRoot, aab)}`);
+}
