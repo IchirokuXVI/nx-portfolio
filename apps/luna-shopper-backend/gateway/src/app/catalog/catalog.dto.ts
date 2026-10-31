@@ -479,6 +479,68 @@ export class CreateItemsDto {
   items!: CreateItemDto[];
 }
 
+/**
+ * What an edit expects the product to hold (plan 0237, section 3.2), in the
+ * shape {@link SourceEntryExpectationDto} gave the decisions route.
+ *
+ * Every field is optional, and only a field that is present is compared. Catalog
+ * compares inside the write's transaction, before any edit of the request is
+ * applied, so a product that a harvest rewrote after the operator read it
+ * refuses the whole request rather than being overwritten from a stale read.
+ */
+@ApiSchema({
+  description:
+    'What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds.',
+})
+export class ItemExpectationDto {
+  @ApiPropertyOptional({
+    type: LocalizedTextDto,
+    description:
+      'Both halves, each trimmed. A half left out expects the product to have no name in that language.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: 120,
+    description: 'Compared by brand key, so `Pierrot` and `PIERROT` agree.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  brand?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  unitSize?: number | null;
+
+  @ApiPropertyOptional({ enum: UnitOfMeasure })
+  @IsOptional()
+  @IsEnum(UnitOfMeasure)
+  defaultUnit?: UnitOfMeasure;
+
+  @ApiPropertyOptional({ type: 'integer', nullable: true })
+  @IsOptional()
+  @IsInt()
+  packCount?: number | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: ITEM_CATEGORY_MAX,
+    description: 'The slugs of the product’s categories, compared in order.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(ITEM_CATEGORY_MAX)
+  @IsString({ each: true })
+  @MaxLength(CATEGORY_SLUG_MAX_LENGTH, { each: true })
+  categorySlugs?: string[];
+}
+
 export class UpdateItemDto {
   @ApiPropertyOptional({ type: LocalizedTextDto })
   @IsOptional()
@@ -569,6 +631,16 @@ export class UpdateItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string | null;
+
+  @ApiPropertyOptional({
+    type: ItemExpectationDto,
+    description:
+      'What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ItemExpectationDto)
+  expect?: ItemExpectationDto;
 }
 
 /** One product of an {@link UpdateItemsDto}: the single edit, and which product. */

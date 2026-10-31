@@ -212,6 +212,10 @@ export const ERROR_CATALOG: Record<
     en: 'Another product already holds that barcode. A barcode names one product: bind onto that product, or take the barcode off it first.',
     es: 'Otro producto ya tiene ese código de barras. Un código de barras nombra un solo producto: enlaza con ese producto o quítale antes el código.',
   },
+  [ERROR_CODES.ITEM_EXPECTATION_FAILED]: {
+    en: 'A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.',
+    es: 'Un producto ya no tiene lo que esta edición esperaba. Vuelve a leerlo y decide si la edición sigue siendo válida. No se ha escrito nada.',
+  },
   [ERROR_CODES.CATEGORY_IN_USE]: {
     en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
     es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',

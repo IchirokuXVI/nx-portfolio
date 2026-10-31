@@ -2342,6 +2342,48 @@ export interface UpdateItemRequest extends AdminCredential {
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;
+  /**
+   * What the product holds as the caller read it (plan 0237, section 3.2).
+   * Compared with the product inside the write's transaction, before any edit
+   * is applied; one field that differs refuses the whole request with
+   * `item_expectation_failed`.
+   */
+  expect?: ItemExpectation;
+}
+
+/**
+ * The state an edit expects a product to be in (plan 0237, section 3.2).
+ *
+ * Every field is optional, and only a field that is present is compared. A
+ * `null` means "the product holds nothing here".
+ *
+ * - `name` is compared as both halves, each trimmed, so an absent half
+ *   expects the product to have no name in that language.
+ * - `brand` is compared by `brandKey`, so `Pierrot` and `PIERROT` agree.
+ * - `categorySlugs` is compared as an ordered list.
+ */
+export interface ItemExpectation {
+  name?: LocalizedText;
+  brand?: string | null;
+  unitSize?: number | null;
+  defaultUnit?: UnitOfMeasure;
+  packCount?: number | null;
+  categorySlugs?: string[];
+}
+
+/** One field an {@link ItemExpectation} named that the product does not hold. */
+export interface ItemExpectationMismatch {
+  field: keyof ItemExpectation;
+  /** What the request expected. */
+  expected: unknown;
+  /** What the product holds. */
+  actual: unknown;
+}
+
+/** One product whose {@link ItemExpectation} failed, and every field that did. */
+export interface ItemExpectationFailure {
+  itemId: string;
+  fields: ItemExpectationMismatch[];
 }
 
 /**

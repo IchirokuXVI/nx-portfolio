@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   brandKey,
   BULK_DECISION_MAX_OPERATIONS,
+  CONTENT_LOCALES,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
   PACK_COUNT_FILL_MAX,
@@ -25,6 +26,9 @@ import {
   type GetItemsResult,
   type ItemEanRefusal,
   type ItemEanRequest,
+  type ItemExpectation,
+  type ItemExpectationFailure,
+  type ItemExpectationMismatch,
   type ItemIdRequest,
   type ItemOfferView,
   type ItemOrder,
@@ -50,7 +54,9 @@ import {
   isUuid,
   ITEM_EAN_DETAIL,
   ITEM_EAN_HOLDER_DETAIL,
+  ITEM_EXPECTATION_FAILURES_DETAIL,
   ItemEanHeldException,
+  ItemExpectationFailedException,
   NotFoundException,
   requireProductEan,
   ValidationException,
@@ -2299,6 +2305,14 @@ export class ItemService {
       .filter((ids): ids is string[] => ids !== undefined);
     const leavesOf =
       named.length === 0 ? null : await this.categories.leaveChecker(named);
+    // Every group the request names, resolved before the transaction opens,
+    // so an edit can be applied again inside it with nothing left to read.
+    const groups = new Map<number, string | null>();
+    for (const [index, input] of inputs.entries()) {
+      if (input.productGroupId !== undefined) {
+        groups.set(index, await this.resolveGroup(input.productGroupId));
+      }
+    }
 
     const edits: {
       row: Item;
@@ -2310,7 +2324,7 @@ export class ItemService {
       const row = rows[index];
       const before = { ...row };
       const groupBefore = row.productGroupId;
-      await this.applyEdits(row, input, registered);
+      this.applyEdits(row, input, registered, groups.get(index));
       const leaves =
         input.categoryIds === undefined || leavesOf === null
           ? null
@@ -2323,6 +2337,33 @@ export class ItemService {
     let saved: Item[];
     try {
       saved = await this.audit.write(actor, async (tx) => {
+        // Plan 0237, section 3.2: every entry that states what it expects is
+        // compared with its row as the transaction holds it, before any edit
+        // is written. Each such entry is then applied again onto that row, so
+        // a field a harvest wrote since the read above is not written back.
+        const expecting = inputs
+          .map((input, index) => ({ input, index }))
+          .filter(({ input }) => input.expect !== undefined);
+        if (expecting.length > 0) {
+          const held = await this.lockForExpectation(
+            tx,
+            expecting.map(({ input }) => input.itemId)
+          );
+          refuseFailedExpectations(
+            expecting.map(({ input }) => ({
+              itemId: input.itemId,
+              expect: input.expect as ItemExpectation,
+            })),
+            held
+          );
+          for (const { input, index } of expecting) {
+            const row = held.rows.get(input.itemId) as Item;
+            const before = { ...row };
+            const groupBefore = row.productGroupId;
+            this.applyEdits(row, input, registered, groups.get(index));
+            edits[index] = { ...edits[index], row, before, groupBefore };
+          }
+        }
         const written: Item[] = [];
         for (const edit of edits) {
           await this.moveFirstEan(tx, edit.before, edit.row, eanTaken);
@@ -2368,12 +2409,57 @@ export class ItemService {
     });
   }
 
-  /** One product's edit onto its row, every field the request names. */
-  private async applyEdits(
+  /**
+   * The rows of the products whose edits state an expectation, locked for the
+   * rest of the transaction and read through it, with the slugs of their
+   * categories (plan 0237, section 3.2).
+   *
+   * Locked with no relations, because a `FOR UPDATE` fails over the outer
+   * join a relation adds. Read through the transaction's own manager, never
+   * through the pool.
+   */
+  private async lockForExpectation(
+    tx: AuditedWrite,
+    itemIds: readonly string[]
+  ): Promise<HeldItems> {
+    const found = await tx.manager.find(Item, {
+      where: { id: In([...itemIds]) },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const rows = new Map(found.map((row) => [row.id, row]));
+    for (const id of itemIds) {
+      if (!rows.has(id)) {
+        // Deleted between the read and the lock.
+        throw new NotFoundException(`Item ${id} not found`);
+      }
+    }
+    const categories = await this.categories.categoriesOf(
+      [...rows.keys()],
+      tx.manager
+    );
+    return {
+      rows,
+      slugs: new Map(
+        [...rows.keys()].map((id) => [
+          id,
+          (categories.get(id) ?? []).map((category) => category.slug),
+        ])
+      ),
+    };
+  }
+
+  /**
+   * One product's edit onto its row, every field the request names.
+   *
+   * `group` is the request's product group, already resolved, so the edit
+   * reads nothing and can be applied again inside the transaction.
+   */
+  private applyEdits(
     row: Item,
     input: UpdateItemInput,
-    registered: ReadonlyMap<string, Brand>
-  ): Promise<void> {
+    registered: ReadonlyMap<string, Brand>,
+    group: string | null | undefined
+  ): void {
     if (input.name !== undefined) {
       row.name = input.name;
     }
@@ -2404,8 +2490,8 @@ export class ItemService {
     if (input.defaultUnit !== undefined) {
       row.defaultUnit = input.defaultUnit;
     }
-    if (input.productGroupId !== undefined) {
-      row.productGroupId = await this.resolveGroup(input.productGroupId);
+    if (input.productGroupId !== undefined && group !== undefined) {
+      row.productGroupId = group;
     }
   }
 
@@ -2586,6 +2672,132 @@ export class ItemService {
 
 /** A product as a view, with what the page's two lookups found for it. */
 type ItemViewer = (row: Item, offer?: ItemOfferView) => ItemView;
+
+/** The locked rows an expectation is compared with, and their category slugs. */
+interface HeldItems {
+  rows: ReadonlyMap<string, Item>;
+  slugs: ReadonlyMap<string, readonly string[]>;
+}
+
+/**
+ * Refuse the request when any product holds something its edit did not
+ * expect (plan 0237, section 3.2). Every failure of the request is named, not
+ * only the first, so an operator fixes the batch once.
+ */
+function refuseFailedExpectations(
+  entries: readonly { itemId: string; expect: ItemExpectation }[],
+  held: HeldItems
+): void {
+  const failures: ItemExpectationFailure[] = [];
+  for (const { itemId, expect } of entries) {
+    const fields = expectationMismatches(
+      held.rows.get(itemId) as Item,
+      held.slugs.get(itemId) ?? [],
+      expect
+    );
+    if (fields.length > 0) {
+      failures.push({ itemId, fields });
+    }
+  }
+  if (failures.length > 0) {
+    throw new ItemExpectationFailedException(
+      `${failures.length} product(s) no longer hold what the edit expected: ` +
+        failures.map((failure) => failure.itemId).join(', '),
+      { details: { [ITEM_EXPECTATION_FAILURES_DETAIL]: failures } }
+    );
+  }
+}
+
+/**
+ * Each field an expectation names that the row does not hold (plan 0237,
+ * section 3.2). Only a field that is present is compared, and `null` expects
+ * the row to hold nothing there.
+ *
+ * - `name` is both halves, each trimmed; a half the expectation leaves out
+ *   expects no name in that language.
+ * - `brand` is compared by key, against the label the row stores, so a
+ *   different case or punctuation of one label agrees.
+ * - `unitSize` is compared as a number, because the column is `numeric` and
+ *   Postgres answers it as a string.
+ * - `categorySlugs` is an ordered list.
+ */
+export function expectationMismatches(
+  row: Pick<Item, 'name' | 'brand' | 'unitSize' | 'defaultUnit' | 'packCount'>,
+  slugs: readonly string[],
+  expect: ItemExpectation
+): ItemExpectationMismatch[] {
+  const mismatches: ItemExpectationMismatch[] = [];
+  if (expect.name !== undefined) {
+    const differs = CONTENT_LOCALES.some(
+      (locale) =>
+        trimmedOrNull(expect.name?.[locale]) !==
+        trimmedOrNull(row.name?.[locale])
+    );
+    if (differs) {
+      mismatches.push({
+        field: 'name',
+        expected: expect.name,
+        actual: row.name,
+      });
+    }
+  }
+  if (
+    expect.brand !== undefined &&
+    brandKey(expect.brand) !== brandKey(row.brand)
+  ) {
+    mismatches.push({
+      field: 'brand',
+      expected: expect.brand,
+      actual: row.brand,
+    });
+  }
+  if (expect.unitSize !== undefined) {
+    const actual = row.unitSize === null ? null : Number(row.unitSize);
+    if (actual !== expect.unitSize) {
+      mismatches.push({ field: 'unitSize', expected: expect.unitSize, actual });
+    }
+  }
+  if (
+    expect.defaultUnit !== undefined &&
+    row.defaultUnit !== expect.defaultUnit
+  ) {
+    mismatches.push({
+      field: 'defaultUnit',
+      expected: expect.defaultUnit,
+      actual: row.defaultUnit,
+    });
+  }
+  if (
+    expect.packCount !== undefined &&
+    (row.packCount ?? null) !== expect.packCount
+  ) {
+    mismatches.push({
+      field: 'packCount',
+      expected: expect.packCount,
+      actual: row.packCount ?? null,
+    });
+  }
+  if (expect.categorySlugs !== undefined) {
+    const expected = expect.categorySlugs ?? [];
+    const same =
+      expected.length === slugs.length &&
+      expected.every((slug, index) => slug === slugs[index]);
+    if (!same) {
+      mismatches.push({
+        field: 'categorySlugs',
+        expected: expect.categorySlugs,
+        actual: [...slugs],
+      });
+    }
+  }
+  return mismatches;
+}
+
+/** A trimmed string, or null for an absent or blank one. */
+function trimmedOrNull(value: string | null | undefined): string | null {
+  const text = value?.trim();
+  return text ? text : null;
+}
 
 /**
  * A product's barcodes in the order a view lists them (plan 0185): the first

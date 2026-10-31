@@ -329,6 +329,17 @@ export const ERROR_CODES = {
    */
   ITEM_EAN_HELD: 'item_ean_held',
   /**
+   * A product edit stated what it expected the product to hold, and the
+   * product holds something else (plan 0237, section 3.2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the operator
+   * has to act on it in a particular way: read the product again, and decide
+   * whether the edit still holds. The products that failed, each field that
+   * differed and the value the product holds travel in `details`. One failure
+   * refuses the whole batch, and nothing is written.
+   */
+  ITEM_EXPECTATION_FAILED: 'item_expectation_failed',
+  /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
    * something.
@@ -651,6 +662,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.ITEM_EAN_INVALID]: HttpStatus.BAD_REQUEST,
   // 409: the barcode is a real one, and another product holds it (plan 0185).
   [ERROR_CODES.ITEM_EAN_HELD]: HttpStatus.CONFLICT,
+  // 409 like `stale_quantity`: the request is well formed, and the product
+  // moved under the caller since it was read (plan 0237, section 3.2).
+  [ERROR_CODES.ITEM_EXPECTATION_FAILED]: HttpStatus.CONFLICT,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,

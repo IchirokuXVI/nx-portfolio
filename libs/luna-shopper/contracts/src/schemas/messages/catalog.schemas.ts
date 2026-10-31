@@ -205,6 +205,8 @@ export const CATALOG_SCHEMA_IDS = {
   createItemsResult: schemaId('msg/item.createMany/response'),
   // Plan 0166: the update op of the items batch.
   updateItemInput: schemaId('catalog/UpdateItemInput'),
+  // Plan 0237, section 3.2: what an edit expects the product to hold.
+  itemExpectation: schemaId('catalog/ItemExpectation'),
   updateItemsRequest: schemaId('msg/item.updateMany/request'),
   updateItemsResult: schemaId('msg/item.updateMany/response'),
   // Plan 0166: the category tree, and a category as a product carries it.
@@ -1470,7 +1472,21 @@ const updateItemFields = {
   categoryIds: categoryIds(),
   defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   productGroupId: nullableString(),
+  // Plan 0237, section 3.2: compared before any edit of the request.
+  expect: ref(CATALOG_SCHEMA_IDS.itemExpectation),
 };
+/**
+ * What an edit expects the product to hold (plan 0237, section 3.2). Every
+ * field is optional, and `null` means the product holds nothing there.
+ */
+const itemExpectation = object(CATALOG_SCHEMA_IDS.itemExpectation, {
+  name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  brand: nullableString(),
+  unitSize: numberOrNull(),
+  defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  packCount: { type: ['integer', 'null'] },
+  categorySlugs: array(nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })),
+}, []);
 const updateItemRequest = object(
   CATALOG_SCHEMA_IDS.updateItemRequest,
   { ...adminCredentialProperties, ...updateItemFields },
@@ -3390,6 +3406,7 @@ export const catalogSchemas: JsonSchema[] = [
   createItemsRequest,
   createItemsResult,
   updateItemInput,
+  itemExpectation,
   updateItemsRequest,
   updateItemsResult,
   categoryTreeRequest,

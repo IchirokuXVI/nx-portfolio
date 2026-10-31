@@ -515,6 +515,26 @@ export class ItemEanHeldException extends DomainException {
 }
 
 /**
+ * The `details` key an {@link ItemExpectationFailedException} lists its
+ * failures under: one entry per product, `{ itemId, fields }`, and each field
+ * as `{ field, expected, actual }`.
+ */
+export const ITEM_EXPECTATION_FAILURES_DETAIL = 'failures';
+
+/**
+ * A product edit stated what it expected, and the product holds something
+ * else (plan 0237, section 3.2).
+ *
+ * The details are public. `expected` is what the request sent, and `actual`
+ * is the product's own value, which only an admin reaches and which is the
+ * one fact the operator needs to decide again.
+ */
+export class ItemExpectationFailedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_EXPECTATION_FAILED;
+  override readonly exposesDetails = true;
+}
+
+/**
  * A category with children or products cannot be deleted (plan 0166, rule R4).
  * No details: the category is the one the client asked to delete, and the back
  * office links to its products from the id it already holds.
