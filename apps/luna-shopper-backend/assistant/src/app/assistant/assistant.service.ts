@@ -1326,6 +1326,13 @@ export class AssistantService {
    * by their user id and never by anything else**, and the retention on these
    * logs is short and stated, because a transcript is what a person typed about
    * groceries and that is ordinary personal data.
+   *
+   * The words themselves are logged only when `ASSISTANT_LOG_TURN_TEXT` is on
+   * (k8s plan 0018, D3). Off, which is the default, each text field becomes
+   * its length (`saidChars`, `repliedChars`, `withheldChars`) and every other
+   * field stays, so the record still answers the questions of section 10. The
+   * host keeps this container's lines for 7 days; a record with no text keeps
+   * that promise even on a host that trims nothing.
    */
   private record(entry: {
     userId: string;
@@ -1366,8 +1373,12 @@ export class AssistantService {
         event: 'assistant.turn',
         userId: entry.userId,
         locale: entry.locale,
-        said: entry.said,
-        replied: entry.replied,
+        ...(this.config.logTurnText
+          ? { said: entry.said, replied: entry.replied }
+          : {
+              saidChars: entry.said.length,
+              repliedChars: entry.replied.length,
+            }),
         tools: entry.calledTools,
         // The single most valuable field here: how often the app can infer the
         // list, which is the question the accessibility work turns on.
@@ -1379,7 +1390,11 @@ export class AssistantService {
         // Anything but `ok` and `skipped` is a line the owner counts (plan
         // 0236, section 4.4). The classifier's prompt is never here.
         moderation: entry.moderation,
-        ...(entry.withheld !== undefined ? { withheld: entry.withheld } : {}),
+        ...(entry.withheld === undefined
+          ? {}
+          : this.config.logTurnText
+            ? { withheld: entry.withheld }
+            : { withheldChars: entry.withheld.length }),
         // The turn's own usage as before, with the check's beside it under
         // `moderation`, so one read of the record has the whole cost.
         tokens:

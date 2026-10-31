@@ -270,6 +270,11 @@ runs:
 
     # Events are the part people forget: ImagePullBackOff, a claim that cannot
     # bind and a failing probe announce themselves there and nowhere else.
+    #
+    # No log lines (k8s plan 0018, D4). This repository is public, so its
+    # Actions logs are too, and an application line can carry an IP, a user id
+    # or a value Postgres quoted. `describe` gives the reason, the exit code
+    # and the probe failures; the logs stay on the host, kept for the stated time.
     - name: Diagnose the failed deploy
       if: failure() && env.DEPLOY_TARGET != ''
       shell: bash
@@ -289,7 +294,7 @@ runs:
           for p in $(kubectl -n "$ns" get pods --field-selector=status.phase!=Running -o name 2> /dev/null); do
             echo "::group::$p"
             kubectl -n "$ns" describe "$p" | tail -30 || true
-            kubectl -n "$ns" logs "$p" --tail=50 --all-containers || true
+            echo "read its logs on the host: kubectl -n $ns logs $p --all-containers"
             echo "::endgroup::"
           done
         EOF
