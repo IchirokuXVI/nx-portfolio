@@ -1,7 +1,5 @@
 > **PR:** [#885](https://github.com/IchirokuXVI/nx-portfolio/pull/885)
 
-> **PR:** [#863](https://github.com/IchirokuXVI/nx-portfolio/pull/863)
-
 # 0237: the operations of a catalog audit, and the routes they need
 
 > The catalog audit of 2026-10-27 read the 22,203 products of production and kept 879
@@ -469,9 +467,30 @@ after the edit is applied to the row in memory and before it is saved:
   grams it would be.
 
 The check reads the row as it will be saved, so an entry that sets `defaultUnit` alone on
-a sized product is refused, which is the audit's case. `sourceEntry.createItem` in the
-harvester normalizes with `toBaseUnit` before it sends and is not affected; the spec
-proves it with the fixtures of `file-import.integration.spec.ts`. No migration: the
+a sized product is refused, which is the audit's case.
+
+`sourceEntry.createItem` in the harvester has two paths, and only one is unaffected:
+
+- **The automatic path is unaffected.** With no unit in the request, `createdSize`
+  (`harvester/src/app/harvest/source-entry-size.ts`) converts the row's size with
+  `toBaseUnit`, and catalog accepts every size `toBaseUnit` gives. The catalog
+  integration spec creates each of them.
+- **The operator's override is now refused.** With a `defaultUnit` override on the
+  create from a row (`POST /v1/admin/harvest/entries/:id/item`), `createdSize` passes the
+  unit through as given, and converts the row's size into it when the override names no
+  size. The back office's queue form offers `UNIT`, `GRAM`, `KILOGRAM`, `MILLILITER`,
+  `LITER` and `PACK`, and sends `defaultUnit` without `unitSize` when the size field is
+  untouched. So `KILOGRAM` on a sized row answers 400 `item_kilogram_has_size` (before
+  this plan it stored a sized `KILOGRAM`, which R9 forbids), and `LITER` or `PACK`
+  always answers 400 `item_unit_not_base`, with the same codes and details as the item
+  routes. The curation CLI is unaffected: it sends `unitSize: null` and refuses a unit
+  that is not a base unit itself.
+- **The owner decides** how the override path ends, and this plan changes neither the
+  harvester nor the back office: normalize the override in `createdSize` through
+  `toBaseUnit`, as the automatic path does, or remove `LITER` and `PACK` from the form
+  (a sized `KILOGRAM` is then still refused, and says what to send).
+
+No migration: the
 first catalog holds no such row (check A3 reads 0, plan `0186`), and a cluster that holds
 one keeps it until a write touches it. The two codes are added where the others are and
 reach `openapi.json`.
@@ -538,8 +557,9 @@ regenerate the document and the wire types.
       the field and the row's value; a right `expect` writes; `brand` compares by key.
 - [x] 3.3: `{ "defaultUnit": "KILOGRAM" }` on a product sized 4000 `GRAM` is refused with
       `item_kilogram_has_size`; with `"unitSize": null` it is applied; `LITER` is refused
-      on create and update; the harvester's file import fixtures still create their
-      products.
+      on create and update; every size `toBaseUnit` gives is accepted on create; the
+      harvester's file import suite passes; the operator's unit override on the create
+      from a row is refused by design (see 3.3, an owner decision).
 - [x] 3.4: `categorySlugs: ["small-appliances"]` writes the same row `categoryIds` with
       its id does; both at once is `validation_failed`; a root slug is
       `category_not_a_leaf`.

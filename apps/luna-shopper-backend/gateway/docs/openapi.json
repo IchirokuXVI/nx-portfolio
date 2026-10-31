@@ -17903,7 +17903,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18139,7 +18139,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18179,7 +18179,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`brand_unregistered` — The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18243,7 +18243,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18283,7 +18283,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_expectation_failed` — A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.\n\n`brand_unregistered` — The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18537,7 +18537,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18577,7 +18577,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_expectation_failed` — A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28350,7 +28350,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {

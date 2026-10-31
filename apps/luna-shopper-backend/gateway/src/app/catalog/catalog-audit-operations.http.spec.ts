@@ -195,6 +195,34 @@ describe('an audit through the admin item routes, over HTTP (plan 0237)', () => 
       }
     );
 
+    it('refuses a null expectation on the batch and on the single edit, and sends nothing', async () => {
+      const { nest, sent, origin } = await boot();
+      try {
+        const batch = await send(
+          origin,
+          'PATCH',
+          '/v1/admin/catalog/items/batch',
+          { items: [{ itemId: ITEM_ID, packCount: 6, expect: null }] }
+        );
+        const single = await send(
+          origin,
+          'PATCH',
+          `/v1/admin/catalog/items/${ITEM_ID}`,
+          { packCount: 6, expect: null }
+        );
+
+        expect(batch.status).toBe(400);
+        expect(await batch.json()).toMatchObject({ code: 'validation_failed' });
+        expect(single.status).toBe(400);
+        expect(await single.json()).toMatchObject({
+          code: 'validation_failed',
+        });
+        expect(sent).toEqual([]);
+      } finally {
+        await nest.close();
+      }
+    });
+
     it('answers catalog’s refusal as 409 item_expectation_failed, with each product, field and value', async () => {
       const failures = [
         {

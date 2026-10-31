@@ -34,6 +34,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -748,7 +749,10 @@ export class UpdateItemDto {
     description:
       'What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.',
   })
-  @IsOptional()
+  // Not `@IsOptional()`: that lets `null` through, and catalog has nothing
+  // to compare a null expectation with. Absent is the only way to send none.
+  @ValidateIf((dto: UpdateItemDto) => dto.expect !== undefined)
+  @IsObject()
   @ValidateNested()
   @Type(() => ItemExpectationDto)
   expect?: ItemExpectationDto;
