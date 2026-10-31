@@ -239,6 +239,21 @@ examples are proposals of the audit, with their production ids.
 - Eighteen proposals give one name to several rows. Before the batch, check A6 in
   memory: no two products may end equal in brand, Spanish name, size, unit and pack
   count.
+- **After 3.2**, each entry also sends `expect`, the product as the audit read it.
+  The service compares it before any edit of the batch and refuses the whole batch
+  with `item_expectation_failed` when one field differs:
+
+  ```json
+  { "items": [
+    { "itemId": "4e01712e-7879-4d63-9217-ac10d937374b",
+      "name": { "es": "Yogur 0% con trozos de melocotón", "en": "0% yoghurt with peach pieces" },
+      "expect": { "name": { "es": "<the audit's nameEs>", "en": "<the audit's nameEn>" },
+                  "brand": "<the audit's brand, or null>", "categorySlugs": ["<in order>"] } }
+  ] }
+  ```
+
+  `details.failures` names each product, each field and the value the product holds.
+  The single `PATCH /v1/admin/catalog/items/:id` takes the same `expect`.
 
 ### 2.2 Brand
 
@@ -249,6 +264,8 @@ examples are proposals of the audit, with their production ids.
 { "items": [ { "itemId": "063628a4-ff9b-4165-967a-04d67cb7f6bb", "brand": "Pierrot" } ] }
 ```
 
+- After 3.2, `expect.brand` compares by `brandKey`, so the audit's `PIERROT` agrees with
+  a product that stores `Pierrot`.
 - Catalog keys the text with `brandKey`. A registered key stores the registry's label and
   `brandId`; a spelling resolves to its canonical brand. **An unregistered label is
   stored as free text with `brandId` null, and nothing says so** (`applyBrand`,
@@ -276,6 +293,13 @@ examples are proposals of the audit, with their production ids.
 - A `KILOGRAM` product has no size (R9, `toBaseUnit` of plan `0183`). The audit's twenty
   `unit: "KILOGRAM"` proposals keep the row's size; the entry sets `unitSize: null`. A
   `5 KILOGRAM` is `5000 GRAM`. `LITER` and `PACK` are never written.
+- **After 3.3** the service refuses them itself, on the create, the batch create, the
+  edit and the batch edit: `LITER` and `PACK` with 400 `item_unit_not_base`, whose
+  `details` name the unit and size they become (`MILLILITER`, `UNIT`), and a sized
+  `KILOGRAM` with 400 `item_kilogram_has_size`, whose `details` name the grams. An edit
+  is checked as the product will be saved, so `{ "defaultUnit": "KILOGRAM" }` alone on a
+  sized product is refused. An edit that names neither the unit nor the size is not
+  checked, so a product that already holds such a row still saves a rename.
 - `pack: 0` in the audit means no pack count: send `null`. The DTO refuses 0 and 1.
 - Nineteen of the twenty `KILOGRAM` proposals infer "sold by weight" from a price that
   looks like a per kilo price. Read the queue rows first: a bound row that says
@@ -301,8 +325,12 @@ uuids, the whole set replaced in the order given.
   (`catalog/src/app/db/taxonomy/ids.ts`), or read once from `GET /v1/catalog/categories`.
   `small-appliances` is `9aa24ae9-19c9-5583-a093-b97cb81771c4`. After 3.4 the entry sends
   `categorySlugs: ["small-appliances"]` instead.
-- A category change is not written to `catalog_audit` today (3.5). The operator's log
-  is the only record of it until then.
+- A category change was not written to `catalog_audit` before 3.5. **After 3.5** it is,
+  in the same row as the field edits of the same entry, as `before.categories` and
+  `after.categories`, slug lists in order. An entry that names the set the product
+  already holds, in the same order, writes no row.
+- After 3.4, an entry sends `categoryIds` or `categorySlugs`, never both
+  (`validation_failed`).
 - The back office does this one in bulk already: "Set categories" on ticked rows sends
   exactly this batch, for the rows on screen.
 
@@ -315,6 +343,9 @@ the entry is one object.
 { "itemId": "...", "name": { "es": "...", "en": "..." }, "brand": "Bugles",
   "unitSize": 85, "defaultUnit": "GRAM", "packCount": null, "categoryIds": ["..."] }
 ```
+
+After 3.2 and 3.4 the same entry sends `"categorySlugs": ["..."]` in place of
+`categoryIds`, and an `expect` with the fields as the audit read them.
 
 ### 2.6 Split
 
@@ -498,27 +529,27 @@ view is wrong under 3.2. The admin lookup reads through to catalog on every call
 Build in the order 3.2, 3.3, 3.4, 3.5, 3.6, 3.7. Each is one commit with its spec. Then
 regenerate the document and the wire types.
 
-- [ ] `npx nx run luna-shopper-backend-catalog:test`, `luna-shopper-backend-gateway:test`
+- [x] `npx nx run luna-shopper-backend-catalog:test`, `luna-shopper-backend-gateway:test`
       and `luna-shopper-admin/models:test` pass, including `openapi-document.spec.ts` and
       `wire-types.spec.ts` on the regenerated files.
-- [ ] 3.2: a batch with a wrong `expect` on one entry writes nothing and names the entry,
+- [x] 3.2: a batch with a wrong `expect` on one entry writes nothing and names the entry,
       the field and the row's value; a right `expect` writes; `brand` compares by key.
-- [ ] 3.3: `{ "defaultUnit": "KILOGRAM" }` on a product sized 4000 `GRAM` is refused with
+- [x] 3.3: `{ "defaultUnit": "KILOGRAM" }` on a product sized 4000 `GRAM` is refused with
       `item_kilogram_has_size`; with `"unitSize": null` it is applied; `LITER` is refused
       on create and update; the harvester's file import fixtures still create their
       products.
-- [ ] 3.4: `categorySlugs: ["small-appliances"]` writes the same row `categoryIds` with
+- [x] 3.4: `categorySlugs: ["small-appliances"]` writes the same row `categoryIds` with
       its id does; both at once is `validation_failed`; a root slug is
       `category_not_a_leaf`.
-- [ ] 3.5: a category edit leaves one `catalog_audit` row with `before.categories` and
+- [x] 3.5: a category edit leaves one `catalog_audit` row with `before.categories` and
       `after.categories` as slug lists; an unchanged set leaves none.
-- [ ] 3.6: a batch with `requireRegisteredBrands: true` and one label the registry lacks
+- [x] 3.6: a batch with `requireRegisteredBrands: true` and one label the registry lacks
       is refused with `brand_unregistered` naming it; the same batch without the flag
       writes the label with `brandId` null, as today; a spelling passes and stores the
       canonical label.
-- [ ] 3.7: an admin token reads 1,000 ids in one call and a shopper token is refused;
+- [x] 3.7: an admin token reads 1,000 ids in one call and a shopper token is refused;
       the answer reflects a write made one second earlier.
-- [ ] The walk of the progress evidence on a local slot.
+- [x] The walk of the progress evidence on a local slot.
 
 ## 5. What this plan does not do
 
