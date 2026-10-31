@@ -87,6 +87,7 @@ import { CatalogEventsPublisher } from '../events/catalog-events.publisher';
 import {
   CatalogAuditService,
   type AuditedWrite,
+  type ExtraAuditFields,
 } from './catalog-audit.service';
 import {
   decodeCursorForLocale,
@@ -96,7 +97,11 @@ import {
   toItemView,
   toProductGroupView,
 } from './catalog.mappers';
-import { CategoryService, toCategoryOnItem } from './category.service';
+import {
+  CategoryService,
+  toCategoryOnItem,
+  type CategoryOnItem,
+} from './category.service';
 import { ItemEanStore } from './item-ean.store';
 import {
   PlatformAdminService,
@@ -466,7 +471,10 @@ export class ItemService {
     let saved: Item;
     try {
       saved = await this.audit.write(actor, async (tx) => {
-        const row = await tx.create(Item, draft);
+        // The categories are recorded beside the columns, as slugs in order
+        // (plan 0237, section 3.5), because they are written in the same
+        // transaction and are a field of the product to the person who asks.
+        const row = await tx.create(Item, draft, categoryAudit(leaves));
         // In the same transaction as the product, so there is never a product
         // with no category to read.
         await this.categories.setItemCategories(tx.manager, row.id, leaves);
@@ -567,7 +575,7 @@ export class ItemService {
       saved = await this.audit.write(actor, async (tx) => {
         const rows: { row: Item; leaves: Category[] }[] = [];
         for (const { draft, leaves } of drafts) {
-          const row = await tx.create(Item, draft);
+          const row = await tx.create(Item, draft, categoryAudit(leaves));
           await this.categories.setItemCategories(tx.manager, row.id, leaves);
           if (row.ean) {
             await this.eans.insert(tx.manager, row.id, row.ean);
@@ -2379,11 +2387,34 @@ export class ItemService {
             edits[index] = { ...edits[index], row, before, groupBefore };
           }
         }
+        // The categories each edit replaces, as they stand inside the
+        // transaction, so the trail says what they were (plan 0237, section
+        // 3.5). One read for the whole request.
+        const replacing = edits
+          .filter((edit) => edit.leaves !== null)
+          .map((edit) => edit.row.id);
+        const held =
+          replacing.length === 0
+            ? new Map<string, CategoryOnItem[]>()
+            : await this.categories.categoriesOf(replacing, tx.manager);
         const written: Item[] = [];
         for (const edit of edits) {
           await this.moveFirstEan(tx, edit.before, edit.row, eanTaken);
-          written.push(await tx.update(Item, edit.before, edit.row));
-          if (edit.leaves !== null) {
+          const categories =
+            edit.leaves === null
+              ? null
+              : categoryChange(held.get(edit.row.id) ?? [], edit.leaves);
+          // In the same audit row as the field edits, and only when the set
+          // or its order moved: an unchanged set is no change.
+          written.push(
+            await tx.update(
+              Item,
+              edit.before,
+              edit.row,
+              categories ?? undefined
+            )
+          );
+          if (categories !== null && edit.leaves !== null) {
             await this.categories.setItemCategories(
               tx.manager,
               edit.row.id,
@@ -2725,6 +2756,33 @@ export class ItemService {
 
 /** A product as a view, with what the page's two lookups found for it. */
 type ItemViewer = (row: Item, offer?: ItemOfferView) => ItemView;
+
+/**
+ * A product's categories as the trail records them (plan 0237, section 3.5):
+ * the slugs, in the order the product holds them.
+ */
+function categoryAudit(leaves: readonly Pick<Category, 'slug'>[]): {
+  categories: string[];
+} {
+  return { categories: leaves.map((leaf) => leaf.slug) };
+}
+
+/**
+ * The categories an edit moves, before and after, or null when the edit names
+ * the set the product already holds in the same order (plan 0237, section
+ * 3.5). Null writes neither the rows nor a line of the trail.
+ */
+function categoryChange(
+  held: readonly Pick<Category, 'slug'>[],
+  leaves: readonly Pick<Category, 'slug'>[]
+): ExtraAuditFields | null {
+  const before = categoryAudit(held);
+  const after = categoryAudit(leaves);
+  const same =
+    before.categories.length === after.categories.length &&
+    before.categories.every((slug, index) => slug === after.categories[index]);
+  return same ? null : { before, after };
+}
 
 /** The locked rows an expectation is compared with, and their category slugs. */
 interface HeldItems {

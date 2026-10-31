@@ -595,4 +595,78 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
       });
     });
   });
+
+  describe('3.5: a category change is audited', () => {
+    /** The trail rows of one product's edits, oldest first. */
+    function editsOf(itemId: string) {
+      return trail.find({
+        where: {
+          entity: 'items',
+          entityId: itemId,
+          action: AuditAction.UPDATE,
+        },
+        order: { at: 'ASC', id: 'ASC' },
+      });
+    }
+
+    it('records a create with its categories as slugs, in order', async () => {
+      const product = await newProduct();
+
+      const [created] = await trail.find({
+        where: { entityId: product.id, action: AuditAction.CREATE },
+      });
+      expect(created.after).toMatchObject({ categories: ['milk', 'eggs'] });
+    });
+
+    it('leaves one row with both slug lists for a category edit', async () => {
+      const product = await newProduct();
+
+      await items.updateMany({
+        userId: OPERATOR,
+        items: [{ itemId: product.id, categorySlugs: ['small-appliances'] }],
+      });
+
+      const history = await editsOf(product.id);
+      expect(history).toHaveLength(1);
+      expect(history[0].before).toEqual({ categories: ['milk', 'eggs'] });
+      expect(history[0].after).toEqual({ categories: ['small-appliances'] });
+    });
+
+    it('records the categories in the same row as the fields of the same edit', async () => {
+      const product = await newProduct();
+
+      await items.update({
+        userId: OPERATOR,
+        itemId: product.id,
+        packCount: 6,
+        categoryIds: [categoryId('eggs')],
+      });
+
+      const history = await editsOf(product.id);
+      expect(history).toHaveLength(1);
+      expect(history[0].before).toEqual({
+        packCount: null,
+        categories: ['milk', 'eggs'],
+      });
+      expect(history[0].after).toEqual({ packCount: 6, categories: ['eggs'] });
+    });
+
+    it('leaves no row for the set the product holds, in the same order, and one for another order', async () => {
+      const product = await newProduct();
+
+      await items.updateMany({
+        userId: OPERATOR,
+        items: [{ itemId: product.id, categorySlugs: ['milk', 'eggs'] }],
+      });
+      expect(await editsOf(product.id)).toHaveLength(0);
+
+      await items.updateMany({
+        userId: OPERATOR,
+        items: [{ itemId: product.id, categorySlugs: ['eggs', 'milk'] }],
+      });
+      const history = await editsOf(product.id);
+      expect(history).toHaveLength(1);
+      expect(history[0].after).toEqual({ categories: ['eggs', 'milk'] });
+    });
+  });
 });
