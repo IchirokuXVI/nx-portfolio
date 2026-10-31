@@ -322,6 +322,99 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
       ).resolves.toMatchObject({ items: [{ packCount: 6 }] });
     });
 
+    describe('a write that lands between the read and the transaction', () => {
+      /**
+       * Run `work` with `write` landing after the service read the products
+       * and before its transaction opens, the window a harvest can write in.
+       * The category lists are resolved in that window on every edit, so the
+       * write is placed there, on the service instance under test only.
+       */
+      async function withWriteInTheWindow<T>(
+        write: () => Promise<unknown>,
+        work: () => Promise<T>
+      ): Promise<T> {
+        const service = items as unknown as {
+          categoryIdLists: (...args: unknown[]) => Promise<unknown>;
+        };
+        const resolve = service.categoryIdLists;
+        let landed = 0;
+        service.categoryIdLists = async (...args: unknown[]) => {
+          await write();
+          landed += 1;
+          return resolve.apply(items, args);
+        };
+        try {
+          return await work();
+        } finally {
+          // The own property shadows the prototype's method; removing it
+          // restores the method for every other case.
+          delete (service as Partial<typeof service>).categoryIdLists;
+          expect(landed).toBe(1);
+        }
+      }
+
+      function harvestWritesPackCount(itemId: string) {
+        return () =>
+          dataSource.getRepository(Item).update(itemId, { packCount: 12 });
+      }
+
+      it('compares with the row the transaction holds, so the concurrent value is the actual one', async () => {
+        const product = await newProduct();
+
+        const { failures } = await refusal(
+          withWriteInTheWindow(harvestWritesPackCount(product.id), () =>
+            items.updateMany({
+              userId: OPERATOR,
+              items: [
+                {
+                  itemId: product.id,
+                  name: { es: 'Cambiado', en: 'Changed' },
+                  // True when the service read the product, false by the
+                  // time its transaction holds it.
+                  expect: { packCount: null },
+                },
+              ],
+            })
+          )
+        );
+
+        expect(failures).toEqual([
+          {
+            itemId: product.id,
+            fields: [{ field: 'packCount', expected: null, actual: 12 }],
+          },
+        ]);
+        const [kept] = (await items.getMany({ ids: [product.id] })).items;
+        expect(kept).toMatchObject({
+          name: { es: 'Galletas de chocolate' },
+          packCount: 12,
+        });
+      });
+
+      it('applies the edit onto the locked row, so a field the expectation does not name keeps the concurrent value', async () => {
+        const product = await newProduct();
+
+        await withWriteInTheWindow(harvestWritesPackCount(product.id), () =>
+          items.updateMany({
+            userId: OPERATOR,
+            items: [
+              {
+                itemId: product.id,
+                name: { es: 'Cambiado', en: 'Changed' },
+                expect: { brand: 'Pierrot' },
+              },
+            ],
+          })
+        );
+
+        const [saved] = (await items.getMany({ ids: [product.id] })).items;
+        expect(saved).toMatchObject({
+          name: { es: 'Cambiado', en: 'Changed' },
+          packCount: 12,
+        });
+      });
+    });
+
     it('refuses a name whose missing half the product holds', async () => {
       const product = await newProduct();
 
