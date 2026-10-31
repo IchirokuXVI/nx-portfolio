@@ -615,6 +615,16 @@ export type MapSourceLocationDto = {
 };
 
 /**
+ * `MergeItemDto` in the gateway's OpenAPI document.
+ */
+export type MergeItemDto = {
+  intoItemId: string;
+  dryRun?: boolean;
+  allowSecondArticle?: boolean;
+  allowFormatDifference?: boolean;
+};
+
+/**
  * `MintGoogleNonceDto` in the gateway's OpenAPI document.
  */
 export type MintGoogleNonceDto = {
@@ -700,6 +710,10 @@ export type ProblemDetails = {
     | 'item_expectation_failed'
     | 'item_unit_not_base'
     | 'item_kilogram_has_size'
+    | 'item_merged'
+    | 'item_merge_two_articles_one_chain'
+    | 'item_merge_format_differs'
+    | 'item_in_use'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
@@ -2409,6 +2423,7 @@ export type BasketBasketProductView = {
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
+  mergedInto?: string;
   atShop: BasketBasketProductAtShopView | null;
   sectionIds?: string[];
 };
@@ -3059,6 +3074,7 @@ export type CatalogItemView = {
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
+  mergedInto?: string;
 };
 
 /**
@@ -3097,6 +3113,26 @@ export type CatalogLocationSectionsView = {
  */
 export type CatalogLocationShopMapView = {
   map: CatalogShopMapView | null;
+};
+
+/**
+ * `catalog.MergeItemResult` in the gateway's OpenAPI document.
+ */
+export type CatalogMergeItemResult = {
+  itemId: string;
+  intoItemId: string;
+  dryRun: boolean;
+  mergedIntoId: string;
+  mergedAt: string | null;
+  prices: number;
+  scopeRows: number;
+  shopRows: number;
+  shopRowsKept: number;
+  barcodes: string[];
+  survivorEan: string | null;
+  linkedImages: number;
+  repointedItemIds: string[];
+  queueRows: number;
 };
 
 /**
