@@ -2379,9 +2379,11 @@ export class ItemService {
         // compared with its row as the transaction holds it, before any edit
         // is written. Each such entry is then applied again onto that row, so
         // a field a harvest wrote since the read above is not written back.
+        // A null expectation is read as none: the gateway refuses it, but a
+        // caller on the bus is not validated by the gateway.
         const expecting = inputs
           .map((input, index) => ({ input, index }))
-          .filter(({ input }) => input.expect !== undefined);
+          .filter(({ input }) => input.expect != null);
         if (expecting.length > 0) {
           const held = await this.lockForExpectation(
             tx,

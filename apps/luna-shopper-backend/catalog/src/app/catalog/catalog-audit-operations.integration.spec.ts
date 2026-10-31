@@ -304,6 +304,24 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
       ]);
     });
 
+    it('reads a null expectation from the bus as none, and writes the edit', async () => {
+      const product = await newProduct();
+
+      await expect(
+        items.updateMany({
+          userId: OPERATOR,
+          items: [
+            {
+              itemId: product.id,
+              packCount: 6,
+              // The gateway refuses it; a caller on the bus is not validated.
+              expect: null as never,
+            },
+          ],
+        })
+      ).resolves.toMatchObject({ items: [{ packCount: 6 }] });
+    });
+
     it('refuses a name whose missing half the product holds', async () => {
       const product = await newProduct();
 
