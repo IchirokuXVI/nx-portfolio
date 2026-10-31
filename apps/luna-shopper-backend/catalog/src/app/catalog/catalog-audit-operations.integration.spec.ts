@@ -5,6 +5,10 @@ import {
   type ItemExpectationFailure,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  CATEGORY_DETAIL,
+  CATEGORY_UNKNOWN_DETAIL,
+  CategoryNotALeafException,
+  CategoryNotFoundException,
   ITEM_EXPECTATION_FAILURES_DETAIL,
   ITEM_GRAMS_DETAIL,
   ITEM_UNIT_BECOMES_DETAIL,
@@ -13,6 +17,7 @@ import {
   ItemExpectationFailedException,
   ItemKilogramHasSizeException,
   ItemUnitNotBaseException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -483,6 +488,111 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
       expect(created.map((item) => item.defaultUnit).sort()).not.toContain(
         UnitOfMeasure.LITER
       );
+    });
+  });
+
+  describe('3.4: category slugs on the item routes', () => {
+    async function caught(work: Promise<unknown>): Promise<unknown> {
+      return work.then(
+        () => {
+          throw new Error('expected the write to be refused');
+        },
+        (error: unknown) => error
+      );
+    }
+
+    async function heldBy(itemId: string) {
+      return dataSource.query(
+        `SELECT "categoryId", "position" FROM "item_categories"
+          WHERE "itemId" = $1 ORDER BY "position"`,
+        [itemId]
+      );
+    }
+
+    it('writes the same rows by slug as by id, on a create and on an edit', async () => {
+      const byId = await items.create({
+        userId: OPERATOR,
+        name: { es: 'Batidora', en: 'Blender' },
+        defaultUnit: UnitOfMeasure.UNIT,
+        categoryIds: [categoryId('small-appliances'), categoryId('milk')],
+      });
+      const bySlug = await items.create({
+        userId: OPERATOR,
+        name: { es: 'Batidora dos', en: 'Blender two' },
+        defaultUnit: UnitOfMeasure.UNIT,
+        categorySlugs: ['small-appliances', 'milk'],
+      });
+
+      expect(bySlug.categories.map((category) => category.slug)).toEqual([
+        'small-appliances',
+        'milk',
+      ]);
+      const slugRows = await heldBy(bySlug.id);
+      expect(slugRows).toEqual(await heldBy(byId.id));
+
+      const { items: edited } = await items.updateMany({
+        userId: OPERATOR,
+        items: [{ itemId: byId.id, categorySlugs: ['small-appliances'] }],
+      });
+      expect(edited[0].categories.map((category) => category.id)).toEqual([
+        categoryId('small-appliances'),
+      ]);
+      expect(await heldBy(byId.id)).toEqual([
+        { categoryId: categoryId('small-appliances'), position: 0 },
+      ]);
+    });
+
+    it('refuses both lists at once with validation_failed', async () => {
+      const product = await newProduct();
+
+      const error = await caught(
+        items.updateMany({
+          userId: OPERATOR,
+          items: [
+            {
+              itemId: product.id,
+              categoryIds: [categoryId('milk')],
+              categorySlugs: ['milk'],
+            },
+          ],
+        })
+      );
+
+      expect(error).toBeInstanceOf(ValidationException);
+      expect((error as ValidationException).code).toBe('validation_failed');
+    });
+
+    it('refuses a root slug with category_not_a_leaf, and an unknown slug with category_not_found naming it', async () => {
+      const product = await newProduct();
+
+      const root = await caught(
+        items.update({
+          userId: OPERATOR,
+          itemId: product.id,
+          categorySlugs: ['eggs-milk-and-butter'],
+        })
+      );
+      const unknown = await caught(
+        items.createMany({
+          userId: OPERATOR,
+          items: [
+            {
+              name: { es: 'Nada', en: 'Nothing' },
+              defaultUnit: UnitOfMeasure.UNIT,
+              categorySlugs: ['milk', 'no-such-aisle'],
+            },
+          ],
+        })
+      );
+
+      expect(root).toBeInstanceOf(CategoryNotALeafException);
+      expect((root as CategoryNotALeafException).details).toEqual({
+        [CATEGORY_DETAIL]: categoryId('eggs-milk-and-butter'),
+      });
+      expect(unknown).toBeInstanceOf(CategoryNotFoundException);
+      expect((unknown as CategoryNotFoundException).details).toEqual({
+        [CATEGORY_UNKNOWN_DETAIL]: ['no-such-aisle'],
+      });
     });
   });
 });

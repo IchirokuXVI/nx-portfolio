@@ -279,4 +279,119 @@ describe('an audit through the admin item routes, over HTTP (plan 0237)', () => 
       }
     );
   });
+
+  describe('3.4: category slugs on the item routes', () => {
+    const CATEGORY_ID = '9aa24ae9-19c9-5583-a093-b97cb81771c4';
+    const product = (categories: Record<string, unknown>) => ({
+      name: { es: 'Batidora', en: 'Blender' },
+      defaultUnit: UnitOfMeasure.UNIT,
+      ...categories,
+    });
+
+    it('sends slugs, or ids, on a create, a batch create, an edit and a batch edit', async () => {
+      const { nest, sent, origin } = await boot();
+      try {
+        const answers = await Promise.all([
+          send(
+            origin,
+            'POST',
+            '/v1/admin/catalog/items',
+            product({ categorySlugs: ['small-appliances'] })
+          ),
+          send(origin, 'POST', '/v1/admin/catalog/items/batch', {
+            items: [
+              product({ categorySlugs: ['small-appliances'] }),
+              product({ categoryIds: [CATEGORY_ID] }),
+            ],
+          }),
+          send(origin, 'PATCH', `/v1/admin/catalog/items/${ITEM_ID}`, {
+            categorySlugs: ['small-appliances'],
+          }),
+          send(origin, 'PATCH', '/v1/admin/catalog/items/batch', {
+            items: [
+              { itemId: ITEM_ID, categorySlugs: ['small-appliances'] },
+              { itemId: OTHER_ID, packCount: 6 },
+            ],
+          }),
+        ]);
+
+        expect(answers.map((res) => res.status)).toEqual([201, 201, 200, 200]);
+        const bySubject = new Map(
+          sent.map((message) => [message.subject, message.payload])
+        );
+        expect(bySubject.get(ITEM_PATTERNS.create)).toMatchObject({
+          categorySlugs: ['small-appliances'],
+        });
+        expect(bySubject.get(ITEM_PATTERNS.createMany)).toMatchObject({
+          items: [
+            { categorySlugs: ['small-appliances'] },
+            { categoryIds: [CATEGORY_ID] },
+          ],
+        });
+        expect(bySubject.get(ITEM_PATTERNS.update)).toMatchObject({
+          categorySlugs: ['small-appliances'],
+        });
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it.each([
+      [
+        'a create with both lists',
+        'POST',
+        '/v1/admin/catalog/items',
+        product({
+          categoryIds: [CATEGORY_ID],
+          categorySlugs: ['small-appliances'],
+        }),
+      ],
+      [
+        'a create with neither list',
+        'POST',
+        '/v1/admin/catalog/items',
+        product({}),
+      ],
+      [
+        'a batch edit with both lists',
+        'PATCH',
+        '/v1/admin/catalog/items/batch',
+        {
+          items: [
+            {
+              itemId: ITEM_ID,
+              categoryIds: [CATEGORY_ID],
+              categorySlugs: ['small-appliances'],
+            },
+          ],
+        },
+      ],
+      [
+        'an empty list of slugs',
+        'PATCH',
+        `/v1/admin/catalog/items/${ITEM_ID}`,
+        { categorySlugs: [] },
+      ],
+      [
+        'eleven slugs',
+        'PATCH',
+        `/v1/admin/catalog/items/${ITEM_ID}`,
+        { categorySlugs: Array.from({ length: 11 }, (_, i) => `aisle-${i}`) },
+      ],
+    ] as const)(
+      'refuses %s with validation_failed, and sends nothing',
+      async (_what, method, path, body) => {
+        const { nest, sent, origin } = await boot();
+        try {
+          const res = await send(origin, method, path, body);
+
+          expect(res.status).toBe(400);
+          expect(await res.json()).toMatchObject({ code: 'validation_failed' });
+          expect(sent).toEqual([]);
+        } finally {
+          await nest.close();
+        }
+      }
+    );
+  });
 });

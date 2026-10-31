@@ -166,6 +166,72 @@ export function AtLeastOneLocale(): PropertyDecorator {
 }
 
 /**
+ * The leaves of a product write named by slug (plan 0237, section 3.4), and the
+ * one rule the two category lists share: never both, and on a create exactly
+ * one.
+ *
+ * One decorator holding the shape and the rule, rather than `@IsOptional()`
+ * and the array validators, because `@IsOptional()` switches off every
+ * validator on the property, and the rule has to see the case where this list
+ * is absent and `categoryIds` is too. Its message starts with the property
+ * name, which is where the envelope files it.
+ */
+export function CategorySlugList(options: {
+  required: boolean;
+}): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'categorySlugList',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const ids = (args.object as { categoryIds?: unknown }).categoryIds;
+          if (value === undefined) {
+            return !options.required || ids !== undefined;
+          }
+          return (
+            ids === undefined &&
+            Array.isArray(value) &&
+            value.length >= 1 &&
+            value.length <= ITEM_CATEGORY_MAX &&
+            value.every(
+              (slug) =>
+                typeof slug === 'string' &&
+                slug.trim() !== '' &&
+                slug.length <= CATEGORY_SLUG_MAX_LENGTH
+            )
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return (
+            `${args.property} must be 1 to ${ITEM_CATEGORY_MAX} slugs, and ` +
+            (options.required
+              ? 'exactly one of categoryIds and categorySlugs is sent'
+              : 'categoryIds and categorySlugs are never sent together')
+          );
+        },
+      },
+    });
+  };
+}
+
+/** The leaf slugs of an item route (plan 0237, section 3.4), for the document. */
+function categorySlugsProperty(required: boolean): PropertyDecorator {
+  return ApiPropertyOptional({
+    type: [String],
+    minItems: 1,
+    maxItems: ITEM_CATEGORY_MAX,
+    description:
+      'The leaf categories by slug, in the order meant, for example `["small-appliances"]` (plan 0237, section 3.4): what an audit and the register speak. ' +
+      (required
+        ? 'Exactly one of this and `categoryIds`; both, or neither, is refused with `validation_failed`. '
+        : 'Never with `categoryIds`; both is refused with `validation_failed`. Absent leaves the set alone. ') +
+      'An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.',
+  });
+}
+
+/**
  * A localized text value in at least one of the catalog's languages (plan 0012,
  * widened by plan 0079).
  *
@@ -434,20 +500,25 @@ export class CreateItemDto {
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
     minItems: 1,
     maxItems: ITEM_CATEGORY_MAX,
     description:
-      'One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`.',
+      'One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`. Exactly one of this and `categorySlugs` (plan 0237, section 3.4).',
   })
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(ITEM_CATEGORY_MAX)
   // Any version: seeded categories carry version 5 ids derived from the slug.
   @IsUUID('all', { each: true })
-  categoryIds!: string[];
+  categoryIds?: string[];
+
+  @categorySlugsProperty(true)
+  @CategorySlugList({ required: true })
+  categorySlugs?: string[];
 
   @ApiProperty({ enum: UnitOfMeasure, description: BASE_UNIT_DESCRIPTION })
   @IsEnum(UnitOfMeasure)
@@ -623,6 +694,10 @@ export class UpdateItemDto {
   @ArrayMaxSize(ITEM_CATEGORY_MAX)
   @IsUUID('all', { each: true })
   categoryIds?: string[];
+
+  @categorySlugsProperty(false)
+  @CategorySlugList({ required: false })
+  categorySlugs?: string[];
 
   @ApiPropertyOptional({
     enum: UnitOfMeasure,

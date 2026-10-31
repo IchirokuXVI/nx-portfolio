@@ -2289,8 +2289,18 @@ export interface CreateItemRequest extends AdminCredential {
    * One or more leaf ids, in the order meant (plan 0166, section 3). An empty
    * list is refused with `item_needs_a_category`, a root with
    * `category_not_a_leaf` and an unknown id with `category_not_found`.
+   *
+   * Exactly one of this and {@link categorySlugs} (plan 0237, section 3.4).
+   * Neither is `item_needs_a_category`, both is `validation_failed`.
    */
-  categoryIds: string[];
+  categoryIds?: string[];
+  /**
+   * The same leaves named by slug, in the order meant (plan 0237, section
+   * 3.4): what an audit, the register and a decisions file speak. Resolved
+   * through the category rows, so an unknown slug is `category_not_found`
+   * and a root `category_not_a_leaf`.
+   */
+  categorySlugs?: string[];
   defaultUnit: UnitOfMeasure;
   /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
   productGroupId?: string | null;
@@ -2339,6 +2349,12 @@ export interface UpdateItemRequest extends AdminCredential {
    * `item_needs_a_category`, because a product always has one.
    */
   categoryIds?: string[];
+  /**
+   * The same replacement with the leaves named by slug (plan 0237, section
+   * 3.4). At most one of this and {@link categoryIds}; both is
+   * `validation_failed`.
+   */
+  categorySlugs?: string[];
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;

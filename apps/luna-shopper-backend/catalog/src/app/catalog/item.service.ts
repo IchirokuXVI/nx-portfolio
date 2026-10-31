@@ -437,8 +437,10 @@ export class ItemService {
   async create(req: CreateItemRequest): Promise<ItemView> {
     const actor = await this.admin.requireAdmin(req);
     // One or more leaves, checked before anything is written (plan 0166,
-    // rules R2 and R3): a product always has a category.
-    const leaves = await this.categories.requireLeaves(req.categoryIds ?? []);
+    // rules R2 and R3): a product always has a category. Named by id or, since
+    // plan 0237 section 3.4, by slug.
+    const [categoryIds] = await this.categoryIdLists([req]);
+    const leaves = await this.categories.requireLeaves(categoryIds ?? []);
     const draft = this.items.create({
       name: req.name,
       imageUrl: req.imageUrl ?? null,
@@ -535,14 +537,16 @@ export class ItemService {
       req.items.map((input) => input.brand)
     );
     // Every leaf the batch names, in one query too (plan 0166), and each
-    // product's list checked against it before anything is written.
+    // product's list checked against it before anything is written. A list of
+    // slugs is resolved to ids first, in one more query (plan 0237).
+    const idLists = await this.categoryIdLists(req.items);
     const leavesOf = await this.categories.leaveChecker(
-      req.items.map((input) => input.categoryIds ?? [])
+      idLists.map((ids) => ids ?? [])
     );
 
     const drafts: { draft: Item; leaves: Category[] }[] = [];
     for (const [index, input] of req.items.entries()) {
-      const leaves = leavesOf(input.categoryIds ?? []);
+      const leaves = leavesOf(idLists[index] ?? []);
       const draft = this.items.create({
         name: input.name,
         imageUrl: input.imageUrl ?? null,
@@ -2311,9 +2315,8 @@ export class ItemService {
       branded.length === 0
         ? new Map<string, Brand>()
         : await this.registeredBrands(branded.map((input) => input.brand));
-    const named = inputs
-      .map((input) => input.categoryIds)
-      .filter((ids): ids is string[] => ids !== undefined);
+    const idLists = await this.categoryIdLists(inputs);
+    const named = idLists.filter((ids): ids is string[] => ids !== undefined);
     const leavesOf =
       named.length === 0 ? null : await this.categories.leaveChecker(named);
     // Every group the request names, resolved before the transaction opens,
@@ -2337,10 +2340,9 @@ export class ItemService {
       const groupBefore = row.productGroupId;
       this.applyEdits(row, input, registered, groups.get(index));
       requireBaseUnitOnEdit(row, input);
+      const ids = idLists[index];
       const leaves =
-        input.categoryIds === undefined || leavesOf === null
-          ? null
-          : leavesOf(input.categoryIds);
+        ids === undefined || leavesOf === null ? null : leavesOf(ids);
       edits.push({ row, before, groupBefore, leaves });
     }
 
@@ -2420,6 +2422,44 @@ export class ItemService {
         orderedEans(row.ean, eans.get(row.id) ?? [])
       );
     });
+  }
+
+  /**
+   * The category ids each write names, by id or by slug (plan 0237, section
+   * 3.4), or undefined for a write that names neither.
+   *
+   * One or the other, never both: two lists in one write could disagree, and
+   * no rule could say which of the two was meant. Every slug of the request is
+   * resolved in one query, and a slug that names nothing is
+   * `category_not_found`. What comes back goes through the leaf check exactly
+   * as a list of ids does.
+   */
+  private async categoryIdLists(
+    inputs: readonly Pick<UpdateItemInput, 'categoryIds' | 'categorySlugs'>[]
+  ): Promise<(string[] | undefined)[]> {
+    for (const input of inputs) {
+      if (
+        input.categoryIds !== undefined &&
+        input.categorySlugs !== undefined
+      ) {
+        throw new ValidationException(
+          'categoryIds and categorySlugs: send one of the two, not both.',
+          { messageArgs: { field: 'categorySlugs' } }
+        );
+      }
+    }
+    const slugLists = inputs
+      .map((input) => input.categorySlugs)
+      .filter((slugs): slugs is string[] => slugs !== undefined);
+    const idsOf =
+      slugLists.length === 0
+        ? null
+        : await this.categories.slugResolver(slugLists);
+    return inputs.map((input) =>
+      input.categorySlugs !== undefined && idsOf !== null
+        ? idsOf(input.categorySlugs)
+        : input.categoryIds
+    );
   }
 
   /**
