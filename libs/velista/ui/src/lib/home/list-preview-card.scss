@@ -1,30 +1,60 @@
+@use '../styles/tokens' as tokens;
+
+// The room the card needs for a number of rows, from the geometry in `_semantic.scss`.
+@function room($rows, $chrome: tokens.$app-preview-chrome) {
+  @return $chrome + $rows * tokens.$app-preview-row + tokens.$app-preview-clear;
+}
+
+// The slot the page gives the card: whatever room is left. A size container, so the
+// rules at the end of this file read the slot's height and never the screen's. The
+// page sets how it flexes; the side gutter is here so the container's width is the
+// card's.
+:host {
+  display: block;
+  container-type: size;
+  overflow: hidden;
+  padding-inline: var(--app-space-5);
+}
+
 .card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-3);
-  margin: var(--app-space-5) var(--app-space-5) 0;
-  padding: var(--app-space-3) var(--app-space-4);
+  margin-block-start: var(--app-space-4);
+  padding: var(--app-space-3) var(--app-space-4) 0;
   background: var(--app-surface-raised);
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-card-radius);
 }
 
+// ------------------------------------------------------------- The head
+
 .head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--app-space-3);
+  gap: var(--app-space-4);
+  block-size: var(--app-preview-head-height);
 }
 
 .titles {
   display: flex;
   align-items: baseline;
   gap: var(--app-space-3);
-  min-width: 0;
+  min-inline-size: 0;
+}
+
+// The names are cut with an ellipsis on purpose; the price and the status never are.
+.list-name,
+.zone-name,
+.name,
+.detail {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .list-name {
-  font-size: var(--app-text-sm);
+  font-size: var(--app-preview-name-size);
   font-weight: 600;
   color: var(--app-text-primary);
 }
@@ -34,111 +64,248 @@
   color: var(--app-text-muted);
 }
 
-.presence {
+.here {
   display: flex;
-  align-items: center;
-  gap: var(--app-space-2);
-  flex-shrink: 0;
-}
-
-// A dot, not an icon: it carries no shape of its own and a two-line CSS circle beats
-// a component plus an SVG file for something with no artwork in it.
-.dot {
-  width: var(--app-dot-size);
-  height: var(--app-dot-size);
-  border-radius: var(--app-radius-full);
-  background: var(--app-status-success-fg);
-}
-
-.presence-text {
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-secondary);
-}
-
-.lines {
-  display: flex;
-  flex-direction: column;
-}
-
-.line {
-  display: flex;
+  flex: none;
   align-items: center;
   gap: var(--app-space-3);
-  min-height: var(--app-preview-row-height);
-}
-
-// The content stacks now, because a line can carry an indicator under it exactly as
-// the real row does. It was a single row with a glyph at its head.
-.content {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-hair);
-  flex: 1;
-  min-width: 0;
-}
-
-.text {
-  font-size: var(--app-text-base);
-  color: var(--app-text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
   white-space: nowrap;
 }
 
-// Muted, and pointedly **not** struck through. There is nothing crossed out about a
-// line saying the household is stocked: it keeps everything it knows about itself and
-// somebody drags it back up in a fortnight (velista plan 0043, section 3.2).
-.settled {
-  color: var(--app-text-muted);
+.faces {
+  display: flex;
 }
 
-.mark {
+// Two people, told apart by colour as well as by the letter, which is what carries it.
+.face {
   display: flex;
   align-items: center;
-  gap: var(--app-space-1);
-  font-size: var(--app-text-2xs);
+  justify-content: center;
+  inline-size: var(--app-preview-face-size);
+  block-size: var(--app-preview-face-size);
+  border-radius: var(--app-radius-full);
+  box-shadow: 0 0 0 var(--app-avatar-ring) var(--app-surface-raised);
+  background: var(--app-status-info-bg);
+  color: var(--app-status-info-fg);
+  font-size: var(--app-preview-face-text);
+  font-weight: 700;
+
+  & + & {
+    margin-inline-start: calc(var(--app-preview-face-size) / -4);
+    background: var(--app-action-quiet-bg);
+    color: var(--app-action-quiet-fg);
+  }
+}
+
+// ------------------------------------------------------------- The progress line
+
+.progress {
+  margin-block-start: var(--app-space-3);
+}
+
+// Only the tally of the full card shows until a rule below says otherwise.
+.tally {
+  display: none;
+
+  &[data-given-way='0'] {
+    display: block;
+  }
+}
+
+.caption {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--app-space-3);
+  block-size: var(--app-preview-caption-height);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-preview-caption-height);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-muted);
   white-space: nowrap;
 }
 
-.mark-glyph {
-  font-size: var(--app-icon-sm);
+.total {
+  font-weight: 600;
+  color: var(--app-text-primary);
 }
 
-.mark-bought {
-  color: var(--app-status-success-fg);
+.track {
+  display: block;
+  block-size: var(--app-total-track-height);
+  margin-block-start: var(--app-total-track-height);
+  overflow: hidden;
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
 }
 
-.mark-missing {
-  color: var(--app-status-danger-fg);
+.fill {
+  display: block;
+  block-size: 100%;
+  background: var(--app-action-bg);
 }
 
-// Tabular, so a column of them lines up, and sized like a value rather than like an
-// annotation: it is the state of the line now, not a note about it.
-.quantity {
-  flex-shrink: 0;
-  min-width: var(--app-preview-quantity-width);
-  text-align: center;
-  font-size: var(--app-text-sm);
+// ------------------------------------------------------------- The rows
+
+// The row's hairline is inside its height, so every row costs exactly the token and
+// the rules below can count them. No hairline above the first one.
+.row {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  block-size: var(--app-preview-row-height);
+  border-block-start: 1px solid var(--app-border-subtle);
+
+  .progress + & {
+    border-block-start: 0;
+  }
+}
+
+.picture {
+  --app-line-picture-size: var(--app-preview-picture-size);
+  --app-line-picture-radius: var(--app-preview-picture-radius);
+  --app-line-picture-glyph: var(--app-icon-sm);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--app-space-hair);
+  min-inline-size: 0;
+}
+
+.line-1,
+.line-2 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+}
+
+.name {
+  font-size: var(--app-preview-name-size);
+  font-weight: 600;
+  color: var(--app-text-primary);
+}
+
+.price {
+  flex: none;
+  margin-inline-start: auto;
+  font-size: var(--app-preview-price-size);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--app-text-primary);
 }
 
-// Zero is drawn quietly rather than absent. A line the household does not currently
-// want is still a line, and the number is what says so.
-.zero {
-  color: var(--app-text-muted);
+.line-2 {
+  font-size: var(--app-text-xs);
+  color: var(--app-text-secondary);
 }
 
-.by {
+.status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--app-space-hair);
+  margin-inline-start: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.status-glyph {
+  font-size: var(--app-icon-sm);
+}
+
+.status-bought {
+  color: var(--app-status-success-fg);
+}
+
+.status-missing {
+  color: var(--app-status-danger-fg);
+}
+
+// The chip of the real row at rest. Tabular, so a column of them lines up.
+.quantity {
+  box-sizing: border-box;
   display: flex;
+  flex: none;
   align-items: center;
   justify-content: center;
-  width: var(--app-avatar-sm);
-  height: var(--app-avatar-sm);
-  border-radius: var(--app-radius-full);
-  background: var(--app-status-info-bg);
-  color: var(--app-status-info-fg);
-  font-size: var(--app-text-2xs);
+  inline-size: var(--app-preview-quantity-width);
+  block-size: var(--app-preview-quantity-height);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-preview-quantity-radius);
+  background: var(--app-surface-raised);
+  font-size: var(--app-preview-name-size);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+}
+
+// Settled: at zero, with a purchase behind it. Muted, and **never struck through**
+// (velista plan 0043, section 3.2), and its chip loses its border as the real one does.
+.settled {
+  .name,
+  .price {
+    font-weight: 400;
+    color: var(--app-text-muted);
+  }
+
+  .quantity {
+    border-color: transparent;
+    background: transparent;
+    font-weight: 400;
+    color: var(--app-text-muted);
+  }
+}
+
+// ------------------------------------------------------------- Giving way
+//
+// Velista 0175, targets 5 to 7. The wanted rows go first, then the progress line. The
+// bought row and the one the shop did not have stay to the end, because those two are
+// what explain the product. Below two rows the whole card goes, which only happens
+// while a held sentence or the delete notice takes the room.
+
+@container (height < #{room(4)}) {
+  .row[data-gives-way='1'],
+  .tally[data-given-way='0'] {
+    display: none;
+  }
+
+  .tally[data-given-way='1'] {
+    display: block;
+  }
+}
+
+@container (height < #{room(3)}) {
+  .row[data-gives-way='2'],
+  .tally[data-given-way='1'] {
+    display: none;
+  }
+
+  .tally[data-given-way='2'] {
+    display: block;
+  }
+}
+
+@container (height < #{room(2)}) {
+  .progress {
+    display: none;
+  }
+}
+
+@container (height < #{room(2, tokens.$app-preview-chrome-without-progress)}) {
+  .card {
+    display: none;
+  }
+}
+
+// On a narrow card the group's name goes rather than show two letters of it.
+@container (width < #{tokens.$app-preview-narrow}) {
+  .zone-name {
+    display: none;
+  }
 }

@@ -621,8 +621,7 @@
       "headline": {
         "top": "Crea listas.",
         "bottom": "Comparte y apunta."
-      },
-      "body": "Listas de la compra compartidas con la gente con la que compras de verdad. Los cambios aparecen en el móvil de todos al instante."
+      }
     },
     "preview": {
       "listName": "Compra semanal",
@@ -630,16 +629,22 @@
       "line": {
         "milk": {
           "content": "Leche",
-          "quantity": "2 L"
+          "detail": "Semidesnatada · 1 L"
         },
-        "bread": {
-          "content": "Pan",
-          "quantity": "1"
+        "eggs": {
+          "content": "Huevos",
+          "detail": "Camperos · 12 uds."
         },
-        "tomatoes": {
-          "content": "Tomates"
+        "bananas": {
+          "content": "Plátanos",
+          "detail": "Canarias · 1 kg"
+        },
+        "oil": {
+          "content": "Aceite de oliva",
+          "detail": "Virgen extra · 1 L"
         }
-      }
+      },
+      "here": "Ana y Marc están aquí"
     },
     "action": {
       "createZone": "Crear un grupo",
