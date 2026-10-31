@@ -52,12 +52,15 @@ import { itemEanStoreOf } from './item-ean.store';
 import { ItemPriceService } from './item-price.service';
 import type { ItemReferences, QueueUsage } from './item-references.client';
 import { ItemService } from './item.service';
+import { LocationScopeService } from './location-scopes';
 import {
   PlatformAdminService,
   type CatalogActor,
 } from './platform-admin.service';
 import { PriceScopeService } from './price-scope.service';
 import { ProductGroupService } from './product-group.service';
+import { SupermarketItemService } from './supermarket-item.service';
+import { SupermarketLocationItemService } from './supermarket-location-item.service';
 
 /**
  * A product merge against real Postgres (plan 0239).
@@ -126,6 +129,8 @@ describeIntegration('a product merge (real Postgres)', () => {
   let itemsAsService: ItemService;
   let prices: ItemPriceService;
   let scopes: PriceScopeService;
+  let shopItems: SupermarketLocationItemService;
+  let scopeItems: SupermarketItemService;
   let references: FakeReferences;
   let merged: { itemId: string; intoItemId: string }[];
 
@@ -215,6 +220,23 @@ describeIntegration('a product merge (real Postgres)', () => {
       realGate,
       audit,
       effective
+    );
+    shopItems = new SupermarketLocationItemService(
+      dataSource.getRepository(SupermarketLocationItem),
+      dataSource.getRepository(Item),
+      dataSource.getRepository(SupermarketLocation),
+      realGate,
+      audit,
+      new LocationScopeService()
+    );
+    scopeItems = new SupermarketItemService(
+      dataSource.getRepository(SupermarketItem),
+      dataSource.getRepository(Item),
+      dataSource.getRepository(PriceScope),
+      dataSource.getRepository(SupermarketLocation),
+      realGate,
+      audit,
+      new LocationScopeService()
     );
 
     const supermarkets = dataSource.getRepository(Supermarket);
@@ -723,6 +745,167 @@ describeIntegration('a product merge (real Postgres)', () => {
       expect(one.items).toEqual([
         expect.objectContaining({ id: loser.id, mergedInto: survivor.id }),
       ]);
+    });
+  });
+
+  describe('section 2: a write that names a merged product', () => {
+    /** A merged product and its survivor, merged with nothing on either. */
+    async function mergedPair(name: string) {
+      const loser = await product(`${name} fusion`);
+      const survivor = await product(`${name} queda`);
+      await items.merge({
+        ...AS_OPERATOR,
+        itemId: loser.id,
+        intoItemId: survivor.id,
+      });
+      return { loser, survivor };
+    }
+
+    it('writes a price sent for the merged id onto the survivor', async () => {
+      const { loser, survivor } = await mergedPair('Leche tarde');
+
+      // A harvest that read the merged id before the merge, as a batch and
+      // as one row.
+      await price(loser.id, 1.11, warehouseId);
+      const one = await prices.add({
+        userId: HARVESTER,
+        itemId: loser.id,
+        priceScopeId: otherNationalId,
+        sourceKind: PriceSourceKind.OFFICIAL_API,
+        price: 1.22,
+        currency: 'EUR',
+        observedAt: new Date(Date.now() - 60_000).toISOString(),
+      });
+
+      expect(one.itemId).toBe(survivor.id);
+      expect(await priceRows(loser.id)).toBe(0);
+      expect(await priceRows(survivor.id)).toBe(2);
+      const shown = dataSource.getRepository(SupermarketItem);
+      expect(
+        Number(
+          (
+            await shown.findOneBy({
+              itemId: survivor.id,
+              priceScopeId: warehouseId,
+            })
+          )?.price
+        )
+      ).toBe(1.11);
+      expect(await shown.countBy({ itemId: loser.id })).toBe(0);
+    });
+
+    it('writes availability sent for the merged id onto the survivor, at a shop and at a scope', async () => {
+      const { loser, survivor } = await mergedPair('Leche tienda tarde');
+      const shops = dataSource.getRepository(SupermarketLocation);
+      const shop = await shops.save(shops.create({ supermarketId: chainId }));
+
+      await shopItems.setAvailability({
+        userId: HARVESTER,
+        supermarketLocationId: shop.id,
+        sourceKind: PriceSourceKind.OFFICIAL_WEB,
+        sourceRunId: RUN,
+        entries: [{ itemId: loser.id, available: true }],
+      });
+      await scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: otherNationalId,
+        entries: [{ itemId: loser.id, available: true }],
+      });
+
+      const shopRows = dataSource.getRepository(SupermarketLocationItem);
+      expect(
+        await shopRows.findOneBy({
+          itemId: survivor.id,
+          supermarketLocationId: shop.id,
+        })
+      ).toMatchObject({ available: true });
+      expect(await shopRows.countBy({ itemId: loser.id })).toBe(0);
+      const scopeRows = dataSource.getRepository(SupermarketItem);
+      expect(
+        await scopeRows.findOneBy({
+          itemId: survivor.id,
+          priceScopeId: otherNationalId,
+        })
+      ).toMatchObject({ available: true });
+      expect(await scopeRows.countBy({ itemId: loser.id })).toBe(0);
+    });
+
+    it('teaches a barcode sent for the merged id to the survivor', async () => {
+      const { loser, survivor } = await mergedPair('Leche codigo tarde');
+
+      const taught = await itemsAsService.teachEans({
+        userId: HARVESTER,
+        entries: [{ itemId: loser.id, ean: '4006381333931' }],
+      });
+
+      expect(taught).toEqual({ added: 1, refused: [] });
+      const found = await items.findByEan({
+        userId: OPERATOR,
+        ean: '4006381333931',
+      });
+      expect(found.item?.id).toBe(survivor.id);
+      expect((await row(loser.id)).ean).toBeNull();
+    });
+
+    it('answers the survivor for a barcode a merged row still holds', async () => {
+      const { loser, survivor } = await mergedPair('Leche codigo viejo');
+      // A barcode written to the merged row before such writes were moved.
+      await dataSource.query(
+        `INSERT INTO "item_eans" ("ean", "itemId") VALUES ($1, $2)`,
+        ['5000112637922', loser.id]
+      );
+
+      const one = await items.findByEan({
+        userId: OPERATOR,
+        ean: '5000112637922',
+      });
+      expect(one.item?.id).toBe(survivor.id);
+      const many = await items.findByEans({
+        userId: OPERATOR,
+        eans: ['5000112637922'],
+      });
+      expect(many.items.map((item) => item.id)).toEqual([survivor.id]);
+    });
+
+    it('refuses a barcode or a group on a merged row, and allows any other edit', async () => {
+      const { loser } = await mergedPair('Leche editada');
+
+      await refused(
+        items.addEan({
+          ...AS_OPERATOR,
+          itemId: loser.id,
+          ean: '9780201379624',
+        }),
+        ItemMergedException
+      );
+      await refused(
+        items.update({
+          ...AS_OPERATOR,
+          itemId: loser.id,
+          ean: '9780201379624',
+        }),
+        ItemMergedException
+      );
+      const groups = dataSource.getRepository(ProductGroup);
+      const group = await groups.save(
+        groups.create({ name: { es: 'Leches', en: 'Milks' } })
+      );
+      await refused(
+        items.update({
+          ...AS_OPERATOR,
+          itemId: loser.id,
+          productGroupId: group.id,
+        }),
+        ItemMergedException
+      );
+      expect((await row(loser.id)).productGroupId).toBeNull();
+
+      const edited = await items.update({
+        ...AS_OPERATOR,
+        itemId: loser.id,
+        brand: null,
+      });
+      expect(edited.brand).toBeNull();
     });
   });
 

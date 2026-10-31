@@ -93,8 +93,10 @@ export class ItemMergeService {
    * the survivor, and a `CANDIDATE` row proposes it.
    *
    * It never throws at the broker. A failure is logged, and the rows still
-   * name the merged product, which every catalog read answers with the
-   * survivor, so nothing a shopper sees is wrong while it waits.
+   * name the merged product. A catalog read by that id answers the
+   * survivor, and catalog writes every price, availability, photo link and
+   * barcode sent for the merged id onto the survivor, so what a run sends
+   * for those rows still reaches shoppers.
    */
   async onItemMerged(event: ItemMergedEvent): Promise<void> {
     if (!isUuid(event?.itemId) || !isUuid(event?.intoItemId)) {

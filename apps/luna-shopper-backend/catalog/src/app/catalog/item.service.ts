@@ -893,11 +893,19 @@ export class ItemService {
    *
    * A product with no first barcode takes this one as its first, so
    * `items.ean` is never empty while the product holds a barcode.
+   *
+   * A merged product takes none (`item_merged`, plan 0239): the barcode
+   * belongs on its survivor.
    */
   async addEan(req: ItemEanRequest): Promise<ItemView> {
     const actor = await this.admin.requireAdmin(req);
     const ean = this.requireEan(req.ean);
     const row = await this.load(req.itemId);
+    if (row.mergedIntoId) {
+      // Its barcodes moved to the survivor, and one given to it now would
+      // find a product no read shows (plan 0239).
+      throw itemMerged(row);
+    }
     let heldBy: string | null;
     try {
       heldBy = await this.audit.write(
@@ -951,6 +959,9 @@ export class ItemService {
    * barcode another product took in the meantime must not cost the rest of a
    * file theirs. Asking first is the caller's job, and the refusal that stops
    * a decision is made there, before anything is written.
+   *
+   * A pair that names a merged product teaches its survivor (plan 0239), and
+   * a refusal still names the product the pair named.
    */
   async teachEans(req: TeachItemEansRequest): Promise<TeachItemEansResult> {
     const actor = await this.admin.requireAdmin(req);
@@ -985,13 +996,34 @@ export class ItemService {
         })
       ).map((row) => [row.id, row])
     );
+    // A barcode taught to a merged product is its survivor's (plan 0239):
+    // the merge moved every barcode there, and a decision made before the
+    // merge still names the merged id. The survivors not named are read too.
+    const survivorIds = [
+      ...new Set(
+        [...rows.values()]
+          .map((row) => row.mergedIntoId)
+          .filter((id): id is string => !!id && !rows.has(id))
+      ),
+    ];
+    if (survivorIds.length > 0) {
+      for (const row of await this.items.find({
+        where: { id: In(survivorIds) },
+      })) {
+        rows.set(row.id, row);
+      }
+    }
+    const rowOf = (itemId: string): Item | undefined => {
+      const row = rows.get(itemId);
+      return row?.mergedIntoId ? rows.get(row.mergedIntoId) : row;
+    };
 
     let added = 0;
     try {
       added = await this.audit.write(actor, async (tx) => {
         let written = 0;
         for (const pair of pairs) {
-          const row = rows.get(pair.itemId);
+          const row = rowOf(pair.itemId);
           if (!row) {
             refused.push({ ...pair, reason: 'NOT_FOUND', heldBy: null });
             continue;
@@ -1198,12 +1230,15 @@ export class ItemService {
    * or invalid code that an old product still carries on `items.ean` is in no
    * row, so it finds nothing, which is the rule plan 0184 set for every
    * caller: such a code joins nothing.
+   *
+   * **A barcode a merged product still holds finds its survivor** (plan
+   * 0239). A merge moves every barcode, so only a row written before writes
+   * to a merged id were refused can hold one, and the lookup answers the
+   * product a harvest should bind to.
    */
   async findByEan(req: FindItemByEanRequest): Promise<FindItemByEanResult> {
     const itemId = (await this.eans.holdersOf([req.ean])).get(req.ean);
-    const row = itemId
-      ? await this.items.findOne({ where: { id: itemId } })
-      : null;
+    const [row] = itemId ? await this.withSurvivors([itemId]) : [];
     if (!row) {
       return { item: null };
     }
@@ -1238,7 +1273,8 @@ export class ItemService {
     if (itemIds.length === 0) {
       return { items: [] };
     }
-    const rows = await this.items.find({ where: { id: In(itemIds) } });
+    // A merged holder answers its survivor, once, as findByEan does.
+    const rows = await this.withSurvivors(itemIds);
     const view = await this.viewer(rows);
     return { items: rows.map((row) => view(row)) };
   }
@@ -2409,6 +2445,27 @@ export class ItemService {
     return row;
   }
 
+  /**
+   * These products by id, each merged one replaced by its survivor (plan
+   * 0239), every product once. An id that names nothing is left out. The
+   * barcode lookups read through it: a lookup answers the product to bind
+   * to, never a merged row.
+   */
+  private async withSurvivors(ids: readonly string[]): Promise<Item[]> {
+    const found = await this.items.find({ where: { id: In([...ids]) } });
+    const survivorIds = [
+      ...new Set(
+        found.map((row) => row.mergedIntoId).filter((id): id is string => !!id)
+      ),
+    ];
+    const survivors =
+      survivorIds.length === 0
+        ? []
+        : await this.items.find({ where: { id: In(survivorIds) } });
+    const live = [...found, ...survivors].filter((row) => !row.mergedIntoId);
+    return [...new Map(live.map((row) => [row.id, row])).values()];
+  }
+
   /** The seam to the harvester and core, or a loud failure without it. */
   private requireReferences(): ItemReferences {
     if (!this.references) {
@@ -2827,6 +2884,7 @@ export class ItemService {
       const before = { ...row };
       const groupBefore = row.productGroupId;
       this.applyEdits(row, input, registered, groups.get(index));
+      refuseMergedEdit(before, row);
       // An entry that states what it expects is checked inside the
       // transaction, after its expectation: a unit refusal here would answer
       // for a row the caller may not have read (plan 0237, section 3.2).
@@ -2878,6 +2936,7 @@ export class ItemService {
           const before = { ...row };
           const groupBefore = row.productGroupId;
           this.applyEdits(row, input, registered, groups.get(index));
+          refuseMergedEdit(before, row);
           requireBaseUnitOnEdit(row, input);
           edits[index] = { ...edits[index], row, before, groupBefore };
         }
@@ -3267,6 +3326,26 @@ type ItemViewer = (row: Item, offer?: ItemOfferView) => ItemView;
  * canonical label through `applyBrand`. A null brand, or a text with no key,
  * means no brand and passes. Every label that failed is named, once.
  */
+/**
+ * An edit of a merged row may not give it a barcode or a group (plan 0239).
+ *
+ * The merged row is the record of what the product was called, and its
+ * other fields stay editable: a brand that only merged rows hold is refused
+ * by `brand_in_use` until those rows are given no brand. A barcode on it
+ * would find a product no read shows, and a group would announce it to the
+ * lists that follow the group. Both belong on the survivor. An edit that
+ * leaves either as it is passes, so a client that sends the whole row back
+ * is not refused for a field it did not change.
+ */
+function refuseMergedEdit(before: Item, row: Item): void {
+  if (
+    row.mergedIntoId &&
+    (row.ean !== before.ean || row.productGroupId !== before.productGroupId)
+  ) {
+    throw itemMerged(row);
+  }
+}
+
 /** The refusal of a merged row, naming its survivor (plan 0239). */
 function itemMerged(row: Item): ItemMergedException {
   return new ItemMergedException(
