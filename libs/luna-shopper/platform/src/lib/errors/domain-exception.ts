@@ -582,6 +582,73 @@ export class ItemKilogramHasSizeException extends DomainException {
 }
 
 /**
+ * The `details` keys of the merge refusals (plan 0239): the product the
+ * refusal is about, and the product it was merged into.
+ */
+export const ITEM_MERGED_ITEM_DETAIL = 'itemId';
+export const ITEM_MERGED_INTO_DETAIL = 'mergedIntoId';
+
+/**
+ * A merged product was named by a merge or a delete (plan 0239). The details
+ * are public: the product under {@link ITEM_MERGED_ITEM_DETAIL} and the
+ * product it was merged into under {@link ITEM_MERGED_INTO_DETAIL}.
+ */
+export class ItemMergedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_MERGED;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key the chains of a two article refusal travel under. */
+export const ITEM_MERGE_CHAINS_DETAIL = 'supermarketIds';
+
+/**
+ * Both products of a merge hold a bound queue row of one chain (plan 0239,
+ * section 1.1). The details are public: the chains under
+ * {@link ITEM_MERGE_CHAINS_DETAIL}.
+ */
+export class ItemMergeTwoArticlesOneChainException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` keys of a format refusal: the format of the product to merge
+ * and the format of the survivor, each as `{ unitSize, defaultUnit }`.
+ */
+export const ITEM_MERGE_FORMAT_DETAIL = 'item';
+export const ITEM_MERGE_INTO_FORMAT_DETAIL = 'into';
+
+/**
+ * The two products of a merge differ in size or unit (plan 0239, section
+ * 1.1). The details are public: both formats, under
+ * {@link ITEM_MERGE_FORMAT_DETAIL} and {@link ITEM_MERGE_INTO_FORMAT_DETAIL}.
+ */
+export class ItemMergeFormatDiffersException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` keys of {@link ItemInUseException}, each a count that is
+ * always present: price rows, products merged into this one, harvester queue
+ * rows, and shopper list lines.
+ */
+export const ITEM_IN_USE_PRICES_DETAIL = 'priceCount';
+export const ITEM_IN_USE_MERGED_DETAIL = 'mergedFromCount';
+export const ITEM_IN_USE_QUEUE_DETAIL = 'queueRowCount';
+export const ITEM_IN_USE_LINES_DETAIL = 'listLineCount';
+
+/**
+ * A product that something still names was asked to be deleted (plan 0239,
+ * section 4). The details are public, the four counts above, and at least
+ * one of them is above zero. Nothing was deleted.
+ */
+export class ItemInUseException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_IN_USE;
+  override readonly exposesDetails = true;
+}
+
+/**
  * A category with children or products cannot be deleted (plan 0166, rule R4).
  * No details: the category is the one the client asked to delete, and the back
  * office links to its products from the id it already holds.

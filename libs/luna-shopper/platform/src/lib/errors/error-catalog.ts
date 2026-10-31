@@ -228,6 +228,22 @@ export const ERROR_CATALOG: Record<
     en: 'A product sold by the kilo has no size. Clear the size, or store the weight in grams.',
     es: 'Un producto que se vende por kilo no tiene tamaño. Quita el tamaño o guarda el peso en gramos.',
   },
+  [ERROR_CODES.ITEM_MERGED]: {
+    en: 'This product was merged into another one. Work on the product it was merged into.',
+    es: 'Este producto se fusionó con otro. Trabaja con el producto con el que se fusionó.',
+  },
+  [ERROR_CODES.ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN]: {
+    en: 'Both products are sold by the same chain, so the merged product would hold two articles of that chain. Allow a second article to merge them anyway.',
+    es: 'La misma cadena vende los dos productos, así que el producto fusionado tendría dos artículos de esa cadena. Permite un segundo artículo para fusionarlos igualmente.',
+  },
+  [ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS]: {
+    en: 'The two products have a different size or unit, so they are two products. Allow the format difference to merge them anyway.',
+    es: 'Los dos productos tienen un tamaño o una unidad distintos, así que son dos productos. Permite la diferencia de formato para fusionarlos igualmente.',
+  },
+  [ERROR_CODES.ITEM_IN_USE]: {
+    en: 'Prices, queue rows, shopping lists or other products still name this product. Merge it into the product that replaces it instead.',
+    es: 'Hay precios, filas de la cola, listas de la compra u otros productos que todavía nombran este producto. Fusiónalo con el producto que lo sustituye.',
+  },
   [ERROR_CODES.CATEGORY_IN_USE]: {
     en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
     es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',

@@ -110,9 +110,9 @@ survivor):
    side, so nothing is overwritten. Recompute the effective prices of the survivor in the
    same write.
 3. Move `supermarket_location_items` rows, and keep the survivor's row where both have one
-   for the same shop. The same for `supermarket_item_sections` (where a product sits in a
-   chain's aisles, plan `0167`), which this plan did not name when it was written. A row
-   the survivor already holds stays on the merged row, as a record, and is not deleted.
+   for the same shop. A row the survivor already holds stays on the merged row, as a
+   record, and is not deleted. The pins of plan `0167` (`supermarket_item_sections`) do
+   not move: nothing reads them since plan `0200`, and a release task removes them.
    The materialized `supermarket_items` row of a scope moves when the survivor has none
    there, because it carries `available`, which no price row holds. Where the survivor
    has one, the survivor's row stays and the merged row's copy is removed: it is derived,
@@ -163,8 +163,8 @@ message `item.merge`, with the body:
 
 Every flag is optional, false when absent, and a JSON boolean only. It answers 201 with
 `MergeItemResult`, which names what moved: the price rows, the scope rows, the shop rows
-(moved and kept on the merged row), the section rows, the barcodes, the photo links, the
-products that pointed at the merged one, and the `mergedIntoId` and `mergedAt` that were set.
+(moved and kept on the merged row), the barcodes, the photo links, the products that
+pointed at the merged one, and the `mergedIntoId` and `mergedAt` that were set.
 
 **The queue rows are counted, not moved, by catalog.** They live in the harvester's
 database. The answer states `queueRows`, the number of rows that named the merged product

@@ -1,7 +1,4 @@
-import type { BasketKind } from '../enums/basket.enums';
-import type {
-  BasketStatus,
-} from '../enums/basket.enums';
+import type { BasketKind, BasketStatus } from '../enums/basket.enums';
 import type {
   LineApprovalStatus,
   SettlementOutcome,
@@ -747,4 +744,39 @@ export interface PostalCodeUsageRequest extends AdminCredential {
 export interface PostalCodeUsageListView {
   country: string;
   usage: PostalCodeUsageView[];
+}
+
+/**
+ * What core holds that names a catalog product (plan 0239, section 4).
+ *
+ * Catalog asks it, with the operator's credential, before it deletes a
+ * product: a line that holds a deleted product loses it and nobody is told.
+ * It answers counts across every household and never an identity, as the
+ * postal code usage does.
+ */
+export const ADMIN_ITEM_PATTERNS = {
+  usage: 'adminItem.usage',
+} as const;
+
+export type AdminItemPattern =
+  (typeof ADMIN_ITEM_PATTERNS)[keyof typeof ADMIN_ITEM_PATTERNS];
+
+export interface AdminItemUsageRequest extends AdminCredential {
+  /** At most `ITEM_USAGE_MAX_IDS` products. */
+  itemIds: string[];
+}
+
+/** One product, and how many lines name it. */
+export interface AdminItemUsage {
+  itemId: string;
+  /**
+   * Lines that hold the product in their set or as their favourite, deleted
+   * lines included: a deleted line can be restored, with its products.
+   */
+  listLineCount: number;
+}
+
+/** One entry per product asked about, the ones nothing names included. */
+export interface AdminItemUsageResult {
+  usage: AdminItemUsage[];
 }

@@ -1,3 +1,4 @@
+import { applyDecorators } from '@nestjs/common';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ADMIN_PRICE_ITEM_IDS_MAX,
@@ -33,6 +34,49 @@ import {
   CatalogListQueryDto,
   SearchOrderQueryDto,
 } from './catalog.dto';
+
+/**
+ * One flag of the merge body (plan 0239, section 1.1): optional, false when
+ * absent, and a JSON boolean only. The value as the body spelled it, so the
+ * string "false" is refused rather than read as true.
+ */
+function MergeFlag(description: string): PropertyDecorator {
+  return applyDecorators(
+    ApiPropertyOptional({ default: false, description }),
+    Transform(
+      ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
+        obj?.[key]
+    ),
+    IsOptional(),
+    IsBoolean()
+  );
+}
+
+/** Merge the product of the path into another one (plan 0239, section 1.1). */
+export class MergeItemDto {
+  @ApiProperty({
+    format: 'uuid',
+    description:
+      'The survivor. It receives the price rows, scope rows, shop rows, barcodes and photo links of the product in the path, which stays as a record that names it.',
+  })
+  @IsUUID()
+  intoItemId!: string;
+
+  @MergeFlag(
+    'Answer what the merge would move, and write nothing. The answer has the shape of a real merge and counts the same things. Every refusal is checked as for a real merge.'
+  )
+  dryRun?: boolean;
+
+  @MergeFlag(
+    'Merge even when both products hold a bound queue row of one chain, so the survivor holds two articles of that chain (rule R28). Without it that answers `item_merge_two_articles_one_chain`.'
+  )
+  allowSecondArticle?: boolean;
+
+  @MergeFlag(
+    'Merge even when the two products differ in `unitSize` or `defaultUnit`. Without it that answers `item_merge_format_differs`.'
+  )
+  allowFormatDifference?: boolean;
+}
 
 /**
  * The products an operator reads at once, by id (plan 0237, section 3.7).
@@ -127,6 +171,20 @@ export class AdminSearchItemsQueryDto extends SearchOrderQueryDto {
   @IsOptional()
   @IsUUID()
   withoutPriceAtScopeId?: string;
+
+  /**
+   * The history of the merges (plan 0239, section 2): the merged products
+   * alone, each as it was, with `mergedInto`. Absent or false lists the
+   * live products, as always.
+   */
+  @ApiPropertyOptional({
+    description:
+      'Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise.',
+  })
+  @IsOptional()
+  @Transform(asBoolean)
+  @IsBoolean()
+  merged?: boolean;
 }
 
 /**

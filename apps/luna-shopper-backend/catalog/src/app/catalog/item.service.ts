@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   brandKey,
@@ -36,6 +36,8 @@ import {
   type ItemOrder,
   type ItemPage,
   type ItemView,
+  type MergeItemRequest,
+  type MergeItemResult,
   type ProductGroupOfferPage,
   type ProductGroupOfferView,
   type SearchItemsRequest,
@@ -54,18 +56,32 @@ import {
   ConflictException,
   DEFAULT_LOCALE,
   encodeCursor,
+  ForbiddenException,
   getRequestContext,
   isUuid,
   ITEM_EAN_DETAIL,
   ITEM_EAN_HOLDER_DETAIL,
   ITEM_EXPECTATION_FAILURES_DETAIL,
   ITEM_GRAMS_DETAIL,
+  ITEM_IN_USE_LINES_DETAIL,
+  ITEM_IN_USE_MERGED_DETAIL,
+  ITEM_IN_USE_PRICES_DETAIL,
+  ITEM_IN_USE_QUEUE_DETAIL,
+  ITEM_MERGE_CHAINS_DETAIL,
+  ITEM_MERGE_FORMAT_DETAIL,
+  ITEM_MERGE_INTO_FORMAT_DETAIL,
+  ITEM_MERGED_INTO_DETAIL,
+  ITEM_MERGED_ITEM_DETAIL,
   ITEM_UNIT_BECOMES_DETAIL,
   ITEM_UNIT_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
   ItemEanHeldException,
   ItemExpectationFailedException,
+  ItemInUseException,
   ItemKilogramHasSizeException,
+  ItemMergedException,
+  ItemMergeFormatDiffersException,
+  ItemMergeTwoArticlesOneChainException,
   ItemUnitNotBaseException,
   NotFoundException,
   requireProductEan,
@@ -104,7 +120,17 @@ import {
   toCategoryOnItem,
   type CategoryOnItem,
 } from './category.service';
+import {
+  affectedPriceKeys,
+  recomputeEffectivePrices,
+} from './effective-price.service';
 import { ItemEanStore } from './item-ean.store';
+import { refreshLinkedImages } from './item-linked-image.service';
+import {
+  ITEM_REFERENCES,
+  type ItemReferences,
+  type QueueUsage,
+} from './item-references.client';
 import {
   PlatformAdminService,
   type CatalogActor,
@@ -323,6 +349,25 @@ function withoutPriceAtScopeSql(placeholder: string): string {
 }
 
 /**
+ * The one condition every list and search of products carries (plan 0239,
+ * section 2): a live product, or with `merged` the merged ones alone.
+ *
+ * **Every query this service writes over `items` goes through it**, and
+ * `item-merged-reads.spec.ts` reads this file to say so. A read by id does not:
+ * it answers the survivor of a merged product rather than leaving it out.
+ */
+export function itemStateSql(alias: string, merged = false): string {
+  return `${alias}."mergedIntoId" IS ${merged ? 'NOT NULL' : 'NULL'}`;
+}
+
+/** Thrown inside a dry run's transaction to roll it back with its answer. */
+class MergeDryRun extends Error {
+  constructor(readonly result: MergeItemResult) {
+    super('dry run');
+  }
+}
+
+/**
  * What the ranked branch matches on, bound once and spent by the page and by
  * its count (plan 0187). The two must not be able to disagree, so neither
  * writes the filter itself.
@@ -429,7 +474,13 @@ export class ItemService {
     private readonly categories: CategoryService,
     // Every barcode of every product (plan 0185). `items.ean` is the first
     // one, and this is where the rest live.
-    private readonly eans: ItemEanStore
+    private readonly eans: ItemEanStore,
+    // What the harvester and core hold that names a product (plan 0239).
+    // Optional so the specs that build this positionally and never merge
+    // or delete need not pass it. A merge or a delete without it throws.
+    @Optional()
+    @Inject(ITEM_REFERENCES)
+    private readonly references?: ItemReferences
   ) {}
 
   /**
@@ -684,16 +735,152 @@ export class ItemService {
     };
   }
 
+  /**
+   * Delete a product that nothing names (plan 0239, section 4).
+   *
+   * A merged row is the record of its merge and is never deleted
+   * (`item_merged`). Anything else that still names the product refuses the
+   * delete with `item_in_use` and the counts: a price row, a product merged
+   * into it, a harvester queue row, a shopper's line. Catalog cannot choose a
+   * survivor, so the answer to a product that is named is a merge.
+   *
+   * **An operator's delete asks the harvester and core first**, with the
+   * operator's credential. A service's delete does not: the harvester is the
+   * one service that deletes, to undo products a decisions file created and
+   * then could not bind (plan 0100), and it is the caller that knows they are
+   * orphans. Catalog still checks its own prices and merges for it.
+   */
   async delete(req: ItemIdRequest): Promise<{ id: string }> {
     const actor = await this.admin.requireAdmin(req);
     const row = await this.load(req.itemId);
-    await this.audit.write(actor, (tx) => tx.delete(Item, row));
+    if (row.mergedIntoId) {
+      throw itemMerged(row);
+    }
+    let queueRowCount = 0;
+    let listLineCount = 0;
+    if (actor.kind === 'admin') {
+      const references = this.requireReferences();
+      const [queue, lines] = await Promise.all([
+        references.queueUsage(req, [row.id]),
+        references.lineUsage(req, [row.id]),
+      ]);
+      queueRowCount = queue.get(row.id)?.rowCount ?? 0;
+      listLineCount = lines.get(row.id) ?? 0;
+    }
+    await this.audit.write(actor, async (tx) => {
+      const [counted] = (await tx.manager.query(
+        `SELECT (SELECT count(*) FROM "item_prices" p WHERE p."itemId" = $1)::int
+                  AS "priceCount",
+                (SELECT count(*) FROM "items" m WHERE m."mergedIntoId" = $1)::int
+                  AS "mergedFromCount"`,
+        [row.id]
+      )) as { priceCount: number; mergedFromCount: number }[];
+      if (
+        counted.priceCount > 0 ||
+        counted.mergedFromCount > 0 ||
+        queueRowCount > 0 ||
+        listLineCount > 0
+      ) {
+        throw new ItemInUseException(
+          `Item ${row.id} is still named by ${counted.priceCount} price rows, ` +
+            `${counted.mergedFromCount} merged products, ${queueRowCount} ` +
+            `queue rows and ${listLineCount} list lines. Merge it into the ` +
+            'product that replaces it: POST /v1/admin/catalog/items/:id/merge.',
+          {
+            details: {
+              [ITEM_IN_USE_PRICES_DETAIL]: counted.priceCount,
+              [ITEM_IN_USE_MERGED_DETAIL]: counted.mergedFromCount,
+              [ITEM_IN_USE_QUEUE_DETAIL]: queueRowCount,
+              [ITEM_IN_USE_LINES_DETAIL]: listLineCount,
+            },
+          }
+        );
+      }
+      await tx.delete(Item, row);
+    });
     return { id: req.itemId };
   }
 
+  /**
+   * One product by id. A merged product answers its survivor, under the id
+   * that was asked for, with `mergedInto` (plan 0239, section 2): a phone or
+   * a line that still holds the old id draws the right product.
+   */
   async get(req: ItemIdRequest): Promise<ItemView> {
     const row = await this.load(req.itemId);
-    return (await this.viewer([row]))(row);
+    if (!row.mergedIntoId) {
+      return (await this.viewer([row]))(row);
+    }
+    const survivor = await this.load(row.mergedIntoId);
+    return {
+      ...(await this.viewer([survivor]))(survivor),
+      id: row.id,
+      mergedInto: survivor.id,
+    };
+  }
+
+  /**
+   * Merge one product into another (plan 0239), in one transaction.
+   *
+   * The merged row stays, names the survivor, and leaves every list and
+   * search. Its price rows, scope rows, shop rows, barcodes and photo links
+   * move to the survivor, the survivor's prices are recomputed in
+   * the same write, and a product already merged into the merged one is
+   * moved onto the survivor (the one level rule). Its name, brand, size and
+   * categories stay as they were: it is the record of what the product was.
+   *
+   * Refused, before anything is written: a product merged into itself, a
+   * product that is merged already on either side (`item_merged`), two
+   * formats (`item_merge_format_differs`) and two articles of one chain
+   * (`item_merge_two_articles_one_chain`), the last two unless the request
+   * allows them. The chains come from the harvester, asked with the
+   * operator's credential, because the queue rows live in its database.
+   *
+   * A dry run runs the same transaction and rolls it back, so it answers
+   * exactly what a merge writes, and it publishes nothing.
+   */
+  async merge(req: MergeItemRequest): Promise<MergeItemResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (actor.kind !== 'admin') {
+      // The merge forwards the operator's token to the harvester, and a
+      // service has none. No service merges products.
+      throw new ForbiddenException('Only an operator merges products.');
+    }
+    if (req.itemId === req.intoItemId) {
+      throw new ValidationException('A product cannot be merged into itself.');
+    }
+    const [item, into] = await this.loadInOrder([req.itemId, req.intoItemId]);
+    this.refuseMerge(item, into, req);
+    const queue = await this.requireReferences().queueUsage(req, [
+      item.id,
+      into.id,
+    ]);
+    refuseSecondArticle(item.id, into.id, queue, req);
+
+    const dryRun = req.dryRun === true;
+    let result: MergeItemResult;
+    try {
+      result = await this.audit.write(actor, async (tx) => {
+        const merged = await this.applyMerge(
+          tx,
+          item.id,
+          into.id,
+          queue.get(item.id)?.rowCount ?? 0,
+          req
+        );
+        if (dryRun) {
+          throw new MergeDryRun({ ...merged, dryRun: true, mergedAt: null });
+        }
+        return merged;
+      });
+    } catch (error) {
+      if (error instanceof MergeDryRun) {
+        return error.result;
+      }
+      throw error;
+    }
+    this.events.itemMerged(item.id, into.id);
+    return result;
   }
 
   /**
@@ -926,22 +1113,61 @@ export class ItemService {
     if (ids.length === 0) {
       return { items: [] };
     }
-    const rows = await this.items.find({ where: { id: In(ids) } });
-    const view = await this.viewer(rows);
+    const found = await this.items.find({ where: { id: In(ids) } });
+    // A merged product answers its survivor under the asked id (plan 0239,
+    // section 2), so the survivors that were not asked for are read too. A
+    // survivor is never merged itself, so one more read is the whole chain.
+    const known = new Set(found.map((row) => row.id));
+    const missing = [
+      ...new Set(
+        found
+          .map((row) => row.mergedIntoId)
+          .filter((id): id is string => !!id && !known.has(id))
+      ),
+    ];
+    const byId = new Map(
+      [
+        ...found,
+        ...(missing.length === 0
+          ? []
+          : await this.items.find({ where: { id: In(missing) } })),
+      ].map((row) => [row.id, row])
+    );
+    const entries = found.flatMap((asked) => {
+      const shown = asked.mergedIntoId ? byId.get(asked.mergedIntoId) : asked;
+      return shown ? [{ asked, shown }] : [];
+    });
+    const rows = [
+      ...new Map(entries.map((e) => [e.shown.id, e.shown])).values(),
+    ];
+    const viewOf = await this.viewer(rows);
+    // The survivor's view, under the asked id when it was asked for by a
+    // merged one.
+    const view = (
+      entry: { asked: Item; shown: Item },
+      offer?: ItemOfferView
+    ): ItemView =>
+      entry.asked === entry.shown
+        ? viewOf(entry.shown, offer)
+        : {
+            ...viewOf(entry.shown, offer),
+            id: entry.asked.id,
+            mergedInto: entry.shown.id,
+          };
     const scopeIds = req.priceScopeIds ?? [];
     if (scopeIds.length === 0) {
       // An arrow rather than a bare reference: `map` passes the index as the
       // second argument, which `view` reads as the offer.
-      return { items: rows.map((row) => view(row)) };
+      return { items: entries.map((entry) => view(entry)) };
     }
     const itemIds = rows.map((row) => row.id);
     if (req.offers === 'all') {
       const perItem = await this.allOffersFor(itemIds, scopeIds);
       return {
-        items: rows.map((row) => {
-          const offers = perItem.get(row.id) ?? [];
+        items: entries.map((entry) => {
+          const offers = perItem.get(entry.shown.id) ?? [];
           return {
-            ...view(row),
+            ...view(entry),
             // Filled from the same array rather than from a second query, so
             // "the cheapest" and "the first of all of them" cannot disagree
             // (plan 0109, section 2).
@@ -953,9 +1179,9 @@ export class ItemService {
     }
     const offers = await this.offersFor(itemIds, scopeIds);
     return {
-      items: rows.map((row) => ({
-        ...view(row),
-        bestOffer: offers.get(row.id) ?? null,
+      items: entries.map((entry) => ({
+        ...view(entry),
+        bestOffer: offers.get(entry.shown.id) ?? null,
       })),
     };
   }
@@ -1178,6 +1404,7 @@ export class ItemService {
         FROM "supermarket_items" si
         JOIN "items" mi ON mi."id" = si."itemId"
         WHERE mi."productGroupId" = g."id"
+          AND ${itemStateSql('mi')}
           AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
           AND si."available"
         ORDER BY si."price" IS NULL ASC,
@@ -1363,6 +1590,7 @@ export class ItemService {
                ) AS rn
         FROM "items" i
         WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+          AND ${itemStateSql('i')}
       ) ranked
       WHERE rn <= ${p.bind(LINE_ITEM_SET_MAX)}
       ORDER BY "productGroupId" ASC, rn ASC
@@ -1464,6 +1692,7 @@ export class ItemService {
                ) AS rn
         FROM "items" i${offerJoin}
         WHERE i."productGroupId" = ANY(${p.bind(groupIds)})
+          AND ${itemStateSql('i')}
       ) ranked
       WHERE rn <= ${p.bind(count)}
       ORDER BY "productGroupId" ASC, rn ASC
@@ -1817,7 +2046,8 @@ export class ItemService {
         OR similarity(i."name" ->> 'en', ${raw}) > ${p.bind(TRIGRAM_THRESHOLD)}`
       : '';
 
-    const filters: string[] = [];
+    // Plan 0239: live products, or with `merged` the merged ones alone.
+    const filters: string[] = [itemStateSql('i', req.merged === true)];
     if (req.categoryId) {
       filters.push(underCategorySql(p.bind(req.categoryId)));
     }
@@ -1993,6 +2223,8 @@ export class ItemService {
     term: SearchTerm | null
   ): SelectQueryBuilder<Item> {
     const qb = this.items.createQueryBuilder('i');
+    // Plan 0239, on both branches: live products, or the merged ones alone.
+    qb.andWhere(itemStateSql('i', req.merged === true));
     if (term) {
       // The same filter the ranked branch applies, named parameters apart. It is
       // written twice because the two branches assemble their SQL differently,
@@ -2175,6 +2407,238 @@ export class ItemService {
       throw new NotFoundException('Item not found');
     }
     return row;
+  }
+
+  /** The seam to the harvester and core, or a loud failure without it. */
+  private requireReferences(): ItemReferences {
+    if (!this.references) {
+      throw new Error(
+        'ItemService has no ItemReferences, so it cannot learn what the ' +
+          'harvester and core hold. Provide ITEM_REFERENCES.'
+      );
+    }
+    return this.references;
+  }
+
+  /**
+   * The refusals a merge reads off the two rows (plan 0239, sections 1 and
+   * 1.1), checked before the harvester is asked and again under the lock.
+   */
+  private refuseMerge(
+    item: Item,
+    into: Item,
+    req: Pick<MergeItemRequest, 'allowFormatDifference'>
+  ): void {
+    for (const row of [item, into]) {
+      if (row.mergedIntoId) {
+        throw itemMerged(row);
+      }
+    }
+    if (req.allowFormatDifference === true) {
+      return;
+    }
+    const size = (row: Item) =>
+      row.unitSize === null ? null : Number(row.unitSize);
+    if (size(item) !== size(into) || item.defaultUnit !== into.defaultUnit) {
+      throw new ItemMergeFormatDiffersException(
+        `Item ${item.id} is ${size(item) ?? 'no size'} ${item.defaultUnit} ` +
+          `and item ${into.id} is ${size(into) ?? 'no size'} ` +
+          `${into.defaultUnit}. Two formats are two products; send ` +
+          '`allowFormatDifference` to merge them anyway.',
+        {
+          details: {
+            [ITEM_MERGE_FORMAT_DETAIL]: {
+              unitSize: size(item),
+              defaultUnit: item.defaultUnit,
+            },
+            [ITEM_MERGE_INTO_FORMAT_DETAIL]: {
+              unitSize: size(into),
+              defaultUnit: into.defaultUnit,
+            },
+          },
+        }
+      );
+    }
+  }
+
+  /**
+   * The writes of a merge, inside the caller's transaction (plan 0239,
+   * section 1). Both rows are locked first, in id order, and the refusals
+   * of the rows are read again under the lock, so two merges that race on
+   * one product cannot both pass.
+   */
+  private async applyMerge(
+    tx: AuditedWrite,
+    itemId: string,
+    intoItemId: string,
+    queueRows: number,
+    req: Pick<MergeItemRequest, 'allowFormatDifference'>
+  ): Promise<MergeItemResult> {
+    const manager = tx.manager;
+    const locked = await manager.find(Item, {
+      where: { id: In([itemId, intoItemId]) },
+      order: { id: 'ASC' },
+      lock: { mode: 'pessimistic_write' },
+    });
+    const item = locked.find((row) => row.id === itemId);
+    const into = locked.find((row) => row.id === intoItemId);
+    if (!item || !into) {
+      throw new NotFoundException('Item not found');
+    }
+    this.refuseMerge(item, into, req);
+
+    // `query()` answers `[rows, rowCount]` for an UPDATE or a DELETE with
+    // RETURNING, and the rows alone for a SELECT.
+    const moved = async <T>(sql: string): Promise<T[]> =>
+      ((await manager.query(sql, [itemId, intoItemId])) as [T[], number])[0];
+
+    // 2. Every price row, side by side with the survivor's (plan 0080).
+    const prices = await moved<{ priceScopeId: string }>(
+      `UPDATE "item_prices" SET "itemId" = $2
+        WHERE "itemId" = $1
+    RETURNING "priceScopeId"`
+    );
+    // The materialized row of a scope the survivor has none at moves, because
+    // it carries `available`, which no price row holds. Where the survivor
+    // has one, its own stays and the merged row's derived copy goes.
+    await manager.query(
+      `DELETE FROM "supermarket_items" m
+        WHERE m."itemId" = $1
+          AND EXISTS (
+            SELECT 1 FROM "supermarket_items" s
+             WHERE s."itemId" = $2 AND s."priceScopeId" = m."priceScopeId"
+          )`,
+      [itemId, intoItemId]
+    );
+    const scopeRows = await moved<{ priceScopeId: string }>(
+      `UPDATE "supermarket_items" SET "itemId" = $2
+        WHERE "itemId" = $1
+    RETURNING "priceScopeId"`
+    );
+    const scopes = new Set([
+      ...prices.map((row) => row.priceScopeId),
+      ...scopeRows.map((row) => row.priceScopeId),
+    ]);
+    const keys = new Map<string, { itemId: string; priceScopeId: string }>();
+    for (const scopeId of scopes) {
+      for (const key of await affectedPriceKeys(
+        manager,
+        [intoItemId],
+        scopeId
+      )) {
+        keys.set(key.priceScopeId, key);
+      }
+    }
+    await recomputeEffectivePrices(manager, [...keys.values()]);
+
+    // 3. Shop rows. A row the survivor already holds stays on the merged row,
+    // as a record, and is not deleted. The pins of plan 0167
+    // (`supermarket_item_sections`) are not moved: nothing reads them since
+    // plan 0200, and a release task removes them.
+    const shopRows = await moved<{ id: string }>(
+      `UPDATE "supermarket_location_items" m SET "itemId" = $2
+        WHERE m."itemId" = $1
+          AND NOT EXISTS (
+            SELECT 1 FROM "supermarket_location_items" s
+             WHERE s."itemId" = $2
+               AND s."supermarketLocationId" = m."supermarketLocationId"
+          )
+    RETURNING m."id"`
+    );
+    const [kept] = (await manager.query(
+      `SELECT count(*)::int AS "count"
+         FROM "supermarket_location_items" WHERE "itemId" = $1`,
+      [itemId]
+    )) as { count: number }[];
+
+    // 4. Every barcode (plan 0185), in the order the merged product held them.
+    const barcodes = (
+      await moved<{ ean: string; createdAt: Date }>(
+        `UPDATE "item_eans" SET "itemId" = $2
+          WHERE "itemId" = $1
+      RETURNING "ean", "createdAt"`
+      )
+    )
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() ||
+          a.ean.localeCompare(b.ean)
+      )
+      .map((row) => row.ean);
+
+    // The photo links of the merged product's rows, before both lists are
+    // worked out again.
+    const linkedImages = await moved<{ sourceEntryId: string }>(
+      `UPDATE "item_linked_images" SET "itemId" = $2
+        WHERE "itemId" = $1
+    RETURNING "sourceEntryId"`
+    );
+
+    // 5. The one level rule: a product merged into this one now names the
+    // survivor.
+    const repointed = await moved<{ id: string }>(
+      `UPDATE "items" SET "mergedIntoId" = $2, "updatedAt" = now()
+        WHERE "mergedIntoId" = $1
+    RETURNING "id"`
+    );
+    for (const row of repointed) {
+      await tx.recordUpdate(Item, { id: row.id, mergedIntoId: itemId }, {
+        id: row.id,
+        mergedIntoId: intoItemId,
+      } as Item);
+    }
+
+    // The merged row's barcode goes first: `uq_items_ean` holds one row per
+    // barcode, and the survivor may be about to take it.
+    const mergedBefore = { ...item };
+    const firstEan = item.ean;
+    item.ean = null;
+    item.mergedIntoId = intoItemId;
+    item.mergedAt = new Date();
+    await tx.update(Item, mergedBefore, item);
+
+    const intoBefore = { ...into };
+    if (into.ean === null && barcodes.length > 0) {
+      into.ean =
+        firstEan !== null && barcodes.includes(firstEan)
+          ? firstEan
+          : barcodes[0];
+    }
+    const result: MergeItemResult = {
+      itemId,
+      intoItemId,
+      dryRun: false,
+      mergedIntoId: intoItemId,
+      mergedAt: item.mergedAt.toISOString(),
+      prices: prices.length,
+      scopeRows: scopeRows.length,
+      shopRows: shopRows.length,
+      shopRowsKept: kept?.count ?? 0,
+      barcodes,
+      survivorEan: into.ean,
+      linkedImages: linkedImages.length,
+      repointedItemIds: repointed.map((row) => row.id).sort(),
+      queueRows,
+    };
+    // The survivor's trail row says what it received, beside any barcode it
+    // took. This is the merge's mark on the survivor's side (plan 0239,
+    // section 1, step 5).
+    await tx.update(Item, intoBefore, into, {
+      before: { mergedFrom: null },
+      after: {
+        mergedFrom: {
+          itemId,
+          prices: result.prices,
+          scopeRows: result.scopeRows,
+          shopRows: result.shopRows,
+          barcodes,
+          linkedImages: result.linkedImages,
+          repointedItemIds: result.repointedItemIds,
+        },
+      },
+    });
+    await refreshLinkedImages(manager, { itemIds: [intoItemId, itemId] });
+    return result;
   }
 
   /**
@@ -2781,6 +3245,52 @@ type ItemViewer = (row: Item, offer?: ItemOfferView) => ItemView;
  * canonical label through `applyBrand`. A null brand, or a text with no key,
  * means no brand and passes. Every label that failed is named, once.
  */
+/** The refusal of a merged row, naming its survivor (plan 0239). */
+function itemMerged(row: Item): ItemMergedException {
+  return new ItemMergedException(
+    `Item ${row.id} was merged into ${row.mergedIntoId}. Work on that ` +
+      'product instead.',
+    {
+      details: {
+        [ITEM_MERGED_ITEM_DETAIL]: row.id,
+        [ITEM_MERGED_INTO_DETAIL]: row.mergedIntoId,
+      },
+    }
+  );
+}
+
+/**
+ * Rule R28 (plan 0239, section 1.1): two products that each hold an `ACTIVE`
+ * row of one chain are two articles of that chain, and the survivor of their
+ * merge would hold both. The owner allows it per pair.
+ */
+function refuseSecondArticle(
+  itemId: string,
+  intoItemId: string,
+  queue: ReadonlyMap<string, QueueUsage>,
+  req: Pick<MergeItemRequest, 'allowSecondArticle'>
+): void {
+  if (req.allowSecondArticle === true) {
+    return;
+  }
+  const held = new Set(queue.get(intoItemId)?.activeSupermarketIds ?? []);
+  const shared = [
+    ...new Set(
+      (queue.get(itemId)?.activeSupermarketIds ?? []).filter((id) =>
+        held.has(id)
+      )
+    ),
+  ].sort();
+  if (shared.length > 0) {
+    throw new ItemMergeTwoArticlesOneChainException(
+      `Items ${itemId} and ${intoItemId} each hold a bound queue row of ` +
+        `${shared.join(', ')}, so the merged product would hold two articles ` +
+        'of one chain. Send `allowSecondArticle` to merge them anyway.',
+      { details: { [ITEM_MERGE_CHAINS_DETAIL]: shared } }
+    );
+  }
+}
+
 function refuseUnregisteredBrands(
   texts: readonly (string | null | undefined)[],
   registered: ReadonlyMap<string, Brand>

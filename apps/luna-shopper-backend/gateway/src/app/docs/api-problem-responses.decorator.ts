@@ -103,6 +103,15 @@ export interface ProblemResponseOptions {
    */
   eanHeld?: boolean;
   /**
+   * The route merges or deletes a product (plan 0239), and each answers 409
+   * with codes of its own:
+   *
+   * - `merge`: a product that is merged already, two articles of one chain,
+   *   and two formats. The last two are lifted by a flag of the body.
+   * - `delete`: a merged product, and a product something still names.
+   */
+  itemMerge?: 'merge' | 'delete';
+  /**
    * The route can give a shop an external reference (plan 0195), so a
    * reference another shop holds answers 409 with a code of its own. It is
    * told apart from a plain conflict because the client names the shop that
@@ -260,6 +269,16 @@ export function ApiProblemResponses(
   if (options.eanHeld) {
     codes.push(ERROR_CODES.ITEM_EAN_HELD);
   }
+  if (options.itemMerge === 'merge') {
+    codes.push(
+      ERROR_CODES.ITEM_MERGED,
+      ERROR_CODES.ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN,
+      ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS
+    );
+  }
+  if (options.itemMerge === 'delete') {
+    codes.push(ERROR_CODES.ITEM_MERGED, ERROR_CODES.ITEM_IN_USE);
+  }
   if (options.locationRefTaken) {
     codes.push(ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN);
   }
@@ -273,10 +292,7 @@ export function ApiProblemResponses(
     codes.push(ERROR_CODES.IMPERSONATION_CODE_INVALID);
   }
   if (options.impersonation === 'end') {
-    codes.push(
-      ERROR_CODES.IMPERSONATION_ENDED,
-      ERROR_CODES.NOT_IMPERSONATING
-    );
+    codes.push(ERROR_CODES.IMPERSONATION_ENDED, ERROR_CODES.NOT_IMPERSONATING);
   }
   if (options.recovery === 'signIn') {
     codes.push(ERROR_CODES.RECOVERY_OTHER_ACCOUNT);

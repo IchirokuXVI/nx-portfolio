@@ -8,16 +8,19 @@ import {
   NO_LINE_SETTLEMENTS,
   RealtimeEvent,
   type ItemGroupChangedEvent,
+  type ItemMergedEvent,
   type ProductGroupDeletedEvent,
 } from '@portfolio/luna-shopper/contracts';
-import { runOnce } from '@portfolio/luna-shopper/platform';
+import { isUuid, runOnce } from '@portfolio/luna-shopper/platform';
 // `DataSource` is a **value** import, not a type one, and that is load bearing:
 // Nest resolves a constructor parameter by its runtime token, so erasing this to
 // a type leaves index 0 undefined and the service unconstructable. It costs a
 // boot failure that no unit spec sees, because a spec passes its own double in.
 import { DataSource, In, Repository, type EntityManager } from 'typeorm';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import {
+  LineSettlement,
   ListLine,
   ListLineGroupRemoval,
   ListLineItem,
@@ -25,7 +28,6 @@ import {
 } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ProcessedEventStore } from '../events/idempotency.store';
-import { LineClaimService } from '../baskets/line-claim.service';
 import { itemSetHash } from './item-set-hash';
 import { keptFavorite, toLineItemSet } from './line-item-set';
 import { namedOverSet } from './line-named';
@@ -138,6 +140,140 @@ export class ProductGroupSyncService {
         await this.announce(touched);
       }
     );
+  }
+
+  /**
+   * Catalog merged one product into another (plan 0239, section 3): every row
+   * of core that names the merged product names the survivor instead.
+   *
+   * Through {@link runOnce} on the `processed_events` inbox, keyed on the
+   * event id like the two group events, so a redelivery writes nothing and
+   * announces nothing. The touched lines are announced to their lists after
+   * the commit, as a group sync announces them, because their product set
+   * changed with nobody touching them.
+   */
+  async handleItemMerged(event: ItemMergedEvent): Promise<void> {
+    if (
+      !isUuid(event?.itemId) ||
+      !isUuid(event?.intoItemId) ||
+      event.itemId === event.intoItemId
+    ) {
+      return;
+    }
+    await runOnce(
+      this.store,
+      `${CATALOG_EVENTS.itemMerged}:${event.eventId}`,
+      async () => {
+        const touched = await this.dataSource.transaction((manager) =>
+          this.repoint(manager, event.itemId, event.intoItemId)
+        );
+        // A deleted line is rewritten too, so a restore brings back the
+        // survivor, and it is not announced: no client draws it.
+        await this.announce(touched.filter((line) => line.deletedAt === null));
+      }
+    );
+  }
+
+  /**
+   * Every core column that names a product, moved from `from` to `to` (plan
+   * 0239, section 3): `list_line_items.itemId`,
+   * `list_line_group_removals.itemId`, `line_settlements.itemId` and
+   * `list_lines.favoriteItemId`.
+   *
+   * A line that held both products keeps one row, the survivor's, because a
+   * set holds a product once (`uq_list_line_item`). When the merged one was
+   * the person's (`USER`), the row that stays becomes the person's: provenance
+   * moves from `GROUP` to `USER` and never back. A removal follows the same
+   * rule on its own unique pair. A settlement is a record of a buy and has no
+   * such pair, so it is only renamed.
+   *
+   * Every line whose set or favourite moved gets a new `itemSetHash` and a
+   * new version, deleted lines included.
+   */
+  private async repoint(
+    manager: EntityManager,
+    from: string,
+    to: string
+  ): Promise<ListLine[]> {
+    const items = manager.getRepository(ListLineItem);
+    const held = await items.find({ where: { itemId: from } });
+    const survivors = held.length
+      ? await items.find({
+          where: { lineId: In(held.map((row) => row.lineId)), itemId: to },
+        })
+      : [];
+    const survivorOf = new Map(survivors.map((row) => [row.lineId, row]));
+    for (const row of held) {
+      const kept = survivorOf.get(row.lineId);
+      if (!kept) {
+        await items.update({ id: row.id }, { itemId: to });
+        continue;
+      }
+      if (
+        row.source === LineItemSource.USER &&
+        kept.source === LineItemSource.GROUP
+      ) {
+        await items.update({ id: kept.id }, { source: LineItemSource.USER });
+      }
+      await items.delete({ id: row.id });
+    }
+
+    const removals = manager.getRepository(ListLineGroupRemoval);
+    const removed = await removals.find({ where: { itemId: from } });
+    const alsoRemoved = new Set(
+      (removed.length
+        ? await removals.find({
+            where: { lineId: In(removed.map((row) => row.lineId)), itemId: to },
+          })
+        : []
+      ).map((row) => row.lineId)
+    );
+    for (const row of removed) {
+      if (alsoRemoved.has(row.lineId)) {
+        await removals.delete({ id: row.id });
+      } else {
+        await removals.update({ id: row.id }, { itemId: to });
+      }
+    }
+
+    await manager
+      .getRepository(LineSettlement)
+      .update({ itemId: from }, { itemId: to });
+
+    const lineRepo = manager.getRepository(ListLine);
+    const favourites = await lineRepo.find({
+      where: { favoriteItemId: from },
+      withDeleted: true,
+    });
+    const lineIds = [
+      ...new Set([
+        ...held.map((row) => row.lineId),
+        ...favourites.map((line) => line.id),
+      ]),
+    ];
+    if (lineIds.length === 0) {
+      return [];
+    }
+    const lines = await lineRepo.find({
+      where: { id: In(lineIds) },
+      withDeleted: true,
+    });
+    const rows = await items.find({
+      where: { lineId: In(lineIds) },
+      order: { position: 'ASC', id: 'ASC' },
+    });
+    const touched: ListLine[] = [];
+    for (const line of lines) {
+      if (line.favoriteItemId === from) {
+        line.favoriteItemId = to;
+      }
+      line.itemSetHash = itemSetHash(
+        rows.filter((row) => row.lineId === line.id).map((row) => row.itemId)
+      );
+      line.version += 1;
+      touched.push(await lineRepo.save(line));
+    }
+    return touched;
   }
 
   /**
