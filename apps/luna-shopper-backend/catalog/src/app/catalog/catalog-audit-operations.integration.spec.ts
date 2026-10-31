@@ -467,6 +467,43 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
       });
     });
 
+    it('answers the failed expectation before the unit rule, for an entry that states one', async () => {
+      const product = await newProduct();
+
+      // The caller believed the product had no size, so KILOGRAM alone looked
+      // right to it. What it needs to hear is that the product moved.
+      const { failures } = await refusal(
+        items.updateMany({
+          userId: OPERATOR,
+          items: [
+            {
+              itemId: product.id,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+              expect: { unitSize: null },
+            },
+          ],
+        })
+      );
+
+      expect(failures[0].fields).toEqual([
+        { field: 'unitSize', expected: null, actual: 4000 },
+      ]);
+      // When the expectation holds, the unit rule still refuses inside the
+      // transaction.
+      await expect(
+        items.updateMany({
+          userId: OPERATOR,
+          items: [
+            {
+              itemId: product.id,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+              expect: { unitSize: 4000 },
+            },
+          ],
+        })
+      ).rejects.toBeInstanceOf(ItemKilogramHasSizeException);
+    });
+
     it('applies KILOGRAM with a null size', async () => {
       const product = await newProduct();
 

@@ -2363,7 +2363,12 @@ export class ItemService {
       const before = { ...row };
       const groupBefore = row.productGroupId;
       this.applyEdits(row, input, registered, groups.get(index));
-      requireBaseUnitOnEdit(row, input);
+      // An entry that states what it expects is checked inside the
+      // transaction, after its expectation: a unit refusal here would answer
+      // for a row the caller may not have read (plan 0237, section 3.2).
+      if (input.expect == null) {
+        requireBaseUnitOnEdit(row, input);
+      }
       const ids = idLists[index];
       const leaves =
         ids === undefined || leavesOf === null ? null : leavesOf(ids);
