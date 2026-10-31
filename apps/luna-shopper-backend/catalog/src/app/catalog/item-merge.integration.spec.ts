@@ -459,6 +459,46 @@ describeIntegration('a product merge (real Postgres)', () => {
       expect(Number(national?.price)).toBe(1.05);
     });
 
+    it('offers the survivor at a scope where only the merged product was offered', async () => {
+      const loser = await product('Leche ofrecida fusion');
+      const survivor = await product('Leche no ofrecida queda');
+      // Both have a row at the scope: the survivor's is priced and says the
+      // scope does not carry it, the merged one's says the scope does.
+      await price(survivor.id, 1.05, otherNationalId);
+      await scopeItems.setAvailability({
+        userId: HARVESTER,
+        priceScopeId: otherNationalId,
+        entries: [
+          { itemId: survivor.id, available: false },
+          { itemId: loser.id, available: true },
+        ],
+      });
+      const offered = async () =>
+        (
+          await items.getMany({
+            ids: [survivor.id],
+            priceScopeIds: [otherNationalId],
+          })
+        ).items[0]?.bestOffer ?? null;
+      expect(await offered()).toBeNull();
+
+      await items.merge({
+        ...AS_OPERATOR,
+        itemId: loser.id,
+        intoItemId: survivor.id,
+      });
+
+      const rows = dataSource.getRepository(SupermarketItem);
+      expect(
+        await rows.findOneBy({
+          itemId: survivor.id,
+          priceScopeId: otherNationalId,
+        })
+      ).toMatchObject({ available: true });
+      expect(await rows.countBy({ itemId: loser.id })).toBe(0);
+      expect(Number((await offered())?.price)).toBe(1.05);
+    });
+
     it('writes the trail of both products as updates, never as a delete', async () => {
       const loser = await product('Leche trail perdida');
       const survivor = await product('Leche trail queda');
@@ -888,7 +928,10 @@ describeIntegration('a product merge (real Postgres)', () => {
       );
       const groups = dataSource.getRepository(ProductGroup);
       const group = await groups.save(
-        groups.create({ name: { es: 'Leches', en: 'Milks' } })
+        groups.create({
+          name: { es: 'Leches', en: 'Milks' },
+          slug: 'plan0239-merged-row-group',
+        })
       );
       await refused(
         items.update({

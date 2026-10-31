@@ -10,6 +10,7 @@ import {
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   packCountOf,
+  PriceSourceKind,
   PRODUCT_GROUP_MEMBERS_MAX,
   readGtin,
   toBaseUnit,
@@ -2557,7 +2558,23 @@ export class ItemService {
     );
     // The materialized row of a scope the survivor has none at moves, because
     // it carries `available`, which no price row holds. Where the survivor
-    // has one, its own stays and the merged row's derived copy goes.
+    // has one, its own stays and the merged row's derived copy goes, but not
+    // before the survivor takes its `available`: a scope that offered either
+    // product offers the survivor, as a scope that any shop says true of is
+    // true (plan 0084). The recompute below never touches that column. A row
+    // whose price a person set is the person's, and is left alone.
+    await manager.query(
+      `UPDATE "supermarket_items" s
+          SET "available" = true, "updatedAt" = now()
+         FROM "supermarket_items" m
+        WHERE s."itemId" = $2
+          AND m."itemId" = $1
+          AND m."priceScopeId" = s."priceScopeId"
+          AND m."available"
+          AND NOT s."available"
+          AND s."priceSourceKind" IS DISTINCT FROM $3`,
+      [itemId, intoItemId, PriceSourceKind.ADMIN]
+    );
     await manager.query(
       `DELETE FROM "supermarket_items" m
         WHERE m."itemId" = $1

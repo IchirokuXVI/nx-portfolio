@@ -118,7 +118,10 @@ survivor):
    The materialized `supermarket_items` row of a scope moves when the survivor has none
    there, because it carries `available`, which no price row holds. Where the survivor
    has one, the survivor's row stays and the merged row's copy is removed: it is derived,
-   and step 2 recomputes the survivor's rows from the moved prices. The chain photo
+   and step 2 recomputes the survivor's rows from the moved prices. The recompute never
+   touches `available`, so before the copy goes the survivor's row takes `true` from it
+   when the merged product was offered there (plan `0084`: a scope that any shop says
+   true of is true). A row whose price a person set (`ADMIN`) is left as it is. The chain photo
    links (`item_linked_images`, plan `0198`) move too, and both products' `linkedImages`
    are refreshed in the same write.
 4. Move every `item_eans` row of the merged product to the survivor (plan `0185`). The
