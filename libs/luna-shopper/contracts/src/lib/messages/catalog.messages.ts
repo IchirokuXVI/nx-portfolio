@@ -2653,9 +2653,10 @@ export interface MergeItemResult {
    */
   repointedItemIds: string[];
   /**
-   * The harvester's queue rows that named the merged product when catalog
-   * asked, just before the write. **Not yet moved when this answers**: the
-   * harvester rewrites them when it hears `catalog.itemMerged`.
+   * The harvester's queue rows that named the merged product, or a product
+   * already merged into it, when catalog asked, just before the write. **Not
+   * yet moved when this answers**: the harvester rewrites them when it hears
+   * `catalog.itemMerged`, which is published for each of those products.
    */
   queueRows: number;
 }

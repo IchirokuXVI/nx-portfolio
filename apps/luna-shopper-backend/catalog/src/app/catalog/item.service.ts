@@ -860,7 +860,9 @@ export class ItemService {
    * formats (`item_merge_format_differs`) and two articles of one chain
    * (`item_merge_two_articles_one_chain`), the last two unless the request
    * allows them. The chains come from the harvester, asked with the
-   * operator's credential, because the queue rows live in its database.
+   * operator's credential, because the queue rows live in its database. It
+   * is asked about both products and every product already merged into
+   * either.
    *
    * A dry run runs the same transaction and rolls it back, so it answers
    * exactly what a merge writes, and it publishes nothing.
@@ -877,11 +879,31 @@ export class ItemService {
     }
     const [item, into] = await this.loadInOrder([req.itemId, req.intoItemId]);
     this.refuseMerge(item, into, req);
+    // The products already merged into either side are asked about too. The
+    // harvester moves their rows when it hears of their merge, and an event
+    // that was lost leaves the rows on their ids: those articles are still
+    // the side's, so they count for rule R28 and for `queueRows`.
+    const followers = (await this.items.query(
+      `SELECT i."id", i."mergedIntoId"
+         FROM "items" i
+        WHERE i."mergedIntoId" = $1 OR i."mergedIntoId" = $2
+        ORDER BY i."id"`,
+      [item.id, into.id]
+    )) as { id: string; mergedIntoId: string }[];
     const queue = await this.requireReferences().queueUsage(req, [
       item.id,
       into.id,
+      ...followers.map((row) => row.id),
     ]);
-    refuseSecondArticle(item.id, into.id, queue, req);
+    const sideOf = (id: string): QueueUsage =>
+      queueOfSide(queue, [
+        id,
+        ...followers
+          .filter((row) => row.mergedIntoId === id)
+          .map((row) => row.id),
+      ]);
+    const itemSide = sideOf(item.id);
+    refuseSecondArticle(item.id, into.id, itemSide, sideOf(into.id), req);
 
     const dryRun = req.dryRun === true;
     let result: MergeItemResult;
@@ -891,7 +913,7 @@ export class ItemService {
           tx,
           item.id,
           into.id,
-          queue.get(item.id)?.rowCount ?? 0,
+          itemSide.rowCount,
           req
         );
         if (dryRun) {
@@ -906,6 +928,13 @@ export class ItemService {
       throw error;
     }
     this.events.itemMerged(item.id, into.id);
+    // Each product that named the merged one names the survivor now, and is
+    // announced as merged into it. A service that already moved its rows
+    // finds nothing to move. One whose earlier event was lost moves them now,
+    // which is what `queueRows` counted them for.
+    for (const repointed of result.repointedItemIds) {
+      this.events.itemMerged(repointed, into.id);
+    }
     return result;
   }
 
@@ -3441,26 +3470,44 @@ function itemMerged(row: Item): ItemMergedException {
 }
 
 /**
+ * What the harvester holds for one side of a merge: a product and the
+ * products already merged into it, summed (plan 0239).
+ */
+function queueOfSide(
+  queue: ReadonlyMap<string, QueueUsage>,
+  itemIds: readonly string[]
+): QueueUsage {
+  const chains = new Set<string>();
+  let rowCount = 0;
+  for (const id of itemIds) {
+    const usage = queue.get(id);
+    rowCount += usage?.rowCount ?? 0;
+    for (const chain of usage?.activeSupermarketIds ?? []) {
+      chains.add(chain);
+    }
+  }
+  return { rowCount, activeSupermarketIds: [...chains].sort() };
+}
+
+/**
  * Rule R28 (plan 0239, section 1.1): two products that each hold an `ACTIVE`
  * row of one chain are two articles of that chain, and the survivor of their
- * merge would hold both. The owner allows it per pair.
+ * merge would hold both. The owner allows it per pair. Each side is a product
+ * with the products already merged into it.
  */
 function refuseSecondArticle(
   itemId: string,
   intoItemId: string,
-  queue: ReadonlyMap<string, QueueUsage>,
+  itemSide: QueueUsage,
+  intoSide: QueueUsage,
   req: Pick<MergeItemRequest, 'allowSecondArticle'>
 ): void {
   if (req.allowSecondArticle === true) {
     return;
   }
-  const held = new Set(queue.get(intoItemId)?.activeSupermarketIds ?? []);
+  const held = new Set(intoSide.activeSupermarketIds);
   const shared = [
-    ...new Set(
-      (queue.get(itemId)?.activeSupermarketIds ?? []).filter((id) =>
-        held.has(id)
-      )
-    ),
+    ...new Set(itemSide.activeSupermarketIds.filter((id) => held.has(id))),
   ].sort();
   if (shared.length > 0) {
     throw new ItemMergeTwoArticlesOneChainException(

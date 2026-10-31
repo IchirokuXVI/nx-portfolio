@@ -694,6 +694,78 @@ describeIntegration('a product merge (real Postgres)', () => {
       expect(done.mergedIntoId).toBe(other.id);
     });
 
+    it('counts the products already merged into either side, whose rows a lost event left', async () => {
+      const a = await product('Kiwi ya fusionado');
+      const b = await product('Kiwi que se fusiona');
+      const c = await product('Kiwi que queda');
+      await items.merge({ ...AS_OPERATOR, itemId: a.id, intoItemId: b.id });
+      merged.length = 0;
+      references.asked = [];
+      // The harvester never heard that A became B: its rows still name A.
+      references.queue.set(a.id, {
+        rowCount: 2,
+        activeSupermarketIds: [CHAIN_X],
+      });
+      references.queue.set(b.id, { rowCount: 1, activeSupermarketIds: [] });
+      references.queue.set(c.id, {
+        rowCount: 1,
+        activeSupermarketIds: [CHAIN_X],
+      });
+
+      const error = await refused(
+        items.merge({ ...AS_OPERATOR, itemId: b.id, intoItemId: c.id }),
+        ItemMergeTwoArticlesOneChainException
+      );
+      expect(error.details?.[ITEM_MERGE_CHAINS_DETAIL]).toEqual([CHAIN_X]);
+      expect(references.asked).toEqual([
+        { what: 'queue', itemIds: [b.id, c.id, a.id] },
+      ]);
+
+      const done = await items.merge({
+        ...AS_OPERATOR,
+        itemId: b.id,
+        intoItemId: c.id,
+        allowSecondArticle: true,
+      });
+      // B's row and A's two.
+      expect(done.queueRows).toBe(3);
+      expect(done.repointedItemIds).toEqual([a.id]);
+      // A is announced again, now onto C, so its rows move.
+      expect(merged).toEqual([
+        { itemId: b.id, intoItemId: c.id },
+        { itemId: a.id, intoItemId: c.id },
+      ]);
+    });
+
+    it('reads a product already merged into the survivor as the survivor for rule R28', async () => {
+      const early = await product('Pera ya fusionada');
+      const survivor = await product('Pera que queda');
+      const late = await product('Pera que llega');
+      await items.merge({
+        ...AS_OPERATOR,
+        itemId: early.id,
+        intoItemId: survivor.id,
+      });
+      references.queue.set(early.id, {
+        rowCount: 1,
+        activeSupermarketIds: [CHAIN_X],
+      });
+      references.queue.set(late.id, {
+        rowCount: 1,
+        activeSupermarketIds: [CHAIN_X],
+      });
+
+      const error = await refused(
+        items.merge({
+          ...AS_OPERATOR,
+          itemId: late.id,
+          intoItemId: survivor.id,
+        }),
+        ItemMergeTwoArticlesOneChainException
+      );
+      expect(error.details?.[ITEM_MERGE_CHAINS_DETAIL]).toEqual([CHAIN_X]);
+    });
+
     it('refuses a merged product on either side, the same product, and a service', async () => {
       const a = await product('Pan uno');
       const b = await product('Pan dos');

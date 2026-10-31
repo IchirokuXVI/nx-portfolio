@@ -821,7 +821,8 @@ export class AdminCatalogItemsController {
    * counts each. The harvester's queue rows
    * and the shoppers' lines move after the answer, when the harvester and
    * core hear `catalog.itemMerged`: `queueRows` is the number that named
-   * the merged product just before the write.
+   * the merged product, or a product already merged into it, just before
+   * the write.
    *
    * `dryRun` answers the same and writes nothing, as the settle route
    * does. Two articles of one chain and two formats are refused unless the

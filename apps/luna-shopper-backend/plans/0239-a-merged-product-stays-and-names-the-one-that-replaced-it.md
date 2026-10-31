@@ -174,7 +174,12 @@ pointed at the merged one, and the `mergedIntoId` and `mergedAt` that were set.
 **The queue rows are counted, not moved, by catalog.** They live in the harvester's
 database. The answer states `queueRows`, the number of rows that named the merged product
 when catalog asked the harvester just before the write, and the harvester rewrites them
-when it hears `catalog.itemMerged`, after the answer. So the answer never claims that the
+when it hears `catalog.itemMerged`, after the answer. **The products already merged into
+either side count as that side** (review of PR #886): catalog asks about them too, rule
+R28 reads each side as the product with them, and `queueRows` counts their rows. An event
+that was lost leaves their rows on their own ids, so catalog publishes
+`catalog.itemMerged` again for each product the one level rule moves onto the survivor;
+a service that already moved those rows finds nothing to move. So the answer never claims that the
 queue already agrees. Core's lines are rewritten the same way and are not counted.
 
 **A dry run answers the same and writes nothing**, as the settle route of plan `0191`
