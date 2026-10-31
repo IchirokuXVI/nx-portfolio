@@ -66,10 +66,11 @@ will ever see.
 Copy the script up and run it as root. It creates the accounts, installs the
 keys, then hands off to `install.sh` for the cluster. `host-patch.sh` goes up
 beside it: provision-host.sh installs it as `nx-host-patch`, the one program the
-weekly maintenance workflow may run as root (section 10b).
+weekly maintenance workflow may run as root (section 10b). `log-retention.sh`
+goes up too, and becomes `nx-log-retention` (section 10c).
 
 ```powershell
-scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh root@<IP>:/tmp/
+scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh k8s/bootstrap/log-retention.sh root@<IP>:/tmp/
 
 $admin  = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_admin.pub  -Raw).Trim()
 $deploy = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_deploy.pub -Raw).Trim()
@@ -467,6 +468,59 @@ sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --k3s
 
 To see what a host has, as the deploy account: `sudo nx-host-patch status`.
 
+## 10c. How long logs are kept (k8s plan 0018)
+
+The privacy policy states how long logs live: 30 days, and 7 for the
+assistant, whose lines can hold what a person said. Container logs exist only as
+the kubelet's files under `/var/log/pods`, and the kubelet bounds them by size
+and by the life of the pod, never by age. A Postgres pod that lives across
+releases keeps lines for months.
+
+`provision-host.sh` installs `nx-log-retention` and a systemd timer that runs it
+every hour. It deletes or trims each file so that no line is older than its
+rule, and `kubectl logs` reads the files as before. The rules are in
+`/etc/nx-log-retention.conf` and come from two flags, which a re-run rewrites:
+
+```sh
+sudo bash ~/nx-portfolio/k8s/bootstrap/provision-host.sh --log-days 30 --assistant-log-days 7
+```
+
+The numbers must equal `lunaShopperBackend.legal.applicationLogDays` and
+`assistantLogDays` of the velista chart, which the policy prints. The host
+cannot read the chart, so `host-health.sh` prints the rules for you to compare,
+and fails while the timer is not active. The same run sets journald to 30 days.
+
+A host provisioned before plan 0018 gets it from one run of
+`provision-host.sh`, as above. Until then the weekly host maintenance stops at
+its health check.
+
+To see what a run would do, without changing anything:
+
+```sh
+sudo nx-log-retention --dry-run
+systemctl list-timers nx-log-retention.timer
+journalctl -u nx-log-retention.service --since today
+```
+
+**Before the first trim on production, prove it on staging (V1).** The live file
+is trimmed in place, which is safe only if containerd appends with `O_APPEND`:
+
+```sh
+kubectl run v1 --image=busybox -- sh -c 'while true; do date; sleep 1; done'
+sleep 120
+echo 'default/v1 30' | sudo tee -a /etc/nx-log-retention.conf
+sudo nx-log-retention --only default/v1 --now "$(date -d '+30 days +1 minute' -Is)"
+kubectl logs v1 --tail=3                                   # new lines
+sudo grep -c $'\x00' /var/log/pods/default_v1_*/v1/0.log  # 0
+sudo ls -l /var/log/pods/default_v1_*/v1/0.log             # small, and growing
+kubectl delete pod v1
+sudo sed -i '/^default\/v1 /d' /etc/nx-log-retention.conf
+```
+
+A NUL byte, or a size that goes on from the old offset, means containerd does
+not append. Then stop the timer (`sudo systemctl disable --now
+nx-log-retention.timer`) and read section 8 of the plan before anything else.
+
 ## 11. When it goes wrong
 
 Every entry here is something that actually happened on a real bring up.
@@ -543,8 +597,9 @@ ssh-keygen -t ed25519 -C "github-actions-nx-portfolio" -f $env:USERPROFILE\.ssh\
 $admin  = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_admin.pub  -Raw).Trim()
 $deploy = (Get-Content $env:USERPROFILE\.ssh\nx_<env>_deploy.pub -Raw).Trim()
 
-# 2. accounts, keys, cluster, and nx-host-patch for the weekly maintenance
-scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh root@<IP>:/tmp/
+# 2. accounts, keys, cluster, nx-host-patch for the weekly maintenance, and
+#    nx-log-retention for the log days the privacy policy states
+scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh k8s/bootstrap/log-retention.sh root@<IP>:/tmp/
 ssh root@<IP> "bash /tmp/provision-host.sh --admin-key '$admin' --deploy-key '$deploy' --k3s"
 
 # 3. prove both logins, THEN close the door (it asks you to type 'lock root')

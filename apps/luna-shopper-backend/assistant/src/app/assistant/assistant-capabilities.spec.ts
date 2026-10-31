@@ -34,6 +34,7 @@ const BASE: AssistantConfig = {
   moderation: true,
   moderationModel: DEFAULT_MODERATION_MODEL,
   emergencyNumber: '112',
+  logTurnText: true,
   transcriberUrl: '',
   transcriberTurnTimeoutMs: 45000,
   transcriberCommentTimeoutMs: 110000,

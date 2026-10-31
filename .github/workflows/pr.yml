@@ -74,6 +74,11 @@ jobs:
       - name: Every release task states when it can run
         run: node k8s/release-tasks/check-tasks.mjs
 
+      # nx-log-retention deletes log lines on the hosts, so what it keeps and
+      # what it drops is proven on a fixture tree first (k8s plan 0018).
+      - name: The log retention program's own tests
+        run: node --test k8s/bootstrap/log-retention.test.mjs
+
       # Every deployable app ships with exactly one deploy unit, and every unit in
       # k8s/units is complete (k8s plan 0014). Plain node that reads project.json
       # as text, so it needs no Nx and `nx affected` never sees it.
