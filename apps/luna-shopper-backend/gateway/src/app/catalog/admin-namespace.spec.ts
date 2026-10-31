@@ -223,7 +223,13 @@ describe('the admin API is its own namespace', () => {
      */
     it('POST /v1/catalog/items/lookup is a read and did not move', () => {
       expect(has('post', '/v1/catalog/items/lookup')).toBe(true);
-      expect(has('post', '/v1/admin/catalog/items/lookup')).toBe(false);
+      // Plan 0237, section 3.7 gave the operator a lookup of their own, beside
+      // this one rather than instead of it: a second read behind the admin
+      // guard, which reads through and takes a batch's worth of ids. The
+      // shopper's route is where it was.
+      expect(guardsOf(CatalogItemLookupController)).toEqual([JwtAuthGuard]);
+      expect(has('post', '/v1/admin/catalog/items/lookup')).toBe(true);
+      expect(guardsOf(AdminCatalogItemsController)).toEqual([AdminJwtGuard]);
     });
 
     /**

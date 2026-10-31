@@ -2,6 +2,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ADMIN_PRICE_ITEM_IDS_MAX,
   BRAND_ORDERS,
+  BULK_DECISION_MAX_OPERATIONS,
   CATEGORY_KINDS,
   PostalCodeSource,
   PriceSourceKind,
@@ -32,6 +33,27 @@ import {
   CatalogListQueryDto,
   SearchOrderQueryDto,
 } from './catalog.dto';
+
+/**
+ * The products an operator reads at once, by id (plan 0237, section 3.7).
+ *
+ * The cap is the batch's own, {@link BULK_DECISION_MAX_OPERATIONS}, so an
+ * operator reads every product of one batch in one call before writing it.
+ * Every id is checked for shape, as the shopper's lookup checks it.
+ */
+export class AdminLookupItemsDto {
+  @ApiProperty({
+    type: [String],
+    format: 'uuid',
+    maxItems: BULK_DECISION_MAX_OPERATIONS,
+    description:
+      'The products to read, at most as many as one items batch writes. Duplicates are harmless, and an id that names nothing is absent from the answer.',
+  })
+  @IsArray()
+  @ArrayMaxSize(BULK_DECISION_MAX_OPERATIONS)
+  @IsUUID('all', { each: true })
+  ids!: string[];
+}
 
 /**
  * The query parameters the back office's catalog lists take (plan 0073, section

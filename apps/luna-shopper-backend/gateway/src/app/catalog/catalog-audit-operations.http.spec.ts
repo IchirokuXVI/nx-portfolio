@@ -1,7 +1,10 @@
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import {
+  ADMIN_TOKEN_AUDIENCE,
   ITEM_PATTERNS,
   UnitOfMeasure,
+  UserKind,
 } from '@portfolio/luna-shopper/contracts';
 import {
   BRAND_LABELS_DETAIL,
@@ -17,8 +20,11 @@ import {
   ItemKilogramHasSizeException,
   ItemUnitNotBaseException,
 } from '@portfolio/luna-shopper/platform';
+import { generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
+import { AdminJwtStrategy } from '../admin/admin-jwt.strategy';
+import { JwtStrategy } from '../auth/jwt.strategy';
 import { NatsClient } from '../messaging/nats-client';
 import { AdminCatalogItemsController } from './catalog-admin.controller';
 
@@ -479,6 +485,201 @@ describe('an audit through the admin item routes, over HTTP (plan 0237)', () => 
       } finally {
         await nest.close();
       }
+    });
+  });
+
+  describe('3.7: an admin read of many products', () => {
+    /** `n` distinct uuids, in order. */
+    const uuids = (n: number, from = 0) =>
+      Array.from(
+        { length: n },
+        (_, i) =>
+          `00000000-0000-4000-8000-${(from + i).toString(16).padStart(12, '0')}`
+      );
+
+    /** A catalog that answers every id it is asked for, except `missing`. */
+    const catalog = (missing: readonly string[] = []) => ({
+      [ITEM_PATTERNS.getMany]: (payload: Record<string, unknown>) => ({
+        items: (payload['ids'] as string[])
+          .filter((id) => !missing.includes(id))
+          .map((id) => ({ id })),
+      }),
+    });
+
+    it('reads 1,000 ids in one call, as two pages of the catalog lookup, reading through every time', async () => {
+      const ids = uuids(1000);
+      const { nest, sent, origin } = await boot(catalog([ids[7]]));
+      try {
+        const res = await send(
+          origin,
+          'POST',
+          '/v1/admin/catalog/items/lookup',
+          {
+            ids,
+          }
+        );
+        const again = await send(
+          origin,
+          'POST',
+          '/v1/admin/catalog/items/lookup',
+          { ids: ids.slice(0, 3) }
+        );
+
+        expect(res.status).toBe(201);
+        const { items } = (await res.json()) as { items: { id: string }[] };
+        // The unknown id is absent, as on the shopper's lookup.
+        expect(items).toHaveLength(999);
+        expect(items.map((item) => item.id)).not.toContain(ids[7]);
+        expect(again.status).toBe(201);
+        // Two pages for the first call, one for the second: nothing cached.
+        expect(sent.map((message) => message.subject)).toEqual([
+          ITEM_PATTERNS.getMany,
+          ITEM_PATTERNS.getMany,
+          ITEM_PATTERNS.getMany,
+        ]);
+        expect(
+          sent.map((message) => (message.payload['ids'] as string[]).length)
+        ).toEqual([500, 500, 3]);
+        // No scope and no price: the products alone.
+        expect(sent[0].payload).toEqual({ ids: ids.slice(0, 500) });
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('asks once for an id named twice', async () => {
+      const [id] = uuids(1);
+      const { nest, sent, origin } = await boot(catalog());
+      try {
+        const res = await send(
+          origin,
+          'POST',
+          '/v1/admin/catalog/items/lookup',
+          {
+            ids: [id, id],
+          }
+        );
+
+        expect(res.status).toBe(201);
+        expect(sent[0].payload).toEqual({ ids: [id] });
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it.each([
+      ['1,001 ids', { ids: uuids(1001) }],
+      ['an id that is not a uuid', { ids: ['not-a-uuid'] }],
+      ['no list', {}],
+    ])(
+      'refuses %s with validation_failed, and sends nothing',
+      async (_what, body) => {
+        const { nest, sent, origin } = await boot(catalog());
+        try {
+          const res = await send(
+            origin,
+            'POST',
+            '/v1/admin/catalog/items/lookup',
+            body
+          );
+
+          expect(res.status).toBe(400);
+          expect(await res.json()).toMatchObject({ code: 'validation_failed' });
+          expect(sent).toEqual([]);
+        } finally {
+          await nest.close();
+        }
+      }
+    );
+
+    describe('behind the real admin guard', () => {
+      const authKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const adminKeys = generateKeyPairSync('rsa', { modulusLength: 2048 });
+      const pem = (key: { export: (o: object) => string | Buffer }) =>
+        key.export({ type: 'spki', format: 'pem' }).toString();
+      const jwt = new JwtService();
+
+      beforeAll(() => {
+        // Each registers itself with passport under the name its guard asks for.
+        new JwtStrategy({
+          getOrThrow: () => ({ authJwtPublicKey: pem(authKeys.publicKey) }),
+        } as never);
+        new AdminJwtStrategy({
+          getOrThrow: () => ({ adminJwtPublicKey: pem(adminKeys.publicKey) }),
+        } as never);
+      });
+
+      async function bootGuarded() {
+        const sent: SentMessage[] = [];
+        const nest = (
+          await Test.createTestingModule({
+            controllers: [AdminCatalogItemsController],
+            providers: [
+              {
+                provide: NatsClient,
+                useValue: {
+                  send: async (
+                    subject: string,
+                    payload: Record<string, unknown>
+                  ) => {
+                    sent.push({ subject, payload });
+                    return { items: [] };
+                  },
+                },
+              },
+            ],
+          }).compile()
+        ).createNestApplication();
+        nest.useGlobalPipes(createValidationPipe());
+        nest.setGlobalPrefix('v1');
+        await nest.init();
+        await nest.listen(0);
+        const { port } = nest.getHttpServer().address() as AddressInfo;
+        return { nest, sent, origin: `http://127.0.0.1:${port}` };
+      }
+
+      function lookup(origin: string, token: string): Promise<Response> {
+        return fetch(`${origin}/v1/admin/catalog/items/lookup`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ ids: uuids(2) }),
+        });
+      }
+
+      it('refuses a shopper token and reads with an operator token', async () => {
+        const shopper = jwt.sign(
+          { sub: 'u1', kind: UserKind.REGISTERED },
+          {
+            privateKey: authKeys.privateKey,
+            algorithm: 'RS256',
+            expiresIn: '15m',
+          }
+        );
+        const operator = jwt.sign(
+          { sub: 'a1' },
+          {
+            privateKey: adminKeys.privateKey,
+            algorithm: 'RS256',
+            audience: ADMIN_TOKEN_AUDIENCE,
+            expiresIn: '15m',
+          }
+        );
+        const { nest, sent, origin } = await bootGuarded();
+        try {
+          const refused = await lookup(origin, shopper);
+          expect(refused.status).toBe(401);
+          expect(sent).toEqual([]);
+
+          const read = await lookup(origin, operator);
+          expect(read.status).toBe(201);
+          expect(sent).toHaveLength(1);
+        } finally {
+          await nest.close();
+        }
+      });
     });
   });
 });
