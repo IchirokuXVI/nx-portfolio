@@ -7,7 +7,13 @@ import {
   createValidationPipe,
   GlobalExceptionFilter,
   ITEM_EXPECTATION_FAILURES_DETAIL,
+  ITEM_GRAMS_DETAIL,
+  ITEM_UNIT_BECOMES_DETAIL,
+  ITEM_UNIT_DETAIL,
+  ITEM_UNIT_SIZE_DETAIL,
   ItemExpectationFailedException,
+  ItemKilogramHasSizeException,
+  ItemUnitNotBaseException,
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
 import { AdminJwtGuard } from '../admin/admin-jwt.guard';
@@ -217,5 +223,60 @@ describe('an audit through the admin item routes, over HTTP (plan 0237)', () => 
         await nest.close();
       }
     });
+  });
+
+  describe('3.3: the unit rules', () => {
+    it.each([
+      [
+        'item_unit_not_base',
+        () =>
+          new ItemUnitNotBaseException('LITER', {
+            details: {
+              itemId: ITEM_ID,
+              [ITEM_UNIT_DETAIL]: UnitOfMeasure.LITER,
+              [ITEM_UNIT_BECOMES_DETAIL]: UnitOfMeasure.MILLILITER,
+              [ITEM_UNIT_SIZE_DETAIL]: 1000,
+            },
+          }),
+        { defaultUnit: UnitOfMeasure.LITER, unitSize: 1 },
+      ],
+      [
+        'item_kilogram_has_size',
+        () =>
+          new ItemKilogramHasSizeException('KILOGRAM', {
+            details: {
+              itemId: ITEM_ID,
+              [ITEM_UNIT_SIZE_DETAIL]: 4000,
+              [ITEM_GRAMS_DETAIL]: 4_000_000,
+            },
+          }),
+        { defaultUnit: UnitOfMeasure.KILOGRAM },
+      ],
+    ])(
+      'answers catalog’s %s as a 400 with its details',
+      async (code, refusal, edit) => {
+        const { nest, origin } = await boot({
+          [ITEM_PATTERNS.updateMany]: () => {
+            throw refusal();
+          },
+        });
+        try {
+          const res = await send(
+            origin,
+            'PATCH',
+            '/v1/admin/catalog/items/batch',
+            { items: [{ itemId: ITEM_ID, ...edit }] }
+          );
+
+          expect(res.status).toBe(400);
+          expect(await res.json()).toMatchObject({
+            code,
+            details: refusal().details,
+          });
+        } finally {
+          await nest.close();
+        }
+      }
+    );
   });
 });

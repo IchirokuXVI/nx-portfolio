@@ -367,6 +367,13 @@ export class UpdateSupermarketLocationDto extends CreateSupermarketLocationDto {
 
 // --- Items -----------------------------------------------------------------
 
+/**
+ * The unit rules catalog holds every product write to (plan 0237, section
+ * 3.3), stated once for the create and the edit.
+ */
+const BASE_UNIT_DESCRIPTION =
+  'A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size.';
+
 export class CreateItemDto {
   @ApiProperty({ type: LocalizedTextDto })
   @ValidateNested()
@@ -442,7 +449,7 @@ export class CreateItemDto {
   @IsUUID('all', { each: true })
   categoryIds!: string[];
 
-  @ApiProperty({ enum: UnitOfMeasure })
+  @ApiProperty({ enum: UnitOfMeasure, description: BASE_UNIT_DESCRIPTION })
   @IsEnum(UnitOfMeasure)
   defaultUnit!: UnitOfMeasure;
 
@@ -617,7 +624,10 @@ export class UpdateItemDto {
   @IsUUID('all', { each: true })
   categoryIds?: string[];
 
-  @ApiPropertyOptional({ enum: UnitOfMeasure })
+  @ApiPropertyOptional({
+    enum: UnitOfMeasure,
+    description: BASE_UNIT_DESCRIPTION,
+  })
   @IsOptional()
   @IsEnum(UnitOfMeasure)
   defaultUnit?: UnitOfMeasure;

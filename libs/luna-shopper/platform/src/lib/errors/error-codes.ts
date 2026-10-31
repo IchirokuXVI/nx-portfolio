@@ -340,6 +340,22 @@ export const ERROR_CODES = {
    */
   ITEM_EXPECTATION_FAILED: 'item_expectation_failed',
   /**
+   * A product write would store `LITER` or `PACK` (plan 0237, section 3.3,
+   * and rule R9 of the first catalog's register).
+   *
+   * A product is stored in a base unit: a volume in `MILLILITER` and a count
+   * in `UNIT`. The unit that was sent and the unit and size it becomes travel
+   * in `details`, so the operator sends that instead.
+   */
+  ITEM_UNIT_NOT_BASE: 'item_unit_not_base',
+  /**
+   * A product write would store a `KILOGRAM` with a size (plan 0237, section
+   * 3.3, and rule R9). A `KILOGRAM` product is sold by weight and has no size;
+   * a weight is stored in `GRAM`. The grams the size would be travel in
+   * `details`.
+   */
+  ITEM_KILOGRAM_HAS_SIZE: 'item_kilogram_has_size',
+  /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
    * something.
@@ -665,6 +681,10 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409 like `stale_quantity`: the request is well formed, and the product
   // moved under the caller since it was read (plan 0237, section 3.2).
   [ERROR_CODES.ITEM_EXPECTATION_FAILED]: HttpStatus.CONFLICT,
+  // 400 for both: what is wrong is a value in the body, a unit the catalog
+  // does not store (plan 0237, section 3.3).
+  [ERROR_CODES.ITEM_UNIT_NOT_BASE]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: HttpStatus.BAD_REQUEST,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,

@@ -12,6 +12,8 @@ import {
   packCountOf,
   PRODUCT_GROUP_MEMBERS_MAX,
   readGtin,
+  toBaseUnit,
+  UnitOfMeasure,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsRequest,
@@ -55,8 +57,14 @@ import {
   ITEM_EAN_DETAIL,
   ITEM_EAN_HOLDER_DETAIL,
   ITEM_EXPECTATION_FAILURES_DETAIL,
+  ITEM_GRAMS_DETAIL,
+  ITEM_UNIT_BECOMES_DETAIL,
+  ITEM_UNIT_DETAIL,
+  ITEM_UNIT_SIZE_DETAIL,
   ItemEanHeldException,
   ItemExpectationFailedException,
+  ItemKilogramHasSizeException,
+  ItemUnitNotBaseException,
   NotFoundException,
   requireProductEan,
   ValidationException,
@@ -443,6 +451,8 @@ export class ItemService {
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
+    // A base unit, and no size on a kilogram (plan 0237, section 3.3).
+    requireBaseUnit(draft, {});
     // The three brand columns, in the one step every write shares (plan 0115,
     // section 4). An unregistered brand is still accepted: refusing it is the
     // curator's decision, not the catalog's.
@@ -543,6 +553,7 @@ export class ItemService {
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
       });
+      requireBaseUnit(draft, { index });
       this.applyBrand(draft, input.brand, registered);
       drafts.push({ draft, leaves });
     }
@@ -2325,6 +2336,7 @@ export class ItemService {
       const before = { ...row };
       const groupBefore = row.productGroupId;
       this.applyEdits(row, input, registered, groups.get(index));
+      requireBaseUnitOnEdit(row, input);
       const leaves =
         input.categoryIds === undefined || leavesOf === null
           ? null
@@ -2361,6 +2373,7 @@ export class ItemService {
             const before = { ...row };
             const groupBefore = row.productGroupId;
             this.applyEdits(row, input, registered, groups.get(index));
+            requireBaseUnitOnEdit(row, input);
             edits[index] = { ...edits[index], row, before, groupBefore };
           }
         }
@@ -2791,6 +2804,70 @@ export function expectationMismatches(
     }
   }
   return mismatches;
+}
+
+/**
+ * Refuse a product that would be stored in a unit the catalog does not keep
+ * (plan 0237, section 3.3, and rule R9 of the register): `LITER` and `PACK`,
+ * which become `MILLILITER` and `UNIT`, and a `KILOGRAM` with a size, which
+ * is a weight in `GRAM`. The harvester sends neither, because it converts
+ * with `toBaseUnit` before it creates a product, and the refusal names what
+ * that conversion would give.
+ *
+ * It reads the row as it will be saved, so an edit that sets `defaultUnit`
+ * alone on a sized product is refused. `where` names the product or the
+ * position of the entry in a batch.
+ */
+export function requireBaseUnit(
+  row: Pick<Item, 'unitSize' | 'defaultUnit'>,
+  where: { itemId?: string; index?: number }
+): void {
+  const unitSize = row.unitSize === null ? null : Number(row.unitSize);
+  const base = toBaseUnit(unitSize, row.defaultUnit);
+  if (
+    row.defaultUnit === UnitOfMeasure.LITER ||
+    row.defaultUnit === UnitOfMeasure.PACK
+  ) {
+    throw new ItemUnitNotBaseException(
+      `A product is not stored in ${row.defaultUnit}: send ${base.unit}` +
+        (base.unitSize === null ? '.' : ` with a size of ${base.unitSize}.`),
+      {
+        details: {
+          ...where,
+          [ITEM_UNIT_DETAIL]: row.defaultUnit,
+          [ITEM_UNIT_BECOMES_DETAIL]: base.unit,
+          [ITEM_UNIT_SIZE_DETAIL]: base.unitSize,
+        },
+      }
+    );
+  }
+  if (row.defaultUnit === UnitOfMeasure.KILOGRAM && unitSize !== null) {
+    throw new ItemKilogramHasSizeException(
+      `A product sold by the kilo has no size: send a null size, or ` +
+        `${base.unitSize} ${base.unit}.`,
+      {
+        details: {
+          ...where,
+          [ITEM_UNIT_SIZE_DETAIL]: unitSize,
+          [ITEM_GRAMS_DETAIL]: base.unitSize,
+        },
+      }
+    );
+  }
+}
+
+/**
+ * {@link requireBaseUnit} for an edit, which is checked only when it names the
+ * unit or the size. A product that already holds such a row still saves a
+ * rename, as a product that holds an old in-store barcode still does (plan
+ * 0184): the rule is about the unit a write sets, and refusing an untouched
+ * one would lock the product against every other edit until somebody fixes
+ * its unit.
+ */
+function requireBaseUnitOnEdit(row: Item, input: UpdateItemInput): void {
+  if (input.defaultUnit !== undefined || input.unitSize !== undefined) {
+    requireBaseUnit(row, { itemId: row.id });
+  }
 }
 
 /** A trimmed string, or null for an absent or blank one. */

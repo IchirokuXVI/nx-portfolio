@@ -216,6 +216,14 @@ export const ERROR_CATALOG: Record<
     en: 'A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.',
     es: 'Un producto ya no tiene lo que esta edición esperaba. Vuelve a leerlo y decide si la edición sigue siendo válida. No se ha escrito nada.',
   },
+  [ERROR_CODES.ITEM_UNIT_NOT_BASE]: {
+    en: 'A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.',
+    es: 'Un producto se guarda en una unidad base: un volumen en mililitros y un recuento en unidades. Envía la unidad y el tamaño en que se convierte.',
+  },
+  [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: {
+    en: 'A product sold by the kilo has no size. Clear the size, or store the weight in grams.',
+    es: 'Un producto que se vende por kilo no tiene tamaño. Quita el tamaño o guarda el peso en gramos.',
+  },
   [ERROR_CODES.CATEGORY_IN_USE]: {
     en: 'This category still holds categories or products, or a shop section covers it. Move them, or take it off the section, before deleting it.',
     es: 'Esta categoría todavía contiene categorías o productos, o la cubre una sección de una tienda. Muévelos, o quítala de la sección, antes de borrarla.',

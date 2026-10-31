@@ -133,7 +133,7 @@ describe('ItemService', () => {
         userId: 'intruder',
         name: { en: 'Milk', es: 'Leche' },
         categoryIds: ['milk'],
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(items.save).not.toHaveBeenCalled();
@@ -143,7 +143,7 @@ describe('ItemService', () => {
         userId: ADMIN,
         name: { en: 'Milk', es: 'Leche' },
         categoryIds: ['milk'],
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
       })
     ).resolves.toMatchObject({ name: { en: 'Milk', es: 'Leche' } });
   });
@@ -159,7 +159,7 @@ describe('ItemService', () => {
       userId: ADMIN,
       name: { en: 'Milk', es: 'Leche' },
       categoryIds: ['milk'],
-      defaultUnit: UnitOfMeasure.LITER,
+      defaultUnit: UnitOfMeasure.MILLILITER,
       productGroupId: 'g1',
     });
 
@@ -178,7 +178,7 @@ describe('ItemService', () => {
         sku: null,
         ean: null,
         unitSize: null,
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
         productGroupId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -512,7 +512,7 @@ describe('ItemService', () => {
         sku: null,
         ean: null,
         unitSize: null,
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
         productGroupId: null,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -553,7 +553,7 @@ describe('ItemService', () => {
       return {
         name: { es: 'Leche' },
         categoryIds: ['milk'],
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
         ...overrides,
       };
     }
@@ -666,7 +666,7 @@ describe('ItemService', () => {
       ean: null,
       unitSize: 6,
       packCount: 6,
-      defaultUnit: UnitOfMeasure.LITER,
+      defaultUnit: UnitOfMeasure.MILLILITER,
       productGroupId: null,
     };
 
@@ -684,7 +684,7 @@ describe('ItemService', () => {
         userId: ADMIN,
         name: { es: 'Leche' },
         categoryIds: ['milk'],
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
       });
       expect(created.packCount).toBeNull();
       expect(
@@ -698,7 +698,7 @@ describe('ItemService', () => {
         userId: ADMIN,
         name: { es: 'Leche' },
         categoryIds: ['milk'],
-        defaultUnit: UnitOfMeasure.LITER,
+        defaultUnit: UnitOfMeasure.MILLILITER,
         packCount: 6,
       });
       expect(created.packCount).toBe(6);
@@ -1344,7 +1344,7 @@ describe('ItemService', () => {
           sku: null,
           ean: null,
           unitSize: 1,
-          defaultUnit: UnitOfMeasure.LITER,
+          defaultUnit: UnitOfMeasure.MILLILITER,
           productGroupId: null,
         })),
       } as unknown as Repository<Item>;
@@ -1358,7 +1358,7 @@ describe('ItemService', () => {
           userId: ADMIN,
           name: { en: 'Milk', es: 'Leche' },
           categoryIds: ['milk'],
-          defaultUnit: UnitOfMeasure.LITER,
+          defaultUnit: UnitOfMeasure.MILLILITER,
           ean: '8480000123459',
         })
       ).rejects.toBeInstanceOf(ConflictException);
@@ -1386,7 +1386,7 @@ describe('ItemService', () => {
             {
               name: { es: 'Leche' },
               categoryIds: ['milk'],
-              defaultUnit: UnitOfMeasure.LITER,
+              defaultUnit: UnitOfMeasure.MILLILITER,
               ean: '8480000123459',
             },
           ],
@@ -1406,7 +1406,7 @@ describe('ItemService', () => {
             {
               name: { es: 'Leche' },
               categoryIds: ['milk'],
-              defaultUnit: UnitOfMeasure.LITER,
+              defaultUnit: UnitOfMeasure.MILLILITER,
               ean: '8480000123459',
             },
           ],
@@ -1428,7 +1428,7 @@ describe('ItemService', () => {
           userId: ADMIN,
           name: { en: 'Milk', es: 'Leche' },
           categoryIds: ['milk'],
-          defaultUnit: UnitOfMeasure.LITER,
+          defaultUnit: UnitOfMeasure.MILLILITER,
         })
       ).rejects.toThrow('the database went away');
     });
@@ -1595,7 +1595,7 @@ describe('ItemService', () => {
     const draft = {
       userId: ADMIN,
       name: { es: 'Leche' },
-      defaultUnit: UnitOfMeasure.LITER,
+      defaultUnit: UnitOfMeasure.MILLILITER,
     };
 
     it('writes the leaves in the order meant, and answers them', async () => {

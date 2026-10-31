@@ -1,11 +1,18 @@
 import { JwtService } from '@nestjs/jwt';
 import {
+  toBaseUnit,
   UnitOfMeasure,
   type ItemExpectationFailure,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ITEM_EXPECTATION_FAILURES_DETAIL,
+  ITEM_GRAMS_DETAIL,
+  ITEM_UNIT_BECOMES_DETAIL,
+  ITEM_UNIT_DETAIL,
+  ITEM_UNIT_SIZE_DETAIL,
   ItemExpectationFailedException,
+  ItemKilogramHasSizeException,
+  ItemUnitNotBaseException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -305,6 +312,177 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
         field: 'name',
         actual: { es: 'Galletas de chocolate', en: 'Chocolate biscuits' },
       });
+    });
+  });
+
+  describe('3.3: the unit rules the service left to the tools', () => {
+    async function caught(work: Promise<unknown>): Promise<unknown> {
+      return work.then(
+        () => {
+          throw new Error('expected the write to be refused');
+        },
+        (error: unknown) => error
+      );
+    }
+
+    it('refuses KILOGRAM alone on a product sized 4000 GRAM, naming the grams, and writes nothing', async () => {
+      const product = await newProduct();
+
+      const error = await caught(
+        items.updateMany({
+          userId: OPERATOR,
+          items: [{ itemId: product.id, defaultUnit: UnitOfMeasure.KILOGRAM }],
+        })
+      );
+
+      expect(error).toBeInstanceOf(ItemKilogramHasSizeException);
+      expect((error as ItemKilogramHasSizeException).details).toEqual({
+        itemId: product.id,
+        [ITEM_UNIT_SIZE_DETAIL]: 4000,
+        [ITEM_GRAMS_DETAIL]: 4_000_000,
+      });
+      const [kept] = (await items.getMany({ ids: [product.id] })).items;
+      expect(kept).toMatchObject({
+        defaultUnit: UnitOfMeasure.GRAM,
+        unitSize: 4000,
+      });
+    });
+
+    it('applies KILOGRAM with a null size', async () => {
+      const product = await newProduct();
+
+      const { items: written } = await items.updateMany({
+        userId: OPERATOR,
+        items: [
+          {
+            itemId: product.id,
+            defaultUnit: UnitOfMeasure.KILOGRAM,
+            unitSize: null,
+          },
+        ],
+      });
+
+      expect(written[0]).toMatchObject({
+        defaultUnit: UnitOfMeasure.KILOGRAM,
+        unitSize: null,
+      });
+    });
+
+    it('refuses LITER on a create, naming the unit and the size it becomes', async () => {
+      const error = await caught(
+        items.create({
+          userId: OPERATOR,
+          name: { es: 'Leche', en: 'Milk' },
+          unitSize: 1.5,
+          defaultUnit: UnitOfMeasure.LITER,
+          categoryIds: [categoryId('milk')],
+        })
+      );
+
+      expect(error).toBeInstanceOf(ItemUnitNotBaseException);
+      expect((error as ItemUnitNotBaseException).details).toEqual({
+        [ITEM_UNIT_DETAIL]: UnitOfMeasure.LITER,
+        [ITEM_UNIT_BECOMES_DETAIL]: UnitOfMeasure.MILLILITER,
+        [ITEM_UNIT_SIZE_DETAIL]: 1500,
+      });
+    });
+
+    it('refuses LITER on an update, and PACK in a create batch by its position', async () => {
+      const product = await newProduct();
+
+      const onUpdate = await caught(
+        items.update({
+          userId: OPERATOR,
+          itemId: product.id,
+          defaultUnit: UnitOfMeasure.LITER,
+          unitSize: 1,
+        })
+      );
+      const inBatch = await caught(
+        items.createMany({
+          userId: OPERATOR,
+          items: [
+            {
+              name: { es: 'Uno', en: 'One' },
+              defaultUnit: UnitOfMeasure.UNIT,
+              categoryIds: [categoryId('eggs')],
+            },
+            {
+              name: { es: 'Seis', en: 'Six' },
+              unitSize: 6,
+              defaultUnit: UnitOfMeasure.PACK,
+              categoryIds: [categoryId('eggs')],
+            },
+          ],
+        })
+      );
+
+      expect(onUpdate).toBeInstanceOf(ItemUnitNotBaseException);
+      expect((onUpdate as ItemUnitNotBaseException).details).toMatchObject({
+        itemId: product.id,
+        [ITEM_UNIT_BECOMES_DETAIL]: UnitOfMeasure.MILLILITER,
+      });
+      expect(inBatch).toBeInstanceOf(ItemUnitNotBaseException);
+      expect((inBatch as ItemUnitNotBaseException).details).toEqual({
+        index: 1,
+        [ITEM_UNIT_DETAIL]: UnitOfMeasure.PACK,
+        [ITEM_UNIT_BECOMES_DETAIL]: UnitOfMeasure.UNIT,
+        [ITEM_UNIT_SIZE_DETAIL]: 6,
+      });
+      // The first entry was valid, and the refusal of the second took it too.
+      const [{ count }] = (await dataSource.query(
+        `SELECT count(*)::int AS "count" FROM "items" WHERE "name"->>'es' = 'Uno'`
+      )) as { count: number }[];
+      expect(count).toBe(0);
+    });
+
+    it('still saves a rename of a product that already holds LITER, because the edit does not touch the unit', async () => {
+      // A row from before the rule, written past the service as a cluster
+      // could hold one. Check A3 of plan 0186 counts none in the first
+      // catalog; a cluster that holds one keeps it until a write sets a unit.
+      const old = await items.create({
+        userId: OPERATOR,
+        name: { es: 'Leche antigua', en: 'Old milk' },
+        defaultUnit: UnitOfMeasure.MILLILITER,
+        categoryIds: [categoryId('milk')],
+      });
+      await dataSource
+        .getRepository(Item)
+        .update({ id: old.id }, { defaultUnit: UnitOfMeasure.LITER });
+
+      await expect(
+        items.update({
+          userId: OPERATOR,
+          itemId: old.id,
+          name: { es: 'Leche de antes', en: 'Milk from before' },
+        })
+      ).resolves.toMatchObject({ defaultUnit: UnitOfMeasure.LITER });
+    });
+
+    it('accepts every size the harvester creates with, because it converts with toBaseUnit first', async () => {
+      // `sourceEntry.createItem` and the bulk decisions send
+      // `toBaseUnit(size, unit)` for a row with no override, and a null
+      // `KILOGRAM` for a row sold by weight (plan 0183). Every unit the row
+      // can state, sized and unsized, is created here as it would be sent.
+      const sent = Object.values(UnitOfMeasure).flatMap((unit) =>
+        [null, 0.25, 33, 4].map((size) => toBaseUnit(size, unit))
+      );
+      sent.push({ unitSize: null, unit: UnitOfMeasure.KILOGRAM });
+
+      const { items: created } = await items.createMany({
+        userId: OPERATOR,
+        items: sent.map((size, index) => ({
+          name: { es: `Fila ${index}`, en: `Row ${index}` },
+          unitSize: size.unitSize,
+          defaultUnit: size.unit,
+          categoryIds: [categoryId('eggs')],
+        })),
+      });
+
+      expect(created).toHaveLength(sent.length);
+      expect(created.map((item) => item.defaultUnit).sort()).not.toContain(
+        UnitOfMeasure.LITER
+      );
     });
   });
 });
