@@ -1008,6 +1008,62 @@ describeIntegration('a product merge (real Postgres)', () => {
       expect(lineRefusal.details?.[ITEM_IN_USE_LINES_DETAIL]).toBe(2);
     });
 
+    it('waits for a merge that holds the row, and then refuses the merged row', async () => {
+      const doomed = await product('Queso en plena fusion');
+      const survivor = await product('Queso que recibe');
+      // A merge that is running: both rows locked as applyMerge locks them,
+      // and the mark written but not committed.
+      const merge = dataSource.createQueryRunner();
+      await merge.connect();
+      await merge.startTransaction();
+      try {
+        await merge.query(
+          `SELECT "id" FROM "items" WHERE "id" = ANY($1::uuid[])
+            ORDER BY "id" FOR UPDATE`,
+          [[doomed.id, survivor.id]]
+        );
+        await merge.query(
+          `UPDATE "items" SET "mergedIntoId" = $2, "mergedAt" = now()
+            WHERE "id" = $1`,
+          [doomed.id, survivor.id]
+        );
+
+        const deleting = items
+          .delete({ ...AS_OPERATOR, itemId: doomed.id })
+          .then(
+            () => 'deleted',
+            (error: unknown) => error
+          );
+        // The delete is waiting on the row once a statement over `items`
+        // waits on a lock. Read, not slept: a fixed sleep proves nothing.
+        const waiting = async () =>
+          (
+            (await dataSource.query(
+              `SELECT count(*)::int AS "count" FROM pg_stat_activity
+                WHERE "wait_event_type" = 'Lock'
+                  AND "query" LIKE '%"items"%'
+                  AND "pid" <> pg_backend_pid()`
+            )) as { count: number }[]
+          )[0].count;
+        const deadline = Date.now() + 10_000;
+        while ((await waiting()) === 0 && Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        expect(await waiting()).toBeGreaterThan(0);
+
+        await merge.commitTransaction();
+        const outcome = await deleting;
+
+        expect(outcome).toBeInstanceOf(ItemMergedException);
+        expect((await row(doomed.id)).mergedIntoId).toBe(survivor.id);
+      } finally {
+        if (merge.isTransactionActive) {
+          await merge.rollbackTransaction();
+        }
+        await merge.release();
+      }
+    });
+
     it('deletes a product nothing names, after asking the harvester and core', async () => {
       const lonely = await product('Queso solo');
 

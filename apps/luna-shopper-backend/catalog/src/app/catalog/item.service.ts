@@ -750,6 +750,9 @@ export class ItemService {
    * one service that deletes, to undo products a decisions file created and
    * then could not bind (plan 0100), and it is the caller that knows they are
    * orphans. Catalog still checks its own prices and merges for it.
+   *
+   * The row is locked before catalog counts what names it, so a delete and a
+   * merge of one product never both go ahead.
    */
   async delete(req: ItemIdRequest): Promise<{ id: string }> {
     const actor = await this.admin.requireAdmin(req);
@@ -769,6 +772,22 @@ export class ItemService {
       listLineCount = lines.get(row.id) ?? 0;
     }
     await this.audit.write(actor, async (tx) => {
+      // The row is locked, and read again under the lock, before anything is
+      // counted. A merge locks both of its rows the same way first, so a
+      // merge that is running makes this wait and its result is what is read
+      // here, and a merge that starts after this waits for the delete. The
+      // read above, outside the transaction, only spared the harvester and
+      // core a question about a merged row.
+      const [locked] = await tx.manager.find(Item, {
+        where: { id: row.id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!locked) {
+        throw new NotFoundException('Item not found');
+      }
+      if (locked.mergedIntoId) {
+        throw itemMerged(locked);
+      }
       const [counted] = (await tx.manager.query(
         `SELECT (SELECT count(*) FROM "item_prices" p WHERE p."itemId" = $1)::int
                   AS "priceCount",
@@ -782,22 +801,28 @@ export class ItemService {
         queueRowCount > 0 ||
         listLineCount > 0
       ) {
-        throw new ItemInUseException(
-          `Item ${row.id} is still named by ${counted.priceCount} price rows, ` +
-            `${counted.mergedFromCount} merged products, ${queueRowCount} ` +
-            `queue rows and ${listLineCount} list lines. Merge it into the ` +
-            'product that replaces it: POST /v1/admin/catalog/items/:id/merge.',
-          {
-            details: {
-              [ITEM_IN_USE_PRICES_DETAIL]: counted.priceCount,
-              [ITEM_IN_USE_MERGED_DETAIL]: counted.mergedFromCount,
-              [ITEM_IN_USE_QUEUE_DETAIL]: queueRowCount,
-              [ITEM_IN_USE_LINES_DETAIL]: listLineCount,
-            },
-          }
-        );
+        throw itemInUse(row.id, {
+          ...counted,
+          queueRowCount,
+          listLineCount,
+        });
       }
-      await tx.delete(Item, row);
+      try {
+        await tx.delete(Item, locked);
+      } catch (error) {
+        // A product merged into this one after the count. The lock above
+        // makes it unreachable; this keeps it a 409 and not a 500 if a
+        // writer ever names a survivor without locking it.
+        if (isForeignKeyViolation(error, 'fk_items_merged_into')) {
+          throw itemInUse(row.id, {
+            ...counted,
+            mergedFromCount: Math.max(1, counted.mergedFromCount),
+            queueRowCount,
+            listLineCount,
+          });
+        }
+        throw error;
+      }
     });
     return { id: req.itemId };
   }
@@ -3363,6 +3388,44 @@ function refuseMergedEdit(before: Item, row: Item): void {
   }
 }
 
+/** The refusal of a delete of a product something names (plan 0239). */
+function itemInUse(
+  itemId: string,
+  counts: {
+    priceCount: number;
+    mergedFromCount: number;
+    queueRowCount: number;
+    listLineCount: number;
+  }
+): ItemInUseException {
+  return new ItemInUseException(
+    `Item ${itemId} is still named by ${counts.priceCount} price rows, ` +
+      `${counts.mergedFromCount} merged products, ${counts.queueRowCount} ` +
+      `queue rows and ${counts.listLineCount} list lines. Merge it into the ` +
+      'product that replaces it: POST /v1/admin/catalog/items/:id/merge.',
+    {
+      details: {
+        [ITEM_IN_USE_PRICES_DETAIL]: counts.priceCount,
+        [ITEM_IN_USE_MERGED_DETAIL]: counts.mergedFromCount,
+        [ITEM_IN_USE_QUEUE_DETAIL]: counts.queueRowCount,
+        [ITEM_IN_USE_LINES_DETAIL]: counts.listLineCount,
+      },
+    }
+  );
+}
+
+/** Whether a statement failed on this foreign key. */
+function isForeignKeyViolation(error: unknown, constraint: string): boolean {
+  const driver = (
+    error as { driverError?: { code?: string; constraint?: string } }
+  ).driverError;
+  return (
+    error instanceof QueryFailedError &&
+    driver?.code === PG_FOREIGN_KEY_VIOLATION &&
+    driver.constraint === constraint
+  );
+}
+
 /** The refusal of a merged row, naming its survivor (plan 0239). */
 function itemMerged(row: Item): ItemMergedException {
   return new ItemMergedException(
@@ -3689,6 +3752,7 @@ function eanHeld(ean: string, heldBy: string): ItemEanHeldException {
 }
 
 const PG_UNIQUE_VIOLATION = '23505';
+const PG_FOREIGN_KEY_VIOLATION = '23503';
 
 /**
  * What a duplicate barcode means, in the words of the write that met it.
