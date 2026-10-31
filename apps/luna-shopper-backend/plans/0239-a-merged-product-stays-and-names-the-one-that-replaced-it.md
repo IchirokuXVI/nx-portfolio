@@ -272,27 +272,33 @@ As built:
 
 ## 5. Acceptance criteria
 
-- [ ] An integration spec on real Postgres: after a merge, the survivor holds both
+- [x] An integration spec on real Postgres: after a merge, the survivor holds both
       products' prices, the merged row still exists, and its `mergedIntoId` is set.
-- [ ] `search` for the merged product's name returns the survivor once and the merged row
+- [x] `search` for the merged product's name returns the survivor once and the merged row
       never.
-- [ ] `getMany` with the merged id returns the survivor's data and `mergedInto`.
-- [ ] A merge of B into C, when A was merged into B, leaves A pointing at C.
-- [ ] A merge of two products with different EANs moves every barcode row of the merged
+- [x] `getMany` with the merged id returns the survivor's data and `mergedInto`.
+- [x] A merge of B into C, when A was merged into B, leaves A pointing at C.
+- [x] A merge of two products with different EANs moves every barcode row of the merged
       product to the survivor; the survivor keeps its own first barcode, or takes the
       merged product's first barcode when it has none; the merged row's `items.ean` is
       null (plan `0185`).
-- [ ] A dry run answers what a merge writes and writes nothing.
-- [ ] Two `ACTIVE` rows of one chain refuse the merge with
+- [x] A dry run answers what a merge writes and writes nothing.
+- [x] Two `ACTIVE` rows of one chain refuse the merge with
       `item_merge_two_articles_one_chain`, and `allowSecondArticle` lets it through; a size
       or unit difference refuses it with `item_merge_format_differs`, and
       `allowFormatDifference` lets it through.
-- [ ] The harvester handler rewrites the queue rows, and a second delivery of the event
+- [x] The harvester handler rewrites the queue rows, and a second delivery of the event
       changes nothing.
-- [ ] The core handler leaves one `list_line_items` row when both products were on one
+- [x] The core handler leaves one `list_line_items` row when both products were on one
       line.
-- [ ] `delete` of a product with a price is refused.
-- [ ] `openapi-document.spec.ts` and `wire-types.spec.ts` pass.
+- [x] `delete` of a product with a price is refused.
+- [x] `openapi-document.spec.ts` and `wire-types.spec.ts` pass.
+
+Each is proven by a spec: `catalog/src/app/catalog/item-merge.integration.spec.ts` and
+`item-merged-reads.spec.ts`, `catalog/src/app/db/merged-items-migration.integration.spec.ts`,
+`harvester/src/app/harvest/item-merge.integration.spec.ts`,
+`core/src/app/lists/item-merged-sync.integration.spec.ts` and
+`gateway/src/app/catalog/item-merge.http.spec.ts`.
 
 ## 6. What this plan leaves out
 
