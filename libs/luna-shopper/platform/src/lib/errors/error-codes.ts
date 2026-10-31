@@ -253,6 +253,13 @@ export const ERROR_CODES = {
    */
   BRAND_IN_USE: 'brand_in_use',
   /**
+   * A batch that asked for registered brands named a label the registry does
+   * not hold, and that is not a spelling of a brand it holds (plan 0237,
+   * section 3.6). Only a batch that sends `requireRegisteredBrands` meets it.
+   * The labels that failed travel in `details`, and nothing is written.
+   */
+  BRAND_UNREGISTERED: 'brand_unregistered',
+  /**
    * A discovered place is already imported, and the write asked to import it
    * again or to reject it (plan 0152, section 5).
    *
@@ -656,6 +663,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409: the request is well formed and the caller may make it, and what
   // refuses it is the products and the spellings that still point at the brand.
   [ERROR_CODES.BRAND_IN_USE]: HttpStatus.CONFLICT,
+  // 409: the label is a well formed label, and what refuses it is the state
+  // of the registry, which a person changes (plan 0237, section 3.6).
+  [ERROR_CODES.BRAND_UNREGISTERED]: HttpStatus.CONFLICT,
   // All three 409: the request is well formed, and what refuses it is the
   // state of the place, of the catalog's shops, or of the chain's scopes
   // (plan 0152).

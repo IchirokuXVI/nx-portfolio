@@ -2320,6 +2320,14 @@ export type CreateItemInput = Omit<CreateItemRequest, 'userId'>;
  */
 export interface CreateItemsRequest extends AdminCredential {
   items: CreateItemInput[];
+  /**
+   * Refuse the whole batch when a brand it names is not in the registry and
+   * is not a spelling of a brand that is (plan 0237, section 3.6), with
+   * `brand_unregistered` and the labels. A null brand passes. Absent or false
+   * stores such a label as text with no `brandId`, as always: the harvester
+   * never sends it, because a printed brand is a reading.
+   */
+  requireRegisteredBrands?: boolean;
 }
 
 export interface CreateItemsResult {
@@ -2418,6 +2426,8 @@ export type UpdateItemInput = Omit<UpdateItemRequest, keyof AdminCredential>;
  */
 export interface UpdateItemsRequest extends AdminCredential {
   items: UpdateItemInput[];
+  /** As {@link CreateItemsRequest.requireRegisteredBrands} (plan 0237, section 3.6). */
+  requireRegisteredBrands?: boolean;
 }
 
 export interface UpdateItemsResult {

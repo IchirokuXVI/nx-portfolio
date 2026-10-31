@@ -216,6 +216,10 @@ export const ERROR_CATALOG: Record<
     en: 'A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.',
     es: 'Un producto ya no tiene lo que esta edición esperaba. Vuelve a leerlo y decide si la edición sigue siendo válida. No se ha escrito nada.',
   },
+  [ERROR_CODES.BRAND_UNREGISTERED]: {
+    en: 'The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.',
+    es: 'El registro de marcas no tiene una o más de estas marcas. Regístralas, o enlázalas con la marca que escriben, antes de guardar los productos.',
+  },
   [ERROR_CODES.ITEM_UNIT_NOT_BASE]: {
     en: 'A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.',
     es: 'Un producto se guarda en una unidad base: un volumen en mililitros y un recuento en unidades. Envía la unidad y el tamaño en que se convierte.',

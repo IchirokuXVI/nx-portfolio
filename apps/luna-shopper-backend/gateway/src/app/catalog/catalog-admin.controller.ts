@@ -588,6 +588,7 @@ export class AdminCatalogItemsController {
         ...item,
         ean: requireProductEan(item.ean),
       })),
+      requireRegisteredBrands: dto.requireRegisteredBrands,
     });
   }
 
@@ -613,6 +614,7 @@ export class AdminCatalogItemsController {
     return this.nats.send<UpdateItemsResult>(ITEM_PATTERNS.updateMany, {
       ...adminCredential(admin),
       items: dto.items,
+      requireRegisteredBrands: dto.requireRegisteredBrands,
     });
   }
 

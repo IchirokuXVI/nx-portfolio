@@ -48,6 +48,8 @@ import {
   type UpdateItemsResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BRAND_LABELS_DETAIL,
+  BrandUnregisteredException,
   clampPageSize,
   ConflictException,
   DEFAULT_LOCALE,
@@ -544,6 +546,12 @@ export class ItemService {
     const registered = await this.registeredBrands(
       req.items.map((input) => input.brand)
     );
+    if (req.requireRegisteredBrands === true) {
+      refuseUnregisteredBrands(
+        req.items.map((input) => input.brand),
+        registered
+      );
+    }
     // Every leaf the batch names, in one query too (plan 0166), and each
     // product's list checked against it before anything is written. A list of
     // slugs is resolved to ids first, in one more query (plan 0237).
@@ -670,7 +678,8 @@ export class ItemService {
       items: await this.applyUpdates(
         actor,
         req.items,
-        EAN_TAKEN_IN_UPDATE_BATCH
+        EAN_TAKEN_IN_UPDATE_BATCH,
+        req.requireRegisteredBrands === true
       ),
     };
   }
@@ -2315,7 +2324,8 @@ export class ItemService {
   private async applyUpdates(
     actor: CatalogActor,
     inputs: readonly UpdateItemInput[],
-    eanTaken: string
+    eanTaken: string,
+    requireRegisteredBrands = false
   ): Promise<ItemView[]> {
     const rows = await this.loadInOrder(inputs.map((input) => input.itemId));
     const branded = inputs.filter((input) => input.brand !== undefined);
@@ -2323,6 +2333,12 @@ export class ItemService {
       branded.length === 0
         ? new Map<string, Brand>()
         : await this.registeredBrands(branded.map((input) => input.brand));
+    if (requireRegisteredBrands) {
+      refuseUnregisteredBrands(
+        branded.map((input) => input.brand),
+        registered
+      );
+    }
     const idLists = await this.categoryIdLists(inputs);
     const named = idLists.filter((ids): ids is string[] => ids !== undefined);
     const leavesOf =
@@ -2756,6 +2772,33 @@ export class ItemService {
 
 /** A product as a view, with what the page's two lookups found for it. */
 type ItemViewer = (row: Item, offer?: ItemOfferView) => ItemView;
+
+/**
+ * Refuse a batch that asked for registered brands when a label it names is
+ * not in the registry and is not a spelling of a brand that is (plan 0237,
+ * section 3.6). `registered` already maps every spelling to its canonical
+ * brand, so a key it holds passes either way, and a spelling then stores the
+ * canonical label through `applyBrand`. A null brand, or a text with no key,
+ * means no brand and passes. Every label that failed is named, once.
+ */
+function refuseUnregisteredBrands(
+  texts: readonly (string | null | undefined)[],
+  registered: ReadonlyMap<string, Brand>
+): void {
+  const labels = new Map<string, string>();
+  for (const text of texts) {
+    const key = brandKey(text);
+    if (key !== null && !registered.has(key) && !labels.has(key)) {
+      labels.set(key, (text as string).trim());
+    }
+  }
+  if (labels.size > 0) {
+    throw new BrandUnregisteredException(
+      `The brand registry holds none of: ${[...labels.values()].join(', ')}.`,
+      { details: { [BRAND_LABELS_DETAIL]: [...labels.values()] } }
+    );
+  }
+}
 
 /**
  * A product's categories as the trail records them (plan 0237, section 3.5):

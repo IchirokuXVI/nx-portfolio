@@ -1,3 +1,4 @@
+import { applyDecorators } from '@nestjs/common';
 import {
   ApiProperty,
   ApiPropertyOptional,
@@ -536,6 +537,28 @@ export class CreateItemDto {
 }
 
 /**
+ * The opt in of a batch to the brand registry (plan 0237, section 3.6), the
+ * same on the create and the update op.
+ *
+ * The value as the body spelled it, so only a JSON true or false passes: the
+ * pipe would otherwise read the string "false" as true.
+ */
+function RequireRegisteredBrandsProperty(): PropertyDecorator {
+  return applyDecorators(
+    ApiPropertyOptional({
+      default: false,
+      description:
+        'Refuse the whole batch when a brand it names is not in the registry and is not a spelling of a brand that is, with `brand_unregistered` and the labels in `details.labels` (plan 0237, section 3.6). A null brand passes, and a spelling stores the label of the brand it spells. Absent or false stores such a label as text with no brand id, as always.',
+    }),
+    Transform(({ obj }: { obj: Record<string, unknown> }) =>
+      obj?.['requireRegisteredBrands']
+    ),
+    IsOptional(),
+    IsBoolean()
+  );
+}
+
+/**
  * Several products in one transaction (plan 0100).
  *
  * The cap is stated here **and** in catalog, which is the repository's standing
@@ -555,6 +578,9 @@ export class CreateItemsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateItemDto)
   items!: CreateItemDto[];
+
+  @RequireRegisteredBrandsProperty()
+  requireRegisteredBrands?: boolean;
 }
 
 /**
@@ -756,6 +782,9 @@ export class UpdateItemsDto {
   @ValidateNested({ each: true })
   @Type(() => UpdateItemBatchEntryDto)
   items!: UpdateItemBatchEntryDto[];
+
+  @RequireRegisteredBrandsProperty()
+  requireRegisteredBrands?: boolean;
 }
 
 // --- Categories (plan 0166, sections 1 to 3) --------------------------------

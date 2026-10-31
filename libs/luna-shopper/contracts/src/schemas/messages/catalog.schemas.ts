@@ -1530,6 +1530,8 @@ const updateItemsRequest = object(
       minItems: 1,
       maxItems: BULK_DECISION_MAX_OPERATIONS,
     },
+    // Plan 0237, section 3.6: opt in, never sent by the harvester.
+    requireRegisteredBrands: boolean(),
   },
   ['userId', 'items']
 );
@@ -1785,6 +1787,8 @@ const createItemsRequest = object(
   {
     ...adminCredentialProperties,
     items: array(ref(CATALOG_SCHEMA_IDS.createItemInput)),
+    // Plan 0237, section 3.6: opt in, never sent by the harvester.
+    requireRegisteredBrands: boolean(),
   },
   ['userId', 'items']
 );

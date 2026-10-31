@@ -1,10 +1,13 @@
 import { JwtService } from '@nestjs/jwt';
 import {
+  brandKey,
   toBaseUnit,
   UnitOfMeasure,
   type ItemExpectationFailure,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BRAND_LABELS_DETAIL,
+  BrandUnregisteredException,
   CATEGORY_DETAIL,
   CATEGORY_UNKNOWN_DETAIL,
   CategoryNotALeafException,
@@ -667,6 +670,118 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
       const history = await editsOf(product.id);
       expect(history).toHaveLength(1);
       expect(history[0].after).toEqual({ categories: ['eggs', 'milk'] });
+    });
+  });
+
+  describe('3.6: a batch that refuses a brand the registry lacks', () => {
+    let pierrotId: string;
+
+    beforeAll(async () => {
+      const pierrot = await brands.findOneOrFail({ where: { key: 'pierrot' } });
+      pierrotId = pierrot.id;
+      // A spelling of Pierrot (plan 0124): its own key, linked to the brand.
+      await brands.save(
+        brands.create({
+          key: brandKey('Pierrot Piwy') as string,
+          label: 'Pierrot Piwy',
+          privateLabelSupermarketId: null,
+          canonicalBrandId: pierrot.id,
+        })
+      );
+    });
+
+    async function brandOf(itemId: string) {
+      return dataSource
+        .getRepository(Item)
+        .findOneOrFail({ where: { id: itemId } });
+    }
+
+    it('refuses the whole batch for a label the registry lacks, naming it, and writes nothing', async () => {
+      const first = await newProduct('Uno');
+      const second = await newProduct('Dos');
+
+      const error = await items
+        .updateMany({
+          userId: OPERATOR,
+          requireRegisteredBrands: true,
+          items: [
+            { itemId: first.id, brand: 'PIERROT' },
+            { itemId: second.id, brand: ' Marca Nueva ' },
+          ],
+        })
+        .then(
+          () => null,
+          (caught: unknown) => caught
+        );
+
+      expect(error).toBeInstanceOf(BrandUnregisteredException);
+      expect((error as BrandUnregisteredException).details).toEqual({
+        [BRAND_LABELS_DETAIL]: ['Marca Nueva'],
+      });
+      expect((await brandOf(second.id)).brand).toBe('Pierrot');
+    });
+
+    it('writes the same label with no brand id when the batch does not ask, as before', async () => {
+      const product = await newProduct();
+
+      await items.updateMany({
+        userId: OPERATOR,
+        items: [{ itemId: product.id, brand: 'Marca Nueva' }],
+      });
+
+      expect(await brandOf(product.id)).toMatchObject({
+        brand: 'Marca Nueva',
+        brandId: null,
+      });
+    });
+
+    it('lets a spelling through and stores the label of the brand it spells, and lets a null brand through', async () => {
+      const spelled = await newProduct('Escrita');
+      const plain = await newProduct('Sin marca');
+
+      await items.updateMany({
+        userId: OPERATOR,
+        requireRegisteredBrands: true,
+        items: [
+          { itemId: spelled.id, brand: 'PIERROT PIWY' },
+          { itemId: plain.id, brand: null },
+        ],
+      });
+
+      expect(await brandOf(spelled.id)).toMatchObject({
+        brand: 'Pierrot',
+        brandId: pierrotId,
+        brandKey: brandKey('Pierrot Piwy'),
+      });
+      expect(await brandOf(plain.id)).toMatchObject({
+        brand: null,
+        brandId: null,
+      });
+    });
+
+    it('refuses a create batch the same way', async () => {
+      const error = await items
+        .createMany({
+          userId: OPERATOR,
+          requireRegisteredBrands: true,
+          items: [
+            {
+              name: { es: 'Nueva', en: 'New' },
+              brand: 'Otra Marca',
+              defaultUnit: UnitOfMeasure.UNIT,
+              categorySlugs: ['eggs'],
+            },
+          ],
+        })
+        .then(
+          () => null,
+          (caught: unknown) => caught
+        );
+
+      expect(error).toBeInstanceOf(BrandUnregisteredException);
+      expect((error as BrandUnregisteredException).details).toEqual({
+        [BRAND_LABELS_DETAIL]: ['Otra Marca'],
+      });
     });
   });
 });

@@ -4,6 +4,8 @@ import {
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  BRAND_LABELS_DETAIL,
+  BrandUnregisteredException,
   createValidationPipe,
   GlobalExceptionFilter,
   ITEM_EXPECTATION_FAILURES_DETAIL,
@@ -393,5 +395,90 @@ describe('an audit through the admin item routes, over HTTP (plan 0237)', () => 
         }
       }
     );
+  });
+
+  describe('3.6: a batch that refuses a brand the registry lacks', () => {
+    const created = {
+      name: { es: 'Galletas', en: 'Biscuits' },
+      brand: 'Marca Nueva',
+      defaultUnit: UnitOfMeasure.GRAM,
+      categorySlugs: ['biscuits'],
+    };
+
+    it('carries the flag on both batches, and sends nothing when it is absent', async () => {
+      const { nest, sent, origin } = await boot();
+      try {
+        await send(origin, 'POST', '/v1/admin/catalog/items/batch', {
+          items: [created],
+          requireRegisteredBrands: true,
+        });
+        await send(origin, 'PATCH', '/v1/admin/catalog/items/batch', {
+          items: [{ itemId: ITEM_ID, brand: 'Marca Nueva' }],
+          requireRegisteredBrands: true,
+        });
+        await send(origin, 'PATCH', '/v1/admin/catalog/items/batch', {
+          items: [{ itemId: ITEM_ID, brand: 'Marca Nueva' }],
+        });
+
+        expect(sent[0].payload).toMatchObject({
+          requireRegisteredBrands: true,
+        });
+        expect(sent[1].payload).toMatchObject({
+          requireRegisteredBrands: true,
+        });
+        expect(sent[2].payload['requireRegisteredBrands']).toBeUndefined();
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('refuses a flag that is not a JSON boolean, and sends nothing', async () => {
+      const { nest, sent, origin } = await boot();
+      try {
+        const res = await send(
+          origin,
+          'PATCH',
+          '/v1/admin/catalog/items/batch',
+          {
+            items: [{ itemId: ITEM_ID, brand: 'Marca Nueva' }],
+            requireRegisteredBrands: 'false',
+          }
+        );
+
+        expect(res.status).toBe(400);
+        expect(sent).toEqual([]);
+      } finally {
+        await nest.close();
+      }
+    });
+
+    it('answers catalog’s refusal as 409 brand_unregistered, naming the labels', async () => {
+      const { nest, origin } = await boot({
+        [ITEM_PATTERNS.createMany]: () => {
+          throw new BrandUnregisteredException('unregistered', {
+            details: { [BRAND_LABELS_DETAIL]: ['Marca Nueva'] },
+          });
+        },
+      });
+      try {
+        const res = await send(
+          origin,
+          'POST',
+          '/v1/admin/catalog/items/batch',
+          {
+            items: [created],
+            requireRegisteredBrands: true,
+          }
+        );
+
+        expect(res.status).toBe(409);
+        expect(await res.json()).toMatchObject({
+          code: 'brand_unregistered',
+          details: { [BRAND_LABELS_DETAIL]: ['Marca Nueva'] },
+        });
+      } finally {
+        await nest.close();
+      }
+    });
   });
 });

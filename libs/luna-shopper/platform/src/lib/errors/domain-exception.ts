@@ -534,6 +534,19 @@ export class ItemExpectationFailedException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The `details` key a {@link BrandUnregisteredException} lists its labels under. */
+export const BRAND_LABELS_DETAIL = 'labels';
+
+/**
+ * A batch that asked for registered brands named labels the registry does not
+ * hold (plan 0237, section 3.6). The details are public: the labels, as the
+ * request sent them, under {@link BRAND_LABELS_DETAIL}.
+ */
+export class BrandUnregisteredException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_UNREGISTERED;
+  override readonly exposesDetails = true;
+}
+
 /**
  * The `details` keys of the two unit refusals (plan 0237, section 3.3): the
  * unit the write would store, and what the write should store instead.
