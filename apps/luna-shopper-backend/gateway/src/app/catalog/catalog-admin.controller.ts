@@ -553,7 +553,7 @@ export class AdminCatalogItemsController {
    */
   @Post()
   @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, baseUnit: true })
   async create(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemDto
@@ -580,7 +580,12 @@ export class AdminCatalogItemsController {
   @ApiContractResponse(ITEM_PATTERNS.createMany, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    baseUnit: true,
+    registeredBrands: true,
+  })
   async createMany(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemsDto
@@ -610,7 +615,13 @@ export class AdminCatalogItemsController {
    */
   @Patch('batch')
   @ApiContractResponse(ITEM_PATTERNS.updateMany)
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    baseUnit: true,
+    itemExpectation: true,
+    registeredBrands: true,
+  })
   updateMany(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: UpdateItemsDto
@@ -756,7 +767,12 @@ export class AdminCatalogItemsController {
    */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    baseUnit: true,
+    itemExpectation: true,
+  })
   update(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,
