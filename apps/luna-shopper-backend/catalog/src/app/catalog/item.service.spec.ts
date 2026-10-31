@@ -675,6 +675,8 @@ describe('ItemService', () => {
         create: jest.fn((x) => x),
         save: jest.fn(async (x) => ({ id: 'i1', ...x })),
         findOne: jest.fn(async () => ({ ...MILK })),
+        // The lock every edit takes inside its transaction (plan 0237).
+        find: jest.fn(async () => [{ ...MILK }]),
       } as unknown as Repository<Item>;
     }
 
@@ -811,21 +813,24 @@ describe('ItemService', () => {
 
     /** A catalog holding one product, with the EAN the test names. */
     function holding(ean: string | null) {
+      const row = () => ({
+        id: 'i1',
+        name: { en: 'Cheese', es: 'Queso' },
+        brand: null,
+        imageUrl: null,
+        sku: null,
+        ean,
+        unitSize: 1,
+        packCount: null,
+        defaultUnit: UnitOfMeasure.KILOGRAM,
+        productGroupId: null,
+      });
       return {
         create: jest.fn((x) => x),
         save: jest.fn(async (x) => ({ id: 'i1', ...x })),
-        findOne: jest.fn(async () => ({
-          id: 'i1',
-          name: { en: 'Cheese', es: 'Queso' },
-          brand: null,
-          imageUrl: null,
-          sku: null,
-          ean,
-          unitSize: 1,
-          packCount: null,
-          defaultUnit: UnitOfMeasure.KILOGRAM,
-          productGroupId: null,
-        })),
+        findOne: jest.fn(async () => row()),
+        // The lock every edit takes inside its transaction (plan 0237).
+        find: jest.fn(async () => [row()]),
       } as unknown as Repository<Item>;
     }
 
@@ -1331,22 +1336,25 @@ describe('ItemService', () => {
     }
 
     function refusingItems(detail?: string) {
+      const row = () => ({
+        id: 'i1',
+        name: { en: 'Milk', es: 'Leche' },
+        brand: null,
+        imageUrl: null,
+        sku: null,
+        ean: null,
+        unitSize: 1,
+        defaultUnit: UnitOfMeasure.MILLILITER,
+        productGroupId: null,
+      });
       return {
         create: jest.fn((x) => x),
         save: jest.fn(async () => {
           throw duplicateEan(detail);
         }),
-        findOne: jest.fn(async () => ({
-          id: 'i1',
-          name: { en: 'Milk', es: 'Leche' },
-          brand: null,
-          imageUrl: null,
-          sku: null,
-          ean: null,
-          unitSize: 1,
-          defaultUnit: UnitOfMeasure.MILLILITER,
-          productGroupId: null,
-        })),
+        findOne: jest.fn(async () => row()),
+        // The lock every edit takes inside its transaction (plan 0237).
+        find: jest.fn(async () => [row()]),
       } as unknown as Repository<Item>;
     }
 
@@ -1450,17 +1458,20 @@ describe('ItemService', () => {
       privateLabelSupermarketId: null,
     } as Brand;
 
+    const beer = () => ({
+      id: 'i1',
+      name: { es: 'Cerveza' },
+      brand: 'MAHOU',
+      brandKey: 'mahou',
+      brandId: null,
+    });
     const savingItems = () =>
       ({
         create: jest.fn((x) => x),
         save: jest.fn(async (x) => ({ id: 'i1', ...x })),
-        findOne: jest.fn(async () => ({
-          id: 'i1',
-          name: { es: 'Cerveza' },
-          brand: 'MAHOU',
-          brandKey: 'mahou',
-          brandId: null,
-        })),
+        findOne: jest.fn(async () => beer()),
+        // The lock every edit takes inside its transaction (plan 0237).
+        find: jest.fn(async () => [beer()]),
       }) as unknown as Repository<Item>;
 
     const draft = {

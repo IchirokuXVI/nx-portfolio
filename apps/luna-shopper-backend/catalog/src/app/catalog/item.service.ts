@@ -2384,20 +2384,23 @@ export class ItemService {
         const expecting = inputs
           .map((input, index) => ({ input, index }))
           .filter(({ input }) => input.expect != null);
+        // Every product of the request is locked here, in one statement in
+        // the order of its id, before anything is written.
+        const locked = await this.lockForEdit(
+          tx,
+          inputs.map((input) => input.itemId),
+          expecting.map(({ input }) => input.itemId)
+        );
         if (expecting.length > 0) {
-          const held = await this.lockForExpectation(
-            tx,
-            expecting.map(({ input }) => input.itemId)
-          );
           refuseFailedExpectations(
             expecting.map(({ input }) => ({
               itemId: input.itemId,
               expect: input.expect as ItemExpectation,
             })),
-            held
+            locked
           );
           for (const { input, index } of expecting) {
-            const row = held.rows.get(input.itemId) as Item;
+            const row = locked.rows.get(input.itemId) as Item;
             const before = { ...row };
             const groupBefore = row.productGroupId;
             this.applyEdits(row, input, registered, groups.get(index));
@@ -2512,20 +2515,28 @@ export class ItemService {
   }
 
   /**
-   * The rows of the products whose edits state an expectation, locked for the
-   * rest of the transaction and read through it, with the slugs of their
-   * categories (plan 0237, section 3.2).
+   * Every product of the request locked for the rest of the transaction, and
+   * read through it, with the slugs of the categories of those whose edits
+   * state an expectation (plan 0237, section 3.2).
+   *
+   * All of them in one statement ordered by id, so two requests that share
+   * products take their locks in the same order and cannot deadlock. Locking
+   * only the expecting rows, and leaving the rest to `save` in the order of
+   * the request, let two batches that name the same two products in opposite
+   * orders each hold one and wait for the other.
    *
    * Locked with no relations, because a `FOR UPDATE` fails over the outer
    * join a relation adds. Read through the transaction's own manager, never
    * through the pool.
    */
-  private async lockForExpectation(
+  private async lockForEdit(
     tx: AuditedWrite,
-    itemIds: readonly string[]
+    itemIds: readonly string[],
+    expectingIds: readonly string[]
   ): Promise<HeldItems> {
     const found = await tx.manager.find(Item, {
-      where: { id: In([...itemIds]) },
+      where: { id: In([...new Set(itemIds)]) },
+      order: { id: 'ASC' },
       lock: { mode: 'pessimistic_write' },
     });
     const rows = new Map(found.map((row) => [row.id, row]));
@@ -2535,14 +2546,14 @@ export class ItemService {
         throw new NotFoundException(`Item ${id} not found`);
       }
     }
-    const categories = await this.categories.categoriesOf(
-      [...rows.keys()],
-      tx.manager
-    );
+    const categories =
+      expectingIds.length === 0
+        ? new Map<string, CategoryOnItem[]>()
+        : await this.categories.categoriesOf([...expectingIds], tx.manager);
     return {
       rows,
       slugs: new Map(
-        [...rows.keys()].map((id) => [
+        expectingIds.map((id) => [
           id,
           (categories.get(id) ?? []).map((category) => category.slug),
         ])
