@@ -274,12 +274,21 @@ export class SupermarketLocationItemService {
     return { written: touched.length, skipped, conflicts };
   }
 
+  /**
+   * One product's row at one shop. A merged product answers its survivor's
+   * row there (plan 0239), as a read of the product by id answers the
+   * survivor: the row a merge kept on the merged product is a record, and
+   * the survivor's is the one that says what the shop carries.
+   */
   async get(
     req: GetSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
     const row = await this.rows.findOne({
       where: {
-        itemId: req.itemId,
+        itemId: toSurvivor(
+          await survivorsOf(this.rows.manager, [req.itemId]),
+          req.itemId
+        ),
         supermarketLocationId: req.supermarketLocationId,
       },
     });
@@ -294,6 +303,12 @@ export class SupermarketLocationItemService {
     );
   }
 
+  /**
+   * A shop's rows, newest first. **A row a merge kept on the merged product
+   * is not listed** (plan 0239): the survivor's row at the same shop is, and
+   * a page that showed both would list one product twice, once under a name
+   * that leaves every other list.
+   */
   async listByLocation(
     req: ListSupermarketLocationItemsRequest
   ): Promise<SupermarketLocationItemPage> {
@@ -305,6 +320,12 @@ export class SupermarketLocationItemService {
       .where('li."supermarketLocationId" = :lid', {
         lid: req.supermarketLocationId,
       })
+      .andWhere(
+        `NOT EXISTS (
+           SELECT 1 FROM "items" m
+            WHERE m."id" = li."itemId" AND m."mergedIntoId" IS NOT NULL
+         )`
+      )
       .orderBy('li.createdAt', 'DESC')
       .addOrderBy('li.id', 'DESC')
       .take(limit + 1);

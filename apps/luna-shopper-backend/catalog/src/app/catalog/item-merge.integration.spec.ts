@@ -860,6 +860,55 @@ describeIntegration('a product merge (real Postgres)', () => {
     });
   });
 
+  describe('section 2: the admin reads of a shop', () => {
+    it('lists the survivor and not the row kept on the merged product, and a get by the merged id answers the survivor', async () => {
+      const loser = await product('Pan de tienda fusion');
+      const survivor = await product('Pan de tienda queda');
+      const shops = dataSource.getRepository(SupermarketLocation);
+      const shop = await shops.save(shops.create({ supermarketId: chainId }));
+      const shopRows = dataSource.getRepository(SupermarketLocationItem);
+      await shopRows.save([
+        shopRows.create({
+          itemId: loser.id,
+          supermarketLocationId: shop.id,
+          positionInStore: 'Pasillo 3',
+        }),
+        shopRows.create({
+          itemId: survivor.id,
+          supermarketLocationId: shop.id,
+          positionInStore: 'Pasillo 4',
+        }),
+      ]);
+      await items.merge({
+        ...AS_OPERATOR,
+        itemId: loser.id,
+        intoItemId: survivor.id,
+      });
+      // The merge kept the merged product's row as a record.
+      expect(await shopRows.countBy({ itemId: loser.id })).toBe(1);
+
+      const page = await shopItems.listByLocation({
+        userId: OPERATOR,
+        supermarketLocationId: shop.id,
+      });
+      expect(page.items.map((row) => row.itemId)).toEqual([survivor.id]);
+      expect(page.items[0]).toMatchObject({
+        itemName: { es: 'Pan de tienda queda' },
+        positionInStore: 'Pasillo 4',
+      });
+
+      const one = await shopItems.get({
+        userId: OPERATOR,
+        itemId: loser.id,
+        supermarketLocationId: shop.id,
+      });
+      expect(one).toMatchObject({
+        itemId: survivor.id,
+        positionInStore: 'Pasillo 4',
+      });
+    });
+  });
+
   describe('section 2: a write that names a merged product', () => {
     /** A merged product and its survivor, merged with nothing on either. */
     async function mergedPair(name: string) {

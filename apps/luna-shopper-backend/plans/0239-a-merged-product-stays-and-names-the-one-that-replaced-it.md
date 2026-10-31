@@ -227,12 +227,28 @@ As built:
 - The admin filter is `merged=true` on `GET /v1/admin/catalog/items`
   (`SearchItemsRequest.merged`). It lists the merged rows alone, each with its **own**
   name, brand and size and with `mergedInto`, because the history is what it is for.
-- `findByEan` and `findByEans` change nothing: the barcodes moved, so they find the
-  survivor.
-- Reads outside `ItemService` still count merged rows: the dashboard's product count and
-  a brand's `itemCount`, because the merged row keeps its brand. A brand that only merged
-  rows hold is therefore refused by `brand_in_use` until those rows are given no brand. An
-  update of a merged row is allowed for that reason.
+- `findByEan` and `findByEans` find the survivor because the barcodes moved, and a
+  barcode that a merged row still holds (written before the next point) answers its
+  survivor too.
+- **A write that names a merged product lands on its survivor** (review of PR #886). The
+  event is fire and forget and a running harvest keeps the id it read, so writes to the
+  merged id go on arriving. `survivorsOf` (`catalog/merged-items.ts`) resolves them for
+  `writeItemPrices`, both availability writers, the photo link batch and `teachEans`. A
+  withdraw of run written prices that names a merged product removes nothing. `addEan`
+  on a merged row, and an update that changes its barcode or its group, are refused with
+  `item_merged`; any other edit of a merged row is allowed (see the last point).
+- The admin shop rows (`supermarketLocationItem.listByLocation`) leave out a row a merge
+  kept on the merged product, and `supermarketLocationItem.get` by a merged id answers the
+  survivor's row at that shop. The view's shape is unchanged.
+- Reads outside `ItemService` that still count merged rows, each left on purpose:
+  - The dashboard's product count. It counts the rows of the catalog, and a figure that
+    drops by one at every merge needs a label in the back office that no plan gives it.
+  - A brand's `itemCount` and `brand_in_use`, because the merged row keeps its brand as a
+    record. A brand that only merged rows hold is refused until those rows are given no
+    brand, which is why an update of a merged row is allowed.
+  - `category_in_use` (`category.service.ts`), because the merged row keeps its categories
+    for the same reason. A category that only merged rows hold is refused until those rows
+    are moved to another category, through the same update.
 
 ## 3. Who hears about it
 
