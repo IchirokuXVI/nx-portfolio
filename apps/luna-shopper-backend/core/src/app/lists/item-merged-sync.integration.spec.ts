@@ -196,15 +196,13 @@ describeIntegration('core and a product merge (real Postgres)', () => {
       source: LineItemSource.USER,
     });
     expect((await lineOf(both.id)).itemSetHash).toBe(itemSetHash([survivor]));
-    // The removals follow the same rule on their own pair.
+    // Both lines now hold the survivor, so neither keeps a removal of it:
+    // the merged product's removal became one, and the line that held both
+    // had removed the survivor already.
     const removals = await dataSource.getRepository(ListLineGroupRemoval).find({
       where: { lineId: In([single.id, both.id]) },
     });
-    expect(
-      removals
-        .map((r) => `${r.lineId === single.id ? 'single' : 'both'}:${r.itemId}`)
-        .sort()
-    ).toEqual([`both:${survivor}`, `single:${survivor}`].sort());
+    expect(removals).toEqual([]);
     // A settlement is renamed.
     expect(
       await dataSource.getRepository(LineSettlement).countBy({ itemId: merged })
@@ -218,6 +216,48 @@ describeIntegration('core and a product merge (real Postgres)', () => {
     expect(
       emitted.filter((e) => e.event === RealtimeEvent.LineUpdated)
     ).toHaveLength(2);
+  });
+
+  it('clears a removal of the survivor on a line that holds it, whichever product was removed', async () => {
+    const merged = randomUUID();
+    const survivor = randomUUID();
+    const other = randomUUID();
+    // Holds the survivor, and had removed the merged product.
+    const holdsSurvivor = await line('Arroz', [
+      { itemId: survivor },
+      { itemId: other },
+    ]);
+    // Holds the merged product, and had removed the survivor.
+    const holdsMerged = await line('Arroz largo', [{ itemId: merged }]);
+    // Holds neither, and had removed the merged product: it stays removed.
+    const holdsNeither = await line('Arroz redondo', [{ itemId: other }]);
+    await dataSource.getRepository(ListLineGroupRemoval).insert([
+      { lineId: holdsSurvivor.id, itemId: merged },
+      { lineId: holdsMerged.id, itemId: survivor },
+      { lineId: holdsNeither.id, itemId: merged },
+    ]);
+
+    await sync.handleItemMerged({
+      eventId: randomUUID(),
+      itemId: merged,
+      intoItemId: survivor,
+    });
+
+    expect((await rowsOf(holdsSurvivor.id)).map((r) => r.itemId)).toEqual([
+      survivor,
+      other,
+    ]);
+    expect((await rowsOf(holdsMerged.id)).map((r) => r.itemId)).toEqual([
+      survivor,
+    ]);
+    const removals = await dataSource.getRepository(ListLineGroupRemoval).find({
+      where: {
+        lineId: In([holdsSurvivor.id, holdsMerged.id, holdsNeither.id]),
+      },
+    });
+    expect(removals.map((r) => [r.lineId, r.itemId])).toEqual([
+      [holdsNeither.id, survivor],
+    ]);
   });
 
   it('keeps a replayed event out through processed_events', async () => {

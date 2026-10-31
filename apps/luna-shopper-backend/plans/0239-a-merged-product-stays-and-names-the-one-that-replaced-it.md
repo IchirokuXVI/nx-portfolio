@@ -238,7 +238,9 @@ As built:
   `list_lines.itemSetHash`. Two rows of one line that end on the same product become one
   (`list_line_items` is unique on line and product, and so is
   `list_line_group_removals`). When either row was the person's (`USER`), the row that
-  stays is the person's. The touched lines bump their version and are announced to their
+  stays is the person's. A line that ends holding the survivor keeps no removal of it,
+  as every other write of a line's set clears the removal of a product the line holds
+  (`rewriteItemSet`, `moveGroupRemovals`). The touched lines bump their version and are announced to their
   lists, as a group sync announces them. These are every core column that names a
   product: `favoriteItemId` (plan `0199`) was added after this plan was written, and
   `k8s/catalog-reset/cleanup-core-catalog-refs.sh` does not name it either.

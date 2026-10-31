@@ -184,7 +184,8 @@ export class ProductGroupSyncService {
    * set holds a product once (`uq_list_line_item`). When the merged one was
    * the person's (`USER`), the row that stays becomes the person's: provenance
    * moves from `GROUP` to `USER` and never back. A removal follows the same
-   * rule on its own unique pair. A settlement is a record of a buy and has no
+   * rule on its own unique pair, and a line left holding the survivor keeps
+   * no removal of it. A settlement is a record of a buy and has no
    * such pair, so it is only renamed.
    *
    * Every line whose set or favourite moved gets a new `itemSetHash` and a
@@ -233,6 +234,30 @@ export class ProductGroupSyncService {
         await removals.delete({ id: row.id });
       } else {
         await removals.update({ id: row.id }, { itemId: to });
+      }
+    }
+    // A removal of the survivor on a line that now holds it says something
+    // the line contradicts, so it goes, as every other write of a set clears
+    // the removal of a product the line holds (`rewriteItemSet`,
+    // `moveGroupRemovals`). Two ways to get here: the line held the survivor
+    // and had removed the merged product, or it held the merged product and
+    // had removed the survivor.
+    const named = [
+      ...new Set([
+        ...held.map((row) => row.lineId),
+        ...removed.map((row) => row.lineId),
+      ]),
+    ];
+    if (named.length > 0) {
+      const holding = await items.find({
+        where: { lineId: In(named), itemId: to },
+        select: { lineId: true },
+      });
+      if (holding.length > 0) {
+        await removals.delete({
+          lineId: In(holding.map((row) => row.lineId)),
+          itemId: to,
+        });
       }
     }
 
