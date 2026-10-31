@@ -413,6 +413,30 @@ describeIntegration('the operations of a catalog audit (real Postgres)', () => {
           packCount: 12,
         });
       });
+
+      it('saves the locked row for an entry with no expectation too, so the concurrent value is kept', async () => {
+        const product = await newProduct();
+
+        await withWriteInTheWindow(harvestWritesPackCount(product.id), () =>
+          items.updateMany({
+            userId: OPERATOR,
+            items: [
+              { itemId: product.id, name: { es: 'Cambiado', en: 'Changed' } },
+            ],
+          })
+        );
+
+        const [saved] = (await items.getMany({ ids: [product.id] })).items;
+        expect(saved).toMatchObject({
+          name: { es: 'Cambiado', en: 'Changed' },
+          packCount: 12,
+        });
+        // The trail diffs against the locked row: the rename alone.
+        const [edit] = await trail.find({
+          where: { action: AuditAction.UPDATE, entityId: product.id },
+        });
+        expect(Object.keys(edit.after ?? {})).toEqual(['name']);
+      });
     });
 
     it('refuses a name whose missing half the product holds', async () => {

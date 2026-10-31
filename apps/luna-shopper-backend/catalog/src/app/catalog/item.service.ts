@@ -2846,10 +2846,8 @@ export class ItemService {
       saved = await this.audit.write(actor, async (tx) => {
         // Plan 0237, section 3.2: every entry that states what it expects is
         // compared with its row as the transaction holds it, before any edit
-        // is written. Each such entry is then applied again onto that row, so
-        // a field a harvest wrote since the read above is not written back.
-        // A null expectation is read as none: the gateway refuses it, but a
-        // caller on the bus is not validated by the gateway.
+        // is written. A null expectation is read as none: the gateway refuses
+        // it, but a caller on the bus is not validated by the gateway.
         const expecting = inputs
           .map((input, index) => ({ input, index }))
           .filter(({ input }) => input.expect != null);
@@ -2868,14 +2866,20 @@ export class ItemService {
             })),
             locked
           );
-          for (const { input, index } of expecting) {
-            const row = locked.rows.get(input.itemId) as Item;
-            const before = { ...row };
-            const groupBefore = row.productGroupId;
-            this.applyEdits(row, input, registered, groups.get(index));
-            requireBaseUnitOnEdit(row, input);
-            edits[index] = { ...edits[index], row, before, groupBefore };
-          }
+        }
+        // Every edit is applied again onto its locked row, and that row is
+        // what is saved, with or without an expectation. `save` writes each
+        // column that differs from the database, so saving the row read
+        // before the transaction would write back the old value of a field a
+        // harvest wrote since, though the edit never named it. The pass above
+        // stays for the refusals that need no lock.
+        for (const [index, input] of inputs.entries()) {
+          const row = locked.rows.get(input.itemId) as Item;
+          const before = { ...row };
+          const groupBefore = row.productGroupId;
+          this.applyEdits(row, input, registered, groups.get(index));
+          requireBaseUnitOnEdit(row, input);
+          edits[index] = { ...edits[index], row, before, groupBefore };
         }
         // The categories each edit replaces, as they stand inside the
         // transaction, so the trail says what they were (plan 0237, section
