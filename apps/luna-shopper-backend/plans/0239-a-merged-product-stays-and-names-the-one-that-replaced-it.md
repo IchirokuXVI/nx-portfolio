@@ -1,3 +1,5 @@
+> **PR:** [#886](https://github.com/IchirokuXVI/nx-portfolio/pull/886)
+
 # 0239 A merged product stays, and names the one that replaced it
 
 > Picked up on 2026-10-31 from backlog `0020`, because plan `0237` (section 3.1) needs it:
