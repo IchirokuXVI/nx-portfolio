@@ -128,6 +128,9 @@
       "@portfolio/luna-shopper/shop-map/recorder": [
         "./libs/luna-shopper/shop-map/recorder/src/index.ts"
       ],
+      "@portfolio/luna-shopper/source-guard": [
+        "./libs/luna-shopper/source-guard/src/index.ts"
+      ],
       "@portfolio/luna-shopper/test-fixtures": [
         "./libs/luna-shopper/test-fixtures/src/index.ts"
       ],
