@@ -514,7 +514,9 @@ A rerun is a person's act, or the next slot of a schedule. This plan starts noth
 - The warnings list shows `SOURCE_PAUSED` and `SOURCE_RESUMED` with their sentences, and the stage
   reads `PAUSED` while a pause lasts.
 - `HarvestRunView.stopReason` is in the contract for the back office and for plan `0218`. A badge
-  or a filter on it is a back office follow up, and it needs a mock first.
+  or a filter on it is a back office follow up, and it needs a mock first. The owner asked for that
+  follow up on 2026-11-01: the schedule view says `SOURCE_FAILING` today and not why, so the follow
+  up shows the `stopReason` of the last run beside the block, and on the run row.
 
 ## 9. The contracts and the table
 
@@ -682,14 +684,15 @@ Chosen in this plan, and open to the owner's correction:
 - An isolated refusal still counts one `failed`, and the report names the first 50.
 - The policies are constants in each adapter library, not columns and not variables.
 
-**Owner** (ask, do not choose):
+**Owner** (answered 2026-11-01):
 
-1. **Does a stop count as one failure for the three failure rule?** This plan counts it, which
-   stops the schedules of a chain after three blocked walks. The other answers are "a stop
-   suspends the chain's schedules at once" and "a stop does not count, because the chain and not
-   the run was at fault".
-2. **Do DIA and Carrefour get the pause too?** This plan keeps their stop at once, because their
-   own notes say a retry deepens the block. A pause of ten minutes and one probe is milder than
-   the retry those notes describe.
-3. **Is ten minutes the pause you want?** It is twice the one block measured. A longer pause makes
-   a scheduled walk end later, and a shorter one risks a probe inside the block.
+1. **A stop counts as one failure for the three failure rule.** Three blocked walks in a row stop
+   the schedules of the chain, as plan `0206` built. The owner asked that a person can see that the
+   block, and not an error of the run, is what stopped them. `stopReason` is in the contract for
+   that. The back office follow up (section 8) shows it beside `SOURCE_FAILING` on the schedule and
+   on the run row, after a mock.
+2. **DIA and Carrefour get no pause.** The Carrefour notes record that a retry deepens the block,
+   and DIA already waits 60 s on each 403 before it counts one. Both stop at once, as the table of
+   section 3 says. Plan `0219` gives the data to revisit this.
+3. **Ten minutes is the pause.** It is a constant in each adapter library, so a later change is one
+   line.
