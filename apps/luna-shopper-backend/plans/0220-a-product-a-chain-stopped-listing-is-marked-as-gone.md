@@ -1,3 +1,5 @@
+> **PR:** [#888](https://github.com/IchirokuXVI/nx-portfolio/pull/888)
+
 # 0220: a product a chain stopped listing is marked as gone
 
 > Asked for by the owner on 2026-10-22: mark the products a chain stopped listing. Today such a
