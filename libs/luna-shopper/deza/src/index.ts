@@ -6,7 +6,8 @@
  * decorator, no `Item`, no `SupermarketItem`, no database, and every test runs
  * against checked in fixtures with no network.
  *
- * It depends on **nothing at all**, not even on `contracts`. There is no enum to
+ * It depends on almost nothing: `contracts` for one size unit type, and
+ * `source-guard` for the run's refusal guard (plan 0215). There is no enum to
  * map onto here: the source states no price, no EAN and no product id, and the
  * one identity it could offer is a description. `normalizeName` is deliberately
  * absent too, because the harvester's `matching.ts` owns it and a second copy
@@ -17,6 +18,7 @@ export { extractBrand } from './lib/brand';
 export {
   DEZA_BASE_URL,
   DEZA_PRODUCTS_PATH,
+  DEZA_REFUSAL_POLICY,
   DezaClient,
   DezaHttpError,
 } from './lib/deza.client';

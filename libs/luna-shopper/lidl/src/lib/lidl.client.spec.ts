@@ -1,7 +1,9 @@
-import searchPage from './__fixtures__/search-page.json';
+import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import productShortCode from './__fixtures__/product-short-code.json';
+import productSinglePrice from './__fixtures__/product-single-price.json';
+import searchPage from './__fixtures__/search-page.json';
 import storePage from './__fixtures__/store-page.json';
-import { LidlClient, LidlHttpError } from './lidl.client';
+import { LIDL_REFUSAL_POLICY, LidlClient, LidlHttpError } from './lidl.client';
 import type { LidlListRow } from './types';
 
 /**
@@ -36,15 +38,18 @@ function fakeFetch(answers: Array<() => Response>): {
   return { fetchImpl, calls };
 }
 
-const json = (body: unknown, status = 200): (() => Response) =>
+const json =
+  (body: unknown, status = 200): (() => Response) =>
   () =>
     new Response(JSON.stringify(body), {
       status,
       headers: { 'content-type': 'application/json' },
     });
 
-const html = (body: string, status = 200): (() => Response) =>
-  () => new Response(body, { status, headers: { 'content-type': 'text/html' } });
+const html =
+  (body: string, status = 200): (() => Response) =>
+  () =>
+    new Response(body, { status, headers: { 'content-type': 'text/html' } });
 
 /**
  * The whole walk over the index fixture: the captured page, then the empty page
@@ -140,11 +145,9 @@ describe('LidlClient.walkInStore', () => {
     const rows = await collect(client.walkInStore());
 
     expect(rows).toHaveLength(5);
-    expect(calls.map((call) => new URL(call.url).searchParams.get('offset'))).toEqual([
-      '0',
-      '2',
-      '4',
-    ]);
+    expect(
+      calls.map((call) => new URL(call.url).searchParams.get('offset'))
+    ).toEqual(['0', '2', '4']);
     expect(
       calls.every(
         (call) => new URL(call.url).searchParams.get('fetchsize') === '2'
@@ -157,7 +160,12 @@ describe('LidlClient.walkInStore', () => {
       numFound: 4,
       items: [{ gridbox: { data: { productId: 1, category: 'Food' } } }],
     };
-    const { fetchImpl } = fakeFetch([json(one), json(one), json(one), json(one)]);
+    const { fetchImpl } = fakeFetch([
+      json(one),
+      json(one),
+      json(one),
+      json(one),
+    ]);
     const client = new LidlClient({
       userAgent: USER_AGENT,
       fetchImpl,
@@ -252,10 +260,9 @@ describe('LidlClient.listStores', () => {
     expect(stores).toHaveLength(8);
     expect(calls[0].headers['x-apikey']).toBe('a-public-key');
     expect(new URL(calls[0].url).searchParams.get('country_code')).toBe('ES');
-    expect(calls.map((c) => new URL(c.url).searchParams.get('offset'))).toEqual([
-      '0',
-      '250',
-    ]);
+    expect(calls.map((c) => new URL(c.url).searchParams.get('offset'))).toEqual(
+      ['0', '250']
+    );
   });
 });
 
@@ -263,7 +270,11 @@ describe('LidlClient politeness', () => {
   it('waits on the gate before every request', async () => {
     const { fetchImpl } = fakeFetch(walkAnswers());
     const acquire = jest.fn().mockResolvedValue(undefined);
-    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl, acquire });
+    const client = new LidlClient({
+      userAgent: USER_AGENT,
+      fetchImpl,
+      acquire,
+    });
 
     await collect(client.walkInStore());
 
@@ -306,5 +317,114 @@ describe('LidlClient politeness', () => {
 
     await expect(collect(client.walkInStore())).rejects.toThrow();
     expect(calls).toEqual([]);
+  });
+});
+
+/**
+ * The run's refusal guard (plan 0215, section 4). The 200 answers are the
+ * committed fixtures and the refusals are synthesized: the guard reads the
+ * status and never the body, so no block is provoked to capture one.
+ */
+describe('LidlClient and the refusal guard', () => {
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => setImmediate(resolve));
+  const refused =
+    (status = 403): (() => Response) =>
+    () =>
+      new Response('refused', { status });
+
+  function pausingGuard() {
+    const sleeps: Array<() => void> = [];
+    const guard = new SourceGuard(LIDL_REFUSAL_POLICY, {
+      sleep: () => new Promise<void>((resolve) => sleeps.push(resolve)),
+    });
+    const endPause = async (): Promise<void> => {
+      for (let tick = 0; tick < 40; tick += 1) {
+        await settle();
+        sleeps.shift()?.();
+      }
+    };
+    return { guard, endPause };
+  }
+
+  const single = row({
+    externalId: '11671605',
+    path: '/p/producto/p11671605',
+  });
+
+  it('trips a passed guard on a run of 403, and a clean probe resumes it', async () => {
+    const { guard, endPause } = pausingGuard();
+    const { fetchImpl, calls } = fakeFetch([
+      json(searchPage),
+      json({ numFound: 494, items: [] }),
+      refused(),
+      refused(),
+      refused(),
+      refused(),
+      refused(),
+      html(productHtml(productSinglePrice)),
+    ]);
+    const client = new LidlClient({
+      userAgent: USER_AGENT,
+      fetchImpl,
+      sleepImpl: async () => undefined,
+      guard,
+    });
+
+    expect((await collect(client.walkInStore())).length).toBeGreaterThan(0);
+    for (let n = 0; n < 4; n += 1) {
+      await expect(client.getProduct(single)).rejects.toBeInstanceOf(
+        LidlHttpError
+      );
+    }
+    const tripping = client.getProduct(single);
+    await settle();
+    expect(calls).toHaveLength(7);
+
+    await endPause();
+
+    expect((await tripping)?.externalId).toBe('11671605');
+    expect(calls).toHaveLength(8);
+    expect(guard.summary().paused?.resumedAt).not.toBeNull();
+  });
+
+  it('counts a 429 as a refusal only once its retries are spent', async () => {
+    const { guard } = pausingGuard();
+    const { fetchImpl, calls } = fakeFetch([
+      refused(429),
+      refused(429),
+      html(productHtml(productSinglePrice)),
+      refused(429),
+      refused(429),
+      refused(429),
+    ]);
+    const client = new LidlClient({
+      userAgent: USER_AGENT,
+      fetchImpl,
+      sleepImpl: async () => undefined,
+      retries: 2,
+      guard,
+    });
+
+    // Two 429 and then a page: the retries absorbed them and nothing counts.
+    expect((await client.getProduct(single))?.externalId).toBe('11671605');
+    expect(guard.summary().lastStatus).toBeNull();
+    // Three 429 in a row outlive the two retries: one refusal.
+    await expect(client.getProduct(single)).rejects.toBeInstanceOf(
+      LidlHttpError
+    );
+    expect(guard.summary()).toEqual(
+      expect.objectContaining({ isolated: 1, lastStatus: 429 })
+    );
+    expect(calls).toHaveLength(6);
+  });
+
+  it('throws LidlHttpError on a 403 with no guard, as before', async () => {
+    const { fetchImpl, calls } = fakeFetch([refused()]);
+
+    await expect(
+      new LidlClient({ userAgent: USER_AGENT, fetchImpl }).getProduct(single)
+    ).rejects.toBeInstanceOf(LidlHttpError);
+    expect(calls).toHaveLength(1);
   });
 });

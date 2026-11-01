@@ -1,3 +1,7 @@
+import type {
+  RefusalPolicy,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import { pageCountOf, parseListingPage, parseTopCategories } from './listing';
 import { parseProductPage } from './product';
 import { parseLocations } from './stores';
@@ -41,6 +45,20 @@ export const ELJAMON_DEFAULT_POSTAL_CODE = '21440';
 
 const PORTLET = 'ProductosFoodPortlet_WAR_comerzziaportletsfood';
 
+/**
+ * When a run of refusals is the chain refusing this client (plan 0215,
+ * section 3): five in a row, or 20 of the last 50 answers, then one pause of
+ * ten minutes and three probes. No El Jamón block has been seen yet, so these
+ * are the numbers of the storefronts that pause.
+ */
+export const ELJAMON_REFUSAL_POLICY: Readonly<RefusalPolicy> = {
+  consecutive: 5,
+  window: { size: 50, refusals: 20 },
+  coolDowns: 1,
+  coolDownMs: 600_000,
+  probes: 3,
+};
+
 /** Thrown when the source answers something a retry cannot fix. */
 export class ElJamonHttpError extends Error {
   constructor(
@@ -70,6 +88,14 @@ const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Whether an answer is the chain refusing this client (plan 0215, section 2):
+ * a 403 at once, and a 429 once the retries it is owed are spent.
+ */
+function isRefusal(status: number, attempt: number, retries: number): boolean {
+  return status === 403 || (status === 429 && attempt >= retries);
+}
+
 export class ElJamonClient {
   /** Every request this client sent, retries included. On the run's report. */
   requests = 0;
@@ -83,6 +109,7 @@ export class ElJamonClient {
   private readonly backoffBaseMs: number;
   private readonly minIntervalMs: number;
   private readonly acquire?: () => Promise<void>;
+  private readonly guard?: SourceGuard;
   /** `JSESSIONID`, and `GCLB`, which keeps the session on one backend. */
   private readonly cookies = new Map<string, string>();
   /** The home page of the current session, which also lists the categories. */
@@ -99,6 +126,7 @@ export class ElJamonClient {
     this.backoffBaseMs = options.backoffBaseMs ?? 500;
     this.minIntervalMs = options.minIntervalMs ?? 0;
     this.acquire = options.acquire;
+    this.guard = options.guard;
   }
 
   /**
@@ -314,6 +342,7 @@ export class ElJamonClient {
     session: boolean
   ): Promise<string> {
     let attempt = 0;
+    let retriedAfterPause = false;
     for (;;) {
       this.options.signal?.throwIfAborted();
       await this.gate();
@@ -348,6 +377,8 @@ export class ElJamonClient {
           text = await response.text();
         }
       } catch (error) {
+        // No answer says nothing about a block (plan 0215, section 2).
+        this.guard?.inconclusive();
         if (this.options.signal?.aborted || attempt >= this.retries) {
           throw error;
         }
@@ -357,8 +388,27 @@ export class ElJamonClient {
       }
 
       if (text !== null) {
+        this.guard?.answered();
         return text;
       }
+      if (response.status === 404) {
+        // Not a value here, and still an answer: the chain served this client.
+        this.guard?.answered();
+        throw new ElJamonHttpError(response.status, url);
+      }
+      if (isRefusal(response.status, attempt, this.retries)) {
+        // The refusal that began a pause, or one during it, is sent again
+        // once the gate lets it through. Any other is this request's alone.
+        if (
+          this.guard?.refused(response.status, url) === 'retry' &&
+          !retriedAfterPause
+        ) {
+          retriedAfterPause = true;
+          continue;
+        }
+        throw new ElJamonHttpError(response.status, url);
+      }
+      this.guard?.inconclusive();
       if (!RETRYABLE_STATUSES.has(response.status) || attempt >= this.retries) {
         throw new ElJamonHttpError(response.status, url);
       }
@@ -415,6 +465,7 @@ export class ElJamonClient {
       await this.acquire();
       return;
     }
+    await this.guard?.admit(this.options.signal);
     if (this.minIntervalMs <= 0) {
       return;
     }

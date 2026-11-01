@@ -4,7 +4,8 @@
  *
  * Framework free by hard constraint: no TypeORM entity, no repository, no Nest
  * decorator, no `Item`, no `SupermarketItem`, no database. It depends on
- * `contracts` for the unit enum it maps onto, and on nothing else. A category
+ * `contracts` for the unit enum it maps onto, on `source-guard` for the run's
+ * refusal guard (plan 0215), and on nothing else. A category
  * is answered as a slug of the taxonomy (plan 0166), never an id.
  *
  * **What this source gives that the other two do not**: an EAN-13 on most
@@ -14,13 +15,17 @@
  * built by running every week.
  */
 
-export { LidlClient, LidlHttpError } from './lib/lidl.client';
 export {
+  LIDL_CATEGORY_MAP,
   categoryPathOf,
   isGroceryCategory,
-  LIDL_CATEGORY_MAP,
   resolveCategory,
 } from './lib/categories';
+export {
+  LIDL_REFUSAL_POLICY,
+  LidlClient,
+  LidlHttpError,
+} from './lib/lidl.client';
 export {
   normalizeListPage,
   normalizeListRow,

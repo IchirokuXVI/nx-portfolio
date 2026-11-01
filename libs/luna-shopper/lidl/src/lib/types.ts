@@ -1,4 +1,5 @@
 import type { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
+import type { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 
 /**
  * The library's public shapes (plan 0089, section 6). Nothing here is a TypeORM
@@ -194,6 +195,13 @@ export interface LidlClientOptions {
    * matter how many workers are running.
    */
   acquire?: () => Promise<void>;
+  /**
+   * The run's refusal guard (plan 0215), told the answer of every request.
+   * With an `acquire` the caller admits through the guard itself, as the
+   * harvester's does; without one this client awaits `admit` before each
+   * request. Without a guard nothing changes.
+   */
+  guard?: SourceGuard;
   /** Sequential fallback pacing, used when no `acquire` is supplied. */
   minIntervalMs?: number;
   retries?: number;

@@ -51,16 +51,16 @@
  */
 
 import {
+  SourceGuard,
+  type RefusalPolicy,
+} from '@portfolio/luna-shopper/source-guard';
+import {
   listingPath,
   pagesFor,
   walkFrontier,
   type CarrefourFrontier,
 } from './categories';
-import {
-  CarrefourBlockedError,
-  CarrefourBrowserError,
-  CarrefourHttpError,
-} from './errors';
+import { CarrefourBrowserError, CarrefourHttpError } from './errors';
 import { readCards } from './listing';
 import { readDetail, readListing } from './state';
 import {
@@ -122,7 +122,8 @@ const sleep = (ms: number): Promise<void> =>
 const BROWSER_TIMEOUT_MS = 90_000;
 
 /**
- * How many refusals in a row end the run.
+ * When the refusals end the run (plan 0090, section 13; plan 0215, section
+ * 3): three in a row, and no pause.
  *
  * Plan 0090 section 13 says a refusal aborts the run rather than retrying into
  * a deeper block, and the reason is section 5: the penalty escalates, and its
@@ -132,10 +133,18 @@ const BROWSER_TIMEOUT_MS = 90_000;
  * side, so failing the whole hour on the first would have failed every run.
  *
  * So neither refusal is ever retried, which is the rule that matters, and a run
- * gives up once they stop being isolated. The category a skipped page belonged
- * to is named in the run report, so nothing claims to have read what it did not.
+ * gives up once they stop being isolated. A pause and a probe would be a retry
+ * by another name, which is why this chain stops at once. The category a
+ * skipped page belonged to is named in the run report, so nothing claims to
+ * have read what it did not.
  */
-const CONSECUTIVE_REFUSALS = 3;
+export const CARREFOUR_REFUSAL_POLICY: Readonly<RefusalPolicy> = {
+  consecutive: 3,
+  window: null,
+  coolDowns: 0,
+  coolDownMs: 0,
+  probes: 0,
+};
 
 /** Run `work`, or raise {@link CarrefourBrowserError} when it does not answer. */
 async function withDeadline<T>(what: string, work: Promise<T>): Promise<T> {
@@ -174,8 +183,13 @@ export class CarrefourClient {
   private readonly sleep: (ms: number) => Promise<void>;
   private session: CarrefourSession | null = null;
   private lastLoadAt = 0;
-  /** Refusals since the last page that answered. See {@link CONSECUTIVE_REFUSALS}. */
-  private refusals = 0;
+  /**
+   * The run's guard, or one of this client's own from
+   * {@link CARREFOUR_REFUSAL_POLICY} when none was passed.
+   */
+  private readonly guard: SourceGuard;
+  /** Whether this client admits through the guard itself. */
+  private readonly admitsGuard: boolean;
 
   /** Pages loaded by this client, for a run that reports its own cost. */
   loads = 0;
@@ -190,6 +204,12 @@ export class CarrefourClient {
     );
     this.sleep = options.sleepImpl ?? sleep;
     this.loader = (path) => this.load(path);
+    this.guard =
+      options.guard ??
+      new SourceGuard(CARREFOUR_REFUSAL_POLICY, { sleep: this.sleep });
+    // A passed guard is admitted by the caller's `acquire`, as the run's is.
+    // This client's own guard is admitted here, since nothing else knows it.
+    this.admitsGuard = !options.guard || !options.acquire;
   }
 
   /**
@@ -301,27 +321,31 @@ export class CarrefourClient {
       // A browser that hangs or dies costs this page and not the run. The
       // session is dropped **without being awaited**, because the thing that
       // just failed to answer is the thing a close would ask, and the next load
-      // launches a fresh one.
+      // launches a fresh one. No answer says nothing about a block.
+      this.guard.inconclusive();
       this.discardSession();
       throw error;
     }
 
     if (status === 200) {
-      this.refusals = 0;
+      this.guard.answered();
       return state;
     }
     if (status === 403 || status === 429) {
-      this.refusals += 1;
       // Never retried, whichever branch this takes: a retry is what turns a
-      // refusal into a deeper block. What differs is whether the run goes on.
-      if (this.refusals >= CONSECUTIVE_REFUSALS) {
-        throw new CarrefourBlockedError(status, url, this.refusals);
-      }
+      // refusal into a deeper block. What differs is whether the run goes on:
+      // the refusal that stops it throws `SourceBlockedError` from the guard.
+      this.guard.refused(status, url);
       throw new CarrefourHttpError(status, url);
     }
-    // Anything else, a 404 or a 5xx, is this page and not the storefront. The
-    // caller records the gap and carries on.
-    this.refusals = 0;
+    // Anything else is this page and not the storefront. The caller records
+    // the gap and carries on. A 404 is an answer and clears the count; a 5xx
+    // says nothing either way and leaves it (plan 0215, section 2).
+    if (status >= 500) {
+      this.guard.inconclusive();
+    } else {
+      this.guard.answered();
+    }
     return null;
   }
 
@@ -343,6 +367,9 @@ export class CarrefourClient {
   private async pace(): Promise<void> {
     if (this.options.acquire) {
       await this.options.acquire();
+    }
+    if (this.admitsGuard) {
+      await this.guard.admit(this.options.signal);
     }
     const wait = this.lastLoadAt + this.delayMs - Date.now();
     if (wait > 0) {
