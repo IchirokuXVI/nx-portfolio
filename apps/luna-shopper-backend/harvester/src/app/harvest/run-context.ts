@@ -52,12 +52,17 @@ export class RunContext {
   private lastStage: { stage: string; label: string } | null = null;
 
   /**
-   * What the source clients await before every request: the guard, which
-   * holds every worker here while a pause lasts, and then the bucket.
+   * What the source clients await before every request: the bucket, and then
+   * the guard, which holds every worker here while a pause lasts.
+   *
+   * The guard comes last on purpose. A worker can wait in the bucket for a
+   * while, and a pause that begins during that wait must hold it too: with the
+   * guard first, it would have been admitted before the trip and would send
+   * one request into the pause.
    */
   acquire = async (): Promise<void> => {
-    await this.guard?.admit(this.signal);
     await this.bucket.acquire();
+    await this.guard?.admit(this.signal);
   };
 
   async setStage(stage: string, label: string): Promise<void> {

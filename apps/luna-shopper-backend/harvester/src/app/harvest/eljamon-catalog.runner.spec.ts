@@ -524,6 +524,91 @@ describe('ElJamonCatalogRunner', () => {
       expect(ctx.setReport).toHaveBeenCalled();
     });
 
+    it('reports the rows it never read from the listing alone, so the stored photo and category stay', async () => {
+      const controller = new AbortController();
+      const ctx = context(controller.signal);
+      const report = new RecordingRunReport();
+      // A person aborts while the second page is asked for, after 101's page
+      // was read. One worker, so the order is the listing's.
+      const runner = new TestRunner(
+        site((code) => {
+          if (code === '102') {
+            controller.abort();
+          }
+          return undefined;
+        })
+      );
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, details: HarvestDetailFetch.ALL },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+
+      expect(report.products).toEqual([
+        expect.objectContaining({
+          externalId: '101',
+          categoryPath: ['Frescos', 'Arroz'],
+          imageUrl: expect.stringContaining('101_G.jpg'),
+        }),
+      ]);
+      // An `ALL` walk was handed no ids, so every row may be held: none states
+      // a photo or a category path, and each still carries the listing price.
+      expect(report.partialProducts).toHaveLength(21);
+      for (const product of report.partialProducts) {
+        expect(product).not.toHaveProperty('imageUrl');
+        expect(product).not.toHaveProperty('categoryPath');
+        expect(product.prices).toHaveLength(1);
+      }
+      // The page the abort cut short is not a failed page.
+      expect(ctx.report).not.toHaveBeenCalledWith({ failed: 1 });
+    });
+
+    it('marks an unread row the chain holds no row for, and reads a held one from the listing', async () => {
+      const ctx = guardedContext();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(
+        site((code) =>
+          code === '101' ? new Response('', { status: 403 }) : undefined
+        )
+      );
+
+      await runner.run(
+        ctx,
+        report,
+        {
+          ...input,
+          // 200 was written from a page that failed last week, so it is
+          // asked for again and is held.
+          externalIdsWithoutEan: new Set(['200']),
+          externalIdsWithFailedDetail: new Set(['200']),
+        },
+        source
+      );
+
+      const byId = new Map(
+        [...report.products, ...report.partialProducts].map((product) => [
+          product.externalId,
+          product,
+        ])
+      );
+      expect(byId.size).toBe(22);
+      expect(byId.get('200')).toEqual({
+        externalId: '200',
+        detailFetched: false,
+        observedAt: expect.any(Date),
+        prices: [expect.objectContaining({ price: 0.45 })],
+      });
+      // Nothing is stored for 201 to clear, so it is created with the listing
+      // and marked for the next `NEW` walk.
+      expect(byId.get('201')).toMatchObject({
+        imageUrl: null,
+        categoryPath: ['BEBIDAS'],
+        extra: { [DETAIL_FAILED_KEY]: true },
+      });
+    });
+
     it('reports the rows listed so far when the stop comes in the listing', async () => {
       const ctx = guardedContext();
       const report = new RecordingRunReport();

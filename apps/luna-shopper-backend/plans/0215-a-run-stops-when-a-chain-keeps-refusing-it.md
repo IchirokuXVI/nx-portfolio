@@ -391,9 +391,11 @@ if (clears(response.status)) {
 `RunExecutor.execute` builds the guard beside the bucket, from
 `refusalPolicyOf(source?.adapterKey)`, and hands it to the `RunContext`:
 
-- `RunContext.acquire` becomes `await guard.admit(signal)` and then `await bucket.acquire()`. Every
+- `RunContext.acquire` becomes `await bucket.acquire()` and then `await guard.admit(signal)`. Every
   client of the run already awaits `acquire`, so every worker stops at the gate during a pause
-  with no change in the runners. The bucket is not touched.
+  with no change in the runners. The bucket is not touched. The guard comes after the bucket, so
+  a worker that waited in the bucket while the guard tripped is held at the gate too, and sends
+  nothing into the pause.
 - `RunContext.guard` is exposed, and each runner passes it to the clients it builds, beside
   `acquire`.
 - `onTrip` writes a `SOURCE_PAUSED` warning and sets the stage to `PAUSED` with a label such as
@@ -424,9 +426,16 @@ This plan fixes them for both causes:
 
 - `lidl-catalog.runner.ts`:90 and `carrefour-catalog.runner.ts`:87: break out of the loop on an
   aborted signal instead of throwing, then report what was read, as the loop end does today.
-- `eljamon-catalog.runner.ts`:127: report every listed row as today and then return. A product
-  whose page was not read is reported with `DETAIL_FAILED_KEY`, as a failed page is today
-  (`eljamon-catalog.runner.ts`:291 to :297), and is read again by the next `NEW` walk.
+- `eljamon-catalog.runner.ts`:127: report every listed row as today and then return. A page that
+  was asked for and failed keeps `DETAIL_FAILED_KEY`, as today (`eljamon-catalog.runner.ts`:291
+  to :297). A page the abort cut short, or never asked for, was not read, and its row depends on
+  what the chain holds. A row the chain may hold is reported from the listing alone, as a known
+  one is: `detailFetched: false` and the listing price, with no photo and no category path, so
+  the ingest leaves both as they were. A full observation would state no photo and the top level
+  category, and the ingest would clear the stored photo and category path with them. Only a
+  `NEW` walk knows which ids are held, so after an `ALL` walk every unread row is reported this
+  way. A row the chain holds none of is written with `DETAIL_FAILED_KEY`, and the next `NEW`
+  walk reads it.
 - `dia-catalog.runner.ts`:84 to :96: on `SourceBlockedError`, go on to report the products, as an
   aborted walk does. The scopes that did not finish state positives only.
 - `carrefour-catalog.runner.ts`:130 to :136 and `carrefour-detail.runner.ts`:148: return after
@@ -501,8 +510,9 @@ sixteen refused requests and not four thousand.
 - Mercadona reports every known product from the listing before the detail pool (context). A
   product whose detail was never fetched has no row, or a row with no EAN, and both are "not
   known", so the next `NEW` walk fetches exactly those.
-- El Jamón reports every listed row on a stop, and a row whose page was not read carries
-  `DETAIL_FAILED_KEY`, which `knownIds` does not count as known.
+- El Jamón reports every listed row on a stop. A row whose page failed carries
+  `DETAIL_FAILED_KEY`, which `knownIds` does not count as known. A row whose page was not read is
+  either new, and is written with `DETAIL_FAILED_KEY`, or held, and keeps the key it had (6.1).
 - LIDL, DEZA, DIA and the Carrefour crawl have no `NEW` choice. A rerun repeats the run, and what
   the stopped run wrote stays written.
 - The Carrefour detail backfill picks the rows with no EAN, so it resumes by itself.
@@ -594,6 +604,8 @@ A rerun is a person's act, or the next slot of a schedule. This plan starts noth
     `SourceBlockedError`, and `isSkippable` is false for it.
 - **`worker-pool.spec.ts`**: a `SourceBlockedError` counts neither processed nor failed, calls no
   `onError`, and the result says `stopped`.
+- **`run-context.spec.ts`**: a worker that waits in the bucket while the guard trips sends nothing
+  until the pause ends.
 - **Executor**, with fake runners:
   - a guard stop ends the run `FAILED` with `stopReason: SOURCE_BLOCKED`, the stop sentence, the
     `refusals` block, and a drained sink,
@@ -603,11 +615,14 @@ A rerun is a person's act, or the next slot of a schedule. This plan starts noth
   - a stopped run adds one to `consecutiveFailures`, and `interrupted` is false for it,
   - a stopped run under the ratio is still `FAILED`.
 - **Runners**, each with its existing fake site and a guard that stops partway:
-  - Mercadona: known products are written, no negative availability and no `assortmentComplete`
-    when the stop came in the listing walk, and the negatives are written when it came in the
-    detail phase after a whole listing walk.
+  - Mercadona: known products are written, and a stop writes no negative availability and no
+    `assortmentComplete`, whether it came in the listing walk or in the detail phase, exactly as
+    an abort does (section 6.1).
   - LIDL, El Jamón, Carrefour: the products read before the stop are reported, and the same holds
     for a person's abort.
+  - El Jamón: a walk aborted after the first detail reports every remaining listed row the chain
+    may hold with no photo and no category path, and the ingest leaves both of the stored row as
+    they were.
   - DIA: the products of the scopes walked are reported, and an unfinished scope states no
     negative.
   - DEZA: availability is stated only for products the crawl saw.

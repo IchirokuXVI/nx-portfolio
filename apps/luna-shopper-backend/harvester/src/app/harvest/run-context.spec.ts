@@ -141,6 +141,53 @@ describe('RunContext.guardWith', () => {
     expect(onStop).not.toHaveBeenCalled();
   });
 
+  it('holds a worker that was waiting in the bucket when the guard tripped', async () => {
+    const store = build().store;
+    // A bucket of one token a second, on a clock the spec moves, whose wait
+    // the spec ends by hand.
+    let clock = 0;
+    let refill: () => void = () => undefined;
+    const bucket = new TokenBucket({
+      ratePerSecond: 1,
+      burst: 1,
+      now: () => clock,
+      sleep: () =>
+        new Promise<void>((resolve) => {
+          refill = resolve;
+        }),
+    });
+    const context = new RunContext(
+      { id: RUN } as HarvestRun,
+      new AbortController().signal,
+      bucket,
+      store as unknown as HarvestRunStore
+    );
+    const guard = context.guardWith(POLICY, jest.fn());
+
+    await context.acquire();
+    let sent = false;
+    const waiting = context.acquire().then(() => {
+      sent = true;
+    });
+    await settle();
+    expect(sent).toBe(false);
+
+    // The trip comes while the second worker waits for its token.
+    expect(guard.refused(403, 'https://shop.test/p/1')).toBe('fail');
+    expect(guard.refused(403, 'https://shop.test/p/2')).toBe('retry');
+
+    // Its token arrives during the pause, and it is held at the gate.
+    clock += 1_000;
+    refill();
+    await settle();
+    expect(sent).toBe(false);
+
+    // The 60 ms pause ends, and it goes out as the one probe.
+    await waiting;
+    expect(sent).toBe(true);
+    expect(guard.summary().paused).not.toBeNull();
+  });
+
   it('writes no pause for a trip that stops the run, and hands the stop on', async () => {
     const { store, context } = build();
     const onStop = jest.fn();
