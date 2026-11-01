@@ -161,7 +161,7 @@ describeIntegration('the delisting counter (real Postgres)', () => {
   function count(
     run: number,
     at: Date,
-    listings: Array<{ scopeId: string; listed: string[] }>,
+    listings: Array<{ scopeId: string; listed: string[]; claimed?: string[] }>,
     over: Partial<DelistingInput> = {}
   ) {
     return counter.count(
@@ -208,11 +208,11 @@ describeIntegration('the delisting counter (real Postgres)', () => {
 
     const first = await count(2, day(7), [{ scopeId: S1, listed: [] }]);
     expect(first.scopes[0]).toMatchObject({ missed: 1, newlyOutOfStock: 1 });
-    // The first miss hides nothing.
+    // The first miss hides nothing and turns nothing on: no flag at all.
     expect(told).toEqual([
       {
         scopeId: S1,
-        entries: [{ itemId: ITEM(1), available: true, outOfStock: true }],
+        entries: [{ itemId: ITEM(1), outOfStock: true }],
       },
     ]);
 
@@ -273,22 +273,52 @@ describeIntegration('the delisting counter (real Postgres)', () => {
       pendingCatalog: false,
       lastCountedRunId: RUN(5),
     });
+    // It was gone and no claim of the run spoke for it, so it is sold again.
+    // The out of stock mark is the sink's positive to clear.
     expect(told).toEqual([
       {
         scopeId: S1,
-        entries: [
-          {
-            itemId: ITEM(1),
-            available: true,
-            delisted: false,
-            outOfStock: false,
-          },
-        ],
+        entries: [{ itemId: ITEM(1), available: true, delisted: false }],
       },
     ]);
     expect(
       (await entries.findOneByOrFail({ id: row.id })).delistedAt
     ).toBeNull();
+  });
+
+  it('turns no product on when a claim of the same run spoke for it at the scope', async () => {
+    // A DIA row listed again with no stock, or a Mercadona row listed again
+    // whose detail answered 404: the sink's claim landed first, and the
+    // counter's listed again statement must not override it.
+    await entry('p', { itemId: ITEM(1) });
+    await count(1, day(0), [{ scopeId: S1, listed: ['p'] }]);
+    for (const n of [1, 2, 3]) {
+      await count(1 + n, day(7 * n), [{ scopeId: S1, listed: [] }]);
+    }
+    told = [];
+
+    await count(5, day(28), [
+      { scopeId: S1, listed: ['p'], claimed: [ITEM(1)] },
+    ]);
+
+    expect(told).toEqual([
+      { scopeId: S1, entries: [{ itemId: ITEM(1), delisted: false }] },
+    ]);
+  });
+
+  it('sends only the gone mark for a pair that was out of stock and is listed again', async () => {
+    await entry('p', { itemId: ITEM(1) });
+    await count(1, day(0), [{ scopeId: S1, listed: ['p'] }]);
+    await count(2, day(7), [{ scopeId: S1, listed: [] }]);
+    told = [];
+
+    await count(3, day(14), [{ scopeId: S1, listed: ['p'] }]);
+
+    // Never turned off, so nothing turns it on; the sink's positive clears
+    // the out of stock mark.
+    expect(told).toEqual([
+      { scopeId: S1, entries: [{ itemId: ITEM(1), delisted: false }] },
+    ]);
   });
 
   it('counts the same run once, however often it is counted', async () => {
@@ -373,7 +403,7 @@ describeIntegration('the delisting counter (real Postgres)', () => {
     expect((await pairOf(second, S1))?.goneAt).not.toBeNull();
     expect(told.map((call) => call.entries)).toEqual([
       // `b`'s first miss, with `a` already gone: out of stock.
-      [{ itemId: ITEM(1), available: true, outOfStock: true }],
+      [{ itemId: ITEM(1), outOfStock: true }],
       [{ itemId: ITEM(1), available: false, delisted: true }],
     ]);
   });
@@ -392,7 +422,7 @@ describeIntegration('the delisting counter (real Postgres)', () => {
     expect(told).toEqual([
       {
         scopeId: S1,
-        entries: [{ itemId: ITEM(1), available: true, outOfStock: true }],
+        entries: [{ itemId: ITEM(1), outOfStock: true }],
       },
     ]);
     expect((await pairOf(row, S1))?.pendingCatalog).toBe(false);
@@ -421,6 +451,17 @@ describeIntegration('the delisting counter (real Postgres)', () => {
     });
     await price(theirs, OTHER_SCOPE);
     await price(mine, S1);
+    // The other chain tracks the product at its own scope, one miss in, and at
+    // the walked scope too, so a guard that forgot the chain would move both.
+    const missed = { missedWalks: 1, firstMissedAt: day(0) };
+    await presence.save([
+      presence.create({
+        entryId: theirs.id,
+        priceScopeId: OTHER_SCOPE,
+        ...missed,
+      }),
+      presence.create({ entryId: theirs.id, priceScopeId: S1, ...missed }),
+    ]);
     const snapshot = async () =>
       JSON.stringify(
         await dataSource.query(
@@ -438,7 +479,26 @@ describeIntegration('the delisting counter (real Postgres)', () => {
 
     expect((await pairOf(mine, S1))?.goneAt).not.toBeNull();
     expect(await snapshot()).toBe(before);
+    for (const scopeId of [OTHER_SCOPE, S1]) {
+      expect(await pairOf(theirs, scopeId)).toMatchObject({
+        ...missed,
+        goneAt: null,
+        lastCountedRunId: null,
+        pendingCatalog: false,
+      });
+    }
+    expect(await prices.find({ where: { entryId: theirs.id } })).toMatchObject([
+      { priceScopeId: OTHER_SCOPE, copiedFromScopeId: null },
+    ]);
+    expect((await entries.findOneByOrFail({ id: theirs.id })).delistedAt).toBe(
+      null
+    );
     expect(told.every((call) => call.scopeId === S1)).toBe(true);
+    // Catalog was told about the walked chain's row and nothing else.
+    expect(told.flatMap((call) => call.entries.map((e) => e.itemId))).toEqual([
+      ITEM(1),
+      ITEM(1),
+    ]);
   });
 
   describe('the scope diff of the sink reads the same tables (section 3)', () => {

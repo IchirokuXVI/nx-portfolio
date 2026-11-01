@@ -2586,7 +2586,14 @@ const setSupermarketItemAvailabilityRequest = object(
         delisted: boolean(),
         outOfStock: boolean(),
       },
-      required: ['itemId', 'available'],
+      required: ['itemId'],
+      // `available` may be left out when either instant is given, and an
+      // entry that states none of the three is refused (section 6.1).
+      anyOf: [
+        { required: ['available'] },
+        { required: ['delisted'] },
+        { required: ['outOfStock'] },
+      ],
       additionalProperties: false,
     }),
     onlyIfMissing: boolean(),

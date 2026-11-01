@@ -327,7 +327,7 @@ describe('SupermarketItemService', () => {
       const write = (
         svc: SupermarketItemService,
         entry: {
-          available: boolean;
+          available?: boolean;
           delisted?: boolean;
           outOfStock?: boolean;
         }
@@ -390,6 +390,33 @@ describe('SupermarketItemService', () => {
         expect(absent.saved[0].outOfStockAt).toBe(FIRST);
       });
 
+      it('keeps the flag of a row when the entry gives an instant and no flag', async () => {
+        // A 404 turned the product off at this scope, and the next whole walk
+        // missed it: the first miss marks it out of stock and sells nothing.
+        const off = over(storedRow({ available: false }));
+        await write(off.svc, { outOfStock: true });
+        expect(off.saved[0].available).toBe(false);
+        expect(off.saved[0].outOfStockAt).toBeInstanceOf(Date);
+
+        const sold = over(storedRow({ available: true, delistedAt: FIRST }));
+        await write(sold.svc, { delisted: false });
+        expect(sold.saved[0]).toMatchObject({
+          available: true,
+          delistedAt: null,
+        });
+      });
+
+      it('creates no row for an entry that gives an instant and no flag', async () => {
+        const { svc, saved, audit } = build({
+          find: jest.fn(async () => []),
+          query: jest.fn(async () => []),
+        } as unknown as Partial<Repository<SupermarketItem>>);
+        const result = await write(svc, { outOfStock: true });
+        expect(result).toEqual({ updated: 0, keptSold: 0 });
+        expect(saved).toEqual([]);
+        expect(audit.recorded).toEqual([]);
+      });
+
       it('records the instants in the trail beside the flag', async () => {
         const { svc, audit } = over(storedRow());
         await write(svc, { available: true, outOfStock: true });
@@ -430,6 +457,40 @@ describe('SupermarketItemService', () => {
           PriceSourceKind.ADMIN,
           PriceSourceKind.OFFICIAL_LEAFLET,
         ]);
+      });
+
+      it('counts kept sold only for a row that was sold and would have turned off', async () => {
+        const SOLD = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        const OFF = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+        const NONE = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+        const { svc, saved } = build({
+          find: jest.fn(async () => [
+            storedRow({ itemId: SOLD }),
+            storedRow({ itemId: OFF, available: false }),
+          ]),
+          // Each of the three holds a current person or leaflet price.
+          query: jest.fn(async () => [
+            { itemId: SOLD },
+            { itemId: OFF },
+            { itemId: NONE },
+          ]),
+        } as unknown as Partial<Repository<SupermarketItem>>);
+
+        const result = await svc.setAvailability({
+          userId: ADMIN,
+          priceScopeId: 'scope-1',
+          entries: [SOLD, OFF, NONE].map((itemId) => ({
+            itemId,
+            available: false,
+            delisted: true,
+          })),
+        });
+
+        // OFF was not sold already, and NONE had no row: the price kept
+        // neither from turning off, so only SOLD is a person's to decide.
+        expect(result.keptSold).toBe(1);
+        expect(saved.find((row) => row.itemId === SOLD)?.available).toBe(true);
+        expect(saved.find((row) => row.itemId === OFF)?.available).toBe(false);
       });
     });
   });

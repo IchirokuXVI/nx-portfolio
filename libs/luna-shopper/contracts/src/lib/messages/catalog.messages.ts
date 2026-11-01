@@ -3536,10 +3536,19 @@ export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   onlyIfMissing?: boolean;
 }
 
-/** One product of {@link SetSupermarketItemAvailabilityRequest}. */
+/**
+ * One product of {@link SetSupermarketItemAvailabilityRequest}.
+ *
+ * `available` is optional when `delisted` or `outOfStock` is given, and the
+ * schema refuses an entry that carries none of the three (plan 0220, section
+ * 6.1). Absent leaves the flag of a row that exists as it is, and creates no
+ * row where the scope has none: an entry that says nothing about whether the
+ * scope sells the product has nothing to say about a scope with no row.
+ * `onlyIfMissing` creates only from an entry that carries `available`.
+ */
 export interface SupermarketItemAvailabilityEntry {
   itemId: string;
-  available: boolean;
+  available?: boolean;
   /**
    * True sets `delistedAt` when it is null and keeps it when set, false clears
    * it, and absent leaves it as it is (plan 0220, section 6.1). Only the

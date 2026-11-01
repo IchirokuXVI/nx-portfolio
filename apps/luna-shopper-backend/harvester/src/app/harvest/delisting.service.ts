@@ -101,11 +101,13 @@ export class DelistingService {
     };
 
     const changed = new Set<string>();
+    const cameBackAt = new Map<string, readonly string[]>();
     for (const listing of input.whole) {
       const counted = await this.presence.manager.transaction((manager) =>
         this.countScope(manager, input, listing, now)
       );
       report.scopes.push(counted.report);
+      cameBackAt.set(listing.scopeId, counted.cameBack);
       for (const entryId of counted.changed) {
         changed.add(entryId);
       }
@@ -119,7 +121,11 @@ export class DelistingService {
       const sent = await this.sendPending(
         listing.scopeId,
         input.supermarketId,
-        input.copiesOf
+        input.copiesOf,
+        {
+          cameBack: cameBackAt.get(listing.scopeId) ?? [],
+          claimed: listing.claimed ?? [],
+        }
       );
       report.catalogSent += sent.sent;
       report.catalogFailed += sent.failed;
@@ -134,7 +140,12 @@ export class DelistingService {
     input: DelistingInput,
     listing: WholeListing,
     now: Date
-  ): Promise<{ report: DelistingScopeReport; changed: string[] }> {
+  ): Promise<{
+    report: DelistingScopeReport;
+    changed: string[];
+    /** The entries whose pair was gone here and this walk listed again. */
+    cameBack: string[];
+  }> {
     const scopeId = listing.scopeId;
 
     // 1. Resolve. A listed id with no row (a new product whose detail answered
@@ -173,8 +184,8 @@ export class DelistingService {
     );
 
     // 3. Listed. A pair the walk listed exists, and one that was missed or
-    // gone starts again at no miss. Catalog is told, because the first miss
-    // told it the product was out of stock.
+    // gone starts again at no miss. Catalog is told the product is not gone;
+    // the sink's positive already cleared the out of stock mark.
     await manager.query(
       `
       INSERT INTO "source_entry_scope_presence" ("entryId", "priceScopeId")
@@ -293,6 +304,7 @@ export class DelistingService {
         ...backRows.map((row) => row.entryId),
         ...gone.map((row) => row.entryId),
       ],
+      cameBack: backRows.filter((row) => row.wasGone).map((row) => row.entryId),
     };
   }
 
@@ -357,22 +369,36 @@ export class DelistingService {
    * being gone. A pair whose row is not `ACTIVE` is acknowledged with no call,
    * because catalog holds no product for it. A batch catalog refused keeps its
    * pairs pending, and the next counted run of the chain sends them again.
+   *
+   * **A product listed again is turned on only when it was gone here** and the
+   * run made no claim about it at this scope (`statementOf`). `cameBack` names
+   * the entries whose pair this run brought back from gone, and `claimed` the
+   * items a claim of this run named at this scope. A pair a later run sends
+   * again is no longer named in `cameBack`, and only clears `delistedAt`.
    */
   async sendPending(
     scopeId: string,
     supermarketId: string,
-    copiesOf?: (priceScopeId: string) => readonly string[]
+    copiesOf?: (priceScopeId: string) => readonly string[],
+    run: { cameBack: readonly string[]; claimed: readonly string[] } = {
+      cameBack: [],
+      claimed: [],
+    }
   ): Promise<{ sent: number; failed: number; keptSold: number }> {
     const result = { sent: 0, failed: 0, keptSold: 0 };
+    const cameBack = new Set(run.cameBack);
+    const claimed = new Set(run.claimed);
     const pending: {
       id: string;
+      entryId: string;
       itemId: string | null;
       status: SourceEntryStatus;
       missedWalks: number;
       goneAt: Date | null;
     }[] = await this.presence.query(
       `
-      SELECT s."id"::text AS "id", e."itemId"::text AS "itemId", e."status",
+      SELECT s."id"::text AS "id", s."entryId"::text AS "entryId",
+             e."itemId"::text AS "itemId", e."status",
              s."missedWalks"::int AS "missedWalks", s."goneAt"
         FROM "source_entry_scope_presence" s
         JOIN "source_catalog_entries" e ON e."id" = s."entryId"
@@ -419,7 +445,7 @@ export class DelistingService {
 
     const statements = new Map<
       string,
-      { entry: SupermarketItemAvailabilityEntry; pairIds: string[] }
+      { state: PairState; cameBack: boolean; pairIds: string[] }
     >();
     for (const row of active) {
       const itemId = row.itemId as string;
@@ -429,15 +455,27 @@ export class DelistingService {
         continue;
       }
       const held = statements.get(itemId) ?? {
-        entry: statementOf(itemId, state),
+        state,
+        cameBack: false,
         pairIds: [],
       };
+      held.cameBack ||= cameBack.has(row.entryId);
       held.pairIds.push(row.id);
       statements.set(itemId, held);
     }
     // A product whose pending pairs all disagree with its state is not sent,
     // and a product with one that agrees is sent once with every such pair.
-    const sendable = [...statements.values()];
+    const sendable: {
+      entry: SupermarketItemAvailabilityEntry;
+      pairIds: string[];
+    }[] = [...statements].map(([itemId, held]) => ({
+      entry: statementOf(
+        itemId,
+        held.state,
+        held.cameBack && !claimed.has(itemId)
+      ),
+      pairIds: held.pairIds,
+    }));
 
     await this.acknowledge(silent);
     const targets = [scopeId, ...(copiesOf?.(scopeId) ?? [])];

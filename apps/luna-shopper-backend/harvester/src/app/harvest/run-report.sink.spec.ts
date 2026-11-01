@@ -616,7 +616,32 @@ describe('RunReportSink', () => {
       sink.listingWhole(null, ['seen', 'failed']);
       await sink.drain();
 
-      expect(told(catalog)).toEqual([{ itemId: 'item-seen', available: true }]);
+      // The listing also says the product is on the shelf.
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-seen', available: true, outOfStock: false },
+      ]);
+    });
+
+    it('writes no negative through another row of a product whose named row failed', async () => {
+      // Row A is named and its detail failed; row B of the same product was
+      // never listed here. B's absence must not say A's product is not sold.
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [
+          { externalId: 'seen', itemId: 'item-seen' },
+          { externalId: 'a', itemId: 'item-x' },
+          { externalId: 'b', itemId: 'item-x' },
+        ],
+      });
+
+      sink.product(observation({ externalId: 'seen' }));
+      sink.listingWhole(null, ['seen', 'a']);
+      await sink.drain();
+
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-seen', available: true, outOfStock: false },
+      ]);
     });
 
     it('says not sold for a product this scope never listed', async () => {
@@ -649,7 +674,9 @@ describe('RunReportSink', () => {
       sink.listingWhole(null, ['seen']);
       await sink.drain();
 
-      expect(told(catalog)).toEqual([{ itemId: 'item-seen', available: true }]);
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-seen', available: true, outOfStock: false },
+      ]);
     });
 
     it('writes no negative for any row of a product the counter tracks', async () => {
@@ -690,7 +717,10 @@ describe('RunReportSink', () => {
         [string, unknown[]]
       >;
       expect(calls).toEqual([
-        ['scope-w1', [{ itemId: 'item-a', available: true }]],
+        [
+          'scope-w1',
+          [{ itemId: 'item-a', available: true, outOfStock: false }],
+        ],
         // Never listed at w2: not sold there, and never "sold" by the report.
         ['scope-w2', [{ itemId: 'item-a', available: false }]],
       ]);
@@ -721,6 +751,16 @@ describe('RunReportSink', () => {
       expect(told(catalog)).toEqual([
         { itemId: 'item-a', available: true, outOfStock: true },
         { itemId: 'item-nf', available: false },
+      ]);
+      // The counter reads which items a claim spoke for, so its listed again
+      // statement turns neither of them back on (section 15.1).
+      expect(sink.delistingListings().whole).toEqual([
+        {
+          key: null,
+          scopeId: SCOPE,
+          listed: ['a', 'nf'],
+          claimed: ['item-a', 'item-nf'],
+        },
       ]);
     });
 
@@ -775,8 +815,8 @@ describe('RunReportSink', () => {
 
       expect(sink.delistingListings()).toEqual({
         whole: [
-          { key: 'w1', scopeId: 'scope-w1', listed: ['a', 'b'] },
-          { key: null, scopeId: SCOPE, listed: ['c'] },
+          { key: 'w1', scopeId: 'scope-w1', listed: ['a', 'b'], claimed: [] },
+          { key: null, scopeId: SCOPE, listed: ['c'], claimed: [] },
         ],
         notWhole: [
           { key: 'never-declared', reason: 'scope-unresolved', detail: [] },

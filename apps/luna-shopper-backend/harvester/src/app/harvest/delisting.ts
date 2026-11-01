@@ -151,19 +151,30 @@ export function itemStateOf(rows: readonly PairRow[]): PairState {
 /**
  * What catalog is told for a product in this state (sections 6.1 and 15.1).
  *
- * The first miss marks the product out of stock and leaves it sold, the
- * threshold says it is not sold and leaves `outOfStockAt` as it is, and a walk
- * that lists it again clears both.
+ * - **The first miss** sends `outOfStock` alone. It leaves `available` as it
+ *   is, so a product a 404 turned off at this scope stays off, and catalog
+ *   creates no row where the scope has none.
+ * - **The threshold** says the product is not sold, and leaves `outOfStockAt`
+ *   as it is.
+ * - **A walk that lists it again** clears `delistedAt` and nothing else. The
+ *   sink already stated the walk's positive and its claims (DIA's stock,
+ *   Mercadona's 404) before the counter runs, and this must not override
+ *   them. Only a product that was gone is turned on here, and only when the
+ *   run made no claim about it at this scope (`cameBack`): the sink sends no
+ *   positive for a named row whose detail failed.
  */
 export function statementOf(
   itemId: string,
-  state: PairState
+  state: PairState,
+  cameBack = false
 ): SupermarketItemAvailabilityEntry {
   switch (state) {
     case 'listed':
-      return { itemId, available: true, delisted: false, outOfStock: false };
+      return cameBack
+        ? { itemId, available: true, delisted: false }
+        : { itemId, delisted: false };
     case 'outOfStock':
-      return { itemId, available: true, outOfStock: true };
+      return { itemId, outOfStock: true };
     case 'gone':
       return { itemId, available: false, delisted: true };
   }

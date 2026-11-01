@@ -432,11 +432,22 @@ A row whose `available` and `delistedAt` already say what the entry says is left
 for nothing, as today. `onlyIfMissing` keeps its meaning and ignores `delisted`. `deriveScopeFlags`
 and the effective price recompute do not touch `delistedAt`.
 
+**`available` is optional when `delisted` or `outOfStock` is given.** The schema requires `itemId`
+and at least one of `available`, `delisted` and `outOfStock`. An entry with no `available` keeps
+the flag of a row that exists, and creates no row where the scope has none: it says nothing about
+whether the scope sells the product. `onlyIfMissing` creates only from an entry that carries
+`available`. This is what keeps a first miss from turning on a product that a 404 turned off
+(section 15.1).
+
 After the transaction of section 4.2, the counter sends, per scope S, every pair with
 `pendingCatalog` true whose entry is `ACTIVE`:
 
 - gone: `{ itemId, available: false, delisted: true }`,
-- back: `{ itemId, available: true, delisted: false }`,
+- first miss: `{ itemId, outOfStock: true }` (section 15.1),
+- listed again: `{ itemId, delisted: false }`. A pair that step 3 brought back from gone in this
+  run also carries `available: true`, unless a claim of the same run named the item at S. The sink
+  has already stated the walk's positive and its claims by then, and this must not override them.
+  A pair sent again by a later run, after a failed batch, carries `delisted: false` alone.
 
 at S and at each scope `copiesOf(S)` names (plan 0118), in batches of the sink's
 `AVAILABILITY_BATCH`. A batch that catalog accepted clears `pendingCatalog` on its pairs. A batch
@@ -478,7 +489,8 @@ serves the single accept, the create and the bulk route.
 ## 7. How a product comes back
 
 The first counted walk that lists the product at S runs step 3 of section 4.2. The pair goes back to
-0, `goneAt` goes to null, and catalog gets `{ available: true, delisted: false }`. The entry's
+0, `goneAt` goes to null, and catalog gets `{ available: true, delisted: false }`, or
+`{ delisted: false }` when a claim of the same run named the item at S (section 6.1). The entry's
 `delistedAt` clears with the first scope that comes back.
 
 A walk that is not counted (an aborted run, a `FAILED` run, a LIDL run, a leaflet) moves
@@ -594,7 +606,7 @@ Both are additive and both have a `down`.
 | ---------------------------------------------------- | ------------------------------------------ |
 | `SourceCatalogEntryView` (and `ItemSourceEntryView`) | `delistedAt: string \| null`, not required in the schema |
 | `ListSourceEntriesRequest`                           | `delisted?: boolean`: true lists gone rows only, false leaves them out, absent lists both |
-| `SetSupermarketItemAvailabilityRequest.entries[]`    | `delisted?: boolean`                       |
+| `SetSupermarketItemAvailabilityRequest.entries[]`    | `delisted?: boolean`, and `available` optional when `delisted` or `outOfStock` is given (section 6.1) |
 | `SupermarketItemView`                                | `delistedAt: string \| null` and `outOfStockAt: string \| null`, not required in the schema |
 | `ItemOfferView`, the scopes of an item               | `outOfStockAt: string \| null`, not required (section 15.2) |
 | `SetSupermarketItemAvailabilityRequest.entries[]`    | `outOfStock?: boolean` (section 15.1)       |
@@ -682,11 +694,21 @@ Two things send `outOfStock`:
    negative, because "not stocked in this warehouse" is the warehouse's catalog and not its shelf,
    and DEZA's per shop claims stay in `supermarket_location_items` (plan 0084) and are not touched.
 2. **The first miss.** In step 4 of section 4.2, a row whose `missedWalks` goes from 0 to 1 gets
-   `pendingCatalog` true, and the counter sends `{ available: true, outOfStock: true }` for its
-   item at S and its copies, subject to section 6.2. The chain delisted the product or ran out of
-   it, and a walk cannot tell which, so the product is out of stock until the threshold says gone.
-   Step 3 (listed again) sends `{ available: true, delisted: false, outOfStock: false }`. Step 5
-   (gone) sends `{ available: false, delisted: true }` and leaves `outOfStockAt` as it is.
+   `pendingCatalog` true, and the counter sends `{ outOfStock: true }` for its item at S and its
+   copies, subject to section 6.2. The chain delisted the product or ran out of it, and a walk
+   cannot tell which, so the product is out of stock until the threshold says gone. The entry
+   carries no `available` (section 6.1). A product a 404 turned off at S stays off, and the seed's
+   first count after the deploy turns on no product that the old diff had already set not sold.
+   Step 3 (listed again) sends `{ delisted: false }`, and `available: true` only for a pair that
+   was gone and that no claim of the run named at S (section 6.1). Step 5 (gone) sends
+   `{ available: false, delisted: true }` and leaves `outOfStockAt` as it is.
+
+**The sink clears the mark, and a claim beats it.** The sink drains before the counter runs. For a
+scope declared whole, its positive for a named row is `{ available: true, outOfStock: false }`: the
+listing says the product is on the shelf. A claim for that item at S overrides it, so DIA's
+`unitsInStock` 0 keeps `outOfStock: true` and Mercadona's 404 keeps `available: false`. The sink
+hands the counter the items its claims named per scope, and the counter's listed again statement
+turns none of them on.
 
 This changes one decision below. The scope negative of section 3 for a row the listing did not
 name is the first miss of a delisting chain, for Mercadona too: `writeScopeAvailability` writes
@@ -701,8 +723,9 @@ scopes that never sold the product, because catalog creates a row it is missing,
 products back to sold on every walk. So for a scope a runner declared whole, `writeScopeAvailability`
 states, per tracked `ACTIVE` row:
 
-- **Named by the listing:** the positive, as today, and the explicit claims (DIA's stock, and
-  Mercadona's 404).
+- **Named by the listing:** the positive, as today, with `outOfStock: false`, and the explicit
+  claims (DIA's stock, and Mercadona's 404), which override it. A named row whose detail failed
+  gets no statement, and no other row of its product writes a negative for it.
 - **Not named, with no presence row at S and no price row at S that the scope read itself**
   (`copiedFromScopeId IS NULL`, the seed's own condition): `available: false`, as today. This scope
   never sold the product, and the row says so. It is the cross warehouse negative of plan 0108: plan
@@ -796,7 +819,8 @@ out of stock, which picks the cheapest.
 Catalog decides, because catalog holds the prices (plan 0080). In `setAvailability`, an entry with
 `available: false` and `delisted: true` for a row that holds an eligible, not stale `ADMIN` or
 `LEAFLET` price at that scope writes `delistedAt` and leaves `available` true. The result counts it
-in `keptSold`, and the run report carries the number as `delisting.catalogKeptSold`. The back
+in `keptSold` only when the row exists and was sold, so the price is what kept it from turning
+off. The run report carries the number as `delisting.catalogKeptSold`. The back
 office follow up shows a row with `delistedAt` set and `available` true as the conflict it is, and a
 person decides. The counter does not override a person or a current leaflet. A walk price cannot be
 current on a gone product: the walk that wrote it listed the product, and 14 days is twice the 7 day

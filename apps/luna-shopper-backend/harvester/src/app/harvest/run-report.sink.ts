@@ -110,6 +110,12 @@ export interface WholeListing {
   key: string | null;
   scopeId: string;
   listed: readonly string[];
+  /**
+   * The items the run made an explicit claim about at this scope, read after
+   * the drain. The counter turns no product on that a claim spoke for
+   * (section 15.1): DIA's stock and Mercadona's 404 beat a listing.
+   */
+  claimed?: readonly string[];
 }
 
 /** What the delisting counter reads off the sink once the run has drained. */
@@ -273,6 +279,8 @@ export class RunReportSink implements RunReport {
   private readonly notWhole: NotWholeListing[] = [];
   /** The whole listings resolved to scopes, set at drain. */
   private resolvedWhole: WholeListing[] = [];
+  /** Per scope id, the items an explicit scope claim of this run named. */
+  private readonly claimedByScope = new Map<string, Set<string>>();
   /** Every external id the run named, for the negative availability diff. */
   private readonly observedIds = new Set<string>();
   /**
@@ -424,7 +432,13 @@ export class RunReportSink implements RunReport {
    * that were not whole (plan 0220, section 4.4). Read after {@link drain}.
    */
   delistingListings(): DelistingListings {
-    return { whole: this.resolvedWhole, notWhole: [...this.notWhole] };
+    return {
+      whole: this.resolvedWhole.map((listing) => ({
+        ...listing,
+        claimed: [...(this.claimedByScope.get(listing.scopeId) ?? [])],
+      })),
+      notWhole: [...this.notWhole],
+    };
   }
 
   /**
@@ -745,9 +759,10 @@ export class RunReportSink implements RunReport {
    * **A whole listing decides the diff** (plan 0220, section 3). For a scope a
    * runner declared whole with `listingWhole`, per tracked `ACTIVE` row:
    *
-   * - Named by the listing: the positive when the run reported it, and the
-   *   explicit claims. A named row the run failed to read further gets no
-   *   statement, so a failed detail no longer writes a negative.
+   * - Named by the listing: the positive when the run reported it, with
+   *   `outOfStock: false`, and the explicit claims, which override it. A named
+   *   row the run failed to read further gets no statement, and neither does
+   *   another row of its product, so a failed detail never writes a negative.
    * - Not named, and the scope never listed it (no presence row and no price
    *   the scope read itself): `false`, as plan 0108 requires. The scope never
    *   sold it, and the row says so.
@@ -806,15 +821,23 @@ export class RunReportSink implements RunReport {
 
       const byItem = new Map<string, SupermarketItemAvailabilityEntry>();
       // Everything the run named is stocked here, by the fact it was listed.
-      // With a listing, only what this scope's listing named.
+      // With a listing, only what this scope's listing named. A whole listing
+      // also says the product is on the shelf, which clears the out of stock
+      // mark of a first miss; a claim below overrides it (section 15.1).
       for (const [externalId, itemId] of this.activeItemByExternalId) {
         if (
           this.observedIds.has(externalId) &&
           (listing === null || listing.has(externalId))
         ) {
-          byItem.set(itemId, { itemId, available: true });
+          byItem.set(
+            itemId,
+            whole
+              ? { itemId, available: true, outOfStock: false }
+              : { itemId, available: true }
+          );
         }
       }
+      const claimed = new Set<string>();
       // What the source said outright beats what the listing implied.
       for (const claim of this.claims) {
         if (claim.shopCode || (claim.scopeKey ?? null) !== scopeKey) {
@@ -824,6 +847,7 @@ export class RunReportSink implements RunReport {
           this.activeItemByExternalId.get(claim.externalId) ??
           trackedItem.get(claim.externalId);
         if (itemId) {
+          claimed.add(itemId);
           byItem.set(itemId, {
             itemId,
             available: claim.available,
@@ -834,9 +858,20 @@ export class RunReportSink implements RunReport {
         }
       }
 
+      if (claimed.size > 0) {
+        this.claimedByScope.set(scopeId, claimed);
+      }
+
       if (whole) {
         const unnamed = tracked.filter(
           (row) => row.itemId && !whole.has(row.externalId)
+        );
+        // A product a named row stands for is not the scope's negative, even
+        // when that row's detail failed and stated nothing.
+        const named = new Set(
+          tracked
+            .filter((row) => row.itemId && whole.has(row.externalId))
+            .map((row) => row.itemId as string)
         );
         const once = await this.listedOnceAt(
           scopeId,
@@ -851,7 +886,12 @@ export class RunReportSink implements RunReport {
         );
         for (const row of unnamed) {
           const itemId = row.itemId as string;
-          if (once.has(row.id) || counted.has(itemId) || byItem.has(itemId)) {
+          if (
+            once.has(row.id) ||
+            counted.has(itemId) ||
+            named.has(itemId) ||
+            byItem.has(itemId)
+          ) {
             continue;
           }
           byItem.set(itemId, { itemId, available: false });

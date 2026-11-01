@@ -159,7 +159,7 @@ describeIntegration(
 
     const write = (
       itemId: string,
-      entry: { available: boolean; delisted?: boolean; outOfStock?: boolean },
+      entry: { available?: boolean; delisted?: boolean; outOfStock?: boolean },
       onlyIfMissing?: boolean
     ) =>
       service.setAvailability({
@@ -249,6 +249,38 @@ describeIntegration(
       });
     });
 
+    it('keeps a product a 404 turned off not sold through the next first miss', async () => {
+      // A listed product whose detail answered 404 at this scope, then a whole
+      // walk that missed it: the first miss sends `outOfStock` alone.
+      const itemId = await product();
+      await write(itemId, { available: false });
+      await write(itemId, { outOfStock: true });
+
+      const row = await offer(itemId);
+      expect(row.available).toBe(false);
+      expect(row.outOfStockAt).toBeInstanceOf(Date);
+    });
+
+    it('creates no row for a first miss at a scope that has none', async () => {
+      const items = dataSource.getRepository(Item);
+      const item = await items.save(
+        items.create({
+          name: { en: 'Unoffered', es: 'Sin oferta' },
+          defaultUnit: UnitOfMeasure.UNIT,
+        })
+      );
+
+      expect(await write(item.id, { outOfStock: true })).toEqual({
+        updated: 0,
+        keptSold: 0,
+      });
+      expect(
+        await dataSource
+          .getRepository(SupermarketItem)
+          .countBy({ itemId: item.id, priceScopeId: scopeId })
+      ).toBe(0);
+    });
+
     it('ignores delisted and outOfStock under onlyIfMissing', async () => {
       const itemId = await product();
 
@@ -278,6 +310,17 @@ describeIntegration(
       const row = await offer(itemId);
       expect(row.available).toBe(true);
       expect(row.delistedAt).toBeInstanceOf(Date);
+    });
+
+    it('counts nothing kept sold for a row that was already not sold', async () => {
+      const itemId = await product();
+      await write(itemId, { available: false });
+      await price(itemId, PriceSourceKind.ADMIN);
+
+      expect(await write(itemId, { available: false, delisted: true })).toEqual(
+        { updated: 1, keptSold: 0 }
+      );
+      expect((await offer(itemId)).available).toBe(false);
     });
 
     it('keeps a gone product sold for a current leaflet price', async () => {

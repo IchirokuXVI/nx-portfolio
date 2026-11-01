@@ -140,16 +140,25 @@ describe('the state of a pair and of a product (sections 6.2 and 15.1)', () => {
   });
 
   it('tells catalog what each state means', () => {
+    // Listed again clears the gone mark and leaves the sink's positive and
+    // claims alone: the flag and the out of stock mark are theirs.
     expect(statementOf('i', 'listed')).toEqual({
+      itemId: 'i',
+      delisted: false,
+    });
+    // A product that was gone here, that no claim of the run spoke for.
+    expect(statementOf('i', 'listed', true)).toEqual({
       itemId: 'i',
       available: true,
       delisted: false,
-      outOfStock: false,
     });
-    // The first miss hides nothing.
+    // The first miss hides nothing and turns nothing on: no flag at all.
     expect(statementOf('i', 'outOfStock')).toEqual({
       itemId: 'i',
-      available: true,
+      outOfStock: true,
+    });
+    expect(statementOf('i', 'outOfStock', true)).toEqual({
+      itemId: 'i',
       outOfStock: true,
     });
     // Gone leaves the out of stock instant as it is.

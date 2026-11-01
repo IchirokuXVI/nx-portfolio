@@ -133,12 +133,17 @@ export class SupermarketItemService {
    * and 15.1). True sets the instant when it is null and keeps the first one,
    * false clears it, and absent leaves it. `onlyIfMissing` ignores both. An
    * entry that changes neither the flag nor either instant counts for nothing.
+   * An entry may leave `available` out when it gives either instant: the flag
+   * of a row that exists is then kept, and a scope with no row gets none. The
+   * first miss of a walk is such an entry, and it must not turn on a product
+   * that a 404 turned off.
    *
    * **A current price of a person or a leaflet keeps a product sold** (section
    * 15.6). An entry that says gone (`available: false` with `delisted: true`)
    * for a product that holds an eligible `ADMIN` or `OFFICIAL_LEAFLET` price at
-   * this scope writes `delistedAt` and leaves `available` true, and is counted
-   * in `keptSold` for a person to decide.
+   * this scope writes `delistedAt` and leaves `available` true. It is counted
+   * in `keptSold` for a person to decide only where a row was sold and the
+   * entry would have turned it off.
    */
   async setAvailability(
     req: SetSupermarketItemAvailabilityRequest
@@ -151,11 +156,14 @@ export class SupermarketItemService {
 
     const wanted = new Map(req.entries.map((e) => [e.itemId, e]));
     if (req.onlyIfMissing === true) {
-      return this.createMissing(
-        actor,
-        req.priceScopeId,
-        new Map(req.entries.map((e) => [e.itemId, e.available]))
-      );
+      // An entry with no flag has nothing to create a row from.
+      const flags = new Map<string, boolean>();
+      for (const e of req.entries) {
+        if (e.available !== undefined) {
+          flags.set(e.itemId, e.available);
+        }
+      }
+      return this.createMissing(actor, req.priceScopeId, flags);
     }
     const now = new Date();
     const kept = await this.keptSoldAt(
@@ -176,13 +184,17 @@ export class SupermarketItemService {
 
     const fresh: SupermarketItem[] = [];
     const changed: { before: SupermarketItem; row: SupermarketItem }[] = [];
+    let keptSold = 0;
     for (const [itemId, entry] of wanted) {
       const held = byItem.get(itemId);
-      // Kept sold leaves the flag as it was: it never turns a "not sold" on.
-      const available = kept.has(itemId)
-        ? (held?.available ?? true)
-        : entry.available;
       if (!held) {
+        if (entry.available === undefined) {
+          // An instant alone says nothing about whether the scope sells the
+          // product, so a scope with no row gets none (section 6.1).
+          continue;
+        }
+        // Kept sold never turns a "not sold" on, and a missing row is sold.
+        const available = kept.has(itemId) ? true : entry.available;
         fresh.push(
           this.supermarketItems.create({
             itemId,
@@ -195,6 +207,15 @@ export class SupermarketItemService {
         );
         continue;
       }
+      // Kept sold leaves the flag as it was, and is counted only where it held
+      // a row sold that the entry would have turned off. An entry with no flag
+      // leaves it too.
+      if (kept.has(itemId) && held.available) {
+        keptSold += 1;
+      }
+      const available = kept.has(itemId)
+        ? held.available
+        : (entry.available ?? held.available);
       const delistedAt = nextInstant(held.delistedAt, entry.delisted, now);
       const outOfStockAt = nextInstant(
         held.outOfStockAt,
@@ -215,7 +236,7 @@ export class SupermarketItemService {
       changed.push({ before, row: held });
     }
     if (fresh.length === 0 && changed.length === 0) {
-      return { updated: 0, keptSold: kept.size };
+      return { updated: 0, keptSold };
     }
 
     await this.audit.write(actor, async (tx) => {
@@ -228,7 +249,7 @@ export class SupermarketItemService {
         await tx.recordUpdate(SupermarketItem, before, row);
       }
     });
-    return { updated: fresh.length + changed.length, keptSold: kept.size };
+    return { updated: fresh.length + changed.length, keptSold };
   }
 
   /**
