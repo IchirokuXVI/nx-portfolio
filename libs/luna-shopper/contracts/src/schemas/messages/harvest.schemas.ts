@@ -602,6 +602,13 @@ const sourceCatalogEntryProperties = {
   },
   confidence: { type: 'number', minimum: 0, maximum: 1 },
   decidedAt: nullableString(),
+  // Plan 0220. Stated but not required, so a reader built before it keeps
+  // validating what it holds.
+  delistedAt: {
+    ...nullableString(),
+    description:
+      'When every scope a whole walk counted lost this product, and null while any of them still lists it. Written by the delisting counter alone, and it never changes the status.',
+  },
   // Inline, because there is one per scope and a chain has a handful of
   // scopes, and the queue cannot decide a row without seeing what it holds.
   prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
@@ -1635,6 +1642,8 @@ const listEntriesRequest = object(
     // Keyed before it is matched, so a value that makes no key matches nothing
     // rather than being refused (plan 0124, section 7).
     brandKey: string(),
+    // Plan 0220: true lists the gone rows only, false leaves them out.
+    delisted: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1905,7 +1914,7 @@ const adapterCapabilityTable: JsonSchema = {
   $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
   type: 'object',
   description:
-    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.',
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.',
   const: ADAPTER_CAPABILITIES,
 };
 

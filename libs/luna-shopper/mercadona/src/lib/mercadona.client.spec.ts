@@ -1,5 +1,5 @@
-import categoryExpanded from './__fixtures__/category-expanded.json';
 import categoriesTree from './__fixtures__/categories-tree.json';
+import categoryExpanded from './__fixtures__/category-expanded.json';
 import oliveOilEn from './__fixtures__/product-detail-en.json';
 import oliveOilEs from './__fixtures__/product-detail-es.json';
 import { MercadonaClient, MercadonaHttpError } from './mercadona.client';
@@ -233,5 +233,52 @@ describe('walkCatalog', () => {
       ids.push(product.externalId);
     }
     expect(ids).toEqual(['7012', '8271']);
+  });
+
+  it('names a category that answered 404 and yields no product for it (plan 0220)', async () => {
+    const { fetchImpl } = stubFetch([
+      { body: { results: [categoriesTree.results[1]] } },
+      { status: 404 },
+      { body: categoryExpanded },
+    ]);
+    const c = client(fetchImpl);
+    expect(c.missingCategories).toEqual([]);
+    const ids: string[] = [];
+    for await (const product of c.walkCatalog()) {
+      ids.push(product.externalId);
+    }
+    // 53 answered 404, so only what 55 answered was listed.
+    expect(c.missingCategories).toEqual(['53']);
+    expect(ids).toEqual(['7012', '8271']);
+  });
+
+  it('names the tree when the tree itself answered 404', async () => {
+    const { fetchImpl } = stubFetch([{ status: 404 }]);
+    const c = client(fetchImpl);
+    const ids: string[] = [];
+    for await (const product of c.walkCatalog()) {
+      ids.push(product.externalId);
+    }
+    expect(ids).toEqual([]);
+    expect(c.missingCategories).toEqual(['categories']);
+  });
+
+  it('starts every walk with an empty list', async () => {
+    const { fetchImpl } = stubFetch([
+      { body: { results: [categoriesTree.results[1]] } },
+      { status: 404 },
+      { body: categoryExpanded },
+      { body: { results: [categoriesTree.results[1]] } },
+      { body: categoryExpanded },
+      { body: categoryExpanded },
+    ]);
+    const c = client(fetchImpl);
+    for await (const _ of c.walkCatalog()) {
+      // Drained.
+    }
+    for await (const _ of c.walkCatalog()) {
+      // Drained again, with no 404 this time.
+    }
+    expect(c.missingCategories).toEqual([]);
   });
 });

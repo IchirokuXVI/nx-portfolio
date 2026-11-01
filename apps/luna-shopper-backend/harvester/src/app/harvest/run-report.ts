@@ -75,6 +75,13 @@ export interface AvailabilityClaim {
   /** The product, by the `externalId` the observation carried. */
   externalId: string;
   available: boolean;
+  /**
+   * The page showed the product listed with no stock (plan 0220, section
+   * 15.1): `true` with `available: true` is "sold, out of stock", and `false`
+   * clears it. Absent says nothing about stock. Only a scope claim carries it;
+   * a per shop claim ignores it.
+   */
+  outOfStock?: boolean;
   /** The source's own code for one shop, e.g. `T1`. */
   shopCode?: string | null;
   /** What the source calls this shop, so an unmapped one reads in the queue. */
@@ -132,6 +139,47 @@ export interface RunReport {
    * whether it finished, so the runner is what says this.
    */
   assortmentComplete(scopeKey: string | null): void;
+
+  /**
+   * The run read the whole listing of this scope, and these are the external
+   * ids it named (plan 0220, section 2).
+   *
+   * A product the listing named counts as listed, whatever its detail request
+   * answered. A tracked product it did not name is a miss, which the
+   * delisting counter counts once the run ends `COMPLETED`. **A runner calls
+   * it only under the conditions its adapter's section of the plan states**,
+   * and never for a run that was aborted.
+   */
+  listingWhole(scopeKey: string | null, listed: Iterable<string>): void;
+
+  /**
+   * The run walked this scope and its listing is not whole, and why (plan
+   * 0220, section 8, `notWhole`).
+   *
+   * `listed` is what the walk did read, when it read anything. The scope then
+   * gets the positives of what it listed and no negative, because a listing
+   * with a hole in it proves nothing absent.
+   */
+  listingNotWhole(
+    scopeKey: string | null,
+    reason: string,
+    detail?: readonly unknown[],
+    listed?: Iterable<string>
+  ): void;
+}
+
+/** A whole listing a runner declared, as {@link RecordingRunReport} keeps it. */
+export interface RecordedListing {
+  scopeKey: string | null;
+  listed: string[];
+}
+
+/** A listing a runner said is not whole, as {@link RecordingRunReport} keeps it. */
+export interface RecordedNotWhole {
+  scopeKey: string | null;
+  reason: string;
+  detail: readonly unknown[];
+  listed: string[] | null;
 }
 
 /**
@@ -150,6 +198,8 @@ export class RecordingRunReport implements RunReport {
   readonly places: ObservedPlace[] = [];
   readonly availabilities: AvailabilityClaim[] = [];
   readonly completed: (string | null)[] = [];
+  readonly wholeListings: RecordedListing[] = [];
+  readonly notWhole: RecordedNotWhole[] = [];
 
   scope(declaration: ScopeDeclaration): void {
     this.scopes.push(declaration);
@@ -173,5 +223,23 @@ export class RecordingRunReport implements RunReport {
 
   assortmentComplete(scopeKey: string | null): void {
     this.completed.push(scopeKey);
+  }
+
+  listingWhole(scopeKey: string | null, listed: Iterable<string>): void {
+    this.wholeListings.push({ scopeKey, listed: [...listed] });
+  }
+
+  listingNotWhole(
+    scopeKey: string | null,
+    reason: string,
+    detail: readonly unknown[] = [],
+    listed?: Iterable<string>
+  ): void {
+    this.notWhole.push({
+      scopeKey,
+      reason,
+      detail,
+      listed: listed ? [...listed] : null,
+    });
   }
 }

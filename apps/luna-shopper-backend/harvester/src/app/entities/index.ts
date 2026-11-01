@@ -6,6 +6,7 @@ import { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.enti
 import { SourceCatalogEntry } from './source-catalog-entry.entity';
 import { SourceEntryAvailability } from './source-entry-availability.entity';
 import { SourceEntryPrice } from './source-entry-price.entity';
+import { SourceEntryScopePresence } from './source-entry-scope-presence.entity';
 import { SourceLocation } from './source-location.entity';
 import { SupermarketSource } from './supermarket-source.entity';
 
@@ -18,6 +19,7 @@ export { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.enti
 export { SourceCatalogEntry } from './source-catalog-entry.entity';
 export { SourceEntryAvailability } from './source-entry-availability.entity';
 export { SourceEntryPrice } from './source-entry-price.entity';
+export { SourceEntryScopePresence } from './source-entry-scope-presence.entity';
 export { SourceLocation } from './source-location.entity';
 export { SupermarketSource } from './supermarket-source.entity';
 
@@ -38,6 +40,8 @@ export const HARVESTER_ENTITIES = [
   // Which shop of a source carries which of its rows, kept until the row is
   // bound and the shop is mapped (plan 0182).
   SourceEntryAvailability,
+  // Whole walks that did not list a product, per scope (plan 0220).
+  SourceEntryScopePresence,
   DiscoveredPlace,
   PostalCodeDiscoveryRequest,
 ];

@@ -29,6 +29,7 @@ import { BrandHomonyms1758700000000 } from './1758700000000-BrandHomonyms';
 import { ItemEans1758800000000 } from './1758800000000-ItemEans';
 import { ItemLinkedImages1758900000000 } from './1758900000000-ItemLinkedImages';
 import { SectionsOfAShop1759000000000 } from './1759000000000-SectionsOfAShop';
+import { SupermarketItemDelistedAt1759200000000 } from './1759200000000-SupermarketItemDelistedAt';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -71,4 +72,5 @@ export const CATALOG_MIGRATIONS = [
   ItemEans1758800000000,
   ItemLinkedImages1758900000000,
   SectionsOfAShop1759000000000,
+  SupermarketItemDelistedAt1759200000000,
 ];

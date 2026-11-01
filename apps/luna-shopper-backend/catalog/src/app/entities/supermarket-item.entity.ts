@@ -107,6 +107,23 @@ export class SupermarketItem extends BaseEntity {
   @Column({ type: 'boolean', default: true })
   available!: boolean;
 
+  /**
+   * When a whole walk proved the chain stopped listing the product here (plan
+   * 0220, section 6.1). Written by `setAvailability` on the harvester's
+   * `delisted`, and by nothing else. It is not "not sold": `available` says
+   * that, and a current `ADMIN` or leaflet price keeps the row sold beside it.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  delistedAt!: Date | null;
+
+  /**
+   * Since when the chain shows the product out of stock here (plan 0220,
+   * section 15.1). Carried on every read and filtered on by none, so it hides
+   * nothing and stops no purchase.
+   */
+  @Column({ type: 'timestamptz', nullable: true })
+  outOfStockAt!: Date | null;
+
   /** The `item_prices` row section 4 chose. Null when there is no row at all. */
   @Column({ type: 'uuid', nullable: true })
   itemPriceId!: string | null;

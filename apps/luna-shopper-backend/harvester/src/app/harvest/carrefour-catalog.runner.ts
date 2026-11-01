@@ -11,6 +11,7 @@ import {
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import { readDelistCountsCrawl } from './delisting';
 import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -115,6 +116,14 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // --- 3. Report what was read -----------------------------------------
       await context.setStage('INGEST', `Recording ${products.size} product(s)`);
       this.reportProducts(report, products);
+      declareListing(report, products, {
+        switchOn: readDelistCountsCrawl(source.config),
+        seedPath: readSeedPath(source.config) !== undefined,
+        blocked: blocked !== null,
+        truncated: frontier.capped.length > 0,
+        unreadable: unreadable.length > 0,
+        aborted: context.signal.aborted,
+      });
 
       await context.flush();
       await context.setReport(
@@ -205,9 +214,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * none. Until the backfill has run, every row resolves through the fuzzy rung
    * of plan 0086 and waits for a person, which is where DEZA sits today.
    *
-   * It states no completeness. A Carrefour crawl walks a frontier of categories
-   * and a product filed nowhere in it is unseen for a reason that says nothing
-   * about stock.
+   * It states no completeness here. A Carrefour crawl walks a frontier of
+   * categories, and a product filed nowhere in it is unseen for a reason that
+   * says nothing about stock. The crawl is handed over as a whole listing only
+   * under the five conditions of {@link declareListing}.
    */
   private reportProducts(
     report: RunReport,
@@ -257,6 +267,50 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       });
     }
   }
+}
+
+/**
+ * The crawl as a whole listing of the default scope, or why it is not one
+ * (plan 0220, section 15.4).
+ *
+ * Whole only when the chain's own `delistCountsCrawl` is on, no seed path
+ * narrowed the walk, nothing blocked it, no category was capped at the paging
+ * ceiling, no category was unreadable, and the run was not aborted. The doubt
+ * that remains is a product filed in no frontier category, which nobody has
+ * measured: the switch stays off until two clean crawls were compared. A crawl
+ * that is not whole declares nothing and is named with the first reason.
+ */
+function declareListing(
+  report: RunReport,
+  products: ReadonlyMap<string, CarrefourProduct>,
+  crawl: {
+    switchOn: boolean;
+    seedPath: boolean;
+    blocked: boolean;
+    truncated: boolean;
+    unreadable: boolean;
+    aborted: boolean;
+  }
+): void {
+  if (crawl.aborted) {
+    return;
+  }
+  const reason = !crawl.switchOn
+    ? 'switch-off'
+    : crawl.seedPath
+      ? 'seed-path'
+      : crawl.blocked
+        ? 'blocked'
+        : crawl.truncated
+          ? 'truncated'
+          : crawl.unreadable
+            ? 'unreadable'
+            : null;
+  if (reason !== null) {
+    report.listingNotWhole(null, reason);
+    return;
+  }
+  report.listingWhole(null, products.keys());
 }
 
 /** What a run has to say about itself beyond its counters. */

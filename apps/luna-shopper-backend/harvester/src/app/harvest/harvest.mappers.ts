@@ -268,6 +268,7 @@ export function toSourceCatalogEntryView(
     matchedBy: row.matchedBy,
     confidence: Number(row.confidence),
     decidedAt: iso(row.decidedAt),
+    delistedAt: iso(row.delistedAt ?? null),
     prices: (row.prices ?? []).map(toSourceEntryPriceView),
   };
 }

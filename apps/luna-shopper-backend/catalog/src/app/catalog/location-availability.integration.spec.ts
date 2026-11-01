@@ -307,7 +307,7 @@ describeIntegration('per shop availability (real Postgres)', () => {
       });
 
     // One row created, and the derived false is still false.
-    expect(await offer()).toEqual({ updated: 1 });
+    expect(await offer()).toEqual({ updated: 1, keptSold: 0 });
     expect(await flagOf(soldNowhere)).toBe(false);
     expect(await flagOf(neverSeen)).toBe(true);
     const created = await scopeRows.findOneByOrFail({
@@ -318,7 +318,7 @@ describeIntegration('per shop availability (real Postgres)', () => {
     expect(created.priceSourceKind).toBeNull();
 
     // The offer of the next run writes nothing at all.
-    expect(await offer()).toEqual({ updated: 0 });
+    expect(await offer()).toEqual({ updated: 0, keptSold: 0 });
     expect(await flagOf(soldNowhere)).toBe(false);
 
     // A row that got there first wins, and a product catalog does not hold
@@ -352,7 +352,7 @@ describeIntegration('per shop availability (real Postgres)', () => {
         })),
         onlyIfMissing: true,
       })
-    ).toEqual({ updated: 1 });
+    ).toEqual({ updated: 1, keptSold: 0 });
     expect(await flagOf(taken)).toBe(false);
     expect(await flagOf(fresh)).toBe(true);
     expect(await flagOf(deleted)).toBeUndefined();
@@ -375,7 +375,7 @@ describeIntegration('per shop availability (real Postgres)', () => {
         priceScopeId: scopeId,
         entries: [{ itemId: soldNowhere, available: true }],
       })
-    ).toEqual({ updated: 1 });
+    ).toEqual({ updated: 1, keptSold: 0 });
     expect(await flagOf(soldNowhere)).toBe(true);
   }, 300_000);
 

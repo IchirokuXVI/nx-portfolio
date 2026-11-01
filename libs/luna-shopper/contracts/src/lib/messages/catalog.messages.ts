@@ -1160,6 +1160,13 @@ export interface ItemOfferView {
   priceCopiedFromScopeId: string | null;
   /** Plan 0080, section 5: shown because nothing better exists, not because it is current. */
   stale: boolean;
+  /**
+   * Since when the chain shows this product out of stock at this scope (plan
+   * 0220, section 15), from the row the offer was read from. Null when it is
+   * in stock or nothing said. **It hides nothing**: the offer is listed,
+   * priced and bought as any other.
+   */
+  outOfStockAt: string | null;
 }
 
 /** The bounds of one {@link ITEM_PATTERNS.priceHistory} read (plan 0196). */
@@ -1590,6 +1597,18 @@ export interface SupermarketItemView {
    * from a detail call means "not stocked in this warehouse".
    */
   available: boolean;
+  /**
+   * When a whole walk proved the chain stopped listing this product here
+   * (plan 0220, section 6.1), and null when none did or a later one listed it
+   * again. Read it as "a walk proved this gone and none has proved it back",
+   * never as "not sold": `available` says that.
+   */
+  delistedAt: string | null;
+  /**
+   * Since when the chain shows this product out of stock here (plan 0220,
+   * section 15.1). It hides nothing and stops no purchase.
+   */
+  outOfStockAt: string | null;
 }
 
 /**
@@ -3503,7 +3522,7 @@ export interface WithdrawSupermarketItemsResult {
 /** Whether a scope carries each of these products. Carries no price. */
 export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   priceScopeId: string;
-  entries: { itemId: string; available: boolean }[];
+  entries: SupermarketItemAvailabilityEntry[];
   /**
    * True creates the row of a product the scope has none for and leaves every
    * row that exists exactly as it is, whatever `available` says here (plan
@@ -3517,9 +3536,32 @@ export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   onlyIfMissing?: boolean;
 }
 
+/** One product of {@link SetSupermarketItemAvailabilityRequest}. */
+export interface SupermarketItemAvailabilityEntry {
+  itemId: string;
+  available: boolean;
+  /**
+   * True sets `delistedAt` when it is null and keeps it when set, false clears
+   * it, and absent leaves it as it is (plan 0220, section 6.1). Only the
+   * harvester's delisting counter sends it.
+   */
+  delisted?: boolean;
+  /**
+   * True sets `outOfStockAt` when it is null and keeps it when set, false
+   * clears it, and absent leaves it as it is (plan 0220, section 15.1).
+   */
+  outOfStock?: boolean;
+}
+
 export interface SetSupermarketItemAvailabilityResult {
   /** Rows created or changed. A row already saying so counts for nothing. */
   updated: number;
+  /**
+   * Entries that said gone for a row that holds a current, not stale `ADMIN`
+   * or `OFFICIAL_LEAFLET` price at the scope, which got `delistedAt` and kept
+   * `available` true (plan 0220, section 15.6). A person decides those.
+   */
+  keptSold: number;
 }
 
 // --- Price policy requests (plan 0080, section 3) ---------------------------

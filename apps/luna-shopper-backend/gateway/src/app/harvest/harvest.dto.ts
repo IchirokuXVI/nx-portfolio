@@ -368,6 +368,28 @@ export class ImportDiscoveredPlaceDto {
 const asSent = ({ obj, key }: { obj: Record<string, unknown>; key: string }) =>
   obj[key];
 
+/**
+ * A query flag read from the string the caller sent (plan 0220, section 12).
+ *
+ * `asBoolean` is handed the value after the implicit conversion, which has
+ * already turned the string `"false"` into `true`. This reads the raw string
+ * instead: `true` or a bare flag is true, `false` is false, and anything else
+ * is handed on as it was spelled, so `@IsBoolean` refuses it.
+ */
+const asQueryFlag = ({
+  obj,
+  key,
+}: {
+  obj: Record<string, unknown>;
+  key: string;
+}) => {
+  const spelled = obj[key];
+  if (spelled === '' || spelled === 'true' || spelled === true) {
+    return true;
+  }
+  return spelled === 'false' || spelled === false ? false : spelled;
+};
+
 /** Bind a discovered place to a shop the catalog already holds (plan 0152). */
 export class LinkDiscoveredPlaceDto {
   @ApiProperty({
@@ -858,6 +880,15 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   @IsString()
   @MaxLength(BRAND_LABEL_MAX_LENGTH)
   brandKey?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Parsed strictly: the string `false` is false.',
+  })
+  @IsOptional()
+  @Transform(asQueryFlag)
+  @IsBoolean()
+  delisted?: boolean;
 }
 
 /**

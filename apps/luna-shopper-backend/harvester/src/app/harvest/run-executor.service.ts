@@ -21,6 +21,14 @@ import {
   type BackfillEntry,
   type RunPriceScope,
 } from './catalog-runner';
+import {
+  provesDelistingFor,
+  readDelistingThreshold,
+  uncountedReport,
+  type DelistingNotCounted,
+  type DelistingReport,
+} from './delisting';
+import { DelistingService } from './delisting.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { FileImportRunner } from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
@@ -78,7 +86,8 @@ export class RunExecutor implements OnApplicationShutdown {
     private readonly shops: SourceLocationService,
     private readonly catalog: CatalogClient,
     private readonly config: ConfigService,
-    private readonly availability: SourceEntryAvailabilityWriter
+    private readonly availability: SourceEntryAvailabilityWriter,
+    private readonly delisting: DelistingService
   ) {}
 
   /**
@@ -392,6 +401,12 @@ export class RunExecutor implements OnApplicationShutdown {
                 autoImportPlaces: source?.autoImportPlaces ?? false,
                 copiesOf: (scopeId) => copies.get(scopeId) ?? [],
                 writes,
+                // Whether a whole listing is accepted (plan 0220, section
+                // 15.3): the adapter's own fact, or Carrefour's switch.
+                provesDelisting: provesDelistingFor(
+                  source?.adapterKey,
+                  source?.config
+                ),
               },
               {
                 ingest: this.ingest,
@@ -546,6 +561,25 @@ export class RunExecutor implements OnApplicationShutdown {
       const status = controller.signal.aborted
         ? HarvestRunStatus.ABORTED
         : this.verdict(finished.failed, finished.totalPlanned, settings);
+      // After the verdict, so only a COMPLETED walk counts a miss (plan 0220,
+      // section 4.4), and before the finish, so the report says what it did.
+      if (run.mode === HarvestRunMode.CATALOG_DISCOVERY && sink) {
+        const delisting = await this.countDelisting({
+          runId,
+          supermarketId: run.supermarketId,
+          sourceKind: sourceKindOf(source?.adapterKey),
+          status,
+          writes,
+          detailBackfill: run.input['detailBackfill'] === true,
+          sink,
+          config: source?.config,
+          copiesOf: (scopeId) => copies.get(scopeId) ?? [],
+        });
+        await this.store.setReport(runId, {
+          ...(await this.store.load(runId)).report,
+          delisting,
+        });
+      }
       await this.store.finish(
         runId,
         status,
@@ -577,6 +611,67 @@ export class RunExecutor implements OnApplicationShutdown {
       clearInterval(pollAbort);
       this.inFlight.delete(runId);
       this.stoppedByShutdown.delete(runId);
+    }
+  }
+
+  /**
+   * The delisting counter for one finished walk (plan 0220, section 4.4).
+   *
+   * It counts only a `COMPLETED` walk that is not a detail backfill, that
+   * writes availability, and whose runner declared at least one whole
+   * listing. Otherwise the report says why it counted nothing.
+   *
+   * **It never changes the status of the run.** An error in the counter or in
+   * the catalog call is logged and written to the report as `error`. The
+   * `lastCountedRunId` guard makes a second count of the same run add no miss.
+   */
+  private async countDelisting(input: {
+    runId: string;
+    supermarketId: string | null;
+    sourceKind: PriceSourceKind;
+    status: HarvestRunStatus;
+    writes: HarvestRunWrites | undefined;
+    detailBackfill: boolean;
+    sink: Pick<RunReportSink, 'delistingListings'>;
+    config: Record<string, unknown> | undefined;
+    copiesOf: (scopeId: string) => readonly string[];
+  }): Promise<DelistingReport> {
+    const threshold = readDelistingThreshold(input.config);
+    const { whole, notWhole } = input.sink.delistingListings();
+    const because: DelistingNotCounted | null =
+      input.status !== HarvestRunStatus.COMPLETED
+        ? 'run-not-completed'
+        : input.detailBackfill
+          ? 'detail-backfill'
+          : input.writes === HarvestRunWrites.PRICES
+            ? 'prices-only'
+            : whole.length === 0 || !input.supermarketId
+              ? 'no-whole-listing'
+              : null;
+    if (because !== null) {
+      return uncountedReport(because, threshold, notWhole);
+    }
+    try {
+      return await this.delisting.count({
+        runId: input.runId,
+        supermarketId: input.supermarketId as string,
+        sourceKind: input.sourceKind,
+        whole,
+        notWhole,
+        threshold,
+        copiesOf: input.copiesOf,
+      });
+    } catch (error) {
+      const message = describeError(error).message;
+      this.logger.error(
+        `Harvest run ${input.runId}: the delisting count failed: ${message}`
+      );
+      return {
+        ...uncountedReport('no-whole-listing', threshold, notWhole),
+        counted: true,
+        notCountedBecause: null,
+        error: message,
+      };
     }
   }
 

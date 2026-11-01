@@ -215,6 +215,133 @@ describe('CarrefourCatalogRunner', () => {
     });
   });
 
+  describe('a whole crawl behind the chain switch (plan 0220, section 15.4)', () => {
+    /** The clean crawl of the first case: one frontier category, two cards. */
+    const clean = () => ({
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [link('cat1', 'Bebidas')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [
+          card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €'),
+          card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €'),
+        ],
+      }),
+    });
+    const crawl = (
+      states: Record<string, Record<string, unknown>>,
+      config: Record<string, unknown>
+    ) =>
+      new TestRunner(states)
+        .run(
+          context(),
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source(config)
+        )
+        .catch(() => undefined);
+
+    it('declares nothing while the switch is off, and says so', async () => {
+      await crawl(clean(), {});
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        { scopeKey: null, reason: 'switch-off', detail: [], listed: null },
+      ]);
+    });
+
+    it('declares the default scope whole with the switch on and a clean crawl', async () => {
+      await crawl(clean(), { delistCountsCrawl: true });
+
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p1', 'p2'] },
+      ]);
+      expect(report.notWhole).toEqual([]);
+    });
+
+    it('reads only a JSON true as the switch', async () => {
+      await crawl(clean(), { delistCountsCrawl: 'true' });
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('switch-off');
+    });
+
+    it('declares nothing for a crawl a seed path narrowed', async () => {
+      await crawl(
+        {
+          ...clean(),
+          '/seed': page({ firstLevel: [link('cat1', 'Bebidas')] }),
+        },
+        { delistCountsCrawl: true, seedPath: '/seed' }
+      );
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('seed-path');
+    });
+
+    it('declares nothing for a crawl with a category capped at the ceiling', async () => {
+      const capped = link('cat2', 'Limpieza');
+      await crawl(
+        {
+          ...clean(),
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: [link('cat1', 'Bebidas'), capped],
+          }),
+          [capped.url]: page({ totalResults: 2000 }),
+        },
+        { delistCountsCrawl: true }
+      );
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('truncated');
+    });
+
+    it('declares nothing for a crawl with an unreadable category', async () => {
+      await crawl(
+        {
+          ...clean(),
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: [link('cat1', 'Bebidas'), link('cat3', 'Gone')],
+          }),
+        },
+        { delistCountsCrawl: true }
+      );
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+    });
+
+    it('declares nothing for a blocked crawl', async () => {
+      // Three categories refused in a row on their first page of results is
+      // the block, as in the case further down.
+      const refused = ['cat2', 'cat3', 'cat4'].map((id, n) =>
+        link(id, `Refused ${n}`)
+      );
+      const states: Record<string, Record<string, unknown>> = {
+        ...clean(),
+        '/supermercado/la-despensa/cat20001/c': page({
+          firstLevel: [link('cat1', 'Bebidas'), ...refused],
+        }),
+      };
+      for (const category of refused) {
+        states[category.url] = page({ totalResults: 500 });
+      }
+      await new BlockingRunner(states)
+        .run(
+          context(),
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source({ delistCountsCrawl: true })
+        )
+        .catch(() => undefined);
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0]?.reason).toBe('blocked');
+    });
+  });
+
   it('reports a centilitre as millilitres and a dimension as no pack (plans 0177, 0183)', async () => {
     const states = {
       '/supermercado/la-despensa/cat20001/c': page({

@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  PriceSourceKind,
   WITHDRAW_MAX_SCOPES,
   type AdminListSupermarketItemsRequest,
   type AdminSupermarketItemPage,
@@ -59,6 +60,31 @@ interface SupermarketItemCursor {
 }
 
 /**
+ * The kinds whose current price keeps a product sold at the threshold (plan
+ * 0220, section 15.6): a person's, and a leaflet's. A walk price cannot be
+ * current on a gone product.
+ */
+const KEEPS_SOLD: readonly PriceSourceKind[] = [
+  PriceSourceKind.ADMIN,
+  PriceSourceKind.OFFICIAL_LEAFLET,
+];
+
+/**
+ * The next value of an instant an entry may move (plan 0220): true keeps the
+ * first instant or sets it now, false clears it, absent leaves it.
+ */
+function nextInstant(
+  held: Date | null,
+  wanted: boolean | undefined,
+  now: Date
+): Date | null {
+  if (wanted === undefined) {
+    return held;
+  }
+  return wanted ? (held ?? now) : null;
+}
+
+/**
  * The materialized row: the price a shopper sees for one item in one scope
  * (plan 0038, section 5.2, sharpened by plan 0080, section 7). Reads are open.
  *
@@ -102,6 +128,17 @@ export class SupermarketItemService {
    * `true` would flip a derived `false` back on every run. With the option a
    * row that exists is left alone and counts for nothing. That path is
    * {@link createMissing}, which is one statement and not a read then a write.
+   *
+   * **`delisted` and `outOfStock` move two instants** (plan 0220, sections 6.1
+   * and 15.1). True sets the instant when it is null and keeps the first one,
+   * false clears it, and absent leaves it. `onlyIfMissing` ignores both. An
+   * entry that changes neither the flag nor either instant counts for nothing.
+   *
+   * **A current price of a person or a leaflet keeps a product sold** (section
+   * 15.6). An entry that says gone (`available: false` with `delisted: true`)
+   * for a product that holds an eligible `ADMIN` or `OFFICIAL_LEAFLET` price at
+   * this scope writes `delistedAt` and leaves `available` true, and is counted
+   * in `keptSold` for a person to decide.
    */
   async setAvailability(
     req: SetSupermarketItemAvailabilityRequest
@@ -109,13 +146,25 @@ export class SupermarketItemService {
     const actor = await this.admin.requireAdmin(req);
     await this.requireScope(req.priceScopeId);
     if (req.entries.length === 0) {
-      return { updated: 0 };
+      return { updated: 0, keptSold: 0 };
     }
 
-    const wanted = new Map(req.entries.map((e) => [e.itemId, e.available]));
+    const wanted = new Map(req.entries.map((e) => [e.itemId, e]));
     if (req.onlyIfMissing === true) {
-      return this.createMissing(actor, req.priceScopeId, wanted);
+      return this.createMissing(
+        actor,
+        req.priceScopeId,
+        new Map(req.entries.map((e) => [e.itemId, e.available]))
+      );
     }
+    const now = new Date();
+    const kept = await this.keptSoldAt(
+      req.priceScopeId,
+      [...wanted.values()]
+        .filter((e) => e.available === false && e.delisted === true)
+        .map((e) => e.itemId),
+      now
+    );
     const itemIds = [...wanted.keys()];
     const existing = await this.supermarketItems.find({
       where: itemIds.map((itemId) => ({
@@ -127,8 +176,12 @@ export class SupermarketItemService {
 
     const fresh: SupermarketItem[] = [];
     const changed: { before: SupermarketItem; row: SupermarketItem }[] = [];
-    for (const [itemId, available] of wanted) {
+    for (const [itemId, entry] of wanted) {
       const held = byItem.get(itemId);
+      // Kept sold leaves the flag as it was: it never turns a "not sold" on.
+      const available = kept.has(itemId)
+        ? (held?.available ?? true)
+        : entry.available;
       if (!held) {
         fresh.push(
           this.supermarketItems.create({
@@ -136,19 +189,33 @@ export class SupermarketItemService {
             priceScopeId: req.priceScopeId,
             available,
             priceSourceKind: null,
+            ...(entry.delisted === true ? { delistedAt: now } : {}),
+            ...(entry.outOfStock === true ? { outOfStockAt: now } : {}),
           })
         );
         continue;
       }
-      if (held.available === available) {
+      const delistedAt = nextInstant(held.delistedAt, entry.delisted, now);
+      const outOfStockAt = nextInstant(
+        held.outOfStockAt,
+        entry.outOfStock,
+        now
+      );
+      if (
+        held.available === available &&
+        delistedAt === held.delistedAt &&
+        outOfStockAt === held.outOfStockAt
+      ) {
         continue;
       }
       const before = { ...held };
       held.available = available;
+      held.delistedAt = delistedAt;
+      held.outOfStockAt = outOfStockAt;
       changed.push({ before, row: held });
     }
     if (fresh.length === 0 && changed.length === 0) {
-      return { updated: 0 };
+      return { updated: 0, keptSold: kept.size };
     }
 
     await this.audit.write(actor, async (tx) => {
@@ -161,7 +228,51 @@ export class SupermarketItemService {
         await tx.recordUpdate(SupermarketItem, before, row);
       }
     });
-    return { updated: fresh.length + changed.length };
+    return { updated: fresh.length + changed.length, keptSold: kept.size };
+  }
+
+  /**
+   * The products among these that hold a current price of a person or a
+   * leaflet at this scope itself (plan 0220, section 15.6).
+   *
+   * Current is the rule of the materialized row (plan 0117): the newest row
+   * per product and kind, whose kind is enabled, whose window holds `now`,
+   * and whose age is within the policy's `maxAgeDays`. A stale row keeps
+   * nothing sold. Only this scope's own rows count, not a less specific one:
+   * the walk proved the product gone here.
+   */
+  private async keptSoldAt(
+    priceScopeId: string,
+    itemIds: readonly string[],
+    now: Date
+  ): Promise<Set<string>> {
+    const ids = itemIds.filter(isUuid);
+    if (ids.length === 0) {
+      return new Set();
+    }
+    const rows: { itemId: string }[] = await this.supermarketItems.query(
+      `
+      SELECT DISTINCT c."itemId"
+        FROM (
+          SELECT DISTINCT ON (p."itemId", p."sourceKind")
+                 p."itemId", p."sourceKind", p."lastObservedAt",
+                 p."validFrom", p."validUntil"
+            FROM "item_prices" p
+           WHERE p."itemId" = ANY($1::uuid[])
+             AND p."priceScopeId" = $2::uuid
+             AND p."sourceKind" = ANY($3::"price_source_kind"[])
+           ORDER BY p."itemId", p."sourceKind", p."observedAt" DESC, p."id" DESC
+        ) c
+        JOIN "price_policies" pol
+          ON pol."sourceKind" = c."sourceKind" AND pol."enabled"
+       WHERE (c."validFrom" IS NULL OR c."validFrom" <= $4::timestamptz)
+         AND (c."validUntil" IS NULL OR c."validUntil" > $4::timestamptz)
+         AND (pol."maxAgeDays" IS NULL
+              OR c."lastObservedAt" > $4::timestamptz - make_interval(days => pol."maxAgeDays"))
+      `,
+      [ids, priceScopeId, KEEPS_SOLD, now]
+    );
+    return new Set(rows.map((row) => row.itemId));
   }
 
   /**
@@ -189,7 +300,7 @@ export class SupermarketItemService {
   ): Promise<SetSupermarketItemAvailabilityResult> {
     const itemIds = [...wanted.keys()].filter(isUuid);
     if (itemIds.length === 0) {
-      return { updated: 0 };
+      return { updated: 0, keptSold: 0 };
     }
     return this.audit.write(actor, async (tx) => {
       const inserted: { id: string }[] = await tx.manager.query(
@@ -204,7 +315,7 @@ export class SupermarketItemService {
         [priceScopeId, itemIds, itemIds.map((itemId) => wanted.get(itemId))]
       );
       if (inserted.length === 0) {
-        return { updated: 0 };
+        return { updated: 0, keptSold: 0 };
       }
       const rows = await tx.manager.find(SupermarketItem, {
         where: { id: In(inserted.map((row) => row.id)) },
@@ -212,7 +323,7 @@ export class SupermarketItemService {
       for (const row of rows) {
         await tx.recordCreate(SupermarketItem, row);
       }
-      return { updated: rows.length };
+      return { updated: rows.length, keptSold: 0 };
     });
   }
 

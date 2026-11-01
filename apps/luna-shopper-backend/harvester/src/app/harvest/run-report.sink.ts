@@ -5,10 +5,12 @@ import {
   PriceSourceKind,
   SourceEntryStatus,
   type PackCountFill,
+  type SupermarketItemAvailabilityEntry,
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
+import type { NotWholeListing } from './delisting';
 import type {
   BlockedPlace,
   DiscoveredPlaceService,
@@ -95,6 +97,25 @@ export interface RunReportSinkInput {
    * copy follows whichever its walked scope wrote.
    */
   writes?: HarvestRunWrites;
+  /**
+   * Whether this chain's runs may declare a whole listing (plan 0220, section
+   * 15.3): the adapter's `provesDelisting`, or Carrefour's own switch, read by
+   * the executor. Absent is false, and a declaration is then refused and named.
+   */
+  provesDelisting?: boolean;
+}
+
+/** One whole listing, resolved to its scope at drain (plan 0220, section 4.4). */
+export interface WholeListing {
+  key: string | null;
+  scopeId: string;
+  listed: readonly string[];
+}
+
+/** What the delisting counter reads off the sink once the run has drained. */
+export interface DelistingListings {
+  whole: WholeListing[];
+  notWhole: NotWholeListing[];
 }
 
 /** What the run wrote, for the counters and the run's report. */
@@ -241,6 +262,17 @@ export class RunReportSink implements RunReport {
   private readonly claims: AvailabilityClaim[] = [];
   /** The scope keys whose whole assortment this run walked. */
   private readonly complete = new Set<string | null>();
+  /**
+   * The whole listings the runner declared, by scope key, with the external
+   * ids each one named (plan 0220, section 2).
+   */
+  private readonly wholeListings = new Map<string | null, Set<string>>();
+  /** What a walk read of a scope whose listing is not whole. */
+  private readonly partialListings = new Map<string | null, Set<string>>();
+  /** Every scope a runner walked and did not declare whole, with why. */
+  private readonly notWhole: NotWholeListing[] = [];
+  /** The whole listings resolved to scopes, set at drain. */
+  private resolvedWhole: WholeListing[] = [];
   /** Every external id the run named, for the negative availability diff. */
   private readonly observedIds = new Set<string>();
   /**
@@ -354,6 +386,48 @@ export class RunReportSink implements RunReport {
   }
 
   /**
+   * A whole listing (plan 0220, section 2), kept for the scope diff and the
+   * delisting counter.
+   *
+   * **Refused for a chain that cannot prove a delisting** (section 15.3): the
+   * capability table and the runners then cannot disagree. A refused listing is
+   * named in `notWhole` and still states the positives of what it read.
+   */
+  listingWhole(scopeKey: string | null, listed: Iterable<string>): void {
+    const ids = new Set(listed);
+    if (this.input.provesDelisting !== true) {
+      this.notWhole.push({
+        key: scopeKey,
+        reason: 'adapter-cannot-prove',
+        detail: [],
+      });
+      this.partialListings.set(scopeKey, ids);
+      return;
+    }
+    this.wholeListings.set(scopeKey, ids);
+  }
+
+  listingNotWhole(
+    scopeKey: string | null,
+    reason: string,
+    detail: readonly unknown[] = [],
+    listed?: Iterable<string>
+  ): void {
+    this.notWhole.push({ key: scopeKey, reason, detail: [...detail] });
+    if (listed) {
+      this.partialListings.set(scopeKey, new Set(listed));
+    }
+  }
+
+  /**
+   * The whole listings of this run, resolved to their scopes, and the scopes
+   * that were not whole (plan 0220, section 4.4). Read after {@link drain}.
+   */
+  delistingListings(): DelistingListings {
+    return { whole: this.resolvedWhole, notWhole: [...this.notWhole] };
+  }
+
+  /**
    * Write what is left, then everything that could only be decided at the end.
    *
    * The order matters. Products are written first, because availability is
@@ -400,6 +474,7 @@ export class RunReportSink implements RunReport {
       await this.fillPackCounts(outcomes);
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
+    this.resolveWholeListings();
 
     // A run that writes prices only states no stock, per shop or per scope, and
     // its copies state none either (plan 0119, section 7).
@@ -456,6 +531,29 @@ export class RunReportSink implements RunReport {
       );
       this.result.packCountsFilled += written;
     }
+  }
+
+  /**
+   * Each whole listing to the scope it names, as the scope diff resolves a key:
+   * null is the run's default scope, and any other key goes through the
+   * resolver. A key that resolves to nothing is named and not counted.
+   */
+  private resolveWholeListings(): void {
+    this.resolvedWhole = [];
+    for (const [key, listed] of this.wholeListings) {
+      const scopeId = this.scopeIdOf(key);
+      if (!scopeId) {
+        this.notWhole.push({ key, reason: 'scope-unresolved', detail: [] });
+        continue;
+      }
+      this.resolvedWhole.push({ key, scopeId, listed: [...listed] });
+    }
+  }
+
+  private scopeIdOf(scopeKey: string | null): string | null {
+    return scopeKey === null
+      ? this.input.defaultPriceScopeId
+      : (this.deps.scopes?.idFor(scopeKey) ?? null);
   }
 
   /** Append to the serial chain, so writes happen in the order reported. */
@@ -644,6 +742,24 @@ export class RunReportSink implements RunReport {
    * row is a printed name rather than a product id a walk could have listed, and
    * its absence from the tree is not a claim about stock.
    *
+   * **A whole listing decides the diff** (plan 0220, section 3). For a scope a
+   * runner declared whole with `listingWhole`, per tracked `ACTIVE` row:
+   *
+   * - Named by the listing: the positive when the run reported it, and the
+   *   explicit claims. A named row the run failed to read further gets no
+   *   statement, so a failed detail no longer writes a negative.
+   * - Not named, and the scope never listed it (no presence row and no price
+   *   the scope read itself): `false`, as plan 0108 requires. The scope never
+   *   sold it, and the row says so.
+   * - Not named, and the scope once listed it: nothing here. The delisting
+   *   counter is the one writer for it, out of stock at the first miss and
+   *   gone at the threshold.
+   *
+   * A listing that is not whole states the positives of what it read and the
+   * claims, and no negative. A scope with `assortmentComplete` and no listing
+   * keeps the rule of plan 0103: every tracked row the run did not report is
+   * not stocked.
+   *
    * **A copy writes the same entries at each target** (plan 0118, section 6),
    * the positives, the negatives and the explicit claims alike, because they
    * are one statement about the assortment the walk read. A per shop claim is
@@ -651,27 +767,52 @@ export class RunReportSink implements RunReport {
    */
   private async writeScopeAvailability(): Promise<void> {
     const supermarketId = this.input.supermarketId;
-    if (!supermarketId || this.complete.size === 0) {
+    const keys = new Set<string | null>([
+      ...this.complete,
+      ...this.wholeListings.keys(),
+      ...this.partialListings.keys(),
+    ]);
+    if (!supermarketId || keys.size === 0) {
       // Nothing to state. A run that walked no whole assortment and named no
       // scope has only positives, and a positive with no scope to write it for
       // is not a claim anybody can read.
       return;
     }
 
-    for (const scopeKey of this.complete) {
-      const scopeId =
-        scopeKey === null
-          ? this.input.defaultPriceScopeId
-          : this.deps.scopes?.idFor(scopeKey);
+    const tracked = await this.deps.entries.find({
+      where: {
+        supermarketId,
+        sourceKind: this.input.sourceKind,
+        status: SourceEntryStatus.ACTIVE,
+      },
+    });
+    // A claim may name a product the run did not report: a Mercadona detail
+    // that answered 404 is "not stocked here" and is never an observation. Its
+    // item is read off the tracked row.
+    const trackedItem = new Map<string, string>();
+    for (const row of tracked) {
+      if (row.itemId) {
+        trackedItem.set(row.externalId, row.itemId);
+      }
+    }
+
+    for (const scopeKey of keys) {
+      const scopeId = this.scopeIdOf(scopeKey);
       if (!scopeId) {
         continue;
       }
+      const whole = this.wholeListings.get(scopeKey);
+      const listing = whole ?? this.partialListings.get(scopeKey) ?? null;
 
-      const byItem = new Map<string, boolean>();
+      const byItem = new Map<string, SupermarketItemAvailabilityEntry>();
       // Everything the run named is stocked here, by the fact it was listed.
+      // With a listing, only what this scope's listing named.
       for (const [externalId, itemId] of this.activeItemByExternalId) {
-        if (this.observedIds.has(externalId)) {
-          byItem.set(itemId, true);
+        if (
+          this.observedIds.has(externalId) &&
+          (listing === null || listing.has(externalId))
+        ) {
+          byItem.set(itemId, { itemId, available: true });
         }
       }
       // What the source said outright beats what the listing implied.
@@ -679,32 +820,56 @@ export class RunReportSink implements RunReport {
         if (claim.shopCode || (claim.scopeKey ?? null) !== scopeKey) {
           continue;
         }
-        const itemId = this.activeItemByExternalId.get(claim.externalId);
+        const itemId =
+          this.activeItemByExternalId.get(claim.externalId) ??
+          trackedItem.get(claim.externalId);
         if (itemId) {
-          byItem.set(itemId, claim.available);
+          byItem.set(itemId, {
+            itemId,
+            available: claim.available,
+            ...(claim.outOfStock === undefined
+              ? {}
+              : { outOfStock: claim.outOfStock }),
+          });
         }
       }
 
-      const tracked = await this.deps.entries.find({
-        where: {
-          supermarketId,
-          sourceKind: this.input.sourceKind,
-          status: SourceEntryStatus.ACTIVE,
-        },
-      });
-      for (const row of tracked) {
-        if (!row.itemId || this.observedIds.has(row.externalId)) {
-          continue;
+      if (whole) {
+        const unnamed = tracked.filter(
+          (row) => row.itemId && !whole.has(row.externalId)
+        );
+        const once = await this.listedOnceAt(
+          scopeId,
+          unnamed.map((row) => row.id)
+        );
+        // A product the counter tracks here through any of its rows is the
+        // counter's, so no other row of it writes a negative.
+        const counted = new Set(
+          unnamed
+            .filter((row) => once.has(row.id))
+            .map((row) => row.itemId as string)
+        );
+        for (const row of unnamed) {
+          const itemId = row.itemId as string;
+          if (once.has(row.id) || counted.has(itemId) || byItem.has(itemId)) {
+            continue;
+          }
+          byItem.set(itemId, { itemId, available: false });
         }
-        // A product two rows resolve to is stocked if either row saw it: the
-        // false would be a claim the source never made.
-        byItem.set(row.itemId, byItem.get(row.itemId) ?? false);
+      } else if (listing === null) {
+        for (const row of tracked) {
+          if (!row.itemId || this.observedIds.has(row.externalId)) {
+            continue;
+          }
+          // A product two rows resolve to is stocked if either row saw it: the
+          // false would be a claim the source never made.
+          if (!byItem.has(row.itemId)) {
+            byItem.set(row.itemId, { itemId: row.itemId, available: false });
+          }
+        }
       }
 
-      const entries = [...byItem].map(([itemId, available]) => ({
-        itemId,
-        available,
-      }));
+      const entries = [...byItem.values()];
       for (let i = 0; i < entries.length; i += AVAILABILITY_BATCH) {
         await this.deps.catalog.setAvailability(
           scopeId,
@@ -726,5 +891,44 @@ export class RunReportSink implements RunReport {
         `Run ${this.context.runId}: availability for ${entries.length} item(s)`
       );
     }
+  }
+
+  /**
+   * Of these rows, the ones this scope once listed (plan 0220, section 3): a
+   * presence row at the scope, or a price the scope read itself, of this run's
+   * kind. A copy writes rows at its targets too, and a copy target was never
+   * listed, so a copied price does not count. It is the seed's own condition
+   * (section 4.2, step 2), so the counter seeds exactly the rows this leaves
+   * to it.
+   */
+  private async listedOnceAt(
+    scopeId: string,
+    entryIds: readonly string[]
+  ): Promise<Set<string>> {
+    if (entryIds.length === 0) {
+      return new Set();
+    }
+    const rows: { id: string }[] = await this.deps.entries.query(
+      `
+      SELECT e."id"::text AS "id"
+        FROM "source_catalog_entries" e
+       WHERE e."id" = ANY($1::uuid[])
+         AND (
+           EXISTS (
+             SELECT 1 FROM "source_entry_scope_presence" s
+              WHERE s."entryId" = e."id" AND s."priceScopeId" = $2::uuid
+           )
+           OR EXISTS (
+             SELECT 1 FROM "source_entry_prices" p
+              WHERE p."entryId" = e."id"
+                AND p."priceScopeId" = $2::uuid
+                AND p."copiedFromScopeId" IS NULL
+                AND p."sourceKind" = $3
+           )
+         )
+      `,
+      [[...entryIds], scopeId, this.input.sourceKind]
+    );
+    return new Set(rows.map((row) => row.id));
   }
 }

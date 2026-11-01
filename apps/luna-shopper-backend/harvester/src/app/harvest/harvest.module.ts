@@ -10,6 +10,7 @@ import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
+import { DelistingService } from './delisting.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
@@ -135,6 +136,9 @@ import { SupermarketSourceService } from './supermarket-source.service';
     // Where a run's per shop claims wait for a binding and a shop, and the one
     // thing that sends them to catalog (plan 0182).
     SourceEntryAvailabilityWriter,
+    // Whole walks that did not list a product, and what catalog is told about
+    // them (plan 0220).
+    DelistingService,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,
