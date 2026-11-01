@@ -1,6 +1,10 @@
 import type { ConfigService } from '@nestjs/config';
 import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import type { RunContext } from './run-context';
@@ -149,22 +153,29 @@ class TestRunner extends LidlCatalogRunner {
     private readonly pages: {
       index: Array<Record<string, unknown>>;
       products: Record<string, string | number>;
-    }
+    },
+    /** Called with every path asked, before it is answered. */
+    private readonly onAsk?: (path: string) => void
   ) {
     super({
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
     } as unknown as ConfigService);
   }
 
-  protected override createClient(): LidlClient {
+  protected override createClient(context: RunContext): LidlClient {
     return new LidlClient({
       // The seam is the fetch, so the run below exercises the real paging, the
       // real header and the real normalizing.
       userAgent: 'LunaShopperBot/1.0',
       sleepImpl: async () => undefined,
+      // The run's gate, guard and signal, as the runtime passes them.
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
       fetchImpl: (async (url: string) => {
         const path = String(url).replace('https://www.lidl.es', '');
         this.asked.push(path);
+        this.onAsk?.(path);
         if (path.startsWith('/q/api/search')) {
           const offset = Number(
             new URL(String(url)).searchParams.get('offset') ?? 0
@@ -190,10 +201,27 @@ class TestRunner extends LidlCatalogRunner {
   }
 }
 
-function context(): RunContext {
+/**
+ * A context with a refusal guard that stops on the first refusal, wired the
+ * way `RunExecutor` wires the run's (plan 0215).
+ */
+function guardedContext(): RunContext {
+  const controller = new AbortController();
+  const ctx = context(controller.signal);
+  const guard = new SourceGuard(
+    { consecutive: 1, window: null, coolDowns: 0, coolDownMs: 0, probes: 0 },
+    { onStop: (stop) => controller.abort(new SourceBlockedError(stop)) }
+  );
+  return Object.assign(ctx, {
+    guard,
+    acquire: () => guard.admit(controller.signal),
+  });
+}
+
+function context(signal = new AbortController().signal): RunContext {
   return {
     runId: RUN,
-    signal: new AbortController().signal,
+    signal,
     acquire: async () => undefined,
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
@@ -471,6 +499,64 @@ describe('LidlCatalogRunner', () => {
       detailRead: 1,
       detailFailed: 1,
       unreadableProducts: ['2'],
+    });
+  });
+
+  describe('a run that stops partway (plan 0215)', () => {
+    const index = [
+      row({ id: '1', title: 'Queso', category: 'Food' }),
+      row({ id: '2', title: 'Uva', category: 'F+V' }),
+      row({ id: '3', title: 'Leche', category: 'Food' }),
+    ];
+    const pageOf = (id: string): string =>
+      product({ id, groups: [{ priceId: 'a', regions: ['1'], price: 2.5 }] });
+
+    it('reports the products read before the guard stopped it', async () => {
+      const run = guardedContext();
+      const runner = new TestRunner({
+        index,
+        products: {
+          '/p/x/p1': pageOf('1'),
+          '/p/x/p2': 403,
+          '/p/x/p3': pageOf('3'),
+        },
+      });
+
+      await runner.run(run, report, { supermarketId: CHAIN }, source());
+
+      expect(run.signal.aborted).toBe(true);
+      expect(idsOf()).toEqual(['1']);
+      expect(runner.asked).not.toContain('/p/x/p3');
+      // The refused page that stopped the run is not a failed product.
+      expect(run.report).not.toHaveBeenCalledWith({ failed: 1 });
+      expect(run.setReport).toHaveBeenCalled();
+    });
+
+    it('reports the products read before a person aborted it', async () => {
+      const controller = new AbortController();
+      const run = context(controller.signal);
+      const runner = new TestRunner(
+        {
+          index,
+          products: {
+            '/p/x/p1': pageOf('1'),
+            '/p/x/p2': pageOf('2'),
+            '/p/x/p3': pageOf('3'),
+          },
+        },
+        (path) => {
+          if (path === '/p/x/p2') {
+            controller.abort();
+          }
+        }
+      );
+
+      await runner.run(run, report, { supermarketId: CHAIN }, source());
+
+      // The page in flight answered and is kept; nothing was asked after it.
+      expect(idsOf()).toEqual(['1', '2']);
+      expect(runner.asked).not.toContain('/p/x/p3');
+      expect(run.setReport).toHaveBeenCalled();
     });
   });
 

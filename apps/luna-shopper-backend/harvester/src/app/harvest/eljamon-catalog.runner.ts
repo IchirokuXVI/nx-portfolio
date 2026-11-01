@@ -72,7 +72,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     await context.setStage('LIST', 'Reading the top level categories');
     const categories = await client.topCategories();
     for (const category of categories) {
-      context.signal.throwIfAborted();
+      // An abort, a person's or the refusal guard's (plan 0215), ends the
+      // listing and not the run: every row listed so far is reported below.
+      if (context.signal.aborted) {
+        break;
+      }
       await this.listCategory(context, client, walk, category);
     }
     await context.setTotalPlanned(walk.rows.size);
@@ -124,7 +128,9 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         await context.report({ failed: 1 });
       },
     });
-    context.signal.throwIfAborted();
+    // An aborted walk still reports every listed row (plan 0215, section
+    // 6.1). A row whose page was not read carries `DETAIL_FAILED_KEY`, as a
+    // failed page does, so the next `NEW` walk reads it.
     for (const disagreement of walk.priceDisagreements) {
       // The listing wins: it is what a shopper sees with the session's postal
       // code (section 5.2). The disagreement is named on the report.
@@ -205,8 +211,10 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         await context.heartbeat();
       }
     } catch (error) {
+      // The page the abort cut short is not a failed page, and the rows read
+      // before it stay in the walk.
       if (context.signal.aborted) {
-        throw error;
+        return;
       }
       skipped.push({ page: page + 1, error });
     }
@@ -242,6 +250,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       // The run's own bucket, so the rate the owner set on this row is the rate
       // the source sees, whatever the number of workers.
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

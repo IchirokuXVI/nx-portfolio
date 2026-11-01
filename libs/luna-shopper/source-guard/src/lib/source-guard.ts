@@ -128,8 +128,24 @@ interface Waiter {
   reject: (reason: unknown) => void;
 }
 
-const defaultSleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * A timer that an abort of `signal` ends early and clears, so a run that was
+ * aborted during a pause leaves no timer behind it.
+ */
+const defaultSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve) => {
+    if (signal?.aborted) {
+      resolve();
+      return;
+    }
+    const done = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
+  });
 
 export class SourceGuard {
   private state: State = 'open';
@@ -159,7 +175,8 @@ export class SourceGuard {
   ) {
     this.coolDownsLeft = policy.coolDowns;
     this.now = options.now ?? (() => Date.now());
-    this.sleep = options.sleep ?? defaultSleep;
+    this.sleep =
+      options.sleep ?? ((ms) => defaultSleep(ms, this.options.signal));
   }
 
   /** Null until the run stops. */

@@ -201,19 +201,38 @@ describe('CarrefourDetailRunner', () => {
     );
   });
 
-  it('stops when the refusals stop being isolated', async () => {
+  it('stops when the refusals stop being isolated, and keeps the EANs it read', async () => {
     // Three in a row is the block, and every page after it would be worse for
-    // having been asked.
-    await expect(
-      new RefusingRunner({}).run(
-        context(),
-        new RecordingRunReport(),
-        {
-          supermarketId: CHAIN,
-          backfill: ['p1', 'p2', 'p3', 'p4'].map(row),
-        },
-        source()
-      )
-    ).rejects.toThrow(/refused/);
+    // having been asked. The pass returns after its report: the guard's stop
+    // has already aborted the run, which the executor ends FAILED (plan 0215).
+    const runner = new RefusingRunner({
+      '/supermercado/p0/p': productPage('p0', '8411327052016'),
+    });
+    const ctx = context();
+    const report = new RecordingRunReport();
+
+    await runner.run(
+      ctx,
+      report,
+      {
+        supermarketId: CHAIN,
+        backfill: ['p0', 'p1', 'p2', 'p3', 'p4'].map(row),
+      },
+      source()
+    );
+
+    expect(report.products.map((product) => product.ean)).toEqual([
+      '8411327052016',
+    ]);
+    // Four page loads: the one that answered and the three refused. The
+    // fifth row was never asked for.
+    expect(ctx.setReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eansWritten: 1,
+        refusedPages: 2,
+        pageLoads: 4,
+        blockedAfter: expect.stringMatching(/refused/),
+      })
+    );
   });
 });

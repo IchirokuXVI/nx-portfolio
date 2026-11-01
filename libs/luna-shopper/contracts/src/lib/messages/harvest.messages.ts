@@ -11,6 +11,7 @@ import type {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   HarvestRunWrites,
   HarvestScheduleBlock,
@@ -693,6 +694,13 @@ export interface HarvestRunView {
    * `STALE`. A scheduled run that was interrupted is started again one time.
    */
   interrupted: boolean;
+  /**
+   * Why a `FAILED` run stopped before its work was done (plan 0215), null for
+   * every other run. `SOURCE_BLOCKED` is a run the chain refused until its
+   * guard stopped it: it kept what it read, and it is not interrupted, so no
+   * schedule starts it again into the block.
+   */
+  stopReason: HarvestRunStopReason | null;
   /**
    * About how long a run like this one takes, from earlier runs and never from
    * this one (plan 0206, section 8). The view states no time remaining:

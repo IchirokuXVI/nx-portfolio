@@ -87,7 +87,12 @@ export class LidlCatalogRunner implements CatalogRunner {
     const products: LidlProduct[] = [];
     const unreadable: string[] = [];
     for (const row of grocery) {
-      context.signal.throwIfAborted();
+      // An abort, a person's or the refusal guard's (plan 0215), ends the
+      // reading and not the run: what was read is reported below, as the end
+      // of the loop does. Products already read are valid data.
+      if (context.signal.aborted) {
+        break;
+      }
       try {
         const product = await client.getProduct(row);
         if (product) {
@@ -99,6 +104,10 @@ export class LidlCatalogRunner implements CatalogRunner {
           await context.report({ failed: 1 });
         }
       } catch (error) {
+        // The page the abort cut short is not a failed product.
+        if (context.signal.aborted) {
+          break;
+        }
         this.logger.warn(
           `Run ${context.runId}: product ${row.externalId} failed: ${String(error)}`
         );
@@ -150,6 +159,7 @@ export class LidlCatalogRunner implements CatalogRunner {
       // the source sees. The walk is a URL shape `robots.txt` disallows, which
       // is why the limit is treated as a real constraint (section 10).
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

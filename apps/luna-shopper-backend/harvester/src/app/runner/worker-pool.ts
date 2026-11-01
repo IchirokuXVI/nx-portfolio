@@ -1,3 +1,5 @@
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
+
 /**
  * A pool of workers draining one shared queue (plan 0038, section 6.3).
  *
@@ -42,6 +44,11 @@ export interface WorkerPoolResult {
   processed: number;
   failed: number;
   aborted: boolean;
+  /**
+   * Whether the run's refusal guard stopped the pool (plan 0215, section 5).
+   * The stop aborts the run's signal too, so `aborted` is true beside it.
+   */
+  stopped: boolean;
 }
 
 export async function runWorkerPool<T>(
@@ -53,6 +60,7 @@ export async function runWorkerPool<T>(
   let processed = 0;
   let failed = 0;
   let aborted = false;
+  let stopped = false;
 
   const worker = async (): Promise<void> => {
     for (;;) {
@@ -72,6 +80,13 @@ export async function runWorkerPool<T>(
         await options.handle(item, index);
         processed += 1;
       } catch (error) {
+        // The guard's stop is the abort it comes with, not a failed item:
+        // every worker waiting at the gate meets it at once, and counting each
+        // would write one failure and one log line per worker on the stop.
+        if (error instanceof SourceBlockedError) {
+          stopped = true;
+          return;
+        }
         failed += 1;
         await options.onError?.(error, item, index);
       }
@@ -80,5 +95,10 @@ export async function runWorkerPool<T>(
 
   await Promise.all(Array.from({ length: workers }, () => worker()));
 
-  return { processed, failed, aborted: aborted || Boolean(options.signal?.aborted) };
+  return {
+    processed,
+    failed,
+    aborted: aborted || Boolean(options.signal?.aborted),
+    stopped,
+  };
 }

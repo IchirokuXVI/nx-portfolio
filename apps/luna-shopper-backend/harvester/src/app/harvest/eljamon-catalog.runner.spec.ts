@@ -1,8 +1,15 @@
 import type { ConfigService } from '@nestjs/config';
 import { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
 import { ElJamonClient } from '@portfolio/luna-shopper/eljamon';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
-import type { CatalogDiscoveryInput } from './catalog-runner';
+import {
+  DETAIL_FAILED_KEY,
+  type CatalogDiscoveryInput,
+} from './catalog-runner';
 import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
@@ -117,12 +124,16 @@ class TestRunner extends ElJamonCatalogRunner {
     } as unknown as ConfigService);
   }
 
-  protected override createClient(): ElJamonClient {
+  protected override createClient(context: RunContext): ElJamonClient {
     return new ElJamonClient({
       userAgent: 'LunaShopperBot/1.0',
       baseUrl: BASE,
       sleepImpl: async () => undefined,
       retries: 0,
+      // The run's gate, guard and signal, as the runtime passes them.
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
       fetchImpl: (async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
         this.sent.push({ url: String(url), method });
@@ -152,10 +163,29 @@ function storefront(url: URL): Response {
   );
 }
 
-function context(): RunContext & { setReport: jest.Mock; report: jest.Mock } {
+/**
+ * A context with a refusal guard that stops on the first refusal, wired the
+ * way `RunExecutor` wires the run's (plan 0215).
+ */
+function guardedContext(): ReturnType<typeof context> {
+  const controller = new AbortController();
+  const ctx = context(controller.signal);
+  const guard = new SourceGuard(
+    { consecutive: 1, window: null, coolDowns: 0, coolDownMs: 0, probes: 0 },
+    { onStop: (stop) => controller.abort(new SourceBlockedError(stop)) }
+  );
+  return Object.assign(ctx, {
+    guard,
+    acquire: () => guard.admit(controller.signal),
+  });
+}
+
+function context(
+  signal = new AbortController().signal
+): RunContext & { setReport: jest.Mock; report: jest.Mock } {
   return {
     runId: 'run-1',
-    signal: new AbortController().signal,
+    signal,
     acquire: async () => undefined,
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
@@ -429,5 +459,84 @@ describe('ElJamonCatalogRunner', () => {
     expect(
       report.products.some((product) => product.externalId === '300')
     ).toBe(true);
+  });
+
+  describe('a run that stops partway (plan 0215)', () => {
+    /** The storefront with a whole listing, and a product page `onPage` may answer instead. */
+    function site(onPage?: (code: string) => Response | undefined) {
+      return (url: URL): Response => {
+        if (url.pathname === '/categorias/bebidas/06' && url.search !== '') {
+          return new Response(listing([], 25, '06'));
+        }
+        const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
+        return (code && onPage?.(code)) || storefront(url);
+      };
+    }
+
+    /** Every listed row, and whether its page was read. */
+    const read = (report: RecordingRunReport) =>
+      new Map(
+        report.products.map((product) => [
+          product.externalId,
+          product.extra?.[DETAIL_FAILED_KEY] !== true,
+        ])
+      );
+
+    it('reports every listed row when the guard stops it, and marks the pages not read', async () => {
+      const ctx = guardedContext();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(
+        site((code) =>
+          code === '200' ? new Response('', { status: 403 }) : undefined
+        )
+      );
+
+      await runner.run(ctx, report, input, source);
+
+      expect(ctx.signal.aborted).toBe(true);
+      const rows = read(report);
+      expect(rows.size).toBe(22);
+      // The refused page and every page after it are read again by the
+      // next NEW walk.
+      expect(rows.get('200')).toBe(false);
+      expect(rows.get('101')).toBe(true);
+      expect(ctx.setReport).toHaveBeenCalled();
+    });
+
+    it('reports every listed row when a person aborts it', async () => {
+      const controller = new AbortController();
+      const ctx = context(controller.signal);
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(
+        site((code) => {
+          if (code === '205') {
+            controller.abort();
+          }
+          return undefined;
+        })
+      );
+
+      await runner.run(ctx, report, input, source);
+
+      const rows = read(report);
+      expect(rows.size).toBe(22);
+      expect([...rows.values()].some((wasRead) => !wasRead)).toBe(true);
+      expect(ctx.setReport).toHaveBeenCalled();
+    });
+
+    it('reports the rows listed so far when the stop comes in the listing', async () => {
+      const ctx = guardedContext();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner((url) =>
+        url.pathname === '/categorias/bebidas/06'
+          ? new Response('', { status: 403 })
+          : storefront(url)
+      );
+
+      await runner.run(ctx, report, input, source);
+
+      // FRESCOS was listed before BEBIDAS was refused.
+      expect([...read(report).keys()].sort()).toEqual(['101', '102']);
+    });
   });
 });
