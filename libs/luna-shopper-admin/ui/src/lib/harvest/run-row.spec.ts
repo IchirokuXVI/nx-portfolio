@@ -144,4 +144,20 @@ describe('RunRowView, on the Runs tab', () => {
 
     expect(fixture.nativeElement.querySelector('.wrote')).toBeNull();
   });
+
+  /** A column of its own beside "Wrote" (backend plan 0217). */
+  it('says how many prices the run published, zero included', async () => {
+    const fixture = await render(row({ wrote: 30, prices: 0 }), ['run-1']);
+
+    expect(
+      fixture.nativeElement.querySelector('.prices').textContent.trim()
+    ).toBe('harvest.runs.row.prices');
+  });
+
+  it('leaves the prices blank when the report states none', async () => {
+    const fixture = await render(row({ wrote: 30, prices: null }), ['run-1']);
+
+    expect(fixture.nativeElement.querySelector('.prices')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.wrote')).not.toBeNull();
+  });
 });

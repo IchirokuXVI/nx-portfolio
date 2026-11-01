@@ -78,6 +78,9 @@ export class DiaCatalogRunner implements CatalogRunner {
     source: SupermarketSource
   ): Promise<void> {
     const scopes = requireScopes(input.priceScopes);
+    // The plan is leaves times postal codes, so a whole leaf is the unit of
+    // `processed` and the ingest adds no products to it (plan 0217).
+    context.countProgressItself();
     const client = this.createClient(context, source);
     const walk = new Walk();
 

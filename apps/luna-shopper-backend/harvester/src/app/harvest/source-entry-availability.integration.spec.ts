@@ -329,6 +329,7 @@ describeIntegration(
         setStage: async () => undefined,
         setTotalPlanned: async () => undefined,
         report: async () => undefined,
+        advance: async () => undefined,
         heartbeat: async () => undefined,
         flush: async () => undefined,
         setReport: async () => undefined,

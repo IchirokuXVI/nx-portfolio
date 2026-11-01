@@ -23,6 +23,7 @@ import {
   HARVEST_NEW_RUN,
   harvestRunPath,
   harvestRunsPath,
+  runPricesPublished,
   runProgress,
   type HarvestRun,
   type InfoContent,
@@ -810,8 +811,10 @@ export class RunsPage {
           : this.names.nameOf(run.supermarketId ?? ''),
       // "Wrote" is what the run created plus what it updated (admin plan
       // 0044, section 2). The run view has no count of what it queued, so no
-      // such column is drawn.
+      // such column is drawn. Since backend plan 0217 those are source rows
+      // alone, and the prices are a column of their own.
       wrote: run.created + run.updated,
+      prices: runPricesPublished(run),
     }))
   );
 

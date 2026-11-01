@@ -415,6 +415,7 @@ async function ingestFirstSight(
   const context = {
     runId: RUN,
     report: jest.fn(async () => undefined),
+    advance: jest.fn(async () => undefined),
     warn: jest.fn(),
   } as unknown as RunContext;
   const observation: SourceObservation = {
@@ -1339,6 +1340,7 @@ describe('a waiting row is matched again after a barcode is taught (plan 0185)',
     const context = {
       runId: 'run-2',
       report: jest.fn(async () => undefined),
+      advance: jest.fn(async () => undefined),
       warn: jest.fn(),
     } as unknown as RunContext;
     const result = await new SourceIngest(

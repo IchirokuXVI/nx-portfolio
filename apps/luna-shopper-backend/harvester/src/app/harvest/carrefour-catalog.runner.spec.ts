@@ -1,8 +1,10 @@
 import type { ConfigService } from '@nestjs/config';
 import { CarrefourClient } from '@portfolio/luna-shopper/carrefour';
-import type { SupermarketSource } from '../entities';
+import type { HarvestRun, SupermarketSource } from '../entities';
+import { TokenBucket } from '../runner/token-bucket';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
-import type { RunContext } from './run-context';
+import type { HarvestRunStore } from './harvest-run.store';
+import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 
 /**
@@ -144,9 +146,43 @@ function context(): RunContext {
     setTotalPlanned: jest.fn(async () => undefined),
     setReport: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    countProgressItself: jest.fn(),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
   } as unknown as RunContext;
+}
+
+/**
+ * A real {@link RunContext} over a store that records what it was asked to
+ * write, so a spec reads `processed` as the run row would hold it.
+ */
+function countingContext() {
+  const counters: Array<Record<string, number>> = [];
+  let planned: number | null = null;
+  const store = {
+    setStage: async () => undefined,
+    setTotalPlanned: async (_run: string, total: number) => {
+      planned = total;
+    },
+    setReport: async () => undefined,
+    addCounters: async (_run: string, added: Record<string, number>) => {
+      counters.push(added);
+    },
+    addWarnings: async () => undefined,
+    touchHeartbeat: async () => undefined,
+  };
+  const context = new RunContext(
+    { id: RUN } as HarvestRun,
+    new AbortController().signal,
+    new TokenBucket({ ratePerSecond: 1000 }),
+    store as unknown as HarvestRunStore
+  );
+  return {
+    context,
+    planned: () => planned,
+    processed: () =>
+      counters.reduce((sum, added) => sum + (added['processed'] ?? 0), 0),
+  };
 }
 
 const source = (config: Record<string, unknown> = {}): SupermarketSource =>
@@ -213,6 +249,36 @@ describe('CarrefourCatalogRunner', () => {
         }),
       ],
     });
+  });
+
+  it('counts progress in listings, the unit it plans in, and the ingest adds nothing (plan 0217)', async () => {
+    const states = {
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [link('cat1', 'Bebidas')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [
+          card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €'),
+          card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €'),
+        ],
+      }),
+    };
+    const counting = countingContext();
+
+    await new TestRunner(states).run(
+      counting.context,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
+    // What the ingest does with each product it is handed.
+    await counting.context.advance(report.products.length);
+    await counting.context.flush();
+
+    expect(counting.planned()).toBe(2);
+    expect(counting.processed()).toBe(2);
   });
 
   it('reports a centilitre as millilitres and a dimension as no pack (plans 0177, 0183)', async () => {

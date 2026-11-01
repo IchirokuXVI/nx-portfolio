@@ -328,6 +328,7 @@ function context(): RunContext {
     setTotalPlanned: async () => undefined,
     setReport: async () => undefined,
     report: async () => undefined,
+    advance: async () => undefined,
     flush: async () => undefined,
     warn: () => undefined,
   } as unknown as RunContext;

@@ -139,6 +139,7 @@ describeIntegration('the photo a source row states (real Postgres)', () => {
     const context = {
       runId,
       report: async () => undefined,
+      advance: async () => undefined,
       warn: () => undefined,
     } as unknown as RunContext;
     return new SourceIngest(entries, prices, catalog).ingest(context, {

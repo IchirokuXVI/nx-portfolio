@@ -1,5 +1,6 @@
 import { DiaClient, DiaStoppedError } from '@portfolio/luna-shopper/dia';
-import type { SupermarketSource } from '../entities';
+import type { HarvestRun, SupermarketSource } from '../entities';
+import { TokenBucket } from '../runner/token-bucket';
 import type { CatalogDiscoveryInput } from './catalog-runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import {
@@ -8,7 +9,8 @@ import {
   type FakeDiaRow,
   type FakeDiaWorld,
 } from './dia-site.fake';
-import type { RunContext } from './run-context';
+import type { HarvestRunStore } from './harvest-run.store';
+import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 
 /**
@@ -111,6 +113,7 @@ function context(
     setTotalPlanned: jest.fn(async () => undefined),
     setReport: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    countProgressItself: jest.fn(),
     heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
@@ -118,6 +121,39 @@ function context(
     setReport: jest.Mock;
     setTotalPlanned: jest.Mock;
     report: jest.Mock;
+  };
+}
+
+/**
+ * A real {@link RunContext} over a store that records what it was asked to
+ * write, so a spec reads `processed` as the run row would hold it.
+ */
+function countingContext() {
+  const counters: Array<Record<string, number>> = [];
+  let planned: number | null = null;
+  const store = {
+    setStage: async () => undefined,
+    setTotalPlanned: async (_run: string, total: number) => {
+      planned = total;
+    },
+    setReport: async () => undefined,
+    addCounters: async (_run: string, added: Record<string, number>) => {
+      counters.push(added);
+    },
+    addWarnings: async () => undefined,
+    touchHeartbeat: async () => undefined,
+  };
+  const context = new RunContext(
+    { id: RUN } as HarvestRun,
+    new AbortController().signal,
+    new TokenBucket({ ratePerSecond: 1000 }),
+    store as unknown as HarvestRunStore
+  );
+  return {
+    context,
+    planned: () => planned,
+    processed: () =>
+      counters.reduce((sum, added) => sum + (added['processed'] ?? 0), 0),
   };
 }
 
@@ -584,6 +620,31 @@ describe('DiaCatalogRunner', () => {
     expect(reportOf(ctx)['leaves']).toEqual([
       { id: 'L2108', name: 'Cola', printedTotal: 45, rowsRead: 45 },
     ]);
+  });
+
+  it('counts progress in leaves, the unit it plans in, and the ingest adds nothing (plan 0217)', async () => {
+    const many = Array.from({ length: 45 }, (_, index) => ({
+      ...COKE,
+      sku: `sku-${index}`,
+    }));
+    const runner = new TestRunner(
+      world({ leaves: [COLA], listings: { '13835': { L2108: many } } })
+    );
+    const counting = countingContext();
+
+    await runner.run(
+      counting.context,
+      report,
+      input({ priceScopes: [MADRID] }),
+      source()
+    );
+    // What the ingest does with each product it is handed.
+    await counting.context.advance(report.products.length);
+    await counting.context.flush();
+
+    expect(report.products).toHaveLength(45);
+    expect(counting.planned()).toBe(1);
+    expect(counting.processed()).toBe(1);
   });
 
   it('names a failed page, goes on, and states no absence for that store', async () => {

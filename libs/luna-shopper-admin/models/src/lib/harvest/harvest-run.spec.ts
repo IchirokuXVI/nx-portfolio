@@ -6,6 +6,7 @@ import {
   isTerminalRun,
   PRICE_WRITING_MODES,
   runPriceCounters,
+  runPricesPublished,
   runProgress,
   spawnBlockReason,
   TERMINAL_RUN_STATUSES,
@@ -120,6 +121,7 @@ describe('runProgress', () => {
     ).toBeNull();
   });
 
+  // An old run that counted two units in `processed` (backend plan 0217).
   it('never reports more than a hundred', () => {
     expect(
       runProgress(run({ processed: 120, totalPlanned: 100 })).percent
@@ -287,5 +289,24 @@ describe('runPriceCounters', () => {
     ['a report whose numbers are not numbers', { pricesRecorded: 'many' }],
   ])('answers null for %s', (_name, report) => {
     expect(runPriceCounters(run({ report }))).toBeNull();
+  });
+});
+
+/** The "Prices" column of the runs list (backend plan 0217). */
+describe('runPricesPublished', () => {
+  it('reads pricesPublished from the report, zero included', () => {
+    expect(
+      runPricesPublished(
+        run({ updated: 30, report: { pricesPublished: 4000 } })
+      )
+    ).toBe(4000);
+    expect(runPricesPublished(run({ report: { pricesPublished: 0 } }))).toBe(0);
+  });
+
+  it.each([
+    ['a report with no such key', { pricesRecorded: 8154 }],
+    ['a value that is not a number', { pricesPublished: 'many' }],
+  ])('answers null for %s', (_name, report) => {
+    expect(runPricesPublished(run({ report }))).toBeNull();
   });
 });

@@ -93,19 +93,38 @@ export class HarvestRun extends BaseEntity {
   @Column({ type: 'integer', nullable: true })
   totalPlanned!: number | null;
 
+  /*
+   * Each counter below counts one kind of thing in every mode (plan 0217,
+   * section 3). No price moves any of them: a run's prices are counted in its
+   * `report` alone, as `pricesRecorded`, `pricesPublished`, `pricesConfirmed`
+   * and `pricesConflicted`.
+   */
+
+  /**
+   * Units of planned work done, in the unit of `totalPlanned`. The unit is the
+   * product, or the place in a store discovery, except for the runners that
+   * count their own: Carrefour catalog (listings), DIA catalog (leaves) and DIA
+   * store discovery (shop details).
+   */
   @Column({ type: 'integer', default: 0 })
   processed!: number;
 
+  /** Source rows created, or places created in a store discovery. */
   @Column({ type: 'integer', default: 0 })
   created!: number;
 
+  /** Source rows whose source group changed, or places changed. Never a price. */
   @Column({ type: 'integer', default: 0 })
   updated!: number;
 
+  /** Source rows seen and left as they were, or places refreshed. */
   @Column({ type: 'integer', default: 0 })
   unchanged!: number;
 
-  /** A 404 from a detail call: "not stocked here" is a value, not a failure. */
+  /**
+   * A source answered that it does not stock the product here: a Mercadona 404,
+   * and nothing else. "Not stocked here" is a value, not a failure.
+   */
   @Column({ type: 'integer', default: 0 })
   notFound!: number;
 

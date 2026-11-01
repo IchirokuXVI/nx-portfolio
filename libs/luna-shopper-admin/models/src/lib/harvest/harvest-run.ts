@@ -78,8 +78,9 @@ export const PRICE_WRITING_MODES: readonly HarvestRunMode[] = [
  * They are read from the report and not from `updated` and `unchanged`, which
  * is where the screen took them before and why a LIDL walk read "prices
  * written: 0" beside 8,154 prices on its own rows. Those two counters are rows
- * the ladder changed and rows it left alone, and the harvester adds its price
- * inserts to them as well, so the number was two unrelated things summed.
+ * the ladder changed and rows it left alone. The harvester once added its price
+ * inserts to `updated` as well, so the number was two unrelated things summed.
+ * Since backend plan 0217 no price moves a counter.
  *
  * Null when the report names none of the three: a store discovery writes no
  * price, and a run that finished before the harvester reported them has nothing
@@ -103,6 +104,18 @@ export function runPriceCounters(run: HarvestRun): RunPriceCounters | null {
     published: published ?? 0,
     confirmed: confirmed ?? 0,
   };
+}
+
+/**
+ * The prices a run published to catalog, as its report states them (backend
+ * plan 0217), for the "Prices" column of the runs list.
+ *
+ * Read from `pricesPublished` alone, so it is null for a run whose report has
+ * no such key: a store discovery, or a run that finished before the harvester
+ * reported it. A zero would read as a run that published nothing.
+ */
+export function runPricesPublished(run: HarvestRun): number | null {
+  return countIn(run.report, 'pricesPublished');
 }
 
 /** One number out of the report bag, which is free form and untyped. */
@@ -154,6 +167,11 @@ export interface RunProgress {
  * several minutes into an eighteen minute run. A screen that filled that gap
  * with a guess would show a bar moving against a denominator nobody chose, so
  * the percentage stays null and the screen says how many rather than how far.
+ *
+ * The percentage stops at 100. A Carrefour catalog, DIA catalog or DIA store
+ * discovery run from before backend plan 0217 counted two units in `processed`
+ * and keeps a count above `totalPlanned`, which no migration can correct
+ * exactly. Its bar is drawn full and no more.
  */
 export function runProgress(run: HarvestRun): RunProgress {
   const total = run.totalPlanned;

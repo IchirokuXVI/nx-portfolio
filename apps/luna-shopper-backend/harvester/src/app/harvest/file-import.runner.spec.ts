@@ -125,6 +125,7 @@ function build(options: {
     report: jest.fn(async (counters: Record<string, number>) => {
       reported.push(counters);
     }),
+    advance: jest.fn(async () => undefined),
     warn: jest.fn((warning: HarvestRunWarning) => {
       warnings.push(warning);
     }),
