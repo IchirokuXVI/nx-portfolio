@@ -39,7 +39,7 @@ GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.6.1}"
 # renovate: datasource=docker depName=envoyproxy/gateway-helm
 ENVOY_GATEWAY_VERSION="${ENVOY_GATEWAY_VERSION:-v1.9.0}"
 # renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
-CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.1}"
+CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.3}"
 # Chart version, which tracks the app version one for one. Check what is current
 # with `helm search repo metallb/metallb --versions`.
 # renovate: datasource=helm depName=metallb registryUrl=https://metallb.github.io/metallb
