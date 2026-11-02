@@ -35,9 +35,9 @@ set -euo pipefail
 #   helm pull oci://docker.io/envoyproxy/gateway-helm --version <v> --untar
 #   grep -rh bundle-version gateway-helm/
 # renovate: datasource=github-releases depName=kubernetes-sigs/gateway-api
-GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.6.1}"
+GATEWAY_API_VERSION="${GATEWAY_API_VERSION:-v1.7.0}"
 # renovate: datasource=docker depName=envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION="${ENVOY_GATEWAY_VERSION:-v1.9.0}"
+ENVOY_GATEWAY_VERSION="${ENVOY_GATEWAY_VERSION:-1.9.3}"
 # renovate: datasource=helm depName=cert-manager registryUrl=https://charts.jetstack.io
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.1}"
 # Chart version, which tracks the app version one for one. Check what is current
