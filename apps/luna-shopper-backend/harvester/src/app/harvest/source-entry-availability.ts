@@ -9,6 +9,7 @@ import {
   type SourceLocation,
 } from '../entities';
 import { CatalogClient } from './catalog-client.service';
+import { statementOf } from './delisting';
 import { sendablePrices } from './source-entry-write';
 
 /**
@@ -228,6 +229,9 @@ export class SourceEntryAvailabilityWriter {
    *
    * Takes several rows because the bulk route binds a thousand at once, and a
    * call per row is a thousand round trips for one file.
+   *
+   * **A row a walk proved gone stays gone** (plan 0220, section 6.4): last,
+   * the product is told it is not sold at each scope where the row is gone.
    */
   async writeForEntries(
     entries: readonly SourceCatalogEntry[]
@@ -244,7 +248,77 @@ export class SourceEntryAvailabilityWriter {
         [...new Set(bound.map((entry) => entry.supermarketId))],
       ]
     );
+    // Last, after the prices and the offer (plan 0220, section 6.4).
+    await this.writeGoneForEntries(bound.map((entry) => entry.id));
     return { ...sent, pricelessOffers };
+  }
+
+  /**
+   * The gone statements a bind owes (section 6.4): for these rows, each scope
+   * where the row's presence row is gone and every other `ACTIVE` row of the
+   * chain bound to the same product that has one there is gone too (section
+   * 6.2). Sent after the prices and the offer, so the product a person just
+   * accepted is not shown sold at a scope a walk proved it gone from.
+   *
+   * Copies are not sent: they belong to a run's request, and a bind has none.
+   * Answers how many statements catalog accepted, and throws the first
+   * failure after every scope was tried, as a bind does for a price.
+   */
+  private async writeGoneForEntries(
+    entryIds: readonly string[]
+  ): Promise<number> {
+    if (entryIds.length === 0) {
+      return 0;
+    }
+    const rows: { priceScopeId: string; itemId: string }[] =
+      await this.claims.query(
+        `
+        SELECT DISTINCT s."priceScopeId"::text AS "priceScopeId",
+                        e."itemId"::text AS "itemId"
+          FROM "source_entry_scope_presence" s
+          JOIN "source_catalog_entries" e ON e."id" = s."entryId"
+         WHERE s."entryId" = ANY($1::uuid[])
+           AND s."goneAt" IS NOT NULL
+           AND e."itemId" IS NOT NULL
+           AND NOT EXISTS (
+                 SELECT 1
+                   FROM "source_entry_scope_presence" o
+                   JOIN "source_catalog_entries" oe ON oe."id" = o."entryId"
+                  WHERE o."priceScopeId" = s."priceScopeId"
+                    AND oe."supermarketId" = e."supermarketId"
+                    AND oe."itemId" = e."itemId"
+                    AND oe."status" = 'ACTIVE'
+                    AND o."goneAt" IS NULL
+               )
+        `,
+        [[...entryIds]]
+      );
+    const byScope = new Map<string, string[]>();
+    for (const row of rows) {
+      const held = byScope.get(row.priceScopeId) ?? [];
+      held.push(row.itemId);
+      byScope.set(row.priceScopeId, held);
+    }
+    let sent = 0;
+    let failure: unknown = null;
+    for (const [scopeId, items] of byScope) {
+      for (let i = 0; i < items.length; i += SEND_BATCH) {
+        const batch = items.slice(i, i + SEND_BATCH);
+        try {
+          await this.catalog.setAvailability(
+            scopeId,
+            batch.map((itemId) => statementOf(itemId, 'gone'))
+          );
+          sent += batch.length;
+        } catch (error) {
+          failure ??= error;
+        }
+      }
+    }
+    if (failure !== null) {
+      throw failure;
+    }
+    return sent;
   }
 
   /** The stored claims of one shop, once a person says which location it is. */

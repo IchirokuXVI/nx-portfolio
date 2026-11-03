@@ -89,6 +89,7 @@ const CONFIG: AssistantConfig = {
   moderation: true,
   moderationModel: DEFAULT_MODERATION_MODEL,
   emergencyNumber: '112',
+  logTurnText: true,
   transcriberUrl: 'http://transcriber.invalid',
   transcriberTurnTimeoutMs: 45000,
   transcriberCommentTimeoutMs: 110000,
@@ -379,6 +380,21 @@ describe('the moderation pass over a turn (plan 0236, section 4)', () => {
       // What was kept from the person, for the owner to read (section 4.4).
       expect(record?.['withheld']).toBe('something unfit');
     }
+  });
+
+  it('logs only the length of the withheld words when turn text is off (k8s plan 0018, D3)', async () => {
+    const provider = writesThenSays('something unfit').willModerate('hate');
+
+    const logged = await logsOf(async () => {
+      await inLocale('en', () =>
+        build(provider, { logTurnText: false }).turn(turnRequest('add milk'))
+      );
+    });
+
+    const record = turnRecord(logged);
+    expect(record?.['moderation']).toBe('hate');
+    expect(record).not.toHaveProperty('withheld');
+    expect(record?.['withheldChars']).toBe('something unfit'.length);
   });
 
   it('answers self_harm with the emergency sentence in the reply language and the operator number', async () => {

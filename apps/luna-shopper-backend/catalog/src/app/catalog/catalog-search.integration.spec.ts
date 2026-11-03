@@ -194,7 +194,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       // claim about the code and not about there being a single milk.
       ean: PASCUAL_EAN,
       categoryIds: [categoryId('milk')],
-      defaultUnit: UnitOfMeasure.LITER,
+      defaultUnit: UnitOfMeasure.MILLILITER,
       productGroupId: milkGroup.id,
     });
     ids.pascualMilk = pascual.id;
@@ -204,7 +204,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       name: { en: 'Whole 1L', es: 'Entera 1L' },
       brand: 'Hacendado',
       categoryIds: [categoryId('milk')],
-      defaultUnit: UnitOfMeasure.LITER,
+      defaultUnit: UnitOfMeasure.MILLILITER,
       productGroupId: milkGroup.id,
     });
     ids.hacendadoMilk = hacendado.id;

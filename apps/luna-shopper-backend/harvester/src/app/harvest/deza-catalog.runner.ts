@@ -76,6 +76,9 @@ export class DezaCatalogRunner implements CatalogRunner {
         // The run's own token bucket, shared by every worker and every query,
         // so the rate the owner set on this row is the rate the source sees.
         acquire: context.acquire,
+        // The run's one refusal guard (plan 0215), for the same reason: a
+        // count kept by a client of one query would start at zero each time.
+        guard: context.guard,
         signal: context.signal,
       });
 

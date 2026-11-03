@@ -61,6 +61,7 @@ export {
   failureBlockReason,
   isTerminalRun,
   runPriceCounters,
+  runPricesPublished,
   runProgress,
   spawnBlockReason,
   type HarvestRun,

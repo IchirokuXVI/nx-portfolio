@@ -4,6 +4,8 @@
  * what a run reports (plan 0169, section 5.3).
  */
 
+import type { SourceGuard } from '@portfolio/luna-shopper/source-guard';
+
 /** One shop of the store locator (plan 0169, section 3). */
 export interface ElJamonStore {
   /**
@@ -138,5 +140,12 @@ export interface ElJamonClientOptions {
   minIntervalMs?: number;
   /** The run's shared token bucket. One per run, never one per client. */
   acquire?: () => Promise<void>;
+  /**
+   * The run's refusal guard (plan 0215), told the answer of every request.
+   * With an `acquire` the caller admits through the guard itself, as the
+   * harvester's does; without one this client awaits `admit` before each
+   * request. Without a guard nothing changes.
+   */
+  guard?: SourceGuard;
   signal?: AbortSignal;
 }

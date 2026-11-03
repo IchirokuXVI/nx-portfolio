@@ -1,3 +1,7 @@
+import type {
+  RefusalPolicy,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import { DEZA_CEILING_PAGES, parseProductPage } from './rows';
 import { parseSectionTree } from './sections';
 import type {
@@ -39,10 +43,32 @@ export class DezaHttpError extends Error {
   }
 }
 
+/**
+ * When a run of refusals is the chain refusing this client (plan 0215,
+ * section 3): five in a row, or 20 of the last 50 answers, then one pause of
+ * ten minutes and three probes. No DEZA block has been seen yet, so these are
+ * the numbers of the storefronts that pause.
+ */
+export const DEZA_REFUSAL_POLICY: Readonly<RefusalPolicy> = {
+  consecutive: 5,
+  window: { size: 50, refusals: 20 },
+  coolDowns: 1,
+  coolDownMs: 600_000,
+  probes: 3,
+};
+
 const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Whether an answer is the chain refusing this client (plan 0215, section 2):
+ * a 403 at once, and a 429 once the retries it is owed are spent.
+ */
+function isRefusal(status: number, attempt: number, retries: number): boolean {
+  return status === 403 || (status === 429 && attempt >= retries);
+}
 
 /**
  * The form the listing posts to itself.
@@ -68,6 +94,7 @@ export class DezaClient {
   private readonly backoffBaseMs: number;
   private readonly minIntervalMs: number;
   private readonly acquire?: () => Promise<void>;
+  private readonly guard?: SourceGuard;
   /** This client's own session. See the class doc for why it is not shared. */
   private readonly cookies = new Map<string, string>();
   private lastRequestAt = 0;
@@ -80,6 +107,7 @@ export class DezaClient {
     this.backoffBaseMs = options.backoffBaseMs ?? 500;
     this.minIntervalMs = options.minIntervalMs ?? 0;
     this.acquire = options.acquire;
+    this.guard = options.guard;
   }
 
   /**
@@ -197,6 +225,7 @@ export class DezaClient {
     body: URLSearchParams | undefined
   ): Promise<string> {
     let attempt = 0;
+    let retriedAfterPause = false;
     for (;;) {
       this.options.signal?.throwIfAborted();
       await this.gate();
@@ -213,17 +242,43 @@ export class DezaClient {
         headers['content-type'] = 'application/x-www-form-urlencoded';
       }
 
-      const response = await this.fetchImpl(url, {
-        method: body ? 'POST' : 'GET',
-        headers,
-        body: body?.toString(),
-        signal: this.options.signal,
-      });
+      let response: Response;
+      try {
+        response = await this.fetchImpl(url, {
+          method: body ? 'POST' : 'GET',
+          headers,
+          body: body?.toString(),
+          signal: this.options.signal,
+        });
+      } catch (error) {
+        // No answer says nothing about a block (plan 0215, section 2).
+        this.guard?.inconclusive();
+        throw error;
+      }
       this.rememberCookies(response);
 
       if (response.ok) {
+        this.guard?.answered();
         return await response.text();
       }
+      if (response.status === 404) {
+        // Not a value here, and still an answer: the chain served this client.
+        this.guard?.answered();
+        throw new DezaHttpError(response.status, url);
+      }
+      if (isRefusal(response.status, attempt, this.retries)) {
+        // The refusal that began a pause, or one during it, is sent again
+        // once the gate lets it through. Any other is this request's alone.
+        if (
+          this.guard?.refused(response.status, url) === 'retry' &&
+          !retriedAfterPause
+        ) {
+          retriedAfterPause = true;
+          continue;
+        }
+        throw new DezaHttpError(response.status, url);
+      }
+      this.guard?.inconclusive();
       if (!RETRYABLE_STATUSES.has(response.status) || attempt >= this.retries) {
         throw new DezaHttpError(response.status, url);
       }
@@ -283,6 +338,7 @@ export class DezaClient {
       await this.acquire();
       return;
     }
+    await this.guard?.admit(this.options.signal);
     if (this.minIntervalMs <= 0) {
       return;
     }

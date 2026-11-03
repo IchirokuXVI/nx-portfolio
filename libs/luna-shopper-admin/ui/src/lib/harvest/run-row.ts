@@ -39,6 +39,12 @@ export interface RunRow {
    * show it.
    */
   readonly wrote?: number;
+  /**
+   * How many prices the run published to catalog, beside "Wrote" (backend
+   * plan 0217). Null when its report states none, and the row then leaves it
+   * blank. Absent where the list does not show it.
+   */
+  readonly prices?: number | null;
 }
 
 /**
@@ -87,6 +93,11 @@ export interface RunRow {
           'harvest.runs.row.wrote' | rokuT: { count: row().wrote }
         }}</span>
       }
+      @if (row().prices !== undefined && row().prices !== null) {
+        <span class="prices">{{
+          'harvest.runs.row.prices' | rokuT: { count: row().prices }
+        }}</span>
+      }
       @if (row().reasonKey; as key) {
         <span class="reason">{{ key | rokuT }}</span>
       }
@@ -125,7 +136,8 @@ export interface RunRow {
       color: var(--admin-ink-muted);
     }
 
-    .wrote {
+    .wrote,
+    .prices {
       font-variant-numeric: tabular-nums;
     }
 

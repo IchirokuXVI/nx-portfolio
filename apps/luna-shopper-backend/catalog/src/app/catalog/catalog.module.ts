@@ -20,6 +20,11 @@ import { EffectivePriceSweep } from './effective-price.sweep';
 import { ItemEanStore } from './item-ean.store';
 import { ItemLinkedImageService } from './item-linked-image.service';
 import { ItemPriceService } from './item-price.service';
+import {
+  CATALOG_NATS_REQUESTS,
+  ITEM_REFERENCES,
+  NatsItemReferences,
+} from './item-references.client';
 import { ItemService } from './item.service';
 import { LocationScopeService } from './location-scopes';
 import { NearbyShopsController } from './nearby-shops.controller';
@@ -57,6 +62,19 @@ import { SupermarketService } from './supermarket.service';
     ClientsModule.registerAsync([
       {
         name: CATALOG_NATS_EVENTS,
+        inject: [ConfigService],
+        useFactory: (config: ConfigService) => ({
+          transport: Transport.NATS,
+          options: {
+            servers: [config.getOrThrow<CatalogConfig>('catalog').natsUrl],
+          },
+        }),
+      },
+      // Catalog's first requests (plan 0239): what the harvester and core
+      // hold that names a product, asked before a merge and a delete. Its own
+      // client, so the one above still publishes and does nothing else.
+      {
+        name: CATALOG_NATS_REQUESTS,
         inject: [ConfigService],
         useFactory: (config: ConfigService) => ({
           transport: Transport.NATS,
@@ -108,6 +126,8 @@ import { SupermarketService } from './supermarket.service';
     // The links to the photos chains print, and what a shopper is given of
     // them (plan 0198).
     ItemLinkedImageService,
+    // What the harvester and core hold that names a product (plan 0239).
+    { provide: ITEM_REFERENCES, useClass: NatsItemReferences },
     ItemService,
     // Turns a place into the scopes that price it today (plan 0049).
     ScopeResolverService,

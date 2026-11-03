@@ -33,6 +33,15 @@ import type {
  * product, so no price is compared here. A tie keeps the product that the line
  * holds first.
  *
+ * ## A product in stock first (plan 0220, section 15.5)
+ *
+ * The comparison runs twice at most. First over the offers that no chain
+ * marks out of stock (`outOfStockAt` null), and only when none of those is
+ * priced, over every offer. So a line picks the cheapest product in stock
+ * before a cheaper one out of stock, and a line whose products are all out of
+ * stock still picks the cheapest. A line with a favourite never reaches here:
+ * core asks only for the lines that have none.
+ *
  * A line with no priced product gets no pick, and core then counts it as its
  * first product.
  */
@@ -46,6 +55,7 @@ export function picksOf(
   const picks: BasketLinePick[] = [];
   for (const line of lines) {
     const prices: BasketRulePrice[] = [];
+    const inStock: BasketRulePrice[] = [];
     for (const itemId of line.itemIds) {
       const item = byId.get(itemId);
       if (!item) {
@@ -54,15 +64,20 @@ export function picksOf(
       }
       for (const offer of offersOf(item)) {
         if (counted.has(offer.priceScopeId)) {
-          prices.push({
+          const price = {
             itemId,
             price: offer.price,
             unitPrice: offer.unitPrice,
-          });
+          };
+          prices.push(price);
+          // Absent is a catalog from before the field, which said nothing.
+          if (!offer.outOfStockAt) {
+            inStock.push(price);
+          }
         }
       }
     }
-    const itemId = cheapestOf(prices);
+    const itemId = cheapestOf(inStock) ?? cheapestOf(prices);
     if (itemId !== null) {
       picks.push({ lineId: line.lineId, itemId });
     }

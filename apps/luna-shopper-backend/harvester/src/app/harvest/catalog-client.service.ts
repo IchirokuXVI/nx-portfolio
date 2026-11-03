@@ -43,6 +43,7 @@ import {
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
   type StatedItemPrice,
+  type SupermarketItemAvailabilityEntry,
   type SupermarketLocationPage,
   type SupermarketLocationView,
   type SupermarketPage,
@@ -597,7 +598,7 @@ export class CatalogClient {
    */
   setAvailability(
     priceScopeId: string,
-    entries: { itemId: string; available: boolean }[],
+    entries: SupermarketItemAvailabilityEntry[],
     options: { onlyIfMissing?: boolean } = {}
   ): Promise<SetSupermarketItemAvailabilityResult> {
     return this.send(SUPERMARKET_ITEM_PATTERNS.setAvailability, {

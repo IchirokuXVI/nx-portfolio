@@ -266,6 +266,20 @@ export class SourceCatalogEntry extends BaseEntity {
   decidedAt!: Date | null;
 
   /**
+   * When every scope a whole walk counted lost this product (plan 0220,
+   * section 4.3), and null while any of them lists it.
+   *
+   * **In neither group above.** It is the delisting counter's, nothing else
+   * writes it, and it never changes `status`: a gone row that waits in the
+   * queue stays where it is, and the list can filter on this.
+   */
+  @Index('ix_source_catalog_entries_delisted', {
+    where: '"delistedAt" IS NOT NULL',
+  })
+  @Column({ type: 'timestamptz', nullable: true })
+  delistedAt!: Date | null;
+
+  /**
    * The latest price each scope stated for this row (section 3.2).
    *
    * Not a column on the row, because a chain has several leaflets at once, each

@@ -3,6 +3,10 @@ import {
   HarvestDetailFetch,
   PriceScopeKind,
 } from '@portfolio/luna-shopper/contracts';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, RunPriceScope } from './catalog-runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -172,6 +176,12 @@ function stubFetch(options: {
     warehouse: string
   ) => Record<string, unknown> | undefined;
   onRequest?: (count: number, url: string) => void;
+  /** A status other than 200 for a level 2 category of one warehouse. */
+  categoryStatus?: (warehouse: string) => number | undefined;
+  /** A status other than 200 for the detail of one product (plan 0220). */
+  detailStatus?: (externalId: string, warehouse: string) => number | undefined;
+  /** A status to answer in place of the fixture, such as a refusal. */
+  statusFor?: (url: string) => number | undefined;
 }): { urls: string[]; fetchImpl: typeof fetch } {
   const urls: string[] = [];
   const fetchImpl = (async (input: string | URL) => {
@@ -187,6 +197,11 @@ function stubFetch(options: {
         json: async () => body,
       }) as unknown as Response;
 
+    const status = options.statusFor?.(url);
+    if (status !== undefined) {
+      return answer(status, null);
+    }
+
     // Every request the client makes names the warehouse it is for, which is
     // what makes one stub answer for a run of several of them.
     const warehouse = new URL(url).searchParams.get('wh') ?? '';
@@ -195,10 +210,18 @@ function stubFetch(options: {
       return answer(200, CATEGORY_TREE);
     }
     if (/\/categories\/\d+\//.test(url)) {
+      const status = options.categoryStatus?.(warehouse);
+      if (status !== undefined) {
+        return answer(status, null);
+      }
       return answer(200, categoryProducts(warehouse, options.listingPriceFor));
     }
     const product = /\/products\/([^/?]+)\//.exec(url);
     if (product) {
+      const status = options.detailStatus?.(product[1], warehouse);
+      if (status !== undefined) {
+        return answer(status, null);
+      }
       const detail =
         options.detailFor?.(product[1], warehouse) ??
         detailed(product[1], warehouse, '8480000135636');
@@ -636,10 +659,72 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
     // scope what that warehouse does not carry (plan 0108, section 2).
     expect(report.completed).toEqual(['4661', '4149']);
     // A product is reported once for the whole run, so the orchestrator cannot
-    // tell which warehouse named it. The absences are the only thing a run of
-    // several warehouses has to state outright.
+    // tell which warehouse named it: each warehouse hands over what its own
+    // listing named (plan 0220, section 2.1), and the absences are the diff.
+    expect(report.wholeListings).toEqual([
+      { scopeKey: '4661', listed: [...WALKED] },
+      { scopeKey: '4149', listed: [...WALKED, '9001'] },
+    ]);
+    expect(report.notWhole).toEqual([]);
+    // "Not listed here" is no longer stated as a claim.
+    expect(report.availabilities).toEqual([]);
+  });
+
+  it('declares nothing whole for a warehouse whose walk met a category that answered 404 (plan 0220)', async () => {
+    const { fetchImpl } = stubFetch({
+      categoryStatus: (warehouse) => (warehouse === '4149' ? 404 : undefined),
+    });
+    restore = withFetch(fetchImpl);
+    const { runner, context, report } = build();
+
+    await runner.run(context, report, walking('4661', '4149'), source());
+
+    expect(report.wholeListings).toEqual([
+      { scopeKey: '4661', listed: [...WALKED] },
+    ]);
+    // Named with the category, and with what it did read, which is nothing.
+    expect(report.notWhole).toEqual([
+      {
+        scopeKey: '4149',
+        reason: 'category-404',
+        detail: ['112'],
+        listed: [],
+      },
+    ]);
+    // Plan 0103's statement stays, and the sink reads the listing first.
+    expect(report.completed).toEqual(['4661', '4149']);
+  });
+
+  it('counts a product whose detail failed as listed (plan 0220, section 2.1)', async () => {
+    const { fetchImpl } = stubFetch({
+      detailStatus: (id) => (id === WALKED[0] ? 400 : undefined),
+    });
+    restore = withFetch(fetchImpl);
+    const { runner, context, report } = build();
+
+    await runner.run(context, report, walking('4661'), source());
+
+    expect(
+      report.products.some((product) => product.externalId === WALKED[0])
+    ).toBe(false);
+    expect(report.wholeListings).toEqual([
+      { scopeKey: '4661', listed: [...WALKED] },
+    ]);
+  });
+
+  it('states a detail that answered 404 as not stocked in the warehouse it was asked of', async () => {
+    const { fetchImpl } = stubFetch({
+      detailStatus: (id) => (id === '9001' ? 404 : undefined),
+    });
+    restore = withFetch(fetchImpl);
+    const { runner, context, report } = build();
+
+    await runner.run(context, report, walking('4661', '4149'), source());
+
+    // 9001 is listed by 4149 alone, so its detail was asked of 4149, and the
+    // 404 is an indicator of that warehouse and of no other (section 15.1).
     expect(report.availabilities).toEqual([
-      { externalId: '9001', available: false, scopeKey: '4661' },
+      { externalId: '9001', available: false, scopeKey: '4149' },
     ]);
   });
 
@@ -670,6 +755,97 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
     // warehouse. Under-claiming is the safe way to be wrong here.
     expect(report.completed).toEqual([]);
     expect(report.availabilities).toEqual([]);
+    expect(report.wholeListings).toEqual([]);
+    expect(report.notWhole).toEqual([]);
+  });
+
+  describe('a run the refusal guard stops (plan 0215)', () => {
+    /** A context with a guard that stops on the first refusal, as the executor wires it. */
+    function guarded() {
+      const controller = new AbortController();
+      const built = build({ controller });
+      const guard = new SourceGuard(
+        {
+          consecutive: 1,
+          window: null,
+          coolDowns: 0,
+          coolDownMs: 0,
+          probes: 0,
+        },
+        { onStop: (stop) => controller.abort(new SourceBlockedError(stop)) }
+      );
+      Object.assign(built.context, {
+        guard,
+        acquire: () => guard.admit(controller.signal),
+      });
+      return built;
+    }
+
+    it('reports nothing and claims nothing when the stop comes in the listing walk', async () => {
+      // The second warehouse's listing is refused, so no walk was whole.
+      const { fetchImpl } = stubFetch({
+        statusFor: (url) =>
+          url.includes('/categories/112/') && url.includes('wh=4149')
+            ? 403
+            : undefined,
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = guarded();
+
+      await expect(
+        runner.run(
+          context,
+          report,
+          {
+            ...walking('4661', '4149'),
+            details: HarvestDetailFetch.NEW,
+            knownExternalIds: new Set(['4241']),
+          },
+          source()
+        )
+      ).rejects.toBeInstanceOf(SourceBlockedError);
+
+      // The products are reported after the walk, so a stop inside it reports
+      // none, and the rerun repeats the 151 requests a warehouse costs.
+      expect(report.products).toEqual([]);
+      expect(report.partialProducts).toEqual([]);
+      expect(report.completed).toEqual([]);
+      expect(report.availabilities).toEqual([]);
+    });
+
+    it('keeps the known products and the details read when the stop comes in the detail phase', async () => {
+      const { urls, fetchImpl } = stubFetch({
+        statusFor: (url) => (url.includes('/products/9001/') ? 403 : undefined),
+      });
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = guarded();
+
+      await runner.run(
+        context,
+        report,
+        {
+          ...walking('4661', '4149'),
+          details: HarvestDetailFetch.NEW,
+          knownExternalIds: new Set(['4241']),
+        },
+        source()
+      );
+
+      expect(context.signal.aborted).toBe(true);
+      // The known product, from the listing, and the detail read before the
+      // refusal. Nothing was asked after it.
+      expect(
+        report.partialProducts.map((product) => product.externalId)
+      ).toEqual(['4241']);
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        '7012',
+      ]);
+      expect(urls.filter((url) => url.includes('/products/'))).toHaveLength(2);
+      // A stopped run takes the abort path, which claims no complete
+      // assortment and states no absence, whichever phase it stopped in.
+      expect(report.completed).toEqual([]);
+      expect(report.availabilities).toEqual([]);
+    });
   });
 
   it('states both request counts, so the saving is auditable', async () => {
@@ -854,9 +1030,11 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       // Phase 3 reads the listings, not the details, so a skipped detail
       // changes nothing about the absences.
       expect(report.completed).toEqual(['4661', '4149']);
-      expect(report.availabilities).toEqual([
-        { externalId: '9001', available: false, scopeKey: '4661' },
+      expect(report.wholeListings).toEqual([
+        { scopeKey: '4661', listed: [...WALKED] },
+        { scopeKey: '4149', listed: [...WALKED, '9001'] },
       ]);
+      expect(report.availabilities).toEqual([]);
     });
   });
 

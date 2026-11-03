@@ -15,7 +15,8 @@
 #
 # Healthy means: the node is Ready, every Deployment is Available, every
 # StatefulSet and DaemonSet has rolled out, no container is stuck in a crash or
-# pull loop, and every cert-manager Certificate is Ready.
+# pull loop, every cert-manager Certificate is Ready, and the hourly log trim
+# of k8s plan 0018 is scheduled.
 
 set -uo pipefail
 
@@ -70,6 +71,21 @@ if kubectl get crd certificates.cert-manager.io >/dev/null 2>&1; then
   kubectl get certificate --all-namespaces
 else
   echo "    cert-manager not installed, skipped"
+fi
+
+step "log retention (k8s plan 0018)"
+# The rules are printed so that a person can hold them against the days the
+# privacy policy states, which the chart's legal values set and this host
+# cannot read.
+if systemctl is-active --quiet nx-log-retention.timer; then
+  echo "    nx-log-retention.timer is active"
+else
+  fail "nx-log-retention.timer is not active: re-run provision-host.sh"
+fi
+if [ -r /etc/nx-log-retention.conf ]; then
+  grep -v '^[[:space:]]*\(#\|$\)' /etc/nx-log-retention.conf | sed 's/^/    rule: /'
+else
+  fail "no /etc/nx-log-retention.conf"
 fi
 
 if [ "$failed" -ne 0 ]; then

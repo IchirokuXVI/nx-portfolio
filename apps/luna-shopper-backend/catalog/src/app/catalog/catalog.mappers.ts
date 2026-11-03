@@ -289,6 +289,11 @@ export function toItemView(
     defaultUnit: row.defaultUnit,
     productGroupId: row.productGroupId,
   };
+  // A merged row names its survivor (plan 0239). Absent on every live product,
+  // which is every product a shopper's read answers as itself.
+  if (row.mergedIntoId) {
+    view.mergedInto = row.mergedIntoId;
+  }
   return bestOffer ? { ...view, bestOffer } : view;
 }
 
@@ -351,6 +356,7 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     sourceKind: row.priceSourceKind ?? null,
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
+    outOfStockAt: toInstant(row.outOfStockAt),
   };
 }
 
@@ -373,6 +379,8 @@ export function toSupermarketItemView(
     validUntil: toInstant(row.validUntil),
     itemPriceId: row.itemPriceId ?? null,
     available: row.available,
+    delistedAt: toInstant(row.delistedAt),
+    outOfStockAt: toInstant(row.outOfStockAt),
   };
 }
 

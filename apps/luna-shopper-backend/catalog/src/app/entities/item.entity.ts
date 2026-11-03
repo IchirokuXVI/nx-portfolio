@@ -124,4 +124,20 @@ export class Item extends BaseEntity {
    */
   @Column({ type: 'uuid', nullable: true })
   brandId!: string | null;
+
+  /**
+   * The product this one was merged into, or null for a live product (plan
+   * 0239).
+   *
+   * A merged row stays, as the record of what the product was called, and
+   * leaves every list and search. A read by id answers its survivor. Written
+   * only by `ItemService.merge`, which also moves every row that named the
+   * merged product onto the survivor, so a survivor is never itself merged.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  mergedIntoId!: string | null;
+
+  /** When the merge was written, or null for a live product (plan 0239). */
+  @Column({ type: 'timestamptz', nullable: true })
+  mergedAt!: Date | null;
 }

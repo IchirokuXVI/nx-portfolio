@@ -4,7 +4,8 @@
  *
  * Framework free by hard constraint: no TypeORM entity, no repository, no Nest
  * decorator, no `Item`, no `SupermarketItem`, no database. It depends on
- * `contracts` for the unit enum and the pack count rule, and on nothing else.
+ * `contracts` for the unit enum and the pack count rule, on `source-guard` for
+ * the run's refusal guard (plan 0215), and on nothing else.
  * A category is answered as a slug of the taxonomy (plan 0166), never an id.
  */
 
@@ -20,6 +21,7 @@ export type {
 } from './lib/categories';
 export {
   MERCADONA_BASE_URL,
+  MERCADONA_REFUSAL_POLICY,
   MercadonaClient,
   MercadonaHttpError,
 } from './lib/mercadona.client';

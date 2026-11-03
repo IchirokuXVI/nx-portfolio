@@ -1,3 +1,4 @@
+import { applyDecorators } from '@nestjs/common';
 import {
   ApiProperty,
   ApiPropertyOptional,
@@ -33,6 +34,7 @@ import {
   IsIn,
   IsInt,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -163,6 +165,72 @@ export function AtLeastOneLocale(): PropertyDecorator {
       },
     });
   };
+}
+
+/**
+ * The leaves of a product write named by slug (plan 0237, section 3.4), and the
+ * one rule the two category lists share: never both, and on a create exactly
+ * one.
+ *
+ * One decorator holding the shape and the rule, rather than `@IsOptional()`
+ * and the array validators, because `@IsOptional()` switches off every
+ * validator on the property, and the rule has to see the case where this list
+ * is absent and `categoryIds` is too. Its message starts with the property
+ * name, which is where the envelope files it.
+ */
+export function CategorySlugList(options: {
+  required: boolean;
+}): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'categorySlugList',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const ids = (args.object as { categoryIds?: unknown }).categoryIds;
+          if (value === undefined) {
+            return !options.required || ids !== undefined;
+          }
+          return (
+            ids === undefined &&
+            Array.isArray(value) &&
+            value.length >= 1 &&
+            value.length <= ITEM_CATEGORY_MAX &&
+            value.every(
+              (slug) =>
+                typeof slug === 'string' &&
+                slug.trim() !== '' &&
+                slug.length <= CATEGORY_SLUG_MAX_LENGTH
+            )
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return (
+            `${args.property} must be 1 to ${ITEM_CATEGORY_MAX} slugs, and ` +
+            (options.required
+              ? 'exactly one of categoryIds and categorySlugs is sent'
+              : 'categoryIds and categorySlugs are never sent together')
+          );
+        },
+      },
+    });
+  };
+}
+
+/** The leaf slugs of an item route (plan 0237, section 3.4), for the document. */
+function categorySlugsProperty(required: boolean): PropertyDecorator {
+  return ApiPropertyOptional({
+    type: [String],
+    minItems: 1,
+    maxItems: ITEM_CATEGORY_MAX,
+    description:
+      'The leaf categories by slug, in the order meant, for example `["small-appliances"]` (plan 0237, section 3.4): what an audit and the register speak. ' +
+      (required
+        ? 'Exactly one of this and `categoryIds`; both, or neither, is refused with `validation_failed`. '
+        : 'Never with `categoryIds`; both is refused with `validation_failed`. Absent leaves the set alone. ') +
+      'An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.',
+  });
 }
 
 /**
@@ -367,6 +435,13 @@ export class UpdateSupermarketLocationDto extends CreateSupermarketLocationDto {
 
 // --- Items -----------------------------------------------------------------
 
+/**
+ * The unit rules catalog holds every product write to (plan 0237, section
+ * 3.3), stated once for the create and the edit.
+ */
+const BASE_UNIT_DESCRIPTION =
+  'A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size.';
+
 export class CreateItemDto {
   @ApiProperty({ type: LocalizedTextDto })
   @ValidateNested()
@@ -427,22 +502,27 @@ export class CreateItemDto {
   @Max(PACK_COUNT_MAX)
   packCount?: number | null;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
     minItems: 1,
     maxItems: ITEM_CATEGORY_MAX,
     description:
-      'One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`.',
+      'One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`. Exactly one of this and `categorySlugs` (plan 0237, section 3.4).',
   })
+  @IsOptional()
   @IsArray()
   @ArrayMinSize(1)
   @ArrayMaxSize(ITEM_CATEGORY_MAX)
   // Any version: seeded categories carry version 5 ids derived from the slug.
   @IsUUID('all', { each: true })
-  categoryIds!: string[];
+  categoryIds?: string[];
 
-  @ApiProperty({ enum: UnitOfMeasure })
+  @categorySlugsProperty(true)
+  @CategorySlugList({ required: true })
+  categorySlugs?: string[];
+
+  @ApiProperty({ enum: UnitOfMeasure, description: BASE_UNIT_DESCRIPTION })
   @IsEnum(UnitOfMeasure)
   defaultUnit!: UnitOfMeasure;
 
@@ -455,6 +535,28 @@ export class CreateItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string | null;
+}
+
+/**
+ * The opt in of a batch to the brand registry (plan 0237, section 3.6), the
+ * same on the create and the update op.
+ *
+ * The value as the body spelled it, so only a JSON true or false passes: the
+ * pipe would otherwise read the string "false" as true.
+ */
+function RequireRegisteredBrandsProperty(): PropertyDecorator {
+  return applyDecorators(
+    ApiPropertyOptional({
+      default: false,
+      description:
+        'Refuse the whole batch when a brand it names is not in the registry and is not a spelling of a brand that is, with `brand_unregistered` and the labels in `details.labels` (plan 0237, section 3.6). A null brand passes, and a spelling stores the label of the brand it spells. Absent or false stores such a label as text with no brand id, as always.',
+    }),
+    Transform(({ obj }: { obj: Record<string, unknown> }) =>
+      obj?.['requireRegisteredBrands']
+    ),
+    IsOptional(),
+    IsBoolean()
+  );
 }
 
 /**
@@ -477,6 +579,71 @@ export class CreateItemsDto {
   @ValidateNested({ each: true })
   @Type(() => CreateItemDto)
   items!: CreateItemDto[];
+
+  @RequireRegisteredBrandsProperty()
+  requireRegisteredBrands?: boolean;
+}
+
+/**
+ * What an edit expects the product to hold (plan 0237, section 3.2), in the
+ * shape {@link SourceEntryExpectationDto} gave the decisions route.
+ *
+ * Every field is optional, and only a field that is present is compared. Catalog
+ * compares inside the write's transaction, before any edit of the request is
+ * applied, so a product that a harvest rewrote after the operator read it
+ * refuses the whole request rather than being overwritten from a stale read.
+ */
+@ApiSchema({
+  description:
+    'What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds.',
+})
+export class ItemExpectationDto {
+  @ApiPropertyOptional({
+    type: LocalizedTextDto,
+    description:
+      'Both halves, each trimmed. A half left out expects the product to have no name in that language.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => LocalizedTextDto)
+  name?: LocalizedTextDto;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    maxLength: 120,
+    description: 'Compared by brand key, so `Pierrot` and `PIERROT` agree.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  brand?: string | null;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsNumber()
+  unitSize?: number | null;
+
+  @ApiPropertyOptional({ enum: UnitOfMeasure })
+  @IsOptional()
+  @IsEnum(UnitOfMeasure)
+  defaultUnit?: UnitOfMeasure;
+
+  @ApiPropertyOptional({ type: 'integer', nullable: true })
+  @IsOptional()
+  @IsInt()
+  packCount?: number | null;
+
+  @ApiPropertyOptional({
+    type: [String],
+    maxItems: ITEM_CATEGORY_MAX,
+    description: 'The slugs of the product’s categories, compared in order.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(ITEM_CATEGORY_MAX)
+  @IsString({ each: true })
+  @MaxLength(CATEGORY_SLUG_MAX_LENGTH, { each: true })
+  categorySlugs?: string[];
 }
 
 export class UpdateItemDto {
@@ -555,7 +722,14 @@ export class UpdateItemDto {
   @IsUUID('all', { each: true })
   categoryIds?: string[];
 
-  @ApiPropertyOptional({ enum: UnitOfMeasure })
+  @categorySlugsProperty(false)
+  @CategorySlugList({ required: false })
+  categorySlugs?: string[];
+
+  @ApiPropertyOptional({
+    enum: UnitOfMeasure,
+    description: BASE_UNIT_DESCRIPTION,
+  })
   @IsOptional()
   @IsEnum(UnitOfMeasure)
   defaultUnit?: UnitOfMeasure;
@@ -569,6 +743,19 @@ export class UpdateItemDto {
   @IsOptional()
   @IsUUID()
   productGroupId?: string | null;
+
+  @ApiPropertyOptional({
+    type: ItemExpectationDto,
+    description:
+      'What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.',
+  })
+  // Not `@IsOptional()`: that lets `null` through, and catalog has nothing
+  // to compare a null expectation with. Absent is the only way to send none.
+  @ValidateIf((dto: UpdateItemDto) => dto.expect !== undefined)
+  @IsObject()
+  @ValidateNested()
+  @Type(() => ItemExpectationDto)
+  expect?: ItemExpectationDto;
 }
 
 /** One product of an {@link UpdateItemsDto}: the single edit, and which product. */
@@ -599,6 +786,9 @@ export class UpdateItemsDto {
   @ValidateNested({ each: true })
   @Type(() => UpdateItemBatchEntryDto)
   items!: UpdateItemBatchEntryDto[];
+
+  @RequireRegisteredBrandsProperty()
+  requireRegisteredBrands?: boolean;
 }
 
 // --- Categories (plan 0166, sections 1 to 3) --------------------------------

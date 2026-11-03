@@ -171,9 +171,10 @@ export class RunProgressView {
    *
    * They keep their neutral words on every mode. Two of them used to be renamed
    * prices on a run that writes any, and that was wrong twice over: `updated` is
-   * rows the ladder changed, and the harvester adds its price inserts to it as
-   * well. A LIDL walk read "prices written: 0" while its own source rows carried
-   * 8,154 prices. The real numbers are {@link prices}, which the run reports.
+   * rows the ladder changed, and the harvester once added its price inserts to
+   * it as well. Since backend plan 0217 it no longer does. A LIDL walk read
+   * "prices written: 0" while its own source rows carried 8,154 prices. The
+   * real numbers are {@link prices}, which the run reports.
    */
   readonly counters = computed(() => {
     const run = this.run();

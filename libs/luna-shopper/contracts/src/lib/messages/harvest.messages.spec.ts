@@ -41,6 +41,30 @@ describe('adapterCapabilities', () => {
       skipsKnownDetails: false,
       printedLocale: null,
       walkablePriorities: null,
+      stockIndicator: null,
+      provesDelisting: false,
+    });
+  });
+
+  it('states how each adapter tells stock and whether it proves a delisting (plan 0220, section 15.3)', () => {
+    const signals = Object.fromEntries(
+      ADAPTER_KEYS.map((key) => [
+        key,
+        [
+          ADAPTER_CAPABILITIES[key].stockIndicator,
+          ADAPTER_CAPABILITIES[key].provesDelisting,
+        ],
+      ])
+    );
+    expect(signals).toEqual({
+      'mercadona-api': ['per-scope', true],
+      'dia-api': ['per-scope', true],
+      'eljamon-web': [null, true],
+      'deza-web': ['per-shop', false],
+      'carrefour-web': [null, false],
+      'lidl-api': [null, false],
+      'osm-places': [null, false],
+      manual: [null, false],
     });
   });
 

@@ -572,6 +572,7 @@ export class AdminHarvestEntriesController {
         sourceKind: query.sourceKind,
         query: query.query,
         brandKey: query.brandKey,
+        delisted: query.delisted,
         cursor: query.cursor,
         limit: query.limit,
       }
@@ -688,7 +689,12 @@ export class AdminHarvestEntriesController {
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.createItem, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true, eanHeld: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    eanHeld: true,
+    baseUnit: true,
+  })
   createItem(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,

@@ -46,6 +46,7 @@ import {
   type PriceKey,
 } from './effective-price.service';
 import { statesTheSame, writeItemPrices } from './item-price-writer';
+import { survivorsOf, toSurvivor } from './merged-items';
 import {
   PlatformAdminService,
   requireServiceActor,
@@ -110,13 +111,20 @@ export class ItemPriceService {
     const scope = await this.requireItemAndScope(req.itemId, req.priceScopeId);
 
     const row = await this.audit.write(actor, async (tx) => {
+      // A merged product's price is its survivor's (plan 0239). The writer
+      // resolves it too; it is resolved here as well so that the recompute
+      // and the answer below read the row that was written.
+      const itemId = toSurvivor(
+        await survivorsOf(tx.manager, [req.itemId], { lock: true }),
+        req.itemId
+      );
       const outcome = await writeItemPrices(tx.manager, {
         scope,
         sourceKind: req.sourceKind,
         sourceRunId: req.sourceRunId ?? null,
         entries: [
           {
-            itemId: req.itemId,
+            itemId,
             price: req.price,
             currency: req.currency,
             unitPrice: req.unitPrice,
@@ -133,7 +141,7 @@ export class ItemPriceService {
       }
       const keys = await this.effective.affectedKeys(
         tx.manager,
-        [req.itemId],
+        [itemId],
         scope.id
       );
       await this.effective.recompute(tx.manager, keys, now);
@@ -145,7 +153,7 @@ export class ItemPriceService {
       // Equal on every value and not later: the current row is the answer.
       return tx.manager.findOne(ItemPrice, {
         where: {
-          itemId: req.itemId,
+          itemId,
           priceScopeId: scope.id,
           sourceKind: req.sourceKind,
         },
@@ -781,6 +789,15 @@ export async function withdrawRunWrittenPrices(
   const scopeIds = [...new Set(req.priceScopeIds.filter(isUuid))];
   const kinds = [...new Set(req.sourceKinds)];
   if (!isUuid(req.itemId) || scopeIds.length === 0 || kinds.length === 0) {
+    return result;
+  }
+  // A merged product holds no price: the merge moved every row to the
+  // survivor (plan 0239). What the harvester says is bound accounts for the
+  // merged id, so it says nothing about which of the survivor's rows to
+  // remove, and nothing is removed or written on a guess. The harvester
+  // moves its rows to the survivor when it hears of the merge, and a
+  // withdraw that names the survivor then applies.
+  if ((await survivorsOf(tx.manager, [req.itemId])).size > 0) {
     return result;
   }
   const named = new Set(scopeIds);

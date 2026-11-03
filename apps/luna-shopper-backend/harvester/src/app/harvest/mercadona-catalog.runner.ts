@@ -36,8 +36,10 @@ import type { RunReport } from './run-report';
  *    hundred, and only the new products after it (plan 0119). A known product
  *    is reported from the listing.
  * 3. Report each product once, carrying one price per warehouse that listed it.
- * 4. Say, per warehouse, that its walk was whole, so the orchestrator can work
- *    out what that warehouse does not carry.
+ * 4. Say, per warehouse, that its walk was whole, with what it listed, so the
+ *    orchestrator can work out what that warehouse does not carry (plan 0220,
+ *    section 2.1). A warehouse whose walk met a category that answered 404 is
+ *    not whole, and says why.
  *
  * **The warehouse is the scope's own `externalKey`** (plan 0108, D1). It used to
  * be `source.config.warehouse`, chosen independently of the scope the spawn was
@@ -105,7 +107,8 @@ export class MercadonaCatalogRunner implements CatalogRunner {
 
     // One client per warehouse, sharing the run's one token bucket through
     // `acquire`, so the rate the source sees is the configured rate however many
-    // warehouses are open.
+    // warehouses are open. They share the run's one refusal guard too (plan
+    // 0215): a block is the chain's, and a count per warehouse could not see it.
     const walks = scopes.map((scope) => ({
       warehouse: scope.externalKey,
       client: new MercadonaClient({
@@ -113,6 +116,7 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         userAgent: settings.userAgent,
         baseUrl: settings.mercadonaBaseUrl,
         acquire: context.acquire,
+        guard: context.guard,
         signal: context.signal,
       }),
     }));
@@ -155,7 +159,11 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         // product absent from warehouse one and present in warehouse four is
         // fetched from four, where it answers 200 rather than "not stocked".
         if (!union.has(externalId)) {
-          union.set(externalId, { client: walk.client, listing: product });
+          union.set(externalId, {
+            client: walk.client,
+            warehouse,
+            listing: product,
+          });
         }
       }
       this.logger.log(
@@ -247,8 +255,15 @@ export class MercadonaCatalogRunner implements CatalogRunner {
 
         // A 404 is "not stocked in this warehouse" (section 2.6): a value, not a
         // failure, and it neither fails the run nor deletes what we know. It
-        // produces no observation, and the absence is what phase 3 reads.
+        // produces no observation. It is an indicator and not a miss (plan
+        // 0220, section 15.1), so it is stated outright, for the warehouse the
+        // detail was asked of and no other.
         if (!detail) {
+          report.availability({
+            externalId: product.externalId,
+            available: false,
+            scopeKey: product.warehouse,
+          });
           await context.report({ processed: 1, notFound: 1 });
           return;
         }
@@ -308,7 +323,7 @@ export class MercadonaCatalogRunner implements CatalogRunner {
       },
     });
 
-    // --- Phase 3: what each warehouse carries, and what it does not --------
+    // --- Phase 3: what each warehouse listed ---------------------------------
     //
     // The runner used to load every `ACTIVE` row of the chain here to work out
     // which tracked products the walk had not seen, and call those out of stock.
@@ -316,27 +331,35 @@ export class MercadonaCatalogRunner implements CatalogRunner {
     // named, so the runner says only that the walk was whole (plan 0103, 6.1).
     //
     // What the orchestrator cannot know is **which** warehouse named which
-    // product, because a product is reported once for the whole run. So the
-    // absences are stated here, per warehouse, and they are the only claims a
-    // run of several warehouses has to add: everything the run named is implied
-    // present, and a warehouse that did not list a product says so outright.
+    // product, because a product is reported once for the whole run. So each
+    // warehouse hands over the ids its own listing named (plan 0220, section
+    // 2.1). A product counts as listed whatever its detail answered, and the
+    // orchestrator works out the absences from that, with the rule that a
+    // warehouse which once listed a product is the delisting counter's. The
+    // claims of "not listed here" this phase used to state are that diff.
+    //
+    // **A category that answered 404 makes the warehouse not whole.** The walk
+    // looks complete with that category's products missing, so the listing is
+    // handed over for its positives and named with the categories.
     //
     // **An aborted run declares nothing**, so it writes positives only. A walk
     // that stopped early has not proved anything absent, and neither has a
     // detail phase that stopped early, since a product it never reached is
     // indistinguishable from one no warehouse listed.
     if (!context.signal.aborted) {
-      for (const scope of scopes) {
-        const listed = assortments.get(scope.externalKey);
-        report.assortmentComplete(scope.externalKey);
-        for (const externalId of union.keys()) {
-          if (!listed?.has(externalId)) {
-            report.availability({
-              externalId,
-              available: false,
-              scopeKey: scope.externalKey,
-            });
-          }
+      for (const walk of walks) {
+        const listed = assortments.get(walk.warehouse)?.keys() ?? [];
+        report.assortmentComplete(walk.warehouse);
+        const missing = walk.client.missingCategories;
+        if (missing.length === 0) {
+          report.listingWhole(walk.warehouse, listed);
+        } else {
+          report.listingNotWhole(
+            walk.warehouse,
+            'category-404',
+            [...missing],
+            listed
+          );
         }
       }
     }
@@ -388,6 +411,8 @@ const CURRENCY: MercadonaProduct['currency'] = 'EUR';
 interface Detailable {
   /** The first warehouse that listed it, which is where it answers 200. */
   client: MercadonaClient;
+  /** That warehouse's key, which a 404 is stated for. */
+  warehouse: string;
   listing: MercadonaListProduct;
 }
 

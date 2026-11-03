@@ -24,12 +24,74 @@ const offer = (
   unitPrice: number | null = price
 ): ItemOfferView => ({ priceScopeId, price, unitPrice }) as ItemOfferView;
 
+/** An offer a chain marks out of stock (plan 0220, section 15). */
+const outOfStock = (priceScopeId: string, price: number): ItemOfferView =>
+  ({
+    ...offer(priceScopeId, price),
+    outOfStockAt: '2026-11-01T00:00:00.000Z',
+  }) as ItemOfferView;
+
 const item = (id: string, offers: ItemOfferView[]): ItemView =>
   ({ id, offers }) as ItemView;
 
 const line = (lineId: string, ...itemIds: string[]): BasketPriceChoice => ({
   lineId,
   itemIds,
+});
+
+describe('picksOf prefers a product in stock (plan 0220, section 15.5)', () => {
+  it('picks a dearer product in stock over a cheaper one out of stock', () => {
+    const picks = picksOf(
+      [line('l1', 'cheap', 'dear')],
+      [
+        item('cheap', [outOfStock(HOME, 0.8)]),
+        item('dear', [offer(HOME, 1.4)]),
+      ],
+      [HOME]
+    );
+
+    expect(picks).toEqual([{ lineId: 'l1', itemId: 'dear' }]);
+  });
+
+  it('picks the cheapest when every product is out of stock', () => {
+    const picks = picksOf(
+      [line('l1', 'dear', 'cheap')],
+      [
+        item('dear', [outOfStock(HOME, 1.4)]),
+        item('cheap', [outOfStock(HOME, 0.8)]),
+      ],
+      [HOME]
+    );
+
+    expect(picks).toEqual([{ lineId: 'l1', itemId: 'cheap' }]);
+  });
+
+  it('still needs a price: an unpriced product in stock is no candidate', () => {
+    const picks = picksOf(
+      [line('l1', 'unpriced', 'gone')],
+      [
+        item('unpriced', [offer(HOME, null)]),
+        item('gone', [outOfStock(HOME, 2)]),
+      ],
+      [HOME]
+    );
+
+    expect(picks).toEqual([{ lineId: 'l1', itemId: 'gone' }]);
+  });
+
+  it('reads a product in stock by its offer at a scope that counts', () => {
+    const picks = picksOf(
+      [line('l1', 'a', 'b')],
+      [
+        // In stock only at a scope that does not count.
+        item('a', [outOfStock(HOME, 0.5), offer(OTHER, 0.4)]),
+        item('b', [offer(HOME, 0.9)]),
+      ],
+      [HOME]
+    );
+
+    expect(picks).toEqual([{ lineId: 'l1', itemId: 'b' }]);
+  });
 });
 
 describe('picksOf (plan 0201, section 1)', () => {

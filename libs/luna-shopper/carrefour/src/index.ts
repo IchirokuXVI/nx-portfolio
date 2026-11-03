@@ -9,13 +9,15 @@
  * refuses every other client this workspace owns on the TLS handshake, which
  * `carrefour.client.ts` records in full.
  *
- * It depends on nothing else in the workspace, not even on `contracts`. The
+ * In the workspace it depends on `contracts` for one size unit type and on
+ * `source-guard` for the run's refusal guard (plan 0215). The
  * harvester maps what this hands out onto rows, and it owns `normalizeName`,
  * which is deliberately not copied here: a second copy beside a second source
  * is how two keys start disagreeing.
  */
 
 export {
+  CARREFOUR_REFUSAL_POLICY,
   CarrefourClient,
   dropCloudflareCookies,
   isCloudflareCookie,
@@ -31,7 +33,6 @@ export {
   type CarrefourFrontier,
 } from './lib/categories';
 export {
-  CarrefourBlockedError,
   CarrefourBrowserError,
   CarrefourHttpError,
   isSkippable,

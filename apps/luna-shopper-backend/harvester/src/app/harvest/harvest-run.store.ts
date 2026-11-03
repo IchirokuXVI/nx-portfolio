@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   HarvestRunMode,
   HarvestRunStatus,
+  type HarvestRunStopReason,
   type HarvestRunTrigger,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
@@ -47,18 +48,30 @@ export class DocumentAlreadyImportedError extends Error {
  */
 const DOCUMENT_INDEX = 'uq_harvest_run_leaflet_document';
 
+/**
+ * What a run adds to its counter columns, each one kind of thing in every mode
+ * (plan 0217, section 3). No price moves any of them; a run's prices are in its
+ * report alone.
+ */
 export interface RunCounters {
+  /**
+   * Planned work done, in the unit of `totalPlanned`: the product or the place,
+   * or the runner's own unit once it called `RunContext.countProgressItself`.
+   */
   processed?: number;
+  /** Source rows created, or places created. */
   created?: number;
+  /** Source rows whose source group changed, or places changed. */
   updated?: number;
+  /** Source rows seen and left as they were, or places refreshed. */
   unchanged?: number;
+  /** A source said it does not stock the product here. Mercadona 404 only. */
   notFound?: number;
   /** Products a run sent to the queue rather than priced (plan 0081, 7). */
   skipped?: number;
   failed?: number;
 }
 
-/** The only column names `addCounters` will ever write. */
 /**
  * The durations an estimate is drawn from (plan 0206, section 8), newest first.
  *
@@ -86,6 +99,7 @@ export interface SourceRef {
   consecutiveFailures: number;
 }
 
+/** The only column names `addCounters` will ever write. */
 const COUNTER_COLUMNS = [
   'processed',
   'created',
@@ -510,10 +524,15 @@ export class HarvestRunStore {
     return Boolean(row?.abortRequestedAt);
   }
 
+  /**
+   * Finalize a run. `stopReason` says why a `FAILED` run stopped before its
+   * work was done (plan 0215), and is null for every other run.
+   */
   async finish(
     runId: string,
     status: HarvestRunStatus,
-    error?: string
+    error?: string,
+    stopReason?: HarvestRunStopReason
   ): Promise<void> {
     await this.runs.update(
       { id: runId },
@@ -522,6 +541,7 @@ export class HarvestRunStore {
         finishedAt: new Date(),
         heartbeatAt: new Date(),
         error: error ?? null,
+        stopReason: stopReason ?? null,
       }
     );
   }

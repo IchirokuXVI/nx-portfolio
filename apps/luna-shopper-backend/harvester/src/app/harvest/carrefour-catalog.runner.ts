@@ -1,16 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  CarrefourBlockedError,
   CarrefourClient,
   photoAddressRead,
   type CarrefourCappedCategory,
   type CarrefourCategory,
   type CarrefourProduct,
 } from '@portfolio/luna-shopper/carrefour';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
+import { readDelistCountsCrawl } from './delisting';
 import { photoOf } from './photo-address';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -59,6 +60,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     source: SupermarketSource
   ): Promise<void> {
     requireScope(input.priceScopeId);
+    // The plan is listings, so a listing paged is the unit of `processed` and
+    // the ingest adds no products to it (plan 0217).
+    context.countProgressItself();
     const client = this.createClient(context, source);
 
     try {
@@ -84,7 +88,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       const unreadable = [...frontier.unreadable];
       let blocked: unknown = null;
       for (const category of frontier.categories) {
-        context.signal.throwIfAborted();
+        // An abort, a person's or the refusal guard's (plan 0215), ends the
+        // crawl and not the run: what was read is reported below.
+        if (context.signal.aborted) {
+          break;
+        }
         try {
           await this.pageCategory(context, client, category, products);
         } catch (error) {
@@ -93,11 +101,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           // the address is in the state section 4 describes, and every page
           // after that deepens it, so the crawl stops here and the run fails
           // once what it already read is written.
-          if (error instanceof CarrefourBlockedError) {
+          if (error instanceof SourceBlockedError) {
             this.logger.warn(`Run ${context.runId}: ${String(error)}`);
             unreadable.push(category.url);
             await context.report({ failed: 1 });
             blocked = error;
+            break;
+          }
+          // A person's abort cut this category short. Its products read so
+          // far are in the map, and it is named as unread.
+          if (context.signal.aborted) {
+            unreadable.push(category.url);
             break;
           }
           // Anything else costs one category. It is counted, logged and named
@@ -115,6 +129,14 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // --- 3. Report what was read -----------------------------------------
       await context.setStage('INGEST', `Recording ${products.size} product(s)`);
       this.reportProducts(report, products);
+      declareListing(report, products, {
+        switchOn: readDelistCountsCrawl(source.config),
+        seedPath: readSeedPath(source.config) !== undefined,
+        blocked: blocked !== null,
+        truncated: frontier.capped.length > 0,
+        unreadable: unreadable.length > 0,
+        aborted: context.signal.aborted,
+      });
 
       await context.flush();
       await context.setReport(
@@ -127,13 +149,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           blocked
         )
       );
-      if (blocked) {
-        // Raised **after** the snapshot, so the run ends FAILED and keeps every
-        // product it read. Prices already fetched are valid data (plan 0038,
-        // section 6.6); what a block costs is the rest of the crawl, not the
-        // part that worked.
-        throw blocked;
-      }
+      // A blocked crawl returns here too, after the snapshot. The guard's stop
+      // aborted the run, so the executor ends it FAILED with its reason and
+      // keeps every product it read (plan 0215, section 6.2). Prices already
+      // fetched are valid data (plan 0038, section 6.6); what a block costs is
+      // the rest of the crawl, not the part that worked.
     } finally {
       // Including when the run aborted, and including when it never opened a
       // page (plan 0090, section 11).
@@ -160,6 +180,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // The run's own bucket, so the rate the owner set on this row is a rate
       // the source sees on top of the floor the client already keeps.
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }
@@ -205,9 +226,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * none. Until the backfill has run, every row resolves through the fuzzy rung
    * of plan 0086 and waits for a person, which is where DEZA sits today.
    *
-   * It states no completeness. A Carrefour crawl walks a frontier of categories
-   * and a product filed nowhere in it is unseen for a reason that says nothing
-   * about stock.
+   * It states no completeness here. A Carrefour crawl walks a frontier of
+   * categories, and a product filed nowhere in it is unseen for a reason that
+   * says nothing about stock. The crawl is handed over as a whole listing only
+   * under the five conditions of {@link declareListing}.
    */
   private reportProducts(
     report: RunReport,
@@ -257,6 +279,50 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       });
     }
   }
+}
+
+/**
+ * The crawl as a whole listing of the default scope, or why it is not one
+ * (plan 0220, section 15.4).
+ *
+ * Whole only when the chain's own `delistCountsCrawl` is on, no seed path
+ * narrowed the walk, nothing blocked it, no category was capped at the paging
+ * ceiling, no category was unreadable, and the run was not aborted. The doubt
+ * that remains is a product filed in no frontier category, which nobody has
+ * measured: the switch stays off until two clean crawls were compared. A crawl
+ * that is not whole declares nothing and is named with the first reason.
+ */
+function declareListing(
+  report: RunReport,
+  products: ReadonlyMap<string, CarrefourProduct>,
+  crawl: {
+    switchOn: boolean;
+    seedPath: boolean;
+    blocked: boolean;
+    truncated: boolean;
+    unreadable: boolean;
+    aborted: boolean;
+  }
+): void {
+  if (crawl.aborted) {
+    return;
+  }
+  const reason = !crawl.switchOn
+    ? 'switch-off'
+    : crawl.seedPath
+      ? 'seed-path'
+      : crawl.blocked
+        ? 'blocked'
+        : crawl.truncated
+          ? 'truncated'
+          : crawl.unreadable
+            ? 'unreadable'
+            : null;
+  if (reason !== null) {
+    report.listingNotWhole(null, reason);
+    return;
+  }
+  report.listingWhole(null, products.keys());
 }
 
 /** What a run has to say about itself beyond its counters. */

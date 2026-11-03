@@ -70,6 +70,19 @@ describe('assistantValidationSchema', () => {
     expect(value.TRANSCRIBER_COMMENT_TIMEOUT_MS).toBe(110000);
   });
 
+  it('defaults to no turn text in the logs, and refuses a word that is not a boolean', () => {
+    const { value } = assistantValidationSchema.validate(BASE, {
+      allowUnknown: true,
+    });
+    expect(value.ASSISTANT_LOG_TURN_TEXT).toBe(false);
+
+    const { error } = assistantValidationSchema.validate(
+      { ...BASE, ASSISTANT_LOG_TURN_TEXT: 'sometimes' },
+      { allowUnknown: true }
+    );
+    expect(error).toBeDefined();
+  });
+
   it('defaults to the Claude settings the evaluation chose and to moderation on', () => {
     const { value } = assistantValidationSchema.validate(BASE, {
       allowUnknown: true,
@@ -131,6 +144,21 @@ describe('assistantConfiguration', () => {
     expect(config.emergencyNumber).toBe(DEFAULT_EMERGENCY_NUMBER);
     expect(Object.keys(config).join(' ')).not.toMatch(/gemini/i);
     expect(config).not.toHaveProperty('provider');
+  });
+
+  it('logs no turn text unless ASSISTANT_LOG_TURN_TEXT is true (k8s plan 0018, D3)', () => {
+    const base = {
+      ...saved,
+      NATS_URL: 'nats://x',
+      GATEWAY_INTERNAL_URL: 'http://g',
+    };
+
+    process.env = { ...base };
+    expect(assistantConfiguration().logTurnText).toBe(false);
+    process.env = { ...base, ASSISTANT_LOG_TURN_TEXT: 'false' };
+    expect(assistantConfiguration().logTurnText).toBe(false);
+    process.env = { ...base, ASSISTANT_LOG_TURN_TEXT: 'true' };
+    expect(assistantConfiguration().logTurnText).toBe(true);
   });
 
   it('turns moderation off only on `off`, and takes an operator number', () => {

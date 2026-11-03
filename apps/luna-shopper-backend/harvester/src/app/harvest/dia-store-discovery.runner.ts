@@ -7,13 +7,13 @@ import {
   candidatesNear,
   DIA_DEFAULT_POSTAL_CODE_RADIUS_METRES,
   DiaClient,
-  DiaStoppedError,
   isTemporarilyClosed,
   parseOpeningHours,
   type DiaStoreDetail,
   type DiaStoreRecord,
 } from '@portfolio/luna-shopper/dia';
 import { SPAIN_POSTAL_CODE_CENTROIDS } from '@portfolio/luna-shopper/postal-codes/dataset';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import type { RunContext } from './run-context';
 import type { RunReport } from './run-report';
@@ -54,6 +54,9 @@ export class DiaStoreDiscoveryRunner implements StoreDiscoveryRunner {
     source: SupermarketSource | null
   ): Promise<void> {
     requireChain(input.supermarketId);
+    // The plan is the candidate shops, so a shop detail read is the unit of
+    // `processed` and the sink adds no places to it (plan 0217).
+    context.countProgressItself();
     const client = this.createClient(context, source);
     const outcome = new StoreRun();
 
@@ -97,7 +100,7 @@ export class DiaStoreDiscoveryRunner implements StoreDiscoveryRunner {
       try {
         detail = await client.storeDetail(record.idTienda);
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         outcome.failedShops.push({
@@ -269,7 +272,7 @@ export class DiaStoreDiscoveryRunner implements StoreDiscoveryRunner {
       try {
         store = await client.checkService(code);
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         outcome.failedPostalCodes.push({
@@ -317,7 +320,7 @@ export class DiaStoreDiscoveryRunner implements StoreDiscoveryRunner {
       try {
         town = (await client.storeDetail(record.idTienda))?.city ?? null;
       } catch (error) {
-        if (error instanceof DiaStoppedError) {
+        if (error instanceof SourceBlockedError) {
           throw error;
         }
         // A label is not worth a failed run: the scope is declared without it.
@@ -339,6 +342,7 @@ export class DiaStoreDiscoveryRunner implements StoreDiscoveryRunner {
     return new DiaClient({
       baseUrl: readString(source?.config ?? {}, 'baseUrl'),
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

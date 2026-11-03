@@ -3,6 +3,7 @@ import {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   HarvestRunWrites,
   HarvestScheduleBlock,
@@ -18,6 +19,7 @@ import {
 } from '../../lib/enums/harvest.enums';
 import {
   CONTENT_LOCALES,
+  ITEM_USAGE_MAX_IDS,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   UNIT_BASES,
@@ -68,6 +70,7 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunMode: schemaId('enums/HarvestRunMode'),
   harvestRunTrigger: schemaId('enums/HarvestRunTrigger'),
   harvestRunStatus: schemaId('enums/HarvestRunStatus'),
+  harvestRunStopReason: schemaId('enums/HarvestRunStopReason'),
   sourceEntryStatus: schemaId('enums/SourceEntryStatus'),
   postalCodeDiscoveryStatus: schemaId('enums/PostalCodeDiscoveryStatus'),
   itemSourceMatch: schemaId('enums/ItemSourceMatch'),
@@ -175,6 +178,9 @@ export const HARVEST_SCHEMA_IDS = {
   queuedSourceEntryPage: schemaId('harvest/QueuedSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
   settleItemRequest: schemaId('msg/sourceEntry.settleItem/request'),
+  // Plan 0239: what names a product, for a merge and a delete.
+  itemUsageRequest: schemaId('msg/sourceEntry.itemUsage/request'),
+  itemUsageResult: schemaId('harvest/SourceEntryItemUsageResult'),
   settleItemAtChainResult: schemaId('harvest/SettleItemAtChainResult'),
   sourceEntryPriceWithheld: schemaId('harvest/SourceEntryPriceWithheld'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
@@ -312,6 +318,11 @@ const harvestRunView = object(
     // dashboard's runs, which do not compute it.
     scheduleId: nullableString(),
     interrupted: boolean(),
+    // Plan 0215, not required for the same reason: why a FAILED run stopped
+    // before its work was done, null for every other run.
+    stopReason: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestRunStopReason), { type: 'null' }],
+    },
     estimate: ref(HARVEST_SCHEMA_IDS.runEstimate),
   },
   [
@@ -602,6 +613,13 @@ const sourceCatalogEntryProperties = {
   },
   confidence: { type: 'number', minimum: 0, maximum: 1 },
   decidedAt: nullableString(),
+  // Plan 0220. Stated but not required, so a reader built before it keeps
+  // validating what it holds.
+  delistedAt: {
+    ...nullableString(),
+    description:
+      'When every scope a whole walk counted lost this product, and null while any of them still lists it. Written by the delisting counter alone, and it never changes the status.',
+  },
   // Inline, because there is one per scope and a chain has a handful of
   // scopes, and the queue cannot decide a row without seeing what it holds.
   prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
@@ -768,6 +786,38 @@ const sourceEntryPriceWithheld = object(
     },
   },
   ['entryId', 'priceScopeId', 'otherEntryIds']
+);
+
+/** What names these products in the harvester (plan 0239). */
+const itemUsageRequest = object(
+  HARVEST_SCHEMA_IDS.itemUsageRequest,
+  {
+    ...adminCredentialProperties,
+    itemIds: {
+      ...array(nonEmptyString()),
+      minItems: 1,
+      maxItems: ITEM_USAGE_MAX_IDS,
+    },
+  },
+  ['userId', 'itemIds']
+);
+
+/** One entry per product asked about (plan 0239). */
+const itemUsageResult = object(
+  HARVEST_SCHEMA_IDS.itemUsageResult,
+  {
+    usage: array({
+      type: 'object',
+      properties: {
+        itemId: nonEmptyString(),
+        rowCount: integer({ minimum: 0 }),
+        activeSupermarketIds: array(nonEmptyString()),
+      },
+      required: ['itemId', 'rowCount', 'activeSupermarketIds'],
+      additionalProperties: false,
+    }),
+  },
+  ['usage']
 );
 
 /** Settle a product at a chain (plan 0191). */
@@ -1635,6 +1685,8 @@ const listEntriesRequest = object(
     // Keyed before it is matched, so a value that makes no key matches nothing
     // rather than being refused (plan 0124, section 7).
     brandKey: string(),
+    // Plan 0220: true lists the gone rows only, false leaves them out.
+    delisted: boolean(),
     cursor: string(),
     limit: integer({ minimum: 1 }),
     order: string(),
@@ -1905,7 +1957,7 @@ const adapterCapabilityTable: JsonSchema = {
   $id: HARVEST_SCHEMA_IDS.adapterCapabilityTable,
   type: 'object',
   description:
-    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.',
+    'What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.',
   const: ADAPTER_CAPABILITIES,
 };
 
@@ -1917,6 +1969,10 @@ export const harvestSchemas: JsonSchema[] = [
     Object.values(HarvestRunTrigger)
   ),
   enumOf(HARVEST_SCHEMA_IDS.harvestRunStatus, Object.values(HarvestRunStatus)),
+  enumOf(
+    HARVEST_SCHEMA_IDS.harvestRunStopReason,
+    Object.values(HarvestRunStopReason)
+  ),
   enumOf(
     HARVEST_SCHEMA_IDS.sourceEntryStatus,
     Object.values(SourceEntryStatus)
@@ -2031,6 +2087,8 @@ export const harvestSchemas: JsonSchema[] = [
   listEntriesByItemRequest,
   entryIdRequest,
   settleItemRequest,
+  itemUsageRequest,
+  itemUsageResult,
   settleItemAtChainResult,
   sourceEntryPriceWithheld,
   acceptEntryRequest,
@@ -2196,6 +2254,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.entryIdRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  },
+  [SOURCE_ENTRY_PATTERNS.itemUsage]: {
+    request: HARVEST_SCHEMA_IDS.itemUsageRequest,
+    response: HARVEST_SCHEMA_IDS.itemUsageResult,
   },
   [SOURCE_ENTRY_PATTERNS.settleItem]: {
     request: HARVEST_SCHEMA_IDS.settleItemRequest,

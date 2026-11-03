@@ -190,6 +190,14 @@ export const ITEM_PATTERNS = {
   delete: 'item.delete',
   get: 'item.get',
   /**
+   * Merge one product into another (plan 0239). The merged row stays, names
+   * its survivor in `mergedIntoId`, and leaves every list and search. Its
+   * prices, shop rows, barcodes and photo links move to the survivor in one
+   * transaction, and `catalog.itemMerged` tells the harvester and core to
+   * rewrite what they hold. Operator only.
+   */
+  merge: 'item.merge',
+  /**
    * Several products by id, in one round trip (plan 0051, section 6.1).
    *
    * A basket line names a pick and every option it may be switched to, all as
@@ -1160,6 +1168,13 @@ export interface ItemOfferView {
   priceCopiedFromScopeId: string | null;
   /** Plan 0080, section 5: shown because nothing better exists, not because it is current. */
   stale: boolean;
+  /**
+   * Since when the chain shows this product out of stock at this scope (plan
+   * 0220, section 15), from the row the offer was read from. Null when it is
+   * in stock or nothing said. **It hides nothing**: the offer is listed,
+   * priced and bought as any other.
+   */
+  outOfStockAt: string | null;
 }
 
 /** The bounds of one {@link ITEM_PATTERNS.priceHistory} read (plan 0196). */
@@ -1455,6 +1470,17 @@ export interface ItemView {
    * client to draw.
    */
   offers?: ItemOfferView[];
+  /**
+   * The product this one was merged into (plan 0239). **Optional, and absent
+   * on every product that was not merged.**
+   *
+   * A read by id of a merged product (`item.get`, `item.getMany`) answers the
+   * survivor's data, offers and barcodes under the id that was asked for, with
+   * this field naming the survivor. The admin's history list of merged
+   * products answers each merged row as it was, with this field. A list or a
+   * search never answers a merged product.
+   */
+  mergedInto?: string;
 }
 
 /**
@@ -1590,6 +1616,18 @@ export interface SupermarketItemView {
    * from a detail call means "not stocked in this warehouse".
    */
   available: boolean;
+  /**
+   * When a whole walk proved the chain stopped listing this product here
+   * (plan 0220, section 6.1), and null when none did or a later one listed it
+   * again. Read it as "a walk proved this gone and none has proved it back",
+   * never as "not sold": `available` says that.
+   */
+  delistedAt: string | null;
+  /**
+   * Since when the chain shows this product out of stock here (plan 0220,
+   * section 15.1). It hides nothing and stops no purchase.
+   */
+  outOfStockAt: string | null;
 }
 
 /**
@@ -2289,8 +2327,18 @@ export interface CreateItemRequest extends AdminCredential {
    * One or more leaf ids, in the order meant (plan 0166, section 3). An empty
    * list is refused with `item_needs_a_category`, a root with
    * `category_not_a_leaf` and an unknown id with `category_not_found`.
+   *
+   * Exactly one of this and {@link categorySlugs} (plan 0237, section 3.4).
+   * Neither is `item_needs_a_category`, both is `validation_failed`.
    */
-  categoryIds: string[];
+  categoryIds?: string[];
+  /**
+   * The same leaves named by slug, in the order meant (plan 0237, section
+   * 3.4): what an audit, the register and a decisions file speak. Resolved
+   * through the category rows, so an unknown slug is `category_not_found`
+   * and a root `category_not_a_leaf`.
+   */
+  categorySlugs?: string[];
   defaultUnit: UnitOfMeasure;
   /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
   productGroupId?: string | null;
@@ -2310,6 +2358,14 @@ export type CreateItemInput = Omit<CreateItemRequest, 'userId'>;
  */
 export interface CreateItemsRequest extends AdminCredential {
   items: CreateItemInput[];
+  /**
+   * Refuse the whole batch when a brand it names is not in the registry and
+   * is not a spelling of a brand that is (plan 0237, section 3.6), with
+   * `brand_unregistered` and the labels. A null brand passes. Absent or false
+   * stores such a label as text with no `brandId`, as always: the harvester
+   * never sends it, because a printed brand is a reading.
+   */
+  requireRegisteredBrands?: boolean;
 }
 
 export interface CreateItemsResult {
@@ -2339,9 +2395,57 @@ export interface UpdateItemRequest extends AdminCredential {
    * `item_needs_a_category`, because a product always has one.
    */
   categoryIds?: string[];
+  /**
+   * The same replacement with the leaves named by slug (plan 0237, section
+   * 3.4). At most one of this and {@link categoryIds}; both is
+   * `validation_failed`.
+   */
+  categorySlugs?: string[];
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;
+  /**
+   * What the product holds as the caller read it (plan 0237, section 3.2).
+   * Compared with the product inside the write's transaction, before any edit
+   * is applied; one field that differs refuses the whole request with
+   * `item_expectation_failed`.
+   */
+  expect?: ItemExpectation;
+}
+
+/**
+ * The state an edit expects a product to be in (plan 0237, section 3.2).
+ *
+ * Every field is optional, and only a field that is present is compared. A
+ * `null` means "the product holds nothing here".
+ *
+ * - `name` is compared as both halves, each trimmed, so an absent half
+ *   expects the product to have no name in that language.
+ * - `brand` is compared by `brandKey`, so `Pierrot` and `PIERROT` agree.
+ * - `categorySlugs` is compared as an ordered list.
+ */
+export interface ItemExpectation {
+  name?: LocalizedText;
+  brand?: string | null;
+  unitSize?: number | null;
+  defaultUnit?: UnitOfMeasure;
+  packCount?: number | null;
+  categorySlugs?: string[];
+}
+
+/** One field an {@link ItemExpectation} named that the product does not hold. */
+export interface ItemExpectationMismatch {
+  field: keyof ItemExpectation;
+  /** What the request expected. */
+  expected: unknown;
+  /** What the product holds. */
+  actual: unknown;
+}
+
+/** One product whose {@link ItemExpectation} failed, and every field that did. */
+export interface ItemExpectationFailure {
+  itemId: string;
+  fields: ItemExpectationMismatch[];
 }
 
 /**
@@ -2360,6 +2464,8 @@ export type UpdateItemInput = Omit<UpdateItemRequest, keyof AdminCredential>;
  */
 export interface UpdateItemsRequest extends AdminCredential {
   items: UpdateItemInput[];
+  /** As {@link CreateItemsRequest.requireRegisteredBrands} (plan 0237, section 3.6). */
+  requireRegisteredBrands?: boolean;
 }
 
 export interface UpdateItemsResult {
@@ -2504,6 +2610,76 @@ export interface ItemIdRequest extends AdminCredential {
   itemId: string;
 }
 
+/**
+ * How many products one usage question names (plan 0239): the harvester's
+ * `sourceEntry.itemUsage` and core's `adminItem.usage`. A merge asks about
+ * two and a delete about one.
+ */
+export const ITEM_USAGE_MAX_IDS = 100;
+
+/** Merge {@link itemId} into {@link intoItemId} (plan 0239). */
+export interface MergeItemRequest extends AdminCredential {
+  /** The product that is merged. Its row stays, as a record. */
+  itemId: string;
+  /** The survivor, which receives what the merged product held. */
+  intoItemId: string;
+  /**
+   * Answer what the merge writes, and write nothing (plan 0239, section 1.1).
+   * Every refusal is checked as for a real merge, and no event is published.
+   */
+  dryRun?: boolean;
+  /**
+   * Merge even when both products hold a bound queue row of one chain (rule
+   * R28): the survivor then holds two articles of that chain.
+   */
+  allowSecondArticle?: boolean;
+  /** Merge even when `unitSize` or `defaultUnit` differ. */
+  allowFormatDifference?: boolean;
+}
+
+/**
+ * What a merge moved, or with `dryRun` would move (plan 0239, section 1.1).
+ * A dry run and a real merge answer the same counts.
+ */
+export interface MergeItemResult {
+  itemId: string;
+  intoItemId: string;
+  dryRun: boolean;
+  /** The survivor the merged row now names. Always {@link intoItemId}. */
+  mergedIntoId: string;
+  /** When the merge was written. Null on a dry run. */
+  mergedAt: string | null;
+  /** Rows of `item_prices` moved to the survivor. */
+  prices: number;
+  /** Materialized scope rows (`supermarket_items`) moved to the survivor. */
+  scopeRows: number;
+  /** Shop rows (`supermarket_location_items`) moved to the survivor. */
+  shopRows: number;
+  /**
+   * Shop rows left on the merged row, because the survivor already had a row
+   * for that shop. They are kept as a record and are not deleted.
+   */
+  shopRowsKept: number;
+  /** The barcodes moved to the survivor. */
+  barcodes: string[];
+  /** The survivor's first barcode after the merge. */
+  survivorEan: string | null;
+  /** Chain photo links moved to the survivor. */
+  linkedImages: number;
+  /**
+   * Products that were merged into the merged one and now name the survivor
+   * (the one level rule).
+   */
+  repointedItemIds: string[];
+  /**
+   * The harvester's queue rows that named the merged product, or a product
+   * already merged into it, when catalog asked, just before the write. **Not
+   * yet moved when this answers**: the harvester rewrites them when it hears
+   * `catalog.itemMerged`, which is published for each of those products.
+   */
+  queueRows: number;
+}
+
 /** How many products one {@link ITEM_PATTERNS.getMany} may name. */
 export const ITEM_LOOKUP_LIMITS = {
   /**
@@ -2624,6 +2800,13 @@ export interface SearchItemsRequest extends PageQuery {
    * the two together mean.
    */
   withoutCategory?: boolean;
+  /**
+   * Only the products that were merged into another one (plan 0239, section
+   * 2): the history of the merges, for the back office. Each row answers as it
+   * was, with `mergedInto`. Absent or false lists the live products, which is
+   * every other caller: a merged product is never in a list or a search.
+   */
+  merged?: boolean;
   /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *
@@ -3503,7 +3686,7 @@ export interface WithdrawSupermarketItemsResult {
 /** Whether a scope carries each of these products. Carries no price. */
 export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   priceScopeId: string;
-  entries: { itemId: string; available: boolean }[];
+  entries: SupermarketItemAvailabilityEntry[];
   /**
    * True creates the row of a product the scope has none for and leaves every
    * row that exists exactly as it is, whatever `available` says here (plan
@@ -3517,9 +3700,41 @@ export interface SetSupermarketItemAvailabilityRequest extends AdminCredential {
   onlyIfMissing?: boolean;
 }
 
+/**
+ * One product of {@link SetSupermarketItemAvailabilityRequest}.
+ *
+ * `available` is optional when `delisted` or `outOfStock` is given, and the
+ * schema refuses an entry that carries none of the three (plan 0220, section
+ * 6.1). Absent leaves the flag of a row that exists as it is, and creates no
+ * row where the scope has none: an entry that says nothing about whether the
+ * scope sells the product has nothing to say about a scope with no row.
+ * `onlyIfMissing` creates only from an entry that carries `available`.
+ */
+export interface SupermarketItemAvailabilityEntry {
+  itemId: string;
+  available?: boolean;
+  /**
+   * True sets `delistedAt` when it is null and keeps it when set, false clears
+   * it, and absent leaves it as it is (plan 0220, section 6.1). Only the
+   * harvester's delisting counter sends it.
+   */
+  delisted?: boolean;
+  /**
+   * True sets `outOfStockAt` when it is null and keeps it when set, false
+   * clears it, and absent leaves it as it is (plan 0220, section 15.1).
+   */
+  outOfStock?: boolean;
+}
+
 export interface SetSupermarketItemAvailabilityResult {
   /** Rows created or changed. A row already saying so counts for nothing. */
   updated: number;
+  /**
+   * Entries that said gone for a row that holds a current, not stale `ADMIN`
+   * or `OFFICIAL_LEAFLET` price at the scope, which got `delistedAt` and kept
+   * `available` true (plan 0220, section 15.6). A person decides those.
+   */
+  keptSold: number;
 }
 
 // --- Price policy requests (plan 0080, section 3) ---------------------------

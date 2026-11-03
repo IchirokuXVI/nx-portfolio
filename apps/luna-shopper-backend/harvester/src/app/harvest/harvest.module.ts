@@ -10,6 +10,7 @@ import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
+import { DelistingService } from './delisting.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
@@ -25,6 +26,8 @@ import { HarvestScheduleService } from './harvest-schedule.service';
 import { HarvestScheduleStore } from './harvest-schedule.store';
 import { HarvestScheduleWorker } from './harvest-schedule.worker';
 import { HarvestController } from './harvest.controller';
+import { ItemMergeController } from './item-merge.controller';
+import { ItemMergeService } from './item-merge.service';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -76,9 +79,12 @@ import { SupermarketSourceService } from './supermarket-source.service';
       },
     ]),
   ],
-  controllers: [HarvestController],
+  // Plan 0239: a product merge has its own controller.
+  controllers: [HarvestController, ItemMergeController],
   providers: [
     PlatformAdminService,
+    // What names a product here, and the rewrite after a merge (plan 0239).
+    ItemMergeService,
     CatalogClient,
     HarvestRunStore,
     // Run requests saved under a name (plan 0120).
@@ -135,6 +141,9 @@ import { SupermarketSourceService } from './supermarket-source.service';
     // Where a run's per shop claims wait for a binding and a shop, and the one
     // thing that sends them to catalog (plan 0182).
     SourceEntryAvailabilityWriter,
+    // Whole walks that did not list a product, and what catalog is told about
+    // them (plan 0220).
+    DelistingService,
     SourceLocationService,
     PostalCodeDiscoveryStore,
     PostalCodeDiscoveryService,

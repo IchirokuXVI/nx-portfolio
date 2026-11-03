@@ -5,14 +5,23 @@ import {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunWrites,
   HarvestWarningCode,
   PriceSourceKind,
 } from '@portfolio/luna-shopper/contracts';
 import { describeError } from '@portfolio/luna-shopper/platform';
+import {
+  SourceBlockedError,
+  type SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import { IsNull, Not, Repository } from 'typeorm';
 import type { HarvesterConfig } from '../config/app-config';
-import { SourceCatalogEntry, type SupermarketSource } from '../entities';
+import {
+  SourceCatalogEntry,
+  type HarvestRun,
+  type SupermarketSource,
+} from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import { CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
@@ -21,10 +30,19 @@ import {
   type BackfillEntry,
   type RunPriceScope,
 } from './catalog-runner';
+import {
+  provesDelistingFor,
+  readDelistingThreshold,
+  uncountedReport,
+  type DelistingNotCounted,
+  type DelistingReport,
+} from './delisting';
+import { DelistingService } from './delisting.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { FileImportRunner } from './file-import.runner';
 import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
+import { refusalPolicyOf, stopSentence } from './refusal-policy';
 import { RunContext } from './run-context';
 import { RunReportSink, type RunReportResult } from './run-report.sink';
 import { sourceKindOf } from './run-source-kind';
@@ -78,7 +96,8 @@ export class RunExecutor implements OnApplicationShutdown {
     private readonly shops: SourceLocationService,
     private readonly catalog: CatalogClient,
     private readonly config: ConfigService,
-    private readonly availability: SourceEntryAvailabilityWriter
+    private readonly availability: SourceEntryAvailabilityWriter,
+    private readonly delisting: DelistingService
   ) {}
 
   /**
@@ -340,6 +359,15 @@ export class RunExecutor implements OnApplicationShutdown {
         : settings.defaultMaxRequestsPerSecond,
     });
     const context = new RunContext(run, controller.signal, bucket, this.store);
+    // One refusal guard per run, beside the bucket, shared by every client
+    // and every worker of the run (plan 0215, section 5). Its stop aborts the
+    // run with the stop as the reason, so the run takes the abort path.
+    const policy = refusalPolicyOf(source?.adapterKey, run.mode);
+    const guard = policy
+      ? context.guardWith(policy, (stop) =>
+          controller.abort(new SourceBlockedError(stop))
+        )
+      : null;
 
     // A run aborted between the insert and here never starts fetching.
     const pollAbort = setInterval(() => {
@@ -392,6 +420,12 @@ export class RunExecutor implements OnApplicationShutdown {
                 autoImportPlaces: source?.autoImportPlaces ?? false,
                 copiesOf: (scopeId) => copies.get(scopeId) ?? [],
                 writes,
+                // Whether a whole listing is accepted (plan 0220, section
+                // 15.3): the adapter's own fact, or Carrefour's switch.
+                provesDelisting: provesDelistingFor(
+                  source?.adapterKey,
+                  source?.config
+                ),
               },
               {
                 ingest: this.ingest,
@@ -414,96 +448,109 @@ export class RunExecutor implements OnApplicationShutdown {
       // is the one path whose prices the report can learn about no other way.
       let imported: SourceIngestCounters | null = null;
 
-      switch (run.mode) {
-        // The source is passed and may be null: it is what the discovery
-        // dispatches on (plan 0089, section 9), and a run started by the postal
-        // code queue names no chain at all.
-        case HarvestRunMode.STORE_DISCOVERY:
-          await this.storeDiscovery.run(
-            context,
-            sink as RunReportSink,
-            {
-              postalCode: String(run.input['postalCode'] ?? ''),
-              country: String(run.input['country'] ?? 'es'),
-              radiusMetres: Number(run.input['radiusMetres'] ?? 3000),
-              // The shops a chain's own list is filtered to (plan 0106,
-              // section 4). Absent and empty are the same thing, which is every
-              // shop, and the OpenStreetMap case ignores it.
-              postalCodes: Array.isArray(run.input['postalCodes'])
-                ? (run.input['postalCodes'] as unknown[]).map(String)
-                : undefined,
-              supermarketId: run.supermarketId ?? undefined,
-              // The chain's own identity, read here rather than by the runner
-              // (plan 0103, section 6.4).
-              chain: run.supermarketId
-                ? await this.chainOf(run.supermarketId)
-                : undefined,
-            },
-            source
-          );
-          break;
-        case HarvestRunMode.CATALOG_DISCOVERY: {
-          // Plan 0090, section 12.1. The spawn already refused it for every
-          // adapter that has no product page to read.
-          const detailBackfill = run.input['detailBackfill'] === true;
-          await this.catalogDiscovery.run(
-            context,
-            sink as RunReportSink,
-            {
-              supermarketId: run.supermarketId as string,
-              priceScopeId: run.priceScopeId ?? undefined,
-              // The warehouses this walk covers, read here rather than by the
-              // runner (plan 0108, section 2; plan 0103, section 6.4). The
-              // spawn already refused a scope with no key and one outside the
-              // adapter's band, so what is left is a lookup.
-              priceScopes: await this.walkedScopes(
-                run.supermarketId,
-                run.input['priceScopeIds']
-              ),
-              detailBackfill,
-              // The rows a backfill reads pages for, loaded here rather than by
-              // the runner (plan 0103, section 6.2).
-              backfill: detailBackfill
-                ? await this.backfillRows(
-                    run.supermarketId as string,
-                    requireSource(source)
-                  )
-                : undefined,
-              // What the chain already knows, loaded here rather than by the
-              // runner (plan 0119, section 4), and only when it can save a
-              // request.
-              details,
-              ...(await this.knownProducts(
-                run.supermarketId as string,
+      // A runner that throws after an abort still reported what it read,
+      // and the sink holds the last partial chunk of it (plan 0215,
+      // section 6.1). It is drained below as any run is, and the error is
+      // raised again after. A runner that throws with no abort keeps the
+      // catch branch it always had.
+      let thrownAfterAbort: { error: unknown } | null = null;
+      try {
+        switch (run.mode) {
+          // The source is passed and may be null: it is what the discovery
+          // dispatches on (plan 0089, section 9), and a run started by the postal
+          // code queue names no chain at all.
+          case HarvestRunMode.STORE_DISCOVERY:
+            await this.storeDiscovery.run(
+              context,
+              sink as RunReportSink,
+              {
+                postalCode: String(run.input['postalCode'] ?? ''),
+                country: String(run.input['country'] ?? 'es'),
+                radiusMetres: Number(run.input['radiusMetres'] ?? 3000),
+                // The shops a chain's own list is filtered to (plan 0106,
+                // section 4). Absent and empty are the same thing, which is every
+                // shop, and the OpenStreetMap case ignores it.
+                postalCodes: Array.isArray(run.input['postalCodes'])
+                  ? (run.input['postalCodes'] as unknown[]).map(String)
+                  : undefined,
+                supermarketId: run.supermarketId ?? undefined,
+                // The chain's own identity, read here rather than by the runner
+                // (plan 0103, section 6.4).
+                chain: run.supermarketId
+                  ? await this.chainOf(run.supermarketId)
+                  : undefined,
+              },
+              source
+            );
+            break;
+          case HarvestRunMode.CATALOG_DISCOVERY: {
+            // Plan 0090, section 12.1. The spawn already refused it for every
+            // adapter that has no product page to read.
+            const detailBackfill = run.input['detailBackfill'] === true;
+            await this.catalogDiscovery.run(
+              context,
+              sink as RunReportSink,
+              {
+                supermarketId: run.supermarketId as string,
+                priceScopeId: run.priceScopeId ?? undefined,
+                // The warehouses this walk covers, read here rather than by the
+                // runner (plan 0108, section 2; plan 0103, section 6.4). The
+                // spawn already refused a scope with no key and one outside the
+                // adapter's band, so what is left is a lookup.
+                priceScopes: await this.walkedScopes(
+                  run.supermarketId,
+                  run.input['priceScopeIds']
+                ),
+                detailBackfill,
+                // The rows a backfill reads pages for, loaded here rather than by
+                // the runner (plan 0103, section 6.2).
+                backfill: detailBackfill
+                  ? await this.backfillRows(
+                      run.supermarketId as string,
+                      requireSource(source)
+                    )
+                  : undefined,
+                // What the chain already knows, loaded here rather than by the
+                // runner (plan 0119, section 4), and only when it can save a
+                // request.
                 details,
-                detailBackfill
-              )),
-            },
-            requireSource(source)
-          );
-          break;
+                ...(await this.knownProducts(
+                  run.supermarketId as string,
+                  details,
+                  detailBackfill
+                )),
+              },
+              requireSource(source)
+            );
+            break;
+          }
+          // `requireSource` is deliberately not called (plan 0081, section 1).
+          // A `SupermarketSource` is fetching configuration and an upload fetches
+          // nothing, so a chain with no adapter at all still gets rows that look
+          // exactly like a walk's (plan 0086, D6).
+          //
+          // It writes through the ingest directly rather than through a report,
+          // because it reads a whole document before it writes anything and turns
+          // the outcomes into a warning per product, which is the one thing a
+          // report cannot answer (plan 0103, D1).
+          case HarvestRunMode.FILE_IMPORT:
+            imported = await this.fileImport.run(context, {
+              supermarketId: run.supermarketId as string,
+              priceScopeId: run.priceScopeId as string,
+              // What observed the price, not what uploaded it: a re-imported
+              // Mercadona walk stamps OFFICIAL_API (plan 0086, section 6.2).
+              sourceKind: run.input['sourceKind'] as PriceSourceKind,
+              // The chain's own adapter, for the language a scope this file
+              // declares is named in (plan 0111, section 8).
+              adapterKey: source?.adapterKey ?? null,
+            });
+            break;
         }
-        // `requireSource` is deliberately not called (plan 0081, section 1).
-        // A `SupermarketSource` is fetching configuration and an upload fetches
-        // nothing, so a chain with no adapter at all still gets rows that look
-        // exactly like a walk's (plan 0086, D6).
-        //
-        // It writes through the ingest directly rather than through a report,
-        // because it reads a whole document before it writes anything and turns
-        // the outcomes into a warning per product, which is the one thing a
-        // report cannot answer (plan 0103, D1).
-        case HarvestRunMode.FILE_IMPORT:
-          imported = await this.fileImport.run(context, {
-            supermarketId: run.supermarketId as string,
-            priceScopeId: run.priceScopeId as string,
-            // What observed the price, not what uploaded it: a re-imported
-            // Mercadona walk stamps OFFICIAL_API (plan 0086, section 6.2).
-            sourceKind: run.input['sourceKind'] as PriceSourceKind,
-            // The chain's own adapter, for the language a scope this file
-            // declares is named in (plan 0111, section 8).
-            adapterKey: source?.adapterKey ?? null,
-          });
-          break;
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          throw error;
+        }
+        thrownAfterAbort = { error };
       }
 
       if (sink) {
@@ -541,32 +588,70 @@ export class RunExecutor implements OnApplicationShutdown {
           ...describePrices(imported),
         });
       }
+      if (thrownAfterAbort) {
+        throw thrownAfterAbort.error;
+      }
+      await this.recordRefusals(runId, guard);
       await context.flush();
       const finished = await this.store.load(runId);
-      const status = controller.signal.aborted
-        ? HarvestRunStatus.ABORTED
-        : this.verdict(finished.failed, finished.totalPlanned, settings);
+      // The guard's stop is read before the abort it came with, so a stopped
+      // run ends FAILED with its reason and a person's abort still ends
+      // ABORTED (plan 0215, section 6.2). A stop wins over the ratio too.
+      const status = guard?.stop
+        ? HarvestRunStatus.FAILED
+        : controller.signal.aborted
+          ? HarvestRunStatus.ABORTED
+          : this.verdict(finished.failed, finished.totalPlanned, settings);
+      // After the verdict, so only a COMPLETED walk counts a miss (plan 0220,
+      // section 4.4), and before the finish, so the report says what it did.
+      if (run.mode === HarvestRunMode.CATALOG_DISCOVERY && sink) {
+        const delisting = await this.countDelisting({
+          runId,
+          supermarketId: run.supermarketId,
+          sourceKind: sourceKindOf(source?.adapterKey),
+          status,
+          writes,
+          detailBackfill: run.input['detailBackfill'] === true,
+          sink,
+          config: source?.config,
+          copiesOf: (scopeId) => copies.get(scopeId) ?? [],
+        });
+        await this.store.setReport(runId, {
+          ...(await this.store.load(runId)).report,
+          delisting,
+        });
+      }
       await this.store.finish(
         runId,
         status,
         this.shutdownSentence(runId, status) ??
+          stopSentenceOf(guard, finished) ??
           (status === HarvestRunStatus.FAILED
             ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
               `which is over the ${settings.failureRatio} threshold.`
-            : undefined)
+            : undefined),
+        ...stopReasonOf(guard)
       );
       await this.recordVerdict(source, status);
       return status;
     } catch (error) {
       // Whatever the run managed before it died is still worth keeping.
       await context.flush().catch(() => undefined);
-      const status = controller.signal.aborted
-        ? HarvestRunStatus.ABORTED
-        : HarvestRunStatus.FAILED;
+      await this.recordRefusals(runId, guard).catch(() => undefined);
+      const status =
+        guard?.stop || !controller.signal.aborted
+          ? HarvestRunStatus.FAILED
+          : HarvestRunStatus.ABORTED;
+      const finished = guard?.stop
+        ? await this.store.load(runId).catch(() => null)
+        : null;
       await this.store.finish(
         runId,
         status,
-        this.shutdownSentence(runId, status) ?? describeError(error).message
+        this.shutdownSentence(runId, status) ??
+          stopSentenceOf(guard, finished) ??
+          describeError(error).message,
+        ...stopReasonOf(guard)
       );
       await this.recordVerdict(source, status);
       this.logger.error(
@@ -577,6 +662,67 @@ export class RunExecutor implements OnApplicationShutdown {
       clearInterval(pollAbort);
       this.inFlight.delete(runId);
       this.stoppedByShutdown.delete(runId);
+    }
+  }
+
+  /**
+   * The delisting counter for one finished walk (plan 0220, section 4.4).
+   *
+   * It counts only a `COMPLETED` walk that is not a detail backfill, that
+   * writes availability, and whose runner declared at least one whole
+   * listing. Otherwise the report says why it counted nothing.
+   *
+   * **It never changes the status of the run.** An error in the counter or in
+   * the catalog call is logged and written to the report as `error`. The
+   * `lastCountedRunId` guard makes a second count of the same run add no miss.
+   */
+  private async countDelisting(input: {
+    runId: string;
+    supermarketId: string | null;
+    sourceKind: PriceSourceKind;
+    status: HarvestRunStatus;
+    writes: HarvestRunWrites | undefined;
+    detailBackfill: boolean;
+    sink: Pick<RunReportSink, 'delistingListings'>;
+    config: Record<string, unknown> | undefined;
+    copiesOf: (scopeId: string) => readonly string[];
+  }): Promise<DelistingReport> {
+    const threshold = readDelistingThreshold(input.config);
+    const { whole, notWhole } = input.sink.delistingListings();
+    const because: DelistingNotCounted | null =
+      input.status !== HarvestRunStatus.COMPLETED
+        ? 'run-not-completed'
+        : input.detailBackfill
+          ? 'detail-backfill'
+          : input.writes === HarvestRunWrites.PRICES
+            ? 'prices-only'
+            : whole.length === 0 || !input.supermarketId
+              ? 'no-whole-listing'
+              : null;
+    if (because !== null) {
+      return uncountedReport(because, threshold, notWhole);
+    }
+    try {
+      return await this.delisting.count({
+        runId: input.runId,
+        supermarketId: input.supermarketId as string,
+        sourceKind: input.sourceKind,
+        whole,
+        notWhole,
+        threshold,
+        copiesOf: input.copiesOf,
+      });
+    } catch (error) {
+      const message = describeError(error).message;
+      this.logger.error(
+        `Harvest run ${input.runId}: the delisting count failed: ${message}`
+      );
+      return {
+        ...uncountedReport('no-whole-listing', threshold, notWhole),
+        counted: true,
+        notCountedBecause: null,
+        error: message,
+      };
     }
   }
 
@@ -599,6 +745,23 @@ export class RunExecutor implements OnApplicationShutdown {
       source,
       status === HarvestRunStatus.COMPLETED
     );
+  }
+
+  /**
+   * The `refusals` block of the run's report (plan 0215, section 6.3), merged
+   * into what the run and the drain wrote. Absent for a run with no guard.
+   */
+  private async recordRefusals(
+    runId: string,
+    guard: SourceGuard | null
+  ): Promise<void> {
+    if (!guard) {
+      return;
+    }
+    await this.store.setReport(runId, {
+      ...(await this.store.load(runId)).report,
+      refusals: guard.summary(),
+    });
   }
 
   /** The shutdown sentence for a run the shutdown hook stopped, else null. */
@@ -673,8 +836,10 @@ function readBackfillBudget(
  *
  * They are not the run's `updated` and `unchanged` counters, which is where the
  * back office read them from before. Those two are rows the ladder changed and
- * rows it left alone, and the ingest adds its price inserts to them as well, so
- * a second run's "prices written" was two unrelated things summed.
+ * rows it left alone. `updated` once held every price insert as well, so a
+ * second run's "prices written" was two unrelated things summed. Since plan
+ * 0217 no price moves a counter column, and these keys are the one place a
+ * run's prices are counted.
  */
 function describePrices(
   counters: Pick<
@@ -822,6 +987,34 @@ export function describeCopies(
       availabilityCopied: written.availabilityCopied[from] ?? 0,
     })),
   };
+}
+
+/**
+ * The `error` of a run the guard stopped, else null (plan 0215, section 6.2).
+ * It names how many products the drain wrote, which is what was kept.
+ */
+function stopSentenceOf(
+  guard: SourceGuard | null,
+  row: Pick<HarvestRun, 'report'> | null
+): string | null {
+  const stop = guard?.stop;
+  if (!guard || !stop) {
+    return null;
+  }
+  const written = row?.report?.['productsWritten'];
+  return stopSentence(
+    stop,
+    guard.policy.coolDowns > 0,
+    typeof written === 'number' && written > 0 ? written : null
+  );
+}
+
+/**
+ * The fourth argument of `finish` for a run the guard stopped, and none for
+ * any other run, so a finish that was always three arguments stays three.
+ */
+function stopReasonOf(guard: SourceGuard | null): [] | [HarvestRunStopReason] {
+  return guard?.stop ? [HarvestRunStopReason.SOURCE_BLOCKED] : [];
 }
 
 function requireSource<T>(source: T | null): T {

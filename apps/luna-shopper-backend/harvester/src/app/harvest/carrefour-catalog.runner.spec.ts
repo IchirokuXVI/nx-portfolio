@@ -1,8 +1,17 @@
 import type { ConfigService } from '@nestjs/config';
-import { CarrefourClient } from '@portfolio/luna-shopper/carrefour';
-import type { SupermarketSource } from '../entities';
+import {
+  CARREFOUR_REFUSAL_POLICY,
+  CarrefourClient,
+} from '@portfolio/luna-shopper/carrefour';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
+import type { HarvestRun, SupermarketSource } from '../entities';
+import { TokenBucket } from '../runner/token-bucket';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
-import type { RunContext } from './run-context';
+import type { HarvestRunStore } from './harvest-run.store';
+import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 
 /**
@@ -91,7 +100,7 @@ class TestRunner extends CarrefourCatalogRunner {
     } as unknown as ConfigService);
   }
 
-  protected override createClient(): CarrefourClient {
+  protected override createClient(_context: RunContext): CarrefourClient {
     return new CarrefourClient({
       // The seam is the browser session, so the run below exercises the real
       // pacing, the real refusal counting and the real session handling.
@@ -118,10 +127,14 @@ class TestRunner extends CarrefourCatalogRunner {
  * the block.
  */
 class BlockingRunner extends TestRunner {
-  protected override createClient(): CarrefourClient {
+  protected override createClient(context: RunContext): CarrefourClient {
     return new CarrefourClient({
       userAgent: 'LunaShopperBot/1.0',
       sleepImpl: async () => undefined,
+      // The run's guard and gate, as the runtime passes them (plan 0215).
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
       openSession: async () => ({
         goto: async (url: string) => {
           const path = url.replace('https://www.carrefour.es', '');
@@ -135,18 +148,68 @@ class BlockingRunner extends TestRunner {
   }
 }
 
-function context(): RunContext {
+function context(signal = new AbortController().signal): RunContext {
   return {
     runId: RUN,
-    signal: new AbortController().signal,
+    signal,
     acquire: async () => undefined,
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
     setReport: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    countProgressItself: jest.fn(),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
   } as unknown as RunContext;
+}
+
+/**
+ * A real {@link RunContext} over a store that records what it was asked to
+ * write, so a spec reads `processed` as the run row would hold it.
+ */
+function countingContext() {
+  const counters: Array<Record<string, number>> = [];
+  let planned: number | null = null;
+  const store = {
+    setStage: async () => undefined,
+    setTotalPlanned: async (_run: string, total: number) => {
+      planned = total;
+    },
+    setReport: async () => undefined,
+    addCounters: async (_run: string, added: Record<string, number>) => {
+      counters.push(added);
+    },
+    addWarnings: async () => undefined,
+    touchHeartbeat: async () => undefined,
+  };
+  const context = new RunContext(
+    { id: RUN } as HarvestRun,
+    new AbortController().signal,
+    new TokenBucket({ ratePerSecond: 1000 }),
+    store as unknown as HarvestRunStore
+  );
+  return {
+    context,
+    planned: () => planned,
+    processed: () =>
+      counters.reduce((sum, added) => sum + (added['processed'] ?? 0), 0),
+  };
+}
+
+/**
+ * A context with the run's refusal guard, wired the way `RunExecutor` wires
+ * it: its stop aborts the run with the stop as the reason (plan 0215).
+ */
+function guardedContext(): RunContext {
+  const controller = new AbortController();
+  const ctx = context(controller.signal);
+  const guard = new SourceGuard(CARREFOUR_REFUSAL_POLICY, {
+    onStop: (stop) => controller.abort(new SourceBlockedError(stop)),
+  });
+  return Object.assign(ctx, {
+    guard,
+    acquire: () => guard.admit(controller.signal),
+  });
 }
 
 const source = (config: Record<string, unknown> = {}): SupermarketSource =>
@@ -213,6 +276,163 @@ describe('CarrefourCatalogRunner', () => {
         }),
       ],
     });
+  });
+
+  describe('a whole crawl behind the chain switch (plan 0220, section 15.4)', () => {
+    /** The clean crawl of the first case: one frontier category, two cards. */
+    const clean = () => ({
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [link('cat1', 'Bebidas')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [
+          card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €'),
+          card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €'),
+        ],
+      }),
+    });
+    const crawl = (
+      states: Record<string, Record<string, unknown>>,
+      config: Record<string, unknown>
+    ) =>
+      new TestRunner(states)
+        .run(
+          context(),
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source(config)
+        )
+        .catch(() => undefined);
+
+    it('declares nothing while the switch is off, and says so', async () => {
+      await crawl(clean(), {});
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        { scopeKey: null, reason: 'switch-off', detail: [], listed: null },
+      ]);
+    });
+
+    it('declares the default scope whole with the switch on and a clean crawl', async () => {
+      await crawl(clean(), { delistCountsCrawl: true });
+
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p1', 'p2'] },
+      ]);
+      expect(report.notWhole).toEqual([]);
+    });
+
+    it('reads only a JSON true as the switch', async () => {
+      await crawl(clean(), { delistCountsCrawl: 'true' });
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('switch-off');
+    });
+
+    it('declares nothing for a crawl a seed path narrowed', async () => {
+      await crawl(
+        {
+          ...clean(),
+          '/seed': page({ firstLevel: [link('cat1', 'Bebidas')] }),
+        },
+        { delistCountsCrawl: true, seedPath: '/seed' }
+      );
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('seed-path');
+    });
+
+    it('declares nothing for a crawl with a category capped at the ceiling', async () => {
+      const capped = link('cat2', 'Limpieza');
+      await crawl(
+        {
+          ...clean(),
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: [link('cat1', 'Bebidas'), capped],
+          }),
+          [capped.url]: page({ totalResults: 2000 }),
+        },
+        { delistCountsCrawl: true }
+      );
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('truncated');
+    });
+
+    it('declares nothing for a crawl with an unreadable category', async () => {
+      await crawl(
+        {
+          ...clean(),
+          '/supermercado/la-despensa/cat20001/c': page({
+            firstLevel: [link('cat1', 'Bebidas'), link('cat3', 'Gone')],
+          }),
+        },
+        { delistCountsCrawl: true }
+      );
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0].reason).toBe('unreadable');
+    });
+
+    it('declares nothing for a blocked crawl', async () => {
+      // Three categories refused in a row on their first page of results is
+      // the block, as in the case further down.
+      const refused = ['cat2', 'cat3', 'cat4'].map((id, n) =>
+        link(id, `Refused ${n}`)
+      );
+      const states: Record<string, Record<string, unknown>> = {
+        ...clean(),
+        '/supermercado/la-despensa/cat20001/c': page({
+          firstLevel: [link('cat1', 'Bebidas'), ...refused],
+        }),
+      };
+      for (const category of refused) {
+        states[category.url] = page({ totalResults: 500 });
+      }
+      await new BlockingRunner(states)
+        .run(
+          context(),
+          report,
+          { supermarketId: CHAIN, priceScopeId: SCOPE },
+          source({ delistCountsCrawl: true })
+        )
+        .catch(() => undefined);
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole[0]?.reason).toBe('blocked');
+    });
+  });
+
+  it('counts progress in listings, the unit it plans in, and the ingest adds nothing (plan 0217)', async () => {
+    const states = {
+      '/supermercado/la-despensa/cat20001/c': page({
+        firstLevel: [link('cat1', 'Bebidas')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [
+          card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €'),
+          card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €'),
+        ],
+      }),
+    };
+    const counting = countingContext();
+
+    await new TestRunner(states).run(
+      counting.context,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source()
+    );
+    // What the ingest does with each product it is handed.
+    await counting.context.advance(report.products.length);
+    await counting.context.flush();
+
+    expect(counting.planned()).toBe(2);
+    expect(counting.processed()).toBe(2);
   });
 
   it('reports a centilitre as millilitres and a dimension as no pack (plans 0177, 0183)', async () => {
@@ -379,24 +599,68 @@ describe('CarrefourCatalogRunner', () => {
       states[category.url] = page({ totalResults: 500 });
     }
     const runner = new BlockingRunner(states);
-    const runContext = context();
+    const runContext = guardedContext();
 
-    await expect(
-      runner.run(
-        runContext,
-        report,
-        { supermarketId: CHAIN, priceScopeId: SCOPE },
-        source({ seedPath: '/seed' })
-      )
-    ).rejects.toThrow(/refused/);
+    // The guard's stop aborted the run, and the runner returns after the
+    // snapshot: the executor ends it FAILED with the stop as its reason (plan
+    // 0215, section 6.2).
+    await runner.run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
 
-    // The one product the crawl did read was written before the run failed.
+    expect(runContext.guard?.stop).not.toBeNull();
+    expect(runContext.signal.aborted).toBe(true);
+    // The one product the crawl did read is reported.
     expect(report.products).toHaveLength(1);
     expect(runContext.setReport).toHaveBeenCalledWith(
       expect.objectContaining({
         blockedAfter: expect.stringMatching(/refused/),
       })
     );
+    // Nothing was loaded after the third refusal.
+    expect(
+      runner.asked.filter((path) => path.includes('?offset=0'))
+    ).toHaveLength(4);
+  });
+
+  it('keeps what it read when a person aborts the crawl', async () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Lácteos');
+    const controller = new AbortController();
+    const runner = new TestRunner({
+      '/seed': page({ firstLevel: [one, two] }),
+      [one.url]: page({ totalResults: 1 }),
+      [two.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p2', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+    const runContext = context(controller.signal);
+    // The person aborts once the first category's page is read.
+    (runContext.report as jest.Mock).mockImplementation(async () => {
+      if (runner.asked.includes('/supermercado/x/cat1/c?offset=0')) {
+        controller.abort();
+      }
+    });
+
+    await runner.run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
+
+    expect(report.products.map((product) => product.externalId)).toEqual([
+      'p1',
+    ]);
   });
 
   it('refuses a crawl that has nowhere to write its prices', async () => {

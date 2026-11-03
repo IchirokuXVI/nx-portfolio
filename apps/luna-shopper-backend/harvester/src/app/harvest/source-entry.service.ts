@@ -307,6 +307,13 @@ export class SourceEntryService {
         qb.andWhere('e."brandKey" = :brandKey', { brandKey: key });
       }
     }
+    // Plan 0220, section 12: true is the rows every counted scope lost, false
+    // leaves them out, and absent lists both.
+    if (req.delisted === true) {
+      qb.andWhere('e."delistedAt" IS NOT NULL');
+    } else if (req.delisted === false) {
+      qb.andWhere('e."delistedAt" IS NULL');
+    }
     if (cursor) {
       qb.andWhere('(e."lastSeenAt", e.id) < (:cv, :cid)', {
         cv: cursor.value,

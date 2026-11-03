@@ -6,7 +6,7 @@
 
 .page {
   @include setup.page;
-  padding-block-start: var(--app-space-10);
+  padding-block-start: calc(var(--app-space-10) + var(--app-safe-top));
 }
 
 .wordmark {

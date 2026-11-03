@@ -154,6 +154,13 @@ export type AdminLoginDto = {
 };
 
 /**
+ * `AdminLookupItemsDto` in the gateway's OpenAPI document.
+ */
+export type AdminLookupItemsDto = {
+  ids: string[];
+};
+
+/**
  * `AdminRecoveryDto` in the gateway's OpenAPI document.
  */
 export type AdminRecoveryDto = {
@@ -319,7 +326,8 @@ export type CreateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   packCount?: number | null;
-  categoryIds: string[];
+  categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
 };
@@ -342,6 +350,7 @@ export type CreateItemFromEntryDto = {
  */
 export type CreateItemsDto = {
   items: CreateItemDto[];
+  requireRegisteredBrands?: boolean;
 };
 
 /**
@@ -504,6 +513,20 @@ export type ImportHarvestDocumentDto = {
 };
 
 /**
+ * `ItemExpectationDto` in the gateway's OpenAPI document.
+ *
+ * What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds.
+ */
+export type ItemExpectationDto = {
+  name?: LocalizedTextDto;
+  brand?: string | null;
+  unitSize?: number | null;
+  defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+  packCount?: number | null;
+  categorySlugs?: string[];
+};
+
+/**
  * `JoinBasketDto` in the gateway's OpenAPI document.
  */
 export type JoinBasketDto = {
@@ -592,6 +615,16 @@ export type MapSourceLocationDto = {
 };
 
 /**
+ * `MergeItemDto` in the gateway's OpenAPI document.
+ */
+export type MergeItemDto = {
+  intoItemId: string;
+  dryRun?: boolean;
+  allowSecondArticle?: boolean;
+  allowFormatDifference?: boolean;
+};
+
+/**
  * `MintGoogleNonceDto` in the gateway's OpenAPI document.
  */
 export type MintGoogleNonceDto = {
@@ -664,6 +697,7 @@ export type ProblemDetails = {
     | 'brand_not_linked'
     | 'brand_homonym_is_own_key'
     | 'brand_in_use'
+    | 'brand_unregistered'
     | 'place_already_imported'
     | 'place_matches_location'
     | 'place_names_another_chain'
@@ -673,6 +707,13 @@ export type ProblemDetails = {
     | 'item_needs_a_category'
     | 'item_ean_invalid'
     | 'item_ean_held'
+    | 'item_expectation_failed'
+    | 'item_unit_not_base'
+    | 'item_kilogram_has_size'
+    | 'item_merged'
+    | 'item_merge_two_articles_one_chain'
+    | 'item_merge_format_differs'
+    | 'item_in_use'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
@@ -1220,8 +1261,10 @@ export type UpdateItemBatchEntryDto = {
   unitSize?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+  expect?: ItemExpectationDto;
   itemId: string;
 };
 
@@ -1237,8 +1280,10 @@ export type UpdateItemDto = {
   unitSize?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+  expect?: ItemExpectationDto;
 };
 
 /**
@@ -1246,6 +1291,7 @@ export type UpdateItemDto = {
  */
 export type UpdateItemsDto = {
   items: UpdateItemBatchEntryDto[];
+  requireRegisteredBrands?: boolean;
 };
 
 /**
@@ -2377,6 +2423,7 @@ export type BasketBasketProductView = {
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
+  mergedInto?: string;
   atShop: BasketBasketProductAtShopView | null;
   sectionIds?: string[];
 };
@@ -2631,6 +2678,8 @@ export type CatalogAdminSupermarketItemView = {
   validUntil: string | null;
   itemPriceId: string | null;
   available: boolean;
+  delistedAt?: string | null;
+  outOfStockAt?: string | null;
   itemName: CatalogLocalizedText | null;
 };
 
@@ -2840,6 +2889,7 @@ export type CatalogItemOfferView = {
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
   stale: boolean;
+  outOfStockAt?: string | null;
 };
 
 /**
@@ -3027,6 +3077,7 @@ export type CatalogItemView = {
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
+  mergedInto?: string;
 };
 
 /**
@@ -3065,6 +3116,26 @@ export type CatalogLocationSectionsView = {
  */
 export type CatalogLocationShopMapView = {
   map: CatalogShopMapView | null;
+};
+
+/**
+ * `catalog.MergeItemResult` in the gateway's OpenAPI document.
+ */
+export type CatalogMergeItemResult = {
+  itemId: string;
+  intoItemId: string;
+  dryRun: boolean;
+  mergedIntoId: string;
+  mergedAt: string | null;
+  prices: number;
+  scopeRows: number;
+  shopRows: number;
+  shopRowsKept: number;
+  barcodes: string[];
+  survivorEan: string | null;
+  linkedImages: number;
+  repointedItemIds: string[];
+  queueRows: number;
 };
 
 /**
@@ -3275,6 +3346,7 @@ export type CatalogResolvedScopeView = {
  */
 export type CatalogSetSupermarketItemAvailabilityResult = {
   updated: number;
+  keptSold?: number;
 };
 
 /**
@@ -3642,6 +3714,8 @@ export type CatalogSupermarketItemView = {
   validUntil: string | null;
   itemPriceId: string | null;
   available: boolean;
+  delistedAt?: string | null;
+  outOfStockAt?: string | null;
 };
 
 /**
@@ -3922,6 +3996,11 @@ export type EnumsHarvestRunStatus =
   | 'STALE';
 
 /**
+ * `enums.HarvestRunStopReason` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestRunStopReason = 'SOURCE_BLOCKED';
+
+/**
  * `enums.HarvestRunTrigger` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
@@ -3969,7 +4048,9 @@ export type EnumsHarvestWarningCode =
   | 'COPY_SOURCE_NOT_WRITTEN'
   | 'SCOPE_KIND_MISMATCH'
   | 'DETAIL_SKIPPED_UNKNOWN'
-  | 'PRICE_SOLD_ANOTHER_WAY';
+  | 'PRICE_SOLD_ANOTHER_WAY'
+  | 'SOURCE_PAUSED'
+  | 'SOURCE_RESUMED';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
@@ -4330,7 +4411,7 @@ export type GatewayLegalSettingsView = {
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export const HarvestAdapterCapabilityTable = {
   'mercadona-api': {
@@ -4344,6 +4425,8 @@ export const HarvestAdapterCapabilityTable = {
       min: 200,
       max: 200,
     },
+    stockIndicator: 'per-scope',
+    provesDelisting: true,
   },
   'deza-web': {
     writesPrices: false,
@@ -4353,6 +4436,8 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
+    stockIndicator: 'per-shop',
+    provesDelisting: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -4362,6 +4447,8 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: false,
   },
   'lidl-api': {
     writesPrices: true,
@@ -4371,6 +4458,8 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: false,
     printedLocale: 'es',
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: false,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -4380,6 +4469,8 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: true,
     printedLocale: 'es',
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -4392,6 +4483,8 @@ export const HarvestAdapterCapabilityTable = {
       min: 200,
       max: 200,
     },
+    stockIndicator: 'per-scope',
+    provesDelisting: true,
   },
   'osm-places': {
     writesPrices: false,
@@ -4401,6 +4494,8 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: false,
   },
   manual: {
     writesPrices: false,
@@ -4410,13 +4505,15 @@ export const HarvestAdapterCapabilityTable = {
     skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: false,
   },
 } as const;
 
 /**
  * `harvest.AdapterCapabilityTable` in the gateway's OpenAPI document.
  *
- * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.
+ * What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.
  */
 export type HarvestAdapterCapabilityTable =
   typeof HarvestAdapterCapabilityTable;
@@ -4649,6 +4746,7 @@ export type HarvestHarvestRunView = {
   presetId?: string | null;
   scheduleId?: string | null;
   interrupted?: boolean;
+  stopReason?: EnumsHarvestRunStopReason | null;
   estimate?: HarvestRunEstimate;
 };
 
@@ -4749,6 +4847,7 @@ export type HarvestItemSourceEntryView = {
   matchedBy: EnumsItemSourceMatch | null;
   confidence: number;
   decidedAt: string | null;
+  delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
   eanSharedBy: number | null;
   scopeSharedWith: string[];
@@ -4904,6 +5003,7 @@ export type HarvestQueuedSourceEntryView = {
   matchedBy: EnumsItemSourceMatch | null;
   confidence: number;
   decidedAt: string | null;
+  delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
   brandMatches: CatalogBrandMatchView[];
 };
@@ -4994,6 +5094,7 @@ export type HarvestSourceCatalogEntryView = {
   matchedBy: EnumsItemSourceMatch | null;
   confidence: number;
   decidedAt: string | null;
+  delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
 };
 
@@ -5536,6 +5637,13 @@ export type MsgBrandRegisterManyResponse = {
  * `msg.item.createMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemCreateManyResponse = {
+  items: CatalogItemView[];
+};
+
+/**
+ * `msg.item.getMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemGetManyResponse = {
   items: CatalogItemView[];
 };
 

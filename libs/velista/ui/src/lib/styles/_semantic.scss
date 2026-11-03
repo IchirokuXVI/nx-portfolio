@@ -477,6 +477,12 @@ $app-content-max: 480px;
   // The tour (velista 0099): over the bar, whose tab it lights, and under a sheet,
   // which it never draws over because no card is up while one is open.
   --app-tour-z: 8;
+  // The insets the tour keeps its ring and its card out of. The tour is fixed over the
+  // whole screen, so the bar's reason for a name of its own holds here too: these are
+  // the raw insets, and nothing redefines them, whatever the frame has zeroed for the
+  // page column below the bar.
+  --app-tour-safe-top: env(safe-area-inset-top, 0px);
+  --app-tour-safe-bottom: env(safe-area-inset-bottom, 0px);
 
   // The strip of a support session (velista `0133`): the first thing on every screen
   // while an operator has the app open as a user. Over **every** cover, the sheet's

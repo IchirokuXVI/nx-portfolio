@@ -11,6 +11,12 @@
 .blocker {
   position: fixed;
   inset: 0;
+  // The insets, carried as padding so the component can measure them: it places the
+  // ring and the card in pixels, and `env()` is a CSS value with no other way into a
+  // script. The layer holds nothing, so the padding draws nothing. Inside the Android
+  // app the screen is drawn edge to edge, and without them the ring round the bar
+  // took in the system navigation bar under it, and a card could reach the status bar.
+  padding-block: var(--app-tour-safe-top) var(--app-tour-safe-bottom);
 
   // The dimming does not animate at all (section 10): a fade on every stop change
   // would be a flash of the undimmed app in the middle of the tour.

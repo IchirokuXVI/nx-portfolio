@@ -1,15 +1,20 @@
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import listingPage from './__fixtures__/listing-page.json';
 import productPage from './__fixtures__/product-page.json';
 import {
+  CARREFOUR_REFUSAL_POLICY,
   CarrefourClient,
   dropCloudflareCookies,
   isCloudflareCookie,
   type CarrefourCookieJar,
 } from './carrefour.client';
 import {
-  CarrefourBlockedError,
   CarrefourBrowserError,
   CarrefourHttpError,
+  isSkippable,
 } from './errors';
 import {
   CARREFOUR_MIN_DELAY_MS,
@@ -214,15 +219,72 @@ describe('CarrefourClient', () => {
       // Consecutive refusals are the escalation signature of section 4: only
       // the first load of a fresh session succeeds. A crawl that fetched on
       // through that would deepen the block.
-      const client = clientOn(new FakeBrowser(refused));
+      let n = 0;
+      const browser = new FakeBrowser(() =>
+        ++n === 1 ? { status: 200, state: listingPage } : { status: 403 }
+      );
+      const client = clientOn(browser);
+      await expect(client.readListing('/0')).resolves.not.toBeNull();
       await expect(client.readListing('/1')).rejects.not.toBeInstanceOf(
-        CarrefourBlockedError
+        SourceBlockedError
       );
       await expect(client.readListing('/2')).rejects.not.toBeInstanceOf(
-        CarrefourBlockedError
+        SourceBlockedError
       );
+      const blocked = await client.readListing('/3').catch((error) => error);
+
+      // The client's own guard, built from CARREFOUR_REFUSAL_POLICY (plan
+      // 0215), and the one failure a walk may not step over.
+      expect(blocked).toBeInstanceOf(SourceBlockedError);
+      expect(isSkippable(blocked)).toBe(false);
+      expect(isSkippable(new CarrefourHttpError(403, '/1'))).toBe(true);
+      // Nothing is loaded after the stop.
+      await expect(client.readListing('/4')).rejects.toBe(blocked);
+      expect(browser.asked).toHaveLength(4);
+    });
+
+    it('reports to the run’s guard when one is passed', async () => {
+      const guard = new SourceGuard(CARREFOUR_REFUSAL_POLICY);
+      const browser = new FakeBrowser(refused);
+      const client = new CarrefourClient({
+        userAgent: 'LunaShopperBot/1.0 (+https://velista.app)',
+        openSession: browser.open,
+        sleepImpl: async () => undefined,
+        acquire: () => guard.admit(),
+        guard,
+      });
+      // A refusal another client of the run met counts here too.
+      guard.refused(403, '/elsewhere');
+
+      await expect(client.readListing('/1')).rejects.toBeInstanceOf(
+        CarrefourHttpError
+      );
+      await expect(client.readListing('/2')).rejects.toBeInstanceOf(
+        SourceBlockedError
+      );
+      expect(guard.stop).toEqual(
+        expect.objectContaining({ url: expect.stringContaining('/2') })
+      );
+    });
+
+    it('leaves the count as it was on a 5xx, and clears it on a 404', async () => {
+      const answers = [403, 503, 403, 404, 403, 403];
+      const client = clientOn(
+        new FakeBrowser(() => ({ status: answers.shift() as number }))
+      );
+      await expect(client.readListing('/1')).rejects.toBeInstanceOf(
+        CarrefourHttpError
+      );
+      await expect(client.readListing('/2')).resolves.toBeNull();
       await expect(client.readListing('/3')).rejects.toBeInstanceOf(
-        CarrefourBlockedError
+        CarrefourHttpError
+      );
+      await expect(client.readListing('/4')).resolves.toBeNull();
+      await expect(client.readListing('/5')).rejects.toBeInstanceOf(
+        CarrefourHttpError
+      );
+      await expect(client.readListing('/6')).rejects.not.toBeInstanceOf(
+        SourceBlockedError
       );
     });
 
@@ -243,7 +305,7 @@ describe('CarrefourClient', () => {
         CarrefourHttpError
       );
       await expect(client.readListing('/4')).rejects.not.toBeInstanceOf(
-        CarrefourBlockedError
+        SourceBlockedError
       );
     });
   });

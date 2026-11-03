@@ -6,7 +6,6 @@ import {
   DIA_CATEGORY_SLUGS,
   DiaClient,
   DiaSessionError,
-  DiaStoppedError,
   photoAddressRead,
   regularPrice,
   splitSize,
@@ -15,6 +14,7 @@ import {
   type DiaListingRow,
   type DiaStoreFile,
 } from '@portfolio/luna-shopper/dia';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import type {
   CatalogDiscoveryInput,
@@ -66,6 +66,13 @@ import type {
  * **It never claims the assortment is complete.** The sitemap names about
  * 7,600 products and a walk lists about 5,700. The rest are out of stock or
  * delisted, and no walk can tell which.
+ *
+ * **It does say when it read a store's whole listing** (plan 0220, section
+ * 2.2): a scope it finished with no failed page, in a run that was not
+ * aborted, is handed over with every product it listed. A product that leaves
+ * the listing is then counted over several walks and several days before it
+ * is gone, because DIA hides a product while it is out of stock. A listed row
+ * with no stock is listed: sold and out of stock, never hidden.
  */
 @Injectable()
 export class DiaCatalogRunner implements CatalogRunner {
@@ -78,22 +85,26 @@ export class DiaCatalogRunner implements CatalogRunner {
     source: SupermarketSource
   ): Promise<void> {
     const scopes = requireScopes(input.priceScopes);
+    // The plan is leaves times postal codes, so a whole leaf is the unit of
+    // `processed` and the ingest adds no products to it (plan 0217).
+    context.countProgressItself();
     const client = this.createClient(context, source);
     const walk = new Walk();
 
     try {
       await this.walkScopes(context, report, client, walk, scopes, source);
     } catch (error) {
-      if (!(error instanceof DiaStoppedError)) {
+      if (!(error instanceof SourceBlockedError) && !context.signal.aborted) {
         throw error;
       }
-      // Five failed requests in a row (section 10). The report says what was
-      // read and what stopped it, and the run then fails with that error named
-      // rather than failing every remaining page at full speed.
-      walk.stoppedBy = String(error.lastError);
-      await context.flush();
-      await context.setReport(walk.toReport(null, null, client.requests));
-      throw error;
+      // Five failed requests in a row (section 10), or an abort that cut a
+      // request short. The products of the scopes walked are reported below,
+      // as a walk that returned on an abort reports them (plan 0215, section
+      // 6.1). A scope that did not finish states positives only, because the
+      // run's signal is aborted, and the report names what stopped it.
+      if (error instanceof SourceBlockedError) {
+        walk.stoppedBy = error.message;
+      }
     }
 
     // --- 3. Report every product ---------------------------------------------
@@ -115,10 +126,11 @@ export class DiaCatalogRunner implements CatalogRunner {
       if (observation) {
         report.product(observation);
       }
-      for (const claim of availabilityOf(product, walk, context.signal)) {
+      for (const claim of availabilityOf(product, walk)) {
         report.availability(claim);
       }
     }
+    declareListings(report, walk, context.signal);
 
     await context.flush();
     await context.setReport(
@@ -188,7 +200,7 @@ export class DiaCatalogRunner implements CatalogRunner {
         // so a scope is never walked under a borrowed one.
         await client.startSession(postalCode, scope.externalKey);
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         walk.skip(
@@ -260,7 +272,7 @@ export class DiaCatalogRunner implements CatalogRunner {
           walk.skip(key, 'no-postal-code', 'The store detail states none.');
         }
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         walk.skip(key, 'detail-failed', String(error));
@@ -294,7 +306,7 @@ export class DiaCatalogRunner implements CatalogRunner {
       try {
         read = await client.listing(path, page);
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         this.logger.warn(
@@ -353,6 +365,7 @@ export class DiaCatalogRunner implements CatalogRunner {
       // The run's own bucket. The client also holds 500 ms between requests,
       // so the source never sees more than 2 per second (section 10).
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }
@@ -731,40 +744,71 @@ function observationOf(
 }
 
 /**
- * Availability per walked scope (section 6.5).
+ * Availability per walked scope (section 6.5, and plan 0220, section 15.1).
  *
- * - Listed with stock: available.
- * - Listed with no stock: not available.
- * - Not listed here and listed by another scope of this run: not available
- *   here, as plan 0108 requires of a run over several warehouses.
+ * - Listed with stock: sold, in stock.
+ * - Listed with no stock: sold, out of stock. It used to be "not available",
+ *   which hid the product at DIA as if DIA did not sell it.
  *
- * The third claim needs a whole walk. A scope whose walk an abort cut short,
- * or that had a failed page, has not proved anything absent, so it states the
- * first two only.
+ * A product a scope did not list gets no claim here. "Not listed here and
+ * listed by another scope" is the listing diff the orchestrator works out
+ * from {@link declareListings}, with the rule that a scope which once listed
+ * the product is the delisting counter's.
  */
 function availabilityOf(
   product: WalkedProduct,
-  walk: Walk,
-  signal: AbortSignal
-): Array<{ externalId: string; available: boolean; scopeKey: string }> {
+  walk: Walk
+): Array<{
+  externalId: string;
+  available: boolean;
+  outOfStock: boolean;
+  scopeKey: string;
+}> {
   const claims = [];
   for (const scope of walk.scopes) {
     const listed = scope.listed.get(product.skuId);
     if (listed) {
       claims.push({
         externalId: product.skuId,
-        available: listed.unitsInStock > 0,
-        scopeKey: scope.key,
-      });
-    } else if (scope.finished && scope.failedPages === 0 && !signal.aborted) {
-      claims.push({
-        externalId: product.skuId,
-        available: false,
+        available: true,
+        outOfStock: listed.unitsInStock <= 0,
         scopeKey: scope.key,
       });
     }
   }
   return claims;
+}
+
+/**
+ * Each walked scope's listing, whole or not (plan 0220, section 2.2).
+ *
+ * Whole is the condition the third claim of section 6.5 used: the scope was
+ * finished, no page of it failed, and the run was not aborted. Any other
+ * walked scope hands over what it read and why it is not whole. A skipped
+ * scope was never opened and says nothing, and DIA never declares the
+ * national scope: its copy of the anonymous store's prices is not a walk of
+ * it. **An aborted run declares nothing.**
+ */
+function declareListings(
+  report: RunReport,
+  walk: Walk,
+  signal: AbortSignal
+): void {
+  if (signal.aborted) {
+    return;
+  }
+  for (const scope of walk.scopes) {
+    if (scope.finished && scope.failedPages === 0) {
+      report.listingWhole(scope.key, scope.listed.keys());
+    } else {
+      report.listingNotWhole(
+        scope.key,
+        scope.finished ? 'failed-page' : 'unfinished',
+        [],
+        scope.listed.keys()
+      );
+    }
+  }
 }
 
 function absolute(path: string): string {

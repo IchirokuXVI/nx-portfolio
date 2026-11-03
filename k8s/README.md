@@ -196,6 +196,39 @@ default) sets `gateway.enabled: false` and stays the zero setup path.
 
 ---
 
+## Log retention on your own cluster
+
+The velista chart states in its privacy policy how long logs are kept
+(`lunaShopperBackend.legal.applicationLogDays` and `assistantLogDays`, 30 and 7 by
+default). Nothing in the chart can make that true, because container logs are not
+in the cluster: they are the kubelet's files under `/var/log/pods` on each node.
+Kubernetes bounds those files by size (10 MiB, five files) and by the life of the
+pod. It never bounds them by age, so a database pod that runs for months keeps its
+lines for months.
+
+On a host that `bootstrap/provision-host.sh` set up, `nx-log-retention` does it
+hourly (k8s plan 0018, [`README-new-cluster.md`](./README-new-cluster.md) section
+10c). On any other cluster that is your job, before you publish the policy:
+
+- Run [`bootstrap/log-retention.sh`](./bootstrap/log-retention.sh) as root on each
+  node from a timer. It needs only bash, coreutils and gzip. Write its rules to
+  `/etc/nx-log-retention.conf`, one `<namespace>/<container> <days>` per line;
+  the comment at the top of the script explains them.
+- Or, if you ship logs to an aggregator, set its retention to the same numbers,
+  and bound the node files as above anyway, because they are still there.
+- State the same numbers in the chart's `legal` values, so the policy says what
+  your nodes do.
+
+The chart's `lunaShopperBackend.assistant.logTurnText` is false by default, and
+then the assistant logs no words of a conversation at all, only their lengths.
+
+Managed Kubernetes keeps node logs under the provider's own policy; read it before
+you state a number. The Docker Desktop path of
+[`README-homelab.md`](./README-homelab.md) is a temporary bridge and is not
+covered: Docker Desktop keeps container logs its own way.
+
+---
+
 ## Local quickstart (port mode — the default)
 
 Port mode exposes every app on its own `localhost:<port>`: shell on **80**, remotes

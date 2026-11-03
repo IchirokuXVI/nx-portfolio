@@ -11,6 +11,7 @@ import type {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   HarvestRunWrites,
   HarvestScheduleBlock,
@@ -235,6 +236,13 @@ export const SOURCE_ENTRY_PATTERNS = {
    * calls it for a product a row left before the plan landed.
    */
   settleItem: 'sourceEntry.settleItem',
+  /**
+   * How many rows name each of these products, and which chains hold an
+   * `ACTIVE` row of each (plan 0239). Catalog asks it, with the operator's
+   * credential, before a merge (rule R28) and before a delete. Counts and
+   * chains only, never the rows.
+   */
+  itemUsage: 'sourceEntry.itemUsage',
 } as const;
 
 /**
@@ -389,7 +397,34 @@ export interface AdapterCapabilities {
    * is its business.
    */
   walkablePriorities: { min: number; max: number } | null;
+  /**
+   * How the source tells stock (plan 0220, section 15.3): `per-shop` when it
+   * names the shops that carry a product, `per-scope` when each listed row or
+   * a scoped answer states it, and null when the source says nothing about
+   * stock.
+   */
+  stockIndicator: StockIndicator | null;
+  /**
+   * A walk of this source can read the whole listing of a scope, so a product
+   * the listing did not name is a miss (plan 0220, section 2). False for a
+   * source whose listing is capped, a window of offers, or a selection.
+   *
+   * A chain's own `config.delistCountsCrawl` can turn it on for a Carrefour
+   * crawl (section 15.4). That switch is read by the harvester and does not
+   * change this table.
+   */
+  provesDelisting: boolean;
 }
+
+/**
+ * The ways a source tells stock (plan 0220, section 15.3).
+ *
+ * `per-shop`: the source names the shops that carry a product (DEZA's popup).
+ * `per-scope`: each listed row, or a scoped answer, states it (DIA's
+ * `unitsInStock`, a Mercadona warehouse 404).
+ */
+export const STOCK_INDICATORS = ['per-shop', 'per-scope'] as const;
+export type StockIndicator = (typeof STOCK_INDICATORS)[number];
 
 /**
  * The facts, per adapter.
@@ -422,6 +457,10 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
       min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
       max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
     },
+    // A detail that answers 404 is "not stocked in this warehouse", and the
+    // listing of a warehouse is whole (plan 0220, section 2.1).
+    stockIndicator: 'per-scope',
+    provesDelisting: true,
   },
   // The site prints no price at all, so a scope would be a required field that
   // does nothing (plan 0085).
@@ -434,6 +473,10 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     printedLocale: 'es',
     // A walk that writes no price writes no scope, so there is no band to state.
     walkablePriorities: null,
+    // The popup names the shops that carry a product, and each query answers
+    // at most 300 rows, so no listing is whole (plan 0085).
+    stockIndicator: 'per-shop',
+    provesDelisting: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -445,6 +488,11 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // One default scope, chosen at the spawn, and no list. Nothing is selected,
     // so there is nothing for a band to refuse.
     walkablePriorities: null,
+    // `units_in_stock` is in the payload and nothing reads it. The 1008 row
+    // ceiling keeps a crawl from proving absence, unless the chain's own
+    // `config.delistCountsCrawl` says otherwise (plan 0220, section 15.4).
+    stockIndicator: null,
+    provesDelisting: false,
   },
   // The one source that states the region of every price it publishes and names
   // its own 730 shops (plan 0089).
@@ -458,6 +506,10 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // It reads every region the week's offers name and creates what is missing,
     // so a run selects no scope and the band has nothing to say about it.
     walkablePriorities: null,
+    // A window of offers, not an assortment: a price ends by its own
+    // `validUntil` (plan 0089).
+    stockIndicator: null,
+    provesDelisting: false,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -472,6 +524,10 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     skipsKnownDetails: true,
     printedLocale: 'es',
     walkablePriorities: null,
+    // The page states no stock, and the national list is whole (plan 0220,
+    // section 2.3).
+    stockIndicator: null,
+    provesDelisting: true,
   },
   'dia-api': {
     writesPrices: true,
@@ -493,6 +549,10 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
       min: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
       max: DEFAULT_SCOPE_PRIORITY[PriceScopeKind.LOCAL_AREA],
     },
+    // `unitsInStock` on each listed row, and the store listing is whole
+    // (plan 0220, section 2.2).
+    stockIndicator: 'per-scope',
+    provesDelisting: true,
   },
   // OpenStreetMap carries a place's name and never a language for it, and a
   // shop name is a proper noun in any case, so there is nothing to claim here.
@@ -504,6 +564,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: false,
   },
   // Nothing is printed: whatever a manual row holds, an operator typed, and the
   // operator says which language they typed it in.
@@ -515,6 +577,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     skipsKnownDetails: false,
     printedLocale: null,
     walkablePriorities: null,
+    stockIndicator: null,
+    provesDelisting: false,
   },
 };
 
@@ -544,6 +608,8 @@ export function adapterCapabilities(
       skipsKnownDetails: false,
       printedLocale: null,
       walkablePriorities: null,
+      stockIndicator: null,
+      provesDelisting: false,
     }
   );
 }
@@ -607,11 +673,32 @@ export interface HarvestRunView {
   heartbeatAt: string | null;
   /** Null until the run knows how much work it has (after the tree walk). */
   totalPlanned: number | null;
+  /**
+   * Units of planned work done, in the unit of `totalPlanned` (plan 0217). The
+   * unit is the product, or the place in a store discovery, except Carrefour
+   * catalog (listings), DIA catalog (leaves) and DIA store discovery (shop
+   * details). A run that finished whole ends with this at most `totalPlanned`;
+   * a run from before plan 0217 of those three runners may read above it.
+   *
+   * No counter of this view counts a price. A run's prices are in `report`
+   * alone, as `pricesRecorded`, `pricesPublished`, `pricesConfirmed` and
+   * `pricesConflicted`.
+   */
   processed: number;
+  /** Source rows created, or places created in a store discovery. */
   created: number;
+  /**
+   * Source rows whose source group changed, or places changed. Never a price:
+   * before plan 0217 it held each price catalog inserted as well, and the stored
+   * runs whose report states that amount were corrected.
+   */
   updated: number;
+  /** Source rows seen and left as they were, or places refreshed. */
   unchanged: number;
-  /** A 404 from a detail call: "not stocked here" is a value, not a failure. */
+  /**
+   * A source answered that it does not stock the product here, which is a
+   * value and not a failure. A Mercadona 404 is the only one.
+   */
   notFound: number;
   /**
    * Offers a rule dropped or sent to the queue (plan 0081, section 7). Backlog
@@ -693,6 +780,13 @@ export interface HarvestRunView {
    * `STALE`. A scheduled run that was interrupted is started again one time.
    */
   interrupted: boolean;
+  /**
+   * Why a `FAILED` run stopped before its work was done (plan 0215), null for
+   * every other run. `SOURCE_BLOCKED` is a run the chain refused until its
+   * guard stopped it: it kept what it read, and it is not interrupted, so no
+   * schedule starts it again into the block.
+   */
+  stopReason: HarvestRunStopReason | null;
   /**
    * About how long a run like this one takes, from earlier runs and never from
    * this one (plan 0206, section 8). The view states no time remaining:
@@ -923,6 +1017,12 @@ export interface SourceCatalogEntryView {
   confidence: number;
   /** When the status left the queue, by a person or by the EAN rung. */
   decidedAt: string | null;
+  /**
+   * When every scope a whole walk counted lost this product (plan 0220,
+   * section 4.3), and null while any of them still lists it. Written by the
+   * delisting counter alone, and it never changes `status`.
+   */
+  delistedAt: string | null;
   /**
    * The latest price each scope stated for this row, one per scope (D3).
    *
@@ -1614,6 +1714,11 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
    * error.
    */
   brandKey?: string;
+  /**
+   * True lists only the rows every counted scope lost (`delistedAt` set),
+   * false leaves them out, and absent lists both (plan 0220, section 12).
+   */
+  delisted?: boolean;
 }
 
 export interface SourceEntryIdRequest extends AdminCredential {
@@ -1754,6 +1859,26 @@ export interface SourceEntryPriceWithheld {
    * offered with no price.
    */
   kindUnknown?: true;
+}
+
+/** The products a usage question names (plan 0239). */
+export interface SourceEntryItemUsageRequest extends AdminCredential {
+  /** At most `ITEM_USAGE_MAX_IDS` products. */
+  itemIds: string[];
+}
+
+/** What the harvester holds that names one product (plan 0239). */
+export interface SourceEntryItemUsage {
+  itemId: string;
+  /** Rows whose `itemId` is the product, whatever their status. */
+  rowCount: number;
+  /** The chains of the product's `ACTIVE` rows, each once, sorted. */
+  activeSupermarketIds: string[];
+}
+
+/** One entry per product asked about, the ones nothing names included. */
+export interface SourceEntryItemUsageResult {
+  usage: SourceEntryItemUsage[];
 }
 
 /** Settle a product at a chain (plan 0191). */
