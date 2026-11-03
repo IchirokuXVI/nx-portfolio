@@ -66,6 +66,13 @@ import type {
  * **It never claims the assortment is complete.** The sitemap names about
  * 7,600 products and a walk lists about 5,700. The rest are out of stock or
  * delisted, and no walk can tell which.
+ *
+ * **It does say when it read a store's whole listing** (plan 0220, section
+ * 2.2): a scope it finished with no failed page, in a run that was not
+ * aborted, is handed over with every product it listed. A product that leaves
+ * the listing is then counted over several walks and several days before it
+ * is gone, because DIA hides a product while it is out of stock. A listed row
+ * with no stock is listed: sold and out of stock, never hidden.
  */
 @Injectable()
 export class DiaCatalogRunner implements CatalogRunner {
@@ -119,10 +126,11 @@ export class DiaCatalogRunner implements CatalogRunner {
       if (observation) {
         report.product(observation);
       }
-      for (const claim of availabilityOf(product, walk, context.signal)) {
+      for (const claim of availabilityOf(product, walk)) {
         report.availability(claim);
       }
     }
+    declareListings(report, walk, context.signal);
 
     await context.flush();
     await context.setReport(
@@ -736,40 +744,71 @@ function observationOf(
 }
 
 /**
- * Availability per walked scope (section 6.5).
+ * Availability per walked scope (section 6.5, and plan 0220, section 15.1).
  *
- * - Listed with stock: available.
- * - Listed with no stock: not available.
- * - Not listed here and listed by another scope of this run: not available
- *   here, as plan 0108 requires of a run over several warehouses.
+ * - Listed with stock: sold, in stock.
+ * - Listed with no stock: sold, out of stock. It used to be "not available",
+ *   which hid the product at DIA as if DIA did not sell it.
  *
- * The third claim needs a whole walk. A scope whose walk an abort cut short,
- * or that had a failed page, has not proved anything absent, so it states the
- * first two only.
+ * A product a scope did not list gets no claim here. "Not listed here and
+ * listed by another scope" is the listing diff the orchestrator works out
+ * from {@link declareListings}, with the rule that a scope which once listed
+ * the product is the delisting counter's.
  */
 function availabilityOf(
   product: WalkedProduct,
-  walk: Walk,
-  signal: AbortSignal
-): Array<{ externalId: string; available: boolean; scopeKey: string }> {
+  walk: Walk
+): Array<{
+  externalId: string;
+  available: boolean;
+  outOfStock: boolean;
+  scopeKey: string;
+}> {
   const claims = [];
   for (const scope of walk.scopes) {
     const listed = scope.listed.get(product.skuId);
     if (listed) {
       claims.push({
         externalId: product.skuId,
-        available: listed.unitsInStock > 0,
-        scopeKey: scope.key,
-      });
-    } else if (scope.finished && scope.failedPages === 0 && !signal.aborted) {
-      claims.push({
-        externalId: product.skuId,
-        available: false,
+        available: true,
+        outOfStock: listed.unitsInStock <= 0,
         scopeKey: scope.key,
       });
     }
   }
   return claims;
+}
+
+/**
+ * Each walked scope's listing, whole or not (plan 0220, section 2.2).
+ *
+ * Whole is the condition the third claim of section 6.5 used: the scope was
+ * finished, no page of it failed, and the run was not aborted. Any other
+ * walked scope hands over what it read and why it is not whole. A skipped
+ * scope was never opened and says nothing, and DIA never declares the
+ * national scope: its copy of the anonymous store's prices is not a walk of
+ * it. **An aborted run declares nothing.**
+ */
+function declareListings(
+  report: RunReport,
+  walk: Walk,
+  signal: AbortSignal
+): void {
+  if (signal.aborted) {
+    return;
+  }
+  for (const scope of walk.scopes) {
+    if (scope.finished && scope.failedPages === 0) {
+      report.listingWhole(scope.key, scope.listed.keys());
+    } else {
+      report.listingNotWhole(
+        scope.key,
+        scope.finished ? 'failed-page' : 'unfinished',
+        [],
+        scope.listed.keys()
+      );
+    }
+  }
 }
 
 function absolute(path: string): string {

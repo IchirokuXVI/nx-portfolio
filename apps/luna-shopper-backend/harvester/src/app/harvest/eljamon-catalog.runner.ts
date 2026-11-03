@@ -38,6 +38,9 @@ import type {
  *
  * **It writes no availability, positive or negative.** The site publishes none
  * per shop, and the JSON-LD `availability` is a template constant (section 2.3).
+ * It does hand over its national listing when the walk read it whole (plan
+ * 0220, section 2.3), and the delisting counter writes a negative only after
+ * several such walks did not list a product.
  *
  * The order (section 8):
  *
@@ -176,6 +179,8 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       }
     }
 
+    declareListing(report, walk, context.signal);
+
     await context.flush();
     await context.setReport(
       walk.toReport(postalCode, fresh.length, client.requests)
@@ -268,6 +273,61 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       signal: context.signal,
     });
   }
+}
+
+/**
+ * The national listing, whole or not (plan 0220, section 2.3).
+ *
+ * Whole needs three things: no page failed, the run was not aborted, and every
+ * category read at least the rows it printed. The client ends a category
+ * quietly on an empty page or on a page that repeats a code it read, with no
+ * failed page, so the printed count is what tells a whole category from a
+ * short one. A category that printed no count is short too: to count too few
+ * walks is the safe error. A product filed in two categories is read twice,
+ * so a category may read more than it printed, never fewer.
+ *
+ * The key is the chain's product code, so a renamed product keeps its key.
+ */
+function declareListing(
+  report: RunReport,
+  walk: Walk,
+  signal: AbortSignal
+): void {
+  if (signal.aborted) {
+    return;
+  }
+  const listed = walk.rows.keys();
+  if (walk.failedPages.length > 0) {
+    report.listingNotWhole(
+      null,
+      'failed-page',
+      walk.failedPages.map((page) => ({
+        category: page.category,
+        page: page.page,
+      })),
+      listed
+    );
+    return;
+  }
+  const short = walk.categories.filter(
+    (category) =>
+      category.printedCount === null ||
+      category.rowsRead < category.printedCount
+  );
+  if (short.length > 0) {
+    report.listingNotWhole(
+      null,
+      'short-category',
+      short.map((category) => ({
+        category: category.code,
+        printedCount: category.printedCount,
+        rowsRead: category.rowsRead,
+      })),
+      listed
+    );
+    return;
+  }
+  report.listingWhole(null, listed);
 }
 
 /**

@@ -288,6 +288,84 @@ describe('ElJamonCatalogRunner', () => {
     expect(report.completed).toEqual([]);
   });
 
+  describe('the national listing (plan 0220, section 2.3)', () => {
+    /** BEBIDAS printing `printed` and answering page 2 with `second`. */
+    const site =
+      (printed: number, second: Row[] = []) =>
+      (url: URL): Response => {
+        if (url.pathname === '/categorias/bebidas/06') {
+          return new Response(
+            url.search === ''
+              ? listing(BEBIDAS_PAGE_1, printed, '06')
+              : listing(second, printed, '06')
+          );
+        }
+        return storefront(url);
+      };
+
+    it('declares the default scope whole when no page failed and every category read what it printed', async () => {
+      const report = new RecordingRunReport();
+      await new TestRunner(site(20)).run(context(), report, input, source);
+
+      expect(report.wholeListings).toEqual([
+        {
+          scopeKey: null,
+          listed: ['101', '102', ...BEBIDAS_PAGE_1.map((row) => row.code)],
+        },
+      ]);
+      expect(report.notWhole).toEqual([]);
+    });
+
+    it('declares nothing whole when a page failed, and names the page', async () => {
+      const report = new RecordingRunReport();
+      await new TestRunner(storefront).run(context(), report, input, source);
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        {
+          scopeKey: null,
+          reason: 'failed-page',
+          detail: [{ category: '06', page: 2 }],
+          listed: expect.any(Array),
+        },
+      ]);
+    });
+
+    it('declares nothing whole for a category that ended short with no failed page', async () => {
+      // Page 2 answers no rows, so the client ends the category quietly at 20
+      // of the 41 it printed.
+      const report = new RecordingRunReport();
+      await new TestRunner(site(41)).run(context(), report, input, source);
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        {
+          scopeKey: null,
+          reason: 'short-category',
+          detail: [{ category: '06', printedCount: 41, rowsRead: 20 }],
+          listed: expect.any(Array),
+        },
+      ]);
+    });
+
+    it('declares nothing when the run is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const report = new RecordingRunReport();
+      await new TestRunner(site(20))
+        .run(
+          { ...context(), signal: controller.signal } as unknown as RunContext,
+          report,
+          input,
+          source
+        )
+        .catch(() => undefined);
+
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+    });
+  });
+
   it('reads no page for a product the chain already holds, and reports it from the listing', async () => {
     const report = new RecordingRunReport();
     const runner = new TestRunner(storefront);

@@ -545,6 +545,8 @@ const itemOfferView = object(
     // validating what it holds.
     priceCopiedFromScopeId: nullableString(),
     stale: boolean(),
+    // Plan 0220, section 15.2. Stated but not required, for the same reason.
+    outOfStockAt: nullableString(),
   },
   [
     'itemId',
@@ -849,6 +851,10 @@ const supermarketItemProperties = () => ({
   validUntil: nullableString(),
   itemPriceId: nullableString(),
   available: boolean(),
+  // Plan 0220, sections 6.1 and 15.1. Stated but not required, so a reader
+  // built before it keeps validating what it holds.
+  delistedAt: nullableString(),
+  outOfStockAt: nullableString(),
 });
 const SUPERMARKET_ITEM_REQUIRED = [
   'id',
@@ -2730,8 +2736,21 @@ const setSupermarketItemAvailabilityRequest = object(
     priceScopeId: nonEmptyString(),
     entries: array({
       type: 'object',
-      properties: { itemId: nonEmptyString(), available: boolean() },
-      required: ['itemId', 'available'],
+      properties: {
+        itemId: nonEmptyString(),
+        available: boolean(),
+        // Plan 0220, sections 6.1 and 15.1: absent leaves the column as it is.
+        delisted: boolean(),
+        outOfStock: boolean(),
+      },
+      required: ['itemId'],
+      // `available` may be left out when either instant is given, and an
+      // entry that states none of the three is refused (section 6.1).
+      anyOf: [
+        { required: ['available'] },
+        { required: ['delisted'] },
+        { required: ['outOfStock'] },
+      ],
       additionalProperties: false,
     }),
     onlyIfMissing: boolean(),
@@ -2740,7 +2759,8 @@ const setSupermarketItemAvailabilityRequest = object(
 );
 const setSupermarketItemAvailabilityResult = object(
   CATALOG_SCHEMA_IDS.setSupermarketItemAvailabilityResult,
-  { updated: integer({ minimum: 0 }) },
+  // `keptSold` is plan 0220, section 15.6. Stated but not required.
+  { updated: integer({ minimum: 0 }), keptSold: integer({ minimum: 0 }) },
   ['updated']
 );
 const listPricePoliciesRequest = object(

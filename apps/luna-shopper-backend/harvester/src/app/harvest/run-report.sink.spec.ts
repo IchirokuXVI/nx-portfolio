@@ -111,6 +111,14 @@ function build(
     writes?: HarvestRunWrites;
     /** Products whose pack count catalog already holds (plan 0162). */
     packCountSet?: string[];
+    /** Whether the chain may declare a whole listing (plan 0220, 15.3). */
+    provesDelisting?: boolean;
+    /**
+     * The tracked rows, by external id, that the scope once listed: a
+     * presence row or a price it read itself (plan 0220, section 3). The
+     * query is proved against Postgres in `delisting.integration.spec.ts`.
+     */
+    listedOnce?: string[];
     /** How many places of a chunk the place service refreshed, not created. */
     placesRefreshed?: number;
   } = {}
@@ -245,15 +253,24 @@ function build(
     })),
   } as unknown as SourceEntryAvailabilityWriter;
 
+  const once = new Set(
+    (options.listedOnce ?? []).map((externalId) => `entry-${externalId}`)
+  );
   const entries = {
     find: jest.fn(async () =>
       (options.tracked ?? []).map(
         (row) =>
           ({
+            id: `entry-${row.externalId}`,
             ...row,
             status: SourceEntryStatus.ACTIVE,
           }) as SourceCatalogEntry
       )
+    ),
+    query: jest.fn(async (_sql: string, parameters: unknown[]) =>
+      (parameters[0] as string[])
+        .filter((id) => once.has(id))
+        .map((id) => ({ id }))
     ),
   } as unknown as Repository<SourceCatalogEntry>;
 
@@ -286,6 +303,7 @@ function build(
       autoImportPlaces: false,
       copiesOf: (scopeId) => options.copies?.[scopeId] ?? [],
       writes: options.writes,
+      provesDelisting: options.provesDelisting,
     },
     { ingest, scopes, places, shops, catalog, entries, availability }
   );
@@ -302,6 +320,7 @@ function build(
     scopes,
     availability,
     storedClaims,
+    entries,
   };
 }
 
@@ -593,6 +612,239 @@ describe('RunReportSink', () => {
       .calls[0][1] as Array<{ itemId: string; available: boolean }>;
     expect(entries).toContainEqual({ itemId: 'item-seen', available: true });
     expect(entries).toContainEqual({ itemId: 'item-gone', available: false });
+  });
+
+  describe('a whole listing decides the scope diff (plan 0220, section 3)', () => {
+    /** What the scope was told, by item. */
+    const told = (catalog: CatalogClient, call = 0) =>
+      (catalog.setAvailability as jest.Mock).mock.calls[call][1] as Array<{
+        itemId: string;
+        available: boolean;
+        outOfStock?: boolean;
+      }>;
+
+    it('writes no negative for a product the listing named whose detail failed', async () => {
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [
+          { externalId: 'seen', itemId: 'item-seen' },
+          // Named by the listing, and its detail failed, so never reported.
+          { externalId: 'failed', itemId: 'item-failed' },
+        ],
+      });
+
+      sink.product(observation({ externalId: 'seen' }));
+      sink.listingWhole(null, ['seen', 'failed']);
+      await sink.drain();
+
+      // The listing also says the product is on the shelf.
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-seen', available: true, outOfStock: false },
+      ]);
+    });
+
+    it('writes no negative through another row of a product whose named row failed', async () => {
+      // Row A is named and its detail failed; row B of the same product was
+      // never listed here. B's absence must not say A's product is not sold.
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [
+          { externalId: 'seen', itemId: 'item-seen' },
+          { externalId: 'a', itemId: 'item-x' },
+          { externalId: 'b', itemId: 'item-x' },
+        ],
+      });
+
+      sink.product(observation({ externalId: 'seen' }));
+      sink.listingWhole(null, ['seen', 'a']);
+      await sink.drain();
+
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-seen', available: true, outOfStock: false },
+      ]);
+    });
+
+    it('says not sold for a product this scope never listed', async () => {
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [{ externalId: 'elsewhere', itemId: 'item-elsewhere' }],
+      });
+
+      sink.product(observation({ externalId: 'seen' }));
+      sink.listingWhole(null, ['seen']);
+      await sink.drain();
+
+      // No presence row and no price this scope read: plan 0108's negative.
+      expect(told(catalog)).toContainEqual({
+        itemId: 'item-elsewhere',
+        available: false,
+      });
+    });
+
+    it('leaves a product this scope once listed to the delisting counter', async () => {
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { seen: { itemId: 'item-seen', active: true } },
+        tracked: [{ externalId: 'missed', itemId: 'item-missed' }],
+        listedOnce: ['missed'],
+      });
+
+      sink.product(observation({ externalId: 'seen' }));
+      sink.listingWhole(null, ['seen']);
+      await sink.drain();
+
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-seen', available: true, outOfStock: false },
+      ]);
+    });
+
+    it('writes no negative for any row of a product the counter tracks', async () => {
+      // Two rows on one product: the counter tracks one of them here, so the
+      // other row's absence states nothing either.
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        tracked: [
+          { externalId: 'old', itemId: 'item-shared' },
+          { externalId: 'new', itemId: 'item-shared' },
+        ],
+        listedOnce: ['old'],
+      });
+
+      sink.listingWhole(null, ['other']);
+      await sink.drain();
+
+      // Nothing to say, so nothing is sent.
+      expect(catalog.setAvailability).not.toHaveBeenCalled();
+    });
+
+    it('states a positive only where this scope listed the product', async () => {
+      const { sink, catalog, scopes } = build({
+        provesDelisting: true,
+        resolves: { a: { itemId: 'item-a', active: true } },
+        tracked: [{ externalId: 'a', itemId: 'item-a' }],
+      });
+
+      sink.scope({ key: 'w1', kind: 'LOCAL_AREA' as never, name: null });
+      sink.scope({ key: 'w2', kind: 'LOCAL_AREA' as never, name: null });
+      sink.product(observation({ externalId: 'a' }));
+      sink.listingWhole('w1', ['a']);
+      sink.listingWhole('w2', []);
+      await sink.drain();
+
+      expect(scopes.declare).toHaveBeenCalledTimes(2);
+      const calls = (catalog.setAvailability as jest.Mock).mock.calls as Array<
+        [string, unknown[]]
+      >;
+      expect(calls).toEqual([
+        [
+          'scope-w1',
+          [{ itemId: 'item-a', available: true, outOfStock: false }],
+        ],
+        // Never listed at w2: not sold there, and never "sold" by the report.
+        ['scope-w2', [{ itemId: 'item-a', available: false }]],
+      ]);
+    });
+
+    it('carries a stock claim and resolves a claim about a product the run did not report', async () => {
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { a: { itemId: 'item-a', active: true } },
+        tracked: [
+          { externalId: 'a', itemId: 'item-a' },
+          // A Mercadona detail that answered 404 is never reported.
+          { externalId: 'nf', itemId: 'item-nf' },
+        ],
+      });
+
+      sink.product(observation({ externalId: 'a' }));
+      sink.availability({
+        externalId: 'a',
+        available: true,
+        outOfStock: true,
+        scopeKey: null,
+      });
+      sink.availability({ externalId: 'nf', available: false, scopeKey: null });
+      sink.listingWhole(null, ['a', 'nf']);
+      await sink.drain();
+
+      expect(told(catalog)).toEqual([
+        { itemId: 'item-a', available: true, outOfStock: true },
+        { itemId: 'item-nf', available: false },
+      ]);
+      // The counter reads which items a claim spoke for, so its listed again
+      // statement turns neither of them back on (section 15.1).
+      expect(sink.delistingListings().whole).toEqual([
+        {
+          key: null,
+          scopeId: SCOPE,
+          listed: ['a', 'nf'],
+          claimed: ['item-a', 'item-nf'],
+        },
+      ]);
+    });
+
+    it('states positives only for a listing that is not whole', async () => {
+      const { sink, catalog } = build({
+        provesDelisting: true,
+        resolves: { a: { itemId: 'item-a', active: true } },
+        tracked: [
+          { externalId: 'a', itemId: 'item-a' },
+          { externalId: 'b', itemId: 'item-b' },
+        ],
+      });
+
+      sink.product(observation({ externalId: 'a' }));
+      sink.assortmentComplete(null);
+      sink.listingNotWhole(null, 'category-404', ['112'], ['a']);
+      await sink.drain();
+
+      // The listing wins over `assortmentComplete`: a hole proves nothing.
+      expect(told(catalog)).toEqual([{ itemId: 'item-a', available: true }]);
+      expect(sink.delistingListings()).toEqual({
+        whole: [],
+        notWhole: [{ key: null, reason: 'category-404', detail: ['112'] }],
+      });
+    });
+
+    it('refuses a whole listing from a chain that cannot prove a delisting, and names it', async () => {
+      const { sink, catalog } = build({
+        resolves: { a: { itemId: 'item-a', active: true } },
+        tracked: [{ externalId: 'b', itemId: 'item-b' }],
+      });
+
+      sink.product(observation({ externalId: 'a' }));
+      sink.listingWhole(null, ['a']);
+      await sink.drain();
+
+      expect(told(catalog)).toEqual([{ itemId: 'item-a', available: true }]);
+      expect(sink.delistingListings()).toEqual({
+        whole: [],
+        notWhole: [{ key: null, reason: 'adapter-cannot-prove', detail: [] }],
+      });
+    });
+
+    it('resolves each whole listing to its scope at drain, and names one that resolves to nothing', async () => {
+      const { sink } = build({ provesDelisting: true });
+
+      sink.scope({ key: 'w1', kind: 'LOCAL_AREA' as never, name: null });
+      sink.listingWhole('w1', ['a', 'b']);
+      sink.listingWhole(null, ['c']);
+      sink.listingWhole('never-declared', ['d']);
+      await sink.drain();
+
+      expect(sink.delistingListings()).toEqual({
+        whole: [
+          { key: 'w1', scopeId: 'scope-w1', listed: ['a', 'b'], claimed: [] },
+          { key: null, scopeId: SCOPE, listed: ['c'], claimed: [] },
+        ],
+        notWhole: [
+          { key: 'never-declared', reason: 'scope-unresolved', detail: [] },
+        ],
+      });
+    });
   });
 
   it('writes the same availability at every scope the walked one is copied to (plan 0118)', async () => {

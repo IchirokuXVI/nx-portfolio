@@ -1,3 +1,5 @@
+> **PR:** [#888](https://github.com/IchirokuXVI/nx-portfolio/pull/888)
+
 # 0220: a product a chain stopped listing is marked as gone
 
 > Asked for by the owner on 2026-10-22: mark the products a chain stopped listing. Today such a
@@ -31,6 +33,10 @@ Add a per scope miss counter to the harvester, fed only by walks that read a who
 `COMPLETED`. Mark a product gone at a scope after N misses and D days, send that to catalog as a
 negative availability with a `delistedAt` instant, mark the harvester row gone when every counted
 scope lost it, and undo all of it when a walk lists the product again, as sections 1 to 13 describe.
+Section 15 adds what the owner decided on 2026-11-01: an **out of stock** state at the scope that
+the first miss and the stock indicators write, a stock signal per adapter in `AdapterCapabilities`,
+Carrefour as a whole walk behind a config switch, a price of a person or a leaflet that keeps a
+product sold, and the basket that prefers a product in stock. Build section 15 as part of this plan.
 
 ### Context
 
@@ -122,14 +128,20 @@ admin wire types are regenerated.
     module, and the catalog client.
   - `libs/luna-shopper/mercadona/src/lib/mercadona.client.ts`, for section 2.1 only.
   - `apps/luna-shopper-backend/catalog/src/app/`: the `supermarket_items` entity, a migration,
-    `supermarket-item.service.ts`, the mapper of `SupermarketItemView`.
+    `supermarket-item.service.ts`, the mappers of `SupermarketItemView` and `ItemOfferView`, and
+    the read of the scopes of an item (section 15.2).
   - `apps/luna-shopper-backend/gateway/src/app/harvest/` (the list query DTO and the entry view DTO)
-    and any gateway DTO that mirrors `SupermarketItemView`.
-  - `libs/luna-shopper/contracts` (the fields of section 12 and their schemas).
+    and any gateway DTO that mirrors `SupermarketItemView` or `ItemOfferView`.
+  - `apps/luna-shopper-backend/gateway/src/app/baskets/basket-catalog.service.ts`, for the pick of
+    section 15.5 only.
+  - `harvest/carrefour-catalog.runner.ts`, for the declaration of section 15.4 only.
+  - `libs/luna-shopper/contracts` (the fields of sections 12 and 15 and their schemas, and the two
+    capabilities of section 15.3).
   - Their specs, and the generated files.
-- Do NOT touch: the DEZA, LIDL and Carrefour runners, the ingest ladder, the price writer and the
-  effective price recompute, `deriveScopeFlags`, core, `apps/velista`, `apps/luna-shopper-admin`,
-  the schedule worker, and any adapter library other than Mercadona.
+- Do NOT touch: the DEZA and LIDL runners, the ingest ladder, the price writer and the effective
+  price recompute, `deriveScopeFlags`, core, `apps/velista`, `apps/luna-shopper-admin`, the schedule
+  worker, and any adapter library other than Mercadona. The wire types of the admin regenerate; its
+  screens do not change.
 
 ### Constraints
 
@@ -166,6 +178,9 @@ Report after each of these, with the spec output:
    Postgres.
 4. The catalog column, the `delisted` field, and the end to end spec: three whole walks without a
    product make it gone in catalog, and a fourth that lists it brings it back.
+5. Section 15: the `outOfStockAt` column and field, the first miss and the DIA stock count writing
+   it, the two capabilities, the Carrefour declaration behind its switch, the kept sold rule, and the
+   basket pick, each with its spec.
 
 ## 1. What is being built
 
@@ -193,7 +208,7 @@ scope. Each adapter was checked against its runner on 2026-10-22.
 | `mercadona-api` | yes               | one warehouse scope       | not aborted, and no level 2 category of that warehouse answered 404 |
 | `dia-api`       | yes               | one fulfilment store      | `finished`, no failed page, not aborted                              |
 | `eljamon-web`   | yes               | the national scope (null) | no failed page, not aborted                                          |
-| `carrefour-web` | no                | none                      | the frontier states no completeness, and a capped category hides rows |
+| `carrefour-web` | behind a switch   | the default scope (null)  | section 15.4: `delistCountsCrawl` true, no truncated category, no unreadable category, no block, no `seedPath` |
 | `deza-web`      | no                | none                      | the 300 row cap and the 25 query budget                              |
 | `lidl-api`      | no                | none                      | the listing is a window of offers, not an assortment                 |
 | file import     | no                | none                      | a leaflet is a selection                                             |
@@ -206,7 +221,10 @@ whole with that category's products missing. Give the client a way to name such 
 example a `missingCategories` list on the client that `walkCatalog` fills. The library stays
 framework free and its fixtures stay as they are. A warehouse whose walk met one is not whole for
 this plan. It still calls `assortmentComplete` as today, because that is plan 0103's statement and
-section 3 makes it safe.
+section 3 makes it safe: the runner names the warehouse with `listingNotWhole(warehouse,
+'category-404', missingCategories, listedIds)`, and a listing that is not whole states positives
+only (section 8). A tree that answers 404 is named as the category `categories`, because a walk of
+it lists nothing at all.
 
 The runner calls `report.listingWhole(warehouse, listedIds)` beside `assortmentComplete`, with the
 keys of `assortments.get(warehouse)`. A product the listing named counts as listed, whatever its
@@ -229,15 +247,22 @@ never opened and declares nothing. The national copy of the anonymous store's pr
 One price list serves every shop (plan 0169), so the walk has one scope, the default scope the spawn
 gives the run, which is the chain's `NATIONAL` scope. The runner calls
 `report.listingWhole(null, walk.rows.keys())` after the listing phase when `walk.failedPages` is
-empty and the run is not aborted. The external id is the chain's product code (`listed.row.code`),
-so a renamed product keeps its key.
+empty, the run is not aborted, and every category that printed a count read at least that many rows
+(`rowsRead >= printedCount`). A category that printed no count counts as short. A walk that misses
+any of the three declares nothing whole, and `notWhole` names the reason: `failed-page`, or
+`short-category` with each short category and both its numbers. To count too few is the safe error.
+The external id is the chain's product code (`listed.row.code`), so a renamed product keeps its key.
 
 The runner doc says that El Jamón writes no availability. That stays true of the runner. The counter
 writes a negative only after the threshold, and the doc gains one sentence that says so.
 
 Each category prints a count (`printedCount`) and the walk counts the rows it read (`rowsRead`). A
-product filed in two categories is read twice, so the two numbers need not agree. Check the
-committed fixtures first, as the action boundaries say.
+product filed in two categories is read twice, so a category may read more than it printed, never
+fewer. The check against the committed fixtures (the action boundary) found the case that needs the
+count: the client ends a category quietly on an empty page or on a page that repeats a code it
+read, with no failed page. The client spec walks `category-page-1.html`, which prints 1039 articles,
+and ends at 40 rows with no failed page. So "no failed page" alone does not prove a whole listing,
+and the owner chose the printed count as the second test on 2026-11-01.
 
 ### 2.4 Why the three others count nothing
 
@@ -301,15 +326,20 @@ one statement per product.
 1. **Resolve.** The entries of the chain whose `externalId` is in L. A listed id with no row (a new
    product whose detail answered 404) is skipped.
 2. **Seed.** Insert a row, `missedWalks` 0, for each entry of the chain that holds a
-   `source_entry_prices` row at S of the run's own source kind and has no presence row at S. That is
-   a product a walk once listed at S, before this plan existed. `ON CONFLICT DO NOTHING`.
+   `source_entry_prices` row at S of the run's own source kind with `copiedFromScopeId IS NULL`, and
+   has no presence row at S. That is a product a walk once listed at S, before this plan existed.
+   `ON CONFLICT DO NOTHING`. Only a price the scope read itself counts: a run's copies (plan 0118)
+   write `source_entry_prices` rows at their targets too, and a copy target never listed the
+   product (the action boundary, answered by the owner on 2026-11-01).
 3. **Listed.** Insert a row for each resolved entry that has none at S. For each resolved entry
-   whose row has `missedWalks > 0` or `goneAt` set, set `missedWalks` 0, `firstMissedAt` null and
-   `lastCountedRunId` to the run. A row that had `goneAt` set also gets `goneAt` null and
-   `pendingCatalog` true. Those are the products that came back.
+   whose row has `missedWalks > 0` or `goneAt` set, set `missedWalks` 0, `firstMissedAt` null,
+   `goneAt` null, `lastCountedRunId` to the run and `pendingCatalog` true. A row that was only
+   missed is told too, because its first miss told catalog it was out of stock (section 15.1). The
+   rows that had `goneAt` set are the products that came back.
 4. **Missed.** For each row at S whose entry is not resolved and whose `lastCountedRunId` is not
    this run, add one to `missedWalks`, set `firstMissedAt` to `coalesce(firstMissedAt, now)` and
-   `lastCountedRunId` to the run.
+   `lastCountedRunId` to the run. A row that goes from 0 to 1 also gets `pendingCatalog` true
+   (section 15.1).
 5. **Gone.** For each row at S with `goneAt` null for which `isGone` holds (section 5), set `goneAt`
    to now and `pendingCatalog` true.
 
@@ -381,7 +411,8 @@ weekly walk the two agree: the third miss comes 14 days after the first.
 | --------------------------------------- | ------------------------------------------------------------------------ |
 | `source_entry_scope_presence`           | `goneAt` set                                                             |
 | `source_catalog_entries.delistedAt`     | set when every counted scope lost the product                            |
-| `supermarket_items` at S and its copies | `available: false` and `delistedAt` set                                  |
+| `supermarket_items` at S and its copies | `available: false` and `delistedAt` set, unless section 15.6 keeps it sold |
+| `supermarket_items` at S, on the first miss | `outOfStockAt` set, `available` untouched (section 15.1)              |
 | Search, best offer, scopes of an item   | the product leaves them at S, through the existing `available` filters   |
 | The basket                              | section 9                                                                |
 | Prices (`item_prices`, `source_entry_prices`) | nothing is deleted or withdrawn                                    |
@@ -401,11 +432,22 @@ A row whose `available` and `delistedAt` already say what the entry says is left
 for nothing, as today. `onlyIfMissing` keeps its meaning and ignores `delisted`. `deriveScopeFlags`
 and the effective price recompute do not touch `delistedAt`.
 
+**`available` is optional when `delisted` or `outOfStock` is given.** The schema requires `itemId`
+and at least one of `available`, `delisted` and `outOfStock`. An entry with no `available` keeps
+the flag of a row that exists, and creates no row where the scope has none: it says nothing about
+whether the scope sells the product. `onlyIfMissing` creates only from an entry that carries
+`available`. This is what keeps a first miss from turning on a product that a 404 turned off
+(section 15.1).
+
 After the transaction of section 4.2, the counter sends, per scope S, every pair with
 `pendingCatalog` true whose entry is `ACTIVE`:
 
 - gone: `{ itemId, available: false, delisted: true }`,
-- back: `{ itemId, available: true, delisted: false }`,
+- first miss: `{ itemId, outOfStock: true }` (section 15.1),
+- listed again: `{ itemId, delisted: false }`. A pair that step 3 brought back from gone in this
+  run also carries `available: true`, unless a claim of the same run named the item at S. The sink
+  has already stated the walk's positive and its claims by then, and this must not override them.
+  A pair sent again by a later run, after a failed batch, carries `delisted: false` alone.
 
 at S and at each scope `copiesOf(S)` names (plan 0118), in batches of the sink's
 `AVAILABILITY_BATCH`. A batch that catalog accepted clears `pendingCatalog` on its pairs. A batch
@@ -447,7 +489,8 @@ serves the single accept, the create and the bulk route.
 ## 7. How a product comes back
 
 The first counted walk that lists the product at S runs step 3 of section 4.2. The pair goes back to
-0, `goneAt` goes to null, and catalog gets `{ available: true, delisted: false }`. The entry's
+0, `goneAt` goes to null, and catalog gets `{ available: true, delisted: false }`, or
+`{ delisted: false }` when a claim of the same run named the item at S (section 6.1). The entry's
 `delistedAt` clears with the first scope that comes back.
 
 A walk that is not counted (an aborted run, a `FAILED` run, a LIDL run, a leaflet) moves
@@ -477,19 +520,33 @@ until a counted walk lists it. The back office follow up decides how to show tha
         "listed": 4102,
         "seeded": 0,
         "missed": 12,
+        "newlyOutOfStock": 5,
         "newlyGone": 3,
         "cameBack": 1
       }
     ],
+    "thresholdIgnored": [],
     "notWhole": [{ "key": "4804", "reason": "category-404", "detail": ["112"] }],
     "entriesDelisted": 2,
     "entriesBack": 1,
     "catalogSent": 4,
     "catalogFailed": 0,
+    "catalogKeptSold": 0,
     "error": null
   }
 }
 ```
+
+`newlyOutOfStock` counts the pairs whose first miss this was. `thresholdIgnored` names each
+override of section 5 that was out of range, with its value. The reasons of `notWhole` are those
+of a runner (`category-404`, `failed-page`, `unfinished`, `short-category`, and Carrefour's five of
+section 15.4) and two of the sink: `adapter-cannot-prove` for a declaration from a chain whose
+adapter cannot prove a delisting (section 15.3), and `scope-unresolved` for a key that resolves to
+no scope. A runner names a scope that is not whole with `RunReport.listingNotWhole(key, reason,
+detail, listed)`, and hands over what it did read: that scope then gets the positives of what it
+listed and the explicit claims, and no negative, because a listing with a hole in it proves nothing
+absent. A Mercadona warehouse whose walk met a category that answered 404 is such a scope, and the
+listing wins over its `assortmentComplete`.
 
 `notCountedBecause` is one of `run-not-completed`, `prices-only`, `detail-backfill`,
 `no-whole-listing`, or null. A run of an adapter that never declares a whole listing says
@@ -549,15 +606,21 @@ Both are additive and both have a `down`.
 | ---------------------------------------------------- | ------------------------------------------ |
 | `SourceCatalogEntryView` (and `ItemSourceEntryView`) | `delistedAt: string \| null`, not required in the schema |
 | `ListSourceEntriesRequest`                           | `delisted?: boolean`: true lists gone rows only, false leaves them out, absent lists both |
-| `SetSupermarketItemAvailabilityRequest.entries[]`    | `delisted?: boolean`                       |
-| `SupermarketItemView`                                | `delistedAt: string \| null`, not required in the schema |
+| `SetSupermarketItemAvailabilityRequest.entries[]`    | `delisted?: boolean`, and `available` optional when `delisted` or `outOfStock` is given (section 6.1) |
+| `SupermarketItemView`                                | `delistedAt: string \| null` and `outOfStockAt: string \| null`, not required in the schema |
+| `ItemOfferView`, the scopes of an item               | `outOfStockAt: string \| null`, not required (section 15.2) |
+| `SetSupermarketItemAvailabilityRequest.entries[]`    | `outOfStock?: boolean` (section 15.1)       |
+| `SetSupermarketItemAvailabilityResult`               | `keptSold: number` (section 15.6)           |
+| `AdapterCapabilities`                                | `stockIndicator` and `provesDelisting` (section 15.3) |
 
 The gateway query DTO of the source entry list gains `delisted` with a strict boolean parse. The
 gateway pipe has read the string `"false"` as true on a boolean before (plan 0206 review). A spec
 covers `"false"`. The fields are not required in the schemas, so the back office's typed fixtures
 stay valid, as plan 0206 did with its new fields. Regenerate `openapi.json` and the wire types.
 
-No velista view changes. The shopper views that would carry the flag belong to the velista follow up.
+No velista code changes. `ItemOfferView.outOfStockAt` reaches velista through the gateway and is
+drawn by the follow up of section 13, after its mock. The basket pick of section 15.5 is a gateway
+rule and changes no view.
 
 ## 13. The follow ups that need a mock
 
@@ -566,11 +629,23 @@ These need a mock before a plan, by the repository rule. This plan designs no sc
 - **Admin: gone products in the source queue and on a product.** The queue filter on `delisted`,
   the date a row went, the scopes it went at, and a product whose offer says `delistedAt`. It needs
   a per scope read of `source_entry_scope_presence`, which that plan adds.
-- **Velista: a product the chain no longer sells.** What a shopper sees on a line, a basket row or a
-  product sheet whose product is gone at a chain, and whether a similar product is offered. It needs
-  `delistedAt` on a shopper facing item view, which that plan adds.
+- **Velista: a product out of stock at a chain.** The owner decided on 2026-11-01 that a product
+  gone at a chain shows exactly what a product the chain never sold shows, and that copy exists
+  ("not sold here", "not at {{supermarket}}"). The follow up is thus only the out of stock mark,
+  from `ItemOfferView.outOfStockAt`, on a line, a basket row, a search result and the product
+  sheet. Do not reuse the "no longer in the catalog" copy: that is for a product deleted or merged
+  across the whole catalog, and a product gone at one chain is still in the catalog.
+- **Admin: the stock signal of a chain.** `adapterCapabilities(adapterKey)` answers it, so the chain
+  row can say "cannot tell stock, review by hand" with no new route. A mock first.
 
 ## 14. What this plan does not do
+
+- It does not hide an out of stock product, and it does not keep a shopper from buying one
+  (section 15.1).
+- It does not build an inactive chain, which the owner left for a later plan: a chain switched off
+  that stops walks and hides its offers from every shopper endpoint without a delete. The walk half
+  exists (`supermarket_sources.enabled`, plan 0083). The read half is a rule on the chain, not on
+  the product, and belongs to its own plan.
 
 - It counts nothing for Carrefour, DEZA, LIDL or a file import.
 - It deletes no row, price or claim, and withdraws no price.
@@ -582,8 +657,194 @@ These need a mock before a plan, by the repository rule. This plan designs no sc
 - It adds no alert. Plan 0218 decides what the owner hears.
 - It adds no screen.
 
+## 15. Out of stock, the stock signal and the basket (owner, 2026-11-01)
+
+The owner's model, reviewed against the code on 2026-11-01. A chain tells stock in one of three
+ways, and a product passes through three states at a scope:
+
+| State                 | `available` | `outOfStockAt` | `delistedAt` | Seen by a shopper                                |
+| --------------------- | ----------- | -------------- | ------------ | ------------------------------------------------ |
+| sold, in stock        | true        | null           | null         | listed, priced, bought                           |
+| sold, out of stock    | true        | set            | null         | listed, priced, bought, marked (follow up)       |
+| not sold (gone)       | false       | kept           | set          | hidden at that chain, kept on the shopper's rows |
+
+**Out of stock hides nothing and stops no purchase.** A chain changes its page at any hour and a
+walk runs once a day at most, so a product a walk missed may be back on the shelf before anyone
+looks. Search, the best offer and every price read keep treating the row by `available` alone. The
+only read that prefers stock is the basket pick of section 15.5.
+
+### 15.1 The column, the write and who sends it
+
+`supermarket_items.outOfStockAt timestamptz null`, beside `delistedAt`, in the same catalog
+migration. `SetSupermarketItemAvailabilityRequest.entries[]` gains `outOfStock?: boolean`:
+
+- `outOfStock: true` sets `outOfStockAt` to now when it is null and keeps it when set.
+- `outOfStock: false` sets it to null.
+- Absent leaves it as it is, which is every caller today. `onlyIfMissing` ignores it, as it ignores
+  `delisted`. An entry that changes neither `available`, `delistedAt` nor `outOfStockAt` counts for
+  nothing.
+
+Two things send `outOfStock`:
+
+1. **An indicator on the page.** DIA lists a row with `unitsInStock`. The runner's `availabilityOf`
+   writes `available: false` for a listed row with no stock today (`dia-catalog.runner.ts:756`),
+   which hides the product at DIA as if DIA did not sell it. It becomes `{ available: true,
+   outOfStock: true }`, and a listed row with stock becomes `{ available: true, outOfStock: false }`.
+   The claim path of the sink carries the new flag beside `available`. Mercadona's 404 stays a
+   negative, because "not stocked in this warehouse" is the warehouse's catalog and not its shelf,
+   and DEZA's per shop claims stay in `supermarket_location_items` (plan 0084) and are not touched.
+2. **The first miss.** In step 4 of section 4.2, a row whose `missedWalks` goes from 0 to 1 gets
+   `pendingCatalog` true, and the counter sends `{ outOfStock: true }` for its item at S and its
+   copies, subject to section 6.2. The chain delisted the product or ran out of it, and a walk
+   cannot tell which, so the product is out of stock until the threshold says gone. The entry
+   carries no `available` (section 6.1). A product a 404 turned off at S stays off, and the seed's
+   first count after the deploy turns on no product that the old diff had already set not sold.
+   Step 3 (listed again) sends `{ delisted: false }`, and `available: true` only for a pair that
+   was gone and that no claim of the run named at S (section 6.1). Step 5 (gone) sends
+   `{ available: false, delisted: true }` and leaves `outOfStockAt` as it is.
+
+**The sink clears the mark, and a claim beats it.** The sink drains before the counter runs. For a
+scope declared whole, its positive for a named row is `{ available: true, outOfStock: false }`: the
+listing says the product is on the shelf. A claim for that item at S overrides it, so DIA's
+`unitsInStock` 0 keeps `outOfStock: true` and Mercadona's 404 keeps `available: false`. The sink
+hands the counter the items its claims named per scope, and the counter's listed again statement
+turns none of them on.
+
+This changes one decision below. The scope negative of section 3 for a row the listing did not
+name is the first miss of a delisting chain, for Mercadona too: `writeScopeAvailability` writes
+`outOfStock: true` for it and no longer `available: false`. Mercadona's 404 is an indicator and
+keeps writing `available: false` through the claims. The DIA third claim ("not listed here and
+listed by another scope") is removed from `availabilityOf`, because the listing diff of section 3
+now states it.
+
+**Who writes the diff, per row (owner, 2026-11-01).** Read literally, the paragraph above would
+send `outOfStock: true` for every tracked row the listing did not name. That creates sold offers at
+scopes that never sold the product, because catalog creates a row it is missing, and it sets gone
+products back to sold on every walk. So for a scope a runner declared whole, `writeScopeAvailability`
+states, per tracked `ACTIVE` row:
+
+- **Named by the listing:** the positive, as today, with `outOfStock: false`, and the explicit
+  claims (DIA's stock, and Mercadona's 404), which override it. A named row whose detail failed
+  gets no statement, and no other row of its product writes a negative for it.
+- **Not named, with no presence row at S and no price row at S that the scope read itself**
+  (`copiedFromScopeId IS NULL`, the seed's own condition): `available: false`, as today. This scope
+  never sold the product, and the row says so. It is the cross warehouse negative of plan 0108: plan
+  0187 reads a `false` row as the answer "not sold here", and no row as no answer, so without it a
+  product sold at warehouse A only would show for a shopper of warehouse B as "no price here"
+  instead of being left out.
+- **Not named, with a presence row at S or such a price row:** the sink writes nothing. The
+  counter's step 4 is the only writer for it: `outOfStock: true` at the first miss, and
+  `available: false, delisted: true` at the threshold.
+
+The sink thus reads `source_entry_scope_presence` and `source_entry_prices` at drain; both are
+harvester tables. A product the counter tracks at S through any of its rows gets no negative from
+another row of it either. The Mercadona runner's phase 3 claims ("not listed in this warehouse") are
+removed, because this diff states the same thing with the presence rule applied. Mercadona's 404 is
+stated as a claim `available: false` at the warehouse the detail was asked of and no other, and the
+sink resolves the item of a claim about a product the run did not report through the tracked row.
+
+**DIA's scope claims reach catalog for the first time.** Before this plan the sink wrote scope
+claims only for a scope with `assortmentComplete`, which DIA never declared, so DIA's per store
+stock claims were stored nowhere. A DIA store declared whole or not whole now carries them.
+
+The miss count still moves only on a whole walk of a `COMPLETED` run (section 4.4). A product a
+walk never listed has no presence row and gets no state. `delistAfterWalks` is at least 1, so at
+least one whole walk that did not list the product stands between sold and gone.
+
+### 15.2 The reads
+
+`outOfStockAt` is carried, never filtered on:
+
+- `SupermarketItemView.outOfStockAt`, from the column.
+- `ItemOfferView.outOfStockAt`, from the row the offer was read from, for `bestOffer`, `offers`
+  and the search result quote.
+- The scopes of an item carry it too, where they carry `available`.
+
+Search, `bestOffer`, the cheapest of a line, the effective price and the stale rule read nothing new.
+
+### 15.3 The stock signal of an adapter
+
+`AdapterCapabilities` (`libs/luna-shopper/contracts/src/lib/messages/harvest.messages.ts`) gains two
+fields, with the "I know nothing" rule of `adapterCapabilities` answering `null` and `false`:
+
+| `adapterKey`    | `stockIndicator` | `provesDelisting` | Why                                                              |
+| --------------- | ---------------- | ----------------- | ---------------------------------------------------------------- |
+| `mercadona-api` | `per-scope`      | true              | a 404 per warehouse; the listing of a warehouse is whole         |
+| `dia-api`       | `per-scope`      | true              | `unitsInStock` on each listed row; the store listing is whole    |
+| `eljamon-web`   | `null`           | true              | the page states no stock; the national list is whole             |
+| `deza-web`      | `per-shop`       | false             | the popup names the shops; the 300 row cap                       |
+| `carrefour-web` | `null`           | false             | `units_in_stock` is in the type and nothing reads it; the ceiling. The chain's `delistCountsCrawl` (section 15.4) overrides the constant in the harvester's resolution, not in the table |
+| `lidl-api`      | `null`           | false             | an offer window, prices end by `validUntil`                      |
+| `osm`, `manual` | `null`           | false             |                                                                  |
+
+`stockIndicator: 'per-shop' | 'per-scope' | null`. A chain with `null` and `false` cannot tell that
+a product it once listed is still sold, and that is what the admin follow up of section 13 shows
+on the chain row as "may hold products it no longer sells, review by hand". The harvester reads the
+same table to decide which runners may declare `listingWhole`, so the table and the runners cannot
+disagree: a declaration from a runner whose adapter says `provesDelisting: false` and whose chain
+has no switch on is refused at the sink with a report line.
+
+### 15.4 Carrefour behind a switch
+
+`supermarket_sources.config.delistCountsCrawl` (boolean, default false, read beside the threshold
+of section 5). When true, the Carrefour catalog runner calls `report.listingWhole(null, ids)` after
+the crawl when all of these hold: `truncatedCategories` is empty, `unreadableCategories` is empty,
+`blockedAfter` is null, the run was not aborted, and `config.seedPath` is unset. Otherwise it
+declares nothing and the report's `notWhole` names the reason (`truncated`, `unreadable`,
+`blocked`, `seed-path`, `switch-off`). The runner doc sentence "It states no completeness" is
+reworded to say under which conditions it does.
+
+Why a switch. The frontier is the shallowest category under the 1008 row ceiling. A crawl that
+meets the five conditions read every category it chose in full, and the remaining doubt is a
+product filed in no frontier category, which nobody has measured. The owner's condition for
+turning the switch on is a comparison of two consecutive clean crawls: the products one lists and
+the other does not. That is an operator's step with the report, not code of this plan.
+
+### 15.5 The basket prefers a product in stock
+
+In `BasketCatalogService.pricesFor` (gateway), the pick of a line with several products and no
+favourite becomes, in this order:
+
+1. the favourite, when the line has one and it is priced at the read's scopes, as today,
+2. else the cheapest priced product whose offer row has `outOfStockAt` null,
+3. else the cheapest priced product, out of stock included.
+
+A product with no price is not a candidate, as today. A line whose only product is out of stock
+keeps it. `compose` reuses the same products. A spec covers a line with a cheaper out of stock
+product and a dearer one in stock, which picks the dearer one, and a line where every product is
+out of stock, which picks the cheapest.
+
+### 15.6 A price of a person or a leaflet keeps a product sold
+
+Catalog decides, because catalog holds the prices (plan 0080). In `setAvailability`, an entry with
+`available: false` and `delisted: true` for a row that holds an eligible, not stale `ADMIN` or
+`LEAFLET` price at that scope writes `delistedAt` and leaves `available` true. The result counts it
+in `keptSold` only when the row exists and was sold, so the price is what kept it from turning
+off. The run report carries the number as `delisting.catalogKeptSold`. The back
+office follow up shows a row with `delistedAt` set and `available` true as the conflict it is, and a
+person decides. The counter does not override a person or a current leaflet. A walk price cannot be
+current on a gone product: the walk that wrote it listed the product, and 14 days is twice the 7 day
+age of a walk price.
+
+### 15.7 Gone is per chain, and nothing else
+
+A chain's walks change only that chain's rows: its `source_catalog_entries`, its presence rows and
+the `supermarket_items` rows of its scopes and their copies. No row of another chain and no column
+of the product changes when a product goes gone at one chain. A chain with no counted walk keeps
+saying sold. The integration spec of the Tests section holds two chains over one product, walks
+one, and asserts the other chain's rows byte for byte.
+
 ## Tests
 
+- **Section 15**: `outOfStock` true sets `outOfStockAt` once, false clears it, absent leaves it,
+  `onlyIfMissing` ignores it. A DIA row with no stock writes `{ available: true, outOfStock: true }`
+  and is not hidden. The first miss writes `outOfStock: true` and not `available: false`, for
+  Mercadona too; the 404 claim still writes `available: false`. A Carrefour run declares whole only
+  under the five conditions and with the switch on, and names the reason otherwise.
+  `adapterCapabilities` answers the table of 15.3 and `null`/`false` for an unknown key. The basket
+  pick: favourite, then in stock, then cheapest. `keptSold` for an `ADMIN` price and for a current
+  leaflet price, and not for a stale one. Two chains, one product, one walked: the other is
+  unchanged.
 - **Pure rule**: `isGone` at the edges of both conditions, with a clock passed in. The threshold
   read: defaults, a valid override, and a value out of range that falls back and is reported.
 - **Mercadona runner**: `listingWhole` per warehouse with the listed keys. A warehouse with a
@@ -632,6 +893,19 @@ These need a mock before a plan, by the repository rule. This plan designs no sc
 - [ ] No row, price or claim is deleted by this plan.
 - [ ] A bind of a gone row sends the gone statement after the prices.
 - [ ] The run report carries the `delisting` object of section 8.
+- [ ] An out of stock product stays `available: true`, is listed and priced, and carries
+      `outOfStockAt` on `SupermarketItemView` and `ItemOfferView`.
+- [ ] The first whole walk that misses a product the scope once listed writes `outOfStock: true`
+      and never `available: false`, for every counting chain. Mercadona's 404 still writes
+      `available: false`, and a product the scope never listed is still written `available: false`.
+- [ ] A DIA row listed with no stock is out of stock and not hidden.
+- [ ] `adapterCapabilities` carries `stockIndicator` and `provesDelisting` as section 15.3 says.
+- [ ] A Carrefour crawl counts as whole only with `delistCountsCrawl` true and the five conditions.
+- [ ] A basket line with no favourite picks the cheapest product in stock before a cheaper one out
+      of stock.
+- [ ] A row with a current `ADMIN` or `LEAFLET` price stays `available: true` at the threshold, gets
+      `delistedAt`, and is counted in `keptSold` and `delisting.catalogKeptSold`.
+- [ ] A product's rows at another chain are unchanged by a chain's walks.
 - [ ] `openapi.json` and `wire-types.ts` are regenerated.
 
 ## Verification
@@ -678,24 +952,26 @@ Chosen in this plan, and open to the owner's correction:
   5), and not in two new columns or an environment variable.
 - **Catalog carries `delistedAt` now** (section 6.1), although only the follow ups read it. It is
   one nullable column and one optional field, and it lets the velista mock work from real data.
-- **The counter writes `available: false` at the threshold, not at the first miss, for DIA and El
-  Jamón** (sections 2.2 and 2.3). Mercadona keeps its first miss negative from plan 0103.
+- **The counter writes `available: false` at the threshold, and the first miss writes
+  `outOfStockAt`, for every counting chain** (section 15.1). Mercadona's 404 keeps its negative
+  from plan 0103, because it is an indicator and not a miss. Before 2026-11-01 this read "Mercadona
+  keeps its first miss negative"; the owner's model of section 15 replaced it.
 - **No backfill in the migration.** Each scope seeds itself from the prices it holds the first time
   a walk counts it (section 4.2).
 - **A revert does not undo counts** (section 14).
 - **A gone row keeps its `status`.** The queue filters on `delistedAt` rather than closing the row.
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-01):
 
-1. **The threshold.** Are 3 whole walks and 14 days right for every chain, or does a chain need its
-   own? DIA hides products that are out of stock from its listing, so it may need more.
-2. **Carrefour.** Should a Carrefour crawl with no truncated category, no unreadable category, no
-   block and no `seedPath` override count as whole? The runner states today that the frontier proves
-   nothing, and this plan follows it.
-3. **What a shopper sees for a gone product.** Is it hidden at that chain, which is what
-   `available: false` does today, or shown with a "no longer sold" mark? The answer shapes the
-   velista follow up and not this plan.
-4. **A gone product with an `ADMIN` price.** Should the back office warn the person, or should the
-   counter leave such a product sold until a person decides?
-5. **Rows that wait in the queue.** Should a gone `UNRESOLVED` or `CANDIDATE` row drop out of the
-   default queue view, so nobody spends time deciding a product the chain no longer sells?
+1. **The threshold.** 3 whole walks and 14 days, as defaults in `supermarket_sources.config`,
+   overridable per chain. Nothing in the back office writes `config` today, so an override is a SQL
+   edit until a route exists. DIA is the chain most likely to need more.
+2. **Carrefour.** Counts as a whole walk under the five conditions of section 15.4, behind
+   `delistCountsCrawl`, off until two consecutive clean crawls were compared for churn.
+3. **What a shopper sees.** Three states (section 15): sold, out of stock, not sold. Out of stock
+   hides nothing and is still bought; the basket prefers a product in stock. Gone is hidden at that
+   chain and kept on the shopper's lines and basket rows with the "not sold here" copy that exists.
+4. **A product with a current `ADMIN` or `LEAFLET` price** stays sold at the threshold, gets
+   `delistedAt`, and is flagged for a person (section 15.6).
+5. **Rows that wait in the queue** stay in the default view. The list can filter on `delisted`.
+6. **Gone is per chain only** (section 15.7). The inactive chain is a later plan (section 14).

@@ -356,6 +356,7 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     sourceKind: row.priceSourceKind ?? null,
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
+    outOfStockAt: toInstant(row.outOfStockAt),
   };
 }
 
@@ -378,6 +379,8 @@ export function toSupermarketItemView(
     validUntil: toInstant(row.validUntil),
     itemPriceId: row.itemPriceId ?? null,
     available: row.available,
+    delistedAt: toInstant(row.delistedAt),
+    outOfStockAt: toInstant(row.outOfStockAt),
   };
 }
 

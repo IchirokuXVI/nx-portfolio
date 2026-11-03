@@ -434,7 +434,7 @@ describe('DiaCatalogRunner', () => {
     });
   });
 
-  it('states availability per store: in stock, out of stock, and not listed there', async () => {
+  it('states availability per store: in stock, and listed with no stock as sold and out of stock (plan 0220)', async () => {
     const runner = new TestRunner(
       world({
         listings: {
@@ -446,16 +446,40 @@ describe('DiaCatalogRunner', () => {
     await runner.run(context(), report, input(), source());
 
     expect(report.availabilities).toEqual([
-      { externalId: '659', available: true, scopeKey: '13835' },
-      { externalId: '659', available: true, scopeKey: '959' },
-      // Listed in Madrid with no stock.
-      { externalId: '38406', available: false, scopeKey: '13835' },
-      // Not listed in Barcelona, and Madrid listed it in this run.
-      { externalId: '38406', available: false, scopeKey: '959' },
+      {
+        externalId: '659',
+        available: true,
+        outOfStock: false,
+        scopeKey: '13835',
+      },
+      {
+        externalId: '659',
+        available: true,
+        outOfStock: false,
+        scopeKey: '959',
+      },
+      // Listed in Madrid with no stock: sold, out of stock, never hidden.
+      {
+        externalId: '38406',
+        available: true,
+        outOfStock: true,
+        scopeKey: '13835',
+      },
+      // Not listed in Barcelona: no claim. The listing diff states it.
     ]);
     // About 7,600 products are in the sitemap and a walk lists about 5,700,
     // so no walk proves the assortment whole (section 6.5).
     expect(report.completed).toEqual([]);
+    // But each store's listing was read whole, and is handed over with every
+    // product it listed, the one with no stock included (plan 0220, 2.2).
+    expect(report.wholeListings).toEqual([
+      { scopeKey: '13835', listed: ['659', '38406'] },
+      { scopeKey: '959', listed: ['659'] },
+    ]);
+    // The national copy of the anonymous store's prices is not a walk of it.
+    expect(
+      report.wholeListings.some((listing) => listing.scopeKey === null)
+    ).toBe(false);
   });
 
   it('starts one session per store and confirms it before it walks', async () => {
@@ -507,6 +531,11 @@ describe('DiaCatalogRunner', () => {
     expect(
       report.availabilities.some((claim) => claim.scopeKey === '959')
     ).toBe(false);
+    // It was never opened, so it declares no listing at all.
+    expect(report.wholeListings.map((listing) => listing.scopeKey)).toEqual([
+      '13835',
+    ]);
+    expect(report.notWhole).toEqual([]);
   });
 
   it('skips a store whose postal code another store serves', async () => {
@@ -700,18 +729,22 @@ describe('DiaCatalogRunner', () => {
     // Pages 1 and 3 were read.
     expect(report.products).toHaveLength(26);
     expect(ctx.report).toHaveBeenCalledWith({ failed: 1 });
-    // Madrid's walk has a hole, so it cannot say Barcelona's product is absent
-    // there. Barcelona's walk was whole, so it says Madrid's are absent.
-    expect(
-      report.availabilities.filter(
-        (claim) => claim.scopeKey === '13835' && !claim.available
-      )
-    ).toEqual([]);
-    expect(
-      report.availabilities.filter(
-        (claim) => claim.scopeKey === '959' && !claim.available
-      )
-    ).toHaveLength(25);
+    // Madrid's walk has a hole, so its listing is handed over for its
+    // positives and is not whole. Barcelona's was whole (plan 0220, 2.2).
+    expect(report.notWhole).toEqual([
+      {
+        scopeKey: '13835',
+        reason: 'failed-page',
+        detail: [],
+        listed: expect.any(Array),
+      },
+    ]);
+    expect(report.notWhole[0].listed).toHaveLength(25);
+    expect(report.wholeListings).toEqual([
+      { scopeKey: '959', listed: ['only-barcelona'] },
+    ]);
+    // No claim states an absence any more: the listing diff does.
+    expect(report.availabilities.every((claim) => claim.available)).toBe(true);
   });
 
   it('stops after five failed requests in a row, keeps what it read, and names the last error', async () => {
@@ -855,5 +888,8 @@ describe('DiaCatalogRunner', () => {
       .catch(() => undefined);
 
     expect(report.availabilities.every((claim) => claim.available)).toBe(true);
+    // An aborted run declares nothing, whole or not (plan 0220, 2.2).
+    expect(report.wholeListings).toEqual([]);
+    expect(report.notWhole).toEqual([]);
   });
 });

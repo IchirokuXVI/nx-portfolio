@@ -89,6 +89,8 @@ function build(adapterKey: string, ending: Ending = 'returns') {
   }));
   (RunReportSink as unknown as jest.Mock).mockImplementation(() => ({
     drain,
+    // No whole listing, so the delisting count (plan 0220) has nothing to count.
+    delistingListings: () => ({ whole: [], notWhole: [] }),
   }));
 
   let started!: (context: RunContext) => void;

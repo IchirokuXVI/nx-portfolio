@@ -28260,6 +28260,15 @@
               "maxLength": 120,
               "type": "string"
             }
+          },
+          {
+            "name": "delisted",
+            "required": false,
+            "in": "query",
+            "description": "True lists only the rows every counted scope lost (`delistedAt` set), false leaves them out, and omitted lists both (plan 0220). Parsed strictly: the string `false` is false.",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -38024,6 +38033,18 @@
           "available": {
             "type": "boolean"
           },
+          "delistedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outOfStockAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "itemName": {
             "anyOf": [
               {
@@ -38720,6 +38741,12 @@
           },
           "stale": {
             "type": "boolean"
+          },
+          "outOfStockAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -40315,6 +40342,10 @@
           "updated": {
             "type": "integer",
             "minimum": 0
+          },
+          "keptSold": {
+            "type": "integer",
+            "minimum": 0
           }
         },
         "required": [
@@ -41414,6 +41445,18 @@
           },
           "available": {
             "type": "boolean"
+          },
+          "delistedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outOfStockAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -42758,7 +42801,7 @@
       },
       "harvest.AdapterCapabilityTable": {
         "type": "object",
-        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. A reader that does not know an adapter must answer no to every boolean, null to the language and null to the band rather than throw.",
+        "description": "What each adapter is able to tell us. `writesPrices` means the source states a price, so a run of it needs somewhere to write prices. `scopesItsOwn` means the source names the scope of every price, so it needs no default. `listsItsOwnStores` means a store discovery takes no postal code and no radius. `hasProductPages` means an EAN backfill has something to read. `skipsKnownDetails` means a walk has a detail phase that a known product can skip, so a run takes `details`. `printedLocale` is the language the source writes its own text in, and null when nothing is known, so accepting a queued row files a printed name under the language it was printed in rather than under a constant. `walkablePriorities` is the band of scope priorities the walk of this adapter may write, and null for an adapter whose walk is given no scopes: a Mercadona crawl of one warehouse writes LOCAL_AREA rows and may claim neither the NATIONAL summary of the chain nor a STORE row somebody typed. `stockIndicator` is how the source tells stock: `per-shop` when it names the shops that carry a product, `per-scope` when each listed row or a scoped answer states it, and null when it says nothing about stock. `provesDelisting` means a walk can read the whole listing of a scope, so a product the listing did not name counts as a miss. A reader that does not know an adapter must answer no to every boolean, null to the language, null to the band and null to the stock indicator rather than throw.",
         "const": {
           "mercadona-api": {
             "writesPrices": true,
@@ -42770,7 +42813,9 @@
             "walkablePriorities": {
               "min": 200,
               "max": 200
-            }
+            },
+            "stockIndicator": "per-scope",
+            "provesDelisting": true
           },
           "deza-web": {
             "writesPrices": false,
@@ -42779,7 +42824,9 @@
             "hasProductPages": false,
             "skipsKnownDetails": false,
             "printedLocale": "es",
-            "walkablePriorities": null
+            "walkablePriorities": null,
+            "stockIndicator": "per-shop",
+            "provesDelisting": false
           },
           "carrefour-web": {
             "writesPrices": true,
@@ -42788,7 +42835,9 @@
             "hasProductPages": true,
             "skipsKnownDetails": false,
             "printedLocale": "es",
-            "walkablePriorities": null
+            "walkablePriorities": null,
+            "stockIndicator": null,
+            "provesDelisting": false
           },
           "lidl-api": {
             "writesPrices": true,
@@ -42797,7 +42846,9 @@
             "hasProductPages": true,
             "skipsKnownDetails": false,
             "printedLocale": "es",
-            "walkablePriorities": null
+            "walkablePriorities": null,
+            "stockIndicator": null,
+            "provesDelisting": false
           },
           "eljamon-web": {
             "writesPrices": true,
@@ -42806,7 +42857,9 @@
             "hasProductPages": false,
             "skipsKnownDetails": true,
             "printedLocale": "es",
-            "walkablePriorities": null
+            "walkablePriorities": null,
+            "stockIndicator": null,
+            "provesDelisting": true
           },
           "dia-api": {
             "writesPrices": true,
@@ -42818,7 +42871,9 @@
             "walkablePriorities": {
               "min": 200,
               "max": 200
-            }
+            },
+            "stockIndicator": "per-scope",
+            "provesDelisting": true
           },
           "osm-places": {
             "writesPrices": false,
@@ -42827,7 +42882,9 @@
             "hasProductPages": false,
             "skipsKnownDetails": false,
             "printedLocale": null,
-            "walkablePriorities": null
+            "walkablePriorities": null,
+            "stockIndicator": null,
+            "provesDelisting": false
           },
           "manual": {
             "writesPrices": false,
@@ -42836,7 +42893,9 @@
             "hasProductPages": false,
             "skipsKnownDetails": false,
             "printedLocale": null,
-            "walkablePriorities": null
+            "walkablePriorities": null,
+            "stockIndicator": null,
+            "provesDelisting": false
           }
         }
       },
@@ -44037,6 +44096,13 @@
               "null"
             ]
           },
+          "delistedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When every scope a whole walk counted lost this product, and null while any of them still lists it. Written by the delisting counter alone, and it never changes the status."
+          },
           "prices": {
             "type": "array",
             "items": {
@@ -44649,6 +44715,13 @@
               "null"
             ]
           },
+          "delistedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When every scope a whole walk counted lost this product, and null while any of them still lists it. Written by the delisting counter alone, and it never changes the status."
+          },
           "prices": {
             "type": "array",
             "items": {
@@ -45109,6 +45182,13 @@
               "string",
               "null"
             ]
+          },
+          "delistedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When every scope a whole walk counted lost this product, and null while any of them still lists it. Written by the delisting counter alone, and it never changes the status."
           },
           "prices": {
             "type": "array",

@@ -335,6 +335,22 @@ export class MercadonaClient {
     return { publishedOn, stores, declared };
   }
 
+  /**
+   * The categories the last {@link walkCatalog} asked for and that answered
+   * 404, by id, and `categories` when the tree itself did (plan 0220, section
+   * 2.1).
+   *
+   * A 404 yields no product and no error, so a walk that met one looks whole
+   * with that category's products missing. This names them, so a caller can
+   * tell a whole listing from one with a hole in it. Empty before a walk and
+   * after a walk that met none.
+   */
+  get missingCategories(): readonly string[] {
+    return this.missing;
+  }
+
+  private missing: string[] = [];
+
   /** The category tree, two levels (26 roots holding 151 children). */
   async listCategories(
     lang: MercadonaLang = 'es'
@@ -417,7 +433,12 @@ export class MercadonaClient {
     lang: MercadonaLang = 'es'
   ): AsyncIterable<MercadonaListProduct> {
     const seen = new Set<string>();
-    for (const root of await this.listCategories(lang)) {
+    this.missing = [];
+    const tree = await this.getJson(this.url('/categories/', lang));
+    if (tree === null) {
+      this.missing.push('categories');
+    }
+    for (const root of tree === null ? [] : normalizeCategories(tree)) {
       // The root is passed down as the ancestor because the response for a level
       // 2 category does not contain it, and the category map in section 5.6 is
       // keyed on the 26 level 1 names. Without it every product arrives with a
@@ -425,9 +446,14 @@ export class MercadonaClient {
       // resolves to null, which the harvester writes as `uncategorised`.
       const rootNode: CategoryPathNode = { id: root.id, name: root.name };
       for (const child of root.children) {
-        for (const product of await this.listCategoryProducts(child.id, lang, [
-          rootNode,
-        ])) {
+        const payload = await this.getJson(
+          this.url(`/categories/${child.id}/`, lang)
+        );
+        if (payload === null) {
+          this.missing.push(String(child.id));
+          continue;
+        }
+        for (const product of normalizeCategoryProducts(payload, [rootNode])) {
           if (!product.externalId || seen.has(product.externalId)) {
             continue;
           }

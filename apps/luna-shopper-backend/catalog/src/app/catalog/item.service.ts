@@ -1491,7 +1491,8 @@ export class ItemService {
       LEFT JOIN LATERAL (
         SELECT si."itemId", si."priceScopeId", si."price", si."currency",
                si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
-               si."priceSourceKind", si."priceCopiedFromScopeId", si."stale"
+               si."priceSourceKind", si."priceCopiedFromScopeId", si."stale",
+               si."outOfStockAt"
         FROM "supermarket_items" si
         JOIN "items" mi ON mi."id" = si."itemId"
         WHERE mi."productGroupId" = g."id"
@@ -1570,14 +1571,16 @@ export class ItemService {
                     NULL::timestamptz AS "offerObservedAt",
                     NULL::"price_source_kind" AS "offerSourceKind",
                     NULL::uuid AS "offerCopiedFromScopeId",
-                    NULL::boolean AS "offerStale"`
+                    NULL::boolean AS "offerStale",
+                    NULL::timestamptz AS "offerOutOfStockAt"`
                  : `o."itemId" AS "offerItemId", o."priceScopeId" AS "offerScopeId",
                     o."price" AS "offerPrice", o."currency" AS "offerCurrency",
                     o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
                     o."priceObservedAt" AS "offerObservedAt",
                     o."priceSourceKind" AS "offerSourceKind",
                     o."priceCopiedFromScopeId" AS "offerCopiedFromScopeId",
-                    o."stale" AS "offerStale"`
+                    o."stale" AS "offerStale",
+                    o."outOfStockAt" AS "offerOutOfStockAt"`
              },
              round(${relevance}::numeric, 4) AS "relevance"
       FROM "product_groups" g${offerJoin}
@@ -1735,7 +1738,8 @@ export class ItemService {
           LEFT JOIN LATERAL (
             SELECT si."priceScopeId", si."price", si."currency",
                    si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
-                   si."priceSourceKind", si."priceCopiedFromScopeId", si."stale"
+                   si."priceSourceKind", si."priceCopiedFromScopeId", si."stale",
+               si."outOfStockAt"
             FROM "supermarket_items" si
             WHERE si."itemId" = i."id"
               AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
@@ -1754,14 +1758,16 @@ export class ItemService {
            NULL::timestamptz AS "offerObservedAt",
            NULL::"price_source_kind" AS "offerSourceKind",
            NULL::uuid AS "offerCopiedFromScopeId",
-           NULL::boolean AS "offerStale"`
+           NULL::boolean AS "offerStale",
+           NULL::timestamptz AS "offerOutOfStockAt"`
         : `o."priceScopeId" AS "offerScopeId",
            o."price" AS "offerPrice", o."currency" AS "offerCurrency",
            o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
            o."priceObservedAt" AS "offerObservedAt",
            o."priceSourceKind" AS "offerSourceKind",
            o."priceCopiedFromScopeId" AS "offerCopiedFromScopeId",
-           o."stale" AS "offerStale"`;
+           o."stale" AS "offerStale",
+           o."outOfStockAt" AS "offerOutOfStockAt"`;
     const rank =
       scopeIds.length === 0
         ? `i."name" ->> 'en' ASC, i."id" ASC`
@@ -3951,6 +3957,8 @@ interface RawOfferColumns {
   offerSourceKind: SupermarketItem['priceSourceKind'];
   offerCopiedFromScopeId: string | null;
   offerStale: boolean | null;
+  /** Plan 0220, section 15.2. Absent on a query that does not select it. */
+  offerOutOfStockAt?: string | Date | null;
 }
 
 /** One offer out of a raw query's `offer` columns. */
@@ -3973,6 +3981,9 @@ function rawOfferView(
     sourceKind: row.offerSourceKind ?? null,
     priceCopiedFromScopeId: row.offerCopiedFromScopeId ?? null,
     stale: row.offerStale ?? false,
+    outOfStockAt: row.offerOutOfStockAt
+      ? new Date(row.offerOutOfStockAt).toISOString()
+      : null,
   };
 }
 

@@ -1265,6 +1265,22 @@ describe('contract schemas', () => {
       ).toBe(false);
     });
 
+    it('supermarketItem.setAvailability takes an entry with no flag when an instant is given (plan 0220)', () => {
+      const request = (entry: Record<string, unknown>) =>
+        validateMessageRequest('supermarketItem.setAvailability', {
+          userId: 'u-1',
+          priceScopeId: 'scope-1',
+          entries: [{ itemId: 'item-1', ...entry }],
+        }).valid;
+      expect(request({ available: true })).toBe(true);
+      expect(request({ outOfStock: true })).toBe(true);
+      expect(request({ delisted: false })).toBe(true);
+      expect(request({ available: false, delisted: true })).toBe(true);
+      // An entry that states nothing is refused.
+      expect(request({})).toBe(false);
+      expect(request({ available: 'yes' })).toBe(false);
+    });
+
     it('basket.participant.list response names an account (plan 0054, section 2)', () => {
       // The two names are separate fields, and both are required: a registered
       // participant who typed nothing on the join screen still has an account
