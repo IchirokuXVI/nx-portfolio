@@ -1,3 +1,5 @@
+> **PR:** [#875](https://github.com/IchirokuXVI/nx-portfolio/pull/875)
+
 # 0175: the landing card looks like a list, and the front door is one screen
 
 > Asked for by the owner on 2026-10-30. The owner confirmed round 6 of the mock in

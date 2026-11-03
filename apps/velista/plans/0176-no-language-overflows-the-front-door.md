@@ -1,3 +1,5 @@
+> **PR:** [#875](https://github.com/IchirokuXVI/nx-portfolio/pull/875)
+
 # 0176: no language overflows the front door
 
 > Asked for by the owner on 2026-10-30, with `0175`: an e2e test that the landing page fits

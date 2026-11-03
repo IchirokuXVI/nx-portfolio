@@ -1,8 +1,5 @@
 .hero {
-  display: flex;
-  flex-direction: column;
-  gap: var(--app-space-3);
-  padding: var(--app-space-4) var(--app-space-5) 0;
+  padding: var(--app-space-3) var(--app-space-5) 0;
 }
 
 .headline {
@@ -10,18 +7,12 @@
   font-family: var(--app-font-display);
   font-weight: 400;
   // Larger than any scale step, and deliberately so: this is the one piece of type
-  // on the whole app that is doing a poster's job.
-  font-size: clamp(2rem, 10.5vw, 2.5625rem);
+  // on the whole app that is doing a poster's job. 9.6vw and not more: at 10.5vw
+  // "Comparte y apunta." broke onto a third line on 375 and 360 px wide phones and
+  // took a row from the card under it (velista 0175).
+  font-size: clamp(2rem, 9.6vw, 2.5625rem);
   line-height: 1.08;
   letter-spacing: var(--app-tracking-display);
   color: var(--app-text-primary);
   text-wrap: balance;
-}
-
-.body {
-  margin: 0;
-  font-size: var(--app-text-base);
-  line-height: var(--app-leading-body);
-  color: var(--app-text-secondary);
-  text-wrap: pretty;
 }

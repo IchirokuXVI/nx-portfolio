@@ -150,9 +150,19 @@ describe('RunContext.advance', () => {
 
 /**
  * The run's one refusal guard, as the context wires it (plan 0215, section
- * 5). The pause here is 60 ms of real time, so no fake timer is involved.
+ * 5). The pause is a 60 ms timer that each spec ends by hand, so a slow
+ * machine cannot end it early and admit a worker the spec expects held.
  */
 describe('RunContext.guardWith', () => {
+  beforeEach(() => {
+    jest.useFakeTimers({
+      doNotFake: ['Date', 'setImmediate', 'nextTick', 'queueMicrotask'],
+    });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   const POLICY = {
     consecutive: 2,
     window: null,
@@ -192,6 +202,7 @@ describe('RunContext.guardWith', () => {
 
     // The pause keeps the heartbeat moving while it lasts.
     tick(10_000);
+    await jest.advanceTimersByTimeAsync(POLICY.coolDownMs);
     await waiting;
     expect(store.touchHeartbeat).toHaveBeenCalled();
 
@@ -251,6 +262,7 @@ describe('RunContext.guardWith', () => {
     expect(sent).toBe(false);
 
     // The 60 ms pause ends, and it goes out as the one probe.
+    await jest.advanceTimersByTimeAsync(POLICY.coolDownMs);
     await waiting;
     expect(sent).toBe(true);
     expect(guard.summary().paused).not.toBeNull();
