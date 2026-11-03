@@ -56,6 +56,7 @@ import {
   type ItemView,
   type LocationSectionsRequest,
   type LocationSectionsView,
+  type MergeItemResult,
   type PricePolicyListView,
   type PricePolicyView,
   type PriceScopePage,
@@ -104,6 +105,7 @@ import {
   AdminListSupermarketsQueryDto,
   AdminLookupItemsDto,
   AdminSearchItemsQueryDto,
+  MergeItemDto,
 } from './catalog-admin.dto';
 import {
   AddBrandHomonymDto,
@@ -711,6 +713,8 @@ export class AdminCatalogItemsController {
       productGroupId: group.id,
       withoutProductGroup: group.none,
       withoutPriceAtScopeId: query.withoutPriceAtScopeId,
+      // Plan 0239: the history of the merges, on the operator's list only.
+      merged: query.merged,
       cursor: query.cursor,
       limit: query.limit,
       order: query.order,
@@ -785,8 +789,18 @@ export class AdminCatalogItemsController {
     });
   }
 
+  /**
+   * Delete a product that nothing names (plan 0239, section 4).
+   *
+   * Catalog asks the harvester and core first. A product that a price, a
+   * product merged into it, a queue row or a shopper's line still names
+   * answers `item_in_use` with the four counts in `details`: merge it into
+   * the product that replaces it instead. A merged product answers
+   * `item_merged`, because it is the record of its merge.
+   */
   @Delete(':id')
   @ApiContractResponse(ITEM_PATTERNS.delete)
+  @ApiProblemResponses({ notFound: true, itemMerge: 'delete' })
   remove(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string
@@ -794,6 +808,41 @@ export class AdminCatalogItemsController {
     return this.nats.send(ITEM_PATTERNS.delete, {
       ...adminCredential(admin),
       itemId: id,
+    });
+  }
+
+  /**
+   * Merge the product of the path into `intoItemId` (plan 0239).
+   *
+   * The merged product stays, as the record of what it was called, names
+   * its survivor, and leaves every list and search; a read of its id
+   * answers the survivor. Its price rows, scope rows, shop rows, barcodes
+   * and photo links move to the survivor in one transaction, and the answer
+   * counts each. The harvester's queue rows
+   * and the shoppers' lines move after the answer, when the harvester and
+   * core hear `catalog.itemMerged`: `queueRows` is the number that named
+   * the merged product, or a product already merged into it, just before
+   * the write.
+   *
+   * `dryRun` answers the same and writes nothing, as the settle route
+   * does. Two articles of one chain and two formats are refused unless the
+   * body allows them, per pair. A `POST` that answers 201 with what moved.
+   */
+  @Post(':id/merge')
+  @ApiContractResponse(ITEM_PATTERNS.merge, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true, notFound: true, itemMerge: 'merge' })
+  merge(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string,
+    @Body() dto: MergeItemDto
+  ): Promise<MergeItemResult> {
+    return this.nats.send<MergeItemResult>(ITEM_PATTERNS.merge, {
+      ...adminCredential(admin),
+      itemId: id,
+      intoItemId: dto.intoItemId,
+      dryRun: dto.dryRun,
+      allowSecondArticle: dto.allowSecondArticle,
+      allowFormatDifference: dto.allowFormatDifference,
     });
   }
 

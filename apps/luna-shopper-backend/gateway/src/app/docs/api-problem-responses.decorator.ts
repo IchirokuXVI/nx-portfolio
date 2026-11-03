@@ -103,6 +103,15 @@ export interface ProblemResponseOptions {
    */
   eanHeld?: boolean;
   /**
+   * The route merges or deletes a product (plan 0239), and each answers 409
+   * with codes of its own:
+   *
+   * - `merge`: a product that is merged already, two articles of one chain,
+   *   and two formats. The last two are lifted by a flag of the body.
+   * - `delete`: a merged product, and a product something still names.
+   */
+  itemMerge?: 'merge' | 'delete';
+  /**
    * The route writes a product's unit or size (plan 0237, section 3.3), so a
    * unit the catalog does not store answers 400 with one of two codes of its
    * own: `LITER` or `PACK`, and `KILOGRAM` with a size. Each names what the
@@ -280,6 +289,16 @@ export function ApiProblemResponses(
   if (options.eanHeld) {
     codes.push(ERROR_CODES.ITEM_EAN_HELD);
   }
+  if (options.itemMerge === 'merge') {
+    codes.push(
+      ERROR_CODES.ITEM_MERGED,
+      ERROR_CODES.ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN,
+      ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS
+    );
+  }
+  if (options.itemMerge === 'delete') {
+    codes.push(ERROR_CODES.ITEM_MERGED, ERROR_CODES.ITEM_IN_USE);
+  }
   if (options.baseUnit) {
     codes.push(
       ERROR_CODES.ITEM_UNIT_NOT_BASE,
@@ -305,10 +324,7 @@ export function ApiProblemResponses(
     codes.push(ERROR_CODES.IMPERSONATION_CODE_INVALID);
   }
   if (options.impersonation === 'end') {
-    codes.push(
-      ERROR_CODES.IMPERSONATION_ENDED,
-      ERROR_CODES.NOT_IMPERSONATING
-    );
+    codes.push(ERROR_CODES.IMPERSONATION_ENDED, ERROR_CODES.NOT_IMPERSONATING);
   }
   if (options.recovery === 'signIn') {
     codes.push(ERROR_CODES.RECOVERY_OTHER_ACCOUNT);

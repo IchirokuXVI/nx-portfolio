@@ -88,6 +88,8 @@ import {
   type ListSupermarketLocationItemsRequest,
   type ListSupermarketLocationsRequest,
   type ListSupermarketsRequest,
+  type MergeItemRequest,
+  type MergeItemResult,
   type NearbyPostalCodesView,
   type NearestPostalCodeView,
   type PostalCodeLocationCountsView,
@@ -110,9 +112,9 @@ import {
   type SearchItemsRequest,
   type SearchOffersRequest,
   type SearchShopsRequest,
-  type SetSupermarketLinkedImagesRequest,
   type SetSupermarketItemAvailabilityRequest,
   type SetSupermarketItemAvailabilityResult,
+  type SetSupermarketLinkedImagesRequest,
   type SetSupermarketLocationItemAvailabilityRequest,
   type SetSupermarketLocationItemAvailabilityResult,
   type ShopAvailabilityRequest,
@@ -404,6 +406,15 @@ export class CatalogController {
   @MessagePattern(ITEM_PATTERNS.delete)
   deleteItem(@Payload() req: ItemIdRequest): Promise<{ id: string }> {
     return this.items.delete(req);
+  }
+
+  /**
+   * Merge one product into another (plan 0239). The merged row stays and
+   * names its survivor; a dry run answers the same and writes nothing.
+   */
+  @MessagePattern(ITEM_PATTERNS.merge)
+  mergeItem(@Payload() req: MergeItemRequest): Promise<MergeItemResult> {
+    return this.items.merge(req);
   }
 
   @MessagePattern(ITEM_PATTERNS.get)

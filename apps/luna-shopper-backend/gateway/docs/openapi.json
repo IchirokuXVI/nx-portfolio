@@ -18039,6 +18039,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "merged",
+            "required": false,
+            "in": "query",
+            "description": "Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise.",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -18669,6 +18678,16 @@
               }
             }
           },
+          "409": {
+            "description": "`item_merged` — This product was merged into another one. Work on the product it was merged into.\n\n`item_in_use` — Prices, queue rows, shopping lists or other products still name this product. Merge it into the product that replaces it instead.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -18746,6 +18765,121 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/{id}/merge": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_merge_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.merge` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.MergeItemResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`item_merged` — This product was merged into another one. Work on the product it was merged into.\n\n`item_merge_two_articles_one_chain` — Both products are sold by the same chain, so the merged product would hold two articles of that chain. Allow a second article to merge them anyway.\n\n`item_merge_format_differs` — The two products have a different size or unit, so they are two products. Allow the format difference to merge them anyway.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31964,6 +32098,34 @@
           }
         }
       },
+      "MergeItemDto": {
+        "type": "object",
+        "properties": {
+          "intoItemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The survivor. It receives the price rows, scope rows, shop rows, barcodes and photo links of the product in the path, which stays as a record that names it."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false,
+            "description": "Answer what the merge would move, and write nothing. The answer has the shape of a real merge and counts the same things. Every refusal is checked as for a real merge."
+          },
+          "allowSecondArticle": {
+            "type": "boolean",
+            "default": false,
+            "description": "Merge even when both products hold a bound queue row of one chain, so the survivor holds two articles of that chain (rule R28). Without it that answers `item_merge_two_articles_one_chain`."
+          },
+          "allowFormatDifference": {
+            "type": "boolean",
+            "default": false,
+            "description": "Merge even when the two products differ in `unitSize` or `defaultUnit`. Without it that answers `item_merge_format_differs`."
+          }
+        },
+        "required": [
+          "intoItemId"
+        ]
+      },
       "AddItemEanDto": {
         "type": "object",
         "properties": {
@@ -36881,6 +37043,10 @@
               "$ref": "#/components/schemas/catalog.ItemOfferView"
             }
           },
+          "mergedInto": {
+            "type": "string",
+            "minLength": 1
+          },
           "atShop": {
             "anyOf": [
               {
@@ -39270,6 +39436,10 @@
             "items": {
               "$ref": "#/components/schemas/catalog.ItemOfferView"
             }
+          },
+          "mergedInto": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
@@ -39379,6 +39549,104 @@
         },
         "required": [
           "map"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.MergeItemResult": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "intoItemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "mergedIntoId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The survivor the merged row names now, the same as intoItemId."
+          },
+          "mergedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the merge was written. Null on a dry run."
+          },
+          "prices": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price rows (item_prices) moved to the survivor."
+          },
+          "scopeRows": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Materialized scope rows (supermarket_items) moved to the survivor. Where the survivor already had a row for the scope, it keeps its own."
+          },
+          "shopRows": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Shop rows (supermarket_location_items) moved to the survivor."
+          },
+          "shopRowsKept": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Shop rows left on the merged row, because the survivor already had a row for that shop. They are a record and are not deleted."
+          },
+          "barcodes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The barcodes moved to the survivor."
+          },
+          "survivorEan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The survivor's first barcode after the merge."
+          },
+          "linkedImages": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Chain photo links moved to the survivor."
+          },
+          "repointedItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Products that were merged into the merged one and now name the survivor (the one level rule)."
+          },
+          "queueRows": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Harvester queue rows that named the merged product, or a product already merged into it, when catalog asked, just before the write. Not yet moved when this answers: the harvester rewrites them when it hears catalog.itemMerged, which is published for each of those products."
+          }
+        },
+        "required": [
+          "itemId",
+          "intoItemId",
+          "dryRun",
+          "mergedIntoId",
+          "mergedAt",
+          "prices",
+          "scopeRows",
+          "shopRows",
+          "shopRowsKept",
+          "barcodes",
+          "survivorEan",
+          "linkedImages",
+          "repointedItemIds",
+          "queueRows"
         ],
         "additionalProperties": false
       },
@@ -46986,6 +47254,10 @@
               "item_expectation_failed",
               "item_unit_not_base",
               "item_kilogram_has_size",
+              "item_merged",
+              "item_merge_two_articles_one_chain",
+              "item_merge_format_differs",
+              "item_in_use",
               "category_in_use",
               "category_not_found",
               "section_not_found",

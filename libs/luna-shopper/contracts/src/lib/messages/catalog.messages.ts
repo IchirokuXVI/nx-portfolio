@@ -190,6 +190,14 @@ export const ITEM_PATTERNS = {
   delete: 'item.delete',
   get: 'item.get',
   /**
+   * Merge one product into another (plan 0239). The merged row stays, names
+   * its survivor in `mergedIntoId`, and leaves every list and search. Its
+   * prices, shop rows, barcodes and photo links move to the survivor in one
+   * transaction, and `catalog.itemMerged` tells the harvester and core to
+   * rewrite what they hold. Operator only.
+   */
+  merge: 'item.merge',
+  /**
    * Several products by id, in one round trip (plan 0051, section 6.1).
    *
    * A basket line names a pick and every option it may be switched to, all as
@@ -1455,6 +1463,17 @@ export interface ItemView {
    * client to draw.
    */
   offers?: ItemOfferView[];
+  /**
+   * The product this one was merged into (plan 0239). **Optional, and absent
+   * on every product that was not merged.**
+   *
+   * A read by id of a merged product (`item.get`, `item.getMany`) answers the
+   * survivor's data, offers and barcodes under the id that was asked for, with
+   * this field naming the survivor. The admin's history list of merged
+   * products answers each merged row as it was, with this field. A list or a
+   * search never answers a merged product.
+   */
+  mergedInto?: string;
 }
 
 /**
@@ -2572,6 +2591,76 @@ export interface ItemIdRequest extends AdminCredential {
   itemId: string;
 }
 
+/**
+ * How many products one usage question names (plan 0239): the harvester's
+ * `sourceEntry.itemUsage` and core's `adminItem.usage`. A merge asks about
+ * two and a delete about one.
+ */
+export const ITEM_USAGE_MAX_IDS = 100;
+
+/** Merge {@link itemId} into {@link intoItemId} (plan 0239). */
+export interface MergeItemRequest extends AdminCredential {
+  /** The product that is merged. Its row stays, as a record. */
+  itemId: string;
+  /** The survivor, which receives what the merged product held. */
+  intoItemId: string;
+  /**
+   * Answer what the merge writes, and write nothing (plan 0239, section 1.1).
+   * Every refusal is checked as for a real merge, and no event is published.
+   */
+  dryRun?: boolean;
+  /**
+   * Merge even when both products hold a bound queue row of one chain (rule
+   * R28): the survivor then holds two articles of that chain.
+   */
+  allowSecondArticle?: boolean;
+  /** Merge even when `unitSize` or `defaultUnit` differ. */
+  allowFormatDifference?: boolean;
+}
+
+/**
+ * What a merge moved, or with `dryRun` would move (plan 0239, section 1.1).
+ * A dry run and a real merge answer the same counts.
+ */
+export interface MergeItemResult {
+  itemId: string;
+  intoItemId: string;
+  dryRun: boolean;
+  /** The survivor the merged row now names. Always {@link intoItemId}. */
+  mergedIntoId: string;
+  /** When the merge was written. Null on a dry run. */
+  mergedAt: string | null;
+  /** Rows of `item_prices` moved to the survivor. */
+  prices: number;
+  /** Materialized scope rows (`supermarket_items`) moved to the survivor. */
+  scopeRows: number;
+  /** Shop rows (`supermarket_location_items`) moved to the survivor. */
+  shopRows: number;
+  /**
+   * Shop rows left on the merged row, because the survivor already had a row
+   * for that shop. They are kept as a record and are not deleted.
+   */
+  shopRowsKept: number;
+  /** The barcodes moved to the survivor. */
+  barcodes: string[];
+  /** The survivor's first barcode after the merge. */
+  survivorEan: string | null;
+  /** Chain photo links moved to the survivor. */
+  linkedImages: number;
+  /**
+   * Products that were merged into the merged one and now name the survivor
+   * (the one level rule).
+   */
+  repointedItemIds: string[];
+  /**
+   * The harvester's queue rows that named the merged product, or a product
+   * already merged into it, when catalog asked, just before the write. **Not
+   * yet moved when this answers**: the harvester rewrites them when it hears
+   * `catalog.itemMerged`, which is published for each of those products.
+   */
+  queueRows: number;
+}
+
 /** How many products one {@link ITEM_PATTERNS.getMany} may name. */
 export const ITEM_LOOKUP_LIMITS = {
   /**
@@ -2692,6 +2781,13 @@ export interface SearchItemsRequest extends PageQuery {
    * the two together mean.
    */
   withoutCategory?: boolean;
+  /**
+   * Only the products that were merged into another one (plan 0239, section
+   * 2): the history of the merges, for the back office. Each row answers as it
+   * was, with `mergedInto`. Absent or false lists the live products, which is
+   * every other caller: a merged product is never in a list or a search.
+   */
+  merged?: boolean;
   /**
    * Price the results, from these scopes and no others (plan 0048, section 3.1).
    *

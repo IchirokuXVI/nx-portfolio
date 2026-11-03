@@ -236,6 +236,13 @@ export const SOURCE_ENTRY_PATTERNS = {
    * calls it for a product a row left before the plan landed.
    */
   settleItem: 'sourceEntry.settleItem',
+  /**
+   * How many rows name each of these products, and which chains hold an
+   * `ACTIVE` row of each (plan 0239). Catalog asks it, with the operator's
+   * credential, before a merge (rule R28) and before a delete. Counts and
+   * chains only, never the rows.
+   */
+  itemUsage: 'sourceEntry.itemUsage',
 } as const;
 
 /**
@@ -1762,6 +1769,26 @@ export interface SourceEntryPriceWithheld {
    * offered with no price.
    */
   kindUnknown?: true;
+}
+
+/** The products a usage question names (plan 0239). */
+export interface SourceEntryItemUsageRequest extends AdminCredential {
+  /** At most `ITEM_USAGE_MAX_IDS` products. */
+  itemIds: string[];
+}
+
+/** What the harvester holds that names one product (plan 0239). */
+export interface SourceEntryItemUsage {
+  itemId: string;
+  /** Rows whose `itemId` is the product, whatever their status. */
+  rowCount: number;
+  /** The chains of the product's `ACTIVE` rows, each once, sorted. */
+  activeSupermarketIds: string[];
+}
+
+/** One entry per product asked about, the ones nothing names included. */
+export interface SourceEntryItemUsageResult {
+  usage: SourceEntryItemUsage[];
 }
 
 /** Settle a product at a chain (plan 0191). */

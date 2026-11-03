@@ -2,18 +2,20 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AccountModule } from '../account/account.module';
+import { BasketsModule } from '../baskets/baskets.module';
 import {
-  BasketSource,
   Basket,
+  BasketSource,
   ListLine,
   ProfilePostalCode,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
-import { BasketsModule } from '../baskets/baskets.module';
 import { ListsModule } from '../lists/lists.module';
 import { ZonesModule } from '../zones/zones.module';
+import { AdminItemUsageController } from './admin-item-usage.controller';
+import { AdminItemUsageService } from './admin-item-usage.service';
 import { AdminListService } from './admin-list.service';
 import { AdminPostalCodeService } from './admin-postal-code.service';
 import { AdminZoneService } from './admin-zone.service';
@@ -61,9 +63,11 @@ import { CorePlatformAdminService } from './platform-admin.service';
     // reading rows of its own any more.
     BasketsModule,
   ],
-  controllers: [CoreAdminController],
+  // Plan 0239: what names a catalog product, before catalog deletes it.
+  controllers: [CoreAdminController, AdminItemUsageController],
   providers: [
     CorePlatformAdminService,
+    AdminItemUsageService,
     AdminZoneService,
     AdminListService,
     AdminPostalCodeService,
