@@ -160,7 +160,7 @@
     },
     "failed": {
       "title": "velista could not update itself",
-      "body": "Close velista completely and open it again. If that does not work, open it in your browser once.",
+      "body": "Close velista completely and open it again. If that does not work, open it from its web address once.",
       "bodyNative": "This version of the app is too old to keep working. Install the newer version, then open velista again.",
       "reload": "Try again",
       "store": "Get the newer version"
@@ -348,7 +348,7 @@
       "decline": "Not now",
       "guestNotice": "Asking makes an account on this phone. Add an email to it later so you do not lose it",
       "installAndJoin": "Install and join",
-      "joinOnly": "Join in the browser",
+      "joinOnly": "Join without installing",
       "installNote": "Installing keeps Velista on your home screen. Either way you are asking to join the same group"
     },
     "invite": {
@@ -755,7 +755,7 @@
       "listening": "Listening",
       "heard": "I heard",
       "working": "Working out what you said…",
-      "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your browser, or type it instead",
+      "micRefused": "Velista cannot hear you. The microphone is switched off for this app, so turn it back on in your settings, or type it instead",
       "micMissing": "There is no microphone on this device, so type it instead",
       "notHeard": "I did not catch that",
       "voiceFailed": "That did not send. Nothing was added, so try again or type it",
@@ -907,7 +907,7 @@
       "stopRecording": "Stop and send",
       "recordingEmpty": "That recording came out empty. Try again",
       "recordingTooBig": "That recording is over the {{limit}} MB limit, so it did not send. It is still here",
-      "micRefused": "Velista could not use the microphone. Check the permission in your browser, or type it instead",
+      "micRefused": "Velista could not use the microphone. Check the permission in your settings, or type it instead",
       "sending": "Sending a recording",
       "transcribing": "Writing this down",
       "noTranscript": "A recording. It could not be written down",
@@ -1236,7 +1236,7 @@
     },
     "guest": {
       "title": "This account lives on this phone",
-      "body": "There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing this browser's data would end it",
+      "body": "There is no email and no password on it yet, so it cannot be opened anywhere else, and clearing Velista's data on this phone would end it",
       "secure": "Secure this account",
       "deleteNote": "In order to log out you need to delete your account because it is not secured to an email"
     },
@@ -1267,7 +1267,7 @@
       "install": "Install the app",
       "installDetail": "Keep Velista on your home screen. It opens on its own and works without a signal",
       "add": "Add it to your home screen",
-      "addDetail": "Three steps, and your browser does the rest",
+      "addDetail": "Three steps, and your phone does the rest",
       "onThisPhone": "On this phone",
       "installed": "Installed",
       "elsewhere": "Get the app",
@@ -1297,7 +1297,7 @@
     },
     "installed": {
       "title": "Velista is installed",
-      "body": "You are reading this inside the app. It is on your home screen, and it opens without the browser",
+      "body": "You are reading this inside the app. It is on your home screen, and it opens on its own",
       "done": "Nothing left to do",
       "reveal": "Not on your home screen? Show the steps",
       "home": "Back to your groups"
@@ -1315,8 +1315,8 @@
         "step3": "Tap Add, at the top right"
       },
       "androidMenu": {
-        "heading": "Add it from your browser menu",
-        "step1": "Open the browser menu, usually three dots",
+        "heading": "Add it from the menu",
+        "step1": "Open the menu, usually three dots",
         "step2": "Choose Install app, or Add to Home screen",
         "step3": "Confirm, and it lands on your home screen"
       },
@@ -1324,7 +1324,7 @@
         "heading": "Add it from the address bar",
         "step1": "Look at the right hand end of the address bar for the install icon",
         "step2": "Click it, then Install",
-        "step3": "If it is not there, open the browser menu and look for Install Velista"
+        "step3": "If it is not there, open the menu and look for Install Velista"
       },
       "desktopSafari": {
         "heading": "Add it from Safari",
@@ -1353,7 +1353,7 @@
       }
     },
     "announce": {
-      "ready": "Your browser can install Velista. The button is at the top of the page"
+      "ready": "Velista can be installed on this phone. The button is at the top of the page"
     }
   },
   "assistant": {
@@ -1385,7 +1385,7 @@
     "recorder": {
       "discard": "Throw this recording away",
       "refused": "I cannot hear you. The microphone is switched off for this app",
-      "unavailable": "This browser cannot record. You can still type",
+      "unavailable": "Recording does not work here. You can still type",
       "dismiss": "Close",
       "limit": {
         "longest": "Five minutes is the longest I can listen.",
@@ -1406,7 +1406,7 @@
     "dropped": "The start of this conversation is too long to keep, so I let it go.",
     "spoken": "You said something. I am listening to it now.",
     "tooLong": "That recording was too big to send. I can take up to {{limit}} MB at a time, so a shorter message will get through.",
-    "badFormat": "Your browser recorded that in a way I cannot read. You can still type it.",
+    "badFormat": "That recording came in a format I cannot read. You can still type it.",
     "allowance": {
       "used": {
         "day": "You have used the assistant as much as you can for today.",
@@ -1461,7 +1461,7 @@
       "use": "Use my location",
       "resolved": "We think you are in",
       "confirm": "Add this code",
-      "refused": "This browser is not allowed to share your location, and only you can change that in its settings. You can type your postal code instead.",
+      "refused": "Velista is not allowed to use your location, and only you can change that in your settings. You can type your postal code instead.",
       "unplaceable": "We could not work out which postal code that is. You can type it instead.",
       "unavailable": "Your device could not say where it is. You can try again, or type your postal code.",
       "failed": "We could not look that up. Please try again.",
@@ -1859,7 +1859,7 @@
       "install": "Keep it on your home screen while you shop",
       "installAction": "Install",
       "dead": "This link is no longer accepting people",
-      "deadBody": "Ask whoever sent it for a new one. If you were already shopping this list, your own link in this browser still works.",
+      "deadBody": "Ask whoever sent it for a new one. If you were already shopping this list, your own link on this phone still works.",
       "checking": "Checking the link",
       "joining": "Joining",
       "failed": "That did not work. Try again.",
@@ -2318,7 +2318,7 @@
       "delete": "Delete",
       "deleteConfirm": "Delete for good",
       "saveFailed": "The walk could not be saved on this phone.",
-      "memoryOnly": "This browser is not keeping walks. They are lost when the page closes, so export each one.",
+      "memoryOnly": "This phone is not keeping walks. They are lost when Velista closes, so export each one.",
       "storageError": "Storage problem: {{error}}"
     },
     "import": {
@@ -2340,7 +2340,7 @@
       "step": "Step length in metres",
       "camera": "Camera tracking",
       "cameraHelp": "Follows the phone with the camera. The most accurate method. Uses more battery.",
-      "cameraUnsupported": "Camera tracking is not available in this browser.",
+      "cameraUnsupported": "Camera tracking is not available on this phone.",
       "live": "Live track",
       "start": "Start",
       "startHelp": "Start at the entrance. The screen stays on. Keep this page open until you finish.",
@@ -2560,7 +2560,7 @@
       "confirmed": "Path checked",
       "discarded": "Purple path discarded",
       "resume": "Resume walking",
-      "noCamera": "Resuming needs camera tracking, which this browser does not have."
+      "noCamera": "Resuming needs camera tracking, which this phone does not have."
     },
     "settings": {
       "show": "Show this walk to shoppers",
