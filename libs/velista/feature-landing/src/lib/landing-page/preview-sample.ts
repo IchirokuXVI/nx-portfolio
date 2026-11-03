@@ -15,26 +15,24 @@ export interface PreviewSampleLine {
 
 /**
  * The five rows of the landing card (velista 0175, target 4), in the order they are
- * drawn, which is also their priority: Olive oil, not in the shop; Bananas, bought and
- * at zero; Gachas; Ham; Cheese.
+ * drawn, which is also their priority: Olive oil, 1 pending; Bananas, bought and at
+ * zero; Gachas, 2 pending; Ham, not in the shop; Cheese, 1 pending. The owner set these
+ * states and prices on 2026-11-03.
  *
  * The rows give way from the end: Cheese is drawn only on a card with room for five,
- * then Ham goes, then Gachas. Olive oil and Bananas always stay, because a line still
- * wanted that the shop did not have and a line at zero that somebody bought are the two
- * states that explain the product (D3).
+ * then Ham goes, then Gachas. Olive oil and Bananas always stay, so the smallest card
+ * still shows one line wanted and one line bought.
  *
  * The photos are the owner's, with no brand visible (O1). Each `image` is a file under
  * `libs/velista/ui/assets/landing`, served at `landing/` beside the document.
  */
 export const PREVIEW_SAMPLE: readonly PreviewSampleLine[] = [
-  // Still wanted, and the shop had none. Not having found something is not the same as
-  // no longer needing it, which is why the number is untouched.
   {
     key: 'oil',
     image: 'oil.webp',
     price: 9.95,
     quantity: 1,
-    indicator: 'notAvailable',
+    indicator: null,
     givesWay: null,
   },
   {
@@ -49,22 +47,24 @@ export const PREVIEW_SAMPLE: readonly PreviewSampleLine[] = [
     key: 'gachas',
     image: 'gachas.webp',
     price: 3.2,
-    quantity: 1,
+    quantity: 2,
     indicator: null,
     givesWay: 3,
   },
+  // Still wanted, and the shop had none. Not having found something is not the same as
+  // no longer needing it, which is why the number is untouched.
   {
     key: 'ham',
     image: 'ham.webp',
     price: 6.49,
     quantity: 1,
-    indicator: null,
+    indicator: 'notAvailable',
     givesWay: 2,
   },
   {
     key: 'cheese',
     image: 'cheese.webp',
-    price: 4.95,
+    price: 7.49,
     quantity: 1,
     indicator: null,
     givesWay: 1,

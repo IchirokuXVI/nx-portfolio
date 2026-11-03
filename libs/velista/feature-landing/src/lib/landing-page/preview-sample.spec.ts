@@ -19,7 +19,7 @@ describe('previewTallies', () => {
 
   it('totals only the pending rows that are drawn', () => {
     expect(previewTallies(PREVIEW_SAMPLE).map((tally) => tally.total)).toEqual([
-      24.59, 19.64, 13.15, 9.95,
+      30.33, 22.84, 16.35, 9.95,
     ]);
   });
 
@@ -35,12 +35,9 @@ describe('previewTallies', () => {
     expect([...steps].sort((a, b) => b - a)).toEqual(steps);
   });
 
-  it('keeps the bought row and the one the shop did not have to the end', () => {
+  it('keeps a pending row and the bought row to the end', () => {
     const staying = PREVIEW_SAMPLE.filter((line) => line.givesWay === null);
 
-    expect(staying.map((line) => line.indicator)).toEqual([
-      'notAvailable',
-      'bought',
-    ]);
+    expect(staying.map((line) => line.indicator)).toEqual([null, 'bought']);
   });
 });
