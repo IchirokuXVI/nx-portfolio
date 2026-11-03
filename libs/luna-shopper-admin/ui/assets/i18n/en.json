@@ -1067,7 +1067,8 @@
         "preset": "From preset {{name}}",
         "deletedPreset": "Deleted preset",
         "everyChain": "Every chain",
-        "wrote": "Wrote {{count}}"
+        "wrote": "Wrote {{count}}",
+        "prices": "Prices {{count}}"
       },
       "filter": {
         "reverted": "Reverted runs",

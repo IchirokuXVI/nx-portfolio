@@ -615,11 +615,32 @@ export interface HarvestRunView {
   heartbeatAt: string | null;
   /** Null until the run knows how much work it has (after the tree walk). */
   totalPlanned: number | null;
+  /**
+   * Units of planned work done, in the unit of `totalPlanned` (plan 0217). The
+   * unit is the product, or the place in a store discovery, except Carrefour
+   * catalog (listings), DIA catalog (leaves) and DIA store discovery (shop
+   * details). A run that finished whole ends with this at most `totalPlanned`;
+   * a run from before plan 0217 of those three runners may read above it.
+   *
+   * No counter of this view counts a price. A run's prices are in `report`
+   * alone, as `pricesRecorded`, `pricesPublished`, `pricesConfirmed` and
+   * `pricesConflicted`.
+   */
   processed: number;
+  /** Source rows created, or places created in a store discovery. */
   created: number;
+  /**
+   * Source rows whose source group changed, or places changed. Never a price:
+   * before plan 0217 it held each price catalog inserted as well, and the stored
+   * runs whose report states that amount were corrected.
+   */
   updated: number;
+  /** Source rows seen and left as they were, or places refreshed. */
   unchanged: number;
-  /** A 404 from a detail call: "not stocked here" is a value, not a failure. */
+  /**
+   * A source answered that it does not stock the product here, which is a
+   * value and not a failure. A Mercadona 404 is the only one.
+   */
   notFound: number;
   /**
    * Offers a rule dropped or sent to the queue (plan 0081, section 7). Backlog

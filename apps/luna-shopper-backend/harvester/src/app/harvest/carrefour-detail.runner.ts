@@ -102,7 +102,10 @@ export class CarrefourDetailRunner implements CatalogRunner {
             // **A missing EAN is a value, not an error.** Some pages carry
             // none; the row stays as it is and the fuzzy rung does its job.
             missing += 1;
-            await context.report({ processed: 1, notFound: 1 });
+            // Progress and nothing else. A page with no EAN says nothing about
+            // stock, so it is not `notFound`; the report names it as
+            // `noEanOnTheirPage` (plan 0217).
+            await context.report({ processed: 1 });
             continue;
           }
           // Reported exactly as a walk reports a product, minus the price. Rung
@@ -130,8 +133,10 @@ export class CarrefourDetailRunner implements CatalogRunner {
             // sends the ones these newly `ACTIVE` rows are owed.
             prices: [],
           });
+          // Counted by the ingest, once, as every reported product is: one
+          // `processed`, and `updated` only when the row's EAN changed (plan
+          // 0217). A count here as well read each EAN two times.
           eansWritten += 1;
-          await context.report({ processed: 1, updated: 1 });
         } catch (error) {
           // A person's abort cut this page short: not a failed product.
           if (context.signal.aborted && isSkippable(error)) {

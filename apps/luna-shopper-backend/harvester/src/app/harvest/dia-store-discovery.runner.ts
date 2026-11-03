@@ -54,6 +54,9 @@ export class DiaStoreDiscoveryRunner implements StoreDiscoveryRunner {
     source: SupermarketSource | null
   ): Promise<void> {
     requireChain(input.supermarketId);
+    // The plan is the candidate shops, so a shop detail read is the unit of
+    // `processed` and the sink adds no places to it (plan 0217).
+    context.countProgressItself();
     const client = this.createClient(context, source);
     const outcome = new StoreRun();
 

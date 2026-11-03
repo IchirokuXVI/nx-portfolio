@@ -2,14 +2,16 @@ import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
 import { DiaClient } from '@portfolio/luna-shopper/dia';
 import { SPAIN_POSTAL_CODE_CENTROIDS } from '@portfolio/luna-shopper/postal-codes/dataset';
 import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
-import type { SupermarketSource } from '../entities';
+import type { HarvestRun, SupermarketSource } from '../entities';
+import { TokenBucket } from '../runner/token-bucket';
 import {
   fakeDiaSite,
   type FakeDiaShop,
   type FakeDiaWorld,
 } from './dia-site.fake';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
-import type { RunContext } from './run-context';
+import type { HarvestRunStore } from './harvest-run.store';
+import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 
 /**
@@ -161,10 +163,44 @@ function context(): RunContext & { setReport: jest.Mock } {
     setTotalPlanned: jest.fn(async () => undefined),
     setReport: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    countProgressItself: jest.fn(),
     heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
   } as unknown as RunContext & { setReport: jest.Mock };
+}
+
+/**
+ * A real {@link RunContext} over a store that records what it was asked to
+ * write, so a spec reads `processed` as the run row would hold it.
+ */
+function countingContext() {
+  const counters: Array<Record<string, number>> = [];
+  let planned: number | null = null;
+  const store = {
+    setStage: async () => undefined,
+    setTotalPlanned: async (_run: string, total: number) => {
+      planned = total;
+    },
+    setReport: async () => undefined,
+    addCounters: async (_run: string, added: Record<string, number>) => {
+      counters.push(added);
+    },
+    addWarnings: async () => undefined,
+    touchHeartbeat: async () => undefined,
+  };
+  const context = new RunContext(
+    { id: RUN } as HarvestRun,
+    new AbortController().signal,
+    new TokenBucket({ ratePerSecond: 1000 }),
+    store as unknown as HarvestRunStore
+  );
+  return {
+    context,
+    planned: () => planned,
+    processed: () =>
+      counters.reduce((sum, added) => sum + (added['processed'] ?? 0), 0),
+  };
 }
 
 const source = (config: Record<string, unknown> = {}): SupermarketSource =>
@@ -203,6 +239,24 @@ describe('DiaStoreDiscoveryRunner', () => {
         source()
       )
     ).rejects.toThrow(/which chain/);
+  });
+
+  it('counts progress in shop details, the unit it plans in, and the sink adds nothing (plan 0217)', async () => {
+    const counting = countingContext();
+
+    await new TestRunner(world()).run(
+      counting.context,
+      report,
+      baseInput,
+      source()
+    );
+    // What the sink does with each place it is handed.
+    await counting.context.advance(report.places.length);
+    await counting.context.flush();
+
+    expect(report.places.length).toBeGreaterThan(0);
+    expect(counting.planned()).toBeGreaterThan(0);
+    expect(counting.processed()).toBe(counting.planned());
   });
 
   it('reports every open DIA shop, with the address its detail states', async () => {

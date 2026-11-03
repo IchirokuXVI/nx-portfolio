@@ -111,6 +111,8 @@ function build(
     writes?: HarvestRunWrites;
     /** Products whose pack count catalog already holds (plan 0162). */
     packCountSet?: string[];
+    /** How many places of a chunk the place service refreshed, not created. */
+    placesRefreshed?: number;
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
@@ -178,9 +180,10 @@ function build(
   const places = {
     observe: jest.fn(async (chunk: readonly ObservedPlace[]) => {
       placesObserved.push([...chunk]);
+      const refreshed = Math.min(options.placesRefreshed ?? 0, chunk.length);
       return {
-        created: chunk.length,
-        refreshed: 0,
+        created: chunk.length - refreshed,
+        refreshed,
         imported: 0,
         blocked: [],
       };
@@ -268,6 +271,7 @@ function build(
   const context = {
     runId: RUN,
     report: jest.fn(async () => undefined),
+    advance: jest.fn(async () => undefined),
   } as unknown as RunContext;
 
   const sink = new RunReportSink(
@@ -288,6 +292,7 @@ function build(
 
   return {
     sink,
+    context,
     pushed,
     opened,
     placesObserved,
@@ -553,6 +558,23 @@ describe('RunReportSink', () => {
       'node/2',
     ]);
     expect(written.placesCreated).toBe(2);
+  });
+
+  it('counts the places of a chunk as progress through advance (plan 0217)', async () => {
+    const { sink, context } = build({ placesRefreshed: 1 });
+
+    sink.place(place({ externalRef: 'node/1' }));
+    sink.place(place({ externalRef: 'node/2' }));
+    sink.place(place({ externalRef: 'node/3' }));
+    await sink.drain();
+
+    // Progress goes through `advance`, so a runner that counts its own unit
+    // gets none of it; `created` and `unchanged` are reported as before.
+    expect(context.advance).toHaveBeenCalledWith(3);
+    expect(context.report).toHaveBeenCalledWith({ created: 2, unchanged: 1 });
+    for (const [counters] of (context.report as jest.Mock).mock.calls) {
+      expect(counters).not.toHaveProperty('processed');
+    }
   });
 
   it('says a tracked product the run did not name is not stocked', async () => {

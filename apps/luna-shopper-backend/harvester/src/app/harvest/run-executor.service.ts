@@ -741,8 +741,10 @@ function readBackfillBudget(
  *
  * They are not the run's `updated` and `unchanged` counters, which is where the
  * back office read them from before. Those two are rows the ladder changed and
- * rows it left alone, and the ingest adds its price inserts to them as well, so
- * a second run's "prices written" was two unrelated things summed.
+ * rows it left alone. `updated` once held every price insert as well, so a
+ * second run's "prices written" was two unrelated things summed. Since plan
+ * 0217 no price moves a counter column, and these keys are the one place a
+ * run's prices are counted.
  */
 function describePrices(
   counters: Pick<

@@ -59,6 +59,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     source: SupermarketSource
   ): Promise<void> {
     requireScope(input.priceScopeId);
+    // The plan is listings, so a listing paged is the unit of `processed` and
+    // the ingest adds no products to it (plan 0217).
+    context.countProgressItself();
     const client = this.createClient(context, source);
 
     try {

@@ -28,6 +28,8 @@ export class RunContext {
   private pending: Required<RunCounters> = emptyCounters();
   private pendingWarnings: HarvestRunWarning[] = [];
   private lastFlushAt = 0;
+  /** Set by {@link countProgressItself}: the runner owns `processed`. */
+  private progressCountedByRunner = false;
 
   constructor(
     readonly run: HarvestRun,
@@ -100,6 +102,39 @@ export class RunContext {
       if (value) {
         this.pending[key as keyof RunCounters] += value;
       }
+    }
+    if (this.now() - this.lastFlushAt >= HEARTBEAT_INTERVAL_MS) {
+      await this.flush();
+    }
+  }
+
+  /**
+   * Say that this runner counts `processed` in a unit of its own (plan 0217,
+   * section 4).
+   *
+   * `processed` is planned work done, in the unit of `totalPlanned`. That unit
+   * is the product or the place for most runs, and the ingest and the sink
+   * count it through {@link advance}. A runner whose plan is in listings, leaves
+   * or shop details calls this once, before its first report, and then reports
+   * `processed` itself. The ingest and the sink then add nothing on top, so the
+   * count never mixes two units and never passes `totalPlanned`.
+   */
+  countProgressItself(): void {
+    this.progressCountedByRunner = true;
+  }
+
+  /**
+   * Count `count` units of progress on behalf of the ingest or the sink (plan
+   * 0217, section 4).
+   *
+   * It adds to `processed` unless the runner called
+   * {@link countProgressItself}, and it flushes on the same throttle as
+   * {@link report}. A runner that counts its own unit keeps calling
+   * `report({ processed })`, which always adds.
+   */
+  async advance(count: number): Promise<void> {
+    if (!this.progressCountedByRunner && count) {
+      this.pending.processed += count;
     }
     if (this.now() - this.lastFlushAt >= HEARTBEAT_INTERVAL_MS) {
       await this.flush();

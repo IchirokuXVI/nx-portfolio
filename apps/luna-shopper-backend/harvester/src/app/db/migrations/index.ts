@@ -22,6 +22,7 @@ import { SourceEntryPriceKind1759200000000 } from './1759200000000-SourceEntryPr
 import { SourceEntryImageUrl1759300000000 } from './1759300000000-SourceEntryImageUrl';
 import { HarvestSchedules1759400000000 } from './1759400000000-HarvestSchedules';
 import { RunStopReason1759500000000 } from './1759500000000-RunStopReason';
+import { HarvestRunCounters1759600000000 } from './1759600000000-HarvestRunCounters';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -56,4 +57,5 @@ export const HARVESTER_MIGRATIONS = [
   SourceEntryImageUrl1759300000000,
   HarvestSchedules1759400000000,
   RunStopReason1759500000000,
+  HarvestRunCounters1759600000000,
 ];

@@ -517,10 +517,12 @@ export class RunReportSink implements RunReport {
     this.result.placesImported += written.imported;
     this.result.placesNotImported.push(...written.blocked);
     await this.context.report({
-      processed: chunk.length,
       created: written.created,
       unchanged: written.refreshed,
     });
+    // A place is the unit of a store discovery, unless the runner counts its
+    // own (plan 0217, section 4). Then this adds nothing.
+    await this.context.advance(chunk.length);
   }
 
   /**

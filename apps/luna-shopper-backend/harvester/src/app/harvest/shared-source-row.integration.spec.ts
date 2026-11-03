@@ -192,6 +192,7 @@ describeIntegration(
       const context = {
         runId,
         report: async () => undefined,
+        advance: async () => undefined,
         warn: () => undefined,
       } as unknown as RunContext;
       const result = await new SourceIngest(entries, prices, catalog).ingest(

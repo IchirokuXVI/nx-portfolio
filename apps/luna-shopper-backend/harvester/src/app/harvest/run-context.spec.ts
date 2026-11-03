@@ -81,6 +81,74 @@ describe('RunContext.heartbeat', () => {
 });
 
 /**
+ * One unit of progress for each run (plan 0217, section 4).
+ *
+ * The ingest and the sink count `processed` through `advance`. A runner whose
+ * plan is in a unit of its own calls `countProgressItself`, and then only its
+ * own `report({ processed })` moves the count, so the bar means one thing.
+ */
+describe('RunContext.advance', () => {
+  const processedIn = (store: ReturnType<typeof build>['store']) =>
+    (store.addCounters.mock.calls as unknown[][]).reduce(
+      (sum, call) =>
+        sum + ((call[1] as Record<string, number>)['processed'] ?? 0),
+      0
+    );
+
+  it('adds to processed', async () => {
+    const { store, context } = build();
+
+    await context.advance(3);
+    await context.advance(2);
+    await context.flush();
+
+    expect(processedIn(store)).toBe(5);
+  });
+
+  it('adds nothing after countProgressItself, while report still adds', async () => {
+    const { store, context } = build();
+    context.countProgressItself();
+
+    await context.advance(45);
+    await context.report({ processed: 1, failed: 1 });
+    await context.flush();
+
+    expect(processedIn(store)).toBe(1);
+    expect(store.addCounters).toHaveBeenCalledWith(
+      RUN,
+      expect.objectContaining({ processed: 1, failed: 1 })
+    );
+  });
+
+  it('flushes on the 10 second throttle, as report does', async () => {
+    const { store, context, tick } = build();
+
+    await context.advance(1);
+    expect(store.addCounters).not.toHaveBeenCalled();
+
+    tick(10_000);
+    await context.advance(1);
+    expect(store.addCounters).toHaveBeenCalledTimes(1);
+    expect(processedIn(store)).toBe(2);
+
+    await context.advance(1);
+    expect(store.addCounters).toHaveBeenCalledTimes(1);
+  });
+
+  it('still keeps the heartbeat on the throttle after countProgressItself', async () => {
+    const { store, context, tick } = build();
+    context.countProgressItself();
+
+    tick(10_000);
+    await context.advance(5);
+
+    // Nothing to count, so the flush is a touch and no counter write.
+    expect(store.addCounters).not.toHaveBeenCalled();
+    expect(store.touchHeartbeat).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
  * The run's one refusal guard, as the context wires it (plan 0215, section
  * 5). The pause here is 60 ms of real time, so no fake timer is involved.
  */
