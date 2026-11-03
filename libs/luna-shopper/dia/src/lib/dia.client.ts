@@ -1,3 +1,7 @@
+import {
+  SourceGuard,
+  type RefusalPolicy,
+} from '@portfolio/luna-shopper/source-guard';
 import { parseListing } from './listing';
 import { parseMenu } from './menu';
 import { parseStoreDetail, parseStoreFile, parseStoreFileUrl } from './stores';
@@ -76,22 +80,26 @@ export class DiaSessionError extends Error {
 }
 
 /**
- * Thrown once too many requests failed in a row, and by every call after it
- * (section 10). A blocked edge refuses connections for minutes, and a walk that
- * went on would fail every remaining page at full speed.
+ * When the client stops (plan 0174, section 10; plan 0215, section 3): five
+ * failed requests in a row, and no pause.
+ *
+ * **Every failure counts**, a request with no answer included, because the
+ * one block measured was refused connections and not a status. A request is
+ * counted only after its own retries: 60 s on a 403, and 30, 60 and 120 s on
+ * anything else. That wait is why the run does not pause on top of it.
+ *
+ * The stop is the guard's {@link SourceBlockedError}, thrown by the request
+ * that stops the client and by every call after it. A blocked edge refuses
+ * connections for minutes, and a walk that went on would fail every remaining
+ * page at full speed.
  */
-export class DiaStoppedError extends Error {
-  constructor(
-    readonly failures: number,
-    readonly lastError: unknown
-  ) {
-    super(
-      `${failures} DIA requests failed in a row, so the client stopped. ` +
-        `The last error: ${String(lastError)}`
-    );
-    this.name = 'DiaStoppedError';
-  }
-}
+export const DIA_REFUSAL_POLICY: Readonly<RefusalPolicy> = {
+  consecutive: 5,
+  window: null,
+  coolDowns: 0,
+  coolDownMs: 0,
+  probes: 0,
+};
 
 /** One answer, undecoded. Public for the fixture capture tool alone. */
 export interface DiaRawResponse {
@@ -118,12 +126,17 @@ export class DiaClient {
   private readonly forbiddenRetryMs: number;
   private readonly minIntervalMs: number;
   private readonly timeoutMs: number;
-  private readonly maxConsecutiveFailures: number;
+  /**
+   * The run's guard, or one of this client's own from
+   * {@link DIA_REFUSAL_POLICY} when none was passed, so a client used alone
+   * (the capture tool, a spec) still stops on the fifth failure in a row.
+   */
+  private readonly guard: SourceGuard;
+  /** Whether this client admits through the guard itself. */
+  private readonly admitsGuard: boolean;
   /** `session_id` and Akamai's own. `fetch` keeps none, so they are kept here. */
   private readonly cookies = new Map<string, string>();
   private lastRequestAt = 0;
-  private consecutiveFailures = 0;
-  private stopped: DiaStoppedError | null = null;
 
   constructor(private readonly options: DiaClientOptions = {}) {
     this.baseUrl = (options.baseUrl ?? DIA_BASE_URL).replace(/\/+$/, '');
@@ -135,7 +148,19 @@ export class DiaClient {
     this.forbiddenRetryMs = options.forbiddenRetryMs ?? 60_000;
     this.minIntervalMs = options.minIntervalMs ?? 500;
     this.timeoutMs = options.timeoutMs ?? 30_000;
-    this.maxConsecutiveFailures = options.maxConsecutiveFailures ?? 5;
+    this.guard =
+      options.guard ??
+      new SourceGuard(
+        {
+          ...DIA_REFUSAL_POLICY,
+          consecutive:
+            options.maxConsecutiveFailures ?? DIA_REFUSAL_POLICY.consecutive,
+        },
+        { now: this.now, sleep: this.sleep }
+      );
+    // A passed guard is admitted by the caller's `acquire`, as the run's is.
+    // This client's own guard is admitted here, since nothing else knows it.
+    this.admitsGuard = !options.guard || !options.acquire;
   }
 
   /** The category menu: roots and leaves, in Spanish. */
@@ -336,20 +361,19 @@ export class DiaClient {
    *   30, 60 and 120 seconds, because the one block seen was a refused
    *   connection and not a status.
    * - A 403 is retried once after 60 seconds, then fails.
-   * - A failed request counts toward the five in a row that stop the client.
+   * - A failed request is a refusal to the guard (plan 0215, section 2), and
+   *   the fifth in a row stops the client with `SourceBlockedError`.
    */
   private async request(
     urlOrPath: string,
     init: { method?: string; body?: string } = {}
   ): Promise<DiaRawResponse> {
-    if (this.stopped) {
-      throw this.stopped;
-    }
     const url = /^https?:\/\//i.test(urlOrPath)
       ? urlOrPath
       : `${this.baseUrl}${urlOrPath}`;
     let attempt = 0;
     let forbiddenRetried = false;
+    let retriedAfterPause = false;
     for (;;) {
       this.options.signal?.throwIfAborted();
       await this.gate();
@@ -381,18 +405,26 @@ export class DiaClient {
         bytes = new Uint8Array(await response.arrayBuffer());
       } catch (error) {
         if (this.options.signal?.aborted) {
+          this.guard.inconclusive();
           throw error;
         }
         if (attempt >= this.retries) {
-          throw this.failed(error);
+          // No answer after every retry is a failure here, status 0, because
+          // the one DIA block measured was refused connections.
+          if (this.failed(0, url) && !retriedAfterPause) {
+            retriedAfterPause = true;
+            continue;
+          }
+          throw error;
         }
+        this.guard.inconclusive();
         await this.sleep(this.backoffBaseMs * 2 ** attempt);
         attempt += 1;
         continue;
       }
 
       if (response.status >= 200 && response.status < 400) {
-        this.consecutiveFailures = 0;
+        this.guard.answered();
         return {
           status: response.status,
           bytes,
@@ -401,26 +433,31 @@ export class DiaClient {
       }
       if (response.status === 403 && !forbiddenRetried) {
         forbiddenRetried = true;
+        this.guard.inconclusive();
         await this.sleep(this.forbiddenRetryMs);
         continue;
       }
       if (RETRYABLE_STATUSES.has(response.status) && attempt < this.retries) {
+        this.guard.inconclusive();
         await this.sleep(this.backoffBaseMs * 2 ** attempt);
         attempt += 1;
         continue;
       }
-      throw this.failed(new DiaHttpError(response.status, url));
+      if (this.failed(response.status, url) && !retriedAfterPause) {
+        retriedAfterPause = true;
+        continue;
+      }
+      throw new DiaHttpError(response.status, url);
     }
   }
 
-  /** Counts one failed request, and stops the client at the limit. */
-  private failed(error: unknown): unknown {
-    this.consecutiveFailures += 1;
-    if (this.consecutiveFailures >= this.maxConsecutiveFailures) {
-      this.stopped = new DiaStoppedError(this.consecutiveFailures, error);
-      return this.stopped;
-    }
-    return error;
+  /**
+   * One request that still failed after its retries, told to the guard. True
+   * when it is to be sent again after a pause, which DIA's own policy never
+   * asks for. Throws `SourceBlockedError` when it stops the client.
+   */
+  private failed(status: number, url: string): boolean {
+    return this.guard.refused(status, url) === 'retry';
   }
 
   private requestSignal(): AbortSignal {
@@ -463,6 +500,9 @@ export class DiaClient {
   private async gate(): Promise<void> {
     if (this.options.acquire) {
       await this.options.acquire();
+    }
+    if (this.admitsGuard) {
+      await this.guard.admit(this.options.signal);
     }
     if (this.minIntervalMs > 0) {
       const wait = this.lastRequestAt + this.minIntervalMs - this.now();

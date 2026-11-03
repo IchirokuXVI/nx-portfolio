@@ -136,11 +136,16 @@ function build(options: {
   };
 
   const reported: Record<string, number>[] = [];
+  /** Every `advance`, which is how the ingest counts progress (plan 0217). */
+  const advanced: number[] = [];
   const warnings: HarvestRunWarning[] = [];
   const context = {
     runId: options.runId ?? RUN,
     report: jest.fn(async (counters: Record<string, number>) => {
       reported.push(counters);
+    }),
+    advance: jest.fn(async (count: number) => {
+      advanced.push(count);
     }),
     warn: jest.fn((warning: HarvestRunWarning) => {
       warnings.push(warning);
@@ -161,6 +166,7 @@ function build(options: {
     priceRows,
     catalog,
     reported,
+    advanced,
     warnings,
   };
 }
@@ -797,8 +803,8 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
     expect(priceRows[0].details).toEqual(extra);
   });
 
-  it('counts new prices as updated, and unchanged as products only', async () => {
-    const { ingest, context, reported } = build({
+  it('a new price moves no counter', async () => {
+    const { ingest, context, reported, advanced } = build({
       rows: [
         {
           externalId: 'a',
@@ -819,15 +825,11 @@ describe('SourceIngest, the one ladder (plan 0086, section 4)', () => {
       ],
     });
 
-    // A new row is "the source said something new". A confirmed price moves
-    // no progress counter: `unchanged` is the one product the ladder left
-    // alone, and the confirmed price is `pricesConfirmed` (plan 0158).
-    expect(reported).toContainEqual({ updated: 2 });
-    const unchanged = reported.reduce(
-      (sum, counters) => sum + (counters.unchanged ?? 0),
-      0
-    );
-    expect(unchanged).toBe(1);
+    // The counters count source rows (plan 0217). Two new prices and a
+    // confirmed one are `pricesPublished` and `pricesConfirmed` in the report,
+    // and the one row the ladder left alone is the only thing counted.
+    expect(reported).toEqual([{ unchanged: 1 }]);
+    expect(advanced).toEqual([1]);
     expect(result.counters).toMatchObject({
       pricesWritten: 2,
       pricesConfirmed: 1,
@@ -1139,7 +1141,7 @@ describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
   }
 
   it('writes the price at the walked scope and at each target, each copy naming where it was read', async () => {
-    const { ingest, context, priceRows, catalog, reported } = bound();
+    const { ingest, context, priceRows, catalog, reported, advanced } = bound();
 
     const { counters, copies } = await ingest.ingest(context, {
       supermarketId: CHAIN,
@@ -1179,9 +1181,10 @@ describe('SourceIngest, a price copied to other scopes (plan 0118)', () => {
     expect(counters).toMatchObject({ pricesRecorded: 1, pricesWritten: 1 });
     expect(copies.pricedScopes).toEqual(new Set([SCOPE]));
     expect(copies.pricesCopied).toEqual(new Map([[SCOPE, 2]]));
-    expect(reported.filter((each) => !('processed' in each))).toEqual([
-      { updated: 1 },
-    ]);
+    // The one row counted once, as changed because the walk renamed it, and
+    // neither the price nor its two copies moved a counter (plan 0217).
+    expect(reported).toEqual([{ updated: 1 }]);
+    expect(advanced).toEqual([1]);
   });
 
   it('copies the source row of a product nobody matched, and sends catalog nothing', async () => {
@@ -2980,6 +2983,25 @@ describe('SourceIngest, the photo a row states (plan 0198)', () => {
       expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
       // Still bound and still holding an address, so it is sent as ever.
       expect(built.linkItemImages).toHaveBeenCalledTimes(1);
+      expect(built.unlinkItemImages).not.toHaveBeenCalled();
+    });
+
+    it('leaves the photo and the category path of a row an aborted walk never read (plan 0215)', async () => {
+      const built = withLinks([
+        { ...known, categoryPath: ['Frescos', 'Arroz'] },
+      ]);
+
+      // What an aborted El Jamón walk reports for a page it never asked for:
+      // the listing price and no photo or category path.
+      const { counters } = await run(built, [
+        partial({ prices: [{ scopeKey: null, ...PRICE }] }),
+      ]);
+
+      expect(built.stored[0]).toMatchObject({
+        imageUrl: PHOTO,
+        categoryPath: ['Frescos', 'Arroz'],
+      });
+      expect(counters).toMatchObject({ updated: 0, pricesRecorded: 1 });
       expect(built.unlinkItemImages).not.toHaveBeenCalled();
     });
 

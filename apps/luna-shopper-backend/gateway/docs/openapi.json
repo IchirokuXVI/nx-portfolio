@@ -17903,7 +17903,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18039,6 +18039,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "name": "merged",
+            "required": false,
+            "in": "query",
+            "description": "Only the products that were merged into another one, each with its own name, brand and size and with `mergedInto` naming the survivor. Absent or false lists the live products: a merged product is never in a list or a search otherwise.",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -18139,7 +18148,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18179,7 +18188,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`brand_unregistered` — The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18243,7 +18252,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18283,7 +18292,103 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_expectation_failed` — A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.\n\n`brand_unregistered` — The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/lookup": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_lookup_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLookupItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.getMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.item.getMany.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18441,7 +18546,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18481,7 +18586,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_expectation_failed` — A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18573,6 +18678,16 @@
               }
             }
           },
+          "409": {
+            "description": "`item_merged` — This product was merged into another one. Work on the product it was merged into.\n\n`item_in_use` — Prices, queue rows, shopping lists or other products still name this product. Merge it into the product that replaces it instead.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -18650,6 +18765,121 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/{id}/merge": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_merge_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeItemDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.merge` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/catalog.MergeItemResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`item_merged` — This product was merged into another one. Work on the product it was merged into.\n\n`item_merge_two_articles_one_chain` — Both products are sold by the same chain, so the merged product would hold two articles of that chain. Allow a second article to merge them anyway.\n\n`item_merge_format_differs` — The two products have a different size or unit, so they are two products. Allow the format difference to merge them anyway.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28263,7 +28493,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31556,11 +31786,20 @@
           "categoryIds": {
             "minItems": 1,
             "maxItems": 10,
-            "description": "One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`.",
+            "description": "One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`. Exactly one of this and `categorySlugs` (plan 0237, section 3.4).",
             "type": "array",
             "items": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          "categorySlugs": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The leaf categories by slug, in the order meant, for example `[\"small-appliances\"]` (plan 0237, section 3.4): what an audit and the register speak. Exactly one of this and `categoryIds`; both, or neither, is refused with `validation_failed`. An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.",
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "defaultUnit": {
@@ -31572,7 +31811,8 @@
               "MILLILITER",
               "LITER",
               "PACK"
-            ]
+            ],
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
@@ -31583,7 +31823,6 @@
         },
         "required": [
           "name",
-          "categoryIds",
           "defaultUnit"
         ]
       },
@@ -31597,11 +31836,63 @@
             "items": {
               "$ref": "#/components/schemas/CreateItemDto"
             }
+          },
+          "requireRegisteredBrands": {
+            "type": "boolean",
+            "default": false,
+            "description": "Refuse the whole batch when a brand it names is not in the registry and is not a spelling of a brand that is, with `brand_unregistered` and the labels in `details.labels` (plan 0237, section 3.6). A null brand passes, and a spelling stores the label of the brand it spells. Absent or false stores such a label as text with no brand id, as always."
           }
         },
         "required": [
           "items"
         ]
+      },
+      "ItemExpectationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Both halves, each trimmed. A half left out expects the product to have no name in that language.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedTextDto"
+              }
+            ]
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "Compared by brand key, so `Pierrot` and `PIERROT` agree."
+          },
+          "unitSize": {
+            "type": "number",
+            "nullable": true
+          },
+          "defaultUnit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "PACK"
+            ]
+          },
+          "packCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "categorySlugs": {
+            "maxItems": 10,
+            "description": "The slugs of the product’s categories, compared in order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds."
       },
       "UpdateItemBatchEntryDto": {
         "type": "object",
@@ -31650,6 +31941,15 @@
               "format": "uuid"
             }
           },
+          "categorySlugs": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The leaf categories by slug, in the order meant, for example `[\"small-appliances\"]` (plan 0237, section 3.4): what an audit and the register speak. Never with `categoryIds`; both is refused with `validation_failed`. Absent leaves the set alone. An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "defaultUnit": {
             "type": "string",
             "enum": [
@@ -31659,13 +31959,22 @@
               "MILLILITER",
               "LITER",
               "PACK"
-            ]
+            ],
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
             "format": "uuid",
             "nullable": true,
             "description": "Assign, reassign or (with null) unassign the product’s group (plan 0048, section 1)."
+          },
+          "expect": {
+            "description": "What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ItemExpectationDto"
+              }
+            ]
           },
           "itemId": {
             "type": "string",
@@ -31686,10 +31995,32 @@
             "items": {
               "$ref": "#/components/schemas/UpdateItemBatchEntryDto"
             }
+          },
+          "requireRegisteredBrands": {
+            "type": "boolean",
+            "default": false,
+            "description": "Refuse the whole batch when a brand it names is not in the registry and is not a spelling of a brand that is, with `brand_unregistered` and the labels in `details.labels` (plan 0237, section 3.6). A null brand passes, and a spelling stores the label of the brand it spells. Absent or false stores such a label as text with no brand id, as always."
           }
         },
         "required": [
           "items"
+        ]
+      },
+      "AdminLookupItemsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "maxItems": 1000,
+            "description": "The products to read, at most as many as one items batch writes. Duplicates are harmless, and an id that names nothing is absent from the answer.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "ids"
         ]
       },
       "UpdateItemDto": {
@@ -31739,6 +32070,15 @@
               "format": "uuid"
             }
           },
+          "categorySlugs": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The leaf categories by slug, in the order meant, for example `[\"small-appliances\"]` (plan 0237, section 3.4): what an audit and the register speak. Never with `categoryIds`; both is refused with `validation_failed`. Absent leaves the set alone. An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "defaultUnit": {
             "type": "string",
             "enum": [
@@ -31748,15 +32088,52 @@
               "MILLILITER",
               "LITER",
               "PACK"
-            ]
+            ],
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
             "format": "uuid",
             "nullable": true,
             "description": "Assign, reassign or (with null) unassign the product’s group (plan 0048, section 1)."
+          },
+          "expect": {
+            "description": "What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ItemExpectationDto"
+              }
+            ]
           }
         }
+      },
+      "MergeItemDto": {
+        "type": "object",
+        "properties": {
+          "intoItemId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The survivor. It receives the price rows, scope rows, shop rows, barcodes and photo links of the product in the path, which stays as a record that names it."
+          },
+          "dryRun": {
+            "type": "boolean",
+            "default": false,
+            "description": "Answer what the merge would move, and write nothing. The answer has the shape of a real merge and counts the same things. Every refusal is checked as for a real merge."
+          },
+          "allowSecondArticle": {
+            "type": "boolean",
+            "default": false,
+            "description": "Merge even when both products hold a bound queue row of one chain, so the survivor holds two articles of that chain (rule R28). Without it that answers `item_merge_two_articles_one_chain`."
+          },
+          "allowFormatDifference": {
+            "type": "boolean",
+            "default": false,
+            "description": "Merge even when the two products differ in `unitSize` or `defaultUnit`. Without it that answers `item_merge_format_differs`."
+          }
+        },
+        "required": [
+          "intoItemId"
+        ]
       },
       "AddItemEanDto": {
         "type": "object",
@@ -36675,6 +37052,10 @@
               "$ref": "#/components/schemas/catalog.ItemOfferView"
             }
           },
+          "mergedInto": {
+            "type": "string",
+            "minLength": 1
+          },
           "atShop": {
             "anyOf": [
               {
@@ -39082,6 +39463,10 @@
             "items": {
               "$ref": "#/components/schemas/catalog.ItemOfferView"
             }
+          },
+          "mergedInto": {
+            "type": "string",
+            "minLength": 1
           }
         },
         "required": [
@@ -39191,6 +39576,104 @@
         },
         "required": [
           "map"
+        ],
+        "additionalProperties": false
+      },
+      "catalog.MergeItemResult": {
+        "type": "object",
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "intoItemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "dryRun": {
+            "type": "boolean"
+          },
+          "mergedIntoId": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The survivor the merged row names now, the same as intoItemId."
+          },
+          "mergedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the merge was written. Null on a dry run."
+          },
+          "prices": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Price rows (item_prices) moved to the survivor."
+          },
+          "scopeRows": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Materialized scope rows (supermarket_items) moved to the survivor. Where the survivor already had a row for the scope, it keeps its own."
+          },
+          "shopRows": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Shop rows (supermarket_location_items) moved to the survivor."
+          },
+          "shopRowsKept": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Shop rows left on the merged row, because the survivor already had a row for that shop. They are a record and are not deleted."
+          },
+          "barcodes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "The barcodes moved to the survivor."
+          },
+          "survivorEan": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The survivor's first barcode after the merge."
+          },
+          "linkedImages": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Chain photo links moved to the survivor."
+          },
+          "repointedItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "description": "Products that were merged into the merged one and now name the survivor (the one level rule)."
+          },
+          "queueRows": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Harvester queue rows that named the merged product, or a product already merged into it, when catalog asked, just before the write. Not yet moved when this answers: the harvester rewrites them when it hears catalog.itemMerged, which is published for each of those products."
+          }
+        },
+        "required": [
+          "itemId",
+          "intoItemId",
+          "dryRun",
+          "mergedIntoId",
+          "mergedAt",
+          "prices",
+          "scopeRows",
+          "shopRows",
+          "shopRowsKept",
+          "barcodes",
+          "survivorEan",
+          "linkedImages",
+          "repointedItemIds",
+          "queueRows"
         ],
         "additionalProperties": false
       },
@@ -41647,6 +42130,12 @@
           "STALE"
         ]
       },
+      "enums.HarvestRunStopReason": {
+        "type": "string",
+        "enum": [
+          "SOURCE_BLOCKED"
+        ]
+      },
       "enums.HarvestRunTrigger": {
         "type": "string",
         "enum": [
@@ -41697,7 +42186,9 @@
           "COPY_SOURCE_NOT_WRITTEN",
           "SCOPE_KIND_MISMATCH",
           "DETAIL_SKIPPED_UNKNOWN",
-          "PRICE_SOLD_ANOTHER_WAY"
+          "PRICE_SOLD_ANOTHER_WAY",
+          "SOURCE_PAUSED",
+          "SOURCE_RESUMED"
         ]
       },
       "enums.ItemImageSource": {
@@ -43161,6 +43652,16 @@
           },
           "interrupted": {
             "type": "boolean"
+          },
+          "stopReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.HarvestRunStopReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "estimate": {
             "$ref": "#/components/schemas/harvest.RunEstimate"
@@ -46564,6 +47065,21 @@
         ],
         "additionalProperties": false
       },
+      "msg.item.getMany.response": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "msg.item.updateMany.response": {
         "type": "object",
         "properties": {
@@ -46805,6 +47321,7 @@
               "brand_not_linked",
               "brand_homonym_is_own_key",
               "brand_in_use",
+              "brand_unregistered",
               "place_already_imported",
               "place_matches_location",
               "place_names_another_chain",
@@ -46814,6 +47331,13 @@
               "item_needs_a_category",
               "item_ean_invalid",
               "item_ean_held",
+              "item_expectation_failed",
+              "item_unit_not_base",
+              "item_kilogram_has_size",
+              "item_merged",
+              "item_merge_two_articles_one_chain",
+              "item_merge_format_differs",
+              "item_in_use",
               "category_in_use",
               "category_not_found",
               "section_not_found",

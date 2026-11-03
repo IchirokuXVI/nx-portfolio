@@ -689,7 +689,12 @@ export class AdminHarvestEntriesController {
   @ApiContractResponse(SOURCE_ENTRY_PATTERNS.createItem, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true, eanHeld: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    eanHeld: true,
+    baseUnit: true,
+  })
   createItem(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,

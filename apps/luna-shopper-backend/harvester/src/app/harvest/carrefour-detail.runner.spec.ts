@@ -1,10 +1,24 @@
 import type { ConfigService } from '@nestjs/config';
 import { CarrefourClient } from '@portfolio/luna-shopper/carrefour';
-import type { SupermarketSource } from '../entities';
+import {
+  PriceSourceKind,
+  SourceEntryStatus,
+} from '@portfolio/luna-shopper/contracts';
+import type { Repository } from 'typeorm';
+import type {
+  HarvestRun,
+  SourceCatalogEntry,
+  SourceEntryPrice,
+  SupermarketSource,
+} from '../entities';
+import { TokenBucket } from '../runner/token-bucket';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
+import type { CatalogClient } from './catalog-client.service';
 import type { BackfillEntry } from './catalog-runner';
-import type { RunContext } from './run-context';
+import type { HarvestRunStore } from './harvest-run.store';
+import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { SourceIngest } from './source-ingest';
 
 /**
  * The EAN backfill, over a fake page loader and no browser (plan 0090, section
@@ -156,6 +170,9 @@ describe('CarrefourDetailRunner', () => {
     expect(runContext.setReport).toHaveBeenCalledWith(
       expect.objectContaining({ eansWritten: 0, noEanOnTheirPage: 1 })
     );
+    // Progress, and not "Not stocked": the page says nothing about stock
+    // (plan 0217).
+    expect(runContext.report).toHaveBeenCalledWith({ processed: 1 });
   });
 
   it('does nothing at all when every row already has one', async () => {
@@ -201,19 +218,162 @@ describe('CarrefourDetailRunner', () => {
     );
   });
 
-  it('stops when the refusals stop being isolated', async () => {
+  it('stops when the refusals stop being isolated, and keeps the EANs it read', async () => {
     // Three in a row is the block, and every page after it would be worse for
-    // having been asked.
-    await expect(
-      new RefusingRunner({}).run(
-        context(),
-        new RecordingRunReport(),
-        {
-          supermarketId: CHAIN,
-          backfill: ['p1', 'p2', 'p3', 'p4'].map(row),
-        },
-        source()
-      )
-    ).rejects.toThrow(/refused/);
+    // having been asked. The pass returns after its report: the guard's stop
+    // has already aborted the run, which the executor ends FAILED (plan 0215).
+    const runner = new RefusingRunner({
+      '/supermercado/p0/p': productPage('p0', '8411327052016'),
+    });
+    const ctx = context();
+    const report = new RecordingRunReport();
+
+    await runner.run(
+      ctx,
+      report,
+      {
+        supermarketId: CHAIN,
+        backfill: ['p0', 'p1', 'p2', 'p3', 'p4'].map(row),
+      },
+      source()
+    );
+
+    expect(report.products.map((product) => product.ean)).toEqual([
+      '8411327052016',
+    ]);
+    // Four page loads: the one that answered and the three refused. The
+    // fifth row was never asked for.
+    expect(ctx.setReport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eansWritten: 1,
+        refusedPages: 2,
+        pageLoads: 4,
+        blockedAfter: expect.stringMatching(/refused/),
+      })
+    );
+  });
+});
+
+/**
+ * Each row counted once, through the ingest (plan 0217, section 4.3).
+ *
+ * The runner used to count `processed` and `updated` for every EAN it read,
+ * and the ingest then counted the same product again. A page with no EAN was
+ * counted as `notFound`, which the back office labels "Not stocked". Here the
+ * runner's products go through a real ingest on a real context, as the sink
+ * pushes them, and the counters are read as the run row would hold them.
+ */
+describe('CarrefourDetailRunner, with the ingest', () => {
+  const NEW_EAN = '8411327052016';
+  const HELD_EAN = '8410000000002';
+
+  function held(externalId: string, ean: string | null): SourceCatalogEntry {
+    const backfill = row(externalId);
+    return {
+      id: `held-${externalId}`,
+      supermarketId: CHAIN,
+      externalId,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      name: backfill.name,
+      brand: backfill.brand,
+      ean,
+      unitSize: backfill.unitSize,
+      sizeUnit: backfill.sizeUnit,
+      sizeFormat: backfill.sizeFormat,
+      packCount: backfill.packCount,
+      categoryPath: backfill.categoryPath,
+      url: backfill.url,
+      imageUrl: backfill.imageUrl,
+      soldByWeight: false,
+      timesSeen: 1,
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+      candidateEntryId: null,
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      extra: null,
+    } as unknown as SourceCatalogEntry;
+  }
+
+  function ingestOver(rows: SourceCatalogEntry[]): SourceIngest {
+    const entries = {
+      find: jest.fn(async () => rows),
+      create: jest.fn((created: SourceCatalogEntry) => ({
+        id: `new-${created.externalId}`,
+        ...created,
+      })),
+      save: jest.fn(async (saved: SourceCatalogEntry) => saved),
+    } as unknown as Repository<SourceCatalogEntry>;
+    const prices = {
+      upsert: jest.fn(async () => undefined),
+    } as unknown as Repository<SourceEntryPrice>;
+    const catalog = {
+      searchItems: jest.fn(async () => ({ items: [], nextCursor: null })),
+      addPrices: jest.fn(async () => ({ inserted: 0, confirmed: 0 })),
+    } as unknown as CatalogClient;
+    return new SourceIngest(entries, prices, catalog);
+  }
+
+  function countingContext() {
+    const counters: Array<Record<string, number>> = [];
+    const store = {
+      setStage: async () => undefined,
+      setTotalPlanned: async () => undefined,
+      setReport: async () => undefined,
+      addCounters: async (_run: string, added: Record<string, number>) => {
+        counters.push(added);
+      },
+      addWarnings: async () => undefined,
+      touchHeartbeat: async () => undefined,
+    };
+    const context = new RunContext(
+      { id: RUN } as HarvestRun,
+      new AbortController().signal,
+      new TokenBucket({ ratePerSecond: 1000 }),
+      store as unknown as HarvestRunStore
+    );
+    const total = (key: string) =>
+      counters.reduce((sum, added) => sum + (added[key] ?? 0), 0);
+    return { context, total };
+  }
+
+  it('counts two rows with an EAN and one without as three, and updates only the changed one', async () => {
+    const report = new RecordingRunReport();
+    const counting = countingContext();
+
+    await new TestRunner({
+      // An EAN the row did not hold.
+      '/supermercado/p1/p': productPage('p1', NEW_EAN),
+      // The EAN the row already holds, so the row does not change.
+      '/supermercado/p2/p': productPage('p2', HELD_EAN),
+      // No EAN printed at all.
+      '/supermercado/p3/p': productPage('p3', null),
+    }).run(
+      counting.context,
+      report,
+      { supermarketId: CHAIN, backfill: [row('p1'), row('p2'), row('p3')] },
+      source()
+    );
+    await ingestOver([
+      held('p1', null),
+      held('p2', HELD_EAN),
+      held('p3', null),
+    ]).ingest(counting.context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: null,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations: report.products,
+    });
+    await counting.context.flush();
+
+    expect(report.products.map((product) => product.externalId)).toEqual([
+      'p1',
+      'p2',
+    ]);
+    expect(counting.total('processed')).toBe(3);
+    expect(counting.total('notFound')).toBe(0);
+    expect(counting.total('updated')).toBe(1);
+    expect(counting.total('unchanged')).toBe(1);
   });
 });

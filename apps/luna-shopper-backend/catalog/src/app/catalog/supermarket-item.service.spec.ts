@@ -72,6 +72,8 @@ describe('SupermarketItemService', () => {
     const admin = makeAdmin();
     const saved: SupermarketItem[] = [];
     const supermarketItems = {
+      // The read of merged products (plan 0239): none is merged here.
+      manager: { query: jest.fn(async () => []) },
       findOne: jest.fn(async () => null),
       find: jest.fn(async () => []),
       create: jest.fn((x) => x),

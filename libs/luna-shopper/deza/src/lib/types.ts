@@ -5,6 +5,7 @@
  */
 
 import type { SourceSizeUnit } from '@portfolio/luna-shopper/contracts';
+import type { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 
 /** One node of the section tree, read from the search form rather than pinned. */
 export interface DezaSection {
@@ -102,5 +103,13 @@ export interface DezaClientOptions {
   minIntervalMs?: number;
   /** The run's shared token bucket. One per run, never one per client. */
   acquire?: () => Promise<void>;
+  /**
+   * The run's refusal guard (plan 0215), told the answer of every request.
+   * One per run like the bucket, so the clients of every query share one
+   * count. With an `acquire` the caller admits through the guard itself, as
+   * the harvester's does; without one this client awaits `admit` before each
+   * request. Without a guard nothing changes.
+   */
+  guard?: SourceGuard;
   signal?: AbortSignal;
 }

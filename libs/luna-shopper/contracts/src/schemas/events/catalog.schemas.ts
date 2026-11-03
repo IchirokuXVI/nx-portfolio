@@ -18,6 +18,7 @@ import {
 export const CATALOG_EVENT_SCHEMA_IDS = {
   itemGroupChanged: schemaId('event/catalog.itemGroupChanged'),
   productGroupDeleted: schemaId('event/catalog.productGroupDeleted'),
+  itemMerged: schemaId('event/catalog.itemMerged'),
 } as const;
 
 const itemGroupChanged = object(
@@ -40,9 +41,21 @@ const productGroupDeleted = object(
   ['eventId', 'productGroupId']
 );
 
+/** One product was merged into another (plan 0239, section 3). */
+const itemMerged = object(
+  CATALOG_EVENT_SCHEMA_IDS.itemMerged,
+  {
+    eventId: nonEmptyString(),
+    itemId: nonEmptyString(),
+    intoItemId: nonEmptyString(),
+  },
+  ['eventId', 'itemId', 'intoItemId']
+);
+
 export const catalogEventSchemas: JsonSchema[] = [
   itemGroupChanged,
   productGroupDeleted,
+  itemMerged,
 ];
 
 /** event name -> payload schema id. */
@@ -50,4 +63,5 @@ export const catalogEventContracts: Record<string, string> = {
   [CATALOG_EVENTS.itemGroupChanged]: CATALOG_EVENT_SCHEMA_IDS.itemGroupChanged,
   [CATALOG_EVENTS.productGroupDeleted]:
     CATALOG_EVENT_SCHEMA_IDS.productGroupDeleted,
+  [CATALOG_EVENTS.itemMerged]: CATALOG_EVENT_SCHEMA_IDS.itemMerged,
 };

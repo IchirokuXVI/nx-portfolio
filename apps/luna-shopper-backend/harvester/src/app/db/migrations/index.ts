@@ -21,6 +21,8 @@ import { SourceEntryAvailability1758200000000 } from './1758200000000-SourceEntr
 import { SourceEntryPriceKind1759200000000 } from './1759200000000-SourceEntryPriceKind';
 import { SourceEntryImageUrl1759300000000 } from './1759300000000-SourceEntryImageUrl';
 import { HarvestSchedules1759400000000 } from './1759400000000-HarvestSchedules';
+import { RunStopReason1759500000000 } from './1759500000000-RunStopReason';
+import { HarvestRunCounters1759600000000 } from './1759600000000-HarvestRunCounters';
 import { SourceEntryScopePresence1759900000000 } from './1759900000000-SourceEntryScopePresence';
 
 /**
@@ -55,5 +57,7 @@ export const HARVESTER_MIGRATIONS = [
   SourceEntryPriceKind1759200000000,
   SourceEntryImageUrl1759300000000,
   HarvestSchedules1759400000000,
+  RunStopReason1759500000000,
+  HarvestRunCounters1759600000000,
   SourceEntryScopePresence1759900000000,
 ];

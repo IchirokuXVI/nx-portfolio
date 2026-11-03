@@ -191,6 +191,7 @@ export class LidlStoreDiscoveryRunner implements StoreDiscoveryRunner {
       storesUrl: readString(source?.config ?? {}, 'storesUrl'),
       storesApiKey: settings.lidlStoresApiKey,
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

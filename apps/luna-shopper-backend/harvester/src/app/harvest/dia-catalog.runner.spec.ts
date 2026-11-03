@@ -1,5 +1,10 @@
-import { DiaClient, DiaStoppedError } from '@portfolio/luna-shopper/dia';
-import type { SupermarketSource } from '../entities';
+import { DIA_REFUSAL_POLICY, DiaClient } from '@portfolio/luna-shopper/dia';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
+import type { HarvestRun, SupermarketSource } from '../entities';
+import { TokenBucket } from '../runner/token-bucket';
 import type { CatalogDiscoveryInput } from './catalog-runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import {
@@ -8,7 +13,8 @@ import {
   type FakeDiaRow,
   type FakeDiaWorld,
 } from './dia-site.fake';
-import type { RunContext } from './run-context';
+import type { HarvestRunStore } from './harvest-run.store';
+import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 
 /**
@@ -86,14 +92,34 @@ class TestRunner extends DiaCatalogRunner {
     this.sent = fake.sent;
   }
 
-  protected override createClient(): DiaClient {
+  protected override createClient(context: RunContext): DiaClient {
     this.client = new DiaClient({
       fetchImpl: this.fetchImpl,
       minIntervalMs: 0,
       sleepImpl: async () => undefined,
+      // The run's guard and gate, as the runtime passes them (plan 0215).
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
     });
     return this.client;
   }
+}
+
+/**
+ * A context with the run's refusal guard, wired the way `RunExecutor` wires
+ * it: its stop aborts the run with the stop as the reason (plan 0215).
+ */
+function guardedContext(): ReturnType<typeof context> {
+  const controller = new AbortController();
+  const ctx = context(controller.signal);
+  const guard = new SourceGuard(DIA_REFUSAL_POLICY, {
+    onStop: (stop) => controller.abort(new SourceBlockedError(stop)),
+  });
+  return Object.assign(ctx, {
+    guard,
+    acquire: () => guard.admit(controller.signal),
+  });
 }
 
 function context(
@@ -111,6 +137,7 @@ function context(
     setTotalPlanned: jest.fn(async () => undefined),
     setReport: jest.fn(async () => undefined),
     report: jest.fn(async () => undefined),
+    countProgressItself: jest.fn(),
     heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
@@ -118,6 +145,39 @@ function context(
     setReport: jest.Mock;
     setTotalPlanned: jest.Mock;
     report: jest.Mock;
+  };
+}
+
+/**
+ * A real {@link RunContext} over a store that records what it was asked to
+ * write, so a spec reads `processed` as the run row would hold it.
+ */
+function countingContext() {
+  const counters: Array<Record<string, number>> = [];
+  let planned: number | null = null;
+  const store = {
+    setStage: async () => undefined,
+    setTotalPlanned: async (_run: string, total: number) => {
+      planned = total;
+    },
+    setReport: async () => undefined,
+    addCounters: async (_run: string, added: Record<string, number>) => {
+      counters.push(added);
+    },
+    addWarnings: async () => undefined,
+    touchHeartbeat: async () => undefined,
+  };
+  const context = new RunContext(
+    { id: RUN } as HarvestRun,
+    new AbortController().signal,
+    new TokenBucket({ ratePerSecond: 1000 }),
+    store as unknown as HarvestRunStore
+  );
+  return {
+    context,
+    planned: () => planned,
+    processed: () =>
+      counters.reduce((sum, added) => sum + (added['processed'] ?? 0), 0),
   };
 }
 
@@ -615,6 +675,31 @@ describe('DiaCatalogRunner', () => {
     ]);
   });
 
+  it('counts progress in leaves, the unit it plans in, and the ingest adds nothing (plan 0217)', async () => {
+    const many = Array.from({ length: 45 }, (_, index) => ({
+      ...COKE,
+      sku: `sku-${index}`,
+    }));
+    const runner = new TestRunner(
+      world({ leaves: [COLA], listings: { '13835': { L2108: many } } })
+    );
+    const counting = countingContext();
+
+    await runner.run(
+      counting.context,
+      report,
+      input({ priceScopes: [MADRID] }),
+      source()
+    );
+    // What the ingest does with each product it is handed.
+    await counting.context.advance(report.products.length);
+    await counting.context.flush();
+
+    expect(report.products).toHaveLength(45);
+    expect(counting.planned()).toBe(1);
+    expect(counting.processed()).toBe(1);
+  });
+
   it('names a failed page, goes on, and states no absence for that store', async () => {
     const many = Array.from({ length: 45 }, (_, index) => ({
       ...COKE,
@@ -662,7 +747,7 @@ describe('DiaCatalogRunner', () => {
     expect(report.availabilities.every((claim) => claim.available)).toBe(true);
   });
 
-  it('stops after five failed requests in a row, and names the last error', async () => {
+  it('stops after five failed requests in a row, keeps what it read, and names the last error', async () => {
     const leaves = Array.from({ length: 8 }, (_, index) => ({
       ...COLA,
       id: `L30${index}`,
@@ -670,23 +755,69 @@ describe('DiaCatalogRunner', () => {
     }));
     const runner = new TestRunner(
       world({
-        leaves,
-        fail: (_, path) => (path.includes('/plp-back/') ? 404 : undefined),
+        // Cola is read, then every leaf after it fails.
+        leaves: [COLA, ...leaves],
+        fail: (_, path) => (path.includes('/hoja-') ? 404 : undefined),
       })
     );
-    const ctx = context();
+    const ctx = guardedContext();
 
-    await expect(
-      runner.run(ctx, report, input({ priceScopes: [MADRID] }), source())
-    ).rejects.toBeInstanceOf(DiaStoppedError);
+    // The run's guard stopped it and aborted the run (plan 0215). The runner
+    // returns, so the executor ends it FAILED with the stop as its reason.
+    await runner.run(
+      ctx,
+      report,
+      input({ priceScopes: [MADRID, BARCELONA] }),
+      source()
+    );
 
-    // Five listing requests and not eight: the rest were never asked for.
+    expect(ctx.guard?.stop).toEqual(expect.objectContaining({ status: 404 }));
+    expect(ctx.signal.aborted).toBe(true);
+    // Five failing listing requests and not eight: the rest were never asked
+    // for, and Barcelona was never walked.
     expect(
-      runner.sent.filter((request) => request.includes('/plp-back/'))
+      runner.sent.filter((request) => request.includes('/hoja-'))
     ).toHaveLength(5);
     expect(reportOf(ctx)['stoppedBy']).toMatch(/404/);
     expect(reportOf(ctx)['failedPages']).toHaveLength(4);
-    expect(report.products).toEqual([]);
+    // What the scope walked read is reported, and a scope that did not
+    // finish states no negative.
+    expect(report.products.map((product) => product.externalId).sort()).toEqual(
+      ['38406', '659']
+    );
+    expect(report.availabilities.filter((claim) => !claim.available)).toEqual(
+      []
+    );
+  });
+
+  it('reports what the walked scopes read when a person aborts mid request', async () => {
+    const controller = new AbortController();
+    const runner = new TestRunner(
+      world({
+        // The second leaf's request is where the person aborts.
+        fail: (_, path) => {
+          if (path.includes('L2286')) {
+            controller.abort();
+          }
+          return undefined;
+        },
+      })
+    );
+    const ctx = context(controller.signal);
+
+    await runner.run(
+      ctx,
+      report,
+      input({ priceScopes: [MADRID, BARCELONA] }),
+      source()
+    );
+
+    expect(report.products.map((product) => product.externalId)).toContain(
+      '659'
+    );
+    expect(report.availabilities.filter((claim) => !claim.available)).toEqual(
+      []
+    );
   });
 
   it('reports what it read and the requests it made', async () => {

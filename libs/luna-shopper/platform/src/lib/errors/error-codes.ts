@@ -253,6 +253,13 @@ export const ERROR_CODES = {
    */
   BRAND_IN_USE: 'brand_in_use',
   /**
+   * A batch that asked for registered brands named a label the registry does
+   * not hold, and that is not a spelling of a brand it holds (plan 0237,
+   * section 3.6). Only a batch that sends `requireRegisteredBrands` meets it.
+   * The labels that failed travel in `details`, and nothing is written.
+   */
+  BRAND_UNREGISTERED: 'brand_unregistered',
+  /**
    * A discovered place is already imported, and the write asked to import it
    * again or to reject it (plan 0152, section 5).
    *
@@ -328,6 +335,61 @@ export const ERROR_CODES = {
    * barcode and the product that holds it travel in `details`.
    */
   ITEM_EAN_HELD: 'item_ean_held',
+  /**
+   * A product edit stated what it expected the product to hold, and the
+   * product holds something else (plan 0237, section 3.2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the operator
+   * has to act on it in a particular way: read the product again, and decide
+   * whether the edit still holds. The products that failed, each field that
+   * differed and the value the product holds travel in `details`. One failure
+   * refuses the whole batch, and nothing is written.
+   */
+  ITEM_EXPECTATION_FAILED: 'item_expectation_failed',
+  /**
+   * A product write would store `LITER` or `PACK` (plan 0237, section 3.3,
+   * and rule R9 of the first catalog's register).
+   *
+   * A product is stored in a base unit: a volume in `MILLILITER` and a count
+   * in `UNIT`. The unit that was sent and the unit and size it becomes travel
+   * in `details`, so the operator sends that instead.
+   */
+  ITEM_UNIT_NOT_BASE: 'item_unit_not_base',
+  /**
+   * A product write would store a `KILOGRAM` with a size (plan 0237, section
+   * 3.3, and rule R9). A `KILOGRAM` product is sold by weight and has no size;
+   * a weight is stored in `GRAM`. The grams the size would be travel in
+   * `details`.
+   */
+  ITEM_KILOGRAM_HAS_SIZE: 'item_kilogram_has_size',
+  /**
+   * The product was merged into another one (plan 0239). A merge names it
+   * as the product to merge or as the survivor, or a delete names it. A
+   * merged row is the record of the merge and is never merged again or
+   * deleted. The survivor travels in `details`.
+   */
+  ITEM_MERGED: 'item_merged',
+  /**
+   * Both products of a merge hold a bound queue row of one chain (plan 0239,
+   * section 1.1, and rule R28 of the first catalog's register). The survivor
+   * would hold two articles of that chain. The same request with
+   * `allowSecondArticle` merges them. The chains travel in `details`.
+   */
+  ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN: 'item_merge_two_articles_one_chain',
+  /**
+   * The two products of a merge differ in `unitSize` or `defaultUnit` (plan
+   * 0239, section 1.1). A different format is a different product by the
+   * curation rules. The same request with `allowFormatDifference` merges
+   * them. Both formats travel in `details`.
+   */
+  ITEM_MERGE_FORMAT_DIFFERS: 'item_merge_format_differs',
+  /**
+   * A product that something still names was asked to be deleted (plan 0239,
+   * section 4): a price, a product merged into it, a harvester queue row or a
+   * shopper's list line. Catalog cannot choose a survivor, so the answer is a
+   * merge. The counts travel in `details`, and nothing is deleted.
+   */
+  ITEM_IN_USE: 'item_in_use',
   /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
@@ -629,6 +691,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409: the request is well formed and the caller may make it, and what
   // refuses it is the products and the spellings that still point at the brand.
   [ERROR_CODES.BRAND_IN_USE]: HttpStatus.CONFLICT,
+  // 409: the label is a well formed label, and what refuses it is the state
+  // of the registry, which a person changes (plan 0237, section 3.6).
+  [ERROR_CODES.BRAND_UNREGISTERED]: HttpStatus.CONFLICT,
   // All three 409: the request is well formed, and what refuses it is the
   // state of the place, of the catalog's shops, or of the chain's scopes
   // (plan 0152).
@@ -651,6 +716,19 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.ITEM_EAN_INVALID]: HttpStatus.BAD_REQUEST,
   // 409: the barcode is a real one, and another product holds it (plan 0185).
   [ERROR_CODES.ITEM_EAN_HELD]: HttpStatus.CONFLICT,
+  // 409 like `stale_quantity`: the request is well formed, and the product
+  // moved under the caller since it was read (plan 0237, section 3.2).
+  [ERROR_CODES.ITEM_EXPECTATION_FAILED]: HttpStatus.CONFLICT,
+  // 400 for both: what is wrong is a value in the body, a unit the catalog
+  // does not store (plan 0237, section 3.3).
+  [ERROR_CODES.ITEM_UNIT_NOT_BASE]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: HttpStatus.BAD_REQUEST,
+  // All four 409: the request is well formed and the caller may make it, and
+  // what refuses it is the state of the products (plan 0239).
+  [ERROR_CODES.ITEM_MERGED]: HttpStatus.CONFLICT,
+  [ERROR_CODES.ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN]: HttpStatus.CONFLICT,
+  [ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS]: HttpStatus.CONFLICT,
+  [ERROR_CODES.ITEM_IN_USE]: HttpStatus.CONFLICT,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,

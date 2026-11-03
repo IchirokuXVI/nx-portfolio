@@ -103,6 +103,35 @@ export interface ProblemResponseOptions {
    */
   eanHeld?: boolean;
   /**
+   * The route merges or deletes a product (plan 0239), and each answers 409
+   * with codes of its own:
+   *
+   * - `merge`: a product that is merged already, two articles of one chain,
+   *   and two formats. The last two are lifted by a flag of the body.
+   * - `delete`: a merged product, and a product something still names.
+   */
+  itemMerge?: 'merge' | 'delete';
+  /**
+   * The route writes a product's unit or size (plan 0237, section 3.3), so a
+   * unit the catalog does not store answers 400 with one of two codes of its
+   * own: `LITER` or `PACK`, and `KILOGRAM` with a size. Each names what the
+   * client should send instead.
+   */
+  baseUnit?: boolean;
+  /**
+   * The route edits a product that the body can say it expects (plan 0237,
+   * section 3.2), so a product that moved since the caller read it answers
+   * 409 with a code of its own. It is told apart from a plain conflict
+   * because the client reads the product again, from `details.failures`.
+   */
+  itemExpectation?: boolean;
+  /**
+   * The route writes a batch that can ask for registered brands only (plan
+   * 0237, section 3.6), so a label the registry lacks answers 409 with a code
+   * of its own, naming the labels in `details`.
+   */
+  registeredBrands?: boolean;
+  /**
    * The route can give a shop an external reference (plan 0195), so a
    * reference another shop holds answers 409 with a code of its own. It is
    * told apart from a plain conflict because the client names the shop that
@@ -260,6 +289,28 @@ export function ApiProblemResponses(
   if (options.eanHeld) {
     codes.push(ERROR_CODES.ITEM_EAN_HELD);
   }
+  if (options.itemMerge === 'merge') {
+    codes.push(
+      ERROR_CODES.ITEM_MERGED,
+      ERROR_CODES.ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN,
+      ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS
+    );
+  }
+  if (options.itemMerge === 'delete') {
+    codes.push(ERROR_CODES.ITEM_MERGED, ERROR_CODES.ITEM_IN_USE);
+  }
+  if (options.baseUnit) {
+    codes.push(
+      ERROR_CODES.ITEM_UNIT_NOT_BASE,
+      ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE
+    );
+  }
+  if (options.itemExpectation) {
+    codes.push(ERROR_CODES.ITEM_EXPECTATION_FAILED);
+  }
+  if (options.registeredBrands) {
+    codes.push(ERROR_CODES.BRAND_UNREGISTERED);
+  }
   if (options.locationRefTaken) {
     codes.push(ERROR_CODES.LOCATION_EXTERNAL_REF_TAKEN);
   }
@@ -273,10 +324,7 @@ export function ApiProblemResponses(
     codes.push(ERROR_CODES.IMPERSONATION_CODE_INVALID);
   }
   if (options.impersonation === 'end') {
-    codes.push(
-      ERROR_CODES.IMPERSONATION_ENDED,
-      ERROR_CODES.NOT_IMPERSONATING
-    );
+    codes.push(ERROR_CODES.IMPERSONATION_ENDED, ERROR_CODES.NOT_IMPERSONATING);
   }
   if (options.recovery === 'signIn') {
     codes.push(ERROR_CODES.RECOVERY_OTHER_ACCOUNT);

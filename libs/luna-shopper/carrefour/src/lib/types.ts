@@ -5,6 +5,7 @@
  */
 
 import type { SourceSizeUnit } from '@portfolio/luna-shopper/contracts';
+import type { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 
 /**
  * One product card exactly as the storefront renders it into the page state.
@@ -194,6 +195,13 @@ export interface CarrefourClientOptions {
   delayMs?: number;
   /** The run's shared token bucket, awaited before every navigation. */
   acquire?: () => Promise<void>;
+  /**
+   * The run's refusal guard (plan 0215), one per run like the bucket. With an
+   * `acquire` the caller admits through it, as the harvester's does. Without
+   * a guard the client builds its own from `CARREFOUR_REFUSAL_POLICY`, so it
+   * still stops on the third refusal in a row.
+   */
+  guard?: SourceGuard;
   signal?: AbortSignal;
   /**
    * Whether to refuse images, fonts and media. On by default: it is the

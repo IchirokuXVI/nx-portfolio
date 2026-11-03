@@ -190,6 +190,7 @@ export class MercadonaStoreDiscoveryRunner implements StoreDiscoveryRunner {
         fetchImpl: options.fetchImpl,
         sleepImpl: options.sleepImpl,
         acquire: options.acquire,
+        guard: options.guard,
         signal: options.signal,
       });
       await context.heartbeat();
@@ -232,6 +233,9 @@ export class MercadonaStoreDiscoveryRunner implements StoreDiscoveryRunner {
       storesUrl: readString(source?.config ?? {}, 'storesUrl'),
       totalsUrl: readString(source?.config ?? {}, 'storesTotalsUrl'),
       acquire: context.acquire,
+      // The run's refusal guard (plan 0215): 1,213 postal code lookups are a
+      // walk of their own, and a block refuses them as it refuses a product.
+      guard: context.guard,
       signal: context.signal,
     };
   }

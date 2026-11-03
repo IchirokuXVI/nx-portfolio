@@ -1,8 +1,13 @@
+import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import categoriesTree from './__fixtures__/categories-tree.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
 import oliveOilEn from './__fixtures__/product-detail-en.json';
 import oliveOilEs from './__fixtures__/product-detail-es.json';
-import { MercadonaClient, MercadonaHttpError } from './mercadona.client';
+import {
+  MERCADONA_REFUSAL_POLICY,
+  MercadonaClient,
+  MercadonaHttpError,
+} from './mercadona.client';
 
 /**
  * Client tests inject `fetchImpl` and assert delay, backoff, abort and 404 to
@@ -280,5 +285,110 @@ describe('walkCatalog', () => {
       // Drained again, with no 404 this time.
     }
     expect(c.missingCategories).toEqual([]);
+  });
+});
+
+/**
+ * The run's refusal guard (plan 0215, section 4). The 200 answers are the
+ * committed fixtures and the 403 is synthesized: the guard reads the status
+ * and never the body of a refusal, so no block is provoked to capture one.
+ */
+describe('MercadonaClient and the refusal guard', () => {
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => setImmediate(resolve));
+
+  /** A guard whose pause ends when the spec says so. */
+  function pausingGuard() {
+    const sleeps: Array<() => void> = [];
+    const guard = new SourceGuard(MERCADONA_REFUSAL_POLICY, {
+      sleep: () => new Promise<void>((resolve) => sleeps.push(resolve)),
+    });
+    const endPause = async (): Promise<void> => {
+      for (let tick = 0; tick < 40; tick += 1) {
+        await settle();
+        sleeps.shift()?.();
+      }
+    };
+    return { guard, endPause };
+  }
+
+  it('trips a passed guard on a run of 403, and sends the tripping request again once after the pause', async () => {
+    const { guard, endPause } = pausingGuard();
+    const { fetchImpl, calls } = stubFetch([
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { body: oliveOilEs },
+    ]);
+    const c = client(fetchImpl, { guard });
+
+    for (const id of ['1', '2', '3', '4']) {
+      await expect(c.getProduct(id)).rejects.toBeInstanceOf(MercadonaHttpError);
+    }
+    const tripping = c.getProduct('5');
+    await settle();
+    // The fifth refusal paused the run: nothing more is sent until it ends.
+    expect(calls).toHaveLength(5);
+
+    await endPause();
+
+    await expect(tripping).resolves.toEqual(oliveOilEs);
+    expect(calls).toHaveLength(6);
+    expect(calls[5]).toBe(calls[4]);
+    expect(guard.stop).toBeNull();
+    expect(guard.summary().paused?.resumedAt).not.toBeNull();
+  });
+
+  it('tells a passed guard what resolveWarehouse was answered', async () => {
+    const { guard } = pausingGuard();
+    const { fetchImpl } = stubFetch([
+      { status: 403 },
+      { headers: { 'x-customer-wh': '4661' } },
+    ]);
+    const options = { userAgent: UA, fetchImpl, guard };
+
+    await expect(
+      MercadonaClient.resolveWarehouse('14013', options)
+    ).rejects.toBeInstanceOf(MercadonaHttpError);
+    await expect(
+      MercadonaClient.resolveWarehouse('14013', options)
+    ).resolves.toBe('4661');
+
+    // The clean answer ended the streak, so the refusal was an isolated one.
+    expect(guard.summary()).toEqual(
+      expect.objectContaining({ isolated: 1, lastStatus: 403 })
+    );
+  });
+
+  it('counts a 404 as an answer that clears the count', async () => {
+    const { guard } = pausingGuard();
+    const { fetchImpl } = stubFetch([
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { status: 404 },
+      { status: 403 },
+    ]);
+    const c = client(fetchImpl, { guard });
+
+    for (const id of ['1', '2', '3', '4']) {
+      await expect(c.getProduct(id)).rejects.toBeInstanceOf(MercadonaHttpError);
+    }
+    await expect(c.getProduct('5')).resolves.toBeNull();
+    await expect(c.getProduct('6')).rejects.toBeInstanceOf(MercadonaHttpError);
+
+    expect(guard.summary().paused).toBeNull();
+  });
+
+  it('throws MercadonaHttpError on a 403 with no guard, as before', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 403 }]);
+
+    await expect(client(fetchImpl).getProduct('1')).rejects.toBeInstanceOf(
+      MercadonaHttpError
+    );
+    expect(calls).toHaveLength(1);
   });
 });

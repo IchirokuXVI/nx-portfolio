@@ -134,6 +134,8 @@ export function toHarvestRunView(row: HarvestRun): HarvestRunView {
     // reaper ended it rather than a person.
     scheduleId: row.scheduleId ?? null,
     interrupted: isInterrupted(row),
+    // Plan 0215. Why a FAILED run stopped before its work was done.
+    stopReason: row.stopReason ?? null,
   };
 }
 

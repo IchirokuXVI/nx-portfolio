@@ -15,6 +15,16 @@ import type { CatalogActor } from './platform-admin.service';
 export type AuditFields = Record<string, unknown>;
 
 /**
+ * Facts outside a row's columns that one write changed, before and after
+ * (plan 0237, section 3.5). Diffed with the columns, so the trail holds them
+ * in the same row of the same transaction.
+ */
+export interface ExtraAuditFields {
+  before: AuditFields;
+  after: AuditFields;
+}
+
+/**
  * Fields the trail never mentions, because none of them says anything about what
  * a row means (plan 0075, section 4).
  *
@@ -134,13 +144,20 @@ export class AuditedWrite {
     private readonly actor: CatalogActor
   ) {}
 
-  /** Persist a new row, and record everything it says. */
+  /**
+   * Persist a new row, and record everything it says.
+   *
+   * `extra` is a fact the row does not hold in a column of its own and the
+   * write sets in the same transaction, recorded beside the columns: a
+   * product's categories, as slugs in order (plan 0237, section 3.5).
+   */
   async create<T extends ObjectLiteral>(
     target: EntityTarget<T>,
-    draft: T
+    draft: T,
+    extra?: AuditFields
   ): Promise<T> {
     const saved = await this.manager.save(target, draft);
-    await this.recordCreate(target, saved);
+    await this.recordCreate(target, saved, extra);
     return saved;
   }
 
@@ -151,14 +168,20 @@ export class AuditedWrite {
    * before it starts assigning. It has to be the caller's copy: by the time this
    * runs, the row object holds the new values and the old ones are gone. A
    * shallow copy is enough, because the trail stores one level of fields.
+   *
+   * `extra` is a fact outside the row's columns that the same write changed,
+   * before and after, compared like a column: a product's categories (plan
+   * 0237, section 3.5). A fact that did not move is left out like a column
+   * that did not.
    */
   async update<T extends ObjectLiteral>(
     target: EntityTarget<T>,
     before: ObjectLiteral,
-    row: T
+    row: T,
+    extra?: ExtraAuditFields
   ): Promise<T> {
     const saved = await this.manager.save(target, row);
-    await this.recordUpdate(target, before, saved);
+    await this.recordUpdate(target, before, saved, extra);
     return saved;
   }
 
@@ -199,11 +222,12 @@ export class AuditedWrite {
    */
   async recordCreate<T extends ObjectLiteral>(
     target: EntityTarget<T>,
-    row: T
+    row: T,
+    extra?: AuditFields
   ): Promise<void> {
     await this.insert(target, row['id'] as string, AuditAction.CREATE, {
       before: null,
-      after: this.snapshot(target, row),
+      after: { ...this.snapshot(target, row), ...extra },
     });
   }
 
@@ -230,11 +254,12 @@ export class AuditedWrite {
   async recordUpdate<T extends ObjectLiteral>(
     target: EntityTarget<T>,
     before: ObjectLiteral,
-    row: T
+    row: T,
+    extra?: ExtraAuditFields
   ): Promise<void> {
     const moved = diffFields(
-      this.snapshot(target, before),
-      this.snapshot(target, row)
+      { ...this.snapshot(target, before), ...extra?.before },
+      { ...this.snapshot(target, row), ...extra?.after }
     );
     if (!moved) {
       return;

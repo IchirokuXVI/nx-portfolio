@@ -24,6 +24,7 @@ import {
   currentPriceRows,
   lessSpecificScopesOf,
 } from './effective-price.service';
+import { survivorsOf, toSurvivor } from './merged-items';
 
 export interface ItemPriceWrite {
   scope: PriceScope;
@@ -62,6 +63,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * chain's NATIONAL one, and `protectedUntil` seven days out. The snapshot is
  * taken here and nowhere else, so a caller cannot supply one.
  *
+ * An entry that names a merged product is written to its survivor (plan
+ * 0239), and the outcome's rows say so in their `itemId`.
+ *
  * A plain function over the caller's `EntityManager`, for the reason the
  * recompute is one: it runs inside the caller's transaction, and the reference
  * seed calls it with a manager and no service.
@@ -85,7 +89,24 @@ export async function writeItemPrices(
     );
   }
 
-  const itemIds = [...new Set(write.entries.map((entry) => entry.itemId))];
+  // A price named to a merged product is the survivor's (plan 0239): the
+  // merged row is shown to nobody, so a row written to it would be lost.
+  // Locked, so a merge that is running cannot move the prices under this
+  // write and miss the row it inserts.
+  const survivors = await survivorsOf(
+    manager,
+    write.entries.map((entry) => entry.itemId),
+    { lock: true }
+  );
+  const entries =
+    survivors.size === 0
+      ? write.entries
+      : write.entries.map((entry) => ({
+          ...entry,
+          itemId: toSurvivor(survivors, entry.itemId),
+        }));
+
+  const itemIds = [...new Set(entries.map((entry) => entry.itemId))];
   // The scope written to and everything it falls through to: the ADMIN
   // snapshot below records what every source said at the moment it was taken,
   // and a source that spoke one tier up is one of them (plan 0105, section 4).
@@ -123,7 +144,7 @@ export async function writeItemPrices(
     ItemPrice,
     NonNullable<ItemPriceBatchEntry['details']>
   >();
-  for (const entry of write.entries) {
+  for (const entry of entries) {
     const values = normalize(entry, write.now);
     const held = currentByItem.get(entry.itemId);
     // A copy is its own statement (plan 0118, section 5.2): the same number read

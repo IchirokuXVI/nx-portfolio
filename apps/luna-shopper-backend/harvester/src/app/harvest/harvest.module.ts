@@ -26,6 +26,8 @@ import { HarvestScheduleService } from './harvest-schedule.service';
 import { HarvestScheduleStore } from './harvest-schedule.store';
 import { HarvestScheduleWorker } from './harvest-schedule.worker';
 import { HarvestController } from './harvest.controller';
+import { ItemMergeController } from './item-merge.controller';
+import { ItemMergeService } from './item-merge.service';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
 import { MercadonaCatalogRunner } from './mercadona-catalog.runner';
@@ -77,9 +79,12 @@ import { SupermarketSourceService } from './supermarket-source.service';
       },
     ]),
   ],
-  controllers: [HarvestController],
+  // Plan 0239: a product merge has its own controller.
+  controllers: [HarvestController, ItemMergeController],
   providers: [
     PlatformAdminService,
+    // What names a product here, and the rewrite after a merge (plan 0239).
+    ItemMergeService,
     CatalogClient,
     HarvestRunStore,
     // Run requests saved under a name (plan 0120).

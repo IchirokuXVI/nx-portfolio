@@ -1,3 +1,7 @@
+import type {
+  RefusalPolicy,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import type { CategoryPathNode } from './categories';
 import type { Json } from './json';
 import {
@@ -40,6 +44,21 @@ import type {
  */
 export const MERCADONA_BASE_URL = 'https://tienda.mercadona.es/api';
 
+/**
+ * When a run of refusals is the chain refusing this client (plan 0215,
+ * section 3): five in a row, or 20 of the last 50 answers, then one pause of
+ * ten minutes and three probes. On 2026-09-25 the storefront refused every
+ * product detail for about five minutes and then answered again, so the pause
+ * is twice the one block measured.
+ */
+export const MERCADONA_REFUSAL_POLICY: Readonly<RefusalPolicy> = {
+  consecutive: 5,
+  window: { size: 50, refusals: 20 },
+  coolDowns: 1,
+  coolDownMs: 600_000,
+  probes: 3,
+};
+
 /** Thrown when the source answers something a retry cannot fix. */
 export class MercadonaHttpError extends Error {
   constructor(
@@ -66,6 +85,8 @@ export interface ResolveWarehouseOptions {
   signal?: AbortSignal;
   /** Awaited before the request, which is where the run's rate limit lives. */
   acquire?: () => Promise<void>;
+  /** The run's refusal guard (plan 0215), as on `MercadonaClientOptions`. */
+  guard?: SourceGuard;
   retries?: number;
   backoffBaseMs?: number;
   sleepImpl?: (ms: number) => Promise<void>;
@@ -80,6 +101,8 @@ export interface ListStoresOptions {
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
   acquire?: () => Promise<void>;
+  /** The run's refusal guard (plan 0215), as on `MercadonaClientOptions`. */
+  guard?: SourceGuard;
   retries?: number;
   backoffBaseMs?: number;
   sleepImpl?: (ms: number) => Promise<void>;
@@ -89,6 +112,29 @@ const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
 
 const defaultSleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Whether an answer is the chain refusing this client (plan 0215, section 2):
+ * a 403 at once, and a 429 once the retries it is owed are spent.
+ */
+function isRefusal(status: number, attempt: number, retries: number): boolean {
+  return status === 403 || (status === 429 && attempt >= retries);
+}
+
+/** One fetch, with the guard told when it got no answer at all. */
+async function send(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  guard: SourceGuard | undefined
+): Promise<Response> {
+  try {
+    return await fetchImpl(url, init);
+  } catch (error) {
+    guard?.inconclusive();
+    throw error;
+  }
+}
 
 /**
  * One request, gated, retried and abortable.
@@ -108,6 +154,7 @@ async function request(
   options: {
     fetchImpl?: typeof fetch;
     acquire?: () => Promise<void>;
+    guard?: SourceGuard;
     sleepImpl?: (ms: number) => Promise<void>;
     retries?: number;
     backoffBaseMs?: number;
@@ -118,19 +165,46 @@ async function request(
   const sleep = options.sleepImpl ?? defaultSleep;
   const retries = options.retries ?? 3;
   const backoffBaseMs = options.backoffBaseMs ?? 500;
+  const guard = options.guard;
 
   let attempt = 0;
+  let retriedAfterPause = false;
   for (;;) {
     options.signal?.throwIfAborted();
-    await options.acquire?.();
+    // A caller's `acquire` admits through the guard itself, as the run's
+    // does. Without one the guard is the gate.
+    if (options.acquire) {
+      await options.acquire();
+    } else {
+      await guard?.admit(options.signal);
+    }
 
-    const response = await fetchImpl(url, { ...init, signal: options.signal });
+    const response = await send(
+      fetchImpl,
+      url,
+      { ...init, signal: options.signal },
+      guard
+    );
     if (response.status === 404) {
+      guard?.answered();
       return null;
     }
     if (response.ok) {
+      guard?.answered();
       return response;
     }
+    if (isRefusal(response.status, attempt, retries)) {
+      // Sent again once after a pause, through the gate that waits it out.
+      if (
+        guard?.refused(response.status, url) === 'retry' &&
+        !retriedAfterPause
+      ) {
+        retriedAfterPause = true;
+        continue;
+      }
+      throw new MercadonaHttpError(response.status, url);
+    }
+    guard?.inconclusive();
     if (!RETRYABLE_STATUSES.has(response.status) || attempt >= retries) {
       throw new MercadonaHttpError(response.status, url);
     }
@@ -149,6 +223,7 @@ export class MercadonaClient {
   private readonly backoffBaseMs: number;
   private readonly minIntervalMs: number;
   private readonly acquire?: () => Promise<void>;
+  private readonly guard?: SourceGuard;
   private lastRequestAt = 0;
 
   constructor(private readonly options: MercadonaClientOptions) {
@@ -160,6 +235,7 @@ export class MercadonaClient {
     this.backoffBaseMs = options.backoffBaseMs ?? 500;
     this.minIntervalMs = options.minIntervalMs ?? 0;
     this.acquire = options.acquire;
+    this.guard = options.guard;
   }
 
   /**
@@ -402,24 +478,45 @@ export class MercadonaClient {
    */
   private async getJson(url: string): Promise<Json | null> {
     let attempt = 0;
+    let retriedAfterPause = false;
     for (;;) {
       this.options.signal?.throwIfAborted();
       await this.gate();
 
-      const response = await this.fetchImpl(url, {
-        headers: {
-          accept: 'application/json',
-          'user-agent': this.options.userAgent,
+      const response = await send(
+        this.fetchImpl,
+        url,
+        {
+          headers: {
+            accept: 'application/json',
+            'user-agent': this.options.userAgent,
+          },
+          signal: this.options.signal,
         },
-        signal: this.options.signal,
-      });
+        this.guard
+      );
 
       if (response.status === 404) {
+        this.guard?.answered();
         return null;
       }
       if (response.ok) {
+        this.guard?.answered();
         return (await response.json()) as Json;
       }
+      if (isRefusal(response.status, attempt, this.retries)) {
+        // The refusal that began a pause, or one during it, is sent again
+        // once the gate lets it through. Any other is this product's alone.
+        if (
+          this.guard?.refused(response.status, url) === 'retry' &&
+          !retriedAfterPause
+        ) {
+          retriedAfterPause = true;
+          continue;
+        }
+        throw new MercadonaHttpError(response.status, url);
+      }
+      this.guard?.inconclusive();
       if (!RETRYABLE_STATUSES.has(response.status) || attempt >= this.retries) {
         throw new MercadonaHttpError(response.status, url);
       }
@@ -446,6 +543,7 @@ export class MercadonaClient {
       await this.acquire();
       return;
     }
+    await this.guard?.admit(this.options.signal);
     if (this.minIntervalMs <= 0) {
       return;
     }

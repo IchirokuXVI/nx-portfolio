@@ -289,6 +289,11 @@ export function toItemView(
     defaultUnit: row.defaultUnit,
     productGroupId: row.productGroupId,
   };
+  // A merged row names its survivor (plan 0239). Absent on every live product,
+  // which is every product a shopper's read answers as itself.
+  if (row.mergedIntoId) {
+    view.mergedInto = row.mergedIntoId;
+  }
   return bestOffer ? { ...view, bestOffer } : view;
 }
 

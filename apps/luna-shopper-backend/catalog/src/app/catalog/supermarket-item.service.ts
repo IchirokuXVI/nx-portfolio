@@ -47,6 +47,7 @@ import {
   withdrawRunWrittenPrices,
 } from './item-price.service';
 import { LocationScopeService } from './location-scopes';
+import { ontoSurvivors, survivorsOf } from './merged-items';
 import {
   PlatformAdminService,
   requireServiceActor,
@@ -116,6 +117,9 @@ export class SupermarketItemService {
   /**
    * Whether a scope carries each of these products (plan 0080, section 9).
    *
+   * An entry that names a merged product is written to its survivor (plan
+   * 0239).
+   *
    * A row that does not exist yet is created with no price: the scope has an
    * opinion about stock and none about price, and the materialized row can
    * hold exactly that. A row already saying so is left alone and counts for
@@ -154,13 +158,20 @@ export class SupermarketItemService {
       return { updated: 0, keptSold: 0 };
     }
 
-    const wanted = new Map(req.entries.map((e) => [e.itemId, e]));
+    // An entry that names a merged product is its survivor's (plan 0239).
+    const wanted = ontoSurvivors(
+      req.entries.map((e) => ({ itemId: e.itemId, value: e })),
+      await survivorsOf(
+        this.supermarketItems.manager,
+        req.entries.map((e) => e.itemId)
+      )
+    );
     if (req.onlyIfMissing === true) {
       // An entry with no flag has nothing to create a row from.
       const flags = new Map<string, boolean>();
-      for (const e of req.entries) {
+      for (const [itemId, e] of wanted) {
         if (e.available !== undefined) {
-          flags.set(e.itemId, e.available);
+          flags.set(itemId, e.available);
         }
       }
       return this.createMissing(actor, req.priceScopeId, flags);
@@ -168,9 +179,9 @@ export class SupermarketItemService {
     const now = new Date();
     const kept = await this.keptSoldAt(
       req.priceScopeId,
-      [...wanted.values()]
-        .filter((e) => e.available === false && e.delisted === true)
-        .map((e) => e.itemId),
+      [...wanted]
+        .filter(([, e]) => e.available === false && e.delisted === true)
+        .map(([itemId]) => itemId),
       now
     );
     const itemIds = [...wanted.keys()];

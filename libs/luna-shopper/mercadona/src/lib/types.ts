@@ -2,6 +2,7 @@ import type {
   LocalizedText,
   UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
+import type { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import type { CategoryPathNode } from './categories';
 
 /**
@@ -137,6 +138,13 @@ export interface MercadonaClientOptions {
    * falls back to `minIntervalMs`, which is only correct at concurrency one.
    */
   acquire?: () => Promise<void>;
+  /**
+   * The run's refusal guard (plan 0215), told the answer of every request.
+   * With an `acquire` the caller admits through the guard itself, as the
+   * harvester's does; without one this client awaits `admit` before each
+   * request. Without a guard nothing changes.
+   */
+  guard?: SourceGuard;
   /** Sequential fallback pacing, used when no `acquire` is supplied. */
   minIntervalMs?: number;
   /** Retries on 429 and 5xx, with exponential backoff and jitter. */

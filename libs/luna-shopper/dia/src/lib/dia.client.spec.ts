@@ -1,11 +1,15 @@
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   DIA_BROWSER_HEADERS,
+  DIA_REFUSAL_POLICY,
   DiaClient,
   DiaHttpError,
   DiaSessionError,
-  DiaStoppedError,
 } from './dia.client';
 
 const fixture = (name: string): Buffer =>
@@ -404,9 +408,11 @@ describe('DiaClient retries', () => {
       await expect(client.menu()).rejects.toBeInstanceOf(DiaHttpError);
     }
     const stopped = await client.menu().catch((error) => error);
-    expect(stopped).toBeInstanceOf(DiaStoppedError);
-    expect(stopped.failures).toBe(5);
-    expect(stopped.lastError).toBeInstanceOf(DiaHttpError);
+    // The client's own guard, built from DIA_REFUSAL_POLICY (plan 0215).
+    expect(stopped).toBeInstanceOf(SourceBlockedError);
+    expect(stopped.stop.trip.refusals).toBe(5);
+    expect(stopped.stop.status).toBe(404);
+    expect(stopped.stop.url).toContain('/common-aggregator/menu-data');
 
     // And every call after it fails without a request.
     await expect(client.checkService('28041')).rejects.toBe(stopped);
@@ -443,6 +449,47 @@ describe('DiaClient retries', () => {
     await expect(client.menu()).rejects.toThrow();
     expect(sent).toHaveLength(1);
     expect(slept).toEqual([]);
+  });
+
+  it('reports to the run’s guard when one is passed, and counts a dropped connection', async () => {
+    // The run's guard is admitted by the run's `acquire`, as RunContext does.
+    const guard = new SourceGuard(DIA_REFUSAL_POLICY);
+    let answer: 'menu' | 'drop' | 'forbidden' = 'forbidden';
+    const { fetchImpl, sent } = fakeSite(() =>
+      answer === 'menu'
+        ? recorded('menu.json')
+        : answer === 'drop'
+          ? new TypeError('fetch failed')
+          : { status: 403 }
+    );
+    const { client } = quickClient(fetchImpl, {
+      guard,
+      retries: 0,
+      acquire: () => guard.admit(),
+    });
+
+    // Two 403 answers, each after its one retry, then a clean menu.
+    await expect(client.menu()).rejects.toBeInstanceOf(DiaHttpError);
+    await expect(client.menu()).rejects.toBeInstanceOf(DiaHttpError);
+    answer = 'menu';
+    await client.menu();
+    expect(guard.summary()).toEqual(
+      expect.objectContaining({ isolated: 2, lastStatus: 403 })
+    );
+
+    // Five dropped connections in a row stop it: for DIA a request with no
+    // answer is a failure too (section 2).
+    answer = 'drop';
+    for (let index = 0; index < 4; index += 1) {
+      await expect(client.menu()).rejects.toThrow('fetch failed');
+    }
+    await expect(client.menu()).rejects.toBeInstanceOf(SourceBlockedError);
+    expect(guard.stop).toEqual(expect.objectContaining({ status: 0 }));
+    const before = sent.length;
+    await expect(client.checkService('28041')).rejects.toBeInstanceOf(
+      SourceBlockedError
+    );
+    expect(sent).toHaveLength(before);
   });
 });
 

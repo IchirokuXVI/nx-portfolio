@@ -1,3 +1,5 @@
+> **PR:** [#887](https://github.com/IchirokuXVI/nx-portfolio/pull/887)
+
 # 0217: a run counts each kind of write once
 
 > The counters on `harvest_runs` are the live numbers of a run. Four of them count more than one
@@ -217,10 +219,13 @@ the report, and those were never wrong.
 
 - No field changes, so `openapi.json` and `wire-types.ts` regenerate with no diff. Run both
   generators to prove it.
-- The admin needs no code change and no mock. Its labels "Updated" and "Not stocked" become true.
-  The "Wrote" column (`runs-page.ts:766`) then shows source rows created and changed, without
-  prices. For a Mercadona walk that number drops from thousands to tens. Whether "Wrote" adds
-  `pricesPublished` is an owner question (Decisions).
+- The admin labels "Updated" and "Not stocked" become true. The "Wrote" column (`runs-page.ts:766`)
+  then shows source rows created and changed, without prices. For a Mercadona walk that number drops
+  from thousands to tens. Two small admin changes follow, and neither needs a mock (Decisions):
+  - A "Prices" column beside "Wrote", mapped from `report.pricesPublished`, blank when the report
+    has no such key. One label in each locale file of `luna-shopper-admin/ui`.
+  - The progress bar of a run is clamped at 100 percent, because the old rows of section 5, point
+    3, keep a `processed` above `totalPlanned`.
 
 ## 7. What this plan does not do
 
@@ -231,7 +236,7 @@ the report, and those were never wrong.
   `totalPlanned` in listings, so its ratio cannot cross the threshold. That belongs with plan 0215
   (a run stops when a chain keeps refusing it) and plan 0218 (alerts).
 - It adds no live price counter. Prices are in the report when the run finishes.
-- It does not change the admin screens, and it designs no screen.
+- It designs no screen. The two admin changes of section 6 are a column and a clamp.
 
 ## Tests
 
@@ -264,6 +269,8 @@ the report, and those were never wrong.
 - [ ] The migration corrects exactly the rows of section 5 and leaves every other row as it was.
 - [ ] `HarvestRunView` documents what each counter counts.
 - [ ] `openapi.json` and `wire-types.ts` show no diff after regeneration.
+- [ ] The admin runs list shows "Prices" from `report.pricesPublished` beside "Wrote", and a run
+      with `processed` above `totalPlanned` draws a full bar and no more.
 
 ## Verification
 
@@ -291,12 +298,19 @@ Chosen in this plan, and open to the owner's correction:
 - The migration corrects only what the report makes exact, and marks nothing.
 - `notFound` keeps its admin label "Not stocked", and the Carrefour backfill stops using it.
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-01):
 
-- Should the admin "Wrote" column add `pricesPublished` to `created + updated`? Today it silently
-  includes prices through the defect. After this plan it shows rows only. A change is a mapping in
-  `runs-page.ts` and a label, and needs no mock.
-- Should DIA leaves that a failed session left unwalked count as `failed` rather than `skipped`?
-  That moves the verdict of a DIA run.
-- Is it acceptable that old Carrefour catalog, DIA catalog and DIA store discovery runs keep a
-  `processed` above `totalPlanned`?
+- **"Wrote" stays rows, and a "Prices" column is added beside it.** The owner first asked to add
+  `pricesPublished` to "Wrote", and agreed that this puts the mixed number back into the one column
+  a person reads first. "Prices" reads `report.pricesPublished` and is blank for a run whose report
+  has no such key. It is a mapping in `runs-page.ts` and one label in each locale file. No mock.
+- **DIA leaves of a failed session stay `skipped`.** A refused session is a failure of the store's
+  session and not of each leaf, and the report names each skipped scope with its reason. A run
+  where every store refused its session still ends `COMPLETED` with nothing done; that gap belongs
+  to plan `0218` or `0219`, not to this counter.
+- **Old Carrefour catalog, DIA catalog and DIA store discovery runs keep a `processed` above
+  `totalPlanned`.** The report cannot say how many of those came from which unit, and a guessed
+  correction is a second kind of wrong. The admin clamps the progress bar at 100 percent instead.
+- **Each runner reports progress in its own unit.** That is `countProgressItself` of section 4,
+  confirmed: the unit of `processed` is the unit of `totalPlanned`, chosen by the runner, and the
+  ingest adds nothing on top.

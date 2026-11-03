@@ -69,7 +69,7 @@ describe('placeCard', () => {
 
 describe('placeCard on a screen whose frame is taller than what shows (velista 0112)', () => {
   // An installed app on Android: the fixed layer reaches 48 under the visible screen.
-  const SCREEN = { visible: 800, frame: 848 };
+  const SCREEN = { visible: 800, frame: 848, insets: { top: 0, bottom: 0 } };
 
   it('counts a card above from the frame, so it still ends over the ring', () => {
     const slot = placeCard(
@@ -109,6 +109,52 @@ describe('placeCard on a screen whose frame is taller than what shows (velista 0
   });
 });
 
+describe('placeCard inside the Android app, drawn edge to edge', () => {
+  // A 390 by 844 phone on three button navigation: the status bar is 24 tall and the
+  // navigation bar 48, and both are inside the screen the WebView draws on.
+  const SCREEN = { visible: 844, frame: 844, insets: { top: 24, bottom: 48 } };
+
+  it('ends a card above the navigation bar, not at the foot of the screen', () => {
+    // Below would end at 669 + 218 = 887, past 844 - 48 as it is past 844 - 8.
+    expect(
+      placeCard(
+        { top: 260, left: 12, width: 366, height: 401 },
+        'below',
+        CARD,
+        SCREEN
+      )
+    ).toEqual({ top: null, bottom: 844 - 260 + 8 });
+  });
+
+  it('keeps the last resort above the navigation bar', () => {
+    expect(
+      placeCard(
+        { top: 232, left: 12, width: 366, height: 401 },
+        'below',
+        CARD,
+        SCREEN
+      )
+    ).toEqual({ top: null, bottom: 48 });
+  });
+
+  it('does not put a card above a control into the status bar', () => {
+    // 8 + 218 + 8 = 234 fits above a control at 240 against the screen's edge, and
+    // not against a 24 tall status bar: below has no room either, so the card is kept
+    // on screen over part of the control, above the navigation bar.
+    const ring = { top: 240, left: 12, width: 366, height: 400 };
+    expect(
+      placeCard(ring, 'above', CARD, {
+        ...SCREEN,
+        insets: { top: 0, bottom: 48 },
+      })
+    ).toEqual({ top: null, bottom: 844 - 240 + 8 });
+    expect(placeCard(ring, 'above', CARD, SCREEN)).toEqual({
+      top: null,
+      bottom: 48,
+    });
+  });
+});
+
 describe('ringOnScreen (velista 0112)', () => {
   it('stands off a control in the middle of the screen', () => {
     expect(
@@ -122,12 +168,37 @@ describe('ringOnScreen (velista 0112)', () => {
       ringOnScreen({ top: 755, left: 0, width: 390, height: 89 }, 390, 844)
     ).toEqual({ top: 751, left: 0, width: 390, height: 93 });
   });
+
+  it('stops at the system navigation bar inside the Android app', () => {
+    // The bar pads itself under a 48 tall navigation bar, so its box reaches the foot
+    // of the screen. The ring ends where the phone's own buttons begin.
+    expect(
+      ringOnScreen({ top: 707, left: 0, width: 390, height: 137 }, 390, 844, {
+        top: 24,
+        bottom: 48,
+      })
+    ).toEqual({ top: 703, left: 0, width: 390, height: 93 });
+  });
+
+  it('stops at the status bar as well', () => {
+    expect(
+      ringOnScreen({ top: 26, left: 12, width: 366, height: 48 }, 390, 844, {
+        top: 24,
+        bottom: 0,
+      })
+    ).toEqual({ top: 24, left: 8, width: 374, height: 54 });
+  });
 });
 
 describe('cardMaxHeight (velista 0112)', () => {
   it('leaves the screen edge free above and below', () => {
     expect(cardMaxHeight(640)).toBe(624);
     expect(cardMaxHeight(0)).toBe(0);
+  });
+
+  it('leaves the insets free where they reach further in than the edge', () => {
+    expect(cardMaxHeight(844, { top: 24, bottom: 48 })).toBe(844 - 24 - 48);
+    expect(cardMaxHeight(844, { top: 4, bottom: 0 })).toBe(844 - 16);
   });
 });
 

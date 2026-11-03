@@ -37,6 +37,7 @@ import {
 } from './catalog.mappers';
 import { idsOf, LocationScopeService } from './location-scopes';
 import { sectionNamesOf } from './location-sections';
+import { ontoSurvivors, survivorsOf, toSurvivor } from './merged-items';
 import { PlatformAdminService } from './platform-admin.service';
 
 interface LocationItemCursor {
@@ -88,21 +89,26 @@ export class SupermarketLocationItemService {
     req: UpsertSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
     const actor = await this.admin.requireAdmin(req);
+    // A merged product's shop row is its survivor's (plan 0239).
+    const itemId = toSurvivor(
+      await survivorsOf(this.rows.manager, [req.itemId]),
+      req.itemId
+    );
     const item = await this.requireItemAndLocation(
-      req.itemId,
+      itemId,
       req.supermarketLocationId
     );
 
     const existing = await this.rows.findOne({
       where: {
-        itemId: req.itemId,
+        itemId,
         supermarketLocationId: req.supermarketLocationId,
       },
     });
     const row =
       existing ??
       this.rows.create({
-        itemId: req.itemId,
+        itemId,
         supermarketLocationId: req.supermarketLocationId,
       });
     const before = existing ? { ...existing } : null;
@@ -128,6 +134,9 @@ export class SupermarketLocationItemService {
    * crawl of DEZA is ten calls, one per shop. Per item calls would be tens of
    * thousands of NATS round trips for one run, which is the mistake
    * `ItemMatchIndex` exists to avoid on the read side.
+   *
+   * **A merged product is written as its survivor** (plan 0239): a harvest
+   * that started before the merge still names the merged id.
    *
    * **Absence is a claim**: a shop missing from a product's list of shops does
    * not stock it, so `entries` carries `available: false` rows and a caller is
@@ -174,8 +183,16 @@ export class SupermarketLocationItemService {
     }
 
     // Last entry wins on a duplicated item, which is the only reading that does
-    // not depend on the order rows come back from the database in.
-    const wanted = new Map(req.entries.map((e) => [e.itemId, e.available]));
+    // not depend on the order rows come back from the database in. An entry
+    // that names a merged product is its survivor's (plan 0239), read before
+    // the transaction like the rows below.
+    const wanted = ontoSurvivors(
+      req.entries.map((e) => ({ itemId: e.itemId, value: e.available })),
+      await survivorsOf(
+        this.rows.manager,
+        req.entries.map((e) => e.itemId)
+      )
+    );
     const observedAt = req.observedAt ? new Date(req.observedAt) : new Date();
     const runId = req.sourceRunId ?? null;
     const byPerson = req.sourceKind === PriceSourceKind.ADMIN;
@@ -257,12 +274,21 @@ export class SupermarketLocationItemService {
     return { written: touched.length, skipped, conflicts };
   }
 
+  /**
+   * One product's row at one shop. A merged product answers its survivor's
+   * row there (plan 0239), as a read of the product by id answers the
+   * survivor: the row a merge kept on the merged product is a record, and
+   * the survivor's is the one that says what the shop carries.
+   */
   async get(
     req: GetSupermarketLocationItemRequest
   ): Promise<SupermarketLocationItemView> {
     const row = await this.rows.findOne({
       where: {
-        itemId: req.itemId,
+        itemId: toSurvivor(
+          await survivorsOf(this.rows.manager, [req.itemId]),
+          req.itemId
+        ),
         supermarketLocationId: req.supermarketLocationId,
       },
     });
@@ -277,6 +303,12 @@ export class SupermarketLocationItemService {
     );
   }
 
+  /**
+   * A shop's rows, newest first. **A row a merge kept on the merged product
+   * is not listed** (plan 0239): the survivor's row at the same shop is, and
+   * a page that showed both would list one product twice, once under a name
+   * that leaves every other list.
+   */
   async listByLocation(
     req: ListSupermarketLocationItemsRequest
   ): Promise<SupermarketLocationItemPage> {
@@ -288,6 +320,12 @@ export class SupermarketLocationItemService {
       .where('li."supermarketLocationId" = :lid', {
         lid: req.supermarketLocationId,
       })
+      .andWhere(
+        `NOT EXISTS (
+           SELECT 1 FROM "items" m
+            WHERE m."id" = li."itemId" AND m."mergedIntoId" IS NOT NULL
+         )`
+      )
       .orderBy('li.createdAt', 'DESC')
       .addOrderBy('li.id', 'DESC')
       .take(limit + 1);

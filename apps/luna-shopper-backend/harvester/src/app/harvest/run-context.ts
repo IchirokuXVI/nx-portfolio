@@ -1,7 +1,16 @@
-import type { HarvestRunWarning } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestWarningCode,
+  type HarvestRunWarning,
+} from '@portfolio/luna-shopper/contracts';
+import {
+  SourceGuard,
+  type RefusalPolicy,
+  type SourceStop,
+} from '@portfolio/luna-shopper/source-guard';
 import type { HarvestRun } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import type { HarvestRunStore, RunCounters } from './harvest-run.store';
+import { pausedLabel, pausedWarning, resumedWarning } from './refusal-policy';
 
 /**
  * What a runner is handed: the run row, the abort signal, the shared rate limiter
@@ -19,6 +28,8 @@ export class RunContext {
   private pending: Required<RunCounters> = emptyCounters();
   private pendingWarnings: HarvestRunWarning[] = [];
   private lastFlushAt = 0;
+  /** Set by {@link countProgressItself}: the runner owns `processed`. */
+  private progressCountedByRunner = false;
 
   constructor(
     readonly run: HarvestRun,
@@ -32,10 +43,36 @@ export class RunContext {
     return this.run.id;
   }
 
-  /** What the source clients await before every request. */
-  acquire = (): Promise<void> => this.bucket.acquire();
+  /**
+   * The run's one refusal guard (plan 0215, section 5), when its adapter has
+   * a policy. Each runner passes it to the clients it builds, beside
+   * `acquire`, so every client of the run reports to the same count.
+   */
+  guard: SourceGuard | undefined = undefined;
+
+  /** The stage and label a runner last set, put back when a pause ends. */
+  private lastStage: { stage: string; label: string } | null = null;
+
+  /**
+   * What the source clients await before every request: the bucket, and then
+   * the guard, which holds every worker here while a pause lasts.
+   *
+   * The guard comes last on purpose. A worker can wait in the bucket for a
+   * while, and a pause that begins during that wait must hold it too: with the
+   * guard first, it would have been admitted before the trip and would send
+   * one request into the pause.
+   */
+  acquire = async (): Promise<void> => {
+    await this.bucket.acquire();
+    await this.guard?.admit(this.signal);
+  };
 
   async setStage(stage: string, label: string): Promise<void> {
+    this.lastStage = { stage, label };
+    await this.writeStage(stage, label);
+  }
+
+  private async writeStage(stage: string, label: string): Promise<void> {
     await this.flush();
     await this.store.setStage(this.runId, stage, label);
   }
@@ -65,6 +102,39 @@ export class RunContext {
       if (value) {
         this.pending[key as keyof RunCounters] += value;
       }
+    }
+    if (this.now() - this.lastFlushAt >= HEARTBEAT_INTERVAL_MS) {
+      await this.flush();
+    }
+  }
+
+  /**
+   * Say that this runner counts `processed` in a unit of its own (plan 0217,
+   * section 4).
+   *
+   * `processed` is planned work done, in the unit of `totalPlanned`. That unit
+   * is the product or the place for most runs, and the ingest and the sink
+   * count it through {@link advance}. A runner whose plan is in listings, leaves
+   * or shop details calls this once, before its first report, and then reports
+   * `processed` itself. The ingest and the sink then add nothing on top, so the
+   * count never mixes two units and never passes `totalPlanned`.
+   */
+  countProgressItself(): void {
+    this.progressCountedByRunner = true;
+  }
+
+  /**
+   * Count `count` units of progress on behalf of the ingest or the sink (plan
+   * 0217, section 4).
+   *
+   * It adds to `processed` unless the runner called
+   * {@link countProgressItself}, and it flushes on the same throttle as
+   * {@link report}. A runner that counts its own unit keeps calling
+   * `report({ processed })`, which always adds.
+   */
+  async advance(count: number): Promise<void> {
+    if (!this.progressCountedByRunner && count) {
+      this.pending.processed += count;
     }
     if (this.now() - this.lastFlushAt >= HEARTBEAT_INTERVAL_MS) {
       await this.flush();
@@ -116,6 +186,68 @@ export class RunContext {
     }
     await this.store.addCounters(this.runId, counters);
   }
+
+  /**
+   * Build the run's one refusal guard and keep it as {@link guard} (plan
+   * 0215, section 5). One per run, never one per client.
+   *
+   * - A trip that pauses writes a `SOURCE_PAUSED` warning and the stage
+   *   `PAUSED`. A trip that stops the run writes neither: its `error` says so.
+   * - A resume writes `SOURCE_RESUMED` and puts back the stage it replaced.
+   * - The pause keeps the heartbeat moving, so ten minutes of waiting never
+   *   reach the stale reaper's fifteen.
+   * - `onStop` is the executor's, which aborts the run.
+   *
+   * The writes are not awaited, because the guard calls back from inside a
+   * client's request loop. Each one swallows its own failure: a lost stage
+   * label costs a label and never the run.
+   */
+  guardWith(
+    policy: RefusalPolicy,
+    onStop: (stop: SourceStop) => void
+  ): SourceGuard {
+    const guard = new SourceGuard(policy, {
+      now: this.now,
+      signal: this.signal,
+      onTrip: (trip) => {
+        if (trip.pauseMs === null) {
+          return;
+        }
+        this.warn(
+          guardWarning(HarvestWarningCode.SOURCE_PAUSED, pausedWarning(trip))
+        );
+        void this.writeStage('PAUSED', pausedLabel(trip)).catch(
+          () => undefined
+        );
+      },
+      onResume: () => {
+        this.warn(
+          guardWarning(
+            HarvestWarningCode.SOURCE_RESUMED,
+            resumedWarning(this.now())
+          )
+        );
+        const stage = this.lastStage;
+        void (
+          stage ? this.writeStage(stage.stage, stage.label) : this.flush()
+        ).catch(() => undefined);
+      },
+      onWait: () => {
+        void this.heartbeat().catch(() => undefined);
+      },
+      onStop,
+    });
+    this.guard = guard;
+    return guard;
+  }
+}
+
+/** A warning about the run itself, which names no offer, page or product. */
+function guardWarning(
+  code: HarvestWarningCode,
+  message: string
+): HarvestRunWarning {
+  return { code, message, offerId: null, page: null, name: null };
 }
 
 function emptyCounters(): Required<RunCounters> {

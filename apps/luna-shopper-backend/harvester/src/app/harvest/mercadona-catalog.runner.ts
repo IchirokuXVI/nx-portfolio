@@ -107,7 +107,8 @@ export class MercadonaCatalogRunner implements CatalogRunner {
 
     // One client per warehouse, sharing the run's one token bucket through
     // `acquire`, so the rate the source sees is the configured rate however many
-    // warehouses are open.
+    // warehouses are open. They share the run's one refusal guard too (plan
+    // 0215): a block is the chain's, and a count per warehouse could not see it.
     const walks = scopes.map((scope) => ({
       warehouse: scope.externalKey,
       client: new MercadonaClient({
@@ -115,6 +116,7 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         userAgent: settings.userAgent,
         baseUrl: settings.mercadonaBaseUrl,
         acquire: context.acquire,
+        guard: context.guard,
         signal: context.signal,
       }),
     }));

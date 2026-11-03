@@ -3,6 +3,7 @@ import { ClientProxy, NatsRecordBuilder } from '@nestjs/microservices';
 import {
   CATALOG_EVENTS,
   type ItemGroupChangedEvent,
+  type ItemMergedEvent,
   type ProductGroupDeletedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -77,6 +78,23 @@ export class CatalogEventsPublisher {
       productGroupId,
     };
     this.emit(CATALOG_EVENTS.productGroupDeleted, event);
+  }
+
+  /**
+   * One product was merged into another (plan 0239, section 3).
+   *
+   * Called after the merge commits, and never for a dry run. The harvester
+   * moves its queue rows and core moves its lines onto the survivor. Until
+   * they do, every read of catalog already answers the survivor for the
+   * merged id, so a late consumer shows nothing wrong.
+   */
+  itemMerged(itemId: string, intoItemId: string): void {
+    const event: ItemMergedEvent = {
+      eventId: randomUUID(),
+      itemId,
+      intoItemId,
+    };
+    this.emit(CATALOG_EVENTS.itemMerged, event);
   }
 
   private emit(subject: string, payload: object): void {

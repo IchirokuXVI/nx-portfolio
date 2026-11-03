@@ -487,7 +487,7 @@ export class SourceIngest {
         // create a row nor change one (plan 0119, section 6).
         if (!held) {
           this.skipUnknownPartial(context, observation);
-          await context.report({ processed: 1 });
+          await context.advance(1);
           continue;
         }
         // Asked before the write, because the write is what makes it false.
@@ -530,14 +530,17 @@ export class SourceIngest {
         counters.created += 1;
         byExternalId.set(outcome.entry.externalId, outcome.entry);
         siblings.add(outcome.entry);
-        await context.report({ processed: 1, created: 1 });
+        await context.report({ created: 1 });
       } else if (changed) {
         counters.updated += 1;
-        await context.report({ processed: 1, updated: 1 });
+        await context.report({ updated: 1 });
       } else {
         counters.unchanged += 1;
-        await context.report({ processed: 1, unchanged: 1 });
+        await context.report({ unchanged: 1 });
       }
+      // Progress is the run's unit, which a runner may count itself (plan
+      // 0217, section 4). Then this adds nothing.
+      await context.advance(1);
 
       outcomes.push(outcome);
       // Every price the source stated, each resolved to the scope it names.
@@ -1311,12 +1314,14 @@ export class SourceIngest {
   /**
    * Step 4: the prices the `ACTIVE` rows are owed, in batches, as this run.
    *
-   * A new row is `updated`, because the source said something new. A confirmed
-   * row moves no progress counter: `unchanged` counts products the ladder left
-   * alone, and adding confirmed prices to it read 6,324 for a walk of 4,246
-   * products (plan 0158). Confirmed prices are reported as `pricesConfirmed`.
-   * Nothing is `created` here, because the row a shopper reads is derived and
-   * the run never sees it (plan 0080).
+   * **A price moves no counter column** (plan 0217). The counters count source
+   * rows, and a price is not one. `updated` once took every new price too, so a
+   * walk that changed 30 rows and published 4,000 prices read 4,030. A confirmed
+   * price was taken out of `unchanged` for the same reason, which had read 6,324
+   * for a walk of 4,246 products (plan 0158). The run's prices are counted in
+   * its report alone: the totals returned here become `pricesPublished` and
+   * `pricesConfirmed`. Nothing is created here either, because the row a
+   * shopper reads is derived and the run never sees it (plan 0080).
    *
    * `details` is a **translation** of the observation's `extra` rather than a
    * pass through: `extra` is free and catalog's `item_price_details` is not, so
@@ -1346,11 +1351,6 @@ export class SourceIngest {
       );
       inserted += result.inserted;
       confirmed += result.confirmed;
-      // A copy moves no progress counter, for the reason `pricesRecorded`
-      // leaves it out: the run's numbers describe what the chain stated.
-      if (copiedFromScopeId === null) {
-        await context.report({ updated: result.inserted });
-      }
     }
     return { inserted, confirmed };
   }

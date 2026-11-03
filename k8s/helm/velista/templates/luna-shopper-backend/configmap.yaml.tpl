@@ -226,6 +226,9 @@ part of the render and would trip that very check.
   ASSISTANT_MODERATION: {{ if kindIs "bool" $assistant.moderation }}{{ ternary "on" "off" $assistant.moderation | quote }}{{ else }}{{ $assistant.moderation | default "" | quote }}{{ end }}
   ASSISTANT_MODERATION_MODEL: {{ $assistant.moderationModel | default "" | quote }}
   ASSISTANT_EMERGENCY_NUMBER: {{ $assistant.emergencyNumber | default "" | quote }}
+  # Whether a turn's record logs its words (k8s plan 0018, D3). Off unless the
+  # operator asks, since logs are kept on the node and a transcript is personal.
+  ASSISTANT_LOG_TURN_TEXT: {{ $assistant.logTurnText | default false | quote }}
   # Voice input (plan 0235). The transcriber's address exactly when the chart
   # runs it, and empty otherwise, so the one value `transcriber.enabled` decides
   # whether the assistant hears and what `hears` reports (plan 0231, section 3).

@@ -396,6 +396,7 @@ describe('importing a run this backend exported', () => {
       setStage: jest.fn(async () => undefined),
       setTotalPlanned: jest.fn(async () => undefined),
       report: jest.fn(async () => undefined),
+      advance: jest.fn(async () => undefined),
       warn: jest.fn(),
       flush: jest.fn(async () => undefined),
     } as unknown as RunContext;

@@ -104,6 +104,8 @@ interface RenderOptions {
   readonly compact?: boolean;
   /** The address the page is opened at. */
   readonly url?: string;
+  /** Keys merged into the report of a seeded run, by run id. */
+  readonly reports?: Readonly<Record<string, Record<string, unknown>>>;
 }
 
 async function render(options: RenderOptions = {}) {
@@ -120,9 +122,19 @@ async function render(options: RenderOptions = {}) {
       if (options.runs === 'refused') {
         throw new GatewayError({ code: '', status: 0, correlationId: '' });
       }
-      return options.runs === 'none'
-        ? { items: [], nextCursor: null }
-        : memory.listRuns(query);
+      if (options.runs === 'none') {
+        return { items: [], nextCursor: null };
+      }
+      const page = await memory.listRuns(query);
+      const reports = options.reports ?? {};
+      return {
+        ...page,
+        items: page.items.map((run) =>
+          reports[run.id]
+            ? { ...run, report: { ...run.report, ...reports[run.id] } }
+            : run
+        ),
+      };
     },
     listPresets: async (supermarketId?: string, cursor?: string) =>
       options.presetsGone
@@ -533,6 +545,23 @@ describe('the runs list, and what a row says', () => {
     const row = page.rows().find((entry) => entry.id === RUNNING.id);
     expect(row?.wrote).toBe(RUNNING.created + RUNNING.updated);
     expect(row?.wrote).toBe(1452);
+  });
+
+  /**
+   * "Prices" sits beside "Wrote" and reads the report alone (backend plan
+   * 0217): "Wrote" counts source rows, and a price is not one.
+   */
+  it('reads the prices of a run from its report, and leaves them blank when it states none', async () => {
+    const { page } = await render({
+      reports: { 'run-catalog-completed': { pricesPublished: 4006 } },
+    });
+
+    const rows = page.rows();
+    const walk = rows.find((entry) => entry.id === 'run-catalog-completed');
+    expect(walk?.prices).toBe(4006);
+    // The price count is not folded into "Wrote".
+    expect(walk?.wrote).toBe(118);
+    expect(rows.find((entry) => entry.id === RUNNING.id)?.prices).toBeNull();
   });
 
   it('names the chain of a run, and none for a run over every chain', async () => {

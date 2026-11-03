@@ -271,6 +271,7 @@ const CONFIG: AssistantConfig = {
   moderation: true,
   moderationModel: DEFAULT_MODERATION_MODEL,
   emergencyNumber: '112',
+  logTurnText: true,
   transcriberUrl: 'http://transcriber.invalid',
   transcriberTurnTimeoutMs: 45000,
   transcriberCommentTimeoutMs: 110000,
@@ -3209,5 +3210,52 @@ describe('a reply with nothing in it (plan 0224, section 2.2)', () => {
     expect(record?.['outcome']).toBe('acted');
 
     jest.restoreAllMocks();
+  });
+});
+
+describe('the words of a turn in its record (k8s plan 0018, D3)', () => {
+  async function recordWith(
+    logTurnText: boolean
+  ): Promise<Record<string, unknown> | undefined> {
+    const logged: string[] = [];
+    const spy = jest
+      .spyOn(Logger.prototype, 'log')
+      .mockImplementation((message: unknown) => {
+        logged.push(String(message));
+      });
+    try {
+      await build(
+        new FakeModelProvider([FakeModelProvider.says('Hola, Ana.')]),
+        new RecordingApi(),
+        { logTurnText }
+      ).turn(turnRequest('soy Ana'));
+    } finally {
+      spy.mockRestore();
+    }
+    return logged
+      .map((entry) => JSON.parse(entry) as Record<string, unknown>)
+      .find((entry) => entry['event'] === 'assistant.turn');
+  }
+
+  it('logs the lengths and no words when the switch is off', async () => {
+    const record = await recordWith(false);
+
+    expect(record).not.toHaveProperty('said');
+    expect(record).not.toHaveProperty('replied');
+    expect(record?.['saidChars']).toBe('soy Ana'.length);
+    expect(record?.['repliedChars']).toBe('Hola, Ana.'.length);
+    expect(JSON.stringify(record)).not.toContain('Ana');
+    // The rest of the record is the same either way.
+    expect(record?.['outcome']).toBe('talked');
+    expect(record?.['latencyMs']).toBeDefined();
+  });
+
+  it('logs the words and no lengths when the switch is on', async () => {
+    const record = await recordWith(true);
+
+    expect(record?.['said']).toBe('soy Ana');
+    expect(record?.['replied']).toBe('Hola, Ana.');
+    expect(record).not.toHaveProperty('saidChars');
+    expect(record).not.toHaveProperty('repliedChars');
   });
 });
