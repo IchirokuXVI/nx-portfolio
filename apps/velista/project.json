@@ -44,6 +44,11 @@
             "input": "apps/velista/public"
           },
           {
+            "glob": "*.webp",
+            "input": "libs/velista/ui/assets/landing",
+            "output": "landing"
+          },
+          {
             "glob": "nginx.conf",
             "input": "apps/velista/src",
             "output": "/"

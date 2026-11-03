@@ -621,25 +621,34 @@
       "headline": {
         "top": "Crea listas.",
         "bottom": "Comparte y apunta."
-      },
-      "body": "Listas de la compra compartidas con la gente con la que compras de verdad. Los cambios aparecen en el móvil de todos al instante."
+      }
     },
     "preview": {
       "listName": "Compra semanal",
       "zoneName": "Casa",
       "line": {
-        "milk": {
-          "content": "Leche",
-          "quantity": "2 L"
+        "oil": {
+          "content": "Aceite de oliva",
+          "detail": "Virgen extra · 1 L"
         },
-        "bread": {
-          "content": "Pan",
-          "quantity": "1"
+        "bananas": {
+          "content": "Plátanos",
+          "detail": "Canarias · 1 kg"
         },
-        "tomatoes": {
-          "content": "Tomates"
+        "gachas": {
+          "content": "Gachas",
+          "detail": "Caseras · 350 g"
+        },
+        "ham": {
+          "content": "Jamón ibérico",
+          "detail": "Loncheado · 100 g"
+        },
+        "cheese": {
+          "content": "Queso",
+          "detail": "Viejo curado · 250 g"
         }
-      }
+      },
+      "here": "Ana y Marc están aquí"
     },
     "action": {
       "createZone": "Crear un grupo",

@@ -18,7 +18,9 @@
 @use 'themes';
 
 @forward 'semantic' show $app-breakpoint-sm, $app-breakpoint-md,
-  $app-content-max, app-from, app-focus-ring;
+  $app-preview-row, $app-preview-chrome, $app-preview-chrome-without-progress,
+  $app-preview-clear, $app-preview-narrow, $app-landing-short, $app-content-max,
+  app-from, app-focus-ring;
 @forward 'themes' show app-theme-night, app-theme-day;
 
 /// Everything the app root carries, minus the theme.

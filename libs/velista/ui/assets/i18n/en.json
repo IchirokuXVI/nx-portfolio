@@ -621,25 +621,34 @@
       "headline": {
         "top": "One list.",
         "bottom": "Everyone in sync."
-      },
-      "body": "Shared shopping lists for the people you actually shop with. Changes show up on everyone's phone as they happen."
+      }
     },
     "preview": {
       "listName": "Weekly shop",
       "zoneName": "Home",
       "line": {
-        "milk": {
-          "content": "Milk",
-          "quantity": "2 L"
+        "oil": {
+          "content": "Olive oil",
+          "detail": "Extra virgin · 1 L"
         },
-        "bread": {
-          "content": "Bread",
-          "quantity": "1"
+        "bananas": {
+          "content": "Bananas",
+          "detail": "Canary Islands · 1 kg"
         },
-        "tomatoes": {
-          "content": "Tomatoes"
+        "gachas": {
+          "content": "Gachas",
+          "detail": "Sweet porridge · 350 g"
+        },
+        "ham": {
+          "content": "Ibérico ham",
+          "detail": "Sliced · 100 g"
+        },
+        "cheese": {
+          "content": "Cheese",
+          "detail": "Aged · 250 g"
         }
-      }
+      },
+      "here": "Ana and Marc are here"
     },
     "action": {
       "createZone": "Create a group",
