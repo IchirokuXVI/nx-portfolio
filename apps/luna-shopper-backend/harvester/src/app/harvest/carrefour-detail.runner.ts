@@ -87,6 +87,8 @@ export class CarrefourDetailRunner implements CatalogRunner {
       let eansWritten = 0;
       let missing = 0;
       let skipped = 0;
+      /** The block that ended the pass, null for a pass that was not blocked. */
+      let stoppedBy: string | null = null;
 
       for (const row of pending) {
         if (context.signal.aborted) {
@@ -136,6 +138,10 @@ export class CarrefourDetailRunner implements CatalogRunner {
           // 0217). A count here as well read each EAN two times.
           eansWritten += 1;
         } catch (error) {
+          // A person's abort cut this page short: not a failed product.
+          if (context.signal.aborted && isSkippable(error)) {
+            break;
+          }
           this.logger.warn(
             `Run ${context.runId}: product ${row.externalId} ` +
               `(${row.url}) failed: ${String(error)}`
@@ -149,9 +155,13 @@ export class CarrefourDetailRunner implements CatalogRunner {
           // that died on the first would never finish one.
           //
           // The block does stop it, because that one says every page after it
-          // will fail too and be worse for having been asked.
+          // will fail too and be worse for having been asked. The pass ends
+          // here and its report is written below, and the guard's stop has
+          // already aborted the run, which the executor ends FAILED with its
+          // reason (plan 0215, section 6.1).
           if (!isSkippable(error)) {
-            throw error;
+            stoppedBy = String(error);
+            break;
           }
           skipped += 1;
         }
@@ -166,6 +176,7 @@ export class CarrefourDetailRunner implements CatalogRunner {
         // state they were already in, so the next backfill takes them again.
         refusedPages: skipped,
         pageLoads: client.loads,
+        ...(stoppedBy ? { blockedAfter: stoppedBy } : {}),
       });
       // How many of those EANs resolved a row to an item is the ladder's answer
       // and no longer this runner's, so it is not counted here (plan 0103, D1).
@@ -192,6 +203,7 @@ export class CarrefourDetailRunner implements CatalogRunner {
       userAgent: settings.userAgent,
       delayMs: readDelay(source.config),
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

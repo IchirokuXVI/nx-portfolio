@@ -1,4 +1,8 @@
 import type { ConfigService } from '@nestjs/config';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import { DezaCatalogRunner, entryKey } from './deza-catalog.runner';
 import { startFakeListing, type FakeListing } from './deza-listing.fake';
@@ -377,5 +381,54 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // Both sections crawled at four workers, over many pages each.
     expect(listing.requests()).toBeGreaterThan(10);
     expect(acquired).toBe(listing.requests());
+  });
+
+  it('states availability only for the products it saw when the guard stops it (plan 0215)', async () => {
+    listing = await startFakeListing(SECTIONS, cappedSection());
+    const { runner, context, report } = build(listing);
+    // The run's guard, wired as the executor wires it, stopped by a refusal
+    // after a few pages: the source answers no status this fake can refuse
+    // with, so the refusal is told to the guard the way a client tells it.
+    const controller = new AbortController();
+    const guard = new SourceGuard(
+      { consecutive: 1, window: null, coolDowns: 0, coolDownMs: 0, probes: 0 },
+      { onStop: (stop) => controller.abort(new SourceBlockedError(stop)) }
+    );
+    let admitted = 0;
+    Object.assign(context, {
+      signal: controller.signal,
+      guard,
+      acquire: async () => {
+        await guard.admit(controller.signal);
+        admitted += 1;
+        if (admitted === 4) {
+          try {
+            guard.refused(403, `${listing.url}/productos/`);
+          } catch {
+            // The stop is the guard's, and every client of the run meets it.
+          }
+        }
+      },
+    });
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(report.products.length).toBeGreaterThan(0);
+    expect(report.products.length).toBeLessThan(400);
+    // Every claim, positive or negative, is about a product the crawl saw:
+    // its popup named the shops that carry it.
+    const seen = new Set(report.products.map((product) => product.externalId));
+    expect(report.availabilities.length).toBeGreaterThan(0);
+    expect(
+      report.availabilities.every((claim) => seen.has(claim.externalId))
+    ).toBe(true);
+    // No request went out after the stop, the one it cut off included.
+    expect(listing.requests()).toBe(3);
   });
 });

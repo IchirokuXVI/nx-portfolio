@@ -11,6 +11,7 @@ import type {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   HarvestRunWrites,
   HarvestScheduleBlock,
@@ -235,6 +236,13 @@ export const SOURCE_ENTRY_PATTERNS = {
    * calls it for a product a row left before the plan landed.
    */
   settleItem: 'sourceEntry.settleItem',
+  /**
+   * How many rows name each of these products, and which chains hold an
+   * `ACTIVE` row of each (plan 0239). Catalog asks it, with the operator's
+   * credential, before a merge (rule R28) and before a delete. Counts and
+   * chains only, never the rows.
+   */
+  itemUsage: 'sourceEntry.itemUsage',
 } as const;
 
 /**
@@ -714,6 +722,13 @@ export interface HarvestRunView {
    * `STALE`. A scheduled run that was interrupted is started again one time.
    */
   interrupted: boolean;
+  /**
+   * Why a `FAILED` run stopped before its work was done (plan 0215), null for
+   * every other run. `SOURCE_BLOCKED` is a run the chain refused until its
+   * guard stopped it: it kept what it read, and it is not interrupted, so no
+   * schedule starts it again into the block.
+   */
+  stopReason: HarvestRunStopReason | null;
   /**
    * About how long a run like this one takes, from earlier runs and never from
    * this one (plan 0206, section 8). The view states no time remaining:
@@ -1775,6 +1790,26 @@ export interface SourceEntryPriceWithheld {
    * offered with no price.
    */
   kindUnknown?: true;
+}
+
+/** The products a usage question names (plan 0239). */
+export interface SourceEntryItemUsageRequest extends AdminCredential {
+  /** At most `ITEM_USAGE_MAX_IDS` products. */
+  itemIds: string[];
+}
+
+/** What the harvester holds that names one product (plan 0239). */
+export interface SourceEntryItemUsage {
+  itemId: string;
+  /** Rows whose `itemId` is the product, whatever their status. */
+  rowCount: number;
+  /** The chains of the product's `ACTIVE` rows, each once, sorted. */
+  activeSupermarketIds: string[];
+}
+
+/** One entry per product asked about, the ones nothing names included. */
+export interface SourceEntryItemUsageResult {
+  usage: SourceEntryItemUsage[];
 }
 
 /** Settle a product at a chain (plan 0191). */

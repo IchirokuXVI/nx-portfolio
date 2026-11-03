@@ -3,6 +3,7 @@ import {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   HarvestRunWrites,
   HarvestScheduleBlock,
@@ -18,6 +19,7 @@ import {
 } from '../../lib/enums/harvest.enums';
 import {
   CONTENT_LOCALES,
+  ITEM_USAGE_MAX_IDS,
   PACK_COUNT_MAX,
   PACK_COUNT_MIN,
   UNIT_BASES,
@@ -68,6 +70,7 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunMode: schemaId('enums/HarvestRunMode'),
   harvestRunTrigger: schemaId('enums/HarvestRunTrigger'),
   harvestRunStatus: schemaId('enums/HarvestRunStatus'),
+  harvestRunStopReason: schemaId('enums/HarvestRunStopReason'),
   sourceEntryStatus: schemaId('enums/SourceEntryStatus'),
   postalCodeDiscoveryStatus: schemaId('enums/PostalCodeDiscoveryStatus'),
   itemSourceMatch: schemaId('enums/ItemSourceMatch'),
@@ -175,6 +178,9 @@ export const HARVEST_SCHEMA_IDS = {
   queuedSourceEntryPage: schemaId('harvest/QueuedSourceEntryPage'),
   entryIdRequest: schemaId('msg/sourceEntry.id/request'),
   settleItemRequest: schemaId('msg/sourceEntry.settleItem/request'),
+  // Plan 0239: what names a product, for a merge and a delete.
+  itemUsageRequest: schemaId('msg/sourceEntry.itemUsage/request'),
+  itemUsageResult: schemaId('harvest/SourceEntryItemUsageResult'),
   settleItemAtChainResult: schemaId('harvest/SettleItemAtChainResult'),
   sourceEntryPriceWithheld: schemaId('harvest/SourceEntryPriceWithheld'),
   acceptEntryRequest: schemaId('msg/sourceEntry.accept/request'),
@@ -312,6 +318,11 @@ const harvestRunView = object(
     // dashboard's runs, which do not compute it.
     scheduleId: nullableString(),
     interrupted: boolean(),
+    // Plan 0215, not required for the same reason: why a FAILED run stopped
+    // before its work was done, null for every other run.
+    stopReason: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestRunStopReason), { type: 'null' }],
+    },
     estimate: ref(HARVEST_SCHEMA_IDS.runEstimate),
   },
   [
@@ -768,6 +779,38 @@ const sourceEntryPriceWithheld = object(
     },
   },
   ['entryId', 'priceScopeId', 'otherEntryIds']
+);
+
+/** What names these products in the harvester (plan 0239). */
+const itemUsageRequest = object(
+  HARVEST_SCHEMA_IDS.itemUsageRequest,
+  {
+    ...adminCredentialProperties,
+    itemIds: {
+      ...array(nonEmptyString()),
+      minItems: 1,
+      maxItems: ITEM_USAGE_MAX_IDS,
+    },
+  },
+  ['userId', 'itemIds']
+);
+
+/** One entry per product asked about (plan 0239). */
+const itemUsageResult = object(
+  HARVEST_SCHEMA_IDS.itemUsageResult,
+  {
+    usage: array({
+      type: 'object',
+      properties: {
+        itemId: nonEmptyString(),
+        rowCount: integer({ minimum: 0 }),
+        activeSupermarketIds: array(nonEmptyString()),
+      },
+      required: ['itemId', 'rowCount', 'activeSupermarketIds'],
+      additionalProperties: false,
+    }),
+  },
+  ['usage']
 );
 
 /** Settle a product at a chain (plan 0191). */
@@ -1918,6 +1961,10 @@ export const harvestSchemas: JsonSchema[] = [
   ),
   enumOf(HARVEST_SCHEMA_IDS.harvestRunStatus, Object.values(HarvestRunStatus)),
   enumOf(
+    HARVEST_SCHEMA_IDS.harvestRunStopReason,
+    Object.values(HarvestRunStopReason)
+  ),
+  enumOf(
     HARVEST_SCHEMA_IDS.sourceEntryStatus,
     Object.values(SourceEntryStatus)
   ),
@@ -2031,6 +2078,8 @@ export const harvestSchemas: JsonSchema[] = [
   listEntriesByItemRequest,
   entryIdRequest,
   settleItemRequest,
+  itemUsageRequest,
+  itemUsageResult,
   settleItemAtChainResult,
   sourceEntryPriceWithheld,
   acceptEntryRequest,
@@ -2196,6 +2245,10 @@ export const harvestMessageContracts: Record<
   [SOURCE_ENTRY_PATTERNS.reject]: {
     request: HARVEST_SCHEMA_IDS.entryIdRequest,
     response: HARVEST_SCHEMA_IDS.sourceCatalogEntryView,
+  },
+  [SOURCE_ENTRY_PATTERNS.itemUsage]: {
+    request: HARVEST_SCHEMA_IDS.itemUsageRequest,
+    response: HARVEST_SCHEMA_IDS.itemUsageResult,
   },
   [SOURCE_ENTRY_PATTERNS.settleItem]: {
     request: HARVEST_SCHEMA_IDS.settleItemRequest,

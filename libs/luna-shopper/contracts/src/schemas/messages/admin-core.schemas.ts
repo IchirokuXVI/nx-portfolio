@@ -1,10 +1,12 @@
 import {
   ADMIN_BASKET_PATTERNS,
+  ADMIN_ITEM_PATTERNS,
   ADMIN_LIST_PATTERNS,
   ADMIN_MEMBERSHIP_PATTERNS,
   ADMIN_PROFILE_POSTAL_CODE_PATTERNS,
   ADMIN_ZONE_PATTERNS,
 } from '../../lib/messages/admin-core.messages';
+import { ITEM_USAGE_MAX_IDS } from '../../lib/messages/catalog.messages';
 import {
   array,
   boolean,
@@ -80,6 +82,9 @@ export const ADMIN_CORE_SCHEMA_IDS = {
   postalCodeUsageView: schemaId('admin-core/PostalCodeUsageView'),
   postalCodeUsageListView: schemaId('admin-core/PostalCodeUsageListView'),
   postalCodeUsageRequest: schemaId('msg/adminProfilePostalCode.usage/request'),
+  // Plan 0239: what names a catalog product, before a delete.
+  itemUsageRequest: schemaId('msg/adminItem.usage/request'),
+  itemUsageResult: schemaId('admin-core/AdminItemUsageResult'),
 } as const;
 
 const timestamps = {
@@ -583,7 +588,39 @@ const postalCodeUsageRequest = object(
   ['userId', 'country', 'postalCodes']
 );
 
+/** What names these catalog products in core (plan 0239, section 4). */
+const itemUsageRequest = object(
+  ADMIN_CORE_SCHEMA_IDS.itemUsageRequest,
+  {
+    ...adminCredentialProperties,
+    itemIds: {
+      ...array(nonEmptyString()),
+      minItems: 1,
+      maxItems: ITEM_USAGE_MAX_IDS,
+    },
+  },
+  ['userId', 'itemIds']
+);
+
+const itemUsageResult = object(
+  ADMIN_CORE_SCHEMA_IDS.itemUsageResult,
+  {
+    usage: array({
+      type: 'object',
+      properties: {
+        itemId: nonEmptyString(),
+        listLineCount: integer({ minimum: 0 }),
+      },
+      required: ['itemId', 'listLineCount'],
+      additionalProperties: false,
+    }),
+  },
+  ['usage']
+);
+
 export const adminCoreSchemas: JsonSchema[] = [
+  itemUsageRequest,
+  itemUsageResult,
   zoneView,
   zoneMemberView,
   zoneListView,
@@ -736,5 +773,9 @@ export const adminCoreMessageContracts: Record<
   [ADMIN_PROFILE_POSTAL_CODE_PATTERNS.usage]: {
     request: ADMIN_CORE_SCHEMA_IDS.postalCodeUsageRequest,
     response: ADMIN_CORE_SCHEMA_IDS.postalCodeUsageListView,
+  },
+  [ADMIN_ITEM_PATTERNS.usage]: {
+    request: ADMIN_CORE_SCHEMA_IDS.itemUsageRequest,
+    response: ADMIN_CORE_SCHEMA_IDS.itemUsageResult,
   },
 };

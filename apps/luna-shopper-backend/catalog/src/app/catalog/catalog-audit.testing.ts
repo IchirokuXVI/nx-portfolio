@@ -3,6 +3,7 @@ import {
   type AuditedWrite,
   CatalogAuditService,
   diffFields,
+  type ExtraAuditFields,
 } from './catalog-audit.service';
 import type { CatalogActor } from './platform-admin.service';
 
@@ -124,7 +125,8 @@ export function fakeAudit(
         },
         create: async (
           target: EntityTarget<ObjectLiteral>,
-          draft: ObjectLiteral
+          draft: ObjectLiteral,
+          extra?: Record<string, unknown>
         ) => {
           const saved = await bindingFor(target).repository.save?.(
             draft as never
@@ -135,19 +137,23 @@ export function fakeAudit(
             entity: bindingFor(target).name,
             entityId: (saved as ObjectLiteral)?.['id'],
             before: null,
-            after: snapshot(saved as ObjectLiteral),
+            after: { ...snapshot(saved as ObjectLiteral), ...extra },
           });
           return saved;
         },
         update: async (
           target: EntityTarget<ObjectLiteral>,
           before: ObjectLiteral,
-          row: ObjectLiteral
+          row: ObjectLiteral,
+          extra?: ExtraAuditFields
         ) => {
           const saved = await bindingFor(target).repository.save?.(
             row as never
           );
-          const moved = diffFields(snapshot(before), snapshot(row));
+          const moved = diffFields(
+            { ...snapshot(before), ...extra?.before },
+            { ...snapshot(row), ...extra?.after }
+          );
           if (moved) {
             recorded.push({
               actor,

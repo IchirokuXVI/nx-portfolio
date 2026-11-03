@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import {
   HarvestRunMode,
   HarvestRunStatus,
+  type HarvestRunStopReason,
   type HarvestRunTrigger,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
@@ -523,10 +524,15 @@ export class HarvestRunStore {
     return Boolean(row?.abortRequestedAt);
   }
 
+  /**
+   * Finalize a run. `stopReason` says why a `FAILED` run stopped before its
+   * work was done (plan 0215), and is null for every other run.
+   */
   async finish(
     runId: string,
     status: HarvestRunStatus,
-    error?: string
+    error?: string,
+    stopReason?: HarvestRunStopReason
   ): Promise<void> {
     await this.runs.update(
       { id: runId },
@@ -535,6 +541,7 @@ export class HarvestRunStore {
         finishedAt: new Date(),
         heartbeatAt: new Date(),
         error: error ?? null,
+        stopReason: stopReason ?? null,
       }
     );
   }

@@ -3,6 +3,7 @@ import { EventPattern, Payload } from '@nestjs/microservices';
 import {
   CATALOG_EVENTS,
   type ItemGroupChangedEvent,
+  type ItemMergedEvent,
   type ProductGroupDeletedEvent,
 } from '@portfolio/luna-shopper/contracts';
 import { ProductGroupSyncService } from './product-group-sync.service';
@@ -32,5 +33,11 @@ export class ProductGroupSyncController {
     @Payload() event: ProductGroupDeletedEvent
   ): Promise<void> {
     await this.sync.handleProductGroupDeleted(event);
+  }
+
+  /** A product was merged into another (plan 0239): lines follow it. */
+  @EventPattern(CATALOG_EVENTS.itemMerged)
+  async onItemMerged(@Payload() event: ItemMergedEvent): Promise<void> {
+    await this.sync.handleItemMerged(event);
   }
 }

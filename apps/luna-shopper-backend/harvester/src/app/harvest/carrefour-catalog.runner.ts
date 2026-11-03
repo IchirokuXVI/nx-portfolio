@@ -1,13 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
-  CarrefourBlockedError,
   CarrefourClient,
   photoAddressRead,
   type CarrefourCappedCategory,
   type CarrefourCategory,
   type CarrefourProduct,
 } from '@portfolio/luna-shopper/carrefour';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
@@ -87,7 +87,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       const unreadable = [...frontier.unreadable];
       let blocked: unknown = null;
       for (const category of frontier.categories) {
-        context.signal.throwIfAborted();
+        // An abort, a person's or the refusal guard's (plan 0215), ends the
+        // crawl and not the run: what was read is reported below.
+        if (context.signal.aborted) {
+          break;
+        }
         try {
           await this.pageCategory(context, client, category, products);
         } catch (error) {
@@ -96,11 +100,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           // the address is in the state section 4 describes, and every page
           // after that deepens it, so the crawl stops here and the run fails
           // once what it already read is written.
-          if (error instanceof CarrefourBlockedError) {
+          if (error instanceof SourceBlockedError) {
             this.logger.warn(`Run ${context.runId}: ${String(error)}`);
             unreadable.push(category.url);
             await context.report({ failed: 1 });
             blocked = error;
+            break;
+          }
+          // A person's abort cut this category short. Its products read so
+          // far are in the map, and it is named as unread.
+          if (context.signal.aborted) {
+            unreadable.push(category.url);
             break;
           }
           // Anything else costs one category. It is counted, logged and named
@@ -130,13 +140,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           blocked
         )
       );
-      if (blocked) {
-        // Raised **after** the snapshot, so the run ends FAILED and keeps every
-        // product it read. Prices already fetched are valid data (plan 0038,
-        // section 6.6); what a block costs is the rest of the crawl, not the
-        // part that worked.
-        throw blocked;
-      }
+      // A blocked crawl returns here too, after the snapshot. The guard's stop
+      // aborted the run, so the executor ends it FAILED with its reason and
+      // keeps every product it read (plan 0215, section 6.2). Prices already
+      // fetched are valid data (plan 0038, section 6.6); what a block costs is
+      // the rest of the crawl, not the part that worked.
     } finally {
       // Including when the run aborted, and including when it never opened a
       // page (plan 0090, section 11).
@@ -163,6 +171,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // The run's own bucket, so the rate the owner set on this row is a rate
       // the source sees on top of the floor the client already keeps.
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

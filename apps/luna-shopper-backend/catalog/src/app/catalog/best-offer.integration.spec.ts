@@ -141,7 +141,7 @@ describeIntegration(
           name: { en: 'Cerveza', es: 'Cerveza' },
           brand,
           categoryIds: [categoryId('beers')],
-          defaultUnit: UnitOfMeasure.LITER,
+          defaultUnit: UnitOfMeasure.MILLILITER,
           productGroupId: beer.id,
         });
       ids.heineken = (await beerNamed('Heineken')).id;

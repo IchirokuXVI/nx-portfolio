@@ -154,6 +154,13 @@ export type AdminLoginDto = {
 };
 
 /**
+ * `AdminLookupItemsDto` in the gateway's OpenAPI document.
+ */
+export type AdminLookupItemsDto = {
+  ids: string[];
+};
+
+/**
  * `AdminRecoveryDto` in the gateway's OpenAPI document.
  */
 export type AdminRecoveryDto = {
@@ -319,7 +326,8 @@ export type CreateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   packCount?: number | null;
-  categoryIds: string[];
+  categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
 };
@@ -342,6 +350,7 @@ export type CreateItemFromEntryDto = {
  */
 export type CreateItemsDto = {
   items: CreateItemDto[];
+  requireRegisteredBrands?: boolean;
 };
 
 /**
@@ -504,6 +513,20 @@ export type ImportHarvestDocumentDto = {
 };
 
 /**
+ * `ItemExpectationDto` in the gateway's OpenAPI document.
+ *
+ * What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds.
+ */
+export type ItemExpectationDto = {
+  name?: LocalizedTextDto;
+  brand?: string | null;
+  unitSize?: number | null;
+  defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+  packCount?: number | null;
+  categorySlugs?: string[];
+};
+
+/**
  * `JoinBasketDto` in the gateway's OpenAPI document.
  */
 export type JoinBasketDto = {
@@ -592,6 +615,16 @@ export type MapSourceLocationDto = {
 };
 
 /**
+ * `MergeItemDto` in the gateway's OpenAPI document.
+ */
+export type MergeItemDto = {
+  intoItemId: string;
+  dryRun?: boolean;
+  allowSecondArticle?: boolean;
+  allowFormatDifference?: boolean;
+};
+
+/**
  * `MintGoogleNonceDto` in the gateway's OpenAPI document.
  */
 export type MintGoogleNonceDto = {
@@ -664,6 +697,7 @@ export type ProblemDetails = {
     | 'brand_not_linked'
     | 'brand_homonym_is_own_key'
     | 'brand_in_use'
+    | 'brand_unregistered'
     | 'place_already_imported'
     | 'place_matches_location'
     | 'place_names_another_chain'
@@ -673,6 +707,13 @@ export type ProblemDetails = {
     | 'item_needs_a_category'
     | 'item_ean_invalid'
     | 'item_ean_held'
+    | 'item_expectation_failed'
+    | 'item_unit_not_base'
+    | 'item_kilogram_has_size'
+    | 'item_merged'
+    | 'item_merge_two_articles_one_chain'
+    | 'item_merge_format_differs'
+    | 'item_in_use'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
@@ -1220,8 +1261,10 @@ export type UpdateItemBatchEntryDto = {
   unitSize?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+  expect?: ItemExpectationDto;
   itemId: string;
 };
 
@@ -1237,8 +1280,10 @@ export type UpdateItemDto = {
   unitSize?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+  expect?: ItemExpectationDto;
 };
 
 /**
@@ -1246,6 +1291,7 @@ export type UpdateItemDto = {
  */
 export type UpdateItemsDto = {
   items: UpdateItemBatchEntryDto[];
+  requireRegisteredBrands?: boolean;
 };
 
 /**
@@ -2377,6 +2423,7 @@ export type BasketBasketProductView = {
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
+  mergedInto?: string;
   atShop: BasketBasketProductAtShopView | null;
   sectionIds?: string[];
 };
@@ -3027,6 +3074,7 @@ export type CatalogItemView = {
   productGroupId: string | null;
   bestOffer?: CatalogItemOfferView | null;
   offers?: CatalogItemOfferView[];
+  mergedInto?: string;
 };
 
 /**
@@ -3065,6 +3113,26 @@ export type CatalogLocationSectionsView = {
  */
 export type CatalogLocationShopMapView = {
   map: CatalogShopMapView | null;
+};
+
+/**
+ * `catalog.MergeItemResult` in the gateway's OpenAPI document.
+ */
+export type CatalogMergeItemResult = {
+  itemId: string;
+  intoItemId: string;
+  dryRun: boolean;
+  mergedIntoId: string;
+  mergedAt: string | null;
+  prices: number;
+  scopeRows: number;
+  shopRows: number;
+  shopRowsKept: number;
+  barcodes: string[];
+  survivorEan: string | null;
+  linkedImages: number;
+  repointedItemIds: string[];
+  queueRows: number;
 };
 
 /**
@@ -3922,6 +3990,11 @@ export type EnumsHarvestRunStatus =
   | 'STALE';
 
 /**
+ * `enums.HarvestRunStopReason` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestRunStopReason = 'SOURCE_BLOCKED';
+
+/**
  * `enums.HarvestRunTrigger` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
@@ -3969,7 +4042,9 @@ export type EnumsHarvestWarningCode =
   | 'COPY_SOURCE_NOT_WRITTEN'
   | 'SCOPE_KIND_MISMATCH'
   | 'DETAIL_SKIPPED_UNKNOWN'
-  | 'PRICE_SOLD_ANOTHER_WAY';
+  | 'PRICE_SOLD_ANOTHER_WAY'
+  | 'SOURCE_PAUSED'
+  | 'SOURCE_RESUMED';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
@@ -4649,6 +4724,7 @@ export type HarvestHarvestRunView = {
   presetId?: string | null;
   scheduleId?: string | null;
   interrupted?: boolean;
+  stopReason?: EnumsHarvestRunStopReason | null;
   estimate?: HarvestRunEstimate;
 };
 
@@ -5536,6 +5612,13 @@ export type MsgBrandRegisterManyResponse = {
  * `msg.item.createMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemCreateManyResponse = {
+  items: CatalogItemView[];
+};
+
+/**
+ * `msg.item.getMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemGetManyResponse = {
   items: CatalogItemView[];
 };
 

@@ -72,7 +72,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     await context.setStage('LIST', 'Reading the top level categories');
     const categories = await client.topCategories();
     for (const category of categories) {
-      context.signal.throwIfAborted();
+      // An abort, a person's or the refusal guard's (plan 0215), ends the
+      // listing and not the run: every row listed so far is reported below.
+      if (context.signal.aborted) {
+        break;
+      }
       await this.listCategory(context, client, walk, category);
     }
     await context.setTotalPlanned(walk.rows.size);
@@ -111,6 +115,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         await context.heartbeat();
       },
       onError: async (error, listed) => {
+        // The page the abort cut short is not a failed page: it was not read,
+        // and is reported below as the pages never asked for are.
+        if (context.signal.aborted) {
+          return;
+        }
         // One page costs one product's category path, never the product: it
         // is still reported, with its top level category (section 5.3).
         this.logger.warn(
@@ -124,7 +133,6 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         await context.report({ failed: 1 });
       },
     });
-    context.signal.throwIfAborted();
     for (const disagreement of walk.priceDisagreements) {
       // The listing wins: it is what a shopper sees with the session's postal
       // code (section 5.2). The disagreement is named on the report.
@@ -137,12 +145,24 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     // --- 3. Report every product -------------------------------------------
     await context.setStage('INGEST', `Recording ${walk.rows.size} product(s)`);
     const observedAt = new Date();
+    const failed = new Set(walk.failedProducts.map((product) => product.code));
+    const holdsRow = rowsHeld(input);
     for (const listed of walk.rows.values()) {
-      if (known.has(listed.row.code)) {
+      const code = listed.row.code;
+      // An aborted walk still reports every listed row (plan 0215, section
+      // 6.1). A row whose page it never read, and that the chain may already
+      // hold, is reported from the listing alone, as a known one is: a full
+      // observation would state no photo and the top level category, and the
+      // ingest would clear the stored photo and category path with them.
+      const unread =
+        context.signal.aborted && !walk.details.has(code) && !failed.has(code);
+      if (known.has(code) || (unread && holdsRow(code))) {
         // What the listing said and nothing else, so the stored name, brand
         // and category path stay what the last full read wrote (plan 0119,
         // section 6). The photo address is on the product page alone (plan
-        // 0198), so it is not stated here and the stored one stays too.
+        // 0198), so it is not stated here and the stored one stays too. A row
+        // held from a page that failed keeps its `DETAIL_FAILED_KEY`, so the
+        // next `NEW` walk reads it.
         report.product({
           externalId: listed.row.code,
           detailFetched: false,
@@ -205,8 +225,10 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         await context.heartbeat();
       }
     } catch (error) {
+      // The page the abort cut short is not a failed page, and the rows read
+      // before it stay in the walk.
       if (context.signal.aborted) {
-        throw error;
+        return;
       }
       skipped.push({ page: page + 1, error });
     }
@@ -242,6 +264,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
       // The run's own bucket, so the rate the owner set on this row is the rate
       // the source sees, whatever the number of workers.
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }
@@ -277,11 +300,30 @@ function knownIds(input: CatalogDiscoveryInput): ReadonlySet<string> {
 }
 
 /**
+ * Whether the chain may already hold a row for a product (plan 0215).
+ *
+ * A `NEW` walk was handed every id the chain holds, so the answer is exact. Any
+ * other walk was handed none, so the answer is yes for every product: reading
+ * an unread one from the listing alone costs a new product its first row until
+ * the next walk, and the other answer could clear what a stored one holds.
+ */
+function rowsHeld(input: CatalogDiscoveryInput): (id: string) => boolean {
+  if ((input.details ?? HarvestDetailFetch.ALL) !== HarvestDetailFetch.NEW) {
+    return () => true;
+  }
+  const known = input.knownExternalIds ?? new Set<string>();
+  const withoutEan = input.externalIdsWithoutEan ?? new Set<string>();
+  return (id) => known.has(id) || withoutEan.has(id);
+}
+
+/**
  * One product as the listing and, when it was read, its page describe it.
  *
- * Every product this is called for had its page asked for, so a missing detail
- * is a page that failed, and the observation says so in its `extra` for the
- * next walk to read the page again.
+ * A missing detail is a page that failed (section 5.3), or on an aborted walk
+ * a page never read of a product the chain holds no row for (plan 0215). The
+ * observation says so in its `extra` for the next walk to read the page again.
+ * An unread page of a row the chain may hold never reaches here, because this
+ * states no photo and the top level category, and the ingest would write both.
  */
 function observationOf(
   listed: ListedRow,

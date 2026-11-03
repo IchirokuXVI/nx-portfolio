@@ -290,6 +290,13 @@ export const assistantValidationSchema = Joi.object({
   ASSISTANT_EMERGENCY_NUMBER: Joi.string().allow('').default(''),
 
   /**
+   * Whether the turn record carries what the person said and what was replied
+   * (k8s plan 0018, D3). Off by default, so a deployment logs no transcript
+   * unless its operator asks for one; the record then holds the lengths.
+   */
+  ASSISTANT_LOG_TURN_TEXT: Joi.boolean().default(false),
+
+  /**
    * Where the deployment's own transcriber listens (plan 0235, section 7).
    *
    * Empty is a supported deployment, like an empty key: the assistant answers
@@ -440,6 +447,8 @@ export interface AssistantConfig {
   moderationModel: string;
   /** The number the distress sentence names (plan 0236, section 3.2). */
   emergencyNumber: string;
+  /** Whether the turn record logs the words of a turn (k8s plan 0018, D3). */
+  logTurnText: boolean;
   /** The transcriber's base url, or empty where none runs (plan 0235). */
   transcriberUrl: string;
   transcriberTurnTimeoutMs: number;
@@ -547,6 +556,9 @@ export const assistantConfiguration = registerAs(
         process.env.ASSISTANT_EMERGENCY_NUMBER,
         DEFAULT_EMERGENCY_NUMBER
       ),
+      logTurnText:
+        trimmed(process.env.ASSISTANT_LOG_TURN_TEXT, 'false').toLowerCase() ===
+        'true',
       transcriberUrl: (process.env.TRANSCRIBER_URL ?? '')
         .trim()
         .replace(/\/+$/, ''),

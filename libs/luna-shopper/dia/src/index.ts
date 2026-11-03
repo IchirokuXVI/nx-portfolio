@@ -4,7 +4,8 @@
  *
  * Framework free by hard constraint: no TypeORM entity, no repository, no Nest
  * decorator, no database, no HTTP or DOM dependency, and every test runs
- * against checked in fixtures with no network. It depends on no other library.
+ * against checked in fixtures with no network. It depends on one other
+ * library, `source-guard`, for the run's refusal guard (plan 0215).
  * Requests go through Node's global `fetch`, never `node:https`, which Akamai
  * refuses.
  *
@@ -20,10 +21,10 @@ export { DIA_CATEGORY_NAMES, DIA_CATEGORY_SLUGS } from './lib/categories';
 export {
   DIA_BASE_URL,
   DIA_BROWSER_HEADERS,
+  DIA_REFUSAL_POLICY,
   DiaClient,
   DiaHttpError,
   DiaSessionError,
-  DiaStoppedError,
 } from './lib/dia.client';
 export type { DiaRawResponse } from './lib/dia.client';
 export { parseOpeningHours } from './lib/hours';

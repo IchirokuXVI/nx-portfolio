@@ -2986,6 +2986,25 @@ describe('SourceIngest, the photo a row states (plan 0198)', () => {
       expect(built.unlinkItemImages).not.toHaveBeenCalled();
     });
 
+    it('leaves the photo and the category path of a row an aborted walk never read (plan 0215)', async () => {
+      const built = withLinks([
+        { ...known, categoryPath: ['Frescos', 'Arroz'] },
+      ]);
+
+      // What an aborted El Jamón walk reports for a page it never asked for:
+      // the listing price and no photo or category path.
+      const { counters } = await run(built, [
+        partial({ prices: [{ scopeKey: null, ...PRICE }] }),
+      ]);
+
+      expect(built.stored[0]).toMatchObject({
+        imageUrl: PHOTO,
+        categoryPath: ['Frescos', 'Arroz'],
+      });
+      expect(counters).toMatchObject({ updated: 0, pricesRecorded: 1 });
+      expect(built.unlinkItemImages).not.toHaveBeenCalled();
+    });
+
     it('clears the address when it carries null, and takes the link back', async () => {
       const built = withLinks([known]);
 

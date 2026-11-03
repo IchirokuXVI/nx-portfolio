@@ -220,7 +220,7 @@ describeIntegration(
           userId: OWNER,
           name: { es: name },
           categoryIds: [categoryId(over.category ?? 'beers')],
-          defaultUnit: UnitOfMeasure.LITER,
+          defaultUnit: UnitOfMeasure.MILLILITER,
           productGroupId: over.productGroupId,
         })
       ).id;

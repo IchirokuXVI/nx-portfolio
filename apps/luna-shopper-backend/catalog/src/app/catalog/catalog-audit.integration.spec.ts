@@ -173,7 +173,7 @@ describeIntegration('the catalog audit trail (real Postgres)', () => {
       name: { en: 'Semi Skimmed 1L', es: 'Semidesnatada 1L' },
       brand: 'Pascual',
       categoryIds: [categoryId('milk')],
-      defaultUnit: UnitOfMeasure.LITER,
+      defaultUnit: UnitOfMeasure.MILLILITER,
     });
   }
 

@@ -22,6 +22,7 @@ import {
 import { DataSource, type EntityManager } from 'typeorm';
 import { Supermarket } from '../entities';
 import { CatalogAuditService } from './catalog-audit.service';
+import { survivorsOf } from './merged-items';
 import { PlatformAdminService } from './platform-admin.service';
 
 /**
@@ -56,6 +57,9 @@ export class ItemLinkedImageService {
 
   /**
    * Save the link of each named source row (plan 0198, section 3).
+   *
+   * An entry that names a merged product is saved on its survivor (plan
+   * 0239).
    *
    * An upsert on the source row. A row that names another product than its
    * link does moves the link, and both products are refreshed. An entry that
@@ -101,6 +105,21 @@ export class ItemLinkedImageService {
         if (reason) {
           bySource.delete(entry.sourceEntryId);
           rejected.push({ sourceEntryId: entry.sourceEntryId, reason });
+        }
+      }
+      // A link named to a merged product is its survivor's (plan 0239): a
+      // harvest that started before the merge still names the merged id.
+      // Locked, so a merge that is running cannot move the links under this
+      // write and miss the row it writes.
+      const survivors = await survivorsOf(
+        manager,
+        [...bySource.values()].map((entry) => entry.itemId),
+        { lock: true }
+      );
+      for (const [sourceEntryId, entry] of bySource) {
+        const survivor = survivors.get(entry.itemId);
+        if (survivor !== undefined) {
+          bySource.set(sourceEntryId, { ...entry, itemId: survivor });
         }
       }
 

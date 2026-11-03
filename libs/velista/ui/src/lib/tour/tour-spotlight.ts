@@ -48,7 +48,25 @@ export type TourSlot =
 export interface TourScreen {
   readonly visible: number;
   readonly frame: number;
+  /**
+   * The strips at the top and the foot of the screen that the platform draws over, in
+   * CSS pixels: the status bar and the notch above, the system navigation bar below.
+   *
+   * Inside the Android app the screen is drawn edge to edge, so both are inside
+   * `visible`. The ring and the card keep out of them: the bar pads itself under the
+   * navigation bar, and a ring round the whole bar took that strip in too, lighting
+   * the phone's own buttons as if they were part of the tour.
+   */
+  readonly insets: TourInsets;
 }
+
+/** How far the platform's own strips reach into the screen, in CSS pixels. */
+export interface TourInsets {
+  readonly top: number;
+  readonly bottom: number;
+}
+
+export const NO_INSETS: TourInsets = { top: 0, bottom: 0 };
 
 /**
  * Where a card of `cardHeight` goes beside `ring` on `screen`.
@@ -61,6 +79,9 @@ export interface TourScreen {
  *
  * The card is never taller than the screen less both edges: past that it scrolls
  * inside itself (velista `0112`), so the last case always fits.
+ *
+ * An edge is the screen's edge or the platform's inset there, whichever is further
+ * in, so a card never ends under the status bar or over the system navigation bar.
  */
 export function placeCard(
   ring: Box,
@@ -68,11 +89,14 @@ export function placeCard(
   cardHeight: number,
   screen: number | TourScreen
 ): TourSlot {
-  const { visible, frame } =
-    typeof screen === 'number' ? { visible: screen, frame: screen } : screen;
+  const { visible, frame, insets } =
+    typeof screen === 'number'
+      ? { visible: screen, frame: screen, insets: NO_INSETS }
+      : screen;
+  const { top: edgeTop, bottom: edgeBottom } = screenEdges(insets);
   const below = ring.top + ring.height + CARD_GAP;
-  const fitsBelow = below + cardHeight <= visible - SCREEN_EDGE;
-  const fitsAbove = ring.top - CARD_GAP - cardHeight >= SCREEN_EDGE;
+  const fitsBelow = below + cardHeight <= visible - edgeBottom;
+  const fitsAbove = ring.top - CARD_GAP - cardHeight >= edgeTop;
   const asBelow: TourSlot = { top: below, bottom: null };
   const asAbove: TourSlot = {
     top: null,
@@ -92,7 +116,15 @@ export function placeCard(
     return asAbove;
   }
 
-  return { top: null, bottom: frame - visible + SCREEN_EDGE };
+  return { top: null, bottom: frame - visible + edgeBottom };
+}
+
+/** How close the card may come to each end of the screen, given the insets there. */
+function screenEdges(insets: TourInsets): TourInsets {
+  return {
+    top: Math.max(SCREEN_EDGE, insets.top),
+    bottom: Math.max(SCREEN_EDGE, insets.bottom),
+  };
 }
 
 /**
@@ -103,12 +135,26 @@ export function placeCard(
  * screen's edges it went past them. The first stop lights the bar, which spans the
  * screen and ends at its foot, and its ring lost its bottom edge and both lower
  * corners under the edge of the screen. Clamped, the ring meets the edge instead.
+ *
+ * The platform's insets count as the edge. The bar reaches under the system
+ * navigation bar on purpose, so the strip is the bar's own colour; the ring stops at
+ * the strip, and the scrim covers it, so the phone's own buttons are not lit as part
+ * of the tour. Whether that strip exists at all is the phone's setting: a phone on
+ * gesture navigation reports a few pixels, one on three buttons about 48.
  */
-export function ringOnScreen(box: Box, width: number, visible: number): Box {
-  const top = Math.max(box.top - RING_GAP, 0);
+export function ringOnScreen(
+  box: Box,
+  width: number,
+  visible: number,
+  insets: TourInsets = NO_INSETS
+): Box {
+  const top = Math.max(box.top - RING_GAP, insets.top);
   const left = Math.max(box.left - RING_GAP, 0);
   const right = Math.min(box.left + box.width + RING_GAP, width);
-  const bottom = Math.min(box.top + box.height + RING_GAP, visible);
+  const bottom = Math.min(
+    box.top + box.height + RING_GAP,
+    visible - insets.bottom
+  );
   return {
     top,
     left,
@@ -118,14 +164,18 @@ export function ringOnScreen(box: Box, width: number, visible: number): Box {
 }
 
 /** How tall the card may be on a screen `visible` tall before it scrolls inside itself. */
-export function cardMaxHeight(visible: number): number {
-  return Math.max(visible - SCREEN_EDGE * 2, 0);
+export function cardMaxHeight(
+  visible: number,
+  insets: TourInsets = NO_INSETS
+): number {
+  const edges = screenEdges(insets);
+  return Math.max(visible - edges.top - edges.bottom, 0);
 }
 
 /** A screen, and how wide it is. */
 type Screen = TourScreen & { readonly width: number };
 
-const NO_SCREEN: Screen = { visible: 0, frame: 0, width: 0 };
+const NO_SCREEN: Screen = { visible: 0, frame: 0, width: 0, insets: NO_INSETS };
 
 /**
  * The dimming, the ring round the lit control, and the place the card goes (velista
@@ -202,7 +252,7 @@ export class TourSpotlight {
     const screen = this._screen();
     return box === null
       ? null
-      : ringOnScreen(box, screen.width, screen.visible);
+      : ringOnScreen(box, screen.width, screen.visible, screen.insets);
   });
 
   /** Where the card goes. See {@link placeCard}. */
@@ -214,9 +264,10 @@ export class TourSpotlight {
   });
 
   /** How tall the card may be before it scrolls inside itself, as a CSS length. */
-  protected readonly cardMax = computed(
-    () => `${cardMaxHeight(this._screen().visible)}px`
-  );
+  protected readonly cardMax = computed(() => {
+    const screen = this._screen();
+    return `${cardMaxHeight(screen.visible, screen.insets)}px`;
+  });
 
   /**
    * Measure again whenever anything scrolls, heard in the capture phase (velista
@@ -280,7 +331,9 @@ export class TourSpotlight {
       now.height !== drawn.height ||
       screen.visible !== held.visible ||
       screen.frame !== held.frame ||
-      screen.width !== held.width
+      screen.width !== held.width ||
+      screen.insets.top !== held.insets.top ||
+      screen.insets.bottom !== held.insets.bottom
     ) {
       this._tick.update((tick) => tick + 1);
     }
@@ -294,10 +347,15 @@ export class TourSpotlight {
  * viewport report, because each of them can be the one that counts a strip the person
  * cannot see. The frame is the height of the fixed layer itself, which is the box a
  * `bottom` offset counts from; before the layer is drawn it is the visible height.
+ *
+ * The insets are the layer's block padding, which its stylesheet sets from the
+ * platform's `env()` values: the one way a CSS value reaches a script is to be
+ * measured. Zero before the layer is drawn, and wherever the platform reports none.
  */
 function screenOf(target: HTMLElement, layer: HTMLElement | undefined): Screen {
   const document = target.ownerDocument;
   const view = document.defaultView;
+  const insets = layer === undefined ? NO_INSETS : insetsOf(layer, view);
   const heights = [document.documentElement.clientHeight];
   if (view !== null && view.innerHeight > 0) {
     heights.push(view.innerHeight);
@@ -314,7 +372,26 @@ function screenOf(target: HTMLElement, layer: HTMLElement | undefined): Screen {
     visible: safeVisible,
     frame: frame > 0 ? frame : safeVisible,
     width: width > 0 ? width : (view?.innerWidth ?? 0),
+    insets,
   };
+}
+
+/** The layer's block padding, read as the platform's insets. */
+function insetsOf(layer: HTMLElement, view: Window | null): TourInsets {
+  if (view === null) {
+    return NO_INSETS;
+  }
+  const style = view.getComputedStyle(layer);
+  return {
+    top: lengthOf(style.paddingTop),
+    bottom: lengthOf(style.paddingBottom),
+  };
+}
+
+/** A computed length in pixels as a number, and zero for anything that is not one. */
+function lengthOf(value: string): number {
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : 0;
 }
 
 /**

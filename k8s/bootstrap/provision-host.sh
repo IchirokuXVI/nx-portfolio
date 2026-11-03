@@ -13,7 +13,8 @@
 #
 # Usage, from a workstation, against a host that still allows root login:
 #
-#   scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh root@HOST:/tmp/
+#   scp k8s/bootstrap/provision-host.sh k8s/bootstrap/host-patch.sh \
+#       k8s/bootstrap/log-retention.sh root@HOST:/tmp/
 #   ssh root@HOST "bash /tmp/provision-host.sh \
 #     --admin-key 'ssh-ed25519 AAAAC3... you@laptop' \
 #     --deploy-key 'ssh-ed25519 AAAAC3... github-actions' \
@@ -56,6 +57,12 @@
 #                         Asks for a typed confirmation every time, and refuses
 #                         unless both accounts already hold a usable key.
 #   --firewall            ufw: 22/80/443 plus the k3s pod and service CIDRs
+#   --log-days <n>        days a container log line is kept, default 30
+#   --assistant-log-days <n>
+#                         the same for the assistant's container, default 7.
+#                         Both must equal what the privacy policy states (k8s
+#                         plan 0018). A re-run rewrites the rules from these.
+#   --no-log-retention    do not install nx-log-retention
 #
 # Environment:
 #   ADMIN_PASSWORD  if set, becomes the admin account's password and sudo asks
@@ -75,6 +82,9 @@ LOCK_ROOT=false
 FIREWALL=false
 REPO_URL="https://github.com/IchirokuXVI/nx-portfolio.git"
 REPO_REF="main"
+LOG_DAYS=30
+ASSISTANT_LOG_DAYS=7
+LOG_RETENTION=true
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -87,9 +97,19 @@ while [ $# -gt 0 ]; do
     --k3s)         RUN_K3S=true;      shift ;;
     --lock-root)   LOCK_ROOT=true;    shift ;;
     --firewall)    FIREWALL=true;     shift ;;
-    -h|--help)     sed -n '2,65p' "$0"; exit 0 ;;
+    --log-days)    LOG_DAYS="$2";     shift 2 ;;
+    --assistant-log-days) ASSISTANT_LOG_DAYS="$2"; shift 2 ;;
+    --no-log-retention)   LOG_RETENTION=false;     shift ;;
+    -h|--help)     sed -n '2,72p' "$0"; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; exit 1 ;;
   esac
+done
+
+for days in "$LOG_DAYS" "$ASSISTANT_LOG_DAYS"; do
+  if ! [[ "$days" =~ ^[1-9][0-9]*$ ]]; then
+    echo "--log-days and --assistant-log-days take a whole number of days above zero." >&2
+    exit 1
+  fi
 done
 
 if [ "$(id -u)" -ne 0 ]; then
@@ -456,6 +476,81 @@ if [ -e /run/lock/nx-deploy.lock ]; then
   chmod 0644 /run/lock/nx-deploy.lock
 fi
 systemd-tmpfiles --create /etc/tmpfiles.d/nx-deploy-lock.conf
+
+# ---------------------------------------------------------------------------
+# 6d. How long logs are kept (k8s plan 0018).
+#
+# Container logs exist only as the kubelet's files under /var/log/pods, and
+# the kubelet bounds them by size and pod life, never by age. A database pod
+# that lives across releases keeps lines for months. nx-log-retention trims
+# them hourly to the days the privacy policy states, and the assistant's
+# container, whose lines can hold what a person said, to fewer.
+#
+# Copied and owned by root for the same reason as nx-host-patch. Persistent
+# timer, so a host that was off runs it at boot. The rules file is rewritten
+# from the flags on every run, so the flags are the one place to change them.
+#
+# journald holds k3s's own messages and the owner's logins, not container
+# output, and is held to the same 30 days at no cost.
+# ---------------------------------------------------------------------------
+echo "==> journald: at most 30 days"
+mkdir -p /etc/systemd/journald.conf.d
+printf '[Journal]\nMaxRetentionSec=30day\n' > /etc/systemd/journald.conf.d/90-nx-retention.conf
+systemctl restart systemd-journald
+
+if [ "$LOG_RETENTION" = true ]; then
+  LOG_RETENTION_SRC=""
+  for candidate in "$(dirname "$0")/log-retention.sh" \
+                   "$(getent passwd "$ADMIN_USER" | cut -d: -f6)/nx-portfolio/k8s/bootstrap/log-retention.sh"; do
+    if [ -f "$candidate" ]; then LOG_RETENTION_SRC="$candidate"; break; fi
+  done
+
+  if [ -n "$LOG_RETENTION_SRC" ]; then
+    echo "==> log retention: $LOG_DAYS days, $ASSISTANT_LOG_DAYS for the assistant"
+    install -m 755 -o root -g root "$LOG_RETENTION_SRC" /usr/local/sbin/nx-log-retention
+    cat > /etc/nx-log-retention.conf <<RULES
+# Written by provision-host.sh (k8s plan 0018). Change the flags and re-run it,
+# not this file, and state the same numbers in the privacy policy.
+# <namespace>/<container> <days>, '*' matches a whole segment.
+*/* $LOG_DAYS
+*/luna-shopper-backend-assistant $ASSISTANT_LOG_DAYS
+RULES
+    chmod 644 /etc/nx-log-retention.conf
+
+    cat > /etc/systemd/system/nx-log-retention.service <<'UNIT'
+[Unit]
+Description=Trim container logs to their stated age (k8s plan 0018)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/nx-log-retention
+Nice=10
+IOSchedulingClass=idle
+UNIT
+    cat > /etc/systemd/system/nx-log-retention.timer <<'UNIT'
+[Unit]
+Description=Trim container logs to their stated age, hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+UNIT
+    systemctl daemon-reload
+    systemctl enable --now nx-log-retention.timer >/dev/null 2>&1
+    echo "    installed /usr/local/sbin/nx-log-retention version $(/usr/local/sbin/nx-log-retention version)"
+    systemctl list-timers nx-log-retention.timer --no-pager | head -2 | sed 's/^/    /' || true
+  else
+    echo "==> log-retention.sh not found beside this script or in the clone, so" >&2
+    echo "    container logs on this host are not trimmed by age. Copy it up next" >&2
+    echo "    to this script, or pass --k3s so the clone provides it, and re-run." >&2
+  fi
+else
+  echo "==> --no-log-retention: container logs are kept by size and pod life only."
+  echo "    Bound them some other way before stating a number in the privacy policy."
+fi
 
 # ---------------------------------------------------------------------------
 # 7. Closing the door, last and only on request.

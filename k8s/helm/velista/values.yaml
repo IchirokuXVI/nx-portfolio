@@ -505,6 +505,12 @@ lunaShopperBackend:
     # emergency number of Spain and the whole EU.
     emergencyNumber: ''
 
+    # Whether each turn's record logs what the person said and the reply (k8s
+    # plan 0018, D3). Off, the record holds their lengths and nothing else
+    # changes. The host keeps this container's logs 7 days (`assistantLogDays`
+    # above states it), so on means a transcript lives that long.
+    logTurnText: false
+
     # Voice input (plan 0041). A spoken turn is transcribed by the deployment's
     # own transcriber (plan 0235, `transcriber` below), and then runs the
     # identical code a typed turn runs. No model provider hears, so there is no

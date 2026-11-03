@@ -20,6 +20,11 @@
 
 // One column, with the primary action pushed to the bottom of a tall screen by `foot`.
 // The width cap is `AppLayout`'s.
+//
+// Both block insets are the page's own to clear, because no setup screen has a page
+// header to take the top one or a bar to take the bottom one. Inside the Android app
+// the WebView is drawn edge to edge, so without the top inset the step header's back
+// and Skip buttons sat under the status bar and the camera notch.
 @mixin page {
   display: flex;
   flex-direction: column;
@@ -27,6 +32,7 @@
   flex: 1;
   min-block-size: 100%;
   padding: var(--app-space-5);
+  padding-block-start: calc(var(--app-space-5) + var(--app-safe-top));
   padding-block-end: calc(var(--app-space-6) + var(--app-safe-bottom));
   overflow-y: auto;
 }

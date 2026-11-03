@@ -1,3 +1,5 @@
+import type { SourceGuard } from '@portfolio/luna-shopper/source-guard';
+
 /** One leaf of DIA's menu, with the root it sits under (plan 0174, section 1). */
 export interface DiaLeaf {
   /** `L2108`. DIA reuses an id with a new meaning, so the name travels too. */
@@ -151,10 +153,20 @@ export interface DiaClientOptions {
   minIntervalMs?: number;
   /** How long one request may take. Default 30 s. */
   timeoutMs?: number;
-  /** Failed requests in a row that stop the client. Default 5 (section 10). */
+  /**
+   * Failed requests in a row that stop the client. Default 5 (section 10).
+   * Read only for the client's own guard: a passed `guard` holds its policy.
+   */
   maxConsecutiveFailures?: number;
   /** The run's shared token bucket. One per run, never one per client. */
   acquire?: () => Promise<void>;
+  /**
+   * The run's refusal guard (plan 0215), one per run like the bucket. With an
+   * `acquire` the caller admits through it, as the harvester's does. Without
+   * a guard the client builds its own from `DIA_REFUSAL_POLICY`, so it still
+   * stops on the fifth failure in a row.
+   */
+  guard?: SourceGuard;
   signal?: AbortSignal;
   nowImpl?: () => number;
 }

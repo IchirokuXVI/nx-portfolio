@@ -180,6 +180,9 @@ export const CATALOG_SCHEMA_IDS = {
   createItemRequest: schemaId('msg/item.create/request'),
   updateItemRequest: schemaId('msg/item.update/request'),
   itemIdRequest: schemaId('msg/item.id/request'),
+  /** Merge one product into another (plan 0239). */
+  mergeItemRequest: schemaId('msg/item.merge/request'),
+  mergeItemResult: schemaId('catalog/MergeItemResult'),
   /** Several products by id, for the basket screen (plan 0051, section 6.1). */
   getItemsRequest: schemaId('msg/item.getMany/request'),
   getItemsResult: schemaId('msg/item.getMany/response'),
@@ -205,6 +208,8 @@ export const CATALOG_SCHEMA_IDS = {
   createItemsResult: schemaId('msg/item.createMany/response'),
   // Plan 0166: the update op of the items batch.
   updateItemInput: schemaId('catalog/UpdateItemInput'),
+  // Plan 0237, section 3.2: what an edit expects the product to hold.
+  itemExpectation: schemaId('catalog/ItemExpectation'),
   updateItemsRequest: schemaId('msg/item.updateMany/request'),
   updateItemsResult: schemaId('msg/item.updateMany/response'),
   // Plan 0166: the category tree, and a category as a product carries it.
@@ -657,6 +662,12 @@ const categoryIds = (): JsonSchema => ({
   minItems: 1,
 });
 
+/** An object schema with a rule over several of its properties added to it. */
+const withRule = (rule: JsonSchema, schema: JsonSchema): JsonSchema => ({
+  ...schema,
+  ...rule,
+});
+
 /** One or more leaf slugs, for the harvest surfaces (plan 0166, section 3). */
 export const categorySlugs = (): JsonSchema => ({
   ...array(nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })),
@@ -703,6 +714,9 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   // asked for `all` fills it, and absent means "this read did not list the
   // scopes", which is a different sentence from an empty array.
   offers: array(ref(CATALOG_SCHEMA_IDS.itemOfferView)),
+  // Plan 0239: NOT required either. Present only on a view of a merged
+  // product, and it names the product it was merged into.
+  mergedInto: nonEmptyString(),
 };
 
 export const itemViewRequired: string[] = [
@@ -1281,7 +1295,12 @@ const itemLinkedImageRejection = object(
     sourceEntryId: nonEmptyString(),
     reason: {
       type: 'string',
-      enum: ['NOT_HTTPS', 'TOO_LONG', 'ITEM_NOT_FOUND', 'SUPERMARKET_NOT_FOUND'],
+      enum: [
+        'NOT_HTTPS',
+        'TOO_LONG',
+        'ITEM_NOT_FOUND',
+        'SUPERMARKET_NOT_FOUND',
+      ],
     },
   },
   ['sourceEntryId', 'reason']
@@ -1436,22 +1455,40 @@ const listLocationsRequest = object(
   ['userId', 'supermarketId']
 );
 
-const createItemRequest = object(
-  CATALOG_SCHEMA_IDS.createItemRequest,
-  {
-    ...adminCredentialProperties,
-    name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    brand: nullableString(),
-    imageUrl: nullableString(),
-    sku: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    packCount: packCountOrNull(),
-    categoryIds: categoryIds(),
-    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
-    productGroupId: nullableString(),
-  },
-  ['userId', 'name', 'categoryIds', 'defaultUnit']
+/**
+ * A product names its leaves by id or by slug, exactly one of the two (plan
+ * 0237, section 3.4). Neither is refused, because a product always has a
+ * category.
+ */
+const ONE_CATEGORY_LIST: JsonSchema = {
+  oneOf: [{ required: ['categoryIds'] }, { required: ['categorySlugs'] }],
+};
+/** An edit names at most one of the two lists (plan 0237, section 3.4). */
+const AT_MOST_ONE_CATEGORY_LIST: JsonSchema = {
+  not: { required: ['categoryIds', 'categorySlugs'] },
+};
+
+const createItemRequest = withRule(
+  ONE_CATEGORY_LIST,
+  object(
+    CATALOG_SCHEMA_IDS.createItemRequest,
+    {
+      ...adminCredentialProperties,
+      name: ref(CATALOG_SCHEMA_IDS.localizedText),
+      brand: nullableString(),
+      imageUrl: nullableString(),
+      sku: nullableString(),
+      ean: nullableString(),
+      unitSize: numberOrNull(),
+      packCount: packCountOrNull(),
+      // One of the two (plan 0237, section 3.4), which catalog checks.
+      categoryIds: categoryIds(),
+      categorySlugs: categorySlugs(),
+      defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+      productGroupId: nullableString(),
+    },
+    ['userId', 'name', 'defaultUnit']
+  )
 );
 /**
  * The fields one product's edit may carry, stated once and used by the single
@@ -1468,19 +1505,43 @@ const updateItemFields = {
   packCount: packCountOrNull(),
   // Replaces the whole set. Never empty, because a product always has one.
   categoryIds: categoryIds(),
+  // The same set by slug, never with `categoryIds` (plan 0237, section 3.4).
+  categorySlugs: categorySlugs(),
   defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   productGroupId: nullableString(),
+  // Plan 0237, section 3.2: compared before any edit of the request.
+  expect: ref(CATALOG_SCHEMA_IDS.itemExpectation),
 };
-const updateItemRequest = object(
-  CATALOG_SCHEMA_IDS.updateItemRequest,
-  { ...adminCredentialProperties, ...updateItemFields },
-  ['userId', 'itemId']
+/**
+ * What an edit expects the product to hold (plan 0237, section 3.2). Every
+ * field is optional, and `null` means the product holds nothing there.
+ */
+const itemExpectation = object(
+  CATALOG_SCHEMA_IDS.itemExpectation,
+  {
+    name: ref(CATALOG_SCHEMA_IDS.localizedText),
+    brand: nullableString(),
+    unitSize: numberOrNull(),
+    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+    packCount: { type: ['integer', 'null'] },
+    categorySlugs: array(
+      nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })
+    ),
+  },
+  []
+);
+const updateItemRequest = withRule(
+  AT_MOST_ONE_CATEGORY_LIST,
+  object(
+    CATALOG_SCHEMA_IDS.updateItemRequest,
+    { ...adminCredentialProperties, ...updateItemFields },
+    ['userId', 'itemId']
+  )
 );
 /** A product of a bulk update: {@link updateItemRequest} without the credential. */
-const updateItemInput = object(
-  CATALOG_SCHEMA_IDS.updateItemInput,
-  updateItemFields,
-  ['itemId']
+const updateItemInput = withRule(
+  AT_MOST_ONE_CATEGORY_LIST,
+  object(CATALOG_SCHEMA_IDS.updateItemInput, updateItemFields, ['itemId'])
 );
 const updateItemsRequest = object(
   CATALOG_SCHEMA_IDS.updateItemsRequest,
@@ -1491,6 +1552,8 @@ const updateItemsRequest = object(
       minItems: 1,
       maxItems: BULK_DECISION_MAX_OPERATIONS,
     },
+    // Plan 0237, section 3.6: opt in, never sent by the harvester.
+    requireRegisteredBrands: boolean(),
   },
   ['userId', 'items']
 );
@@ -1723,21 +1786,25 @@ const bulkOperationError = object(
 );
 
 /** A product of a bulk create: {@link createItemRequest} without the credential. */
-const createItemInput = object(
-  CATALOG_SCHEMA_IDS.createItemInput,
-  {
-    name: ref(CATALOG_SCHEMA_IDS.localizedText),
-    brand: nullableString(),
-    imageUrl: nullableString(),
-    sku: nullableString(),
-    ean: nullableString(),
-    unitSize: numberOrNull(),
-    packCount: packCountOrNull(),
-    categoryIds: categoryIds(),
-    defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
-    productGroupId: nullableString(),
-  },
-  ['name', 'categoryIds', 'defaultUnit']
+const createItemInput = withRule(
+  ONE_CATEGORY_LIST,
+  object(
+    CATALOG_SCHEMA_IDS.createItemInput,
+    {
+      name: ref(CATALOG_SCHEMA_IDS.localizedText),
+      brand: nullableString(),
+      imageUrl: nullableString(),
+      sku: nullableString(),
+      ean: nullableString(),
+      unitSize: numberOrNull(),
+      packCount: packCountOrNull(),
+      categoryIds: categoryIds(),
+      categorySlugs: categorySlugs(),
+      defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+      productGroupId: nullableString(),
+    },
+    ['name', 'defaultUnit']
+  )
 );
 
 const createItemsRequest = object(
@@ -1745,6 +1812,8 @@ const createItemsRequest = object(
   {
     ...adminCredentialProperties,
     items: array(ref(CATALOG_SCHEMA_IDS.createItemInput)),
+    // Plan 0237, section 3.6: opt in, never sent by the harvester.
+    requireRegisteredBrands: boolean(),
   },
   ['userId', 'items']
 );
@@ -1935,6 +2004,97 @@ const itemIdRequest = object(
   { ...adminCredentialProperties, itemId: nonEmptyString() },
   ['userId', 'itemId']
 );
+/** Merge one product into another (plan 0239, section 1.1). */
+const mergeItemRequest = object(
+  CATALOG_SCHEMA_IDS.mergeItemRequest,
+  {
+    ...adminCredentialProperties,
+    itemId: nonEmptyString(),
+    intoItemId: nonEmptyString(),
+    dryRun: boolean(),
+    allowSecondArticle: boolean(),
+    allowFormatDifference: boolean(),
+  },
+  ['userId', 'itemId', 'intoItemId']
+);
+/**
+ * What a merge moved, or with `dryRun` would move (plan 0239, section 1.1).
+ * The two answers have one shape and count the same things.
+ */
+const mergeItemResult = object(
+  CATALOG_SCHEMA_IDS.mergeItemResult,
+  {
+    itemId: nonEmptyString(),
+    intoItemId: nonEmptyString(),
+    dryRun: boolean(),
+    mergedIntoId: {
+      ...nonEmptyString(),
+      description:
+        'The survivor the merged row names now, the same as intoItemId.',
+    },
+    mergedAt: {
+      ...nullableString(),
+      description: 'When the merge was written. Null on a dry run.',
+    },
+    prices: {
+      ...integer({ minimum: 0 }),
+      description: 'Price rows (item_prices) moved to the survivor.',
+    },
+    scopeRows: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Materialized scope rows (supermarket_items) moved to the survivor. Where the survivor already had a row for the scope, it keeps its own.',
+    },
+    shopRows: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Shop rows (supermarket_location_items) moved to the survivor.',
+    },
+    shopRowsKept: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Shop rows left on the merged row, because the survivor already had a row for that shop. They are a record and are not deleted.',
+    },
+    barcodes: {
+      ...array(nonEmptyString()),
+      description: 'The barcodes moved to the survivor.',
+    },
+    survivorEan: {
+      ...nullableString(),
+      description: "The survivor's first barcode after the merge.",
+    },
+    linkedImages: {
+      ...integer({ minimum: 0 }),
+      description: 'Chain photo links moved to the survivor.',
+    },
+    repointedItemIds: {
+      ...array(nonEmptyString()),
+      description:
+        'Products that were merged into the merged one and now name the survivor (the one level rule).',
+    },
+    queueRows: {
+      ...integer({ minimum: 0 }),
+      description:
+        'Harvester queue rows that named the merged product, or a product already merged into it, when catalog asked, just before the write. Not yet moved when this answers: the harvester rewrites them when it hears catalog.itemMerged, which is published for each of those products.',
+    },
+  },
+  [
+    'itemId',
+    'intoItemId',
+    'dryRun',
+    'mergedIntoId',
+    'mergedAt',
+    'prices',
+    'scopeRows',
+    'shopRows',
+    'shopRowsKept',
+    'barcodes',
+    'survivorEan',
+    'linkedImages',
+    'repointedItemIds',
+    'queueRows',
+  ]
+);
 /**
  * Several products by id (plan 0051, section 6.1).
  *
@@ -1992,6 +2152,8 @@ const searchItemsRequest = object(
     withoutProductGroup: boolean(),
     // Admin plan 0043: the products on no category at all.
     withoutCategory: boolean(),
+    // Plan 0239: the merged products alone, the history of the merges.
+    merged: boolean(),
     priceScopeIds: array(nonEmptyString()),
     // Plan 0146: which chains sell the products, which is not what the scopes
     // above decide. Absent and empty both mean every chain.
@@ -3385,11 +3547,14 @@ export const catalogSchemas: JsonSchema[] = [
   createItemRequest,
   updateItemRequest,
   itemIdRequest,
+  mergeItemRequest,
+  mergeItemResult,
   bulkOperationError,
   createItemInput,
   createItemsRequest,
   createItemsResult,
   updateItemInput,
+  itemExpectation,
   updateItemsRequest,
   updateItemsResult,
   categoryTreeRequest,
@@ -3588,6 +3753,10 @@ export const catalogMessageContracts: Record<
   [ITEM_PATTERNS.get]: {
     request: CATALOG_SCHEMA_IDS.itemIdRequest,
     response: CATALOG_SCHEMA_IDS.itemView,
+  },
+  [ITEM_PATTERNS.merge]: {
+    request: CATALOG_SCHEMA_IDS.mergeItemRequest,
+    response: CATALOG_SCHEMA_IDS.mergeItemResult,
   },
   [ITEM_PATTERNS.getMany]: {
     request: CATALOG_SCHEMA_IDS.getItemsRequest,

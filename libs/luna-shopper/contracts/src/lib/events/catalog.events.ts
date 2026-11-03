@@ -16,6 +16,11 @@ export const CATALOG_EVENTS = {
   itemGroupChanged: 'catalog.itemGroupChanged',
   /** A group no longer exists; every line bound to it must let go. */
   productGroupDeleted: 'catalog.productGroupDeleted',
+  /**
+   * One product was merged into another (plan 0239, section 3). The harvester
+   * rewrites its queue rows and core rewrites its lines onto the survivor.
+   */
+  itemMerged: 'catalog.itemMerged',
 } as const;
 
 export type CatalogEvent = (typeof CATALOG_EVENTS)[keyof typeof CATALOG_EVENTS];
@@ -56,4 +61,21 @@ export interface ItemGroupChangedEvent {
 export interface ProductGroupDeletedEvent {
   eventId: string;
   productGroupId: string;
+}
+
+/**
+ * One product was merged into another (plan 0239, section 3).
+ *
+ * Published after catalog's transaction commits, so every reader of catalog
+ * already answers the survivor for `itemId` when this arrives. A consumer
+ * moves every row it holds that names `itemId` onto `intoItemId`. Keyed on
+ * the emission like the group events, so a consumer's inbox dedupes a
+ * redelivery.
+ */
+export interface ItemMergedEvent {
+  eventId: string;
+  /** The merged product. Its row stays in catalog, as a record. */
+  itemId: string;
+  /** The survivor. */
+  intoItemId: string;
 }

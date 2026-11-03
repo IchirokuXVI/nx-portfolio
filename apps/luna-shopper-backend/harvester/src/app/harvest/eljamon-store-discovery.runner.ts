@@ -140,6 +140,7 @@ export class ElJamonStoreDiscoveryRunner implements StoreDiscoveryRunner {
       locatorOrigin: readOrigin(config),
       locatorRadiusKm: readPositive(config, 'locatorRadiusKm'),
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }
