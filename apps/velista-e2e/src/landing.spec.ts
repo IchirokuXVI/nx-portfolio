@@ -48,7 +48,7 @@ test.describe('velista landing page', () => {
     expect(text).not.toMatch(RAW_KEY);
     // Plan 0007 section 7 reversed the decision to leave these in English: they are
     // the only words on the front door that say what the product does.
-    expect(text).toContain('Leche');
+    expect(text).toContain('Aceite de oliva');
   });
 
   test('the language control opens, and switches the locale in place', async ({
