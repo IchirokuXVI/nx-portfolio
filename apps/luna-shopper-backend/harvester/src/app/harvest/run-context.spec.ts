@@ -1,3 +1,5 @@
+import { HarvestWarningCode } from '@portfolio/luna-shopper/contracts';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { HarvestRun } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import type { HarvestRunStore } from './harvest-run.store';
@@ -75,5 +77,132 @@ describe('RunContext.heartbeat', () => {
       expect.objectContaining({ failed: 1 })
     );
     expect(store.touchHeartbeat).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The run's one refusal guard, as the context wires it (plan 0215, section
+ * 5). The pause here is 60 ms of real time, so no fake timer is involved.
+ */
+describe('RunContext.guardWith', () => {
+  const POLICY = {
+    consecutive: 2,
+    window: null,
+    coolDowns: 1 as const,
+    coolDownMs: 60,
+    probes: 1,
+  };
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => setImmediate(resolve));
+
+  it('holds every acquire through a pause, says so, and puts the stage back on resume', async () => {
+    const { store, context, tick } = build();
+    const onStop = jest.fn();
+    const guard = context.guardWith(POLICY, onStop);
+    expect(context.guard).toBe(guard);
+    await context.setStage('DETAIL', 'Fetching detail for 40 product(s)');
+
+    expect(guard.refused(403, 'https://shop.test/p/1')).toBe('fail');
+    expect(guard.refused(403, 'https://shop.test/p/2')).toBe('retry');
+    await settle();
+
+    expect(store.setStage).toHaveBeenLastCalledWith(
+      RUN,
+      'PAUSED',
+      'The chain refused 2 requests in a row. Waiting 0 minutes before trying one more.'
+    );
+    expect(store.addWarnings).toHaveBeenCalledWith(RUN, [
+      expect.objectContaining({ code: HarvestWarningCode.SOURCE_PAUSED }),
+    ]);
+
+    let admitted = false;
+    const waiting = context.acquire().then(() => {
+      admitted = true;
+    });
+    await settle();
+    expect(admitted).toBe(false);
+
+    // The pause keeps the heartbeat moving while it lasts.
+    tick(10_000);
+    await waiting;
+    expect(store.touchHeartbeat).toHaveBeenCalled();
+
+    // The probe was answered: the stage the runner set comes back.
+    guard.answered();
+    await settle();
+    expect(store.setStage).toHaveBeenLastCalledWith(
+      RUN,
+      'DETAIL',
+      'Fetching detail for 40 product(s)'
+    );
+    expect(store.addWarnings).toHaveBeenLastCalledWith(RUN, [
+      expect.objectContaining({ code: HarvestWarningCode.SOURCE_RESUMED }),
+    ]);
+    expect(onStop).not.toHaveBeenCalled();
+  });
+
+  it('holds a worker that was waiting in the bucket when the guard tripped', async () => {
+    const store = build().store;
+    // A bucket of one token a second, on a clock the spec moves, whose wait
+    // the spec ends by hand.
+    let clock = 0;
+    let refill: () => void = () => undefined;
+    const bucket = new TokenBucket({
+      ratePerSecond: 1,
+      burst: 1,
+      now: () => clock,
+      sleep: () =>
+        new Promise<void>((resolve) => {
+          refill = resolve;
+        }),
+    });
+    const context = new RunContext(
+      { id: RUN } as HarvestRun,
+      new AbortController().signal,
+      bucket,
+      store as unknown as HarvestRunStore
+    );
+    const guard = context.guardWith(POLICY, jest.fn());
+
+    await context.acquire();
+    let sent = false;
+    const waiting = context.acquire().then(() => {
+      sent = true;
+    });
+    await settle();
+    expect(sent).toBe(false);
+
+    // The trip comes while the second worker waits for its token.
+    expect(guard.refused(403, 'https://shop.test/p/1')).toBe('fail');
+    expect(guard.refused(403, 'https://shop.test/p/2')).toBe('retry');
+
+    // Its token arrives during the pause, and it is held at the gate.
+    clock += 1_000;
+    refill();
+    await settle();
+    expect(sent).toBe(false);
+
+    // The 60 ms pause ends, and it goes out as the one probe.
+    await waiting;
+    expect(sent).toBe(true);
+    expect(guard.summary().paused).not.toBeNull();
+  });
+
+  it('writes no pause for a trip that stops the run, and hands the stop on', async () => {
+    const { store, context } = build();
+    const onStop = jest.fn();
+    const guard = context.guardWith(
+      { ...POLICY, coolDowns: 0, consecutive: 1 },
+      onStop
+    );
+
+    expect(() => guard.refused(403, 'https://shop.test/p/1')).toThrow(
+      SourceBlockedError
+    );
+    await settle();
+
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(store.setStage).not.toHaveBeenCalled();
+    await expect(context.acquire()).rejects.toBeInstanceOf(SourceBlockedError);
   });
 });

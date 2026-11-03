@@ -1,6 +1,7 @@
 import {
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   type HarvestRunWarning,
 } from '@portfolio/luna-shopper/contracts';
@@ -153,6 +154,19 @@ export class HarvestRun extends BaseEntity {
 
   @Column({ type: 'text', nullable: true })
   error!: string | null;
+
+  /**
+   * Why a `FAILED` run stopped before its work was done (plan 0215), null for
+   * every other run. A reason beside the status, so every reader of `status`
+   * goes on reading a stopped run as the failure it is.
+   */
+  @Column({
+    type: 'enum',
+    enum: HarvestRunStopReason,
+    enumName: 'harvest_run_stop_reason',
+    nullable: true,
+  })
+  stopReason!: HarvestRunStopReason | null;
 
   /**
    * What the run has to say about itself beyond its counters (plan 0085,

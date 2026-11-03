@@ -1,6 +1,8 @@
+import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DezaClient, DezaHttpError } from './deza.client';
+import { DEZA_REFUSAL_POLICY, DezaClient, DezaHttpError } from './deza.client';
+import { parseProductPage } from './rows';
 
 const fixture = (name: string): string =>
   readFileSync(join(__dirname, '__fixtures__', name), 'utf8');
@@ -227,5 +229,77 @@ describe('DezaClient', () => {
 
     await expect(client.fetchSectionTree()).rejects.toThrow();
     expect(calls).toHaveLength(0);
+  });
+});
+
+/**
+ * The run's refusal guard (plan 0215, section 4). The runner builds one client
+ * per query, so a count kept inside a client starts at zero on every query.
+ * The guard is the run's, and every client of the run reports to it.
+ */
+describe('DezaClient and the refusal guard', () => {
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => setImmediate(resolve));
+
+  function pausingGuard() {
+    const sleeps: Array<() => void> = [];
+    const guard = new SourceGuard(DEZA_REFUSAL_POLICY, {
+      sleep: () => new Promise<void>((resolve) => sleeps.push(resolve)),
+    });
+    const endPause = async (): Promise<void> => {
+      for (let tick = 0; tick < 40; tick += 1) {
+        await settle();
+        sleeps.shift()?.();
+      }
+    };
+    return { guard, endPause };
+  }
+
+  it('shares one count between the clients of two queries', async () => {
+    const { guard, endPause } = pausingGuard();
+    const { fetchImpl, calls } = stubFetch([
+      { body: SEARCH },
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { status: 403 },
+      { body: SEARCH },
+    ]);
+    const query = (): DezaClient =>
+      new DezaClient({ userAgent: 'test', fetchImpl, guard });
+    const first = query();
+    const second = query();
+
+    expect((await first.openQuery({ section: 'W051000001' })).rows).toEqual(
+      parseProductPage(SEARCH).rows
+    );
+    for (const client of [first, first, second, second]) {
+      await expect(
+        client.openQuery({ section: 'W051000001' })
+      ).rejects.toBeInstanceOf(DezaHttpError);
+    }
+    // The fifth refusal in a row is the second client's third request, and it
+    // trips on the count both clients fed.
+    const tripping = second.fetchPage(2);
+    await settle();
+    expect(guard.summary().paused).toEqual(
+      expect.objectContaining({ consecutive: 5 })
+    );
+    expect(calls).toHaveLength(6);
+
+    await endPause();
+
+    expect((await tripping).rows.length).toBeGreaterThan(0);
+    expect(calls).toHaveLength(7);
+  });
+
+  it('throws DezaHttpError on a 403 with no guard, as before', async () => {
+    const { fetchImpl, calls } = stubFetch([{ status: 403 }]);
+
+    await expect(
+      new DezaClient({ userAgent: 'test', fetchImpl }).fetchSectionTree()
+    ).rejects.toBeInstanceOf(DezaHttpError);
+    expect(calls).toHaveLength(1);
   });
 });

@@ -1,3 +1,5 @@
+> **PR:** [#889](https://github.com/IchirokuXVI/nx-portfolio/pull/889)
+
 # 0215: a run stops when a chain keeps refusing it
 
 > Four of the six storefront clients treat a 403 as the failure of one product and go on at full
@@ -389,9 +391,11 @@ if (clears(response.status)) {
 `RunExecutor.execute` builds the guard beside the bucket, from
 `refusalPolicyOf(source?.adapterKey)`, and hands it to the `RunContext`:
 
-- `RunContext.acquire` becomes `await guard.admit(signal)` and then `await bucket.acquire()`. Every
+- `RunContext.acquire` becomes `await bucket.acquire()` and then `await guard.admit(signal)`. Every
   client of the run already awaits `acquire`, so every worker stops at the gate during a pause
-  with no change in the runners. The bucket is not touched.
+  with no change in the runners. The bucket is not touched. The guard comes after the bucket, so
+  a worker that waited in the bucket while the guard tripped is held at the gate too, and sends
+  nothing into the pause.
 - `RunContext.guard` is exposed, and each runner passes it to the clients it builds, beside
   `acquire`.
 - `onTrip` writes a `SOURCE_PAUSED` warning and sets the stage to `PAUSED` with a label such as
@@ -422,9 +426,16 @@ This plan fixes them for both causes:
 
 - `lidl-catalog.runner.ts`:90 and `carrefour-catalog.runner.ts`:87: break out of the loop on an
   aborted signal instead of throwing, then report what was read, as the loop end does today.
-- `eljamon-catalog.runner.ts`:127: report every listed row as today and then return. A product
-  whose page was not read is reported with `DETAIL_FAILED_KEY`, as a failed page is today
-  (`eljamon-catalog.runner.ts`:291 to :297), and is read again by the next `NEW` walk.
+- `eljamon-catalog.runner.ts`:127: report every listed row as today and then return. A page that
+  was asked for and failed keeps `DETAIL_FAILED_KEY`, as today (`eljamon-catalog.runner.ts`:291
+  to :297). A page the abort cut short, or never asked for, was not read, and its row depends on
+  what the chain holds. A row the chain may hold is reported from the listing alone, as a known
+  one is: `detailFetched: false` and the listing price, with no photo and no category path, so
+  the ingest leaves both as they were. A full observation would state no photo and the top level
+  category, and the ingest would clear the stored photo and category path with them. Only a
+  `NEW` walk knows which ids are held, so after an `ALL` walk every unread row is reported this
+  way. A row the chain holds none of is written with `DETAIL_FAILED_KEY`, and the next `NEW`
+  walk reads it.
 - `dia-catalog.runner.ts`:84 to :96: on `SourceBlockedError`, go on to report the products, as an
   aborted walk does. The scopes that did not finish state positives only.
 - `carrefour-catalog.runner.ts`:130 to :136 and `carrefour-detail.runner.ts`:148: return after
@@ -499,8 +510,9 @@ sixteen refused requests and not four thousand.
 - Mercadona reports every known product from the listing before the detail pool (context). A
   product whose detail was never fetched has no row, or a row with no EAN, and both are "not
   known", so the next `NEW` walk fetches exactly those.
-- El Jamón reports every listed row on a stop, and a row whose page was not read carries
-  `DETAIL_FAILED_KEY`, which `knownIds` does not count as known.
+- El Jamón reports every listed row on a stop. A row whose page failed carries
+  `DETAIL_FAILED_KEY`, which `knownIds` does not count as known. A row whose page was not read is
+  either new, and is written with `DETAIL_FAILED_KEY`, or held, and keeps the key it had (6.1).
 - LIDL, DEZA, DIA and the Carrefour crawl have no `NEW` choice. A rerun repeats the run, and what
   the stopped run wrote stays written.
 - The Carrefour detail backfill picks the rows with no EAN, so it resumes by itself.
@@ -514,7 +526,9 @@ A rerun is a person's act, or the next slot of a schedule. This plan starts noth
 - The warnings list shows `SOURCE_PAUSED` and `SOURCE_RESUMED` with their sentences, and the stage
   reads `PAUSED` while a pause lasts.
 - `HarvestRunView.stopReason` is in the contract for the back office and for plan `0218`. A badge
-  or a filter on it is a back office follow up, and it needs a mock first.
+  or a filter on it is a back office follow up, and it needs a mock first. The owner asked for that
+  follow up on 2026-11-01: the schedule view says `SOURCE_FAILING` today and not why, so the follow
+  up shows the `stopReason` of the last run beside the block, and on the run row.
 
 ## 9. The contracts and the table
 
@@ -590,6 +604,8 @@ A rerun is a person's act, or the next slot of a schedule. This plan starts noth
     `SourceBlockedError`, and `isSkippable` is false for it.
 - **`worker-pool.spec.ts`**: a `SourceBlockedError` counts neither processed nor failed, calls no
   `onError`, and the result says `stopped`.
+- **`run-context.spec.ts`**: a worker that waits in the bucket while the guard trips sends nothing
+  until the pause ends.
 - **Executor**, with fake runners:
   - a guard stop ends the run `FAILED` with `stopReason: SOURCE_BLOCKED`, the stop sentence, the
     `refusals` block, and a drained sink,
@@ -599,11 +615,14 @@ A rerun is a person's act, or the next slot of a schedule. This plan starts noth
   - a stopped run adds one to `consecutiveFailures`, and `interrupted` is false for it,
   - a stopped run under the ratio is still `FAILED`.
 - **Runners**, each with its existing fake site and a guard that stops partway:
-  - Mercadona: known products are written, no negative availability and no `assortmentComplete`
-    when the stop came in the listing walk, and the negatives are written when it came in the
-    detail phase after a whole listing walk.
+  - Mercadona: known products are written, and a stop writes no negative availability and no
+    `assortmentComplete`, whether it came in the listing walk or in the detail phase, exactly as
+    an abort does (section 6.1).
   - LIDL, El Jamón, Carrefour: the products read before the stop are reported, and the same holds
     for a person's abort.
+  - El Jamón: a walk aborted after the first detail reports every remaining listed row the chain
+    may hold with no photo and no category path, and the ingest leaves both of the stored row as
+    they were.
   - DIA: the products of the scopes walked are reported, and an unfinished scope states no
     negative.
   - DEZA: availability is stated only for products the crawl saw.
@@ -682,14 +701,15 @@ Chosen in this plan, and open to the owner's correction:
 - An isolated refusal still counts one `failed`, and the report names the first 50.
 - The policies are constants in each adapter library, not columns and not variables.
 
-**Owner** (ask, do not choose):
+**Owner** (answered 2026-11-01):
 
-1. **Does a stop count as one failure for the three failure rule?** This plan counts it, which
-   stops the schedules of a chain after three blocked walks. The other answers are "a stop
-   suspends the chain's schedules at once" and "a stop does not count, because the chain and not
-   the run was at fault".
-2. **Do DIA and Carrefour get the pause too?** This plan keeps their stop at once, because their
-   own notes say a retry deepens the block. A pause of ten minutes and one probe is milder than
-   the retry those notes describe.
-3. **Is ten minutes the pause you want?** It is twice the one block measured. A longer pause makes
-   a scheduled walk end later, and a shorter one risks a probe inside the block.
+1. **A stop counts as one failure for the three failure rule.** Three blocked walks in a row stop
+   the schedules of the chain, as plan `0206` built. The owner asked that a person can see that the
+   block, and not an error of the run, is what stopped them. `stopReason` is in the contract for
+   that. The back office follow up (section 8) shows it beside `SOURCE_FAILING` on the schedule and
+   on the run row, after a mock.
+2. **DIA and Carrefour get no pause.** The Carrefour notes record that a retry deepens the block,
+   and DIA already waits 60 s on each 403 before it counts one. Both stop at once, as the table of
+   section 3 says. Plan `0219` gives the data to revisit this.
+3. **Ten minutes is the pause.** It is a constant in each adapter library, so a later change is one
+   line.

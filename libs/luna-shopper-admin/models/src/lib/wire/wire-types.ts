@@ -3922,6 +3922,11 @@ export type EnumsHarvestRunStatus =
   | 'STALE';
 
 /**
+ * `enums.HarvestRunStopReason` in the gateway's OpenAPI document.
+ */
+export type EnumsHarvestRunStopReason = 'SOURCE_BLOCKED';
+
+/**
  * `enums.HarvestRunTrigger` in the gateway's OpenAPI document.
  */
 export type EnumsHarvestRunTrigger = 'MANUAL' | 'SCHEDULED' | 'SYSTEM';
@@ -3969,7 +3974,9 @@ export type EnumsHarvestWarningCode =
   | 'COPY_SOURCE_NOT_WRITTEN'
   | 'SCOPE_KIND_MISMATCH'
   | 'DETAIL_SKIPPED_UNKNOWN'
-  | 'PRICE_SOLD_ANOTHER_WAY';
+  | 'PRICE_SOLD_ANOTHER_WAY'
+  | 'SOURCE_PAUSED'
+  | 'SOURCE_RESUMED';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
@@ -4649,6 +4656,7 @@ export type HarvestHarvestRunView = {
   presetId?: string | null;
   scheduleId?: string | null;
   interrupted?: boolean;
+  stopReason?: EnumsHarvestRunStopReason | null;
   estimate?: HarvestRunEstimate;
 };
 

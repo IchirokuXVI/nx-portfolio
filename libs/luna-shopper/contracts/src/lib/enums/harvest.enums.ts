@@ -119,6 +119,19 @@ export enum HarvestRunStatus {
 }
 
 /**
+ * Why a run that ended FAILED stopped before its work was done (plan 0215).
+ *
+ * A reason beside the status and not a status of its own: every reader of
+ * `status` already treats such a run as a failure that is not an
+ * interruption, and a reader that does not know the reason sees the failure
+ * it saw before.
+ */
+export enum HarvestRunStopReason {
+  /** The chain refused requests until the run's guard stopped it. */
+  SOURCE_BLOCKED = 'SOURCE_BLOCKED',
+}
+
+/**
  * What happened to the last slot of a schedule (plan 0206, section 5.3).
  *
  * Every value but STARTED means no run started, and the slot is skipped rather
@@ -342,6 +355,14 @@ export enum HarvestWarningCode {
    * decides: the leaflet may name another product than the row.
    */
   PRICE_SOLD_ANOTHER_WAY = 'PRICE_SOLD_ANOTHER_WAY',
+  /**
+   * The chain refused requests until the run's guard tripped, and the run
+   * paused before it tries one more (plan 0215, section 5). Nothing is sent
+   * while the pause lasts.
+   */
+  SOURCE_PAUSED = 'SOURCE_PAUSED',
+  /** A probe after the pause was answered, and the run goes on (plan 0215). */
+  SOURCE_RESUMED = 'SOURCE_RESUMED',
 }
 
 /**

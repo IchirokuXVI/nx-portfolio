@@ -1,6 +1,7 @@
 import { PostalCodeSource } from '@portfolio/luna-shopper/contracts';
-import { DiaClient, DiaStoppedError } from '@portfolio/luna-shopper/dia';
+import { DiaClient } from '@portfolio/luna-shopper/dia';
 import { SPAIN_POSTAL_CODE_CENTROIDS } from '@portfolio/luna-shopper/postal-codes/dataset';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import {
   fakeDiaSite,
@@ -423,7 +424,7 @@ describe('DiaStoreDiscoveryRunner', () => {
 
     await expect(
       runner.run(context(), report, baseInput, source())
-    ).rejects.toBeInstanceOf(DiaStoppedError);
+    ).rejects.toBeInstanceOf(SourceBlockedError);
     expect(
       runner.sent.filter((request) => request.includes('buscarInformacion'))
     ).toHaveLength(5);

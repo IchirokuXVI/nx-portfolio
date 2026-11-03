@@ -1,3 +1,4 @@
+import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import { TokenBucket } from './token-bucket';
 import { runWorkerPool } from './worker-pool';
 
@@ -87,6 +88,52 @@ describe('runWorkerPool', () => {
     // valid data, which is why abort flushes rather than discards.
     expect(source.requested.length).toBeGreaterThan(0);
     expect(source.requested.length).toBeLessThan(100);
+  });
+
+  it('counts a stop of the refusal guard neither processed nor failed (plan 0215)', async () => {
+    const controller = new AbortController();
+    const guard = new SourceGuard({
+      consecutive: 1,
+      window: null,
+      coolDowns: 0,
+      coolDownMs: 0,
+      probes: 0,
+    });
+    const errors: unknown[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+
+    const result = await runWorkerPool({
+      items: ids(20),
+      workers: 4,
+      signal: controller.signal,
+      handle: async (id) => {
+        if (id === 'p0') {
+          // The refusal that stops the run, while three workers wait.
+          await new Promise((resolve) => setImmediate(resolve));
+          try {
+            guard.refused(403, `https://example.test/${id}`);
+          } finally {
+            controller.abort();
+            release();
+          }
+        }
+        await held;
+        await guard.admit(controller.signal);
+      },
+      onError: (error) => {
+        errors.push(error);
+      },
+    });
+
+    expect(result).toEqual({
+      processed: 0,
+      failed: 0,
+      aborted: true,
+      stopped: true,
+    });
+    expect(errors).toEqual([]);
+    expect(guard.stop).not.toBeNull();
   });
 
   it('runs a single worker strictly in order', async () => {
@@ -207,6 +254,8 @@ describe('TokenBucket', () => {
   });
 
   it('refuses a rate that would mean no requests at all', async () => {
-    expect(() => new TokenBucket({ ratePerSecond: 0 })).toThrow(/positive rate/);
+    expect(() => new TokenBucket({ ratePerSecond: 0 })).toThrow(
+      /positive rate/
+    );
   });
 });

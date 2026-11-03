@@ -6,7 +6,6 @@ import {
   DIA_CATEGORY_SLUGS,
   DiaClient,
   DiaSessionError,
-  DiaStoppedError,
   photoAddressRead,
   regularPrice,
   splitSize,
@@ -15,6 +14,7 @@ import {
   type DiaListingRow,
   type DiaStoreFile,
 } from '@portfolio/luna-shopper/dia';
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import type {
   CatalogDiscoveryInput,
@@ -84,16 +84,17 @@ export class DiaCatalogRunner implements CatalogRunner {
     try {
       await this.walkScopes(context, report, client, walk, scopes, source);
     } catch (error) {
-      if (!(error instanceof DiaStoppedError)) {
+      if (!(error instanceof SourceBlockedError) && !context.signal.aborted) {
         throw error;
       }
-      // Five failed requests in a row (section 10). The report says what was
-      // read and what stopped it, and the run then fails with that error named
-      // rather than failing every remaining page at full speed.
-      walk.stoppedBy = String(error.lastError);
-      await context.flush();
-      await context.setReport(walk.toReport(null, null, client.requests));
-      throw error;
+      // Five failed requests in a row (section 10), or an abort that cut a
+      // request short. The products of the scopes walked are reported below,
+      // as a walk that returned on an abort reports them (plan 0215, section
+      // 6.1). A scope that did not finish states positives only, because the
+      // run's signal is aborted, and the report names what stopped it.
+      if (error instanceof SourceBlockedError) {
+        walk.stoppedBy = error.message;
+      }
     }
 
     // --- 3. Report every product ---------------------------------------------
@@ -188,7 +189,7 @@ export class DiaCatalogRunner implements CatalogRunner {
         // so a scope is never walked under a borrowed one.
         await client.startSession(postalCode, scope.externalKey);
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         walk.skip(
@@ -260,7 +261,7 @@ export class DiaCatalogRunner implements CatalogRunner {
           walk.skip(key, 'no-postal-code', 'The store detail states none.');
         }
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         walk.skip(key, 'detail-failed', String(error));
@@ -294,7 +295,7 @@ export class DiaCatalogRunner implements CatalogRunner {
       try {
         read = await client.listing(path, page);
       } catch (error) {
-        if (error instanceof DiaStoppedError || context.signal.aborted) {
+        if (error instanceof SourceBlockedError || context.signal.aborted) {
           throw error;
         }
         this.logger.warn(
@@ -353,6 +354,7 @@ export class DiaCatalogRunner implements CatalogRunner {
       // The run's own bucket. The client also holds 500 ms between requests,
       // so the source never sees more than 2 per second (section 10).
       acquire: context.acquire,
+      guard: context.guard,
       signal: context.signal,
     });
   }

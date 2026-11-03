@@ -1,5 +1,12 @@
 import type { ConfigService } from '@nestjs/config';
-import { CarrefourClient } from '@portfolio/luna-shopper/carrefour';
+import {
+  CARREFOUR_REFUSAL_POLICY,
+  CarrefourClient,
+} from '@portfolio/luna-shopper/carrefour';
+import {
+  SourceBlockedError,
+  SourceGuard,
+} from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import type { RunContext } from './run-context';
@@ -91,7 +98,7 @@ class TestRunner extends CarrefourCatalogRunner {
     } as unknown as ConfigService);
   }
 
-  protected override createClient(): CarrefourClient {
+  protected override createClient(_context: RunContext): CarrefourClient {
     return new CarrefourClient({
       // The seam is the browser session, so the run below exercises the real
       // pacing, the real refusal counting and the real session handling.
@@ -118,10 +125,14 @@ class TestRunner extends CarrefourCatalogRunner {
  * the block.
  */
 class BlockingRunner extends TestRunner {
-  protected override createClient(): CarrefourClient {
+  protected override createClient(context: RunContext): CarrefourClient {
     return new CarrefourClient({
       userAgent: 'LunaShopperBot/1.0',
       sleepImpl: async () => undefined,
+      // The run's guard and gate, as the runtime passes them (plan 0215).
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
       openSession: async () => ({
         goto: async (url: string) => {
           const path = url.replace('https://www.carrefour.es', '');
@@ -135,10 +146,10 @@ class BlockingRunner extends TestRunner {
   }
 }
 
-function context(): RunContext {
+function context(signal = new AbortController().signal): RunContext {
   return {
     runId: RUN,
-    signal: new AbortController().signal,
+    signal,
     acquire: async () => undefined,
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
@@ -147,6 +158,22 @@ function context(): RunContext {
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
   } as unknown as RunContext;
+}
+
+/**
+ * A context with the run's refusal guard, wired the way `RunExecutor` wires
+ * it: its stop aborts the run with the stop as the reason (plan 0215).
+ */
+function guardedContext(): RunContext {
+  const controller = new AbortController();
+  const ctx = context(controller.signal);
+  const guard = new SourceGuard(CARREFOUR_REFUSAL_POLICY, {
+    onStop: (stop) => controller.abort(new SourceBlockedError(stop)),
+  });
+  return Object.assign(ctx, {
+    guard,
+    acquire: () => guard.admit(controller.signal),
+  });
 }
 
 const source = (config: Record<string, unknown> = {}): SupermarketSource =>
@@ -379,24 +406,68 @@ describe('CarrefourCatalogRunner', () => {
       states[category.url] = page({ totalResults: 500 });
     }
     const runner = new BlockingRunner(states);
-    const runContext = context();
+    const runContext = guardedContext();
 
-    await expect(
-      runner.run(
-        runContext,
-        report,
-        { supermarketId: CHAIN, priceScopeId: SCOPE },
-        source({ seedPath: '/seed' })
-      )
-    ).rejects.toThrow(/refused/);
+    // The guard's stop aborted the run, and the runner returns after the
+    // snapshot: the executor ends it FAILED with the stop as its reason (plan
+    // 0215, section 6.2).
+    await runner.run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
 
-    // The one product the crawl did read was written before the run failed.
+    expect(runContext.guard?.stop).not.toBeNull();
+    expect(runContext.signal.aborted).toBe(true);
+    // The one product the crawl did read is reported.
     expect(report.products).toHaveLength(1);
     expect(runContext.setReport).toHaveBeenCalledWith(
       expect.objectContaining({
         blockedAfter: expect.stringMatching(/refused/),
       })
     );
+    // Nothing was loaded after the third refusal.
+    expect(
+      runner.asked.filter((path) => path.includes('?offset=0'))
+    ).toHaveLength(4);
+  });
+
+  it('keeps what it read when a person aborts the crawl', async () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Lácteos');
+    const controller = new AbortController();
+    const runner = new TestRunner({
+      '/seed': page({ firstLevel: [one, two] }),
+      [one.url]: page({ totalResults: 1 }),
+      [two.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p2', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+    const runContext = context(controller.signal);
+    // The person aborts once the first category's page is read.
+    (runContext.report as jest.Mock).mockImplementation(async () => {
+      if (runner.asked.includes('/supermercado/x/cat1/c?offset=0')) {
+        controller.abort();
+      }
+    });
+
+    await runner.run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
+
+    expect(report.products.map((product) => product.externalId)).toEqual([
+      'p1',
+    ]);
   });
 
   it('refuses a crawl that has nowhere to write its prices', async () => {

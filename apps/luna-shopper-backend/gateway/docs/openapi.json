@@ -41604,6 +41604,12 @@
           "STALE"
         ]
       },
+      "enums.HarvestRunStopReason": {
+        "type": "string",
+        "enum": [
+          "SOURCE_BLOCKED"
+        ]
+      },
       "enums.HarvestRunTrigger": {
         "type": "string",
         "enum": [
@@ -41654,7 +41660,9 @@
           "COPY_SOURCE_NOT_WRITTEN",
           "SCOPE_KIND_MISMATCH",
           "DETAIL_SKIPPED_UNKNOWN",
-          "PRICE_SOLD_ANOTHER_WAY"
+          "PRICE_SOLD_ANOTHER_WAY",
+          "SOURCE_PAUSED",
+          "SOURCE_RESUMED"
         ]
       },
       "enums.ItemImageSource": {
@@ -43102,6 +43110,16 @@
           },
           "interrupted": {
             "type": "boolean"
+          },
+          "stopReason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.HarvestRunStopReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "estimate": {
             "$ref": "#/components/schemas/harvest.RunEstimate"

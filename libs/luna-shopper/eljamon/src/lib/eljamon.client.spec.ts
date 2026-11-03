@@ -1,6 +1,8 @@
+import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  ELJAMON_REFUSAL_POLICY,
   ElJamonClient,
   ElJamonHttpError,
   ElJamonSessionError,
@@ -400,5 +402,128 @@ describe('ElJamonClient', () => {
     expect(body.get('action')).toBe('make_search_request');
     expect(body.get('store_locatore_search_radius')).toBe('1000');
     expect(shop.requests).toBe(1);
+  });
+});
+
+/**
+ * The run's refusal guard (plan 0215, section 4). The 200 answers are the
+ * committed fixtures and the 403 is synthesized: the guard reads the status
+ * and never the body, so no block is provoked to capture one.
+ */
+describe('ElJamonClient and the refusal guard', () => {
+  const settle = (): Promise<void> =>
+    new Promise((resolve) => setImmediate(resolve));
+  const PRODUCT = '/detalle/-/Producto/x/1';
+
+  function pausingGuard() {
+    const sleeps: Array<() => void> = [];
+    const guard = new SourceGuard(ELJAMON_REFUSAL_POLICY, {
+      sleep: () => new Promise<void>((resolve) => sleeps.push(resolve)),
+    });
+    const endPause = async (): Promise<void> => {
+      for (let tick = 0; tick < 40; tick += 1) {
+        await settle();
+        sleeps.shift()?.();
+      }
+    };
+    return { guard, endPause };
+  }
+
+  /** The storefront, with its product pages refused while `refusing` holds. */
+  function refusingSite(refusing: () => boolean) {
+    let details = 0;
+    const site = fakeSite((url) => {
+      if (url.includes('/detalle/')) {
+        details += 1;
+        if (refusing()) {
+          return { status: 403, body: 'refused' };
+        }
+      }
+      return storefront(url);
+    });
+    return { ...site, details: () => details };
+  }
+
+  it('trips a passed guard on a run of 403, and a clean probe resumes it', async () => {
+    const { guard, endPause } = pausingGuard();
+    let refusals = 5;
+    const site = refusingSite(() => refusals-- > 0);
+    const shop = new ElJamonClient({
+      userAgent: 'test',
+      fetchImpl: site.fetchImpl,
+      sleepImpl: async () => undefined,
+      guard,
+    });
+
+    // The listing answers from its fixture and clears nothing it should not.
+    const rows = [];
+    for await (const row of shop.walkCategory(FRESCOS)) {
+      rows.push(row);
+    }
+    expect(rows.length).toBeGreaterThan(0);
+    for (let n = 0; n < 4; n += 1) {
+      await expect(shop.getProduct(PRODUCT)).rejects.toBeInstanceOf(
+        ElJamonHttpError
+      );
+    }
+    const tripping = shop.getProduct(PRODUCT);
+    await settle();
+    expect(site.details()).toBe(5);
+
+    await endPause();
+
+    expect(await tripping).not.toBeNull();
+    expect(site.details()).toBe(6);
+    expect(guard.summary().paused?.resumedAt).not.toBeNull();
+  });
+
+  it('does not count a request that never got an answer', async () => {
+    const { guard } = pausingGuard();
+    let dropping = false;
+    const site = refusingSite(() => true);
+    const fetchImpl = (async (
+      input: string | URL | Request,
+      init?: RequestInit
+    ) => {
+      if (dropping && String(input).includes('/detalle/')) {
+        throw new Error('socket hang up');
+      }
+      return site.fetchImpl(input, init);
+    }) as typeof fetch;
+    const shop = new ElJamonClient({
+      userAgent: 'test',
+      fetchImpl,
+      sleepImpl: async () => undefined,
+      retries: 1,
+      guard,
+    });
+
+    for (let n = 0; n < 4; n += 1) {
+      await expect(shop.getProduct(PRODUCT)).rejects.toBeInstanceOf(
+        ElJamonHttpError
+      );
+    }
+    dropping = true;
+    await expect(shop.getProduct(PRODUCT)).rejects.toThrow('socket hang up');
+    expect(guard.summary().paused).toBeNull();
+
+    // The dropped request left the count at four, so the next 403 is the
+    // fifth in a row.
+    dropping = false;
+    const tripping = shop.getProduct(PRODUCT);
+    await settle();
+    expect(guard.summary().paused).toEqual(
+      expect.objectContaining({ consecutive: 5 })
+    );
+    void tripping.catch(() => undefined);
+  });
+
+  it('throws ElJamonHttpError on a 403 with no guard, as before', async () => {
+    const site = refusingSite(() => true);
+
+    await expect(
+      client(site.fetchImpl).getProduct(PRODUCT)
+    ).rejects.toBeInstanceOf(ElJamonHttpError);
+    expect(site.details()).toBe(1);
   });
 });

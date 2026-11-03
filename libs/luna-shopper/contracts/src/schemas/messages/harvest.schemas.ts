@@ -3,6 +3,7 @@ import {
   HarvestDetailFetch,
   HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunStopReason,
   HarvestRunTrigger,
   HarvestRunWrites,
   HarvestScheduleBlock,
@@ -68,6 +69,7 @@ export const HARVEST_SCHEMA_IDS = {
   harvestRunMode: schemaId('enums/HarvestRunMode'),
   harvestRunTrigger: schemaId('enums/HarvestRunTrigger'),
   harvestRunStatus: schemaId('enums/HarvestRunStatus'),
+  harvestRunStopReason: schemaId('enums/HarvestRunStopReason'),
   sourceEntryStatus: schemaId('enums/SourceEntryStatus'),
   postalCodeDiscoveryStatus: schemaId('enums/PostalCodeDiscoveryStatus'),
   itemSourceMatch: schemaId('enums/ItemSourceMatch'),
@@ -312,6 +314,11 @@ const harvestRunView = object(
     // dashboard's runs, which do not compute it.
     scheduleId: nullableString(),
     interrupted: boolean(),
+    // Plan 0215, not required for the same reason: why a FAILED run stopped
+    // before its work was done, null for every other run.
+    stopReason: {
+      anyOf: [ref(HARVEST_SCHEMA_IDS.harvestRunStopReason), { type: 'null' }],
+    },
     estimate: ref(HARVEST_SCHEMA_IDS.runEstimate),
   },
   [
@@ -1917,6 +1924,10 @@ export const harvestSchemas: JsonSchema[] = [
     Object.values(HarvestRunTrigger)
   ),
   enumOf(HARVEST_SCHEMA_IDS.harvestRunStatus, Object.values(HarvestRunStatus)),
+  enumOf(
+    HARVEST_SCHEMA_IDS.harvestRunStopReason,
+    Object.values(HarvestRunStopReason)
+  ),
   enumOf(
     HARVEST_SCHEMA_IDS.sourceEntryStatus,
     Object.values(SourceEntryStatus)

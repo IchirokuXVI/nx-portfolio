@@ -9,7 +9,8 @@
  * Node's `fetch` refuses (`transport.ts`).
  *
  * It depends on `contracts` for `packCountOf` alone, as `deza` does, so a pack
- * count means the same thing from every source (plan 0162).
+ * count means the same thing from every source (plan 0162), and on
+ * `source-guard` for the run's refusal guard (plan 0215).
  */
 
 export {
@@ -18,6 +19,7 @@ export {
   ELJAMON_LOCATOR_ORIGIN,
   ELJAMON_LOCATOR_RADIUS_KM,
   ELJAMON_LOCATOR_URL,
+  ELJAMON_REFUSAL_POLICY,
   ElJamonClient,
   ElJamonHttpError,
   ElJamonSessionError,

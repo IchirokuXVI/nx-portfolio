@@ -8,11 +8,14 @@
  *
  * - {@link CarrefourHttpError}: this page was refused. Skip it, record it, and
  *   **never retry it**, because a retry is what turns a refusal into a block.
- * - {@link CarrefourBlockedError}: the refusals have stopped being isolated.
- *   Stop fetching entirely.
+ * - `SourceBlockedError`, the run's refusal guard (plan 0215): the refusals
+ *   have stopped being isolated. Stop fetching entirely. It is the guard's and
+ *   not this library's, so every adapter stops the same way.
  * - {@link CarrefourBrowserError}: the browser stopped answering. The session is
  *   dropped and the next page gets a fresh one.
  */
+
+import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 
 /** Thrown when the storefront answers something a retry cannot fix. */
 export class CarrefourHttpError extends Error {
@@ -22,28 +25,6 @@ export class CarrefourHttpError extends Error {
   ) {
     super(`Carrefour answered ${status} for ${url}`);
     this.name = 'CarrefourHttpError';
-  }
-}
-
-/**
- * Thrown when the refusals stop being isolated, which is the block escalating.
- *
- * A caller may skip a page that raised {@link CarrefourHttpError}. This one it
- * must not skip: it says the address is in the state plan 0090 section 4
- * describes, where only the first load of a fresh session succeeds, and every
- * page fetched from here deepens it.
- */
-export class CarrefourBlockedError extends CarrefourHttpError {
-  constructor(
-    status: number,
-    url: string,
-    readonly refusals: number
-  ) {
-    super(status, url);
-    this.name = 'CarrefourBlockedError';
-    this.message =
-      `Carrefour refused ${refusals} page loads in a row, the last with ` +
-      `${status} for ${url}. Stopping rather than fetching into a deeper block.`;
   }
 }
 
@@ -69,8 +50,10 @@ export class CarrefourBrowserError extends Error {
  * Whether a failed page load is one a walk may step over.
  *
  * Everything is, except the block: that is the one failure which says the next
- * page will fail too, and worse for having been asked.
+ * page will fail too, and worse for having been asked. It says the address is
+ * in the state plan 0090 section 4 describes, where only the first load of a
+ * fresh session succeeds, and every page fetched from there deepens it.
  */
 export function isSkippable(error: unknown): boolean {
-  return !(error instanceof CarrefourBlockedError);
+  return !(error instanceof SourceBlockedError);
 }
