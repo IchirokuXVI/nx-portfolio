@@ -543,7 +543,9 @@ the owner gives them, and the plan named in brackets reads it.
 | D18 | Whether `/velista` on the portfolio host survives (k8s `0019`) | B, a redirect (k8s `0019` D7) | | |
 | D19 | Each other decision of backend `0240` to `0243`, velista `0178`, k8s `0020`, `0021` | as each plan recommends | | |
 | D20 | Release task `0005` before the rename: let its window close on 2026-11-12 or finish it (k8s `0019` owner decision 3) | let the window close | | |
-| D21 | Retire `k8s/catalog-import/restore-first-catalog.sh`, which refuses every dump taken before the baseline adoption (k8s `0019` owner decision 5, backend `0240`) | retire it in k8s `0019` | | |
+| D21 | Retire `k8s/catalog-import/restore-first-catalog.sh`, which refuses every dump taken before the baseline adoption (k8s `0019` owner decision 5, backend `0240`) | retire it in k8s `0019` | retire it in k8s `0019` | 2026-11-03 |
+| D22 | The prefix of the contract schema ids, today `luna://` (docs `0003` D13, backend `0242`) | `velista://` | `velista://` | 2026-11-03 |
+| D23 | A locked slot between the merges of backend `0240` and k8s `0019` (backend `0240` owner decisions) | keep it down, no `adopt-baseline` verb | keep it down | 2026-11-03 |
 
 When a plan of the series is written after this file and adds an owner decision, the agent
 adds a row here with the plan's number before the decision is needed.

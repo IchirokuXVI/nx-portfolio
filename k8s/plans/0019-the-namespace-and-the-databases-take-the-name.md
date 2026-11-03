@@ -603,11 +603,11 @@ delicate script of the series for names nobody reads.
    After the adoption of D6 every database holds one baseline row, so the script refuses
    every dump taken before the cutover (backend `0240`, "The adoption contract", hands
    this decision to this plan). Its only release task, `0003`, closed its window on
-   2026-10-14. Recommendation: retire it in this plan (delete `restore-first-catalog.sh`,
-   `first-catalog.manifest` and `expected-losses.txt`, keep `k8s/catalog-import/README.md`
-   with one line that names k8s `0012` and this plan), so docs `0005` does not copy a tool
-   that can no longer succeed. Alternative: keep it, with a first comment that says it
-   refuses every dump taken before the rename.
+   2026-10-14. **Decided by the owner on 2026-11-03:** retire it in this plan (delete
+   `restore-first-catalog.sh`, `first-catalog.manifest` and `expected-losses.txt`, keep
+   `k8s/catalog-import/README.md` with one line that names k8s `0012` and this plan), so
+   docs `0005` does not copy a tool that can no longer succeed. Rejected: keeping it with a
+   first comment that says it refuses every dump taken before the rename.
 
 ## Owner steps outside the code
 

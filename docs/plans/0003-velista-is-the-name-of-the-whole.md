@@ -570,6 +570,15 @@ files. Rewritten by hand, under target state 7 and the protected table:
   `grep -E '^luna-shopper'`, which today matches the admin too. It becomes
   `grep -E '^velista-(server|admin)'`. Any other filter by prefix keeps the set it
   selected before, and the builder lists each one in the PR body.
+- **D13. The contract schema ids move from `luna://` to `velista://`.** The owner decided
+  this on 2026-11-03. `schemaId(path)` in `libs/velista-server/contracts/src/schemas/builders.ts`
+  builds `velista://<path>`, and every comment, spec and literal that names a `luna://` id
+  follows. The ids are keys inside one ajv instance: none appears in `openapi.json`, the
+  admin wire types or a stored row, so no reader outside the code sees the change. The
+  rename is one explicit rule of the script, applied before "Words, last", and the
+  progress evidence includes `git grep -n "luna://"` printing nothing outside the excluded
+  paths. Rejected: keeping `luna://` as an internal name, and the URN form of backend
+  `0242` D2 for every contract, which no outside reader needs.
 
 ## Owner decisions
 

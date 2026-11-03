@@ -327,11 +327,10 @@ k8s `0019`'s cutover script performs the adoption. What it relies on is fixed he
   side of the adoption: the first `server-slot.sh --up` or `stack.sh up` after `0019`
   renames a kept slot's databases and adopts the baseline in place, through the shared
   `k8s/bootstrap/rename-release/rename-database.sh`, with the invariant of "The adoption
-  contract". Recommendation: keep a locked slot down between the merge of this plan and
-  that of k8s `0019` (they ship in one rollup), and add no `stack.sh adopt-baseline` verb
-  here. Alternative: add that verb in this plan for the gap, running the same truncate and
-  insert with the same invariant and refusing any host other than `localhost`, or dump the
-  catalog, take a fresh slot and restore only the rows.
+  contract". **Decided by the owner on 2026-11-03:** a locked slot stays down between the
+  merge of this plan and that of k8s `0019` (they ship in one rollup), and this plan adds
+  no `stack.sh adopt-baseline` verb. Rejected: that verb for the gap, and a dump of the
+  catalog restored into a fresh slot.
 - **Entity drift found by the measurement**, if any (action boundaries): fix each entity in a
   follow up plan, or accept it in the drift list.
 

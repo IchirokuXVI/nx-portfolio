@@ -181,8 +181,8 @@ mail) and `_env.tpl` (one key in auth's operator list), `k8s/helm/velista/values
 Out: the product rename (docs `0003`), the client's hosts, `assetlinks.json` and
 `capacitor.config.ts` (velista `0178`), the image lines of the chart (k8s `0021`, docs
 `0005`), the e2e gate's hosts in `k8s/e2e` (k8s `0020` and the gate's own configuration),
-plans and committed research notes in Markdown, `luna://` schema ids (docs `0003` decides
-that prefix).
+plans and committed research notes in Markdown, `luna://` schema ids (docs `0003` D13
+renames that prefix to `velista://`).
 
 ### Constraints
 
