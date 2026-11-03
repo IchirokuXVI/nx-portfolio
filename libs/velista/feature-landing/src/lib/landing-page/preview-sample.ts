@@ -4,6 +4,8 @@ import type { PreviewLineVm } from '@portfolio/velista/models';
 export interface PreviewSampleLine {
   /** Names the two keys of the row: `home.preview.line.<key>.content` and `.detail`. */
   readonly key: string;
+  /** The file name of the row's photo under the card's assets. */
+  readonly image: string;
   /** The price of one, in euros. */
   readonly price: number;
   readonly quantity: number;
@@ -12,31 +14,60 @@ export interface PreviewSampleLine {
 }
 
 /**
- * The four rows of the landing card (velista 0175, target 4), in the order they are
- * drawn: Milk, bought and at zero; Eggs; Bananas; Olive oil, not in the shop.
+ * The five rows of the landing card (velista 0175, target 4), in the order they are
+ * drawn, which is also their priority: Olive oil, not in the shop; Bananas, bought and
+ * at zero; Gachas; Ham; Cheese.
  *
- * Bananas gives way first and Eggs second. Milk and Olive oil always stay, because a
- * line at zero that somebody bought and a line still wanted that the shop did not have
- * are the two states that explain the product (D3).
+ * The rows give way from the end: Cheese is drawn only on a card with room for five,
+ * then Ham goes, then Gachas. Olive oil and Bananas always stay, because a line still
+ * wanted that the shop did not have and a line at zero that somebody bought are the two
+ * states that explain the product (D3).
+ *
+ * The photos are the owner's, with no brand visible (O1). Each `image` is a file under
+ * `libs/velista/ui/assets/landing`, served at `landing/` beside the document.
  */
 export const PREVIEW_SAMPLE: readonly PreviewSampleLine[] = [
-  {
-    key: 'milk',
-    price: 0.94,
-    quantity: 0,
-    indicator: 'bought',
-    givesWay: null,
-  },
-  { key: 'eggs', price: 2.35, quantity: 1, indicator: null, givesWay: 2 },
-  { key: 'bananas', price: 1.79, quantity: 2, indicator: null, givesWay: 1 },
   // Still wanted, and the shop had none. Not having found something is not the same as
   // no longer needing it, which is why the number is untouched.
   {
     key: 'oil',
-    price: 8.95,
+    image: 'oil.webp',
+    price: 9.95,
     quantity: 1,
     indicator: 'notAvailable',
     givesWay: null,
+  },
+  {
+    key: 'bananas',
+    image: 'bananas.webp',
+    price: 2.29,
+    quantity: 0,
+    indicator: 'bought',
+    givesWay: null,
+  },
+  {
+    key: 'gachas',
+    image: 'gachas.webp',
+    price: 3.2,
+    quantity: 1,
+    indicator: null,
+    givesWay: 3,
+  },
+  {
+    key: 'ham',
+    image: 'ham.webp',
+    price: 6.49,
+    quantity: 1,
+    indicator: null,
+    givesWay: 2,
+  },
+  {
+    key: 'cheese',
+    image: 'cheese.webp',
+    price: 4.95,
+    quantity: 1,
+    indicator: null,
+    givesWay: 1,
   },
 ];
 
@@ -51,8 +82,8 @@ export interface PreviewTally {
 }
 
 /**
- * The progress line for each step the rows can give way to: none, the first, then the
- * second as well (velista 0175, target 6). Each describes **the rows drawn at that
+ * The progress line for each step the rows can give way to: none, the first, then each
+ * next one as well (velista 0175, target 6). Each describes **the rows drawn at that
  * step**, never a hidden one, so with two rows left the card says "1 of 2".
  *
  * A row is settled when it was bought; the one the shop did not have is still pending.

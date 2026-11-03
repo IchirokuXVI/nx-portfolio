@@ -627,21 +627,25 @@
       "listName": "Compra semanal",
       "zoneName": "Casa",
       "line": {
-        "milk": {
-          "content": "Leche",
-          "detail": "Semidesnatada · 1 L"
-        },
-        "eggs": {
-          "content": "Huevos",
-          "detail": "Camperos · 12 uds."
+        "oil": {
+          "content": "Aceite de oliva",
+          "detail": "Virgen extra · 1 L"
         },
         "bananas": {
           "content": "Plátanos",
           "detail": "Canarias · 1 kg"
         },
-        "oil": {
-          "content": "Aceite de oliva",
-          "detail": "Virgen extra · 1 L"
+        "gachas": {
+          "content": "Gachas",
+          "detail": "Caseras · 350 g"
+        },
+        "ham": {
+          "content": "Jamón ibérico",
+          "detail": "Loncheado · 100 g"
+        },
+        "cheese": {
+          "content": "Queso",
+          "detail": "Viejo curado · 250 g"
         }
       },
       "here": "Ana y Marc están aquí"

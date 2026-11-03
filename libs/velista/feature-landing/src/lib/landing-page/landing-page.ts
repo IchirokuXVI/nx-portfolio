@@ -182,7 +182,8 @@ export class LandingPage {
   readonly localeLabel = computed(() => this.locale().toLocaleUpperCase());
 
   /**
-   * The illustrative list (velista 0175): four rows drawn as the zone list draws them.
+   * The illustrative list (velista 0175): up to five rows drawn as the zone list draws
+   * them, four on most screens.
    *
    * Invented, and it stays invented: it exists to show what the product is in one
    * glance. It shows what a line can be on purpose, because "some of these are dealt with
@@ -191,7 +192,7 @@ export class LandingPage {
    *
    * `0003` argued these strings should stay in English. `0007` reversed that: they are
    * the only words on the front door that describe what the product does, and a Spanish
-   * speaker reading `Milk / Eggs` is looking at an English app. The second line names
+   * speaker reading `Bananas / Olive oil` is looking at an English app. The second line names
    * the kind and the size and never a brand (0175, D4): the landing is marketing, and
    * a real brand there reads as an endorsement.
    *
@@ -214,9 +215,9 @@ export class LandingPage {
       detail: this._t.t(`home.preview.line.${line.key}.detail`),
       price: money.format(line.price),
       quantity: String(line.quantity),
-      // The glyph tile until the owner supplies four photos with no brand on them
-      // (0175, O1). A photo goes here, resolved against the document's base.
-      imageUrl: null,
+      // Relative, so it resolves against the document's `<base>`: `/velista/landing/`
+      // under the portfolio and `/landing/` on velista's own origin.
+      imageUrl: `landing/${line.image}`,
       indicator: line.indicator,
       givesWay: line.givesWay,
     }));

@@ -238,13 +238,28 @@ describe('LandingPage', () => {
           .previewLines()
           .map((line) => [line.content, line.detail])
       ).toEqual([
-        ['home.preview.line.milk.content', 'home.preview.line.milk.detail'],
-        ['home.preview.line.eggs.content', 'home.preview.line.eggs.detail'],
+        ['home.preview.line.oil.content', 'home.preview.line.oil.detail'],
         [
           'home.preview.line.bananas.content',
           'home.preview.line.bananas.detail',
         ],
-        ['home.preview.line.oil.content', 'home.preview.line.oil.detail'],
+        ['home.preview.line.gachas.content', 'home.preview.line.gachas.detail'],
+        ['home.preview.line.ham.content', 'home.preview.line.ham.detail'],
+        ['home.preview.line.cheese.content', 'home.preview.line.cheese.detail'],
+      ]);
+    });
+
+    it('gives each row its photo, relative to the document base', async () => {
+      const { fixture } = await render();
+
+      expect(
+        fixture.componentInstance.previewLines().map((line) => line.imageUrl)
+      ).toEqual([
+        'landing/oil.webp',
+        'landing/bananas.webp',
+        'landing/gachas.webp',
+        'landing/ham.webp',
+        'landing/cheese.webp',
       ]);
     });
 
@@ -260,13 +275,13 @@ describe('LandingPage', () => {
     it('formats the prices in euros in the page locale', async () => {
       const { fixture, store } = await render({ locale: 'en' });
 
-      expect(fixture.componentInstance.previewLines()[3]?.price).toBe('€8.95');
+      expect(fixture.componentInstance.previewLines()[0]?.price).toBe('€9.95');
 
       store.locale.set('es');
 
       expect(
-        fixture.componentInstance.previewLines()[3]?.price.replace(/\s/g, ' ')
-      ).toBe('8,95 €');
+        fixture.componentInstance.previewLines()[0]?.price.replace(/\s/g, ' ')
+      ).toBe('9,95 €');
     });
 
     it('draws one progress line per step the rows give way to', async () => {
@@ -279,11 +294,12 @@ describe('LandingPage', () => {
           tally.getAttribute('data-pending'),
         ])
       ).toEqual([
+        ['5', '4'],
         ['4', '3'],
         ['3', '2'],
         ['2', '1'],
       ]);
-      expect(queryAll(fixture, '[data-preview-row]')).toHaveLength(4);
+      expect(queryAll(fixture, '[data-preview-row]')).toHaveLength(5);
       expect(
         queryAll(fixture, '[data-preview-row][data-settled]')
       ).toHaveLength(1);

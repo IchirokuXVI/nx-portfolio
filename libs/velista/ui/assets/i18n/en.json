@@ -627,21 +627,25 @@
       "listName": "Weekly shop",
       "zoneName": "Home",
       "line": {
-        "milk": {
-          "content": "Milk",
-          "detail": "Semi-skimmed · 1 L"
-        },
-        "eggs": {
-          "content": "Eggs",
-          "detail": "Free range · 12 units"
+        "oil": {
+          "content": "Olive oil",
+          "detail": "Extra virgin · 1 L"
         },
         "bananas": {
           "content": "Bananas",
           "detail": "Canary Islands · 1 kg"
         },
-        "oil": {
-          "content": "Olive oil",
-          "detail": "Extra virgin · 1 L"
+        "gachas": {
+          "content": "Gachas",
+          "detail": "Sweet porridge · 350 g"
+        },
+        "ham": {
+          "content": "Ibérico ham",
+          "detail": "Sliced · 100 g"
+        },
+        "cheese": {
+          "content": "Cheese",
+          "detail": "Aged · 250 g"
         }
       },
       "here": "Ana and Marc are here"

@@ -125,11 +125,11 @@ export interface PreviewLineVm {
    */
   readonly indicator: 'bought' | 'notAvailable' | null;
   /**
-   * When the row gives way as the card loses room: 1 first, then 2. Null for a row
-   * that always stays, which is the bought one and the one the shop did not have,
-   * because those two are the states that explain the product (0175, D3).
+   * When the row gives way as the card loses room: 1 first, then 2, then 3. Null for
+   * a row that always stays, which is the bought one and the one the shop did not
+   * have, because those two are the states that explain the product (0175, D3).
    */
-  readonly givesWay: 1 | 2 | null;
+  readonly givesWay: 1 | 2 | 3 | null;
 }
 
 /**
@@ -139,7 +139,7 @@ export interface PreviewLineVm {
  * total and the bar never describe a hidden row.
  */
 export interface PreviewTallyVm {
-  /** How many rows have given way when this tally is the one shown: 0, 1 or 2. */
+  /** How many rows have given way when this tally is the one shown: 0 to 3. */
   readonly givenWay: number;
   readonly rows: number;
   readonly pending: number;

@@ -264,30 +264,24 @@
 
 // ------------------------------------------------------------- Giving way
 //
-// Velista 0175, targets 5 to 7. The wanted rows go first, then the progress line. The
-// bought row and the one the shop did not have stay to the end, because those two are
-// what explain the product. Below two rows the whole card goes, which only happens
-// while a held sentence or the delete notice takes the room.
+// Velista 0175, targets 5 to 7. The rows go from the last one back, then the progress
+// line. The fifth row is drawn only on a slot with room for all five, so most phones
+// show four. The one the shop did not have and the bought row stay to the end, because
+// those two are what explain the product. Below two rows the whole card goes, which
+// only happens while a held sentence or the delete notice takes the room.
+//
+// Step `n` hides the row that gives way `n` and swaps the count of step `n - 1` for
+// its own, so exactly one count is drawn.
+@each $rows, $step in (5: 1, 4: 2, 3: 3) {
+  @container (height < #{room($rows)}) {
+    .row[data-gives-way='#{$step}'],
+    .tally[data-given-way='#{$step - 1}'] {
+      display: none;
+    }
 
-@container (height < #{room(4)}) {
-  .row[data-gives-way='1'],
-  .tally[data-given-way='0'] {
-    display: none;
-  }
-
-  .tally[data-given-way='1'] {
-    display: block;
-  }
-}
-
-@container (height < #{room(3)}) {
-  .row[data-gives-way='2'],
-  .tally[data-given-way='1'] {
-    display: none;
-  }
-
-  .tally[data-given-way='2'] {
-    display: block;
+    .tally[data-given-way='#{$step}'] {
+      display: block;
+    }
   }
 }
 
