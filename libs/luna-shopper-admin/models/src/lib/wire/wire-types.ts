@@ -154,6 +154,13 @@ export type AdminLoginDto = {
 };
 
 /**
+ * `AdminLookupItemsDto` in the gateway's OpenAPI document.
+ */
+export type AdminLookupItemsDto = {
+  ids: string[];
+};
+
+/**
  * `AdminRecoveryDto` in the gateway's OpenAPI document.
  */
 export type AdminRecoveryDto = {
@@ -319,7 +326,8 @@ export type CreateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   packCount?: number | null;
-  categoryIds: string[];
+  categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
 };
@@ -342,6 +350,7 @@ export type CreateItemFromEntryDto = {
  */
 export type CreateItemsDto = {
   items: CreateItemDto[];
+  requireRegisteredBrands?: boolean;
 };
 
 /**
@@ -501,6 +510,20 @@ export type ImportHarvestDocumentDto = {
   document: {
     [key: string]: unknown;
   };
+};
+
+/**
+ * `ItemExpectationDto` in the gateway's OpenAPI document.
+ *
+ * What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds.
+ */
+export type ItemExpectationDto = {
+  name?: LocalizedTextDto;
+  brand?: string | null;
+  unitSize?: number | null;
+  defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
+  packCount?: number | null;
+  categorySlugs?: string[];
 };
 
 /**
@@ -664,6 +687,7 @@ export type ProblemDetails = {
     | 'brand_not_linked'
     | 'brand_homonym_is_own_key'
     | 'brand_in_use'
+    | 'brand_unregistered'
     | 'place_already_imported'
     | 'place_matches_location'
     | 'place_names_another_chain'
@@ -673,6 +697,9 @@ export type ProblemDetails = {
     | 'item_needs_a_category'
     | 'item_ean_invalid'
     | 'item_ean_held'
+    | 'item_expectation_failed'
+    | 'item_unit_not_base'
+    | 'item_kilogram_has_size'
     | 'category_in_use'
     | 'category_not_found'
     | 'section_not_found'
@@ -1220,8 +1247,10 @@ export type UpdateItemBatchEntryDto = {
   unitSize?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+  expect?: ItemExpectationDto;
   itemId: string;
 };
 
@@ -1237,8 +1266,10 @@ export type UpdateItemDto = {
   unitSize?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
+  categorySlugs?: string[];
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   productGroupId?: string | null;
+  expect?: ItemExpectationDto;
 };
 
 /**
@@ -1246,6 +1277,7 @@ export type UpdateItemDto = {
  */
 export type UpdateItemsDto = {
   items: UpdateItemBatchEntryDto[];
+  requireRegisteredBrands?: boolean;
 };
 
 /**
@@ -5544,6 +5576,13 @@ export type MsgBrandRegisterManyResponse = {
  * `msg.item.createMany.response` in the gateway's OpenAPI document.
  */
 export type MsgItemCreateManyResponse = {
+  items: CatalogItemView[];
+};
+
+/**
+ * `msg.item.getMany.response` in the gateway's OpenAPI document.
+ */
+export type MsgItemGetManyResponse = {
   items: CatalogItemView[];
 };
 

@@ -2289,8 +2289,18 @@ export interface CreateItemRequest extends AdminCredential {
    * One or more leaf ids, in the order meant (plan 0166, section 3). An empty
    * list is refused with `item_needs_a_category`, a root with
    * `category_not_a_leaf` and an unknown id with `category_not_found`.
+   *
+   * Exactly one of this and {@link categorySlugs} (plan 0237, section 3.4).
+   * Neither is `item_needs_a_category`, both is `validation_failed`.
    */
-  categoryIds: string[];
+  categoryIds?: string[];
+  /**
+   * The same leaves named by slug, in the order meant (plan 0237, section
+   * 3.4): what an audit, the register and a decisions file speak. Resolved
+   * through the category rows, so an unknown slug is `category_not_found`
+   * and a root `category_not_a_leaf`.
+   */
+  categorySlugs?: string[];
   defaultUnit: UnitOfMeasure;
   /** Assign the product to a group (plan 0048). Owner curation, never automatic. */
   productGroupId?: string | null;
@@ -2310,6 +2320,14 @@ export type CreateItemInput = Omit<CreateItemRequest, 'userId'>;
  */
 export interface CreateItemsRequest extends AdminCredential {
   items: CreateItemInput[];
+  /**
+   * Refuse the whole batch when a brand it names is not in the registry and
+   * is not a spelling of a brand that is (plan 0237, section 3.6), with
+   * `brand_unregistered` and the labels. A null brand passes. Absent or false
+   * stores such a label as text with no `brandId`, as always: the harvester
+   * never sends it, because a printed brand is a reading.
+   */
+  requireRegisteredBrands?: boolean;
 }
 
 export interface CreateItemsResult {
@@ -2339,9 +2357,57 @@ export interface UpdateItemRequest extends AdminCredential {
    * `item_needs_a_category`, because a product always has one.
    */
   categoryIds?: string[];
+  /**
+   * The same replacement with the leaves named by slug (plan 0237, section
+   * 3.4). At most one of this and {@link categoryIds}; both is
+   * `validation_failed`.
+   */
+  categorySlugs?: string[];
   defaultUnit?: UnitOfMeasure;
   /** Assign, reassign or (with `null`) unassign the product's group (plan 0048). */
   productGroupId?: string | null;
+  /**
+   * What the product holds as the caller read it (plan 0237, section 3.2).
+   * Compared with the product inside the write's transaction, before any edit
+   * is applied; one field that differs refuses the whole request with
+   * `item_expectation_failed`.
+   */
+  expect?: ItemExpectation;
+}
+
+/**
+ * The state an edit expects a product to be in (plan 0237, section 3.2).
+ *
+ * Every field is optional, and only a field that is present is compared. A
+ * `null` means "the product holds nothing here".
+ *
+ * - `name` is compared as both halves, each trimmed, so an absent half
+ *   expects the product to have no name in that language.
+ * - `brand` is compared by `brandKey`, so `Pierrot` and `PIERROT` agree.
+ * - `categorySlugs` is compared as an ordered list.
+ */
+export interface ItemExpectation {
+  name?: LocalizedText;
+  brand?: string | null;
+  unitSize?: number | null;
+  defaultUnit?: UnitOfMeasure;
+  packCount?: number | null;
+  categorySlugs?: string[];
+}
+
+/** One field an {@link ItemExpectation} named that the product does not hold. */
+export interface ItemExpectationMismatch {
+  field: keyof ItemExpectation;
+  /** What the request expected. */
+  expected: unknown;
+  /** What the product holds. */
+  actual: unknown;
+}
+
+/** One product whose {@link ItemExpectation} failed, and every field that did. */
+export interface ItemExpectationFailure {
+  itemId: string;
+  fields: ItemExpectationMismatch[];
 }
 
 /**
@@ -2360,6 +2426,8 @@ export type UpdateItemInput = Omit<UpdateItemRequest, keyof AdminCredential>;
  */
 export interface UpdateItemsRequest extends AdminCredential {
   items: UpdateItemInput[];
+  /** As {@link CreateItemsRequest.requireRegisteredBrands} (plan 0237, section 3.6). */
+  requireRegisteredBrands?: boolean;
 }
 
 export interface UpdateItemsResult {

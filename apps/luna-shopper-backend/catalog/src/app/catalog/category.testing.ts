@@ -1,3 +1,7 @@
+import {
+  CATEGORY_UNKNOWN_DETAIL,
+  CategoryNotFoundException,
+} from '@portfolio/luna-shopper/platform';
 import type { EntityManager } from 'typeorm';
 import type { Category } from '../entities';
 import {
@@ -66,6 +70,17 @@ export function fakeCategories(
     leaveChecker: async (lists: readonly (readonly string[])[]) => {
       const rows = known(lists);
       return (ids: readonly string[]) => checkLeaves(ids, rows);
+    },
+    // A fake leaf's slug is its id (see `rowOf`), so a slug resolves to
+    // itself, and one named in `unknown` names nothing (plan 0237).
+    slugResolver: async () => (slugs: readonly string[]) => {
+      const missing = slugs.filter((slug) => unknown.has(slug));
+      if (missing.length > 0) {
+        throw new CategoryNotFoundException('That category does not exist.', {
+          details: { [CATEGORY_UNKNOWN_DETAIL]: missing },
+        });
+      }
+      return [...slugs];
     },
     setItemCategories: async (
       _manager: EntityManager,

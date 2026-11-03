@@ -17903,7 +17903,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18139,7 +18139,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18179,7 +18179,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`brand_unregistered` — The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18243,7 +18243,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18283,7 +18283,103 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_expectation_failed` — A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.\n\n`brand_unregistered` — The brand registry does not hold one or more of these brands. Register them, or link them to the brand they spell, before writing the products.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-catalog"
+        ]
+      }
+    },
+    "/v1/admin/catalog/items/lookup": {
+      "post": {
+        "operationId": "AdminCatalogItemsController_lookup_v1",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLookupItemsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The `item.getMany` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/msg.item.getMany.response"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18441,7 +18537,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18481,7 +18577,7 @@
             }
           },
           "409": {
-            "description": "`conflict` — That request conflicts with the current state.",
+            "description": "`conflict` — That request conflicts with the current state.\n\n`item_expectation_failed` — A product no longer holds what this edit expected. Read it again and decide whether the edit still holds. Nothing was written.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28254,7 +28350,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31547,11 +31643,20 @@
           "categoryIds": {
             "minItems": 1,
             "maxItems": 10,
-            "description": "One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`.",
+            "description": "One or more leaf categories, in the order meant: the first is the one a row shows when it has room for one (plan 0166, section 3). A root is refused with `category_not_a_leaf`, and an unknown id with `category_not_found`. Exactly one of this and `categorySlugs` (plan 0237, section 3.4).",
             "type": "array",
             "items": {
               "type": "string",
               "format": "uuid"
+            }
+          },
+          "categorySlugs": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The leaf categories by slug, in the order meant, for example `[\"small-appliances\"]` (plan 0237, section 3.4): what an audit and the register speak. Exactly one of this and `categoryIds`; both, or neither, is refused with `validation_failed`. An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.",
+            "type": "array",
+            "items": {
+              "type": "string"
             }
           },
           "defaultUnit": {
@@ -31563,7 +31668,8 @@
               "MILLILITER",
               "LITER",
               "PACK"
-            ]
+            ],
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
@@ -31574,7 +31680,6 @@
         },
         "required": [
           "name",
-          "categoryIds",
           "defaultUnit"
         ]
       },
@@ -31588,11 +31693,63 @@
             "items": {
               "$ref": "#/components/schemas/CreateItemDto"
             }
+          },
+          "requireRegisteredBrands": {
+            "type": "boolean",
+            "default": false,
+            "description": "Refuse the whole batch when a brand it names is not in the registry and is not a spelling of a brand that is, with `brand_unregistered` and the labels in `details.labels` (plan 0237, section 3.6). A null brand passes, and a spelling stores the label of the brand it spells. Absent or false stores such a label as text with no brand id, as always."
           }
         },
         "required": [
           "items"
         ]
+      },
+      "ItemExpectationDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "description": "Both halves, each trimmed. A half left out expects the product to have no name in that language.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LocalizedTextDto"
+              }
+            ]
+          },
+          "brand": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 120,
+            "description": "Compared by brand key, so `Pierrot` and `PIERROT` agree."
+          },
+          "unitSize": {
+            "type": "number",
+            "nullable": true
+          },
+          "defaultUnit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "KILOGRAM",
+              "MILLILITER",
+              "LITER",
+              "PACK"
+            ]
+          },
+          "packCount": {
+            "type": "integer",
+            "nullable": true
+          },
+          "categorySlugs": {
+            "maxItems": 10,
+            "description": "The slugs of the product’s categories, compared in order.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "description": "What the product holds as the caller read it. Every field is optional and only a field that is present is compared; null means the product holds nothing there. One field that differs refuses the whole request with `item_expectation_failed`, and `details.failures` names each product, each field and the value the product holds."
       },
       "UpdateItemBatchEntryDto": {
         "type": "object",
@@ -31641,6 +31798,15 @@
               "format": "uuid"
             }
           },
+          "categorySlugs": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The leaf categories by slug, in the order meant, for example `[\"small-appliances\"]` (plan 0237, section 3.4): what an audit and the register speak. Never with `categoryIds`; both is refused with `validation_failed`. Absent leaves the set alone. An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "defaultUnit": {
             "type": "string",
             "enum": [
@@ -31650,13 +31816,22 @@
               "MILLILITER",
               "LITER",
               "PACK"
-            ]
+            ],
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
             "format": "uuid",
             "nullable": true,
             "description": "Assign, reassign or (with null) unassign the product’s group (plan 0048, section 1)."
+          },
+          "expect": {
+            "description": "What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ItemExpectationDto"
+              }
+            ]
           },
           "itemId": {
             "type": "string",
@@ -31677,10 +31852,32 @@
             "items": {
               "$ref": "#/components/schemas/UpdateItemBatchEntryDto"
             }
+          },
+          "requireRegisteredBrands": {
+            "type": "boolean",
+            "default": false,
+            "description": "Refuse the whole batch when a brand it names is not in the registry and is not a spelling of a brand that is, with `brand_unregistered` and the labels in `details.labels` (plan 0237, section 3.6). A null brand passes, and a spelling stores the label of the brand it spells. Absent or false stores such a label as text with no brand id, as always."
           }
         },
         "required": [
           "items"
+        ]
+      },
+      "AdminLookupItemsDto": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "maxItems": 1000,
+            "description": "The products to read, at most as many as one items batch writes. Duplicates are harmless, and an id that names nothing is absent from the answer.",
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        },
+        "required": [
+          "ids"
         ]
       },
       "UpdateItemDto": {
@@ -31730,6 +31927,15 @@
               "format": "uuid"
             }
           },
+          "categorySlugs": {
+            "minItems": 1,
+            "maxItems": 10,
+            "description": "The leaf categories by slug, in the order meant, for example `[\"small-appliances\"]` (plan 0237, section 3.4): what an audit and the register speak. Never with `categoryIds`; both is refused with `validation_failed`. Absent leaves the set alone. An unknown slug is refused with `category_not_found`, and a root with `category_not_a_leaf`.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "defaultUnit": {
             "type": "string",
             "enum": [
@@ -31739,13 +31945,22 @@
               "MILLILITER",
               "LITER",
               "PACK"
-            ]
+            ],
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
             "format": "uuid",
             "nullable": true,
             "description": "Assign, reassign or (with null) unassign the product’s group (plan 0048, section 1)."
+          },
+          "expect": {
+            "description": "What the product holds as you read it (plan 0237, section 3.2). Absent compares nothing.",
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ItemExpectationDto"
+              }
+            ]
           }
         }
       },
@@ -46502,6 +46717,21 @@
         ],
         "additionalProperties": false
       },
+      "msg.item.getMany.response": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/catalog.ItemView"
+            }
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false
+      },
       "msg.item.updateMany.response": {
         "type": "object",
         "properties": {
@@ -46743,6 +46973,7 @@
               "brand_not_linked",
               "brand_homonym_is_own_key",
               "brand_in_use",
+              "brand_unregistered",
               "place_already_imported",
               "place_matches_location",
               "place_names_another_chain",
@@ -46752,6 +46983,9 @@
               "item_needs_a_category",
               "item_ean_invalid",
               "item_ean_held",
+              "item_expectation_failed",
+              "item_unit_not_base",
+              "item_kilogram_has_size",
               "category_in_use",
               "category_not_found",
               "section_not_found",

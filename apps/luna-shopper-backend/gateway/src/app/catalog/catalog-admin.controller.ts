@@ -17,6 +17,7 @@ import {
   CATEGORY_PATTERNS,
   HARVEST_SCHEMA_IDS,
   ITEM_LINKED_IMAGE_PATTERNS,
+  ITEM_LOOKUP_LIMITS,
   ITEM_PATTERNS,
   ITEM_PRICE_PATTERNS,
   PRICE_POLICY_PATTERNS,
@@ -43,6 +44,8 @@ import {
   type CreateItemsResult,
   type DeleteBrandResult,
   type DisableAllLinkedImagesResult,
+  type GetItemsRequest,
+  type GetItemsResult,
   type ItemLinkedImagesView,
   type ItemPage,
   type ItemPricePage,
@@ -99,6 +102,7 @@ import {
   AdminListLocationsQueryDto,
   AdminListSupermarketItemsQueryDto,
   AdminListSupermarketsQueryDto,
+  AdminLookupItemsDto,
   AdminSearchItemsQueryDto,
 } from './catalog-admin.dto';
 import {
@@ -549,7 +553,7 @@ export class AdminCatalogItemsController {
    */
   @Post()
   @ApiContractResponse(ITEM_PATTERNS.create, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, baseUnit: true })
   async create(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemDto
@@ -576,7 +580,12 @@ export class AdminCatalogItemsController {
   @ApiContractResponse(ITEM_PATTERNS.createMany, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    baseUnit: true,
+    registeredBrands: true,
+  })
   async createMany(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: CreateItemsDto
@@ -588,6 +597,7 @@ export class AdminCatalogItemsController {
         ...item,
         ean: requireProductEan(item.ean),
       })),
+      requireRegisteredBrands: dto.requireRegisteredBrands,
     });
   }
 
@@ -605,7 +615,13 @@ export class AdminCatalogItemsController {
    */
   @Patch('batch')
   @ApiContractResponse(ITEM_PATTERNS.updateMany)
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    baseUnit: true,
+    itemExpectation: true,
+    registeredBrands: true,
+  })
   updateMany(
     @ActingAdmin() admin: CurrentAdmin,
     @Body() dto: UpdateItemsDto
@@ -613,7 +629,48 @@ export class AdminCatalogItemsController {
     return this.nats.send<UpdateItemsResult>(ITEM_PATTERNS.updateMany, {
       ...adminCredential(admin),
       items: dto.items,
+      requireRegisteredBrands: dto.requireRegisteredBrands,
     });
+  }
+
+  /**
+   * Several products by id, for an operator (plan 0237, section 3.7): what an
+   * audit compares before it writes, up to a batch at once.
+   *
+   * **It reads through to catalog on every call.** The shopper's
+   * `POST /v1/catalog/items/lookup` caches nothing itself either, but a read
+   * that compares a product before a write (`expect` of an items batch) must
+   * answer the product as it stands, so nothing here is ever cached. It
+   * resolves no scope and attaches no price, so the answer is the products
+   * alone, with `categories[].slug` and `eans`.
+   *
+   * Catalog's `item.getMany` answers at most `ITEM_LOOKUP_LIMITS.maxIds` ids,
+   * fewer than a batch, so the ids go in pages of that size, one after the
+   * other, and the answer joins them. An id that names nothing is absent, as
+   * there. A `POST` for a read, answered 201, for the reason the shopper's
+   * lookup gives: a thousand ids do not fit in a query string.
+   */
+  @Post('lookup')
+  @ApiContractResponse(ITEM_PATTERNS.getMany, { status: HttpStatus.CREATED })
+  @ApiProblemResponses({ body: true })
+  async lookup(@Body() dto: AdminLookupItemsDto): Promise<GetItemsResult> {
+    const ids = [...new Set(dto.ids)];
+    const items: ItemView[] = [];
+    for (
+      let start = 0;
+      start < ids.length;
+      start += ITEM_LOOKUP_LIMITS.maxIds
+    ) {
+      const page: GetItemsRequest = {
+        ids: ids.slice(start, start + ITEM_LOOKUP_LIMITS.maxIds),
+      };
+      const answer = await this.nats.send<GetItemsResult>(
+        ITEM_PATTERNS.getMany,
+        page
+      );
+      items.push(...answer.items);
+    }
+    return { items };
   }
 
   /**
@@ -710,7 +767,12 @@ export class AdminCatalogItemsController {
    */
   @Patch(':id')
   @ApiContractResponse(ITEM_PATTERNS.update)
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({
+    body: true,
+    conflict: true,
+    baseUnit: true,
+    itemExpectation: true,
+  })
   update(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('id') id: string,

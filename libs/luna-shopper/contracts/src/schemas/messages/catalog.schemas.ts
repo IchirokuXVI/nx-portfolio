@@ -205,6 +205,8 @@ export const CATALOG_SCHEMA_IDS = {
   createItemsResult: schemaId('msg/item.createMany/response'),
   // Plan 0166: the update op of the items batch.
   updateItemInput: schemaId('catalog/UpdateItemInput'),
+  // Plan 0237, section 3.2: what an edit expects the product to hold.
+  itemExpectation: schemaId('catalog/ItemExpectation'),
   updateItemsRequest: schemaId('msg/item.updateMany/request'),
   updateItemsResult: schemaId('msg/item.updateMany/response'),
   // Plan 0166: the category tree, and a category as a product carries it.
@@ -655,6 +657,12 @@ const itemCategoryView = object(
 const categoryIds = (): JsonSchema => ({
   ...array(nonEmptyString()),
   minItems: 1,
+});
+
+/** An object schema with a rule over several of its properties added to it. */
+const withRule = (rule: JsonSchema, schema: JsonSchema): JsonSchema => ({
+  ...schema,
+  ...rule,
 });
 
 /** One or more leaf slugs, for the harvest surfaces (plan 0166, section 3). */
@@ -1436,7 +1444,20 @@ const listLocationsRequest = object(
   ['userId', 'supermarketId']
 );
 
-const createItemRequest = object(
+/**
+ * A product names its leaves by id or by slug, exactly one of the two (plan
+ * 0237, section 3.4). Neither is refused, because a product always has a
+ * category.
+ */
+const ONE_CATEGORY_LIST: JsonSchema = {
+  oneOf: [{ required: ['categoryIds'] }, { required: ['categorySlugs'] }],
+};
+/** An edit names at most one of the two lists (plan 0237, section 3.4). */
+const AT_MOST_ONE_CATEGORY_LIST: JsonSchema = {
+  not: { required: ['categoryIds', 'categorySlugs'] },
+};
+
+const createItemRequest = withRule(ONE_CATEGORY_LIST, object(
   CATALOG_SCHEMA_IDS.createItemRequest,
   {
     ...adminCredentialProperties,
@@ -1447,12 +1468,14 @@ const createItemRequest = object(
     ean: nullableString(),
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
+    // One of the two (plan 0237, section 3.4), which catalog checks.
     categoryIds: categoryIds(),
+    categorySlugs: categorySlugs(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
   },
-  ['userId', 'name', 'categoryIds', 'defaultUnit']
-);
+  ['userId', 'name', 'defaultUnit']
+));
 /**
  * The fields one product's edit may carry, stated once and used by the single
  * update and by the update op of the items batch (plan 0166, section 3).
@@ -1468,20 +1491,36 @@ const updateItemFields = {
   packCount: packCountOrNull(),
   // Replaces the whole set. Never empty, because a product always has one.
   categoryIds: categoryIds(),
+  // The same set by slug, never with `categoryIds` (plan 0237, section 3.4).
+  categorySlugs: categorySlugs(),
   defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
   productGroupId: nullableString(),
+  // Plan 0237, section 3.2: compared before any edit of the request.
+  expect: ref(CATALOG_SCHEMA_IDS.itemExpectation),
 };
-const updateItemRequest = object(
+/**
+ * What an edit expects the product to hold (plan 0237, section 3.2). Every
+ * field is optional, and `null` means the product holds nothing there.
+ */
+const itemExpectation = object(CATALOG_SCHEMA_IDS.itemExpectation, {
+  name: ref(CATALOG_SCHEMA_IDS.localizedText),
+  brand: nullableString(),
+  unitSize: numberOrNull(),
+  defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+  packCount: { type: ['integer', 'null'] },
+  categorySlugs: array(nonEmptyString({ maxLength: CATEGORY_SLUG_MAX_LENGTH })),
+}, []);
+const updateItemRequest = withRule(AT_MOST_ONE_CATEGORY_LIST, object(
   CATALOG_SCHEMA_IDS.updateItemRequest,
   { ...adminCredentialProperties, ...updateItemFields },
   ['userId', 'itemId']
-);
+));
 /** A product of a bulk update: {@link updateItemRequest} without the credential. */
-const updateItemInput = object(
+const updateItemInput = withRule(AT_MOST_ONE_CATEGORY_LIST, object(
   CATALOG_SCHEMA_IDS.updateItemInput,
   updateItemFields,
   ['itemId']
-);
+));
 const updateItemsRequest = object(
   CATALOG_SCHEMA_IDS.updateItemsRequest,
   {
@@ -1491,6 +1530,8 @@ const updateItemsRequest = object(
       minItems: 1,
       maxItems: BULK_DECISION_MAX_OPERATIONS,
     },
+    // Plan 0237, section 3.6: opt in, never sent by the harvester.
+    requireRegisteredBrands: boolean(),
   },
   ['userId', 'items']
 );
@@ -1723,7 +1764,7 @@ const bulkOperationError = object(
 );
 
 /** A product of a bulk create: {@link createItemRequest} without the credential. */
-const createItemInput = object(
+const createItemInput = withRule(ONE_CATEGORY_LIST, object(
   CATALOG_SCHEMA_IDS.createItemInput,
   {
     name: ref(CATALOG_SCHEMA_IDS.localizedText),
@@ -1734,17 +1775,20 @@ const createItemInput = object(
     unitSize: numberOrNull(),
     packCount: packCountOrNull(),
     categoryIds: categoryIds(),
+    categorySlugs: categorySlugs(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     productGroupId: nullableString(),
   },
-  ['name', 'categoryIds', 'defaultUnit']
-);
+  ['name', 'defaultUnit']
+));
 
 const createItemsRequest = object(
   CATALOG_SCHEMA_IDS.createItemsRequest,
   {
     ...adminCredentialProperties,
     items: array(ref(CATALOG_SCHEMA_IDS.createItemInput)),
+    // Plan 0237, section 3.6: opt in, never sent by the harvester.
+    requireRegisteredBrands: boolean(),
   },
   ['userId', 'items']
 );
@@ -3390,6 +3434,7 @@ export const catalogSchemas: JsonSchema[] = [
   createItemsRequest,
   createItemsResult,
   updateItemInput,
+  itemExpectation,
   updateItemsRequest,
   updateItemsResult,
   categoryTreeRequest,

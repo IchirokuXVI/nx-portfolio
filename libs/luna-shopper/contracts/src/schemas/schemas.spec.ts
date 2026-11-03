@@ -1680,6 +1680,32 @@ describe('contract schemas', () => {
       ).toBe(false);
     });
 
+    it('a product names its leaves by id or by slug, never both (plan 0237, section 3.4)', () => {
+      const create = (fields: Record<string, unknown>) =>
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { en: 'Blender', es: 'Batidora' },
+          defaultUnit: 'UNIT',
+          ...fields,
+        }).valid;
+      expect(create({ categorySlugs: ['small-appliances'] })).toBe(true);
+      expect(
+        create({ categoryIds: ['c-1'], categorySlugs: ['small-appliances'] })
+      ).toBe(false);
+      expect(create({ categorySlugs: [] })).toBe(false);
+
+      const update = (fields: Record<string, unknown>) =>
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [{ itemId: 'i', ...fields }],
+        }).valid;
+      expect(update({ categorySlugs: ['small-appliances'] })).toBe(true);
+      expect(update({ packCount: 6 })).toBe(true);
+      expect(
+        update({ categoryIds: ['c-1'], categorySlugs: ['small-appliances'] })
+      ).toBe(false);
+    });
+
     it('item.updateMany is the update op of the items batch (plan 0166)', () => {
       expect(
         validateMessageRequest('item.updateMany', {

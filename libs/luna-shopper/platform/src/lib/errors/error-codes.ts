@@ -253,6 +253,13 @@ export const ERROR_CODES = {
    */
   BRAND_IN_USE: 'brand_in_use',
   /**
+   * A batch that asked for registered brands named a label the registry does
+   * not hold, and that is not a spelling of a brand it holds (plan 0237,
+   * section 3.6). Only a batch that sends `requireRegisteredBrands` meets it.
+   * The labels that failed travel in `details`, and nothing is written.
+   */
+  BRAND_UNREGISTERED: 'brand_unregistered',
+  /**
    * A discovered place is already imported, and the write asked to import it
    * again or to reject it (plan 0152, section 5).
    *
@@ -328,6 +335,33 @@ export const ERROR_CODES = {
    * barcode and the product that holds it travel in `details`.
    */
   ITEM_EAN_HELD: 'item_ean_held',
+  /**
+   * A product edit stated what it expected the product to hold, and the
+   * product holds something else (plan 0237, section 3.2).
+   *
+   * Its own code rather than a plain {@link CONFLICT}, because the operator
+   * has to act on it in a particular way: read the product again, and decide
+   * whether the edit still holds. The products that failed, each field that
+   * differed and the value the product holds travel in `details`. One failure
+   * refuses the whole batch, and nothing is written.
+   */
+  ITEM_EXPECTATION_FAILED: 'item_expectation_failed',
+  /**
+   * A product write would store `LITER` or `PACK` (plan 0237, section 3.3,
+   * and rule R9 of the first catalog's register).
+   *
+   * A product is stored in a base unit: a volume in `MILLILITER` and a count
+   * in `UNIT`. The unit that was sent and the unit and size it becomes travel
+   * in `details`, so the operator sends that instead.
+   */
+  ITEM_UNIT_NOT_BASE: 'item_unit_not_base',
+  /**
+   * A product write would store a `KILOGRAM` with a size (plan 0237, section
+   * 3.3, and rule R9). A `KILOGRAM` product is sold by weight and has no size;
+   * a weight is stored in `GRAM`. The grams the size would be travel in
+   * `details`.
+   */
+  ITEM_KILOGRAM_HAS_SIZE: 'item_kilogram_has_size',
   /**
    * A category that has children or products was asked to be deleted (plan
    * 0166, rule R4). Move them first: nothing deletes a category that holds
@@ -629,6 +663,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 409: the request is well formed and the caller may make it, and what
   // refuses it is the products and the spellings that still point at the brand.
   [ERROR_CODES.BRAND_IN_USE]: HttpStatus.CONFLICT,
+  // 409: the label is a well formed label, and what refuses it is the state
+  // of the registry, which a person changes (plan 0237, section 3.6).
+  [ERROR_CODES.BRAND_UNREGISTERED]: HttpStatus.CONFLICT,
   // All three 409: the request is well formed, and what refuses it is the
   // state of the place, of the catalog's shops, or of the chain's scopes
   // (plan 0152).
@@ -651,6 +688,13 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.ITEM_EAN_INVALID]: HttpStatus.BAD_REQUEST,
   // 409: the barcode is a real one, and another product holds it (plan 0185).
   [ERROR_CODES.ITEM_EAN_HELD]: HttpStatus.CONFLICT,
+  // 409 like `stale_quantity`: the request is well formed, and the product
+  // moved under the caller since it was read (plan 0237, section 3.2).
+  [ERROR_CODES.ITEM_EXPECTATION_FAILED]: HttpStatus.CONFLICT,
+  // 400 for both: what is wrong is a value in the body, a unit the catalog
+  // does not store (plan 0237, section 3.3).
+  [ERROR_CODES.ITEM_UNIT_NOT_BASE]: HttpStatus.BAD_REQUEST,
+  [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: HttpStatus.BAD_REQUEST,
   // 404, the way an unknown group id on a product write is refused, and the
   // status a read of one missing category answers with too.
   [ERROR_CODES.CATEGORY_NOT_FOUND]: HttpStatus.NOT_FOUND,

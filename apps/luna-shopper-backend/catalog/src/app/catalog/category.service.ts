@@ -338,6 +338,36 @@ export class CategoryService {
   }
 
   /**
+   * The ids of the categories several product writes name by slug (plan 0237,
+   * section 3.4), in **one** query, and a resolver for each list.
+   *
+   * A slug that names no category is refused with `category_not_found`, naming
+   * every slug of the list that matched nothing. The ids then go through the
+   * same leaf check as ids sent by a caller, so a root is
+   * `category_not_a_leaf` and the order given is the order kept.
+   */
+  async slugResolver(
+    lists: readonly (readonly string[])[]
+  ): Promise<(slugs: readonly string[]) => string[]> {
+    const slugs = [...new Set(lists.flat())];
+    const rows =
+      slugs.length === 0
+        ? []
+        : ((await this.categories.query(
+            `SELECT c."id", c."slug" FROM "categories" c WHERE c."slug" = ANY($1::text[])`,
+            [slugs]
+          )) as Pick<Category, 'id' | 'slug'>[]);
+    const ids = new Map(rows.map((row) => [row.slug, row.id]));
+    return (list) => {
+      const unknown = [...new Set(list)].filter((slug) => !ids.has(slug));
+      if (unknown.length > 0) {
+        throw notFound(unknown);
+      }
+      return list.map((slug) => ids.get(slug) as string);
+    };
+  }
+
+  /**
    * Replace a product's whole set of categories, inside the caller's
    * transaction (plan 0166, section 2). The order given is the order kept:
    * position 0 is the first.

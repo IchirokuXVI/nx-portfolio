@@ -147,7 +147,7 @@ describeIntegration(
             userId: OWNER,
             name: { en: name, es: name },
             categoryIds: [categoryId('milk')],
-            defaultUnit: UnitOfMeasure.LITER,
+            defaultUnit: UnitOfMeasure.MILLILITER,
             productGroupId,
           })
         ).id;

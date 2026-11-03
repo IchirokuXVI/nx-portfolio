@@ -515,6 +515,73 @@ export class ItemEanHeldException extends DomainException {
 }
 
 /**
+ * The `details` key an {@link ItemExpectationFailedException} lists its
+ * failures under: one entry per product, `{ itemId, fields }`, and each field
+ * as `{ field, expected, actual }`.
+ */
+export const ITEM_EXPECTATION_FAILURES_DETAIL = 'failures';
+
+/**
+ * A product edit stated what it expected, and the product holds something
+ * else (plan 0237, section 3.2).
+ *
+ * The details are public. `expected` is what the request sent, and `actual`
+ * is the product's own value, which only an admin reaches and which is the
+ * one fact the operator needs to decide again.
+ */
+export class ItemExpectationFailedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_EXPECTATION_FAILED;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` key a {@link BrandUnregisteredException} lists its labels under. */
+export const BRAND_LABELS_DETAIL = 'labels';
+
+/**
+ * A batch that asked for registered brands named labels the registry does not
+ * hold (plan 0237, section 3.6). The details are public: the labels, as the
+ * request sent them, under {@link BRAND_LABELS_DETAIL}.
+ */
+export class BrandUnregisteredException extends DomainException {
+  readonly code = ERROR_CODES.BRAND_UNREGISTERED;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * The `details` keys of the two unit refusals (plan 0237, section 3.3): the
+ * unit the write would store, and what the write should store instead.
+ */
+export const ITEM_UNIT_DETAIL = 'unit';
+export const ITEM_UNIT_BECOMES_DETAIL = 'becomes';
+export const ITEM_UNIT_SIZE_DETAIL = 'unitSize';
+export const ITEM_GRAMS_DETAIL = 'grams';
+
+/**
+ * A product write would store `LITER` or `PACK` (plan 0237, section 3.3).
+ *
+ * The details are public: the unit sent under {@link ITEM_UNIT_DETAIL}, and
+ * the unit and size it becomes under {@link ITEM_UNIT_BECOMES_DETAIL}. A
+ * batch also names the product (`itemId`) or the position of the entry
+ * (`index`). All of it comes from the request or from the product an admin
+ * is editing.
+ */
+export class ItemUnitNotBaseException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_UNIT_NOT_BASE;
+  override readonly exposesDetails = true;
+}
+
+/**
+ * A product write would store a `KILOGRAM` with a size (plan 0237, section
+ * 3.3). The details are public: the size under {@link ITEM_UNIT_SIZE_DETAIL}
+ * and the grams it would be under {@link ITEM_GRAMS_DETAIL}, with `itemId` or
+ * `index` as for {@link ItemUnitNotBaseException}.
+ */
+export class ItemKilogramHasSizeException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE;
+  override readonly exposesDetails = true;
+}
+
+/**
  * A category with children or products cannot be deleted (plan 0166, rule R4).
  * No details: the category is the one the client asked to delete, and the back
  * office links to its products from the id it already holds.
