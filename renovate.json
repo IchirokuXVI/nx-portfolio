@@ -156,6 +156,18 @@
       "description": "typeorm 1.1.2 nests a yargs 18 tree that the lock file Nx prunes for each Luna bundle cannot hold: npm ci in catalog, core and harvester images refuses it (Missing: string-width@7.2.0). PR checks build no image, so the update merged green and broke the staging deploy. Lift this once a bundle built with the newer version passes npm ci in its image",
       "matchPackageNames": ["typeorm"],
       "allowedVersions": "<1.1.2"
+    },
+    {
+      "description": "The transcriber installs its pins with --no-deps and then runs pip check, so a package that pins another exactly cannot move alone: pydantic names one pydantic_core release, and a branch for either one fails the image build",
+      "matchManagers": ["pip_requirements"],
+      "matchPackageNames": ["pydantic", "pydantic_core", "pydantic-core"],
+      "groupName": "pydantic"
+    },
+    {
+      "description": "FastAPI caps the starlette it accepts, so a starlette bump past that cap needs the FastAPI release that lifts it, in the same branch",
+      "matchManagers": ["pip_requirements"],
+      "matchPackageNames": ["fastapi", "starlette"],
+      "groupName": "fastapi and starlette"
     }
   ]
 }
