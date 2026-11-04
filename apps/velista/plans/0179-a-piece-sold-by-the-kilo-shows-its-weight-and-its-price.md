@@ -3,15 +3,21 @@
 > Found on 2026-11-03: velista shows Mercadona's 1.56 kg cheese piece as "1560 g" for
 > "13,42 €", and a basket line of one piece adds 13,42 €. The piece costs 20,94 €, and 13,42 €
 > is the price of a kilo. Evidence: `apps/luna-shopper-backend/docs/kilo-pieces-2026-11/`,
-> section 4.
+> section 4 and section 6.
+>
+> **Reviewed on 2026-11-04** with backend plan `0244`. The catalog now has four kinds of product
+> and not three: a piece priced as one with an approximate weight is the fourth (a 580 g salad
+> tub at 6,50 €). It is drawn as a pack with a weight line, and its price does not change
+> meaning. The totals, the mapper and the kind helper below say so.
 >
 > Needs backend plan `0244` first: it adds `approxWeight` to the product and `piecePrice` to
 > every offer. Nothing in this plan can be built against a gateway without them.
 >
-> Prerequisite reading: backend plan `0244` sections 1, 3.3 and 8; velista plan `0101`
+> Prerequisite reading: backend plan `0244` sections 1, 3.3, 4 and 8; velista plan `0101`
 > (rule 5, the unit price line); `libs/velista/ui/src/lib/catalog/product-row-view.ts`;
 > `libs/velista/ui/src/lib/catalog/product-size.ts`; `libs/velista/models/src/lib/domain.ts`
-> (`ProductOffer`, `CatalogItem`); `libs/velista/models/src/lib/basket-total.ts`;
+> (`ProductOffer`, `CatalogItem`); `libs/velista/data-access/src/lib/mapping/mappers.ts`
+> (the offer mapper at line 667); `libs/velista/models/src/lib/basket-total.ts`;
 > `libs/velista/models/src/lib/line-products.ts`. Load the `nx-portfolio-angular-developer`
 > and `design-taste-frontend` skills before any code.
 
@@ -19,23 +25,26 @@
 
 ### Objective
 
-Show a piece sold by the kilo as what it is: about its weight, its piece price, and its price
-per kilo. Count its piece price in every list and basket total. Make a product sold by the
-kilo always say that its price is the price of a kilo.
+Show a piece whose weight is approximate as what it is: about its weight, its own price, and,
+when it is sold by the kilo, its price per kilo. Count the piece price of a kilo piece in every
+list and basket total. Make a product sold by the kilo always say that its price is the price
+of a kilo.
 
 ### Context
 
-Backend plan `0244` gives the catalog three kinds of product:
+Backend plan `0244` gives the catalog four kinds of product:
 
-| Kind | On the wire | Example |
-| --- | --- | --- |
-| Fixed pack | `unitSize` + a base unit | 1 L of milk, 250 g of butter |
-| Sold by the kilo | `KILOGRAM`, `unitSize` null, `approxWeight` null | loose apples, the deli counter |
-| A piece sold by the kilo | `KILOGRAM`, `unitSize` null, `approxWeight` in grams | a 1.56 kg cheese piece, a meat tray |
+| Kind | On the wire | `price` is | Example |
+| --- | --- | --- | --- |
+| Fixed pack | `unitSize` + a base unit, `approxWeight` null | the pack | 1 L of milk, 250 g of butter |
+| Sold by the kilo | `KILOGRAM`, `unitSize` null, `approxWeight` null | a kilo | loose apples, the deli counter |
+| Kilo piece | `KILOGRAM`, `unitSize` null, `approxWeight` in grams | a kilo | a 1.56 kg cheese piece, a meat tray |
+| Piece priced as one | `UNIT`, `unitSize` null, `approxWeight` in grams | the piece | a 580 g salad tub, a fuet, a LIDL fish tray |
 
 For both kinds sold by the kilo, `price` and `unitPrice` are the price of a kilo, label `kg`.
-For a piece, every offer also carries `piecePrice`, which the server derives
-(`round(approxWeight / 1000 × price, 2)`). velista never computes it.
+For a kilo piece, every offer also carries `piecePrice`, which the server derives
+(`round(approxWeight / 1000 × price, 2)`). velista never computes it. For a piece priced as
+one, `piecePrice` is null and `price` is what one piece costs, as for a pack.
 
 What velista draws today (backend `0244` evidence, section 4):
 
@@ -46,36 +55,42 @@ What velista draws today (backend `0244` evidence, section 4):
   nothing that says "a kilo".
 - `basket-total.ts:142` to `144` adds `price × (bought + left)`, and `line-products.ts:356`
   adds `quantity × price`.
+- A settled purchase shows the price the server recorded (`pricePaidCents`). Backend `0244`
+  section 4 makes that the piece price for a kilo piece, so the Bought history needs no change
+  of its own.
 
 ### Target state
 
 1. The domain model carries the weight and the piece price, mapped from `unknown` (rule D4):
    `CatalogItem.approxWeight: number | null` (grams) and `ProductOffer.piecePrice: number | null`.
-2. A piece shows, in every place that draws a product row or a basket row:
-   - the weight as "aprox. 1,56 kg" (`es`) and "approx. 1.56 kg" (`en`), from `approxWeight`
-     through `Intl.NumberFormat`, in kilos with at most two decimals, or in grams under 1 kg
-     ("aprox. 395 g");
-   - the piece price as the headline price ("20,94 €");
-   - the price per kilo as the unit price line ("13,42 € / kg"), always.
-3. A product sold by the kilo with no weight shows its price with the unit, "13,42 € / kg", as
+2. Every product with a weight shows it, in every place that draws a product row, a basket
+   row or a product sheet: "aprox. 1,56 kg" (`es`) and "approx. 1.56 kg" (`en`), from
+   `approxWeight` through `Intl.NumberFormat`, in kilos with at most two decimals, or in grams
+   under 1 kg ("aprox. 395 g"). This holds for a kilo piece and for a piece priced as one.
+3. A kilo piece shows the piece price as the headline price ("20,94 €") and the price per
+   kilo as the unit price line ("13,42 € / kg"), always.
+4. A product sold by the kilo with no weight shows its price with the unit, "13,42 € / kg", as
    the headline, and no second unit price line.
-4. A list total and a basket total add `piecePrice` for a piece. For every other product they
-   add `price`, as today. A piece whose offer has a price and no `piecePrice` adds nothing and
-   counts as unpriced, as an offer with no price does.
-5. Copy in `es.json` and `en.json` of `libs/velista/ui/assets/i18n/` (not `src/assets`).
+5. A piece priced as one shows its price as a pack does ("6,50 €"), with the weight line of
+   target state 2 and the unit price rule of velista `0101` rule 5.
+6. A list total and a basket total add `piecePrice` for a kilo piece. For every other product
+   they add `price`, as today. A kilo piece whose offer has a price and no `piecePrice` adds
+   nothing and counts as unpriced, as an offer with no price does.
+7. Copy in `es.json` and `en.json` of `libs/velista/ui/assets/i18n/` (not `src/assets`).
 
 ### Scope
 
 - Work in `libs/velista/models`, `libs/velista/data-access` (the mappers), `libs/velista/ui`
   (the row views, the size text, the translations) and the feature libraries that draw a row
-  (`feature-shopping-lists`, the catalog tab, the product sheet), and `apps/velista/plans/mocks/`.
+  (`feature-shopping-lists`, the catalog tab, the product sheet, the line page), and
+  `apps/velista/plans/mocks/`.
 - Do NOT touch the backend, the back office, the generated wire types, or how an offer is
   chosen. Do NOT change what a quantity means for a product sold by the kilo with no weight
   (see "Not in this plan").
 
 ### Constraints
 
-- Mock first. Draw the three kinds in the product row, the basket row and the product sheet,
+- Mock first. Draw the four kinds in the product row, the basket row and the product sheet,
   Night and Day, in `apps/velista/plans/mocks/kilo-pieces/` (`*.dc.html`, `canvas.json`, then
   `build-index.mjs`), and stop for the owner's approval before any code. Follow the owner's
   taste notes: quiet and integrated, no tinted container, no new colour role.
@@ -96,7 +111,8 @@ What velista draws today (backend `0244` evidence, section 4):
 The mock link and the owner's answer. Then each criterion of section 4 with its spec output,
 and one walk on a slot with backend `0244`: the cheese of the evidence folder (or a seeded
 product of 1560 g at 13.42 € per kilo) shows "aprox. 1,56 kg", "20,94 €" and "13,42 € / kg",
-and a basket with two of it totals 41,88 €.
+a basket with two of it totals 41,88 €, and a seeded `UNIT` piece of 580 g at 6,50 € shows
+"aprox. 580 g" and "6,50 €".
 
 ## 1. The model
 
@@ -106,16 +122,19 @@ and a basket with two of it totals 41,88 €.
 /**
  * The price of one piece of a product sold by the kilo with an approximate
  * weight (backend 0244). The server derives it from the weight and the price
- * per kilo; it is never computed here. Null for every other product.
+ * per kilo; it is never computed here. Null for every other product, also for
+ * a piece priced as one, whose `price` is already the piece.
  */
 readonly piecePrice: number | null;
 ```
 
-`CatalogItem` (and every model that copies its size fields, such as the basket's product)
-gains `approxWeight: number | null`, in grams. The mappers read both from `unknown` with the
-same guards as `unitPrice` and `unitSize`: a number, finite, above 0, else null.
+`CatalogItem` (and every model that copies its size fields, such as the basket's product and
+the purchase snapshot) gains `approxWeight: number | null`, in grams. The mappers read both
+from `unknown` with the same guards as `unitPrice` and `unitSize`: a number, finite, above 0,
+else null.
 
-A pure helper in `libs/velista/models` names the kind, so no view tests the fields by hand:
+A pure helper in `libs/velista/models` names how a product is priced, so no view tests the
+fields by hand:
 
 ```ts
 export type SoldAs = 'PACK' | 'BY_THE_KILO' | 'KILO_PIECE';
@@ -123,21 +142,26 @@ export function soldAs(unit: string | null, size: number | null, approxWeight: n
 ```
 
 `KILO_PIECE` is `KILOGRAM` with a null size and a weight. `BY_THE_KILO` is `KILOGRAM` with a
-null size and no weight. Everything else is `PACK`.
+null size and no weight. Everything else is `PACK`, a piece priced as one included: its price
+is one piece, which is what a pack's price is. The weight line is not a kind. It is drawn
+whenever `approxWeight` is set, whatever `soldAs` answers.
 
 ## 2. The views
 
-- **The size text** (`productSizeText`): a `KILO_PIECE` answers the "aprox." text of target
-  state 2. A `BY_THE_KILO` product answers null, as today.
+- **The size text** (`productSizeText`): a product with a weight answers the "aprox." text of
+  target state 2, whatever its unit. A `BY_THE_KILO` product answers null, as today. A fixed
+  pack answers its size, as today. The two never meet: the server refuses a weight beside a
+  size.
 - **The price text** (`priceText`): a `KILO_PIECE` answers `piecePrice`. A `BY_THE_KILO`
   product answers the price with the unit ("13,42 € / kg", through the existing
   `catalog.unit.KILOGRAM` key). A `PACK` answers `price`, as today.
 - **The unit price line** (`unitPriceText`): a `KILO_PIECE` always answers the price per kilo,
   also when it equals the piece price (a piece of exactly 1 kg). A `BY_THE_KILO` product
   answers null, because the headline already says "/ kg". A `PACK` keeps the rule of velista
-  `0101`, rule 5.
-- **The basket row** (`basket-row.ts`, `productPrice`): the same three rules. Today the basket
-  row draws no unit price line. Add it for a `KILO_PIECE` only, as the mock shows.
+  `0101`, rule 5, which for a piece priced as one shows the chain's unit price when it differs
+  from the price (Mercadona compares such a piece per piece, so it is usually hidden).
+- **The basket row** (`basket-row.ts`, `productPrice`): the same rules. Today the basket row
+  draws no unit price line. Add it for a `KILO_PIECE` only, as the mock shows.
 - **The cheaper mark and the chain comparison** keep comparing `price` (a price per kilo for
   both kinds sold by the kilo), so a 395 g piece and a 1.56 kg piece compare by the kilo.
 
@@ -149,17 +173,19 @@ null size and no weight. Everything else is `PACK`.
 - `line-products.ts:356`: the same rule for `quantity × amount`.
 - A spec per total: two cheese pieces at a weight of 1560 and a price of 13.42 with a
   `piecePrice` of 20.94 total 41.88. A `KILO_PIECE` with a price and a null `piecePrice` counts
-  as unpriced.
+  as unpriced. A `UNIT` piece of 580 g at 6.50 totals 6.50 per unit of quantity.
 
 ## 4. Acceptance criteria
 
 1. The mock is published and approved by the owner before any code lands.
 2. Mapper specs: `approxWeight` and `piecePrice` are read from `unknown`, a string or a
    negative number answers null.
-3. `soldAs` specs for the three kinds and for a unit that is not `KILOGRAM`.
+3. `soldAs` specs for the three answers, for a `UNIT` product with a weight (`PACK`), and for a
+   unit that is not `KILOGRAM`.
 4. View specs: the cheese answers "aprox. 1,56 kg", "20,94 €" and "13,42 € / kg" in `es`, and
    the same in `en` with its own separators. A 395 g piece answers "aprox. 395 g". A loose
-   product answers "13,42 € / kg" and no unit price line. A 1 kg milk carton is unchanged.
+   product answers "13,42 € / kg" and no unit price line. A 580 g `UNIT` piece answers
+   "aprox. 580 g" and "6,50 €". A 1 kg milk carton is unchanged.
 5. Total specs of section 3.
 6. `npx nx affected -t lint test` is green, and `npx nx build velista` builds.
 
@@ -170,3 +196,7 @@ null size and no weight. Everything else is `PACK`.
   2026-11-03 (backend `0244`, D4).
 - **Weighing at the till.** The total of a piece is an estimate, as the weight is. velista does
   not ask for the weight that was charged.
+- **The Bought history.** It shows the price the server recorded at the settle. Backend `0244`
+  section 4 records the piece price of a kilo piece there, and the snapshot it keeps carries
+  the weight, so the history draws the weight line through the same `productSizeText` and
+  needs no rule of its own.

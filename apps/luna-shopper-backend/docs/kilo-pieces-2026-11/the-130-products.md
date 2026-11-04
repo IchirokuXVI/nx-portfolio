@@ -1,6 +1,6 @@
 # The 130 products, by kind
 
-Read on 2026-11-03. "Stored" is the production product. "Live" is the Mercadona product API on
+Read on 2026-11-03. Seven more sized pieces are priced per piece and are not in this list; the review of 2026-11-04 names them in [README.md](README.md), section 6.1. "Stored" is the production product. "Live" is the Mercadona product API on
 the same day. "Today the app reads" is what velista draws from the stored values. The product id
 is the first eight characters of the catalog uuid. See [README.md](README.md) for the method.
 

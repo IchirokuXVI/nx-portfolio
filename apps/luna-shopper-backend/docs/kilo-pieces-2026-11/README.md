@@ -164,3 +164,99 @@ For the cheese (GRAM 1560, 13.42 € = 13.42 €/kg):
 
 The full list of the 130, by kind, with the stored and the live values:
 [the-130-products.md](the-130-products.md).
+
+## 6. Review of 2026-11-04
+
+A second reading of production, the code and the live API, made while reviewing the three
+plans. Same method: SELECT only, in a read only transaction, and GET on the public product API
+two seconds apart. Where it corrects a sentence above, the sentence above is left as it was
+written on 2026-11-03 and this section says what is true.
+
+### 6.1 Seven of the 138 sized pieces are priced per piece
+
+Section 2 counted products by the label `kg` and found 130. The join of every `ACTIVE`
+Mercadona row with `soldByWeight` true onto its product finds 138 sized `GRAM` products and 183
+`KILOGRAM` products with no size, and no `UNIT` product. The 8 that the count missed are 58488
+(1000 g, section 2.1) and these seven, whose latest price carries the label `ud`:
+
+| Mercadona id | Product | Name | Stored | Price |
+| --- | --- | --- | ---: | ---: |
+| 54105 | `11dcc54b` | Chorizo de Tarancón Bricio | 350 g | 3.05 |
+| 60226 | `592c5a67` | Ensaladilla rusa mediana Listo para Comer | 580 g | 6.50 |
+| 60212 | `45d5d5d5` | Ensaladilla rusa pequeña Listo para Comer | 290 g | 3.50 |
+| 55108 | `58920a13` | Fuet espetec Hacendado | 240 g | 2.50 |
+| 55125 | `1b6f7315` | Longaniza clásica extra Hacendado | 280 g | 2.80 |
+| 55028 | `4a63c2d1` | Salami montañés extra El Pozo | 200 g | 1.85 |
+| 86445 | `28f80622` | Salchichón extra Hacendado | 400 g | 4.25 |
+
+Read live on 2026-11-04, 60226, 55108 and 54105 answer `approx_size: true`, `size_format:
+"kg"`, `reference_format: "ud"`, and `unit_price`, `bulk_price` and `reference_price` all equal
+(6.50, 2.50, 3.05). The chain compares them **per piece**, so `bulk_price` is the price of the
+piece and not of a kilo. `readSoldByWeight` (`normalize.ts:177`) reads `approx_size` and
+`size_format` only, so since plan `0181` these rows are flagged as sold by weight while their
+price is per piece. The stored price is right by accident: the products were created before
+that plan with the piece price, and the runs since wrote `bulk_price`, which is the same
+number. A conversion of "every sized product with a row sold by weight" to a price per kilo
+would turn a 6.50 € salad into 6.50 € a kilo. Plan `0244` section 5.1 and 7.2 handle them.
+
+Among all Mercadona rows sold by weight: 320 `ACTIVE` with the label `kg`, 7 `ACTIVE` with
+`ud`, 1 `CANDIDATE` and 52 `UNRESOLVED` with `kg`.
+
+### 6.2 Other chains do print an approximate weight
+
+Section 3 says no other chain prints a piece weight. Three do, in three shapes:
+
+- **LIDL** prints it as the size: "Aprox.350 g", "Aprox. 360-460g", "aprox 700-900g". 9 rows
+  (6 `ACTIVE`, 3 `UNRESOLVED`), each with one price and no price per kilo. The parser
+  (`libs/luna-shopper/lidl/src/lib/size.ts`) answers `approximate: true` and the runner writes
+  the number as a fixed size: "Filetes de trucha" is 350 `GRAM` at 4.90 €. The price is the
+  price of the tray, so the product is a piece priced as one with a size that cannot move.
+- **El Jamón** prints it inside the name: "lubina 350grs aprox.", "dorada unidad 350grs aprox",
+  "acelgas manojo 1,5kg aprox" (5 rows), priced "Unidad". The size parser reads `ud` or
+  nothing, so these are `UNIT` products with a piece price, which is right. The 81 sized El
+  Jamón rows whose price equals the unit price under the label `Kilo` are all 1 kg packs
+  (rice, sugar, coffee), where the two figures are equal by arithmetic. No defect there.
+- **DEZA's site** prints it inside the name too ("Pan para migas OBRADOR DEZA 750 g aprox.",
+  "Queso mezcla curado ARQUESPAL 1/2 pieza 1 kg aprox", 42 rows), and writes no price (plan
+  `0085`). Nothing can be decided for them without a price.
+- **DIA** is not provisioned in either cluster. Its parser (`libs/luna-shopper/dia/src/lib/size.ts`)
+  reads "800 g aprox." into `approximate: true`, and `dia-catalog.runner.ts:687` reads only the
+  number. The first DIA run would store the same stale sizes.
+
+### 6.3 Two pieces of one name share a match key
+
+`itemNameKey` (`matching.ts:493`) keys a product by name, brand and `unitSize`, and
+`siblingKey` (`matching.ts:201`) keys a row by name, format and `unitSize`. A piece has no
+size, so two pieces of one name share a key. Production holds 10 Mercadona name pairs among the
+rows sold by weight (370 distinct names in 380 rows):
+
+| Pair | Rows | Today |
+| --- | --- | --- |
+| Queso tierno mezcla, Queso semicurado mezcla, Alas partidas de pollo, Caña de lomo, Chorizo cular, Salchichón cular | both `ACTIVE` on one product | the six merged products of section 2.1 |
+| Queso viejo tostado mezcla (50985, 50971), Salmón ahumado (53444, 53445) | both `ACTIVE`, two products | right |
+| Gamba blanca pequeña (24701 `ACTIVE`, 24700 `UNRESOLVED`), Langostino cocido (87292 `ACTIVE`, 83490 `UNRESOLVED`) | one twin waits in the queue | rung 4 proposes the other piece's product |
+
+`item_merge_format_differs` (`item.service.ts:2560`) compares `unitSize` and `defaultUnit`
+only, so a merge of two pieces is not refused either. Plan `0244` sections 3.5 and 5.8 put the
+weight into the keys and the refusal.
+
+### 6.4 The settle records the price of a kilo
+
+`settle-price.service.ts:336` and `:375` record `pricePaidCents` from the offer's `price`,
+which for a product sold by the kilo is a kilo. `snapshotOf` (line 505) keeps the size and the
+unit of the product bought, and a weight would be lost. Plan `0244` section 4.
+
+### 6.5 Staging is the same data
+
+On 2026-11-04 staging answers the same counts as production: 130 sized `GRAM` products with a
+price equal to the unit price under `kg`, 842 `KILOGRAM` products with no size (463 priced), 9
+`UNIT` products with a kilo label. The release task rehearses on the real data there.
+
+### 6.6 What the review changed in the plans
+
+Backend `0244`: the fourth kind (a piece priced as one), the weight on any product with no
+size, the adapter rule that needs a comparison per kilo, LIDL and DIA, the weight in the match
+keys and the merge refusal, the settle and its snapshot, an optional `approx_weight` on the
+harvest document, the error code `item_approx_weight_beside_size`, and the release task's
+second group. velista `0179` and admin `0068`: the fourth kind in the views, the forms and the
+totals. The owner's decisions D1 to D4 of 2026-11-03 stand.
