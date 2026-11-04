@@ -36,9 +36,10 @@ The velista Android app replaces its web bundle over the air. On launch and on r
 reads a signed manifest from its own cluster, downloads the zip of a newer web bundle in
 the background, checks its SHA-256, and applies it at the next navigation, or sooner when
 the bundle is critical. A bundle that does not confirm its boot rolls back to the previous
-one and is never tried again. A bundle that needs a newer native layer is never applied.
-In that case, or when the server refuses the native build, the app asks Google Play for an
-immediate in-app update. A newer native build on Play gets a flexible in-app update.
+one and is never tried again. A bundle that needs a newer native layer is never applied,
+and the app asks Google Play for a flexible in-app update. When the server refuses the
+native build and no bundle fits, it asks for an immediate one. A newer native build on
+Play gets a flexible in-app update.
 
 ### Context
 
@@ -111,20 +112,30 @@ Every statement below was read in the checkout on 2026-11-04.
 
 1. `@capgo/capacitor-updater` (8.x, manual mode) and `@capawesome/capacitor-app-update`
    (8.x) are dependencies. `capacitor.config.ts` configures the updater with
-   `autoUpdate: false`, `updateUrl: ''`, `statsUrl: ''`, `channelUrl: ''`,
-   `appReadyTimeout` per D7, `autoDeleteFailed: true`, `autoDeletePrevious: true` and
-   `resetWhenUpdate: true`. No request goes to a Capgo host (build target 1 and row 13 of section 5 prove it).
+   `autoUpdate: 'off'` (the value the Capgo 8 settings page names; its default is now
+   `'atBackground'`, and `false` is only tolerated), `updateUrl: ''`, `statsUrl: ''`,
+   `channelUrl: ''`, `appReadyTimeout` per D7, `autoDeleteFailed: true`,
+   `autoDeletePrevious: true` and `resetWhenUpdate: true`. `directUpdate` is deprecated and
+   is not set. No request goes to a Capgo host (build target 1 and row 13 of section 5
+   prove it). If target 1 finds that an empty string falls back to the default, the three
+   URLs name a path under the flavor's own host instead (`https://<host>/ota/android/unused`),
+   which nginx answers with a 404: a call the plugin makes anyway then stays on our origin.
 2. `apps/velista/native-api.json` holds `{ "nativeApi": <int>, "fingerprint": "<sha256>" }`.
    `scripts/native-api.mjs --check` recomputes the fingerprint of the native surface (D4)
-   and fails with a message that names `--bump` when it differs. `--bump` increments
-   `nativeApi` and writes the new fingerprint. A `velista:native-api` target runs
-   `--check` with explicit inputs, and `velista:test` depends on it.
+   and fails with a message that names `--bump` and `--accept` when it differs. `--bump`
+   increments `nativeApi` and writes the new fingerprint. `--accept` writes the new
+   fingerprint and keeps the number (D4 says when each is right). A `velista:native-api`
+   target runs `--check` with explicit inputs, and `velista:test` depends on it.
 3. `build-android.mjs` reads `native-api.json`, the flavor's OTA public key
    (`apps/velista/ota-keys/<flavor>.pub.pem`, committed) and the OTA base URL, and passes
-   them to Gradle. `build.gradle` writes them as `BuildConfig` fields. A new local plugin,
-   `VelistaNativeInfoPlugin.java`, answers `info()` with `{ nativeApi, otaBaseUrl,
-   otaPublicKey }`. `otaBaseUrl` is empty when any host override is exported, unless
-   `VELISTA_OTA_URL` names one, so a slot APK never pulls a cluster bundle.
+   them to Gradle, together with the id of the built-in bundle (D8:
+   `<VELISTA_APP_VERSION>+<first 12 characters of the commit>`). `build.gradle` writes
+   them as `BuildConfig` fields. A new local plugin, `VelistaNativeInfoPlugin.java`,
+   answers `info()` with `{ nativeApi, otaBaseUrl, otaPublicKey, builtinBundle }`.
+   `otaBaseUrl` is empty when any host override is exported, unless `VELISTA_OTA_URL`
+   names one, so a slot APK never pulls a cluster bundle. `--no-ota` empties it on purpose,
+   for an APK built from a branch and pointed at a real cluster: without it, the cluster
+   replaces the branch bundle at the first check. `--bundle` refuses `--no-ota`.
 4. `libs/velista/platform` exports a `LIVE_UPDATES` token (interface `LiveUpdatesI`,
    root default: unavailable) and an `APP_STORE_UPDATES` token (interface
    `AppStoreUpdatesI`, root default: unavailable). It also exports `BundleUpdates`, the
@@ -158,9 +169,10 @@ In: `package.json` and the lock file (two dependencies), `apps/velista/capacitor
 (`build-android.mjs`, `native-api.mjs` new, `ota-bundle.mjs` new, `ota-keygen.mjs` new),
 `apps/velista/native-api.json` (new), `apps/velista/ota-keys/` (new, public keys only),
 `apps/velista/project.json` (two targets, one asset rule), `apps/velista/src/nginx.conf`,
-`apps/velista/README.md`, `libs/velista/platform/src/lib/` (`app-updates.ts` and spec, new
-`live-updates.ts`, `bundle-updates.ts`, `ota-manifest.ts`, `app-store-updates.ts` with
-specs, `index.ts`), `libs/velista/native/src/lib/` (`native-plugins.ts`, new
+`apps/velista/README.md`, `libs/velista/platform/src/lib/` (`app-updates.ts` and
+`reload-blocker.ts` with specs, new `live-updates.ts`, `bundle-updates.ts`,
+`ota-manifest.ts`, `app-store-updates.ts` with specs, `index.ts`),
+`libs/velista/native/src/lib/` (`native-plugins.ts`, new
 `native-live-updates.ts`, `native-app-store-updates.ts` with specs,
 `provide-native-shell.ts` and spec, `index.ts`), `.github/workflows/stage-unit.yml`,
 `.github/workflows/release-unit.yml`, `k8s/units/velista/unit.env` (one key),
@@ -270,9 +282,22 @@ Play for native changes.
     bundle can call.
   - `apps/velista/capacitor.config.ts`.
 
-  The check fails on any change to these without a bump. A false alarm costs one bump and
-  forces one native release. A missed bump sends a bundle that calls a method the APK
-  lacks. Its boot then fails, and D7 rolls it back, so the cost of a miss is bounded too.
+  The check fails on any change to these until the file is rewritten. Two answers exist,
+  and the reviewer chooses:
+  - `--bump`, when the change is visible to a bundle: a method added, changed or removed
+    in `native-plugins.ts`, a new plugin, a Capacitor major, a plugin setting in
+    `capacitor.config.ts` that the bundle relies on. The next bundle then needs the next
+    APK.
+  - `--accept`, when it is not: a manifest flag, a resource, a Gradle or dependency bump
+    that adds no method (the `allowBackup` change of PR #913 is such a change). The
+    fingerprint moves and the number stays, so OTA goes on for every installed APK.
+
+  A bump is not free. Every bundle built after it declares the new number, and no phone
+  applies one until Play has delivered the matching APK, so a bump for a change that no
+  bundle can see stops OTA for everyone for nothing. That is why the check offers
+  `--accept`, and why it never decides by itself. A missed bump sends a bundle that calls
+  a method the APK lacks. Its boot then fails, and D7 rolls it back, so the cost of a miss
+  is bounded too.
   `velista:native-api` gets explicit inputs, because `project.json` excludes
   `{projectRoot}/android/**/*` from `default`, and a cached `test` would otherwise pass
   over an Android change.
@@ -315,30 +340,53 @@ Play for native changes.
   - At once, past the blocker, when the server refuses the running build (D9, plan `0072`
     D7).
 
+  **On native, an OTA apply is always `set()`, and never `BrowserFacade.reload()`.** A
+  plain reload of the WebView loads the running bundle again, because the Capacitor
+  server keeps serving the directory it was pointed at. So `ReloadBlocker` gains
+  `whenIdle(action)`, which runs the action now or when the last blocker is released, and
+  `reloadWhenIdle()` becomes `whenIdle(() => browser.reload())`. The native path passes
+  `set()` to it. `reloadByHand()` keeps the plain reload, because "Try again" on the dead
+  end face means the same bundle again.
+
   The Capgo README does not say whether `next()` in manual mode also applies on a move to
   the background. Target 1 measures it. If it does, the app calls `next()` only when the
   blocker is free and the app goes to the background, so a resume never drops a held form.
 
 - **D7. The new bundle confirms its boot, or the app rolls back.** Each boot calls the
-  updater's `notifyAppReady()` once the app is stable: after the first `NavigationEnd`
-  and the first render after it (`afterNextRender`), whatever the backend answers. An
-  offline boot is a good boot. `appReadyTimeout` is 20 s, twice Capgo's default, because
-  the cold boot of an old phone with a slow WebView is the case that matters, and a false
-  rollback costs a full download again. Without the call, the updater returns to the
-  previous bundle or to the built-in one. On the next boot the app reads the failed bundle
+  updater's `notifyAppReady()` at the first `afterNextRender` of the application: the
+  bundle parsed, Angular bootstrapped and the root component painted. That is the proof
+  the rollback exists for, and it does not wait on the backend. It is **not** after the
+  first `NavigationEnd`: the first navigation can wait on guards that wait on the network
+  (`setupGuard` reads the profile, `authenticatedGuard` may refresh the pair), and Capgo's
+  clock runs from the creation of the WebView, so a slow network would read as a broken
+  bundle. An offline boot is a good boot. `appReadyTimeout` is 20 s, twice Capgo's
+  default, because the cold boot of an old phone with a slow WebView is the case that
+  matters, and a false rollback costs a full download again. Without the call, the
+  updater returns to the previous bundle or to the built-in one. On the next boot the app reads the failed bundle
   (the `updateFailed` event or a `list()` entry in error) and records its `bundle` id under
   a new `StorageKeys` entry in local storage. A recorded id is never downloaded again. The
   record clears when the manifest names another bundle.
 
 - **D8. Which bundle is "newer".** The manifest's `bundle` field is
-  `<VELISTA_APP_VERSION>+<first 12 characters of the commit>`, compiled into the bundle as
-  `VELISTA_BUNDLE_ID`. The app applies a manifest whose `bundle` differs from the running
-  one. It does not order them. Staging versions are the literal `staging` and do not
-  order, and a cluster that a redeploy rolled back is the server the app talks to, so
-  following the cluster down is correct. `APP_VERSION`, the account page and
-  `x-client-version` already read the running bundle (`app-providers.ts:168`), so after an
-  OTA they show and send the new version with no change. See question Q3 on a downgrade
-  below the APK's own bundle.
+  `<VELISTA_APP_VERSION>+<first 12 characters of the commit>`. **No bundle compiles its
+  own id into its JavaScript.** The running id is read from the updater: `current()`
+  answers the `version` that `download()` was given, which is the manifest's `bundle`,
+  or `builtin`. For `builtin` the id is `VelistaNativeInfo.info().builtinBundle`, which
+  `build-android.mjs` computes from the version and `git rev-parse HEAD` and Gradle
+  writes into `BuildConfig`. Two reasons. The `DefinePlugin` values are not Nx inputs
+  (`nx.json` declares `NX_MF_DEV_REMOTES` and nothing else, and CI restores `.nx/cache`
+  across runs), so a value that changes on every commit must not travel that way. And the
+  id is a fact about the artifact, not about the code, so the scripts that make the
+  artifacts own it.
+
+  The app applies a manifest whose `bundle` differs from the running one. It does not
+  order them. Staging versions are the literal `staging` and do not order, and a cluster
+  that a redeploy rolled back is the server the app talks to, so following the cluster
+  down is correct. When the manifest names the built-in id, the app calls `reset()` and
+  downloads nothing: the APK already holds that bundle. `APP_VERSION`, the account page
+  and `x-client-version` already read the running bundle (`app-providers.ts:168`), so
+  after an OTA they show and send the new version with no change. See question Q3 on a
+  downgrade below the APK's own bundle.
 
 - **D9. Google Play In-App Updates for the native layer.** `APP_STORE_UPDATES` wraps
   `@capawesome/capacitor-app-update`. Three cases:
@@ -348,9 +396,13 @@ Play for native changes.
     is not asked again for that code). When the download completes, the app calls
     `completeFlexibleUpdate()` at the same idle navigation moment as D6, because it
     restarts the app.
-  - **Immediate.** The manifest names a bundle with `nativeApi` above the installed one,
-    or the server refuses the build (`too-old`) and no OTA bundle fits. The app calls
-    `performImmediateUpdate()` when `immediateUpdateAllowed` is true.
+  - **Immediate.** The server refuses the build (`too-old`) and no OTA bundle fits. The
+    app calls `performImmediateUpdate()` when `immediateUpdateAllowed` is true. The
+    immediate flow is a full screen that the person cannot leave without updating, so it
+    is reserved for the case where the app cannot work. A manifest that names a bundle
+    with `nativeApi` above the installed one, while the server still serves the running
+    build, is the flexible case: the app works, and the newer bundle waits for Play.
+    See question Q8.
   - **Last resort.** Play cannot help (the staging flavor is not on Play, a sideloaded APK,
     no Play services, the person cancels the immediate flow). The dead end face of plan
     `0072` keeps its store action from plan `0166` D3, unchanged.
@@ -364,13 +416,16 @@ Play for native changes.
   native release (a `nativeApi` bump) or an owner's choice. The APK's `versionName` stays
   the version of its built-in bundle (plan `0167` D3). After an OTA the running version
   and the `versionName` differ, which is correct: the floor and the account page read the
-  bundle. A flexible update compares version codes only, never bundle versions.
+  bundle. A flexible update compares version codes only, never bundle versions. Every
+  AAB carries a new `versionName` too, which the scheme already forces: the code is
+  derived from the version, and Play refuses a code it has seen. So `resetWhenUpdate`
+  always has a change to see, whichever of the two it keys on (target 1 learns which).
 
 - **D11. Plugin choice: `@capgo/capacitor-updater` in manual mode.** Checked on 2026-11-04:
   - npm `@capgo/capacitor-updater` 8.54.2, license MPL-2.0, peer `@capacitor/core ^8.0.0`,
     no runtime dependencies. MPL-2.0 is file level copyleft: using it unmodified asks
     nothing of this repository.
-  - The README's "No Cloud setup" path downloads zips from any URL with `autoUpdate: false`,
+  - The README's "No Cloud setup" path downloads zips from any URL with `autoUpdate: 'off'`,
     `download()`, `next()`, `set()`, `notifyAppReady()`, `list()`, `delete()`, `reset()`.
     It names no account or API key for that path. The cloud path starts with one.
   - Rollback: without `notifyAppReady()` within `appReadyTimeout` (default 10 000 ms) the
@@ -457,7 +512,13 @@ build the staging APK. On the AVD, with a throwaway zip served over HTTP from th
 - Does `CapacitorHttp.request` to `https://<server.hostname>/ota/...` reach the network
   (D3)?
 - Does `resetWhenUpdate` return to the built-in bundle after `adb install -r` of a higher
-  version code?
+  version code? Does it key on the version code or on `versionName` (install a higher code
+  with the same name, then with a new one)?
+- Does `updateUrl: ''` stay empty, or does the plugin put its default back? Read the
+  resolved configuration in logcat and watch the traffic (target state item 1 says what
+  to do if it falls back).
+- Does `current().bundle.version` answer `builtin` for the APK's own bundle and the
+  `download()` version for a downloaded one (D8)?
 
 If a Capgo host is contacted with all three URLs empty, stop and ask (D11).
 
@@ -468,11 +529,14 @@ Files: `apps/velista/native-api.json`, `scripts/native-api.mjs` with a `node --t
 `{projectRoot}/capacitor.config.ts`, `{workspaceRoot}/package-lock.json` and
 `{workspaceRoot}/libs/velista/native/src/lib/native-plugins.ts`, and `test` depends on
 it), `VelistaNativeInfoPlugin.java`, `MainActivity.java` (register it before `super`),
-`build.gradle` (three `buildConfigField` entries and `buildFeatures { buildConfig true }`),
-`build-android.mjs`.
+`build.gradle` (four `buildConfigField` entries and `buildFeatures { buildConfig true }`),
+`build-android.mjs` (`--no-ota`, the built-in bundle id, the refusal of `--bundle` with
+`--no-ota`). The new scripts under `apps/velista/scripts/` join `build-android.mjs` in the
+exclusions of the `default` named input of `project.json`: none of them is an input of
+`nx build`.
 
 Tests: the script spec covers a clean tree, a changed Android file, a CRLF only change
-(passes), a changed Capacitor version in a lock file fixture, and `--bump`.
+(passes), a changed Capacitor version in a lock file fixture, `--bump` and `--accept`.
 
 ### Target 3: the OTA files
 
@@ -502,21 +566,24 @@ a signature that `crypto.subtle` verifies in Node with the public key, and a ref
 ### Target 4: the platform half
 
 Files: `libs/velista/platform/src/lib/live-updates.ts`, `app-store-updates.ts`,
-`ota-manifest.ts`, `bundle-updates.ts`, `app-updates.ts`, `storage-keys.ts`, their specs,
-`index.ts`.
+`ota-manifest.ts`, `bundle-updates.ts`, `app-updates.ts`, `reload-blocker.ts`
+(`whenIdle(action)`, D6), `storage-keys.ts`, their specs, `index.ts`.
 
-- `LiveUpdatesI`: `available()`, `info()` (`nativeApi`, `otaBaseUrl`, `otaPublicKey`),
-  `fetchText(url)`, `download({ bundle, url, sha256 })`, `apply(bundle)`,
-  `applyAtNextStart(bundle)`, `confirmBoot()`, `failedBundles()`.
+- `LiveUpdatesI`: `available()`, `info()` (`nativeApi`, `otaBaseUrl`, `otaPublicKey`,
+  `builtinBundle`), `current()` (the running id, D8), `fetchText(url)`,
+  `download({ bundle, url, sha256 })`, `apply(bundle)`, `applyAtNextStart(bundle)`,
+  `resetToBuiltin()`, `confirmBoot()`, `failedBundles()`.
 - `AppStoreUpdatesI`: `info()`, `startFlexible()`, `completeFlexible()`, `immediate()`,
   and a `flexibleReady` signal.
 - `BundleUpdates` holds the rules of D6 to D9 and nothing native. `AppUpdates` on native
   calls it where it returns early today.
 
 Spec cases: a manifest with a bad signature is not parsed; a valid manifest naming the
-running bundle downloads nothing; a recorded failed bundle downloads nothing; a higher
-`nativeApi` downloads nothing and asks for the immediate update; a critical bundle applies
-when the blocker frees; a normal bundle applies at the next `NavigationEnd` and not before;
+running bundle downloads nothing; a manifest naming the built-in id resets and downloads
+nothing; a recorded failed bundle downloads nothing; a higher `nativeApi` downloads
+nothing and asks for the flexible update once per version code; a critical bundle applies
+through `whenIdle` with `set()` and never through `reload()`; a normal bundle applies at
+the next `NavigationEnd` and not before;
 two resumes within 10 minutes make one check; a `too-old` follows the order of D9 and
 spends one attempt; the web runtime never touches either token. Use hand built doubles,
 as the existing `app-updates.spec.ts` does.
@@ -528,8 +595,9 @@ their dynamic imports), `native-live-updates.ts`, `native-app-store-updates.ts`,
 specs, `provide-native-shell.ts` and spec, `index.ts`, `capacitor.config.ts`, the files
 `cap sync` rewrites.
 
-`confirmBoot()` runs from an environment initializer after the first `NavigationEnd` and
-`afterNextRender` (D7). Spec cases: the bindings on web and native, the `updateFailed`
+`confirmBoot()` runs from an environment initializer at the first `afterNextRender`
+(D7), and not after a navigation. Spec cases: the bindings on web and native, the
+`updateFailed`
 record, and a plugin that rejects (each path resolves to "unavailable", never throws into
 the app).
 
@@ -543,7 +611,10 @@ After "Build the bundles in the pinned image" and before "Build & push", one ste
 `VELISTA_OTA_SIGNING_KEY: ${{ secrets.VELISTA_OTA_SIGNING_KEY }}` in its `env`. The step
 fails when the unit lists OTA projects and the secret is empty, so an unsigned production
 manifest never ships. The `build` job names the environment (D5). Stage builds pass
-`VELISTA_APP_VERSION=staging`, and the bundle id still differs per commit (D8).
+`VELISTA_APP_VERSION=staging`, and the bundle id still differs per commit (D8). The
+commit reaches `ota-bundle.mjs` as `GITHUB_SHA` on the runner; nothing about the commit
+enters the `docker run` that builds the bundles, so the Nx cache of `nx build` sees no
+new input.
 
 Tests: `node --test tools/deploy/units.test.mjs`. `actionlint` if it is installed.
 
@@ -571,9 +642,11 @@ and refuses `--bundle` in that case. Use a throwaway key pair for the local sign
 | 6 | Serve a zip whose SHA-256 differs from the manifest | Download refused. The running bundle stays. |
 | 7 | Serve a manifest with a wrong signature | No download at all. |
 | 8 | Serve a bundle whose `main.js` throws at boot | Rollback within 20 s. The id is recorded. A relaunch does not download it again. |
-| 9 | Serve a bundle with a higher `nativeApi` | Not downloaded. The immediate update is asked and fails (not installed from Play). The dead end face shows only on a refusal. |
+| 9 | Serve a bundle with a higher `nativeApi` | Not downloaded. The flexible update is asked once and answers unavailable (not installed from Play). The app goes on with its bundle. The immediate flow and the dead end face come only on a refusal. |
 | 10 | Background the app, resume | One manifest request per resume, at most one per 10 minutes. |
 | 11 | `adb install -r` a higher version code | The new APK boots its own bundle (`resetWhenUpdate`). |
+| 11b | Serve a manifest whose `bundle` is the built-in id while an OTA bundle runs | `reset()`, no download, the built-in bundle boots. |
+| 11c | Build with `--no-ota`, point it at the local image | No manifest request at all. |
 | 12 | Point the APK at a slot gateway with `MIN_CLIENT_VERSION` above the bundle | The refusal pulls the served bundle and boots it. Without one, the dead end face with the store action. |
 | 13 | Throughout, capture traffic | No request to a Capgo host. |
 
@@ -606,7 +679,8 @@ get one run. This needs the Play Console and stays an owner step.
 | Download stops halfway | Bundle not listed as ready. Next check tries again. | Updater keeps partial data out. |
 | New bundle crashes at boot | Rollback after 20 s. Id recorded, never retried. | D7. |
 | New bundle boots but is broken later | Not detected. Fix by a new release or a cluster redeploy, which the app follows. | D8. |
-| Bundle needs newer native layer | Not applied. Immediate update, else store link. | D4, D9. |
+| Bundle needs newer native layer | Not applied. Flexible update once per code; the running bundle goes on. Immediate only on a refusal. | D4, D9. |
+| Branch APK pointed at a cluster | Built with `--no-ota`, or the cluster's bundle replaces the branch's at the first check. | Target state item 3. |
 | Server refuses the build | OTA first, then Play, then dead end face. | D9. |
 | Cluster rolled back | App follows the cluster's bundle. | D8. |
 | `nativeApi` bump forgotten | Check fails in the PR. If it slips, boot fails and rolls back. | D4, D7. |
@@ -632,13 +706,20 @@ manifest later without a schema change to anything else, by a `schema: 2`.
   write the URLs into Gradle as well as into `config.json`.
 - **Q3. Downgrades below the APK's own bundle** (D8). The app follows the cluster, also
   down. If the APK's built-in bundle is newer than the cluster's (an AAB uploaded before
-  the deploy), the app would replace a newer bundle with an older one. Recommendation:
-  allow it, because the older bundle matches the server. The alternative is to refuse a
-  manifest whose parseable version is lower than the built-in one.
+  the deploy), the app would replace a newer bundle with an older one, and go back to the
+  built-in one through `reset()` once the cluster catches up. Recommendation: allow it,
+  because the older bundle matches the server, and the window is the one between the
+  upload and the deploy. The alternative is to refuse a manifest whose parseable version
+  is lower than the built-in one, which also refuses a real rollback of the cluster.
 - **Q4. The `build` job names a GitHub environment** (D5). This adds a deployment entry per
   build in both units and ties the build to the environment's ref rules. The alternative
-  is a separate `sign-ota` job with the environment that the image build waits for.
-  Recommendation: the environment on the `build` job, because it is one line.
+  is a pair of repository secrets (`VELISTA_OTA_SIGNING_KEY_STAGING` and `_PRODUCTION`),
+  which every workflow on every branch of the repository can read, and which breaks the
+  rule that the repository holds no deploy secret (CLAUDE.md). A separate `sign-ota` job
+  is not an option: the image is built in the same job as the bundles, so the signing
+  must happen there. Recommendation: the environment on the `build` job, because it is
+  one line and keeps the secret behind the environment's ref rule. Check that
+  `velista-staging` has no required reviewer, which would hold every staging build.
 - **Q5. `nativeApi` as a minimum** (D4). As written, a bundle built against 1 runs on an
   APK with 2. That holds only while a native release adds methods and removes none.
   Recommendation: keep the minimum and add one README rule: a native release never removes
@@ -649,6 +730,18 @@ manifest later without a schema change to anything else, by a `schema: 2`.
   does not exist, because only `app.velista` is on Play. The dead end face of a staging
   APK therefore links to nothing useful today. Recommendation: no change in this plan.
   It is noted here because D9's last resort reaches it.
+- **Q8. What a bundle that needs a newer APK does while the server still serves the old
+  one** (D9). The first draft asked for the immediate update, a full screen that cannot be
+  left. This plan asks for the flexible update once per version code and lets the app run
+  on its bundle, because nothing is broken yet. The immediate flow comes only with a
+  refusal. Recommendation: flexible, as written. The cost is that a person who declines
+  keeps the old bundle until the floor moves or they update by hand.
+- **Q9. `--accept` beside `--bump`** (D4). The first draft made every change under
+  `apps/velista/android` a native release. This plan lets the reviewer record a change
+  that no bundle can see without a bump, so a manifest flag does not stop OTA for every
+  phone. Recommendation: keep `--accept`, and name in the README the changes that must
+  bump. The alternative is the first draft's rule, which is safer by one review and costs
+  one Play release per native edit.
 
 ## Sources checked on 2026-11-04
 
