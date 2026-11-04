@@ -228,6 +228,31 @@ describe('TokenStore', () => {
       expect(storage.has(StorageKeys.session)).toBe(false);
     });
 
+    it('counts the refusal', async () => {
+      const store = restore();
+      const refreshing = store.refresh();
+      answerWithRejection();
+      await refreshing;
+
+      expect(store.refused()).toBe(1);
+    });
+
+    it('does not count a sign out', () => {
+      const store = restore();
+      store.clear();
+
+      expect(store.refused()).toBe(0);
+    });
+
+    it('does not count a refresh that reached no server', async () => {
+      const store = restore();
+      const refreshing = store.refresh();
+      answerWithNoResponse();
+      await refreshing;
+
+      expect(store.refused()).toBe(0);
+    });
+
     it('tells a guest their account is gone', async () => {
       const store = restore('TEMPORARY');
       const gate = store.authorizeOptionalAuthCall();
@@ -325,6 +350,7 @@ describe('TokenStore', () => {
 
       expect(store.hasSession()).toBe(false);
       expect(storage.has(StorageKeys.session)).toBe(false);
+      expect(store.refused()).toBe(1);
     });
 
     it('adopts instead when another document has already replaced it', () => {

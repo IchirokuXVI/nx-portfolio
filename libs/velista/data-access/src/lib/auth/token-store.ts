@@ -89,6 +89,21 @@ export class TokenStore {
   /** The current pair, or null when anonymous. */
   readonly tokens = this._tokens.asReadonly();
 
+  private readonly _refused = signal(0);
+
+  /**
+   * How many times this document lost its session because the server refused it.
+   *
+   * Counts only the refusals, never a sign out somebody chose: the page that asked
+   * for a sign out navigates on its own, while a refusal arrives in the middle of a
+   * page that still believes it is signed in. That page has to be left at once, or it
+   * stays drawn with nothing in it until the next tap meets a guard and lands on the
+   * front door, which reads as a sign out caused by the tap. A pair that Android
+   * restored from a backup after a reinstall is exactly that case: its refresh token
+   * was spent long ago, so the first request of the first screen ends the session.
+   */
+  readonly refused = this._refused.asReadonly();
+
   /** The one refresh in flight, shared by every caller that needs a fresh token. */
   private _refreshing: Promise<SessionTokens | null> | null = null;
 
@@ -272,7 +287,7 @@ export class TokenStore {
       return;
     }
 
-    this.clear();
+    this._clearRefused();
   }
 
   private async _performRefresh(): Promise<SessionTokens | null> {
@@ -363,7 +378,7 @@ export class TokenStore {
       // A refresh token is single use, so one the server rejected is spent or revoked
       // either way, and a stale pair kept around would be sent to an optional-auth
       // route later and mint a duplicate guest account.
-      this.clear();
+      this._clearRefused();
       return null;
     }
   }
@@ -390,6 +405,11 @@ export class TokenStore {
     }
 
     return stored;
+  }
+
+  private _clearRefused(): void {
+    this.clear();
+    this._refused.update((count) => count + 1);
   }
 
   /** The stored pair when another document has replaced the given one, else null. */
