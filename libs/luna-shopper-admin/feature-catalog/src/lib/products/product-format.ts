@@ -20,8 +20,9 @@ const UNIT_WORDS: Readonly<Record<string, string>> = {
  * are: the back office ships English only.
  */
 
-/** Before the weight of one piece: "approx. 1.56 kg". */
-const APPROX_WORD = 'approx.';
+/** Before the weight of one piece: "~1.56 kg". The tilde says "about" in one
+ * character, which is what a cell beside a name has room for. */
+const APPROX_MARK = '~';
 /** A product sold by the kilo whose pieces state no weight. */
 const BY_THE_KILO = 'by the kilo';
 
@@ -105,8 +106,8 @@ export function formatUnitPrice(
  * The size of a product: `1 L`, `450 g`, `6 x 1 L` for a pack of six.
  *
  * A product with no size may state the weight of one piece instead (backend
- * plan 0244), whatever its unit: `approx. 1.56 kg` for a cheese sold by the
- * kilo, `approx. 580 g` for a melon priced as one. A product sold by the kilo
+ * plan 0244), whatever its unit: `~1.56 kg` for a cheese sold by the
+ * kilo, `~580 g` for a melon priced as one. A product sold by the kilo
  * with neither reads `by the kilo`. Anything else with no size is `''`.
  *
  * A unit with no short word (a unit, a pack) is left out, since "6" beside a
@@ -129,7 +130,7 @@ export function formatSize(
   if (size === null || size === undefined || !Number.isFinite(size)) {
     const weight = product.approxWeight;
     if (typeof weight === 'number' && Number.isFinite(weight) && weight > 0) {
-      return `${APPROX_WORD} ${formatGrams(weight, locale)}`;
+      return `${APPROX_MARK}${formatGrams(weight, locale)}`;
     }
     return product.defaultUnit === 'KILOGRAM' ? BY_THE_KILO : '';
   }

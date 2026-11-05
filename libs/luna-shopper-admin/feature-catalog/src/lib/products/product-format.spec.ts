@@ -12,7 +12,7 @@ describe('formatSize, for a product with no size', () => {
         { unitSize: null, defaultUnit: 'KILOGRAM', approxWeight: 1560 },
         'en'
       )
-    ).toBe('approx. 1.56 kg');
+    ).toBe('~1.56 kg');
   });
 
   it('writes the weight of a lighter piece in grams, whatever its unit', () => {
@@ -21,13 +21,13 @@ describe('formatSize, for a product with no size', () => {
         { unitSize: null, defaultUnit: 'KILOGRAM', approxWeight: 395 },
         'en'
       )
-    ).toBe('approx. 395 g');
+    ).toBe('~395 g');
     expect(
       formatSize(
         { unitSize: null, defaultUnit: 'UNIT', approxWeight: 395 },
         'en'
       )
-    ).toBe('approx. 395 g');
+    ).toBe('~395 g');
   });
 
   it('keeps two decimals of a kilogram at most', () => {
@@ -36,13 +36,13 @@ describe('formatSize, for a product with no size', () => {
         { unitSize: null, defaultUnit: 'UNIT', approxWeight: 1000 },
         'en'
       )
-    ).toBe('approx. 1 kg');
+    ).toBe('~1 kg');
     expect(
       formatSize(
         { unitSize: null, defaultUnit: 'UNIT', approxWeight: 1234 },
         'en'
       )
-    ).toBe('approx. 1.23 kg');
+    ).toBe('~1.23 kg');
   });
 
   it('says "by the kilo" for a product sold by the kilo with no weight', () => {
@@ -61,13 +61,13 @@ describe('formatSize, for a product with no size', () => {
         { unitSize: null, defaultUnit: 'UNIT', approxWeight: 999 },
         'en'
       )
-    ).toBe('approx. 999 g');
+    ).toBe('~999 g');
     expect(
       formatSize(
         { unitSize: null, defaultUnit: 'KILOGRAM', approxWeight: 1000 },
         'en'
       )
-    ).toBe('approx. 1 kg');
+    ).toBe('~1 kg');
   });
 
   it('reads a weight of zero or less as no weight', () => {
