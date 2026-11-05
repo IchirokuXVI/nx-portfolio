@@ -1,3 +1,5 @@
+> **PR:** [#923](https://github.com/IchirokuXVI/nx-portfolio/pull/923)
+
 # 0221: a reworded deza name is proposed as the same product
 
 > DEZA prints no product id, so the harvester keys each DEZA product on its printed name and size.
