@@ -697,13 +697,20 @@ manifest later without a schema change to anything else, by a `schema: 2`.
 
 ## 9. Questions for the owner
 
+> **Decided 2026-11-05.** The owner accepted the recommendation of every question
+> below. Each one is now a rule of this plan, and a builder follows it without asking
+> again. The paragraphs keep the alternatives for the record.
+
 - **Q1. Capgo or our own plugin** (D11). Recommendation: Capgo in manual mode, with the
   cloud URLs empty and target 1 as proof. Our own plugin if target 1 finds a call home.
+  **Decision:** Capgo in manual mode. Our own plugin only if target 1 finds a call home.
 - **Q2. Where the native app's configuration lives after plan `0178`** (D2). This plan
   needs either the built-in bundle's `config.json` to stay readable after an OTA, or the
   three URLs in `VelistaNativeInfo`. Recommendation: the native plugin, because it does
   not depend on how the updater lays out its directories. `0178` target 13 would then
   write the URLs into Gradle as well as into `config.json`.
+  **Decision:** the three URLs come from `VelistaNativeInfo`, and plan `0178` target 13
+  writes them into Gradle as well.
 - **Q3. Downgrades below the APK's own bundle** (D8). The app follows the cluster, also
   down. If the APK's built-in bundle is newer than the cluster's (an AAB uploaded before
   the deploy), the app would replace a newer bundle with an older one, and go back to the
@@ -711,6 +718,7 @@ manifest later without a schema change to anything else, by a `schema: 2`.
   because the older bundle matches the server, and the window is the one between the
   upload and the deploy. The alternative is to refuse a manifest whose parseable version
   is lower than the built-in one, which also refuses a real rollback of the cluster.
+  **Decision:** allowed. The app follows the cluster down, and `reset()` brings it back.
 - **Q4. The `build` job names a GitHub environment** (D5). This adds a deployment entry per
   build in both units and ties the build to the environment's ref rules. The alternative
   is a pair of repository secrets (`VELISTA_OTA_SIGNING_KEY_STAGING` and `_PRODUCTION`),
@@ -720,28 +728,35 @@ manifest later without a schema change to anything else, by a `schema: 2`.
   must happen there. Recommendation: the environment on the `build` job, because it is
   one line and keeps the secret behind the environment's ref rule. Check that
   `velista-staging` has no required reviewer, which would hold every staging build.
+  **Decision:** the `build` job names the environment. Confirm that `velista-staging`
+  has no required reviewer before the first run.
 - **Q5. `nativeApi` as a minimum** (D4). As written, a bundle built against 1 runs on an
   APK with 2. That holds only while a native release adds methods and removes none.
   Recommendation: keep the minimum and add one README rule: a native release never removes
   a method in `native-plugins.ts` in the same release that stops calling it.
+  **Decision:** the minimum stays, and the README gets the rule.
 - **Q6. The flexible prompt.** Play draws its own dialog. Plan `0013` adds no prompt of
   ours, and this keeps that. Recommendation: ask once per version code, as D9 says.
+  **Decision:** once per version code, with the dialog of Play.
 - **Q7. The staging store link.** `storeUrlFor('app.velista.staging')` names a listing that
   does not exist, because only `app.velista` is on Play. The dead end face of a staging
   APK therefore links to nothing useful today. Recommendation: no change in this plan.
   It is noted here because D9's last resort reaches it.
+  **Decision:** no change in this plan.
 - **Q8. What a bundle that needs a newer APK does while the server still serves the old
   one** (D9). The first draft asked for the immediate update, a full screen that cannot be
   left. This plan asks for the flexible update once per version code and lets the app run
   on its bundle, because nothing is broken yet. The immediate flow comes only with a
   refusal. Recommendation: flexible, as written. The cost is that a person who declines
   keeps the old bundle until the floor moves or they update by hand.
+  **Decision:** flexible, immediate only with a refusal.
 - **Q9. `--accept` beside `--bump`** (D4). The first draft made every change under
   `apps/velista/android` a native release. This plan lets the reviewer record a change
   that no bundle can see without a bump, so a manifest flag does not stop OTA for every
   phone. Recommendation: keep `--accept`, and name in the README the changes that must
   bump. The alternative is the first draft's rule, which is safer by one review and costs
   one Play release per native edit.
+  **Decision:** `--accept` stays, and the README names the changes that must bump.
 
 ## Sources checked on 2026-11-04
 
