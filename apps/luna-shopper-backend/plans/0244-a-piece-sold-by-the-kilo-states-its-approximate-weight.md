@@ -105,7 +105,8 @@ The owner decided on 2026-11-03:
   still adds `quantity × price per kilo`. This plan records it in section 8 and changes
   nothing about it.
 
-The review of 2026-11-04 decided, and the owner may overrule any of these:
+The review of 2026-11-04 decided these, and **the owner accepted all six on 2026-11-05**. They are
+settled, as D1 to D4 are, and a builder does not reopen them:
 
 - **R1. The weight belongs to any product with no size, not only to a `KILOGRAM` one.** What
   `price` means is still decided by `defaultUnit` alone, as today. A `KILOGRAM` product with a
