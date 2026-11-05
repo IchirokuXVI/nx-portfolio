@@ -1,7 +1,7 @@
 import {
   catalogName,
   priceWordsText,
-  soldAs,
+  soldAsOf,
   type CatalogProduct,
   type PriceUnitBasis,
   type PriceWords,
@@ -73,7 +73,8 @@ export const CHAIN_MARKS_SHOWN = 3;
  *   it differs, or the age of a stale one. A kilo piece draws its piece price over
  *   its price per kilo (velista `0179`).
  * - `no price` as words when there is none.
- * - The accessible name: the product, the size and the price, in that order.
+ * - The accessible name: the product, the size and the price, in that order,
+ *   and for a kilo piece its price per kilo after them.
  */
 export function productRowView(
   product: ProductRowSource,
@@ -98,6 +99,17 @@ export function productRowView(
   const priced = priceWords(offer, product, locale, translate);
   const price = priced === null ? null : priceWordsText(priced);
   const stale = priced !== null && offer?.stale === true;
+  const unitPrice = stale
+    ? null
+    : unitPriceWords(offer, product, locale, translate);
+  // A kilo piece is named with what a kilo costs too, so a screen reader hears
+  // the two numbers the card draws (velista `0179`).
+  const perKilo =
+    priced !== null &&
+    unitPrice !== null &&
+    soldAsOf(offer, product) === 'KILO_PIECE'
+      ? priceWordsText(unitPrice)
+      : null;
 
   const chain =
     price !== null && offer !== null && !options.chainChosen
@@ -130,11 +142,11 @@ export function productRowView(
     summary: joined([detail, spoken]),
     imageUrl: product.imageUrl,
     price: priced,
-    unitPrice: stale ? null : unitPriceWords(offer, product, locale, translate),
+    unitPrice,
     seen: stale ? priceAgeText(offer, options.now ?? new Date(), locale) : null,
     stale,
     chains,
-    label: [name, size, price ?? translate('catalog.row.noPrice')]
+    label: [name, size, price ?? translate('catalog.row.noPrice'), perKilo]
       .filter((part): part is string => part !== null)
       .join(', '),
   };
@@ -205,21 +217,25 @@ export interface PricedProduct {
  * The headline price of a product (velista `0179`, section 2), or null for an
  * offer with no price.
  *
+ * A product that is not known yet (null) is priced by its offer alone
+ * ({@link soldAsOf}): a set piece price names a kilo piece, and every other
+ * offer is drawn as a pack.
+ *
  * - A kilo piece answers the server's piece price, and null when the offer has
  *   none: the row then says `no price`, because velista never derives one.
  * - A product sold by the kilo answers its price with "/ kg" as its `per`.
  * - Every other product answers its price, as a pack does.
  */
 export function priceWords(
-  offer: ProductOffer | null,
-  product: PricedProduct,
+  offer: Pick<ProductOffer, 'price' | 'currency' | 'piecePrice'> | null,
+  product: PricedProduct | null,
   locale: string,
   translate: CatalogTranslate
 ): PriceWords | null {
   if (offer === null || offer.price === null) {
     return null;
   }
-  switch (soldAs(product.unit, product.size, product.approxWeight)) {
+  switch (soldAsOf(offer, product)) {
     case 'KILO_PIECE':
       return offer.piecePrice === null
         ? null
@@ -253,17 +269,20 @@ export function priceWords(
  *   litre carton priced by the litre and a single unit priced by the unit would
  *   otherwise print one number twice. Null without a basis to name, rather than
  *   guessing one.
+ *
+ * A product that is not known yet (null) is read by its offer alone, as
+ * {@link priceWords} reads it.
  */
 export function unitPriceWords(
   offer: ProductOffer | null,
-  product: PricedProduct,
+  product: PricedProduct | null,
   locale: string,
   translate: CatalogTranslate
 ): PriceWords | null {
   if (offer === null || offer.price === null) {
     return null;
   }
-  switch (soldAs(product.unit, product.size, product.approxWeight)) {
+  switch (soldAsOf(offer, product)) {
     case 'KILO_PIECE':
       return {
         amount: formatMoney(
@@ -276,7 +295,7 @@ export function unitPriceWords(
     case 'BY_THE_KILO':
       return null;
     case 'PACK': {
-      const basis = product.unitBasis ?? null;
+      const basis = product?.unitBasis ?? null;
       if (offer.unitPrice === null || basis === null) {
         return null;
       }

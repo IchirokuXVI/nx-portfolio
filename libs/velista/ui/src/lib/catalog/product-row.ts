@@ -141,8 +141,11 @@ export interface ProductRowStepper {
 export interface ProductRowShop {
   readonly id: string;
   readonly name: string;
-  /** Null for a chain that carries the product with no price on it. */
-  readonly price: string | null;
+  /**
+   * The chain's price as two words (velista `0179`), or null for a chain that
+   * carries the product with no price on it.
+   */
+  readonly price: PriceWords | null;
   /** "seen 12 days ago" when the server marked this price stale, else null. */
   readonly note: string | null;
   /** The cheapest, which carries the number at the top of the card. */
@@ -479,7 +482,12 @@ export type ProductRowExpanded = 'shops' | 'members';
                   <span class="shop-note">{{ note }}</span>
                 }
                 @if (shop.price; as price) {
-                  <span class="shop-price">{{ price }}</span>
+                  <span class="shop-price"
+                    ><span>{{ price.amount }}</span>
+                    @if (price.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
                 }
               </li>
             }

@@ -52,6 +52,15 @@ describe('productSizeText', () => {
     );
   });
 
+  it('says a weight that rounds to a kilo in kilos, never as 1,000 grams', () => {
+    expect(productSizeText(null, 'KILOGRAM', 'en', translate, 999.6)).toBe(
+      '~1\u00a0kg'
+    );
+    expect(productSizeText(null, 'KILOGRAM', 'en', translate, 999.4)).toBe(
+      '~999\u00a0g'
+    );
+  });
+
   it('says the weight of a piece priced as one, whatever its unit', () => {
     expect(productSizeText(null, 'UNIT', 'es', translate, 580)).toBe(
       '~580\u00a0g'

@@ -39,6 +39,7 @@ import {
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
+  priceWords,
   ProductPicture,
   QuantityReel,
   SlashCircleIcon,
@@ -988,25 +989,9 @@ export class BasketRow {
       return null;
     }
     const locale = this._locale();
-    switch (soldAs(product.unit, product.size, product.approxWeight)) {
-      case 'KILO_PIECE':
-        return offer.piecePrice === null
-          ? null
-          : {
-              amount: formatMoney(offer.piecePrice, offer.currency, locale),
-              per: null,
-            };
-      case 'BY_THE_KILO':
-        return {
-          amount: formatMoney(offer.price, offer.currency, locale),
-          per: this._perKilo(),
-        };
-      case 'PACK':
-        return {
-          amount: formatMoney(offer.price, offer.currency, locale),
-          per: null,
-        };
-    }
+    return priceWords(offer, product, locale, (key) =>
+      this._translator.t(key, undefined, locale)
+    );
   });
 
   /**
@@ -1040,6 +1025,23 @@ export class BasketRow {
   }
 
   /**
+   * A price the cheaper mark names, as the words of its sentence. The mark
+   * compares `price`, which is a price per kilo for both kinds sold by the kilo
+   * (velista `0179`, section 2), so for those it says "/ kg" after the number.
+   */
+  private _markPrice(amount: number, currency: string | null): string {
+    const product = this._product();
+    const money = formatMoney(amount, currency, this._locale());
+    const kind =
+      product === null
+        ? 'PACK'
+        : soldAs(product.unit, product.size, product.approxWeight);
+    return kind === 'BY_THE_KILO' || kind === 'KILO_PIECE'
+      ? priceWordsText({ amount: money, per: this._perKilo() })
+      : money;
+  }
+
+  /**
    * The price mark's own sentence, composed, or null when the row carries none.
    *
    * "Not sold here" for a product the shop of the read has no price for (velista
@@ -1057,7 +1059,7 @@ export class BasketRow {
     const locale = this._locale();
     if (mark.kind === 'cheaper') {
       return this._translator.t('basket.price.cheaperAt', undefined, locale, {
-        price: formatMoney(mark.price, mark.currency, locale),
+        price: this._markPrice(mark.price, mark.currency),
         chain: mark.chain,
       });
     }
@@ -1075,7 +1077,7 @@ export class BasketRow {
     }
 
     const at = this._translator.t('basket.price.cheaperAt', undefined, locale, {
-      price: formatMoney(elsewhere.price, elsewhere.currency, locale),
+      price: this._markPrice(elsewhere.price, elsewhere.currency),
       chain: elsewhere.chain,
     });
     return `${missing} · ${at}`;

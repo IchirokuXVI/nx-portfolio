@@ -4,7 +4,6 @@ import {
   inLocale,
   lineName,
   lineProductPrices,
-  priceWordsText,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -15,6 +14,7 @@ import {
   type LineItemChipVm,
   type LineProductPriceRead,
   type LineSettlement,
+  type PriceWords,
   type ProductOffer,
 } from '@portfolio/velista/models';
 
@@ -171,21 +171,17 @@ function chipOf(itemId: string, input: LineDetailInput): LineItemChipVm {
 }
 
 /**
- * The chip's price as text: the piece price of a kilo piece, a price per kilo
- * with its "/ kg", or the price (velista `0179`), or null for none.
+ * The chip's price as two words: the piece price of a kilo piece, a price per
+ * kilo with its "/ kg", or the price (velista `0179`), or null for none. A
+ * product the catalog has not named yet is priced by its offer alone
+ * (`soldAsOf`), so a kilo piece still draws its piece price.
  */
 function chipPrice(
   offer: ProductOffer | null,
   item: CatalogItem | null,
   input: LineDetailInput
-): string | null {
-  const words = priceWords(
-    offer,
-    item ?? { unit: null, size: null, approxWeight: null },
-    input.locale,
-    input.translate
-  );
-  return words === null ? null : priceWordsText(words);
+): PriceWords | null {
+  return priceWords(offer, item, input.locale, input.translate);
 }
 
 /**

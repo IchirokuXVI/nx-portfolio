@@ -76,8 +76,23 @@ import { ProductPicture } from './product-picture';
               }
             }
 
-            @if (card.caption; as caption) {
-              <span class="caption">{{ caption }}</span>
+            @if (card.chain !== null || card.unit !== null) {
+              <span class="caption">
+                @if (card.chain; as chain) {
+                  <span>{{ chain }}</span>
+                }
+                @if (card.chain !== null && card.unit !== null) {
+                  <span class="dot"> · </span>
+                }
+                @if (card.unit; as unit) {
+                  <span
+                    ><span>{{ unit.amount }}</span>
+                    @if (unit.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
+                }
+              </span>
             }
 
             @if (card.cheapest) {

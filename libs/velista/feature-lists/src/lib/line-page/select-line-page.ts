@@ -2,7 +2,6 @@ import {
   catalogName,
   lineCardOrder,
   lineName,
-  priceWordsText,
   type AlsoOnVm,
   type CatalogItem,
   type Line,
@@ -10,21 +9,14 @@ import {
   type LineProductCardVm,
   type LineProductPrice,
   type LineProductPriceRead,
+  type PriceWords,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
   priceWords,
   productDetailText,
   unitPriceWords,
-  type PricedProduct,
 } from '@portfolio/velista/ui';
-
-/** A product the catalog has not named yet: priced as a pack. */
-const UNKNOWN_KIND: PricedProduct = {
-  unit: null,
-  size: null,
-  approxWeight: null,
-};
 
 /**
  * What the line page draws (velista plan `0135`, section 2).
@@ -138,12 +130,13 @@ function cardOf(
 ): LineProductCardVm {
   const item = input.itemNameOf(itemId);
   const offer = price.offer;
-  const words = priceWords(
-    offer,
-    item ?? UNKNOWN_KIND,
-    input.locale,
-    input.translate
-  );
+  // A product the catalog has not named yet is priced by its offer alone
+  // (`soldAsOf`): a set piece price names a kilo piece.
+  const words = priceWords(offer, item, input.locale, input.translate);
+  // A kilo piece whose offer has no piece price is unpriced, as everywhere
+  // else (velista `0179`): velista never derives one. An unpriced card is never
+  // the cheapest either.
+  const unpriced = price.kind === 'priced' && words === null;
 
   return {
     itemId,
@@ -153,24 +146,17 @@ function cardOf(
         ? null
         : productDetailText(item, input.locale, input.translate),
     imageUrl: item?.imageUrl ?? null,
-    // A kilo piece whose offer has no piece price is unpriced, as everywhere
-    // else (velista `0179`): velista never derives one.
-    priceKind:
-      price.kind === 'priced' && words === null ? 'noPrice' : price.kind,
+    priceKind: unpriced ? 'noPrice' : price.kind,
     price: words,
-    caption: captionOf(
-      price,
-      item,
-      line.preferredSupermarketId !== null,
-      input
-    ),
-    cheapest: price.cheapest,
+    ...captionOf(price, item, line.preferredSupermarketId !== null, input),
+    cheapest: unpriced ? false : price.cheapest,
     favorite: line.favoriteItemId === itemId,
   };
 }
 
 /**
- * The line under the price: "Mercadona · 5,38 € / L".
+ * The line under the price: "Mercadona · 5,38 € / L", as the chain and the
+ * unit price in two words, so the rail draws the "/ L" small (velista `0179`).
  *
  * With a supermarket chosen for the line the chain is left out, because every
  * card would repeat the name the row under the cards already says.
@@ -180,28 +166,19 @@ function captionOf(
   item: CatalogItem | null,
   chosen: boolean,
   input: Pick<LinePageInput, 'locale' | 'translate'>
-): string | null {
+): { readonly chain: string | null; readonly unit: PriceWords | null } {
   const offer = price.offer;
   if (offer === null) {
-    return null;
+    return { chain: null, unit: null };
   }
 
-  const words = unitPriceWords(
-    offer,
-    item ?? UNKNOWN_KIND,
-    input.locale,
-    input.translate
-  );
-  const unit = words === null ? null : priceWordsText(words);
+  const unit = unitPriceWords(offer, item, input.locale, input.translate);
   const chain =
     chosen || price.chain === null
       ? null
       : catalogName(price.chain, input.locale);
 
-  const parts = [chain, unit].filter(
-    (part): part is string => part !== null && part !== ''
-  );
-  return parts.length === 0 ? null : parts.join(' · ');
+  return { chain: chain === '' ? null : chain, unit };
 }
 
 /**

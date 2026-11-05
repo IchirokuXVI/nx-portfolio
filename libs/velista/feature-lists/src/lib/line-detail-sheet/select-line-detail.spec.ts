@@ -394,7 +394,7 @@ describe('selectLineDetail', () => {
 
       expect(detail?.choices[0]).toMatchObject({
         imageUrl: 'https://img.test/milk.png',
-        price: '€0.92',
+        price: { amount: '€0.92', per: null },
         chain: 'Mercadona',
       });
     });
@@ -418,7 +418,7 @@ describe('selectLineDetail', () => {
       });
 
       expect(detail?.choices[1]).toMatchObject({
-        price: '€1.15',
+        price: { amount: '€1.15', per: null },
         chain: 'Lidl',
       });
       expect(detail?.choices[0]).toMatchObject({ price: null, chain: null });
@@ -458,7 +458,35 @@ describe('selectLineDetail', () => {
       });
 
       expect(detail?.choices[0]).toMatchObject({
-        price: '€0.92',
+        price: { amount: '€0.92', per: null },
+        chain: 'Mercadona',
+      });
+    });
+
+    it('draw the piece price of a kilo piece the catalog has not named yet (velista 0179)', () => {
+      const detail = select({
+        line: line({ itemIds: ['item-milk-a', 'item-unknown'] }),
+        pricesOf: (itemId) =>
+          itemId === 'item-unknown'
+            ? [
+                {
+                  supermarketId: 'chain-mercadona',
+                  chain: { en: 'Mercadona', es: 'Mercadona' },
+                  logoUrl: null,
+                  kind: 'priced',
+                  offer: {
+                    ...offer(13.42, 'scope-mercadona'),
+                    piecePrice: 20.94,
+                  },
+                  cheapest: true,
+                },
+              ]
+            : [],
+      });
+
+      expect(detail?.choices[1]).toMatchObject({
+        name: null,
+        price: { amount: '€20.94', per: null },
         chain: 'Mercadona',
       });
     });
@@ -485,7 +513,10 @@ describe('selectLineDetail', () => {
             : (CATALOG.find((row) => row.id === itemId) ?? null),
       });
 
-      expect(detail?.choices[0]).toMatchObject({ price: '€0.92', chain: null });
+      expect(detail?.choices[0]).toMatchObject({
+        price: { amount: '€0.92', per: null },
+        chain: null,
+      });
     });
 
     it('keep an unnamed product unnamed, with no detail', () => {

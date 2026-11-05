@@ -59,13 +59,17 @@ export function productSizeText(
   return text === key ? null : text;
 }
 
-/** The approximate weight in grams as words: kilos from 1000, grams below. */
+/**
+ * The approximate weight in grams as words: kilos from 1000, grams below.
+ * Decided on the grams as they are printed, so 999.6 g reads "~1 kg" and never
+ * "~1.000 g".
+ */
 function weightText(
   grams: number,
   locale: string,
   translate: SizeTranslate
 ): string | null {
-  const inKilos = grams >= 1000;
+  const inKilos = Math.round(grams) >= 1000;
   const value = inKilos ? grams / 1000 : grams;
   let number: string;
   try {

@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
+  RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -200,6 +201,11 @@ interface World {
    * here writes its buy at once.
    */
   readonly asks?: boolean;
+  /**
+   * A translator that echoes the values a sentence was given, for a test about
+   * the numbers in it rather than about which sentence was chosen.
+   */
+  readonly echoValues?: boolean;
 }
 
 /** Every settlement read the sheet made, so a test can assert it asked both origins. */
@@ -427,6 +433,28 @@ async function render(world: World = {}) {
         },
       },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      // Listed after the testing module's own, which is what makes it win.
+      ...(world.echoValues === true
+        ? [
+            {
+              provide: RokuTranslatorService,
+              useValue: {
+                loaded: signal(true),
+                locale: signal('en'),
+                getLocale: () => 'en',
+                t: (
+                  key: string,
+                  _ns?: string,
+                  _l?: string,
+                  values?: unknown
+                ) =>
+                  values === undefined
+                    ? key
+                    : `${key}:${JSON.stringify(values)}`,
+              },
+            },
+          ]
+        : []),
       {
         provide: ActivatedRoute,
         useValue: {
@@ -1813,33 +1841,68 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
     );
   });
 
-  it('says no price of one for a kilo piece with a price and no piece price (velista 0179)', async () => {
-    const cheese: BasketProduct = {
+  describe('a kilo piece (velista 0179)', () => {
+    // 1.56 kg at 13,42 € a kilo: 20,94 € a piece, as the server derives it.
+    const cheese = (piecePrice: number | null): BasketProduct => ({
       ...MILK,
       unit: 'KILOGRAM',
       approxWeight: 1560,
-      offer: MILK.offer === null ? null : { ...MILK.offer, piecePrice: null },
-    };
-    const priced: BasketProduct = {
-      ...cheese,
-      offer: MILK.offer === null ? null : { ...MILK.offer, piecePrice: 1.44 },
-    };
-
-    const unpriced = await render({
-      lines: [milkRow()],
-      products: new Map([[MILK.id, cheese]]),
+      offer:
+        MILK.offer === null
+          ? null
+          : { ...MILK.offer, price: 13.42, unitPrice: 13.42, piecePrice },
     });
-    expect(
-      el(unpriced.fixture).querySelector('.subtitle')?.textContent?.trim()
-    ).toBe('basket.sheet.toGet');
+    const subtitle = (fixture: ComponentFixture<SettleSheet>) =>
+      el(fixture).querySelector('.subtitle')?.textContent?.trim();
 
-    const piece = await render({
-      lines: [milkRow()],
-      products: new Map([[MILK.id, priced]]),
+    it('says the piece price as the price of one', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products: new Map([[MILK.id, cheese(20.94)]]),
+        echoValues: true,
+      });
+
+      expect(subtitle(fixture)).toContain(
+        'basket.sheet.each:{"price":"€20.94"}'
+      );
+      expect(subtitle(fixture)).not.toContain('13.42');
     });
-    expect(
-      el(piece.fixture).querySelector('.subtitle')?.textContent?.trim()
-    ).toBe('basket.sheet.each · basket.sheet.toGet');
+
+    it('says no price of one with a price and no piece price', async () => {
+      const { fixture } = await render({
+        lines: [milkRow()],
+        products: new Map([[MILK.id, cheese(null)]]),
+        echoValues: true,
+      });
+
+      expect(subtitle(fixture)).not.toContain('basket.sheet.each');
+      expect(subtitle(fixture)).toContain('basket.sheet.toGet');
+    });
+
+    it('says what was got at the piece price', async () => {
+      const { fixture } = await render({
+        lines: [milkRow({ bought: 2, left: 2, state: 'PARTLY' })],
+        products: new Map([[MILK.id, cheese(20.94)]]),
+        echoValues: true,
+      });
+
+      expect(text(fixture)).toContain(
+        'basket.sheet.gotAt:{"count":2,"price":"€20.94","shop":""}'
+      );
+      expect(text(fixture)).not.toContain('13.42');
+    });
+
+    it('says what was got with no price when there is no piece price', async () => {
+      const { fixture } = await render({
+        lines: [milkRow({ bought: 2, left: 2, state: 'PARTLY' })],
+        products: new Map([[MILK.id, cheese(null)]]),
+        echoValues: true,
+      });
+
+      expect(text(fixture)).toContain('basket.sheet.got:{"count":2');
+      expect(text(fixture)).not.toContain('basket.sheet.gotAt');
+      expect(text(fixture)).not.toContain('13.42');
+    });
   });
 
   it('draws no price for a row with no product, and says how many are left', async () => {

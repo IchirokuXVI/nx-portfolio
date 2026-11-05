@@ -1,8 +1,10 @@
 import {
   catalogName,
+  priceWordsText,
   type CatalogItem,
   type CatalogSuggestion,
   type ChainPrice,
+  type PriceWords,
 } from '@portfolio/velista/models';
 import type {
   ProductRowGroup,
@@ -12,7 +14,7 @@ import type {
 import {
   chainLine,
   priceAgeText,
-  priceText,
+  priceWords,
   productRowView,
   type CatalogTranslate,
 } from '../catalog/product-row-view';
@@ -108,7 +110,7 @@ function itemView(
       chains === null
         ? []
         : item.chainPrices.map((price, index) =>
-            shopView(price, index, options)
+            shopView(price, index, item, options)
           ),
     alsoCalled: null,
     productId: item.id,
@@ -139,14 +141,31 @@ function groupView(
   const { locale, translate } = options;
   const name = catalogName(suggestion.group.name, locale);
   const count = suggestion.itemIds.length;
-  const price = priceText(suggestion.offer, locale);
-  const stale = price !== null && suggestion.offer?.stale === true;
-  const members = suggestion.members.map((member) => ({
-    id: member.id,
-    name: catalogName(member.name, locale),
-    brand: member.brand,
-    price: priceText(member.offer, locale),
-  }));
+  // The group's offer is its cheapest member's, so it is priced as that member
+  // is (velista `0179`). A member that is not among the five shown is priced by
+  // the offer alone.
+  const offer = suggestion.offer;
+  const cheapest =
+    offer === null
+      ? null
+      : (suggestion.members.find(
+          (member) =>
+            member.offer !== null &&
+            member.offer.priceScopeId === offer.priceScopeId &&
+            member.offer.price === offer.price
+        ) ?? null);
+  const words = priceWords(offer, cheapest, locale, translate);
+  const price = words === null ? null : priceWordsText(words);
+  const stale = price !== null && offer?.stale === true;
+  const members = suggestion.members.map((member) => {
+    const memberPrice = priceWords(member.offer, member, locale, translate);
+    return {
+      id: member.id,
+      name: catalogName(member.name, locale),
+      brand: member.brand,
+      price: memberPrice === null ? null : priceWordsText(memberPrice),
+    };
+  });
   const rest = count - members.length;
   const synonym =
     options.query === undefined || options.query === null
@@ -170,7 +189,7 @@ function groupView(
       imageUrl: null,
       // Labelled "from" by the card, because it is the cheapest of several and
       // not the price of a thing (rule 4).
-      price: price === null ? null : { amount: price, per: null },
+      price: words,
       unitPrice: null,
       seen: stale ? priceAgeText(suggestion.offer, options.now, locale) : null,
       stale,
@@ -210,15 +229,24 @@ function groupView(
 function shopView(
   row: ChainPrice,
   index: number,
+  item: CatalogItem,
   options: SuggestionCardOptions
 ): ProductRowShop {
   const seen = row.offer.stale
     ? priceAgeText(row.offer, options.now, options.locale)
     : null;
+  // Priced as the card is (velista `0179`): a kilo piece's piece price, or a
+  // price per kilo with its "/ kg", never a bare price per kilo.
+  const price: PriceWords | null = priceWords(
+    row.offer,
+    item,
+    options.locale,
+    options.translate
+  );
   return {
     id: row.chain.id,
     name: catalogName(row.chain.name, options.locale),
-    price: priceText(row.offer, options.locale),
+    price,
     note:
       seen === null
         ? null

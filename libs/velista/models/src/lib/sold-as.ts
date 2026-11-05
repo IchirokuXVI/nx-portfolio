@@ -28,6 +28,31 @@ export function soldAs(
 }
 
 /**
+ * How a product is priced when the product may not be known yet: while the
+ * catalog's read of it is pending, after it failed, or where only an offer is at
+ * hand (velista `0179`).
+ *
+ * With a product it answers {@link soldAs}. With none it reads the offer: the
+ * server sets `piecePrice` on a kilo piece only, so a set piece price proves the
+ * kind, and the answer is `KILO_PIECE`. Every other offer answers `PACK`. A
+ * product sold by the kilo cannot be told apart from a pack by its offer alone,
+ * so a loose product with no record draws a bare price.
+ */
+export function soldAsOf(
+  offer: Pick<ProductOffer, 'piecePrice'> | null,
+  product: {
+    readonly unit: string | null;
+    readonly size: number | null;
+    readonly approxWeight: number | null;
+  } | null
+): SoldAs {
+  if (product !== null) {
+    return soldAs(product.unit, product.size, product.approxWeight);
+  }
+  return typeof offer?.piecePrice === 'number' ? 'KILO_PIECE' : 'PACK';
+}
+
+/**
  * What one unit of quantity costs: the piece price for a `KILO_PIECE`, the
  * price for every other kind, or null for none.
  *

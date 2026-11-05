@@ -129,8 +129,11 @@ export interface LineItemChipVm {
   readonly imageUrl: string | null;
   /** `brand · size`, or whichever of them the catalog knows, or null. */
   readonly detail: string | null;
-  /** The product's best known price, formatted, or null for none. */
-  readonly price: string | null;
+  /**
+   * The product's best known price as two words (velista `0179`), or null for
+   * none.
+   */
+  readonly price: PriceWords | null;
   /** The chain that has {@link price}, by name, or null when none can be named. */
   readonly chain: string | null;
 }
@@ -330,11 +333,16 @@ export interface LineProductCardVm {
    */
   readonly price: PriceWords | null;
   /**
-   * The line under the price: the chain and the price for each kilo or litre.
-   * With a supermarket chosen for the line, only the unit price, because the row
-   * under the cards names the supermarket. Null with neither.
+   * The chain of the line under the price, by name. Null with a supermarket
+   * chosen for the line, because the row under the cards names the
+   * supermarket, and null when none can be named.
    */
-  readonly caption: string | null;
+  readonly chain: string | null;
+  /**
+   * The price for each kilo or litre of the line under the price, as two words
+   * (velista `0179`), drawn after {@link chain}, or null.
+   */
+  readonly unit: PriceWords | null;
   readonly cheapest: boolean;
   /** The one product the household wants (section 3.1). */
   readonly favorite: boolean;

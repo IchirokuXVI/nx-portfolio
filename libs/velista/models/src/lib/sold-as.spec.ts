@@ -1,4 +1,4 @@
-import { amountOfOne, priceWordsText, soldAs } from './sold-as';
+import { amountOfOne, priceWordsText, soldAs, soldAsOf } from './sold-as';
 
 describe('soldAs', () => {
   it('names a kilo piece: by the kilo, no size, a weight', () => {
@@ -48,6 +48,27 @@ describe('amountOfOne', () => {
   it('answers null with no offer or no price', () => {
     expect(amountOfOne(null, 'PACK')).toBeNull();
     expect(amountOfOne({ price: null, piecePrice: null }, 'PACK')).toBeNull();
+  });
+});
+
+describe('soldAsOf', () => {
+  it('answers soldAs of the product when there is one', () => {
+    const cheese = { unit: 'KILOGRAM', size: null, approxWeight: 1560 };
+    const apples = { unit: 'KILOGRAM', size: null, approxWeight: null };
+    const milk = { unit: 'LITER', size: 1, approxWeight: null };
+    expect(soldAsOf({ piecePrice: 20.94 }, cheese)).toBe('KILO_PIECE');
+    expect(soldAsOf({ piecePrice: null }, cheese)).toBe('KILO_PIECE');
+    expect(soldAsOf({ piecePrice: null }, apples)).toBe('BY_THE_KILO');
+    expect(soldAsOf(null, milk)).toBe('PACK');
+  });
+
+  it('answers a kilo piece with no product when the offer has a piece price', () => {
+    expect(soldAsOf({ piecePrice: 20.94 }, null)).toBe('KILO_PIECE');
+  });
+
+  it('answers a pack with no product and no piece price', () => {
+    expect(soldAsOf({ piecePrice: null }, null)).toBe('PACK');
+    expect(soldAsOf(null, null)).toBe('PACK');
   });
 });
 

@@ -575,6 +575,30 @@ describe('ProductPage', () => {
       );
     });
 
+    it('never marks a kilo piece with no piece price the cheapest (velista 0179)', async () => {
+      const real =
+        (await new CatalogBrowseMemory().scopeOffers('item-oil')) ?? [];
+      const { fixture } = await render({
+        items: [
+          {
+            ...OIL,
+            size: null,
+            unit: 'KILOGRAM',
+            approxWeight: 1560,
+            unitBasis: 'KILOGRAM',
+          },
+          RICE,
+        ],
+        rows: real.map((row) => ({
+          ...row,
+          offer: { ...row.offer, piecePrice: null },
+        })),
+      });
+
+      expect(host(fixture).querySelectorAll('.cheapest')).toHaveLength(0);
+      expect(host(fixture).querySelector('lib-price-table .amount')).toBeNull();
+    });
+
     it('says when the prices were seen, under the table', async () => {
       const { fixture } = await render();
 

@@ -198,7 +198,11 @@ describe('productRowView', () => {
         amount: '€13.42',
         per: 'catalog.per.KILOGRAM',
       });
-      expect(en.label).toBe('Cured cheese, ~1.56\u00a0kg, €20.94');
+      // What a kilo costs is in the name too, so a screen reader hears both
+      // numbers the card draws.
+      expect(en.label).toBe(
+        'Cured cheese, ~1.56\u00a0kg, €20.94, €13.42 catalog.per.KILOGRAM'
+      );
     });
 
     it('says the weight of a piece under a kilo in grams', () => {
@@ -1251,11 +1255,17 @@ describe('ProductRow, the one card', () => {
 
   describe('every shop’s price (the search)', () => {
     const SHOPS: ProductRowShop[] = [
-      { id: 'c-m', name: 'Mercadona', price: '€8.45', note: null, best: true },
+      {
+        id: 'c-m',
+        name: 'Mercadona',
+        price: { amount: '€8.45', per: null },
+        note: null,
+        best: true,
+      },
       {
         id: 'c-e',
         name: 'El Jamón',
-        price: '€9.10',
+        price: { amount: '€9.10', per: '/ kg' },
         note: 'seen 3 days ago',
         best: false,
       },
@@ -1290,6 +1300,14 @@ describe('ProductRow, the one card', () => {
       expect(rows[0]?.classList.contains('best')).toBe(true);
       expect(rows[1]?.querySelector('.shop-note')?.textContent).toBe(
         'seen 3 days ago'
+      );
+      // What a price is per is drawn small after its number (velista 0179).
+      expect(
+        rows[0]?.querySelector('.shop-price')?.firstElementChild?.textContent
+      ).toBe('€8.45');
+      expect(rows[0]?.querySelector('.shop-price .per')).toBeNull();
+      expect(rows[1]?.querySelector('.shop-price .per')?.textContent).toBe(
+        '/ kg'
       );
       expect(line?.getAttribute('aria-expanded')).toBe('true');
     });
