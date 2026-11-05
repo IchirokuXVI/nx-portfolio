@@ -11,6 +11,10 @@ import { HarvestScheduleOutcome } from '@portfolio/luna-shopper/contracts';
 import { describeError } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestSchedule } from '../entities';
+import {
+  slotAlertFor,
+  type HarvestAlertDraft,
+} from './alerts/harvest-alert.rules';
 import { HarvestRunService, type ScheduledStart } from './harvest-run.service';
 import {
   HarvestScheduleStore,
@@ -148,13 +152,20 @@ export class HarvestScheduleWorker
           runId: null,
         }
       : await this.start(schedule);
-    await this.store.recordOutcome(schedule.id, {
-      ...result,
-      at: now,
-      // A started slot is attempt 1. Any other leaves the 0 the claim wrote,
-      // so no retry can fire for a slot that started nothing.
-      attempts: result.runId ? 1 : null,
-    });
+    await this.store.recordOutcome(
+      schedule.id,
+      {
+        ...result,
+        at: now,
+        // A started slot is attempt 1. Any other leaves the 0 the claim wrote,
+        // so no retry can fire for a slot that started nothing.
+        attempts: result.runId ? 1 : null,
+      },
+      // A refused slot tells the owner, in the same write (plan 0218,
+      // section 2.3). `schedule` is the row before the claim, so its last
+      // outcome is the one this slot is compared with.
+      ...alertArgument(schedule, slot, false, result, now)
+    );
     this.log(schedule, slot, result, false);
   }
 
@@ -184,11 +195,15 @@ export class HarvestScheduleWorker
           continue;
         }
         const result = await this.start(schedule);
-        await this.store.recordOutcome(schedule.id, {
-          ...result,
-          at: now,
-          attempts: null,
-        });
+        await this.store.recordOutcome(
+          schedule.id,
+          {
+            ...result,
+            at: now,
+            attempts: null,
+          },
+          ...alertArgument(schedule, slot, true, result, now)
+        );
         this.log(schedule, slot, result, true);
       } catch (error) {
         this.logger.error(
@@ -231,4 +246,28 @@ export class HarvestScheduleWorker
       );
     }
   }
+}
+
+/**
+ * The third argument of `recordOutcome` for a slot that alerts, and none for
+ * any other, so an outcome that was always two arguments stays two.
+ */
+function alertArgument(
+  schedule: HarvestSchedule,
+  slot: Date,
+  retry: boolean,
+  result: ScheduledStart,
+  at: Date
+): [] | [HarvestAlertDraft] {
+  const alert = slotAlertFor({
+    schedule,
+    slot,
+    retry,
+    result,
+    // The worker reads no source row. The message names the chain from
+    // catalog at send time and falls back to the chain's id.
+    adapterKey: null,
+    at,
+  });
+  return alert ? [alert] : [];
 }
