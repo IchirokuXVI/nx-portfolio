@@ -102,6 +102,15 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       return 'resource.error.categoryInUse';
     case 'category_not_found':
       return 'resource.error.categoryNotFound';
+    // A size or a weight, never both (backend plan 0244, admin plan 0068).
+    case 'item_kilogram_has_size':
+      // A size on a product sold by the kilo. The form offers no size for
+      // one, so this is a screen that is behind or a request from elsewhere.
+      return 'resource.error.itemKilogramHasSize';
+    case 'item_approx_weight_beside_size':
+      // A weight beside a size, or a weight of zero or less. Typing either
+      // clears the other in the form, so the fix is to clear one.
+      return 'resource.error.itemApproxWeightBesideSize';
     // The sections of a shop (backend plan 0200, admin plan 0063).
     case 'section_not_found':
       return 'resource.error.sectionNotFound';

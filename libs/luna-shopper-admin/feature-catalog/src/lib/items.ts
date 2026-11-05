@@ -3,7 +3,9 @@ import { RESOURCE_GATEWAYS } from '@portfolio/luna-shopper-admin/data-access';
 import {
   CONTENT_LOCALES,
   defineResource,
+  fieldMessage,
   localizedTextValue,
+  type FieldNote,
   type ResourceGateway,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
@@ -89,6 +91,45 @@ export function itemGateway(
     create: async (input) => toItemRow(await inner.create(input)),
     update: async (id, input) => toItemRow(await inner.update(id, input)),
     remove: (id) => inner.remove(id),
+  };
+}
+
+/**
+ * Who holds the weight of a product, as the line under it (admin plan 0068).
+ *
+ * A weight from the chain is rewritten by each run. One a person typed is
+ * never touched by a run, and the press empties it: an emptied nullable field
+ * submits `approxWeight: null`, which hands the weight back to the chain.
+ *
+ * Read from the weight the form holds, beside the row as it was read. No
+ * held weight, no line: a form that holds the weight empty has nothing left
+ * to hand back, and the save says who holds the next one. A held weight other
+ * than the row's was typed by a person, and the save marks it so, whoever
+ * set the one under it. That line has no press: the field holds a typed
+ * weight, and emptying it is one keystroke away.
+ */
+function approxWeightNote(
+  held: Partial<Item>,
+  row: Item | null
+): FieldNote | null {
+  const typed = String(held.approxWeight ?? '').trim();
+  if (typed === '') {
+    return null;
+  }
+  const admin = fieldMessage('catalog.items.approxWeightFrom.admin');
+  // The draft holds a string and the row a number, so they meet as numbers.
+  if (row === null || Number(typed) !== Number(row.approxWeight ?? NaN)) {
+    return { text: admin };
+  }
+  if (row.approxWeightSetBy === 'SOURCE') {
+    return { text: fieldMessage('catalog.items.approxWeightFrom.source') };
+  }
+  if (row.approxWeightSetBy !== 'ADMIN') {
+    return null;
+  }
+  return {
+    text: admin,
+    action: { label: 'catalog.items.approxWeightFrom.useChain', value: '' },
   };
 }
 
@@ -199,6 +240,12 @@ export const ITEMS = defineResource<Item>({
       required: true,
       // What most of the catalog is sold by, so a new product starts there.
       initial: 'UNIT',
+      // What a price means follows the unit, and only the kilo needs saying:
+      // a price of a piece sold by the kilo reads like the price of the piece.
+      note: (held) =>
+        held.defaultUnit === 'KILOGRAM'
+          ? { text: fieldMessage('catalog.items.pricesPerKilo') }
+          : null,
     },
     {
       kind: 'number',
@@ -208,6 +255,24 @@ export const ITEMS = defineResource<Item>({
       help: 'catalog.items.unitSizeHelp',
       nullable: true,
       min: 0,
+      // A product sold by the kilo has no size (backend plan 0237, section
+      // 3.3), so the field is not offered and the weight takes its place.
+      shown: (row) => row.defaultUnit !== 'KILOGRAM',
+      // A size or a weight, never both (backend plan 0244, section 1).
+      excludes: 'approxWeight',
+    },
+    {
+      // The grams of one piece, for a product with no size: a cheese sold by
+      // the kilo, or a melon priced as one (backend plan 0244).
+      kind: 'number',
+      name: 'approxWeight',
+      label: 'catalog.items.approxWeight',
+      nullable: true,
+      integer: true,
+      // The server refuses a weight of zero or less.
+      min: 1,
+      excludes: 'unitSize',
+      note: approxWeightNote,
     },
     {
       kind: 'reference',
@@ -343,7 +408,13 @@ export const ITEMS = defineResource<Item>({
       },
       {
         title: 'catalog.items.section.sold',
-        fields: ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
+        fields: [
+          'defaultUnit',
+          'unitSize',
+          'approxWeight',
+          'imageUrl',
+          'shownPhoto',
+        ],
       },
     ],
     children: [
@@ -368,11 +439,14 @@ export const ITEMS = defineResource<Item>({
     deleteBody: 'catalog.products.deleteBody',
   },
 
-  // What the server refuses about a product's categories is said under them.
+  // What the server refuses about a product's categories is said under them,
+  // and a refusal about its size or weight under the field it names.
   errorFields: {
     category_not_a_leaf: 'categoryIds',
     item_needs_a_category: 'categoryIds',
     category_not_found: 'categoryIds',
+    item_kilogram_has_size: 'unitSize',
+    item_approx_weight_beside_size: 'approxWeight',
   },
 
   gateway: () => {
