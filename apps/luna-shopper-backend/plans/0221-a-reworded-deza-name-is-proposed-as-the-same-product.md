@@ -249,12 +249,17 @@ map, drops `REJECTED` rows and the row `self` (the row being asked, on a touch),
 | ------------------------------------ | -------------------------- |
 | exactly one product                  | that product               |
 | two or more products                 | nothing                    |
-| no product                           | nothing                    |
+| no product, and the bucket holds exactly one `REJECTED` row and no `ACTIVE` row | the rejected row, through `candidateEntryId` (the owner's answer 3 of 2026-11-05) |
+| no product otherwise                 | nothing                    |
 
 This is the rule of the exact key (`matching.ts:267` to :277) with one difference: the new key never
-proposes a lone sibling with no item through `candidateEntryId`. Two waiting rows whose words agree
+proposes a lone waiting sibling through `candidateEntryId`. Two waiting rows whose words agree
 are almost always the listing repeating one product inside one walk, and a sibling proposal there
 would send the person in a circle between two rows nobody has decided.
+
+The one exception is the owner's answer 3 of 2026-11-05: when no product answers and the bucket,
+without the row itself, holds exactly one name keyed `REJECTED` row and no `ACTIVE` row,
+`SiblingEntryIndex.rejectedAnyOrder` answers that rejected row, and the new row points at it.
 
 ### 3.4 The place in the ladder
 
@@ -267,11 +272,18 @@ The new row then holds `status: CANDIDATE`, `itemId` (the proposed product), `ca
 null`, `matchedBy: NAME_WORDS_SIZE`, `confidence: FUZZY_CONFIDENCE`, and `decidedAt: null`. The
 outcome reports rung 4.
 
+When the new key finds no product but finds the one rejected row of section 3.3, the new row
+points at it. It holds `status: CANDIDATE`, `itemId: null`, the rejected row in `candidateEntryId`,
+`matchedBy: NAME_WORDS_SIZE`, `confidence: FUZZY_CONFIDENCE` (0.6), and `decidedAt: null`. The
+outcome reports rung 4. The run decides nothing: the new row is not rejected by itself.
+
 ### 3.5 A waiting row is asked again
 
 In `touch`, after `bindWaitingByEan` answers false, a row is asked the new key when all of these
 hold: `undecided(row)`, `status` is `UNRESOLVED`, `itemId` and `candidateEntryId` are null, and the
-row is name keyed. A hit writes the fields of section 3.4 onto the row.
+row is name keyed. A hit writes the fields of section 3.4 onto the row. When the new key finds no
+product but finds the one rejected row of section 3.3, the touch writes the pointer of section 3.4
+onto the row, as a create does.
 
 This is what reaches the renames already in the queue: the rows of the walks of 2026-10-06 and
 2026-10-16, and every row that waited while its old twin was still `UNRESOLVED` and was accepted
@@ -325,6 +337,7 @@ the row to a new product. The old row is untouched.
 | The old row is `REJECTED`                                       | No product is proposed, because a run does not reopen a decision. When the bucket holds exactly one `REJECTED` row and no `ACTIVE` row, the new row is queued as a `CANDIDATE` with `matchedBy: NAME_WORDS_SIZE`, no `itemId`, and the rejected row in `candidateEntryId`, so the queue points at the rejection. The same holds on a touch of an `UNRESOLVED` row with no proposal. The run report counts these as `wordOrderRejectedPointers`, apart from `wordOrderProposals`. The owner decided this on 2026-11-05 (Decisions, owner answer 3). |
 | The old row is still `UNRESOLVED` or `CANDIDATE`                | No product in the bucket. Nothing is proposed. When a person accepts the old row, the next walk asks the new row again (section 3.5). |
 | The old row is still listed                                     | The same as a rename. Both rows end on one product.                                                                        |
+| The rejected row that a pointer names is later accepted         | Today the pointer row stays a `CANDIDATE` with no item and is not asked again, because a touch asks only an `UNRESOLVED` row with no proposal (section 3.5). The admin shows it as a sibling proposal of another row. An accept of the pointer row still names its own item. The owner is being asked whether such a row should be asked again on the next touch. |
 
 ## 6. Completeness is not read
 
@@ -388,6 +401,10 @@ first.
   create and on touch together. It is counted by the session and written beside the other ingest
   keys of the report (`run-executor.service.ts:715` to :750). An owner who reads one DEZA run then
   sees how many renames waited for him.
+- The run report also gains `wordOrderRejectedPointers`: how many rows this run queued pointing at
+  the one rejected row their words meet (section 3.3), on create and on touch together. It is kept
+  apart from `wordOrderProposals`, which counts rows proposed as a product. Both keys are written
+  for a walk and for a file import.
 - `openapi.json` and `wire-types.ts` change only by the new enum value. Regenerate both.
 
 ## 11. The comments that are wrong today
@@ -419,6 +436,8 @@ its words agree in another order (this plan), and that any other rewording waits
   - `matchAnyOrder` proposes the one product of a bucket, proposes nothing for two products, drops a
     `REJECTED` row, drops `self`, ignores rows that are not name keyed, and never answers an
     `entryId`.
+  - `rejectedAnyOrder` answers the one `REJECTED` row of a bucket, answers nothing when the bucket
+    also holds an `ACTIVE` row or holds two `REJECTED` rows, and drops `self`.
   - The Don Simon row of `landing-page.html`, read through the DEZA parser, and the same name with
     two words swapped give one word order key and two different `entryKey` values.
 - **`source-ingest.spec.ts`**:
@@ -429,7 +448,14 @@ its words agree in another order (this plan), and that any other rewording waits
   - A touched `UNRESOLVED` row with no proposal is asked the new key and is proposed. A touched
     `CANDIDATE` row and a `REJECTED` row are not changed.
   - Two new rows of one walk with the same words both propose the old product.
-  - `wordOrderProposals` counts creates and touches.
+  - A new name keyed row whose words meet exactly one `REJECTED` row and no `ACTIVE` row becomes
+    `CANDIDATE` with `itemId: null`, the rejected row in `candidateEntryId`,
+    `matchedBy: NAME_WORDS_SIZE`, confidence 0.6 and `decidedAt: null`. A touched `UNRESOLVED` row
+    with no proposal gets the same pointer.
+  - `wordOrderProposals` and `wordOrderRejectedPointers` each count creates and touches, apart from
+    each other.
+- **The executor specs**: both keys reach `harvest_runs.report`, once for a walk and once for a file
+  import.
 - **Integration, on real Postgres**: the migration adds the value, a row can be saved with it, and
   `down` moves it back to `NAME_SIZE` and removes the value.
 - **Gateway**: `openapi-document.spec.ts` passes after regeneration. `wire-types.spec.ts` passes after
@@ -443,12 +469,16 @@ its words agree in another order (this plan), and that any other rewording waits
       catalog before that.
 - [ ] A row keyed by a chain id or an article code is never matched by the new key, as either side.
 - [ ] Two bound products under one new key propose nothing.
+- [ ] A name keyed row whose words meet no product but exactly one `REJECTED` row and no `ACTIVE`
+      row is queued as `CANDIDATE` with no product and the rejected row in `candidateEntryId`, on
+      create and on touch. The run decides nothing.
 - [ ] The exact key of rung 4 is asked first and answers as before.
 - [ ] An `UNRESOLVED` row with no proposal is asked the new key each time a walk touches it.
 - [ ] `entryKey`, `entryNameKey` and `siblingKey` answer the same as before for every input.
 - [ ] Accepting a proposal leaves the old row `ACTIVE` on the same product.
 - [ ] `ItemSourceMatch.NAME_WORDS_SIZE` exists in the contract and in `item_source_match`.
-- [ ] The run report carries `wordOrderProposals`.
+- [ ] The run report carries `wordOrderProposals` and `wordOrderRejectedPointers`, for a walk and
+      for a file import.
 - [ ] `openapi.json` and `wire-types.ts` are regenerated.
 
 ## Verification
@@ -473,10 +503,19 @@ of the 2026-10-16 backup, run one DEZA `CATALOG_DISCOVERY`. Then:
 
 ```sql
 SELECT count(*) FROM source_catalog_entries
- WHERE "matchedBy" = 'NAME_WORDS_SIZE' AND status = 'CANDIDATE';
+ WHERE "matchedBy" = 'NAME_WORDS_SIZE' AND status = 'CANDIDATE'
+   AND "itemId" IS NOT NULL;
 ```
 
 The count equals `wordOrderProposals` in the run report, and it is at least 14 on that backup.
+
+```sql
+SELECT count(*) FROM source_catalog_entries
+ WHERE "matchedBy" = 'NAME_WORDS_SIZE' AND status = 'CANDIDATE'
+   AND "itemId" IS NULL AND "candidateEntryId" IS NOT NULL;
+```
+
+The count equals `wordOrderRejectedPointers` in the run report.
 
 ## Decisions
 
@@ -489,7 +528,9 @@ Chosen in this plan, and open to the owner's correction:
 - **The stop words are "de" and "en", and repeated words count** (section 3.1). Both rules are what
   the walk of 2026-10-16 supports.
 - **Both rows must be keyed on their own text** (section 3.2), because of the El Jamón evidence.
-- **No sibling proposal through `candidateEntryId` on the new key** (section 3.3).
+- **No sibling proposal through `candidateEntryId` on the new key** (section 3.3), with one
+  exception: a row whose words meet no product but exactly one `REJECTED` row and no `ACTIVE` row
+  points at that rejected row (the owner's answer 3 of 2026-11-05).
 - **A waiting row is asked again, and only an `UNRESOLVED` one with no proposal** (section 3.5).
 - **The old row stays `ACTIVE` after an accept**, as the product's second key (section 4).
 - **A new `matchedBy` value**, not `NAME_SIZE` again, so the queue and the report can tell the two

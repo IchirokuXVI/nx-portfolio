@@ -33,6 +33,14 @@ export class NameWordsSizeMatch1760200000000 implements MigrationInterface {
              "updatedAt" = now()
        WHERE "matchedBy" = 'NAME_WORDS_SIZE'
     `);
+    // No run writes the value onto a location, but the type is shared, so
+    // the cast below must be safe on every column that holds it.
+    await queryRunner.query(`
+      UPDATE "source_locations"
+         SET "matchedBy" = 'NAME_SIZE',
+             "updatedAt" = now()
+       WHERE "matchedBy" = 'NAME_WORDS_SIZE'
+    `);
     await queryRunner.query(
       `ALTER TYPE "item_source_match" RENAME TO "item_source_match_old"`
     );

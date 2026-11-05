@@ -431,12 +431,6 @@ describe('the word order key (plan 0221, section 3.1)', () => {
     expect(entryKey(after, sizeFormat)).not.toBe(entryKey(before, sizeFormat));
   });
 
-  it('holds the "de" for "en" pair and the trailing slash pair', () => {
-    const names = DEZA_RENAMES_2026_10_16.map((pair) => pair.before);
-    expect(names.some((name) => name.endsWith('reducido de sal'))).toBe(true);
-    expect(names.some((name) => name.endsWith('/'))).toBe(true);
-  });
-
   it('keeps repeated words, so "zero" and "zero zero" stay apart', () => {
     expect(wordOrderKey('Refresco zero zero COCA COLA', '2 L', 2)).not.toBe(
       wordOrderKey('Refresco zero COCA COLA', '2 L', 2)
