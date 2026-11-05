@@ -1,0 +1,75 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    .kp { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+    .col { display: flex; flex-direction: column; gap: 10px; width: 380px; }
+    .cap { font-size: 14px; color: #525a78; line-height: 1.45; }
+    .cap b { color: #11141f; }
+    .phone { width: 380px; border-radius: 22px; overflow: hidden; position: relative; background: var(--d-ground); color: var(--d-text); border: 1px solid #c9cedd; }
+    .day { --d-ground: #f7f8fc; --d-raised: #ffffff; --d-sunken: #eef0f7; --d-text: #11141f; --d-text-2: #525a78; --d-text-3: #616a8a; --d-border: #dde1ed; --d-border-strong: #6f7899; --d-quiet-fg: #8a5a12; }
+    .night { --d-ground: #0a0c14; --d-raised: #161a28; --d-sunken: #11141f; --d-text: #f7f8fc; --d-text-2: #c2c8db; --d-text-3: #98a0bb; --d-border: rgba(255, 255, 255, 0.08); --d-border-strong: rgba(255, 255, 255, 0.35); --d-quiet-fg: #ffb454; border-color: #2a2f40; }
+    .ph-head { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--d-border); }
+    .ph-head svg { width: 22px; height: 22px; color: var(--d-text-2); flex: none; }
+    .ph-title { font-family: Marcellus, Georgia, serif; font-size: 23px; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .product { display: flex; gap: 16px; padding: 20px 16px 8px; }
+    .picture { width: 96px; height: 96px; border-radius: 14px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
+    .picture img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .picture.none { background: var(--d-sunken); color: var(--d-text-3); }
+    .picture.none svg { width: 34px; height: 34px; }
+    .about { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+    .about-name { font-size: 20px; font-weight: 650; line-height: 1.2; }
+    .about-detail { margin-top: 4px; font-size: 14px; color: var(--d-text-3); }
+    .about-category { margin-top: auto; padding-top: 8px; font-size: 14px; color: var(--d-quiet-fg); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .about-category svg { width: 14px; height: 14px; }
+    .section-title { padding: 18px 16px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--d-text-2); }
+    .prow { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--d-border); }
+    .prow.last { border-bottom: 0; }
+    .logo { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+    .chain { font-size: 16px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .chain span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cheapest { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--d-quiet-fg); flex: none; }
+    .price { text-align: right; display: grid; gap: 1px; }
+    .amount { font-size: 16px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .unit { font-size: 13px; color: var(--d-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .absent { font-size: 14px; color: var(--d-text-3); white-space: nowrap; }
+  </style>
+</helmet>
+<div class="kp">
+
+<div class="col">
+<div class="cap"><b>Product page, Day, Spanish: the kilo piece.</b> The detail under the name is the row's detail, so it says the weight the same way. Each supermarket's row prices the piece and keeps the price per kilo under it, which is the number that made it the cheapest.</div>
+<div class="phone day">
+  <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg><span class="ph-title">Queso viejo tostado mezcla</span></div>
+  <div class="product"><div class="picture none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="about"><div class="about-name">Queso viejo tostado mezcla</div><div class="about-detail">Hacendado · aprox. 1,56 kg</div><div class="about-category">Lácteos · Quesos <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
+  <div class="section-title">Precio en tus supermercados</div>
+  <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">MÁS BARATO</span></span><span class="price"><span class="amount">20,94 €</span><span class="unit">13,42 € / kg</span></span></div>
+  <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">22,35 €</span><span class="unit">14,33 € / kg</span></span></div>
+  <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="absent">aquí no se vende</span></div>
+</div>
+</div>
+
+<div class="col">
+<div class="cap"><b>Night, English: sold by the kilo.</b> A product with no weight has no detail to add. Each row says "/ kg" in the price itself and draws no second line, because there is nothing a second line could say that the first does not.</div>
+<div class="phone night">
+  <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg><span class="ph-title">Canary Islands PGI banana</span></div>
+  <div class="product"><div class="picture"><img src="photos/bananas.jpg" alt=""></div><div class="about"><div class="about-name">Canary Islands PGI banana</div><div class="about-category">Fruit and vegetables · Fruit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
+  <div class="section-title">Price at your supermarkets</div>
+  <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">CHEAPEST</span></span><span class="price"><span class="amount">€2.80 / kg</span></span></div>
+  <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">€2.99 / kg</span></span></div>
+  <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="price"><span class="amount">€3.15 / kg</span></span></div>
+</div>
+</div>
+
+</div>
+</x-dc>
+</body>
+</html>
