@@ -372,6 +372,33 @@ export class SiblingEntryIndex {
       ? { itemId: [...itemIds][0], entryId: null }
       : null;
   }
+
+  /**
+   * The one `REJECTED` row the words of this name meet, or null (plan 0221,
+   * the owner's answer to question 3 of 2026-11-05).
+   *
+   * Asked only after {@link matchAnyOrder} proposed nothing. It answers the
+   * id of the rejected row when the bucket, `self` left out, holds exactly one
+   * `REJECTED` row and no `ACTIVE` row. The run decides nothing with it: the
+   * new row is queued pointing at the rejection, and a person decides.
+   */
+  rejectedAnyOrder(
+    name: string,
+    sizeFormat: string | null,
+    unitSize: number | string | null,
+    self: SourceCatalogEntry | null = null
+  ): string | null {
+    const bucket = (
+      this.byWordOrderKey.get(wordOrderKey(name, sizeFormat, unitSize)) ?? []
+    ).filter((row) => row !== self && (self === null || row.id !== self.id));
+    if (bucket.some((row) => row.status === SourceEntryStatus.ACTIVE)) {
+      return null;
+    }
+    const rejected = bucket.filter(
+      (row) => row.status === SourceEntryStatus.REJECTED
+    );
+    return rejected.length === 1 ? rejected[0].id : null;
+  }
 }
 
 function push<T>(map: Map<string, T[]>, key: string, value: T): void {

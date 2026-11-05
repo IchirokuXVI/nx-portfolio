@@ -137,6 +137,7 @@ function build(
       pricesWritten: 0,
       pricesConfirmed: 0,
       wordOrderProposals: 0,
+      wordOrderRejectedPointers: 0,
       ...options.counters,
     },
     copies: {
@@ -392,12 +393,15 @@ describe('RunReportSink', () => {
   });
 
   it('carries the rows the ingest proposed by their words in any order (plan 0221)', async () => {
-    const { sink } = build({ counters: { wordOrderProposals: 14 } });
+    const { sink } = build({
+      counters: { wordOrderProposals: 14, wordOrderRejectedPointers: 2 },
+    });
     sink.product(observation());
 
     const written = await sink.drain();
 
     expect(written.wordOrderProposals).toBe(14);
+    expect(written.wordOrderRejectedPointers).toBe(2);
   });
 
   it('names the price conflicts the ingest counted, and no more than a report can hold', async () => {

@@ -278,6 +278,14 @@ export interface SourceIngestCounters {
    * waits for a person.
    */
   wordOrderProposals: number;
+  /**
+   * Rows this run queued pointing at the one `REJECTED` row their words meet
+   * (plan 0221, the owner's answer of 2026-11-05): a `CANDIDATE` with
+   * `NAME_WORDS_SIZE`, no product, and the rejected row in
+   * `candidateEntryId`. Kept apart from {@link wordOrderProposals}, which
+   * counts rows proposed as a product.
+   */
+  wordOrderRejectedPointers: number;
 }
 
 /**
@@ -1190,8 +1198,8 @@ export class SourceIngest {
     } else if (bindWaitingByEan(row, items, eans, seenAt)) {
       rung = 2;
     }
-    if (rung === 1 && proposeAnyOrder(row, siblings)) {
-      counters.wordOrderProposals += 1;
+    if (rung === 1) {
+      countAnyOrder(counters, proposeAnyOrder(row, siblings));
     }
 
     const saved = await this.entries.save(row);
@@ -1281,9 +1289,20 @@ export class SourceIngest {
           draft.sizeFormat,
           draft.unitSize
         );
+        const rejected = reworded?.itemId
+          ? null
+          : siblings.rejectedAnyOrder(
+              draft.name,
+              draft.sizeFormat,
+              draft.unitSize
+            );
         if (reworded?.itemId) {
           proposeReworded(draft, reworded.itemId);
           counters.wordOrderProposals += 1;
+          rung = 4;
+        } else if (rejected !== null) {
+          pointAtRejection(draft, rejected);
+          counters.wordOrderRejectedPointers += 1;
           rung = 4;
         }
       }
@@ -1452,6 +1471,7 @@ function emptyCounters(): SourceIngestCounters {
     pricesConflicted: 0,
     pricesSoldAnotherWay: 0,
     wordOrderProposals: 0,
+    wordOrderRejectedPointers: 0,
   };
 }
 
@@ -1662,13 +1682,16 @@ function bindWaitingByEan(
  * something, and a person may be reading that proposal. The exact key is not
  * asked again here.
  *
- * Mutates the row and leaves the save to the caller. Answers whether it
- * proposed.
+ * When the words meet no product but exactly one `REJECTED` row and no
+ * `ACTIVE` one, the row is queued pointing at that rejection
+ * ({@link pointAtRejection}).
+ *
+ * Mutates the row and leaves the save to the caller. Answers what it wrote.
  */
 function proposeAnyOrder(
   row: SourceCatalogEntry,
   siblings: SiblingEntryIndex
-): boolean {
+): 'product' | 'rejected' | null {
   if (
     !undecided(row) ||
     row.status !== SourceEntryStatus.UNRESOLVED ||
@@ -1676,7 +1699,7 @@ function proposeAnyOrder(
     row.candidateEntryId !== null ||
     !isNameKeyed(row)
   ) {
-    return false;
+    return null;
   }
   const reworded = siblings.matchAnyOrder(
     row.name,
@@ -1684,11 +1707,49 @@ function proposeAnyOrder(
     row.unitSize,
     row
   );
-  if (!reworded?.itemId) {
-    return false;
+  if (reworded?.itemId) {
+    proposeReworded(row, reworded.itemId);
+    return 'product';
   }
-  proposeReworded(row, reworded.itemId);
-  return true;
+  const rejected = siblings.rejectedAnyOrder(
+    row.name,
+    row.sizeFormat,
+    row.unitSize,
+    row
+  );
+  if (rejected !== null) {
+    pointAtRejection(row, rejected);
+    return 'rejected';
+  }
+  return null;
+}
+
+function countAnyOrder(
+  counters: SourceIngestCounters,
+  answer: 'product' | 'rejected' | null
+): void {
+  if (answer === 'product') {
+    counters.wordOrderProposals += 1;
+  } else if (answer === 'rejected') {
+    counters.wordOrderRejectedPointers += 1;
+  }
+}
+
+/**
+ * The words of a new name meet one row a person rejected (plan 0221, the
+ * owner's answer to question 3 of 2026-11-05). The run decides nothing: the
+ * row is not rejected by itself. It is queued pointing at the rejection
+ * through `candidateEntryId`, with no product, so the queue shows the person
+ * which rejected row the new name matches. Reject and create work on it as on
+ * any waiting row, and an accept names its product itself.
+ */
+function pointAtRejection(row: SourceCatalogEntry, rejectedId: string): void {
+  row.itemId = null;
+  row.candidateEntryId = rejectedId;
+  row.status = SourceEntryStatus.CANDIDATE;
+  row.matchedBy = ItemSourceMatch.NAME_WORDS_SIZE;
+  row.confidence = FUZZY_CONFIDENCE;
+  row.decidedAt = null;
 }
 
 /**
@@ -1849,6 +1910,8 @@ export class SourceIngestSession {
     this.counters.pricesConflicted += result.counters.pricesConflicted;
     this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
     this.counters.wordOrderProposals += result.counters.wordOrderProposals;
+    this.counters.wordOrderRejectedPointers +=
+      result.counters.wordOrderRejectedPointers;
     this.priceConflicts.push(...result.priceConflicts);
     this.images.linked += result.images.linked;
     this.images.moved += result.images.moved;

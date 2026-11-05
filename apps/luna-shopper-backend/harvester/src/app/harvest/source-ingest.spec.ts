@@ -3432,6 +3432,145 @@ describe('SourceIngest, a reworded name is proposed as the same product (plan 02
     });
   });
 
+  describe('a reworded name of a rejected row (owner, 2026-11-05)', () => {
+    const rejected = {
+      status: SourceEntryStatus.REJECTED,
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      itemId: null,
+      decidedAt: new Date('2026-10-07T10:00:00.000Z'),
+    };
+
+    it('queues the new row pointing at the one REJECTED row, and decides nothing', async () => {
+      const built = build({
+        rows: [web({ id: 'rejected', name: OLD, ...rejected })],
+      });
+
+      const { outcomes, counters } = await ingestWeb(built, [
+        walk(NEW, { price: PRICE }),
+      ]);
+
+      expect(outcomes[0]).toMatchObject({
+        rung: 4,
+        created: true,
+        itemId: null,
+      });
+      expect(built.saved[0]).toMatchObject({
+        name: NEW,
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: null,
+        candidateEntryId: 'rejected',
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+        confidence: 0.6,
+        decidedAt: null,
+      });
+      expect(counters).toMatchObject({
+        wordOrderProposals: 0,
+        wordOrderRejectedPointers: 1,
+      });
+      expect(built.catalog.addPrices).not.toHaveBeenCalled();
+      expect(built.stored[0].status).toBe(SourceEntryStatus.REJECTED);
+    });
+
+    it('proposes the product when a REJECTED row sits beside an ACTIVE one', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'rejected', name: OLD, ...rejected }),
+          web({
+            id: 'kept',
+            name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+            itemId: 'item-chorizo',
+            ...bound,
+          }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: 'item-chorizo',
+        candidateEntryId: null,
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+      });
+      expect(counters).toMatchObject({
+        wordOrderProposals: 1,
+        wordOrderRejectedPointers: 0,
+      });
+    });
+
+    it('points at nothing for two REJECTED rows', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'a', name: OLD, ...rejected }),
+          web({
+            id: 'b',
+            name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+            ...rejected,
+          }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        status: SourceEntryStatus.UNRESOLVED,
+        candidateEntryId: null,
+        matchedBy: null,
+      });
+      expect(counters.wordOrderRejectedPointers).toBe(0);
+    });
+
+    it('finds the pointer for a touched UNRESOLVED row with no proposal', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'rejected', name: OLD, ...rejected }),
+          web({ id: 'waiting', name: NEW }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        id: 'waiting',
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: null,
+        candidateEntryId: 'rejected',
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+        decidedAt: null,
+      });
+      expect(counters.wordOrderRejectedPointers).toBe(1);
+    });
+
+    it('does not ask a CANDIDATE row again', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'rejected', name: OLD, ...rejected }),
+          web({
+            id: 'pointing',
+            name: NEW,
+            status: SourceEntryStatus.CANDIDATE,
+            matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+            candidateEntryId: 'rejected',
+            confidence: 0.6,
+          }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        id: 'pointing',
+        status: SourceEntryStatus.CANDIDATE,
+        candidateEntryId: 'rejected',
+      });
+      expect(counters).toMatchObject({
+        wordOrderProposals: 0,
+        wordOrderRejectedPointers: 0,
+      });
+    });
+  });
+
   describe('the fourteen renames of the walk of 2026-10-16 (section 1)', () => {
     const olds = () =>
       DEZA_RENAMES_2026_10_16.map((pair, index) =>

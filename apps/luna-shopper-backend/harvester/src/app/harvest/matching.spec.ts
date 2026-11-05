@@ -634,6 +634,64 @@ describe('the sibling row index, second key (plan 0221, section 3.3)', () => {
     ).toBeNull();
   });
 
+  describe('the one rejected row the words meet (owner, 2026-11-05)', () => {
+    it('answers the id of a lone REJECTED row', () => {
+      const index = new SiblingEntryIndex([
+        named({
+          id: 'rejected',
+          status: SourceEntryStatus.REJECTED,
+          itemId: null,
+        }),
+      ]);
+
+      expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+      expect(index.rejectedAnyOrder(NEW, '60 g', 60)).toBe('rejected');
+    });
+
+    it('answers nothing beside an ACTIVE row, or for two REJECTED rows', () => {
+      expect(
+        new SiblingEntryIndex([
+          named({
+            id: 'rejected',
+            status: SourceEntryStatus.REJECTED,
+            itemId: null,
+          }),
+          named({
+            id: 'kept',
+            name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+          }),
+        ]).rejectedAnyOrder(NEW, '60 g', 60)
+      ).toBeNull();
+      expect(
+        new SiblingEntryIndex([
+          named({ id: 'a', status: SourceEntryStatus.REJECTED, itemId: null }),
+          named({
+            id: 'b',
+            name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+            status: SourceEntryStatus.REJECTED,
+            itemId: null,
+          }),
+        ]).rejectedAnyOrder(NEW, '60 g', 60)
+      ).toBeNull();
+    });
+
+    it('drops the row being asked and rows that are not name keyed', () => {
+      const self = named({ status: SourceEntryStatus.REJECTED, itemId: null });
+      expect(
+        new SiblingEntryIndex([self]).rejectedAnyOrder(OLD, '60 g', 60, self)
+      ).toBeNull();
+      expect(
+        new SiblingEntryIndex([
+          named({
+            externalId: 'ART-0012',
+            status: SourceEntryStatus.REJECTED,
+            itemId: null,
+          }),
+        ]).rejectedAnyOrder(NEW, '60 g', 60)
+      ).toBeNull();
+    });
+  });
+
   it('holds a row this run created from the moment it exists', () => {
     const index = new SiblingEntryIndex([]);
     expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();

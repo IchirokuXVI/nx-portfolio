@@ -322,7 +322,7 @@ the row to a new product. The old row is untouched.
 | One old row, two new rows with the same words in two orders      | Both new rows propose the old row's product. A person accepts both, or rejects one. Two bound rows of one product are fine (plan 0182). |
 | Two old rows on one product, one new row                        | One product in the bucket. The new row proposes it.                                                                       |
 | Two old rows on two products, one new row                       | Two products in the bucket. Nothing is proposed. The row waits as `UNRESOLVED`.                                            |
-| The old row is `REJECTED`                                       | It is dropped from the bucket. Nothing is proposed, because a run does not reopen a decision (`matching.ts:221` to :223). |
+| The old row is `REJECTED`                                       | No product is proposed, because a run does not reopen a decision. When the bucket holds exactly one `REJECTED` row and no `ACTIVE` row, the new row is queued as a `CANDIDATE` with `matchedBy: NAME_WORDS_SIZE`, no `itemId`, and the rejected row in `candidateEntryId`, so the queue points at the rejection. The same holds on a touch of an `UNRESOLVED` row with no proposal. The run report counts these as `wordOrderRejectedPointers`, apart from `wordOrderProposals`. The owner decided this on 2026-11-05 (Decisions, owner answer 3). |
 | The old row is still `UNRESOLVED` or `CANDIDATE`                | No product in the bucket. Nothing is proposed. When a person accepts the old row, the next walk asks the new row again (section 3.5). |
 | The old row is still listed                                     | The same as a rename. Both rows end on one product.                                                                        |
 
@@ -495,14 +495,18 @@ Chosen in this plan, and open to the owner's correction:
 - **A new `matchedBy` value**, not `NAME_SIZE` again, so the queue and the report can tell the two
   apart and a later admin label can name it.
 
-**Owner**, to ask and not to choose:
+**Owner** (answered 2026-11-05):
 
-1. Does the reason chip for the new value (and for `SHARED_EAN`) need a mock before its admin plan,
-   or is a new string in the existing chip enough?
-2. Is the old printed name beside the proposal wanted? It is a new element on the proposal panel and
-   needs a mock.
-3. A reworded name of a product the owner **rejected** arrives as a new `UNRESOLVED` row and is
-   proposed nothing. Is that right, or should the queue point at the rejection? Rejecting it
-   automatically is not offered, because a run does not make decisions.
-4. The rest of the 23 renames of 2026-10-16 change a word or the size, and this plan leaves them
-   to a person. Is a looser match wanted later, with its false proposals measured first?
+1. **A new string in the existing reason chip is enough** for `NAME_WORDS_SIZE` and `SHARED_EAN`.
+   No mock is needed. It is the admin follow up of section 9.
+2. **The old printed name beside the proposal is wanted, with no mock.** It is an admin follow up.
+   The admin may need the printed name of the matched sibling from the backend, and that plan
+   states how it gets it.
+3. **The queue points at the rejection.** In the owner's words: "If it was reworded but it's the
+   same product, it will stay as rejected, the queue will need to point to the rejection." A run
+   still makes no decision, and the new row is not rejected by itself. When the words of the new
+   row meet exactly one `REJECTED` row and no `ACTIVE` row, the row is queued as a `CANDIDATE` with
+   `matchedBy: NAME_WORDS_SIZE`, no product and the rejected row in `candidateEntryId` (section 5).
+   `accept` names its product itself and `reject` clears the pointer, so neither changes.
+4. **A looser match is wanted later**, with its false proposals measured first. That is a future
+   plan.
