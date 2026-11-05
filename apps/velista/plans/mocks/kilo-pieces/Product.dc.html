@@ -41,6 +41,7 @@
     .amount { font-size: 16px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .unit { font-size: 13px; color: var(--d-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
     .absent { font-size: 14px; color: var(--d-text-3); white-space: nowrap; }
+    .per { font-size: 0.82em; font-weight: 400; color: var(--d-text-3); margin-left: 0.22em; word-spacing: -0.18em; }
   </style>
 </helmet>
 <div class="kp">
@@ -49,10 +50,10 @@
 <div class="cap"><b>Product page, Day, Spanish: the kilo piece.</b> The detail under the name is the row's detail, so it says the weight the same way. Each supermarket's row prices the piece and keeps the price per kilo under it, which is the number that made it the cheapest.</div>
 <div class="phone day">
   <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg><span class="ph-title">Queso viejo tostado mezcla</span></div>
-  <div class="product"><div class="picture none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="about"><div class="about-name">Queso viejo tostado mezcla</div><div class="about-detail">Hacendado · aprox. 1,56 kg</div><div class="about-category">Lácteos · Quesos <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
+  <div class="product"><div class="picture none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="about"><div class="about-name">Queso viejo tostado mezcla</div><div class="about-detail">Hacendado · ~1,56 kg</div><div class="about-category">Lácteos · Quesos <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
   <div class="section-title">Precio en tus supermercados</div>
-  <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">MÁS BARATO</span></span><span class="price"><span class="amount">20,94 €</span><span class="unit">13,42 € / kg</span></span></div>
-  <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">22,35 €</span><span class="unit">14,33 € / kg</span></span></div>
+  <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">MÁS BARATO</span></span><span class="price"><span class="amount">20,94 €</span><span class="unit">13,42 €<span class="per">/ kg</span></span></span></div>
+  <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">22,35 €</span><span class="unit">14,33 €<span class="per">/ kg</span></span></span></div>
   <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="absent">aquí no se vende</span></div>
 </div>
 </div>
@@ -63,9 +64,9 @@
   <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg><span class="ph-title">Canary Islands PGI banana</span></div>
   <div class="product"><div class="picture"><img src="photos/bananas.jpg" alt=""></div><div class="about"><div class="about-name">Canary Islands PGI banana</div><div class="about-category">Fruit and vegetables · Fruit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
   <div class="section-title">Price at your supermarkets</div>
-  <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">CHEAPEST</span></span><span class="price"><span class="amount">€2.80 / kg</span></span></div>
-  <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">€2.99 / kg</span></span></div>
-  <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="price"><span class="amount">€3.15 / kg</span></span></div>
+  <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">CHEAPEST</span></span><span class="price"><span class="amount">€2.80<span class="per">/ kg</span></span></span></div>
+  <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">€2.99<span class="per">/ kg</span></span></span></div>
+  <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="price"><span class="amount">€3.15<span class="per">/ kg</span></span></span></div>
 </div>
 </div>
 
