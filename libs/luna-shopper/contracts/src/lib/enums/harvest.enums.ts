@@ -243,6 +243,13 @@ export enum ItemSourceMatch {
    * never an ACTIVE, and writes no price until a person accepts the row.
    */
   SHARED_EAN = 'SHARED_EAN',
+  /**
+   * The words of the name in any order, without "de" and "en", and the size
+   * (plan 0221). Asked only between two rows keyed on their own printed text,
+   * which is how a reworded DEZA name finds its product. Produces a CANDIDATE,
+   * never an ACTIVE.
+   */
+  NAME_WORDS_SIZE = 'NAME_WORDS_SIZE',
 }
 
 /**

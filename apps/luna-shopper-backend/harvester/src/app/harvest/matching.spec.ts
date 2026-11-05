@@ -4,16 +4,22 @@ import {
   UnitOfMeasure,
   type ItemView,
 } from '@portfolio/luna-shopper/contracts';
+import { parseProductPage } from '@portfolio/luna-shopper/deza';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { SourceCatalogEntry } from '../entities';
+import { DEZA_RENAMES_2026_10_16 } from './__fixtures__/deza-renames-2026-10-16';
 import {
   ChainEanIndex,
   entryKey,
   entryNameKey,
+  isNameKeyed,
   ItemMatchIndex,
   normalizeName,
   SiblingEntryIndex,
   siblingKey,
+  wordOrderKey,
 } from './matching';
 
 function item(overrides: Partial<ItemView> = {}): ItemView {
@@ -405,5 +411,234 @@ describe('normalizeName', () => {
 
   it('collapses runs of separators rather than leaving empty tokens', () => {
     expect(normalizeName('  Café  --  soluble ')).toBe('cafe soluble');
+  });
+});
+
+/**
+ * Rung 4's second key (plan 0221): the words of a name in any order, without
+ * "de" and "en", at the same size, between rows keyed on their own text.
+ */
+describe('the word order key (plan 0221, section 3.1)', () => {
+  it.each(
+    DEZA_RENAMES_2026_10_16.map((pair) => [pair.before, pair.after, pair])
+  )('gives %p and %p one key', (_before, _after, pair) => {
+    const { before, after, sizeFormat, unitSize } =
+      pair as (typeof DEZA_RENAMES_2026_10_16)[number];
+    expect(wordOrderKey(after, sizeFormat, unitSize)).toBe(
+      wordOrderKey(before, sizeFormat, unitSize)
+    );
+    // And two row identities, which is why the rename made a new row.
+    expect(entryKey(after, sizeFormat)).not.toBe(entryKey(before, sizeFormat));
+  });
+
+  it('holds the "de" for "en" pair and the trailing slash pair', () => {
+    const names = DEZA_RENAMES_2026_10_16.map((pair) => pair.before);
+    expect(names.some((name) => name.endsWith('reducido de sal'))).toBe(true);
+    expect(names.some((name) => name.endsWith('/'))).toBe(true);
+  });
+
+  it('keeps repeated words, so "zero" and "zero zero" stay apart', () => {
+    expect(wordOrderKey('Refresco zero zero COCA COLA', '2 L', 2)).not.toBe(
+      wordOrderKey('Refresco zero COCA COLA', '2 L', 2)
+    );
+    // In another order too.
+    expect(wordOrderKey('Refresco COCA COLA zero zero', '2 L', 2)).toBe(
+      wordOrderKey('Refresco zero zero COCA COLA', '2 L', 2)
+    );
+  });
+
+  it('drops "de" and "en" and no more, so "fresa" and "con fresa" stay apart', () => {
+    expect(
+      wordOrderKey('Yogur griego ALTEZA con fresa', '4x125 g', 4)
+    ).not.toBe(wordOrderKey('Yogur griego ALTEZA fresa', '4x125 g', 4));
+  });
+
+  it('keeps two sizes of one name apart, on the text and on the number', () => {
+    expect(wordOrderKey('Leche entera', '1 L', 1)).not.toBe(
+      wordOrderKey('Leche entera', '1.5 L', 1.5)
+    );
+    expect(wordOrderKey('Refresco cola', 'l', 1)).not.toBe(
+      wordOrderKey('Refresco cola', 'l', 0.33)
+    );
+    // The size half is read as `siblingKey` reads it, numeric text included.
+    expect(wordOrderKey('Refresco cola', 'l', '0.3300')).toBe(
+      wordOrderKey('cola Refresco', 'l', 0.33)
+    );
+  });
+
+  it('reads the Don Simon row of the DEZA fixture and its swapped twin as one key', () => {
+    const page = parseProductPage(
+      readFileSync(
+        join(
+          __dirname,
+          '../../../../../../libs/luna-shopper/deza/src/lib/__fixtures__/landing-page.html'
+        ),
+        'utf8'
+      )
+    );
+    const row = page.rows[0];
+    expect(row).toMatchObject({
+      name: 'Vino blanco DON SIMON brik',
+      sizeFormat: '1 L',
+      unitSize: 1,
+    });
+    const swapped = 'Vino DON SIMON blanco brik';
+
+    expect(wordOrderKey(row.name, row.sizeFormat, row.unitSize)).toBe(
+      'blanco brik don simon vino|1 l|1'
+    );
+    expect(wordOrderKey(swapped, row.sizeFormat, row.unitSize)).toBe(
+      wordOrderKey(row.name, row.sizeFormat, row.unitSize)
+    );
+    expect(entryKey(swapped, row.sizeFormat)).not.toBe(
+      entryKey(row.name, row.sizeFormat)
+    );
+  });
+
+  it('leaves the three row identities byte for byte as they were', () => {
+    // Production keys. A change here orphans every row of a source with no id.
+    expect(entryNameKey('Vino blanco DON SIMON brik', '1 L')).toBe(
+      'vino blanco don simon brik|1 l'
+    );
+    expect(entryKey('Vino blanco DON SIMON brik', '1 L')).toBe(
+      'bf69d7617e6548c6399ccb69b7f869bf121f2886'
+    );
+    expect(entryKey('Leche entera', '1 L')).toBe(
+      '70347bf189c7745b807b1e3c17164f9f4ccf1209'
+    );
+    expect(entryKey('Refresco cola', 'l')).toBe(
+      '0360797e6981ae88bb52bd438654c5adc0692e83'
+    );
+    expect(siblingKey('Vino blanco DON SIMON brik', '1 L', 1)).toBe(
+      'vino blanco don simon brik|1 l|1'
+    );
+    expect(siblingKey('Refresco cola', 'l', '0.3300')).toBe(
+      'refresco cola|l|0.33'
+    );
+    expect(siblingKey('Refresco cola', null, null)).toBe('refresco cola||');
+  });
+});
+
+describe('a row keyed on its own text (plan 0221, section 3.2)', () => {
+  it('is a row whose externalId is the entryKey of its name and size', () => {
+    expect(
+      isNameKeyed({
+        externalId: entryKey('Torreznos de Soria MORENO SAEZ dados', '200 g'),
+        name: 'Torreznos de Soria MORENO SAEZ dados',
+        sizeFormat: '200 g',
+      })
+    ).toBe(true);
+  });
+
+  it('is not a row keyed by an article code or a chain id', () => {
+    expect(
+      isNameKeyed({
+        externalId: '0012345',
+        name: 'Chorizo de pavo',
+        sizeFormat: null,
+      })
+    ).toBe(false);
+    expect(
+      isNameKeyed({
+        externalId: '4241',
+        name: 'Leche entera',
+        sizeFormat: '1 L',
+      })
+    ).toBe(false);
+  });
+});
+
+describe('the sibling row index, second key (plan 0221, section 3.3)', () => {
+  const OLD = 'Chorizo ibérico de bellota ESENCIA ÚNICA Covap';
+  const NEW = 'Chorizo de bellota ibérico ESENCIA ÚNICA Covap';
+
+  const named = (over: Partial<SourceCatalogEntry>): SourceCatalogEntry => {
+    const name = over.name ?? OLD;
+    const sizeFormat = over.sizeFormat === undefined ? '60 g' : over.sizeFormat;
+    return {
+      id: 'old',
+      externalId: entryKey(name, sizeFormat),
+      name,
+      sizeFormat,
+      unitSize: 60,
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-chorizo',
+      ...over,
+    } as SourceCatalogEntry;
+  };
+
+  it('proposes the one product of a bucket', () => {
+    const index = new SiblingEntryIndex([named({})]);
+
+    expect(index.matchAnyOrder(NEW, '60 g', 60)).toEqual({
+      itemId: 'item-chorizo',
+      entryId: null,
+    });
+    // The exact key, asked first, has nothing to say about a reworded name.
+    expect(index.match(NEW, '60 g', 60)).toBeNull();
+  });
+
+  it('proposes one product named by two rows', () => {
+    const index = new SiblingEntryIndex([
+      named({ id: 'a' }),
+      named({ id: 'b', name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap' }),
+    ]);
+
+    expect(index.matchAnyOrder(NEW, '60 g', 60)?.itemId).toBe('item-chorizo');
+  });
+
+  it('proposes nothing for two products', () => {
+    const index = new SiblingEntryIndex([
+      named({ id: 'a', itemId: 'item-1' }),
+      named({
+        id: 'b',
+        name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+        itemId: 'item-2',
+      }),
+    ]);
+
+    expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+  });
+
+  it('drops a REJECTED row', () => {
+    const index = new SiblingEntryIndex([
+      named({ status: SourceEntryStatus.REJECTED }),
+    ]);
+
+    expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+  });
+
+  it('drops the row being asked', () => {
+    const self = named({});
+    const index = new SiblingEntryIndex([self]);
+
+    expect(index.matchAnyOrder(OLD, '60 g', 60, self)).toBeNull();
+    // By id too, for a copy of the same row.
+    expect(index.matchAnyOrder(OLD, '60 g', 60, { ...self })).toBeNull();
+  });
+
+  it('ignores rows that are not name keyed', () => {
+    const index = new SiblingEntryIndex([named({ externalId: 'ART-0012' })]);
+
+    expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+  });
+
+  it('never answers an entryId, even for a lone waiting sibling', () => {
+    const index = new SiblingEntryIndex([
+      named({ status: SourceEntryStatus.UNRESOLVED, itemId: null }),
+    ]);
+
+    expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+    expect(
+      new SiblingEntryIndex([named({})]).matchAnyOrder(NEW, '60 g', 60)?.entryId
+    ).toBeNull();
+  });
+
+  it('holds a row this run created from the moment it exists', () => {
+    const index = new SiblingEntryIndex([]);
+    expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+
+    index.add(named({}));
+    expect(index.matchAnyOrder(NEW, '60 g', 60)?.itemId).toBe('item-chorizo');
   });
 });

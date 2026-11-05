@@ -70,10 +70,12 @@ export function entryNameKey(name: string, sizeFormat: string | null): string {
  * section 6, generalized by plan 0086 D2).
  *
  * **The consequence, stated because it is real: a reworded description is a new
- * candidate and orphans the old one.** There is no id to notice that they are
- * the same product. The previous row stops being seen and ages out on
- * `lastSeenAt`, and an operator who had already accepted it sees a new candidate
- * for a product the catalog holds, which rung 4 then proposes a match for.
+ * row and orphans the old one.** There is no id to notice that they are the
+ * same product. The previous row stops being seen and ages out on
+ * `lastSeenAt`. Rung 4 proposes the new row as the old row's product only when
+ * the words of the two names agree in another order, without "de" and "en", at
+ * the same size ({@link wordOrderKey}, plan 0221). Any other rewording waits
+ * for a person.
  */
 export function entryKey(name: string, sizeFormat: string | null): string {
   return createHash('sha1')
@@ -208,6 +210,51 @@ export function siblingKey(
 }
 
 /**
+ * The words that {@link wordOrderKey} drops, and no more (plan 0221, section
+ * 3.1). Adding "con" joins "Yogur griego ALTEZA fresa" and "Yogur griego ALTEZA
+ * con fresa", which a person bound to two products.
+ */
+const WORD_ORDER_STOP_WORDS = new Set(['de', 'en']);
+
+/**
+ * Rung 4's second key (plan 0221, section 3.1): the words of the normalized
+ * name without "de" and "en", sorted, then the size half of {@link siblingKey}.
+ *
+ * **Repeated words are kept.** "Refresco zero COCA COLA" and "Refresco zero
+ * zero COCA COLA" are two products, and a key that read the name as a set
+ * would join them.
+ *
+ * The size half is taken from {@link siblingKey} itself, so this key is never
+ * looser on size than the exact one.
+ */
+export function wordOrderKey(
+  name: string,
+  sizeFormat: string | null,
+  unitSize: number | string | null | undefined
+): string {
+  const words = normalizeName(name)
+    .split(' ')
+    .filter((word) => word !== '' && !WORD_ORDER_STOP_WORDS.has(word))
+    .sort();
+  // `siblingKey` of an empty name is `|<size text>|<unit size>`.
+  return `${words.join(' ')}${siblingKey('', sizeFormat, unitSize)}`;
+}
+
+/**
+ * Whether a row is keyed on its own printed text (plan 0221, section 3.2): its
+ * `externalId` is the {@link entryKey} of its name and size text.
+ *
+ * A chain id never equals a SHA1 of a name, so the test is exact. It is true
+ * for a DEZA walk row and for a file import row with no `external_id`, and
+ * false for every row a chain gave an id or an article code.
+ */
+export function isNameKeyed(
+  row: Pick<SourceCatalogEntry, 'externalId' | 'name' | 'sizeFormat'>
+): boolean {
+  return row.externalId === entryKey(row.name, row.sizeFormat);
+}
+
+/**
  * The chain's own rows, keyed by {@link siblingKey} (plan 0086, section 4,
  * rung 4).
  *
@@ -224,6 +271,12 @@ export function siblingKey(
  */
 export class SiblingEntryIndex {
   private readonly byNameKey = new Map<string, SourceCatalogEntry[]>();
+  /**
+   * The name keyed rows only, under {@link wordOrderKey} (plan 0221). A row
+   * keyed by a chain id or an article code is never in it: El Jamón prints no
+   * brand, and the key would join two brands of one kind of food.
+   */
+  private readonly byWordOrderKey = new Map<string, SourceCatalogEntry[]>();
 
   constructor(rows: Iterable<SourceCatalogEntry>) {
     for (const row of rows) {
@@ -233,12 +286,17 @@ export class SiblingEntryIndex {
 
   /** Rows this run created are siblings too, from the moment they exist. */
   add(row: SourceCatalogEntry): void {
-    const key = siblingKey(row.name, row.sizeFormat, row.unitSize);
-    const bucket = this.byNameKey.get(key);
-    if (bucket) {
-      bucket.push(row);
-    } else {
-      this.byNameKey.set(key, [row]);
+    push(
+      this.byNameKey,
+      siblingKey(row.name, row.sizeFormat, row.unitSize),
+      row
+    );
+    if (isNameKeyed(row)) {
+      push(
+        this.byWordOrderKey,
+        wordOrderKey(row.name, row.sizeFormat, row.unitSize),
+        row
+      );
     }
   }
 
@@ -278,6 +336,50 @@ export class SiblingEntryIndex {
     return siblings.length === 1
       ? { itemId: null, entryId: siblings[0].id }
       : null;
+  }
+
+  /**
+   * The second key of rung 4 (plan 0221, section 3.3): the one product the
+   * `ACTIVE` rows under {@link wordOrderKey} name, or null.
+   *
+   * The caller asks it only for a name keyed row, and only when the exact key
+   * answered nothing. `REJECTED` rows and `self`, the row being asked on a
+   * touch, are dropped. Two products in the bucket, or none, propose nothing.
+   *
+   * **It never proposes a lone sibling through `entryId`.** Two waiting rows
+   * whose words agree are almost always the listing repeating one product in
+   * one walk, and a sibling proposal there sends a person in a circle between
+   * two rows nobody has decided.
+   */
+  matchAnyOrder(
+    name: string,
+    sizeFormat: string | null,
+    unitSize: number | string | null,
+    self: SourceCatalogEntry | null = null
+  ): SiblingProposal | null {
+    const itemIds = new Set(
+      (this.byWordOrderKey.get(wordOrderKey(name, sizeFormat, unitSize)) ?? [])
+        .filter(
+          (row) =>
+            row !== self &&
+            (self === null || row.id !== self.id) &&
+            row.status === SourceEntryStatus.ACTIVE &&
+            row.itemId
+        )
+        .map((row) => row.itemId as string)
+    );
+    return itemIds.size === 1
+      ? { itemId: [...itemIds][0], entryId: null }
+      : null;
+  }
+}
+
+function push<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const bucket = map.get(key);
+  if (bucket) {
+    bucket.push(value);
+  } else {
+    map.set(key, [value]);
   }
 }
 

@@ -4070,7 +4070,8 @@ export type EnumsItemSourceMatch =
   | 'NAME_BRAND_SIZE'
   | 'NAME_SIZE'
   | 'MANUAL'
-  | 'SHARED_EAN';
+  | 'SHARED_EAN'
+  | 'NAME_WORDS_SIZE';
 
 /**
  * `enums.LineApprovalStatus` in the gateway's OpenAPI document.

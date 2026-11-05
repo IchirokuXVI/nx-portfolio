@@ -157,6 +157,12 @@ export interface RunReportResult {
    */
   priceConflicts: PriceConflict[];
   /**
+   * Rows this run proposed by the words of their name in any order (plan
+   * 0221), new and waiting rows together. Each waits for a person as a
+   * `CANDIDATE` with `NAME_WORDS_SIZE`.
+   */
+  wordOrderProposals: number;
+  /**
    * Photo links this run sent for its bound rows (plan 0198): rows that had
    * no link or state a new address. Saved whatever the chain's switch says.
    */
@@ -304,6 +310,7 @@ export class RunReportSink implements RunReport {
     pricesConfirmed: 0,
     pricesConflicted: 0,
     priceConflicts: [],
+    wordOrderProposals: 0,
     imagesLinked: 0,
     imagesMoved: 0,
     imagesUnchanged: 0,
@@ -479,6 +486,7 @@ export class RunReportSink implements RunReport {
       this.result.pricesPublished += counters.pricesWritten;
       this.result.pricesConfirmed += counters.pricesConfirmed;
       this.result.pricesConflicted += counters.pricesConflicted;
+      this.result.wordOrderProposals += counters.wordOrderProposals;
       this.result.priceConflicts = priceConflicts.slice(
         0,
         PRICE_CONFLICTS_NAMED
