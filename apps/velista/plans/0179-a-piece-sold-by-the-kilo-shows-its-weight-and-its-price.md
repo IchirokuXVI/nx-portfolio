@@ -1,3 +1,5 @@
+> **PR:** [#920](https://github.com/IchirokuXVI/nx-portfolio/pull/920)
+
 # 0179: a piece sold by the kilo shows its weight and its price
 
 > Found on 2026-11-03: velista shows Mercadona's 1.56 kg cheese piece as "1560 g" for
