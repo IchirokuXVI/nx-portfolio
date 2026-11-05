@@ -1769,4 +1769,90 @@ describe('ItemService', () => {
       });
     });
   });
+
+  describe('a run´s weight comes from a service only (plan 0244, section 7)', () => {
+    // The gate of this file answers an operator, so every call here is a
+    // person's. The service actor's half needs the real gate and Postgres:
+    // `item-approx-weight.integration.spec.ts`.
+    const untouched = () =>
+      ({
+        find: jest.fn(),
+        findOne: jest.fn(),
+        save: jest.fn(),
+        create: jest.fn((x) => x),
+      }) as unknown as jest.Mocked<Repository<Item>>;
+
+    it('refuses a create from an operator that states SOURCE, before any write', async () => {
+      const items = untouched();
+      const { service } = build({ items });
+      await expect(
+        service.create({
+          userId: ADMIN,
+          name: { es: 'Queso' },
+          categoryIds: ['milk'],
+          defaultUnit: UnitOfMeasure.KILOGRAM,
+          approxWeight: 1560,
+          approxWeightSetBy: 'SOURCE',
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(items.save).not.toHaveBeenCalled();
+    });
+
+    it('refuses an edit and a batch from an operator that states SOURCE, before any read', async () => {
+      const items = untouched();
+      const { service } = build({ items });
+      await expect(
+        service.update({
+          userId: ADMIN,
+          itemId: 'i1',
+          approxWeight: 1560,
+          approxWeightSetBy: 'SOURCE',
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.updateMany({
+          userId: ADMIN,
+          items: [{ itemId: 'i1', approxWeightSetBy: 'SOURCE' }],
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(items.find).not.toHaveBeenCalled();
+      expect(items.save).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findCreatedFromEntry (plan 0244, section 7.4)', () => {
+    it('is gated, and refuses a blank row', async () => {
+      const items = { query: jest.fn(async () => []) };
+      const { service } = build({
+        items: items as unknown as Repository<Item>,
+      });
+      await expect(
+        service.findCreatedFromEntry({
+          userId: 'intruder',
+          createdFromEntry: 's:1',
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(
+        service.findCreatedFromEntry({ userId: ADMIN, createdFromEntry: ' ' })
+      ).rejects.toBeInstanceOf(ValidationException);
+      expect(items.query).not.toHaveBeenCalled();
+    });
+
+    it('answers null when no CREATE audit row names the row', async () => {
+      const items = { query: jest.fn(async () => []) };
+      const { service } = build({
+        items: items as unknown as Repository<Item>,
+      });
+      await expect(
+        service.findCreatedFromEntry({
+          userId: ADMIN,
+          createdFromEntry: 's:24700',
+        })
+      ).resolves.toEqual({ item: null });
+      expect(items.query).toHaveBeenCalledWith(
+        expect.stringContaining('catalog_audit'),
+        ['s:24700']
+      );
+    });
+  });
 });

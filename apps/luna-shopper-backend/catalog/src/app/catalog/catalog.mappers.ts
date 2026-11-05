@@ -1,6 +1,7 @@
 import {
   CONTENT_LOCALES,
   ItemImageSource,
+  UnitOfMeasure,
   type BrandView,
   type ContentLocale,
   type ItemImageView,
@@ -284,6 +285,8 @@ export function toItemView(
     ean: row.ean,
     eans,
     unitSize: toNumber(row.unitSize),
+    approxWeight: toNumber(row.approxWeight ?? null),
+    approxWeightSetBy: row.approxWeightSetBy ?? null,
     packCount: row.packCount ?? null,
     categories,
     defaultUnit: row.defaultUnit,
@@ -343,11 +346,62 @@ function toInstant(value: Date | string | null | undefined): string | null {
   return (value instanceof Date ? value : new Date(value)).toISOString();
 }
 
-export function toItemOfferView(row: SupermarketItem): ItemOfferView {
+/** What a piece price is derived from: the product's unit and its weight. */
+export type PiecePriceBasis = Pick<Item, 'defaultUnit' | 'approxWeight'>;
+
+/**
+ * What one kilo piece costs (plan 0244, section 3.3, decision D1):
+ * `round(approxWeight / 1000 × price, 2)`, half up to the cent.
+ *
+ * **The one place the formula lives.** Every offer view is built through
+ * {@link toItemOfferView} or the raw offer mapper of the item service, and both
+ * call this. Null unless the product is `KILOGRAM` with a weight and the offer
+ * has a price: a `UNIT` product with a weight already prices the piece, and a
+ * product sold by the kilo with no weight has no piece to price.
+ *
+ * Worked in whole numbers, because a float product of a weight and a price
+ * rounds a half cent the wrong way often enough to matter: the weight in ten
+ * thousandths of a gram (the column's scale) times the price in cents, over
+ * ten million.
+ */
+export function piecePriceOf(
+  item: PiecePriceBasis | null | undefined,
+  price: number | null
+): number | null {
+  const weight = toNumber(item?.approxWeight ?? null);
+  if (
+    !item ||
+    item.defaultUnit !== UnitOfMeasure.KILOGRAM ||
+    weight === null ||
+    !(weight > 0) ||
+    price === null ||
+    !Number.isFinite(price) ||
+    price < 0
+  ) {
+    return null;
+  }
+  const tenThousandths = BigInt(Math.round(weight * 10_000));
+  const cents = BigInt(Math.round(price * 100));
+  const divisor = BigInt(10_000_000);
+  // Half up: add half the divisor before the division, which truncates.
+  const pieceCents =
+    (tenThousandths * cents * BigInt(2) + divisor) / (divisor * BigInt(2));
+  return Number(pieceCents) / 100;
+}
+
+/**
+ * One offer on the wire. `item` is the product the offer prices, for its
+ * piece price (plan 0244); null derives none.
+ */
+export function toItemOfferView(
+  row: SupermarketItem,
+  item: PiecePriceBasis | null
+): ItemOfferView {
+  const price = toNumber(row.price);
   return {
     itemId: row.itemId,
     priceScopeId: row.priceScopeId,
-    price: toNumber(row.price),
+    price,
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
@@ -357,6 +411,7 @@ export function toItemOfferView(row: SupermarketItem): ItemOfferView {
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
     stale: row.stale ?? false,
     outOfStockAt: toInstant(row.outOfStockAt),
+    piecePrice: piecePriceOf(item, price),
   };
 }
 

@@ -84,6 +84,8 @@ const SNAPSHOT: ItemSnapshot = {
   unitSize: 1,
   packCount: null,
   defaultUnit: UnitOfMeasure.LITER,
+  // Plan 0244: a pack has no weight of a piece.
+  approxWeight: null,
 };
 
 /** Nothing chosen, which is an ordinary settle. */

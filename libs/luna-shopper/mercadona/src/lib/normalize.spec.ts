@@ -2,6 +2,7 @@ import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import categoriesTree from './__fixtures__/categories-tree.json';
 import categoryExpanded from './__fixtures__/category-expanded.json';
 import cheeseListing from './__fixtures__/category-listing-cheese.json';
+import approximateWeightPerPiece from './__fixtures__/product-approximate-weight-per-piece.json';
 import approximateWeight from './__fixtures__/product-approximate-weight.json';
 import boxOfCapsules from './__fixtures__/product-box-of-capsules.json';
 import capsules from './__fixtures__/product-capsules-per-unit.json';
@@ -39,6 +40,7 @@ describe('normalizeProduct', () => {
       name: { es: 'Aceite de oliva 0,4º Hacendado' },
       brand: 'Hacendado',
       soldByWeight: false,
+      approxWeight: null,
       unitSize: 1,
       unit: UnitOfMeasure.LITER,
       packCount: null,
@@ -789,6 +791,146 @@ describe('a product sold by weight (plan 0181)', () => {
   it('is not sold by weight when the payload does not say', () => {
     // Every fixture authored before the field was known carries none.
     expect(normalizeProduct(oliveOil).soldByWeight).toBe(false);
+  });
+});
+
+describe('the approximate weight of a piece (plan 0244, section 5.1)', () => {
+  it('is what the captured piece priced as one says it is', () => {
+    expect(approximateWeightPerPiece.id).toBe('60226');
+    expect(approximateWeightPerPiece.price_instructions).toMatchObject({
+      approx_size: true,
+      unit_size: 0.58,
+      size_format: 'kg',
+      unit_price: '6.50',
+      bulk_price: '6.50',
+      reference_price: '6.500',
+      reference_format: 'ud',
+    });
+  });
+
+  it('weighs a piece sold by the kilo and keeps its price per kilo', () => {
+    expect(normalizeProduct(approximateWeight)).toMatchObject({
+      externalId: '50946',
+      approxWeight: 1540,
+      soldByWeight: true,
+      unitSize: null,
+      price: 9.41,
+      unitPrice: 9.41,
+      unitPriceLabel: 'kg',
+    });
+  });
+
+  it('weighs a piece the chain compares per piece and keeps its piece price', () => {
+    expect(normalizeProduct(approximateWeightPerPiece)).toMatchObject({
+      externalId: '60226',
+      approxWeight: 580,
+      soldByWeight: false,
+      unitSize: null,
+      unit: UnitOfMeasure.KILOGRAM,
+      // `unit_price`, the piece. `bulk_price` stays the figure beside it.
+      price: 6.5,
+      unitPrice: 6.5,
+      unitPriceLabel: 'ud',
+      packCount: null,
+    });
+  });
+
+  it('states no weight for a fixed pack, in-store barcode or not', () => {
+    expect(normalizeProduct(fixedPackInStoreBarcode)).toMatchObject({
+      approxWeight: null,
+      unitSize: 0.05,
+    });
+    expect(normalizeProduct(oliveOil).approxWeight).toBeNull();
+  });
+
+  it('states no weight when the approximate size is not in kilos', () => {
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        size_format: 'ud',
+      },
+    });
+    expect(product.approxWeight).toBeNull();
+  });
+
+  it('rounds the grams to four decimals', () => {
+    const product = normalizeProduct({
+      ...approximateWeightPerPiece,
+      price_instructions: {
+        ...approximateWeightPerPiece.price_instructions,
+        unit_size: 0.123456789,
+      },
+    });
+    expect(product.approxWeight).toBe(123.4568);
+  });
+
+  it('states no weight for an approximate piece with no unit_size', () => {
+    const product = normalizeProduct({
+      ...approximateWeight,
+      price_instructions: {
+        ...approximateWeight.price_instructions,
+        unit_size: null,
+      },
+    });
+    expect(product).toMatchObject({ approxWeight: null, unitSize: null });
+  });
+
+  it('says nothing of a weight on an unavailable product', () => {
+    expect(unavailableProduct('60226', OBSERVED_AT).approxWeight).toBeNull();
+  });
+
+  describe('in a category listing', () => {
+    const listed = (id: string) =>
+      normalizeCategoryProducts(cheeseListing).find(
+        (product) => product.externalId === id
+      );
+
+    it('weighs each piece the captured listing calls approximate', () => {
+      expect(listed('50946')).toMatchObject({
+        approxWeight: 1540,
+        soldByWeight: true,
+        unitSize: null,
+      });
+      expect(listed('50943')).toMatchObject({
+        approxWeight: 420,
+        soldByWeight: true,
+        unitSize: null,
+      });
+      expect(listed('23561')).toMatchObject({
+        approxWeight: null,
+        unitSize: 0.35,
+      });
+    });
+
+    it('carries reference_format, so the listing decides the kind alone', () => {
+      // Every row of the captured listing prints the comparison format.
+      const raw = cheeseListing.categories.flatMap(
+        (category) => category.products
+      );
+      for (const product of raw) {
+        expect(product.price_instructions.reference_format).toBeTruthy();
+      }
+      const [perKilo, perPiece] = normalizeCategoryProducts({
+        id: 0,
+        name: '',
+        products: [approximateWeight, approximateWeightPerPiece],
+      });
+      expect(perKilo).toMatchObject({
+        approxWeight: 1540,
+        soldByWeight: true,
+        price: 9.41,
+        unitSize: null,
+      });
+      expect(perPiece).toMatchObject({
+        approxWeight: 580,
+        soldByWeight: false,
+        price: 6.5,
+        unitPrice: 6.5,
+        unitPriceLabel: 'ud',
+        unitSize: null,
+      });
+    });
   });
 });
 

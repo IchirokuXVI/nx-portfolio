@@ -64,3 +64,5 @@ export type {
   DiaStoreFile,
   DiaStoreRecord,
 } from './lib/types';
+export { isSoldByWeight, weighedPrice, weightOf } from './lib/weight';
+export type { DiaWeight } from './lib/weight';

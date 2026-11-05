@@ -363,6 +363,13 @@ export enum HarvestWarningCode {
   SOURCE_PAUSED = 'SOURCE_PAUSED',
   /** A probe after the pause was answered, and the run goes on (plan 0215). */
   SOURCE_RESUMED = 'SOURCE_RESUMED',
+  /**
+   * Two or more `ACTIVE` rows of one chain bound to one product state
+   * different weights of one piece (plan 0244, section 5.7). Two pieces of
+   * different weight are two products, so this is a merge for a person to
+   * undo. No weight is written onto that product.
+   */
+  APPROX_WEIGHT_ROWS_DISAGREE = 'APPROX_WEIGHT_ROWS_DISAGREE',
 }
 
 /**

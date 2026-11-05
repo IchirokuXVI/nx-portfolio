@@ -966,6 +966,17 @@ export interface SourceCatalogEntryView {
    * whose payload has no field that says it.
    */
   soldByWeight: boolean;
+  /**
+   * The approximate weight of one piece, in grams, as the last run that saw
+   * the row read it (plan 0244, section 5.5). The source's, so every run
+   * rewrites it. Null whenever `unitSize` is set, and for a row whose source
+   * states no weight.
+   *
+   * Independent of {@link soldByWeight}: a piece priced as one has a weight
+   * and is not sold by weight. Optional until the harvester fills it on every
+   * view it builds.
+   */
+  approxWeight?: number | null;
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
   /**

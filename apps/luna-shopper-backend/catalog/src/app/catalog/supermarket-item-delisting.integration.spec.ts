@@ -224,7 +224,7 @@ describeIntegration(
         delistedAt: null,
         outOfStockAt: row.outOfStockAt?.toISOString(),
       });
-      expect(toItemOfferView(row).outOfStockAt).toBe(
+      expect(toItemOfferView(row, null).outOfStockAt).toBe(
         row.outOfStockAt?.toISOString()
       );
 

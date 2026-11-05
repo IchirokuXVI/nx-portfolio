@@ -592,6 +592,9 @@ const sourceCatalogEntryProperties = {
   sizeUnit: sizeUnitOrNull(),
   // Whether the source sells the product by weight (plan 0181).
   soldByWeight: boolean(),
+  // Plan 0244: the approximate weight of one piece in grams, null beside a
+  // size. Stated but not required, so a reader built before it validates.
+  approxWeight: numberOrNull(),
   sizeFormat: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),

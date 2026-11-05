@@ -287,6 +287,29 @@ export const ITEM_PATTERNS = {
    */
   fillPackCounts: 'item.fillPackCounts',
   /**
+   * Write the approximate weight a run read onto products with no size (plan
+   * 0244, section 3.4).
+   *
+   * The harvester's, after a run. **It never writes a product that has a size,
+   * and it never overwrites a weight a person typed** (`approxWeightSetBy`
+   * `ADMIN`): only {@link ITEM_PATTERNS.update} changes one of those. It does
+   * not change `defaultUnit`.
+   */
+  setApproxWeights: 'item.setApproxWeights',
+  /**
+   * The product whose `CREATE` audit row names this queue row in
+   * `createdFromEntry` (plan 0244, section 7.4), or null when none does.
+   *
+   * What lets a tool that creates in catalog and binds in the harvester stop
+   * between the two and run again without creating twice: before it creates,
+   * it asks. Two such products answer the **oldest**, by audit time and then
+   * by audit id, because the first is the one a later run would have bound.
+   * Admin only (an operator's token or a service), as every write is. It
+   * reads the audit trail, which keeps a row for 180 days by default
+   * (`RETENTION_AUDIT`).
+   */
+  findCreatedFromEntry: 'item.findCreatedFromEntry',
+  /**
    * The price a shopper saw for one product, at each scope asked, over a
    * range of time (plan 0196, section 2).
    *
@@ -1175,6 +1198,18 @@ export interface ItemOfferView {
    * priced and bought as any other.
    */
   outOfStockAt: string | null;
+  /**
+   * What one piece costs, for a kilo piece (plan 0244, section 3.3):
+   * `round(approxWeight / 1000 × price, 2)`, half up to the cent.
+   *
+   * Set only when the product is `KILOGRAM` with an
+   * {@link ItemView.approxWeight} and this offer has a price, and null
+   * otherwise. A `UNIT` product with a weight answers null, because its
+   * `price` is already the price of the piece. **Derived on every read and
+   * stored nowhere**: `price` stays the price of a kilo, and it is what every
+   * comparison and every order reads.
+   */
+  piecePrice: number | null;
 }
 
 /** The bounds of one {@link ITEM_PATTERNS.priceHistory} read (plan 0196). */
@@ -1422,6 +1457,30 @@ export interface ItemView {
   /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
   unitSize: number | null;
   /**
+   * The approximate weight of one piece, in grams, when the chain says it
+   * varies (plan 0244): a cheese piece of "about 1.56 kg", a salad tub of
+   * "about 580 g".
+   *
+   * Never set beside {@link unitSize}: a product has a fixed size or an
+   * approximate weight, never both. Null for every product with a size and
+   * for a product sold by the kilo with no stated weight. What `price` means
+   * is still decided by {@link defaultUnit} alone: on a `KILOGRAM` product it
+   * is a kilo and {@link ItemOfferView.piecePrice} is derived from this
+   * weight, and on a `UNIT` product it is the piece and this weight is
+   * information.
+   */
+  approxWeight: number | null;
+  /**
+   * Who wrote {@link approxWeight} (plan 0244, section 3.1). `SOURCE` is a
+   * run, and the next run may change it. `ADMIN` is a person, and no run
+   * changes it. Null exactly when the weight is null.
+   *
+   * **Optional**, because the back office is the reader it is for. Catalog
+   * fills it on every view it builds, and a view built anywhere else may
+   * leave it out.
+   */
+  approxWeightSetBy?: ApproxWeightSetBy | null;
+  /**
    * How many units the pack holds, a whole number from {@link PACK_COUNT_MIN}
    * to {@link PACK_COUNT_MAX}, or null for a product that is not a pack or
    * whose source did not state a count (plan 0162).
@@ -1495,11 +1554,15 @@ export interface ItemView {
  *
  * It is a copy and it does not move. A product that catalog renames, merges or
  * removes afterwards leaves this as it was.
+ *
+ * `approxWeight` (plan 0244, section 4) is the weight of the piece that was
+ * bought, so the purchase still reads "about 1.56 kg" after the product
+ * moves. Optional, because every buy recorded before that plan has none.
  */
 export type ItemSnapshot = Pick<
   ItemView,
   'name' | 'brand' | 'unitSize' | 'packCount' | 'defaultUnit'
->;
+> & { approxWeight?: number | null };
 
 /**
  * A group and the cheapest way to buy it (plan 0048, section 3).
@@ -2321,6 +2384,36 @@ export interface CreateItemRequest extends AdminCredential {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  /**
+   * The approximate weight of one piece, in grams (plan 0244). See
+   * {@link ItemView.approxWeight}. Refused beside a `unitSize`, and at zero
+   * or below, with `item_approx_weight_beside_size`.
+   */
+  approxWeight?: number | null;
+  /**
+   * Who states {@link approxWeight} (plan 0244, sections 3.1 and 5.6).
+   *
+   * Absent is `ADMIN`, which is what every create through the gateway is:
+   * the gateway's body has no such field. The harvester sends `SOURCE` when
+   * it creates a product from a queue row that carries a weight, so the next
+   * run may move the weight. Ignored when the weight is absent or null.
+   *
+   * **Only a service may state `SOURCE`.** A caller that presents an
+   * operator's token and sends it is refused with `forbidden`, because a
+   * person's weight is the one no run may move.
+   */
+  approxWeightSetBy?: ApproxWeightSetBy;
+  /**
+   * The queue row a product is created for, when a tool must find that
+   * product again (plan 0244, section 7.4): `<supermarketId>:<externalId>`,
+   * the identity of a row of `source_catalog_entries` in the harvester.
+   *
+   * Recorded in the `after` of the product's `CREATE` audit row and nowhere
+   * else: no column holds it and no view answers it.
+   * {@link ITEM_PATTERNS.findCreatedFromEntry} reads it back. Release task
+   * 0006 is the one sender today.
+   */
+  createdFromEntry?: string;
   /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
   packCount?: number | null;
   /**
@@ -2382,6 +2475,27 @@ export interface UpdateItemRequest extends AdminCredential {
   ean?: string | null;
   unitSize?: number | null;
   /**
+   * Set, correct or (with `null`) clear the approximate weight of one piece,
+   * in grams (plan 0244, section 3.2).
+   *
+   * A weight is written as `ADMIN`, and no run changes it after that. A null
+   * hands the weight back to the source: the next run fills it again. An
+   * edit that sets a `unitSize` on a product that holds a weight must send
+   * `approxWeight: null` with it, or it is refused with
+   * `item_approx_weight_beside_size`.
+   */
+  approxWeight?: number | null;
+  /**
+   * Who states {@link approxWeight}, as on a create (plan 0244, section 7).
+   *
+   * Absent is `ADMIN`. A service may send `SOURCE`, so a correction it
+   * makes stays one the next run may move: release task 0006 converts a
+   * sized piece this way, in one transaction. An operator's token that sends
+   * `SOURCE` is refused with `forbidden`. The gateway's body has no such
+   * field. Ignored when the weight is absent or null.
+   */
+  approxWeightSetBy?: ApproxWeightSetBy;
+  /**
    * Set, correct or (with `null`) clear the pack count (plan 0162).
    *
    * **The only write that changes a count that is set.** A run fills a null
@@ -2428,6 +2542,8 @@ export interface ItemExpectation {
   name?: LocalizedText;
   brand?: string | null;
   unitSize?: number | null;
+  /** Compared as a number, as `unitSize` is (plan 0244, section 3.3). */
+  approxWeight?: number | null;
   defaultUnit?: UnitOfMeasure;
   packCount?: number | null;
   categorySlugs?: string[];
@@ -2534,6 +2650,71 @@ export interface FillPackCountsResult {
   written: number;
 }
 
+/**
+ * Who wrote a product's approximate weight (plan 0244, section 3.1): a run
+ * (`SOURCE`), which the next run may change, or a person (`ADMIN`), which no
+ * run changes.
+ */
+export const APPROX_WEIGHT_SET_BY = ['SOURCE', 'ADMIN'] as const;
+export type ApproxWeightSetBy = (typeof APPROX_WEIGHT_SET_BY)[number];
+
+/**
+ * One product a run saw with a weight, for
+ * {@link ITEM_PATTERNS.setApproxWeights}. The weight is in grams and above
+ * zero.
+ */
+export interface ApproxWeightFill {
+  itemId: string;
+  approxWeight: number;
+}
+
+/**
+ * Write the approximate weight a run read onto the products bound to its rows
+ * (plan 0244, section 3.4).
+ *
+ * Sent by the harvester after the price writes of a run, one pair per product.
+ * Capped at {@link APPROX_WEIGHT_FILL_MAX} pairs, and the harvester sends
+ * several calls for a longer list: each pair is written on its own merit, so
+ * two calls cannot leave anything half done. A product named twice refuses the
+ * whole call.
+ */
+export interface SetApproxWeightsRequest extends AdminCredential {
+  entries: ApproxWeightFill[];
+}
+
+/** How many pairs one {@link SetApproxWeightsRequest} may carry. */
+export const APPROX_WEIGHT_FILL_MAX = PACK_COUNT_FILL_MAX;
+
+export interface SetApproxWeightsResult {
+  /**
+   * How many products the call wrote. A product that already held the same
+   * weight, or that no longer exists, is in none of the three counts.
+   */
+  written: number;
+  /** Products skipped because they have a size, whatever their unit. */
+  skippedHasSize: number;
+  /** Products skipped because a person wrote their weight. */
+  skippedSetByAdmin: number;
+}
+
+/**
+ * The product created for one queue row, if catalog holds one (plan 0244,
+ * section 7.4). `createdFromEntry` is the value the create stated, see
+ * {@link CreateItemRequest.createdFromEntry}.
+ */
+export interface FindItemCreatedFromEntryRequest extends AdminCredential {
+  createdFromEntry: string;
+}
+
+/**
+ * The product, or null when no create stated that row. The view is the one
+ * {@link ITEM_PATTERNS.getMany} answers, so a product merged since carries
+ * `mergedInto` and the caller decides what that means.
+ */
+export interface FindItemCreatedFromEntryResult {
+  item: ItemView | null;
+}
+
 /** Find the item carrying this EAN, if catalog has one (plan 0038, section 6.2). */
 export interface FindItemByEanRequest {
   userId: string;
@@ -2633,7 +2814,11 @@ export interface MergeItemRequest extends AdminCredential {
    * R28): the survivor then holds two articles of that chain.
    */
   allowSecondArticle?: boolean;
-  /** Merge even when `unitSize` or `defaultUnit` differ. */
+  /**
+   * Merge even when `unitSize`, `defaultUnit` or `approxWeight` differ (plan
+   * 0244, section 3.5). The survivor keeps its own weight and its own
+   * `approxWeightSetBy`.
+   */
   allowFormatDifference?: boolean;
 }
 

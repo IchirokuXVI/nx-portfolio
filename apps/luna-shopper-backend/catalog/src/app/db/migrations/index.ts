@@ -31,6 +31,7 @@ import { ItemLinkedImages1758900000000 } from './1758900000000-ItemLinkedImages'
 import { SectionsOfAShop1759000000000 } from './1759000000000-SectionsOfAShop';
 import { MergedItems1759100000000 } from './1759100000000-MergedItems';
 import { SupermarketItemDelistedAt1759200000000 } from './1759200000000-SupermarketItemDelistedAt';
+import { ItemApproxWeight1759300000000 } from './1759300000000-ItemApproxWeight';
 
 /**
  * Every catalog migration, in the order TypeORM must apply them (plan 0027,
@@ -75,4 +76,5 @@ export const CATALOG_MIGRATIONS = [
   SectionsOfAShop1759000000000,
   MergedItems1759100000000,
   SupermarketItemDelistedAt1759200000000,
+  ItemApproxWeight1759300000000,
 ];

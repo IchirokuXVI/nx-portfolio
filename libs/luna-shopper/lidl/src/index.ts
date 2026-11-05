@@ -42,7 +42,12 @@ export type {
 } from './lib/normalize';
 export { PHOTO_HOSTS, photoAddress, photoAddressRead } from './lib/photo';
 export type { PhotoFields, PhotoRead } from './lib/photo';
-export { packCountIn, parseSize } from './lib/size';
+export {
+  approxWeightIn,
+  approxWeightOf,
+  packCountIn,
+  parseSize,
+} from './lib/size';
 export type { LidlSize } from './lib/size';
 export {
   LIDL_BASE_URL,

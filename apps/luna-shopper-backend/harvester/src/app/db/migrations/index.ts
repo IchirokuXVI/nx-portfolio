@@ -24,6 +24,7 @@ import { HarvestSchedules1759400000000 } from './1759400000000-HarvestSchedules'
 import { RunStopReason1759500000000 } from './1759500000000-RunStopReason';
 import { HarvestRunCounters1759600000000 } from './1759600000000-HarvestRunCounters';
 import { SourceEntryScopePresence1759900000000 } from './1759900000000-SourceEntryScopePresence';
+import { SourceEntryApproxWeight1760244000000 } from './1760244000000-SourceEntryApproxWeight';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -60,4 +61,5 @@ export const HARVESTER_MIGRATIONS = [
   RunStopReason1759500000000,
   HarvestRunCounters1759600000000,
   SourceEntryScopePresence1759900000000,
+  SourceEntryApproxWeight1760244000000,
 ];
