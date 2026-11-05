@@ -11,7 +11,7 @@
 # The base is pinned by digest, like the Node images, so the runtime is identical
 # until somebody changes this line on purpose. Bump it with
 # `docker buildx imagetools inspect python:3.12-slim --format '{{println .Manifest.Digest}}'`.
-FROM python:3.12-slim@sha256:dddfd7e07f9d15aeeca61529320492139d21cac7f0070c00609243e51e4e0016 AS base
+FROM python:3.12-slim@sha256:b18b261e1b4974b4f321451ad5251ded85abb22c2b8b262da527dda1d031ab30 AS base
 
 # ffmpeg decodes whatever container the browser recorded (webm, ogg, mp4, wav).
 RUN apt-get update \
