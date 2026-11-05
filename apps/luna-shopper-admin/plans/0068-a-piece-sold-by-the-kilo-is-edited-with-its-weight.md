@@ -1,3 +1,5 @@
+> **PR:** [#919](https://github.com/IchirokuXVI/nx-portfolio/pull/919)
+
 # 0068 A piece sold by the kilo is edited with its weight
 
 > Backend half: plan `0244` of `apps/luna-shopper-backend/plans/` (a piece sold by the kilo
