@@ -1,3 +1,5 @@
+> **PR:** [#924](https://github.com/IchirokuXVI/nx-portfolio/pull/924)
+
 # 0219: a probe per chain checks the storefront shape
 
 > A walk of a chain is the only thing today that finds out a storefront changed. A Mercadona walk
