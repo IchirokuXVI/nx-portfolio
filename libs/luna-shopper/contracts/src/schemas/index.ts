@@ -56,3 +56,5 @@ export {
   validateSchema,
 } from './validator';
 export type { ValidationResult } from './validator';
+// A probe per chain checks the storefront shape (plan 0219).
+export { SOURCE_PROBE_SCHEMA_IDS } from './messages/source-probe.ids';

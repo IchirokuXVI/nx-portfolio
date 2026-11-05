@@ -343,6 +343,7 @@ CREATE TABLE "source_probes" (
   "status"            "source_probe_status" NOT NULL DEFAULT 'RUNNING',
   "previousStatus"    "source_probe_status" NULL,
   "changed"           boolean NOT NULL DEFAULT false,
+  "attempt"           smallint NOT NULL DEFAULT 1,
   "startedAt"         timestamptz NOT NULL,
   "finishedAt"        timestamptz NULL,
   "requests"          integer NOT NULL DEFAULT 0,
@@ -363,6 +364,8 @@ CREATE UNIQUE INDEX "uq_source_probe_running"
 - `previousStatus` is the status of the newest finished probe of the same source that is not
   `ABORTED`, read when this probe finishes. `changed` is true when the two differ and
   `previousStatus` is not null. The first probe of a chain is never a change.
+- `attempt` counts one `UNREACHABLE` series, 1 to 3 (section 7). The owner decided it on
+  2026-11-06.
 
 ### 4.1 Why a table and not a run
 
@@ -446,8 +449,16 @@ cleared in `onModuleDestroy`, a `stopping` flag in `onApplicationShutdown`, the 
 - **A tick does nothing unless `HARVEST_ENABLED` and `HARVEST_SCHEDULER_ENABLED` are both true.**
   A probe the worker starts is a fetch nobody asked for, which is what the third switch decides.
   It is true in production only, so staging and every luna slot probe only by hand.
-- **A source is due** when section 6 allows it and its newest probe started more than 24 hours
-  ago, or it has none. The 24 hours is a constant, `PROBE_INTERVAL_MS`.
+- **A source is due** when section 6 allows it and its newest probe started more than
+  `probeIntervalHours` hours ago, or it has none. The interval is read from the row's `config`, 24
+  when absent, and 0 means the worker never probes the chain by itself; a manual start is
+  unaffected. `PROBE_INTERVAL_MS` is only the default. The owner decided it on 2026-11-06.
+- **An `UNREACHABLE` probe is tried again twice.** When the newest finished probe of a source is
+  `UNREACHABLE` with `attempt` below 3, the source is due again once `PROBE_RETRY_MS`, 30
+  minutes, has passed since that probe started, whatever the interval, and the new probe carries
+  the next attempt. Attempt 3 is final: the interval counts from it. Any other status ends the
+  series, and a manual probe is always attempt 1. The owner decided it on 2026-11-06. The rule is
+  one pure function, `source-probe.due.ts`.
 - **A tick starts at most one probe.** After a deploy all six chains are due, and the worker
   spreads them one per minute instead of six at once.
 - **The claim**, one transaction: select one due source with `FOR UPDATE SKIP LOCKED` on its
@@ -491,6 +502,8 @@ export interface SourceProbeView {
   status: SourceProbeStatus;
   previousStatus: SourceProbeStatus | null;
   changed: boolean;
+  /** 1 to 3, one UNREACHABLE series (the owner decided it on 2026-11-06). */
+  attempt: number;
   startedAt: string;
   finishedAt: string | null;
   durationMs: number | null;
@@ -672,7 +685,7 @@ Chosen in this plan, and open to the owner's correction:
 - OpenStreetMap gets no probe (section 13).
 - DIA gains `retryForbidden`, default true (section 3.6).
 
-**Owner**, to answer before the build reaches section 6:
+The questions put to the owner:
 
 - **O1.** Does a probe run for a chain whose row is off: (a) never, (b) only when a person starts
   it, or (c) always? The brief builds (a) until you answer.
@@ -683,3 +696,34 @@ Chosen in this plan, and open to the owner's correction:
   schedule outcome? This plan does not build it. A yes is a follow up to plan `0206`.
 - **O4.** Which statuses alert through plan `0218`: every change, or only `SHAPE_CHANGED` and
   `BLOCKED`? `UNREACHABLE` for one day is often the chain's own outage.
+
+**Owner** (answered 2026-11-05):
+
+1. **O1: (a), never.** A chain whose row is off cannot be fetched at all through the harvester, so
+   a probe never runs for it, scheduled or manual. This is what the brief built.
+2. **O2: a cadence per chain.** The cadence should be configurable and scheduled like harvest runs.
+   The owner asked whether a probe is needed when no run is scheduled soon, or whether it should
+   run just before the run; that question is open. On 2026-11-06 the owner decided the part this
+   plan builds: the interval is `probeIntervalHours` in the row's `config` (item 5).
+3. **O3: yes.** A probe that is not `PASSED` holds back the chain's next scheduled walk, because
+   the data might be wrong. It is a follow up plan to `0206` and `0219`, not this build.
+4. **O4: `SHAPE_CHANGED` and `BLOCKED` alert.** `UNREACHABLE` delays the probe by a fixed time,
+   and the probe runs again; after two retries it stops and alerts. The alert is the follow up to
+   `0218`. On 2026-11-06 the owner decided that the retry enters this build (item 6).
+
+**Owner** (decided 2026-11-06):
+
+5. **The interval is per chain.** `supermarket_sources.config.probeIntervalHours`, an integer from
+   0 to 8760, read as plan `0220` reads its thresholds; 24 when absent or unreadable. 0 means the
+   worker never probes the chain by itself; a manual start is unaffected. `PROBE_INTERVAL_MS`
+   stays only as the default (section 7).
+6. **`UNREACHABLE` is retried twice, 30 minutes apart.** `source_probes.attempt` (smallint, default
+   1) and `SourceProbeView.attempt` count one series. A manual probe and a probe the interval made
+   due are attempt 1. After an `UNREACHABLE` probe whose attempt is below 3, the source is due
+   again once `PROBE_RETRY_MS` (30 minutes) has passed since that probe started, whatever the
+   interval, as the next attempt. Attempt 3 is final, and the interval counts from it. Any other
+   status ends the series. `previousStatus` and `changed` keep their definition; the follow up
+   plan reads `attempt` to decide which `UNREACHABLE` alerts (sections 4 and 7).
+7. **A `PASSED` probe is valid for 15 minutes.** A scheduled run that starts within those 15
+   minutes needs no new probe. That is the rule of the follow up plan (the pre run gate, O3), and
+   this plan builds no code for it.

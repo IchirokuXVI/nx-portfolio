@@ -392,7 +392,7 @@ export class CarrefourClient {
 }
 
 /** Any listing page can seed the walk: every one names the first level. */
-const DEFAULT_SEED_PATH = '/supermercado/la-despensa/cat20001/c';
+export const DEFAULT_SEED_PATH = '/supermercado/la-despensa/cat20001/c';
 
 /**
  * The Chromium half, and the only place in this library that launches one.

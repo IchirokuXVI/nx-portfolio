@@ -95,6 +95,10 @@ import {
   shopWalkMessageContracts,
   shopWalkSchemas,
 } from './messages/shop-walk.schemas';
+import {
+  sourceProbeMessageContracts,
+  sourceProbeSchemas,
+} from './messages/source-probe.schemas';
 import { statsMessageContracts, statsSchemas } from './messages/stats.schemas';
 import { zoneMessageContracts, zoneSchemas } from './messages/zone.schemas';
 
@@ -128,6 +132,8 @@ export const messageContracts: Record<string, MessageContract> = {
   ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
   ...purchaseMessageContracts,
+  // A probe per chain checks the storefront shape (plan 0219).
+  ...sourceProbeMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -180,6 +186,8 @@ export const allSchemas: JsonSchema[] = [
   // harvester exports, validated by the gateway before it crosses the broker and
   // by the harvester again at the spawn, found by its own `$id`.
   ...harvestDocumentSchemas,
+  // A probe per chain checks the storefront shape (plan 0219).
+  ...sourceProbeSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);

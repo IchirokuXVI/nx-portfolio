@@ -8,6 +8,7 @@ import { SourceEntryAvailability } from './source-entry-availability.entity';
 import { SourceEntryPrice } from './source-entry-price.entity';
 import { SourceEntryScopePresence } from './source-entry-scope-presence.entity';
 import { SourceLocation } from './source-location.entity';
+import { SourceProbe } from './source-probe.entity';
 import { SupermarketSource } from './supermarket-source.entity';
 
 export { BaseEntity } from './base.entity';
@@ -21,6 +22,7 @@ export { SourceEntryAvailability } from './source-entry-availability.entity';
 export { SourceEntryPrice } from './source-entry-price.entity';
 export { SourceEntryScopePresence } from './source-entry-scope-presence.entity';
 export { SourceLocation } from './source-location.entity';
+export { SourceProbe } from './source-probe.entity';
 export { SupermarketSource } from './supermarket-source.entity';
 
 /** Every harvester entity, for TypeOrmModule registration and the CLI data source. */
@@ -44,4 +46,6 @@ export const HARVESTER_ENTITIES = [
   SourceEntryScopePresence,
   DiscoveredPlace,
   PostalCodeDiscoveryRequest,
+  // One probe of one chain's storefront (plan 0219).
+  SourceProbe,
 ];
