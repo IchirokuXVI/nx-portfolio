@@ -1,3 +1,5 @@
+> **PR:** [#925](https://github.com/IchirokuXVI/nx-portfolio/pull/925)
+
 # 0218: the owner hears when a run fails
 
 > Today a failed run, a refused schedule slot and a chain whose schedules stopped are visible only
