@@ -27,7 +27,8 @@
 
 On a line whose products offer more than one unit, let the shopper pick the unit, start the
 amount at the default of that unit, show which products can serve it, and order those
-products by the price of one (W3) with the cost of the line's amount drawn beside each.
+products by the cost of the line's amount (W3), with the price of one and that cost drawn
+on each.
 
 ### Context
 
@@ -37,8 +38,9 @@ products by the price of one (W3) with the cost of the line's amount drawn besid
   which replaces the product for every list. The line detail sheet asks "Which one" when
   buying. The settle sheet has no member picker: a basket row is one product (backend `0201`).
 - The gateway's own pick (`cheapestOf`, backend `0246` section 4.3) becomes: members that can
-  serve the line's unit, ordered by `priceOfOne`. Velista's copy of the order must agree with
-  it, as velista `0181` agrees with `0245` for the catalog.
+  serve the line's unit, ordered by the cost of the line's amount, or by the price of one when
+  the line is at 0. Velista's copy of the order must agree with it, as velista `0181` agrees
+  with `0245` for the catalog.
 - Velista never sends `productGroupId` on add and the typeahead drops group rows (`0115`),
   so a line with several products comes from the line page's product set, from
   `adoptItemIds`, or from a server flow. Production holds 4 such lines.
@@ -65,13 +67,17 @@ products by the price of one (W3) with the cost of the line's amount drawn besid
    the piece" (`line.unit.cannot.GRAM` and so on), and it is not a candidate for CHEAPEST or
    for the basket's cheaper mark.
 5. **The order and the mark follow W3.** `lineProductPrices` and `groupCheaper` compare
-   `amountOfOne(offer, kind)`, the price of one: one kilo for a loose product, one piece for a
-   piece, one pack for a pack, among the members that can serve the unit. `unitPrice` and the
-   comparable price of `0245` leave this comparison. The doc comment says why: it is the
-   cheapest way to get the item, not the cheapest kilo, which the catalog tab answers.
+   `lineAmount(line.quantity, line.unit, product, offer).cents`, the cost of the line's
+   amount, among the members that can serve the unit, and `amountOfOne(offer, kind)` when
+   the line is at 0. On a count line that is the order of the price of one. `unitPrice` and
+   the comparable price of `0245` leave this comparison. The doc comment says why: it is
+   what the line costs with each product, not the cheapest kilo, which the catalog tab
+   answers.
 6. **The cost of the line's amount is drawn beside each member**, through `lineAmount`:
    "1 kg · 1,99 €" on the loose product, "2 × ~700 g · ≈ 2,78 €" on the piece, "2 × 500 g ·
-   3,98 €" on the bag, for a line at 1000 g. The amount is information; it does not order.
+   3,98 €" on the bag, for a line at 1000 g. The member marked CHEAPEST is thus always the
+   one with the lowest number in that caption. The price of one stays the member's price
+   line, as velista `0179` draws it.
 7. The product the line counts as (`lineShownProduct`) is the first member in that order
    that can serve the unit, the favourite first when it can.
 
@@ -89,13 +95,10 @@ products by the price of one (W3) with the cost of the line's amount drawn besid
   that names backend `0246`'s.
 - Copy through RokuTranslator keys; no number inside a key; no dashes as punctuation.
 - The chip is one control reused on both sheets, in `libs/velista/ui`, with no raw `<svg>`.
-- Review note, for the owner before the build: W3 orders a 700 g piece at 1,39 € before one
-  kilo of the same bananas at 1,99 €, although the kilo is the better value. The review
-  recommends ordering the members of a **weight** line by the cost of the line's amount
-  (target state 6's number), which agrees with W3 on every count line and never prefers a
-  smaller piece on a weight line. The plan is written to W3 as the owner stated it. The
-  change, if the owner wants it, is the comparator of target state 5 and one sentence of
-  backend `0246` section 4.3.
+- W3 was first stated as the price of one alone, which would have ordered a 700 g piece at
+  1,39 € before one kilo of the same bananas at 1,99 €. Shown the scenarios, the owner
+  amended it on 2026-11-05 to the cost of the line's amount (backend `0246` section 0). It
+  is settled, and a builder does not reopen it.
 
 ### Action boundaries
 
@@ -124,12 +127,17 @@ size. The spec mirrors backend `0246` section 1's "can also serve" column row fo
 The W3 comparator in `line-products.ts`:
 
 ```ts
-/** W3 (backend 0246): the price of one, among the members that can serve the unit. */
-function cheaperOne(a: Member, b: Member): number; // amountOfOne ascending, null last, input order on a tie
+/**
+ * W3 (backend 0246): the cost of the line's amount, among the members that can serve
+ * the unit; the price of one when the line is at 0. Ascending, null last, input order
+ * on a tie.
+ */
+function cheaperForLine(line: Pick<Line, 'quantity' | 'unit'>): (a: Member, b: Member) => number;
 ```
 
 `lineProductPrices`, `orderLineCards` and `groupCheaper` go through it, filtered by
-`lineAmount(line.quantity, line.unit, product, offer) !== null`.
+`lineAmount(Math.max(line.quantity, 1), line.unit, product, offer) !== null`. Its spec and
+the spec of backend `0246`'s `cheapestOf` name each other and share the scenario numbers.
 
 ## 2. The chip
 
@@ -154,10 +162,12 @@ drawn above the reel on the line detail sheet and on the line page, only when `u
 
 1. `lineUnits` specs: each row of backend `0246` section 1, an empty set, a set of all kinds,
    and a legacy `LITER` size.
-2. `line-products.spec.ts`: on a weight line a 700 g piece at 1,39 € is ordered before a
-   loose product at 1,99 € per kilo (W3), a counted pack is excluded, and the favourite stays
-   first; on a count line the loose product is excluded and two packs order by price;
-   `unitPrice` is no longer read.
+2. `line-products.spec.ts`: on a weight line at 1000 g a loose product at 1,99 € per kilo
+   is ordered before a 700 g piece at 1,39 € (two pieces, 2,78 €), at 500 g the loose
+   product (1,00 €) still comes first, at 1800 g a 1,8 kg piece priced as one at 2,50 €
+   comes before loose at 1,49 € per kilo (2,68 €), at 0 the order is the price of one, a
+   counted pack is excluded, and the favourite stays first; on a count line the loose
+   product is excluded and two packs order by price; `unitPrice` is no longer read.
 3. `groupCheaper` specs: the same three cases through the basket page.
 4. The chip's spec: hidden for one unit, three segments for three, `chosen` emits once, the
    sheet sends one `updateLine` with `unit` and the default quantity, and a

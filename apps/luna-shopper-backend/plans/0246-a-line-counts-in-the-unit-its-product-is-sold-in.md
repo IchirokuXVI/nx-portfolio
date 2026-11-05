@@ -82,7 +82,8 @@ mirrors.
 5. A settlement records its unit, an estimate flag and a price paid per one of that unit.
    What was spent and bought is summed per unit and never adds grams to pieces.
 6. The basket's product pick considers only members that can serve the line's unit and
-   orders them by the price of one (owner W3).
+   orders them by the cost of the line's amount, or by the price of one when the line has no
+   amount (owner W3).
 7. The assistant can hear "300 g of cheese" and says so to the gateway.
 8. The OpenAPI document and the wire types are regenerated and committed.
 
@@ -133,12 +134,19 @@ The owner's, 2026-11-05, not to reopen:
 - **W2. A single product cannot be changed from pieces to weight or volume by the shopper.**
   Its kind decides. A piece of about 500 g at 20 € the kilo costs 10 €, and a line for it
   counts 1, 2, 3 pieces at 10 € each. Its weight is not the shopper's to set.
-- **W3. The price of one decides between the products of a line.** A product with no
-  weight of its own is one kilo or one litre and shows its price per kilo. A product with a
-  weight is one piece at the price of that piece. So a piece under a kilo usually costs less
-  than one kilo of the loose product, and that is the intended reading: it is the cheapest
-  way to get the item, not the cheapest kilo. The cheapest kilo is plan `0245`, which stays
-  what the catalog orders by.
+- **W3. The cost of the line's amount decides between the products of a line, and the
+  price of one is what each product shows.** The price of one: a product with no weight of
+  its own is one kilo or one litre and shows its price per kilo; a product with a weight is
+  one piece at the price of that piece; a pack is the pack. The cost of the amount is the
+  table of section 2: on a count line it is the count times the price of one, so the order
+  is the order of the price of one; on a weight or volume line a loose product costs its
+  price per kilo times the amount, and a piece or a pack costs as many whole pieces or packs
+  as the amount needs. A line with no amount (quantity 0) orders by the price of one. So
+  for a 1 kg line, one kilo of loose bananas at 1,99 € comes before two 700 g bunches at
+  2,78 €, and for a 500 g line the loose bananas at 1,00 € still come before one bunch at
+  1,39 €. The owner first stated the price of one alone and, shown the scenarios, chose the
+  cost of the amount on 2026-11-05. The cheapest kilo is plan `0245`, which stays what the
+  catalog orders by.
 - **W4. One unit per product and no conversion table.** The weight of a piece
   (`approxWeight`, plan `0244`) and the size of a pack (`unitSize` in its base unit, plan
   `0183`) are the only two bridges between pieces and weight, and no product needs a third.
@@ -252,7 +260,7 @@ export function lineAmountOf(
   offer: { price: number | null; piecePrice: number | null }
 ): LineAmount | null;
 
-/** W3: what one of this product costs. */
+/** W3: what one of this product costs. What a member shows, and the order of a line at 0. */
 export function priceOfOne(
   product: { kind: ProductKind },
   offer: { price: number | null; piecePrice: number | null }
@@ -286,8 +294,8 @@ Three rules the table encodes:
   a piece price).
 - **A weight served by pieces rounds up to whole pieces.** 1000 g of a 700 g piece is two
   pieces, and `pieces` carries the 2 so the client can say "2 × ~700 g". The cost of the
-  amount is what a screen draws beside a member; it is not what orders the members, which is
-  W3 and `priceOfOne`.
+  amount is what a screen draws beside a member and what orders the members (W3). `priceOfOne`
+  is what a member shows as its price, and the order when the line has no amount.
 
 ## 3. Core
 
@@ -391,12 +399,15 @@ not widen the set.
 ### 4.3 The basket's pick
 
 `basket-picks.ts` passes each candidate's `kind`, `unitSize`, `approxWeight`, `price` and
-`piecePrice`, and the line's `unit`. `cheapestOf` in `basket-rules` becomes: the candidates
-are the products for which `lineAmountOf(1, unit, product, offer)` is not null (the product
-can serve the line's unit at all), ordered by `priceOfOne` ascending with null last, a tie
-keeping the input order. `unitPrice` leaves the rule and the comment names W3. The
-comparable price of plan `0245` is not read here: it answers which kilo is cheapest, and
-W3 asks which one is cheapest.
+`piecePrice`, and the line's `unit` and `quantity`. `cheapestOf` in `basket-rules` becomes:
+the candidates are the products for which `lineAmountOf(max(quantity, 1), unit, product, offer)`
+is not null (the product can serve the line's unit at all), ordered by
+`lineAmountOf(quantity, ...).cents` ascending when the line has an amount and by
+`priceOfOne` when `quantity` is 0, null last, a tie keeping the input order. `unitPrice`
+leaves the rule and the comment names W3. The comparable price of plan `0245` is not read
+here: it answers which kilo is cheapest, and W3 asks what this line costs with each product.
+A line's pick can thus change when its amount changes, which is right: 500 g of bananas is
+cheapest loose, and a whole melon is cheapest as the piece.
 
 ### 4.4 The price paid
 
@@ -475,8 +486,11 @@ plan.
    `line_unit_differs`, and the list rename planner reports it instead of summing.
 5. The basket specs: two lines of one product in two units are two rows with two keys; a
    trip row follows a unit change; `cheapestOf` drops a loose product from a `UNIT` line,
-   drops a counted pack from a `GRAM` line, orders a kilo piece by its `piecePrice` and a
-   loose product by its price per kilo, and no longer reads `unitPrice`.
+   drops a counted pack from a `GRAM` line, on a 1000 g line orders a loose product at 1,99
+   per kilo before a 700 g kilo piece at 1,39 (two pieces), on a 500 g line still orders the
+   loose product first (1,00 against 1,39), on a 1800 g line orders a 1,8 kg piece priced as
+   one at 2,50 before loose at 1,49 per kilo (2,68), at quantity 0 orders by the price of
+   one, and no longer reads `unitPrice`.
 6. The settlement specs: a `GRAM` settle of 750 on a product at 9.95 per kilo records
    `pricePaidCents = 995`, `unit = 'GRAM'`, `estimated = true`, and what was spent reads 746;
    a `UNIT` settle of a kilo piece records its `piecePrice` as before; what was bought is
