@@ -1,15 +1,22 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import {
+  ForbiddenException,
   ITEM_APPROX_WEIGHT_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
   ItemApproxWeightBesideSizeException,
   ItemKilogramHasSizeException,
 } from '@portfolio/luna-shopper/platform';
 import type { Item, SupermarketItem } from '../entities';
-import { piecePriceOf, toItemOfferView, toItemView } from './catalog.mappers';
+import {
+  piecePriceOf,
+  toItemOfferView,
+  toItemView,
+  toSupermarketItemView,
+} from './catalog.mappers';
 import {
   expectationMismatches,
   requireBaseUnit,
+  requireNoSourceOverAdmin,
   requireWeightBesideNoSize,
 } from './item.service';
 
@@ -97,6 +104,59 @@ describe('toItemOfferView with the product it prices', () => {
       toItemOfferView(
         { ...row, price: null } as SupermarketItem,
         kiloPiece(1560)
+      ).piecePrice
+    ).toBeNull();
+  });
+});
+
+/**
+ * The product sheet's offers (`GET /v1/catalog/items/:id/offers`) answer the
+ * materialized row, and velista shows the piece price from it without
+ * computing it.
+ */
+describe('toSupermarketItemView with the product it prices', () => {
+  const row = {
+    id: 'si1',
+    itemId: 'cheese',
+    priceScopeId: 'scope',
+    price: '9.41',
+    currency: 'EUR',
+    unitPrice: '9.41',
+    unitPriceLabel: 'kg',
+    priceObservedAt: null,
+    priceSourceKind: null,
+    priceCopiedFromScopeId: null,
+    stale: false,
+    validUntil: null,
+    itemPriceId: null,
+    available: true,
+    delistedAt: null,
+    outOfStockAt: null,
+  } as unknown as SupermarketItem;
+
+  it('derives the piece price of a kilo piece, and leaves price the kilo', () => {
+    expect(toSupermarketItemView(row, kiloPiece(1540))).toMatchObject({
+      price: 9.41,
+      piecePrice: 14.49,
+    });
+  });
+
+  it('derives none for a UNIT product, for no weight and for no product', () => {
+    expect(
+      toSupermarketItemView(row, {
+        defaultUnit: UnitOfMeasure.UNIT,
+        approxWeight: 1540,
+      }).piecePrice
+    ).toBeNull();
+    expect(toSupermarketItemView(row, kiloPiece(null)).piecePrice).toBeNull();
+    expect(toSupermarketItemView(row, null).piecePrice).toBeNull();
+  });
+
+  it('derives none for a null price', () => {
+    expect(
+      toSupermarketItemView(
+        { ...row, price: null } as SupermarketItem,
+        kiloPiece(1540)
       ).piecePrice
     ).toBeNull();
   });
@@ -196,6 +256,42 @@ describe('requireWeightBesideNoSize (plan 0244, section 3.2)', () => {
     expect(() => requireBaseUnit(row, {})).toThrow(
       ItemKilogramHasSizeException
     );
+  });
+});
+
+describe('requireNoSourceOverAdmin (plan 0244, D2)', () => {
+  const held = (approxWeightSetBy: 'SOURCE' | 'ADMIN' | null) => ({
+    id: 'i1',
+    approxWeightSetBy,
+  });
+
+  it('refuses a SOURCE weight over a weight a person wrote', () => {
+    expect(() =>
+      requireNoSourceOverAdmin(
+        { approxWeight: 1580, approxWeightSetBy: 'SOURCE' },
+        held('ADMIN')
+      )
+    ).toThrow(ForbiddenException);
+  });
+
+  it("lets a SOURCE weight replace a run's weight or fill no weight", () => {
+    for (const setBy of ['SOURCE', null] as const) {
+      expect(() =>
+        requireNoSourceOverAdmin(
+          { approxWeight: 1580, approxWeightSetBy: 'SOURCE' },
+          held(setBy)
+        )
+      ).not.toThrow();
+    }
+  });
+
+  it('lets a person replace a person, and an edit that names no weight through', () => {
+    expect(() =>
+      requireNoSourceOverAdmin({ approxWeight: 1580 }, held('ADMIN'))
+    ).not.toThrow();
+    expect(() =>
+      requireNoSourceOverAdmin({ approxWeightSetBy: 'SOURCE' }, held('ADMIN'))
+    ).not.toThrow();
   });
 });
 

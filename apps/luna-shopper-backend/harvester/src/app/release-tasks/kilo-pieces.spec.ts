@@ -52,7 +52,7 @@ function row(id: string, itemId: string, over: Partial<RowRead> = {}): RowRead {
     sizeFormat: 'kg',
     unitSize: null,
     label: 'kg',
-    lowestPrice: 9,
+    latestRunPrice: 9,
     rowsOnItem: 1,
     ...over,
   };
@@ -62,7 +62,7 @@ function row(id: string, itemId: string, over: Partial<RowRead> = {}): RowRead {
 function raw(r: RowRead): Record<string, unknown> {
   return {
     ...r,
-    lowestPrice: r.lowestPrice === null ? null : String(r.lowestPrice),
+    latestRunPrice: r.latestRunPrice === null ? null : String(r.latestRunPrice),
     unitSize: r.unitSize === null ? null : `${r.unitSize}.0000`,
   };
 }
@@ -196,8 +196,8 @@ describe('planKiloPieces', () => {
           rowsOnItem: 2,
         }),
         row('70000', 'p-loose'),
-        row('50943', 'p-merged', { lowestPrice: 9.7 }),
-        row('50946', 'p-merged', { lowestPrice: 9.41 }),
+        row('50943', 'p-merged', { latestRunPrice: 9.7 }),
+        row('50946', 'p-merged', { latestRunPrice: 9.41 }),
       ],
       items
     );
@@ -216,14 +216,90 @@ describe('planKiloPieces', () => {
     expect(plan.unweighed).toBe(2);
   });
 
+  it('keeps the live row of Alas partidas de pollo and moves the row the latest run did not price', () => {
+    const items = new Map([
+      ['p', item('p', { defaultUnit: UnitOfMeasure.KILOGRAM, unitSize: null })],
+    ]);
+    // 4195 answers 404, so its stored 5.10 names an older run.
+    const plan = planKiloPieces(
+      [
+        row('2785', 'p', { latestRunPrice: 5.2 }),
+        row('4195', 'p', { latestRunPrice: null }),
+      ],
+      items
+    );
+    expect(plan.split[0].keep.externalId).toBe('2785');
+    expect(plan.split[0].move.map((r) => r.externalId)).toEqual(['4195']);
+  });
+
+  it('keeps the cheaper of two rows the latest run priced', () => {
+    const items = new Map([
+      ['p', item('p', { defaultUnit: UnitOfMeasure.KILOGRAM, unitSize: null })],
+    ]);
+    const plan = planKiloPieces(
+      [
+        row('50917', 'p', { latestRunPrice: 8.95 }),
+        row('50919', 'p', { latestRunPrice: 8.7 }),
+      ],
+      items
+    );
+    expect(plan.split[0].keep.externalId).toBe('50919');
+    expect(plan.split[0].move.map((r) => r.externalId)).toEqual(['50917']);
+  });
+
+  it('converts a ud row the new adapter already read, off weight with a weight, on a sized GRAM product', () => {
+    const items = new Map([['p-ud', item('p-ud', { unitSize: 580 })]]);
+    const plan = planKiloPieces(
+      [row('60226', 'p-ud', { label: 'ud', soldByWeight: false })],
+      items
+    );
+    expect(plan.piece.map((c) => [c.group, c.item.id, c.approxWeight])).toEqual(
+      [['piece-mercadona', 'p-ud', 580]]
+    );
+    expect([plan.kilo, plan.resume]).toEqual([[], []]);
+  });
+
+  it('leaves alone a ud row the adapter read once its product is converted', () => {
+    const items = new Map([
+      [
+        'p-ud',
+        item('p-ud', {
+          defaultUnit: UnitOfMeasure.UNIT,
+          unitSize: null,
+          approxWeight: 580,
+          approxWeightSetBy: 'SOURCE',
+        }),
+      ],
+    ]);
+    const plan = planKiloPieces(
+      [row('60226', 'p-ud', { label: 'ud', soldByWeight: false })],
+      items
+    );
+    expect([plan.kilo, plan.piece, plan.split, plan.resume]).toEqual([
+      [],
+      [],
+      [],
+      [],
+    ]);
+  });
+
+  it('never makes a kilo piece of a kg row that is no longer sold by weight', () => {
+    const items = new Map([['p-kilo', kiloPiece()]]);
+    const plan = planKiloPieces(
+      [row('50985', 'p-kilo', { soldByWeight: false })],
+      items
+    );
+    expect([plan.kilo, plan.piece]).toEqual([[], []]);
+  });
+
   it('breaks a tie of price by the lower external id, as numbers', () => {
     const items = new Map([
       ['p', item('p', { defaultUnit: UnitOfMeasure.KILOGRAM, unitSize: null })],
     ]);
     const plan = planKiloPieces(
       [
-        row('58260', 'p', { lowestPrice: 47.5 }),
-        row('9999', 'p', { lowestPrice: 47.5 }),
+        row('58260', 'p', { latestRunPrice: 47.5 }),
+        row('9999', 'p', { latestRunPrice: 47.5 }),
       ],
       items
     );
@@ -354,7 +430,7 @@ describe('runKiloPieces', () => {
     expect(harvester.writes).toEqual([]);
   });
 
-  it('counts a failure when catalog stores the weight as a person´s', async () => {
+  it("counts a failure when catalog stores the weight as a person's", async () => {
     const harvester = new FakeHarvester([row('50985', 'p-kilo')]);
     const { catalog } = fakeCatalog([kiloPiece()]);
     catalog.storedSetBy = 'ADMIN';
@@ -382,6 +458,28 @@ describe('runKiloPieces', () => {
     });
     expect(harvester.writes).toHaveLength(1);
     expect(harvester.writes[0].sql).toContain('"soldByWeight" = false');
+  });
+
+  it('turns a ud row the new adapter already read into UNIT, and its row update changes nothing', async () => {
+    const harvester = new FakeHarvester([
+      row('60226', 'p-ud', { label: 'ud', soldByWeight: false }),
+    ]);
+    const { catalog, calls } = fakeCatalog([item('p-ud', { unitSize: 580 })]);
+    const failures = await runKiloPieces(
+      { harvester, catalog, log: () => undefined },
+      write
+    );
+    expect(failures).toBe(0);
+    expect(calls[0].arg).toMatchObject({
+      defaultUnit: UnitOfMeasure.UNIT,
+      unitSize: null,
+      approxWeight: 580,
+      approxWeightSetBy: 'SOURCE',
+    });
+    expect(harvester.writes).toHaveLength(1);
+    expect(harvester.writes[0].sql).toContain(
+      'CASE WHEN "soldByWeight" THEN now() ELSE "updatedAt" END'
+    );
   });
 
   it('gives a LIDL piece its weight and no size on the row', async () => {
@@ -469,10 +567,10 @@ describe('runKiloPieces', () => {
     });
     const harvester = new FakeHarvester([
       row('50943', 'p-merged', {
-        lowestPrice: 9.7,
+        latestRunPrice: 9.7,
         imageUrl: 'https://prod.mercadona.test/50943.jpg',
       }),
-      row('50946', 'p-merged', { lowestPrice: 9.41 }),
+      row('50946', 'p-merged', { latestRunPrice: 9.41 }),
     ]);
     const { catalog, calls } = fakeCatalog([merged]);
     const lines: string[] = [];
@@ -509,10 +607,10 @@ describe('runKiloPieces', () => {
       defaultUnit: UnitOfMeasure.KILOGRAM,
       unitSize: null,
     });
-    const moving = row('50943', 'p-merged', { lowestPrice: 9.7 });
+    const moving = row('50943', 'p-merged', { latestRunPrice: 9.7 });
     const harvester = new FakeHarvester([
       moving,
-      row('50946', 'p-merged', { lowestPrice: 9.41 }),
+      row('50946', 'p-merged', { latestRunPrice: 9.41 }),
     ]);
     const { catalog, calls } = fakeCatalog([merged]);
     catalog.createdFrom.set(
@@ -540,10 +638,10 @@ describe('runKiloPieces', () => {
       defaultUnit: UnitOfMeasure.KILOGRAM,
       unitSize: null,
     });
-    const moving = row('50943', 'p-merged', { lowestPrice: 9.7 });
+    const moving = row('50943', 'p-merged', { latestRunPrice: 9.7 });
     const harvester = new FakeHarvester([
       moving,
-      row('50946', 'p-merged', { lowestPrice: 9.41 }),
+      row('50946', 'p-merged', { latestRunPrice: 9.41 }),
     ]);
     const { catalog } = fakeCatalog([merged]);
     catalog.createdFrom.set(

@@ -354,8 +354,9 @@ export type PiecePriceBasis = Pick<Item, 'defaultUnit' | 'approxWeight'>;
  * `round(approxWeight / 1000 × price, 2)`, half up to the cent.
  *
  * **The one place the formula lives.** Every offer view is built through
- * {@link toItemOfferView} or the raw offer mapper of the item service, and both
- * call this. Null unless the product is `KILOGRAM` with a weight and the offer
+ * {@link toItemOfferView} or the raw offer mapper of the item service, every
+ * materialized row through {@link toSupermarketItemView}, and all three call
+ * this. Null unless the product is `KILOGRAM` with a weight and the offer
  * has a price: a `UNIT` product with a weight already prices the piece, and a
  * product sold by the kilo with no weight has no piece to price.
  *
@@ -415,14 +416,20 @@ export function toItemOfferView(
   };
 }
 
+/**
+ * One materialized row on the wire. `item` is the product the row prices, for
+ * its piece price (plan 0244); null derives none.
+ */
 export function toSupermarketItemView(
-  row: SupermarketItem
+  row: SupermarketItem,
+  item: PiecePriceBasis | null
 ): SupermarketItemView {
+  const price = toNumber(row.price);
   return {
     id: row.id,
     itemId: row.itemId,
     priceScopeId: row.priceScopeId,
-    price: toNumber(row.price),
+    price,
     currency: row.currency,
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
@@ -436,6 +443,7 @@ export function toSupermarketItemView(
     available: row.available,
     delistedAt: toInstant(row.delistedAt),
     outOfStockAt: toInstant(row.outOfStockAt),
+    piecePrice: piecePriceOf(item, price),
   };
 }
 

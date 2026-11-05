@@ -1691,6 +1691,19 @@ export interface SupermarketItemView {
    * section 15.1). It hides nothing and stops no purchase.
    */
   outOfStockAt: string | null;
+  /**
+   * What one piece costs, for a kilo piece (plan 0244, section 3.3):
+   * `round(approxWeight / 1000 × price, 2)`, half up to the cent, the same
+   * figure as {@link ItemOfferView.piecePrice}.
+   *
+   * Set only when the product is `KILOGRAM` with an
+   * {@link ItemView.approxWeight} and this row has a price, and null
+   * otherwise. A `UNIT` product with a weight answers null, because its
+   * `price` is already the price of the piece. **Derived on every read and
+   * stored nowhere**: `price` stays the price of a kilo, and it is what every
+   * comparison and every order reads.
+   */
+  piecePrice: number | null;
 }
 
 /**

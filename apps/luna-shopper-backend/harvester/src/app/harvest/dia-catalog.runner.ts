@@ -8,8 +8,8 @@ import {
   DiaSessionError,
   photoAddressRead,
   regularPrice,
+  scopePrice,
   splitSize,
-  weighedPrice,
   weightOf,
   type DiaLeaf,
   type DiaListingPage,
@@ -699,7 +699,17 @@ function observationOf(
     }
     // The price of a kilo for a row sold by weight, club scaling of plan 0174
     // D2 included. The piece price DIA prints is not written (plan 0244, D1).
-    const regular = weighedPrice(listed.prices, listed.promotions, size);
+    // "Sold by weight" is the identity row's answer, decided once: a scope
+    // whose listing prints no price per kilo writes no price, and never its
+    // piece price under a row sold by weight.
+    const regular = scopePrice(
+      listed.prices,
+      listed.promotions,
+      weight.soldByWeight
+    );
+    if (regular === null) {
+      continue;
+    }
     const price = {
       price: regular.price,
       currency: regular.currency,

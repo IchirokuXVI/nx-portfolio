@@ -501,6 +501,29 @@ describe('DiaCatalogRunner', () => {
       expect(club.prices[0].price).toBe(club.prices[0].unitPrice);
     });
 
+    it('writes no price for a scope whose listing prints no price per kilo on a row sold by weight', async () => {
+      // Madrid is the identity row and compares per KILO. Barcelona lists
+      // the same piece compared per UNIDAD, so it prints only the piece.
+      const runner = new TestRunner(
+        world({
+          listings: {
+            '13835': { L2108: [APPLES] },
+            '959': { L2108: [{ ...APPLES, unit: 'UNIDAD', unitPrice: 1.59 }] },
+          },
+        })
+      );
+      await runner.run(context(), report, input(), source());
+      const [apples] = report.products;
+
+      expect(apples.soldByWeight).toBe(true);
+      expect(
+        apples.prices.map((price) => [price.scopeKey, price.price])
+      ).toEqual([
+        ['13835', 1.99],
+        [null, 1.99],
+      ]);
+    });
+
     it('leaves a fixed pack beside it exactly as it was', async () => {
       const pears = await run({
         sku: '1',

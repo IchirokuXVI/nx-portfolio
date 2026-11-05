@@ -18,16 +18,19 @@ import { approxWeightIn } from '@portfolio/luna-shopper/lidl';
  * - 7.1 `kilo`. A product with one ACTIVE Mercadona row sold by weight whose
  *   latest price label is `kg`, and which is GRAM with a size. It becomes
  *   KILOGRAM with no size, and its old size becomes its weight.
- * - 7.2 `piece`. The same row with the label `ud`, or a LIDL row that prints an
- *   approximate weight and is the only ACTIVE row of its product, on a GRAM
- *   product with a size. It becomes UNIT with no size, and its old size becomes
+ * - 7.2 `piece`. An ACTIVE Mercadona row whose latest price label is `ud`,
+ *   sold by weight or already read by the adapter of plan 0244 section 5.1
+ *   (no longer sold by weight, a weight and no size), or a LIDL row that
+ *   prints an approximate weight and is the only ACTIVE row of its product,
+ *   on a GRAM product with a size. It becomes UNIT with no size, and its old size becomes
  *   its weight. The row agrees afterwards: a Mercadona row is no longer sold by
  *   weight, and a LIDL row holds the weight and no size.
  * - 7.3 `unweighed`. KILOGRAM products with no size and no weight that have an
  *   ACTIVE Mercadona row sold by weight. Counted, never written: the next run
  *   fills them.
  * - 7.4 `split`. A product with two or more ACTIVE Mercadona rows sold by
- *   weight. It keeps the row with the lowest price per kilo (a tie goes to the
+ *   weight. It keeps the row with the lowest price per kilo in the chain's
+ *   latest run (a row that run did not price ranks last, and a tie goes to the
  *   lower external id), and each other row gets a new product of its own.
  *
  * **One catalog write per converted product.** 7.1 and 7.2 are one
@@ -77,8 +80,13 @@ export interface RowRead {
   unitSize: number | null;
   /** The label of the latest price row that has one, lower case. */
   label: string | null;
-  /** The lowest stored price of the row across its scopes. */
-  lowestPrice: number | null;
+  /**
+   * The lowest price the chain's latest run wrote for the row, across its
+   * scopes, and null when that run priced the row at no scope. A row the
+   * chain stopped answering (a 404) keeps its stale price row, which names an
+   * older run, and so reads null here.
+   */
+  latestRunPrice: number | null;
   /** ACTIVE rows of any chain bound to the same product. */
   rowsOnItem: number;
 }
@@ -148,16 +156,32 @@ export interface KiloPiecesPlan {
 }
 
 /**
- * Every ACTIVE row of Mercadona sold by weight, and every ACTIVE LIDL row
- * whose size may be approximate. The count of rows on a product is taken over
- * all chains before the filter, so the LIDL rule "its only ACTIVE row" reads
- * every chain.
+ * Every ACTIVE row of Mercadona sold by weight or holding a weight and no
+ * size, and every ACTIVE LIDL row whose size may be approximate. The count of
+ * rows on a product is taken over all chains before the filter, so the LIDL
+ * rule "its only ACTIVE row" reads every chain.
+ *
+ * A Mercadona row with a weight and no size is one the adapter of plan 0244
+ * section 5.1 has read. A piece priced as one is then no longer sold by
+ * weight, and 7.2 must still find its product.
+ *
+ * `latest` is the run of each chain's newest price row at each scope. A run
+ * rewrites the price row of every product it answers at its scope, so a price
+ * row that names another run is one the latest run did not write.
  */
 export const SELECT_ROWS_SQL = `
 WITH active AS (
   SELECT e.*, count(*) OVER (PARTITION BY e."itemId")::int AS "rowsOnItem"
     FROM source_catalog_entries e
    WHERE e.status = 'ACTIVE' AND e."itemId" IS NOT NULL
+),
+latest AS (
+  SELECT DISTINCT ON (e."supermarketId", p."priceScopeId")
+         e."supermarketId", p."priceScopeId", p."runId"
+    FROM source_entry_prices p
+    JOIN source_catalog_entries e ON e.id = p."entryId"
+   WHERE p."runId" IS NOT NULL
+   ORDER BY e."supermarketId", p."priceScopeId", p."observedAt" DESC, p."runId"
 )
 SELECT a.id, a."externalId", a."itemId", a."supermarketId", s."adapterKey",
        a."soldByWeight", a.ean, a."imageUrl", a."lastRunId", a."sizeFormat",
@@ -169,10 +193,15 @@ SELECT a.id, a."externalId", a."itemId", a."supermarketId", s."adapterKey",
          LIMIT 1) AS label,
        (SELECT min(p.price)
           FROM source_entry_prices p
-         WHERE p."entryId" = a.id AND p.price IS NOT NULL) AS "lowestPrice"
+          JOIN latest l ON l."supermarketId" = a."supermarketId"
+                       AND l."priceScopeId" = p."priceScopeId"
+                       AND l."runId" = p."runId"
+         WHERE p."entryId" = a.id AND p.price IS NOT NULL) AS "latestRunPrice"
   FROM active a
   LEFT JOIN supermarket_sources s ON s."supermarketId" = a."supermarketId"
- WHERE (s."adapterKey" = 'mercadona-api' AND a."soldByWeight")
+ WHERE (s."adapterKey" = 'mercadona-api'
+        AND (a."soldByWeight"
+             OR (a."approxWeight" IS NOT NULL AND a."unitSize" IS NULL)))
     OR (s."adapterKey" = 'lidl-api'
         AND btrim(coalesce(a."sizeFormat", '')) ~* '${LIDL_APPROXIMATE_PREFILTER}')
  ORDER BY a."itemId", a."externalId"`;
@@ -237,7 +266,7 @@ export async function readRows(db: HarvesterDb): Promise<RowRead[]> {
     sizeFormat: (row['sizeFormat'] as string | null) ?? null,
     unitSize: numberOrNull(row['unitSize']),
     label: (row['label'] as string | null) ?? null,
-    lowestPrice: numberOrNull(row['lowestPrice']),
+    latestRunPrice: numberOrNull(row['latestRunPrice']),
     rowsOnItem: Number(row['rowsOnItem']),
   }));
 }
@@ -288,7 +317,7 @@ export function planKiloPieces(
 
   const mercadona = new Map<string, RowRead[]>();
   for (const row of rows) {
-    if (row.adapterKey === 'mercadona-api' && row.soldByWeight) {
+    if (row.adapterKey === 'mercadona-api') {
       const held = mercadona.get(row.itemId) ?? [];
       held.push(row);
       mercadona.set(row.itemId, held);
@@ -302,37 +331,51 @@ export function planKiloPieces(
       plan.held.push(`${itemId}: ${item ? 'merged' : 'not in catalog'}`);
       continue;
     }
-    if (isKiloWithNoWeight(item)) {
+    const weighed = onItem.filter((row) => row.soldByWeight);
+    if (weighed.length > 0 && isKiloWithNoWeight(item)) {
       plan.unweighed += 1;
     }
-    if (onItem.length >= 2) {
+    if (weighed.length >= 2) {
       claimed.add(itemId);
       if (
         item.defaultUnit !== UnitOfMeasure.KILOGRAM ||
         item.unitSize !== null
       ) {
         plan.held.push(
-          `${itemId}: ${onItem.length} Mercadona pieces on a product that is ` +
+          `${itemId}: ${weighed.length} Mercadona pieces on a product that is ` +
             `${item.defaultUnit} ${item.unitSize ?? 'with no size'}, not split`
         );
         continue;
       }
-      const [keep, ...move] = [...onItem].sort(byKeeper);
+      const [keep, ...move] = [...weighed].sort(byKeeper);
       plan.split.push({ item, keep, move });
+      continue;
+    }
+    if (onItem.length >= 2) {
+      // A row sold by weight beside a piece the adapter has read.
+      claimed.add(itemId);
+      plan.held.push(
+        `${itemId}: ${onItem.length} Mercadona rows of two kinds on one product`
+      );
       continue;
     }
     const [row] = onItem;
     if (row.label === 'ud' && isConvertedPiece(item)) {
-      // The update landed and the row write did not: the row alone is left.
       claimed.add(itemId);
-      plan.resume.push({ group: 'piece-mercadona', row, item });
+      if (row.soldByWeight) {
+        // The update landed and the row write did not: the row alone is left.
+        plan.resume.push({ group: 'piece-mercadona', row, item });
+      }
       continue;
     }
     if (!isSizedGram(item)) {
       continue;
     }
+    // A kilo piece stays sold by weight under any adapter. A piece priced as
+    // one is decided by its label alone, because the adapter of plan 0244
+    // section 5.1 turns its row off weight when it reads it.
     const group =
-      row.label === 'kg'
+      row.label === 'kg' && row.soldByWeight
         ? 'kilo'
         : row.label === 'ud'
           ? 'piece-mercadona'
@@ -412,6 +455,14 @@ export async function runKiloPieces(
   ports: KiloPiecesPorts,
   options: KiloPiecesOptions
 ): Promise<number> {
+  // The selection reads the column, so the check comes before it.
+  const columns = await ports.harvester.query(ROW_WEIGHT_COLUMN_SQL);
+  if (columns.length === 0) {
+    throw new Error(
+      'source_catalog_entries has no "approxWeight" column, so the harvester ' +
+        'migration of plan 0244 has not run. Nothing was changed.'
+    );
+  }
   const rows = await readRows(ports.harvester);
   const items = await readItems(ports.catalog, rows);
   const plan = planKiloPieces(rows, items);
@@ -450,14 +501,6 @@ export async function runKiloPieces(
         '0244 and would drop the weight of every write. Nothing was changed.'
     );
   }
-  const columns = await ports.harvester.query(ROW_WEIGHT_COLUMN_SQL);
-  if (columns.length === 0) {
-    throw new Error(
-      'source_catalog_entries has no "approxWeight" column, so the harvester ' +
-        'migration of plan 0244 has not run. Nothing was changed.'
-    );
-  }
-
   let failures = 0;
   const attempt = async (what: string, step: () => Promise<void>) => {
     try {
@@ -539,10 +582,13 @@ async function finishRow(
   row: RowRead
 ): Promise<void> {
   if (group === 'piece-mercadona') {
+    // A row the adapter already turned off weight is matched and keeps its
+    // values, so the update still proves the row is there and changes nothing.
     await updateOne(
       db,
       `UPDATE source_catalog_entries
-          SET "soldByWeight" = false, "updatedAt" = now()
+          SET "soldByWeight" = false,
+              "updatedAt" = CASE WHEN "soldByWeight" THEN now() ELSE "updatedAt" END
         WHERE id = $1`,
       [row.id]
     );
@@ -660,10 +706,14 @@ async function updateOne(
   }
 }
 
-/** The keeper first: lowest price per kilo, then the lower external id. */
+/**
+ * The keeper first: a row the chain's latest run priced before one it did
+ * not, then the lowest price per kilo of that run, then the lower external
+ * id. A stale price of a row the chain no longer answers never wins.
+ */
 export function byKeeper(a: RowRead, b: RowRead): number {
-  const pa = a.lowestPrice ?? Number.POSITIVE_INFINITY;
-  const pb = b.lowestPrice ?? Number.POSITIVE_INFINITY;
+  const pa = a.latestRunPrice ?? Number.POSITIVE_INFINITY;
+  const pb = b.latestRunPrice ?? Number.POSITIVE_INFINITY;
   if (pa !== pb) {
     return pa < pb ? -1 : 1;
   }

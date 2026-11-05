@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { parseListing } from './listing';
 import { splitSize } from './size';
 import type { DiaListingRow, DiaRawPrices } from './types';
-import { isSoldByWeight, weighedPrice, weightOf } from './weight';
+import { isSoldByWeight, scopePrice, weighedPrice, weightOf } from './weight';
 
 const rowsOf = (name: string): DiaListingRow[] =>
   parseListing(
@@ -153,6 +153,31 @@ describe('a DIA piece of approximate weight (plan 0244, section 5.3)', () => {
         price: 1.79,
         unitPrice: 2.56,
       });
+    });
+  });
+
+  describe('scopePrice, with sold by weight decided once for the row', () => {
+    it('writes the price of a kilo of a scope that compares per KILO', () => {
+      const { row, prices: raw } = captured('listing-weight.json', '65');
+      expect(scopePrice(raw, row.promotions, true)).toMatchObject({
+        price: raw.pricePerUnit,
+        unitPrice: raw.pricePerUnit,
+      });
+    });
+
+    it('writes no price for a scope that prints no price per kilo', () => {
+      const { row, prices: raw } = captured('listing-weight.json', '65');
+      expect(
+        scopePrice({ ...raw, measureUnit: 'UNIDAD' }, row.promotions, true)
+      ).toBeNull();
+      expect(
+        scopePrice({ ...raw, pricePerUnit: null }, row.promotions, true)
+      ).toBeNull();
+    });
+
+    it('writes the piece price of a row not sold by weight, though its scope compares per KILO', () => {
+      const { row, prices: raw } = captured('listing-weight.json', '65');
+      expect(scopePrice(raw, row.promotions, false)?.price).toBe(raw.price);
     });
   });
 

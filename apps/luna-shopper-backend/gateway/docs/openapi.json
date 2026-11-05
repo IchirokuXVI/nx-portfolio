@@ -38085,6 +38085,12 @@
               "null"
             ]
           },
+          "piecePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "itemName": {
             "anyOf": [
               {
@@ -41527,6 +41533,12 @@
           "outOfStockAt": {
             "type": [
               "string",
+              "null"
+            ]
+          },
+          "piecePrice": {
+            "type": [
+              "number",
               "null"
             ]
           }

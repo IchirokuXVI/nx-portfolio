@@ -1770,7 +1770,7 @@ describe('ItemService', () => {
     });
   });
 
-  describe('a run´s weight comes from a service only (plan 0244, section 7)', () => {
+  describe("a run's weight comes from a service only (plan 0244, section 7)", () => {
     // The gate of this file answers an operator, so every call here is a
     // person's. The service actor's half needs the real gate and Postgres:
     // `item-approx-weight.integration.spec.ts`.

@@ -294,7 +294,7 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
       });
     });
 
-    it('saves the harvester´s weight as SOURCE when the create says so', async () => {
+    it("saves the harvester's weight as SOURCE when the create says so", async () => {
       const piece = await product(
         { approxWeight: 1540, approxWeightSetBy: 'SOURCE' },
         HARVESTER
@@ -403,7 +403,7 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
       });
     });
 
-    it('writes a person´s weight as ADMIN, in a batch too', async () => {
+    it("writes a person's weight as ADMIN, in a batch too", async () => {
       const piece = await product(
         { approxWeight: 1540, approxWeightSetBy: 'SOURCE' },
         HARVESTER
@@ -441,7 +441,7 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
     });
   });
 
-  describe('a service states a run´s weight on an edit (section 7)', () => {
+  describe("a service states a run's weight on an edit (section 7)", () => {
     it('converts a sized piece in one edit and one audit row, as SOURCE', async () => {
       const piece = await product({
         defaultUnit: UnitOfMeasure.GRAM,
@@ -504,6 +504,40 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
         approxWeight: 1560,
       });
       expect((await row(piece.id)).approxWeightSetBy).toBe('ADMIN');
+    });
+
+    it("refuses a service's SOURCE weight over a person's, on an edit and a batch, and keeps the person's", async () => {
+      const piece = await product({
+        defaultUnit: UnitOfMeasure.KILOGRAM,
+        unitSize: null,
+        approxWeight: 1560,
+      });
+      expect((await row(piece.id)).approxWeightSetBy).toBe('ADMIN');
+      await refused(
+        items.update({
+          userId: HARVESTER,
+          itemId: piece.id,
+          approxWeight: 1580,
+          approxWeightSetBy: 'SOURCE',
+        }),
+        ForbiddenException
+      );
+      await refused(
+        items.updateMany({
+          userId: HARVESTER,
+          items: [
+            {
+              itemId: piece.id,
+              approxWeight: 1580,
+              approxWeightSetBy: 'SOURCE',
+            },
+          ],
+        }),
+        ForbiddenException
+      );
+      const kept = await row(piece.id);
+      expect(Number(kept.approxWeight)).toBe(1560);
+      expect(kept.approxWeightSetBy).toBe('ADMIN');
     });
 
     it('refuses SOURCE from an operator on an edit, a batch and a create, and writes nothing', async () => {
@@ -798,7 +832,7 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
   });
 
   describe('a merge of two pieces (section 3.5)', () => {
-    it('refuses two kilo pieces of different weights, and keeps the survivor´s weight when allowed', async () => {
+    it("refuses two kilo pieces of different weights, and keeps the survivor's weight when allowed", async () => {
       const small = await product({ approxWeight: 395 });
       const large = await product(
         { approxWeight: 1560, approxWeightSetBy: 'SOURCE' },

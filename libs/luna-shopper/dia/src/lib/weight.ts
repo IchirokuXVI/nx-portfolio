@@ -51,8 +51,12 @@ export function isSoldByWeight(
   size: DiaSize,
   prices: DiaRawPrices | null
 ): boolean {
+  return size.approxWeight !== null && comparesPerKilo(prices);
+}
+
+/** Whether the prices carry a `price_per_unit` whose unit is `KILO`. */
+function comparesPerKilo(prices: DiaRawPrices | null): boolean {
   return (
-    size.approxWeight !== null &&
     prices !== null &&
     prices.pricePerUnit !== null &&
     prices.measureUnit?.trim().toUpperCase() === PER_KILO
@@ -96,6 +100,34 @@ export function weighedPrice(
   const regular = regularPrice(prices, promotions);
   if (!isSoldByWeight(size, prices) || regular.unitPrice === null) {
     return regular;
+  }
+  return { ...regular, price: regular.unitPrice };
+}
+
+/**
+ * The price one scope writes when the row decided "sold by weight" once, from
+ * its identity row ({@link weightOf}), and not again from each scope's
+ * listing.
+ *
+ * Not sold by weight: {@link regularPrice}, the price of the piece or pack,
+ * whatever the scope's comparison says. Sold by weight: the scope's price of
+ * a kilo, as {@link weighedPrice} answers it, and `null` when the scope's
+ * listing carries no `price_per_unit` per `KILO`. The only other figure that
+ * scope prints is the piece price, which D1 of plan 0244 never writes, and
+ * the identity row's price of a kilo belongs to another store. So that scope
+ * writes no price, and keeps what an earlier run said.
+ */
+export function scopePrice(
+  prices: DiaRawPrices,
+  promotions: readonly DiaPromotion[],
+  soldByWeight: boolean
+): DiaRegularPrice | null {
+  const regular = regularPrice(prices, promotions);
+  if (!soldByWeight) {
+    return regular;
+  }
+  if (!comparesPerKilo(prices) || regular.unitPrice === null) {
+    return null;
   }
   return { ...regular, price: regular.unitPrice };
 }

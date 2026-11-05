@@ -2687,6 +2687,7 @@ export type CatalogAdminSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
   itemName: CatalogLocalizedText | null;
 };
 
@@ -3727,6 +3728,7 @@ export type CatalogSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**

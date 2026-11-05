@@ -1427,24 +1427,6 @@ export class ItemService {
   }
 
   /**
-   * Look an item up by its barcode (plan 0038, section 6.2). A **lookup**, not a
-   * search: EAN is unique when present, so this either finds the one item or
-   * finds nothing, and finding nothing is a normal answer rather than a 404. It
-   * is step 2 of the matching ladder, and it is what stops a promoted discovery
-   * entry creating a duplicate of a product catalog already holds.
-   *
-   * **Any barcode of the product finds it** (plan 0185): the lookup reads
-   * `item_eans`, where the first barcode is a row like the rest. An in-store
-   * or invalid code that an old product still carries on `items.ean` is in no
-   * row, so it finds nothing, which is the rule plan 0184 set for every
-   * caller: such a code joins nothing.
-   *
-   * **A barcode a merged product still holds finds its survivor** (plan
-   * 0239). A merge moves every barcode, so only a row written before writes
-   * to a merged id were refused can hold one, and the lookup answers the
-   * product a harvest should bind to.
-   */
-  /**
    * The product created for one queue row (plan 0244, section 7.4): the one
    * whose `CREATE` audit row names it in `createdFromEntry`, or null.
    *
@@ -1485,6 +1467,24 @@ export class ItemService {
     return { item: items[0] ?? null };
   }
 
+  /**
+   * Look an item up by its barcode (plan 0038, section 6.2). A **lookup**, not a
+   * search: EAN is unique when present, so this either finds the one item or
+   * finds nothing, and finding nothing is a normal answer rather than a 404. It
+   * is step 2 of the matching ladder, and it is what stops a promoted discovery
+   * entry creating a duplicate of a product catalog already holds.
+   *
+   * **Any barcode of the product finds it** (plan 0185): the lookup reads
+   * `item_eans`, where the first barcode is a row like the rest. An in-store
+   * or invalid code that an old product still carries on `items.ean` is in no
+   * row, so it finds nothing, which is the rule plan 0184 set for every
+   * caller: such a code joins nothing.
+   *
+   * **A barcode a merged product still holds finds its survivor** (plan
+   * 0239). A merge moves every barcode, so only a row written before writes
+   * to a merged id were refused can hold one, and the lookup answers the
+   * product a harvest should bind to.
+   */
   async findByEan(req: FindItemByEanRequest): Promise<FindItemByEanResult> {
     const itemId = (await this.eans.holdersOf([req.ean])).get(req.ean);
     const [row] = itemId ? await this.withSurvivors([itemId]) : [];
@@ -3189,6 +3189,7 @@ export class ItemService {
       // for a row the caller may not have read (plan 0237, section 3.2).
       if (input.expect == null) {
         requireBaseUnitOnEdit(row, input);
+        requireNoSourceOverAdmin(input, before);
       }
       const ids = idLists[index];
       const leaves =
@@ -3237,6 +3238,7 @@ export class ItemService {
           this.applyEdits(row, input, registered, groups.get(index));
           refuseMergedEdit(before, row);
           requireBaseUnitOnEdit(row, input);
+          requireNoSourceOverAdmin(input, before);
           edits[index] = { ...edits[index], row, before, groupBefore };
         }
         // The categories each edit replaces, as they stand inside the
@@ -3428,10 +3430,11 @@ export class ItemService {
     if (input.unitSize !== undefined) {
       row.unitSize = input.unitSize;
     }
-    // A person's weight, which no run overwrites (plan 0244, section 3.1),
-    // unless a service states `SOURCE` (section 7), which
-    // {@link applyUpdates} checked against the caller. A null hands the
-    // weight back to the source, so it names no writer.
+    // A person's weight, which no run overwrites (plan 0244, section 3.1,
+    // D2). A service may state `SOURCE` (section 7), which
+    // {@link applyUpdates} checked against the caller and, beside the unit
+    // rules, against the weight a person wrote. A null hands the weight back
+    // to the source, so it names no writer.
     if (input.approxWeight !== undefined) {
       row.approxWeight = input.approxWeight;
       row.approxWeightSetBy =
@@ -4098,6 +4101,30 @@ function requireSourceWeightFromService(
     throw new ForbiddenException(
       'approxWeightSetBy SOURCE is sent by a service, not by an operator. A ' +
         "person's weight is written as ADMIN: leave the field out."
+    );
+  }
+}
+
+/**
+ * Refuse a `SOURCE` weight over a product whose weight a person wrote (plan
+ * 0244, D2: a run never overwrites a person). `item.setApproxWeights` skips
+ * such a product and counts it; an update names one product, so it is
+ * refused, as a person who states `SOURCE` is. A person hands the weight back
+ * to the source by sending `approxWeight: null` first. `row` is the product
+ * before the edit.
+ */
+export function requireNoSourceOverAdmin(
+  input: Pick<UpdateItemInput, 'approxWeight' | 'approxWeightSetBy'>,
+  row: Pick<Item, 'id' | 'approxWeightSetBy'>
+): void {
+  if (
+    input.approxWeight !== undefined &&
+    input.approxWeightSetBy === 'SOURCE' &&
+    row.approxWeightSetBy === 'ADMIN'
+  ) {
+    throw new ForbiddenException(
+      `Item ${row.id} holds a weight a person wrote, which a SOURCE write ` +
+        'never replaces. A person sends approxWeight: null to hand it back.'
     );
   }
 }

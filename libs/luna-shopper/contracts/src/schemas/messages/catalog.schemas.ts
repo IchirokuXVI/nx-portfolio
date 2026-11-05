@@ -882,6 +882,9 @@ const supermarketItemProperties = () => ({
   // built before it keeps validating what it holds.
   delistedAt: nullableString(),
   outOfStockAt: nullableString(),
+  // Plan 0244, section 3.3: what one kilo piece costs, derived on read.
+  // Stated but not required, for the same reason.
+  piecePrice: numberOrNull(),
 });
 const SUPERMARKET_ITEM_REQUIRED = [
   'id',
