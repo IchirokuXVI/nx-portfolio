@@ -13,6 +13,13 @@
 > Needs backend plan `0244` first: it adds `approxWeight` to the product and `piecePrice` to
 > every offer. Nothing in this plan can be built against a gateway without them.
 >
+> **Mock approved on 2026-11-05** (`apps/velista/plans/mocks/kilo-pieces/`,
+> https://claude.ai/artifact/L4Gjz8b5FVDDuVHTxzDZ6E) with three choices of the owner, which
+> this text now carries: the weight starts with a tilde and not with "aprox."; every "/ kg" and
+> "/ L" is drawn smaller than its number, in the muted colour, close after it; and the headline
+> of a product sold by the kilo is the number at the price's weight with "/ kg" small after it
+> (option B of the mock), so the number lines up with the other prices.
+>
 > Prerequisite reading: backend plan `0244` sections 1, 3.3, 4 and 8; velista plan `0101`
 > (rule 5, the unit price line); `libs/velista/ui/src/lib/catalog/product-row-view.ts`;
 > `libs/velista/ui/src/lib/catalog/product-size.ts`; `libs/velista/models/src/lib/domain.ts`
@@ -64,13 +71,17 @@ What velista draws today (backend `0244` evidence, section 4):
 1. The domain model carries the weight and the piece price, mapped from `unknown` (rule D4):
    `CatalogItem.approxWeight: number | null` (grams) and `ProductOffer.piecePrice: number | null`.
 2. Every product with a weight shows it, in every place that draws a product row, a basket
-   row or a product sheet: "aprox. 1,56 kg" (`es`) and "approx. 1.56 kg" (`en`), from
-   `approxWeight` through `Intl.NumberFormat`, in kilos with at most two decimals, or in grams
-   under 1 kg ("aprox. 395 g"). This holds for a kilo piece and for a piece priced as one.
+   row or a product sheet: "~1,56 kg" (`es`) and "~1.56 kg" (`en`), from `approxWeight`
+   through `Intl.NumberFormat`, in kilos with at most two decimals, or in grams under 1 kg
+   ("~395 g"). The tilde is the sign the basket total already uses for an estimate (velista
+   `0132`, rule T5), and it is in the translation, so a language can move it. This holds for a
+   kilo piece and for a piece priced as one.
 3. A kilo piece shows the piece price as the headline price ("20,94 €") and the price per
    kilo as the unit price line ("13,42 € / kg"), always.
 4. A product sold by the kilo with no weight shows its price with the unit, "13,42 € / kg", as
-   the headline, and no second unit price line.
+   the headline, and no second unit price line. The "/ kg" is drawn smaller than the number,
+   in the muted colour, close after it, so the number stays in line with the other prices.
+   Every "/ kg" and "/ L" the app draws takes that form, on the unit line too.
 5. A piece priced as one shows its price as a pack does ("6,50 €"), with the weight line of
    target state 2 and the unit price rule of velista `0101` rule 5.
 6. A list total and a basket total add `piecePrice` for a kilo piece. For every other product
@@ -94,7 +105,7 @@ What velista draws today (backend `0244` evidence, section 4):
   Night and Day, in `apps/velista/plans/mocks/kilo-pieces/` (`*.dc.html`, `canvas.json`, then
   `build-index.mjs`), and stop for the owner's approval before any code. Follow the owner's
   taste notes: quiet and integrated, no tinted container, no new colour role.
-- The weight is an estimate. Every place that prints it says "aprox." and every piece price
+- The weight is an estimate. Every place that prints it starts with "~" and every piece price
   that is shown beside it is the server's `piecePrice`, never a number computed here.
 - Numbers through `Intl.NumberFormat`, never a pipe that needs `LOCALE_ID`.
 - No raw pixels (`token-hygiene.spec.ts`).
@@ -110,9 +121,9 @@ What velista draws today (backend `0244` evidence, section 4):
 
 The mock link and the owner's answer. Then each criterion of section 4 with its spec output,
 and one walk on a slot with backend `0244`: the cheese of the evidence folder (or a seeded
-product of 1560 g at 13.42 € per kilo) shows "aprox. 1,56 kg", "20,94 €" and "13,42 € / kg",
+product of 1560 g at 13.42 € per kilo) shows "~1,56 kg", "20,94 €" and "13,42 € / kg",
 a basket with two of it totals 41,88 €, and a seeded `UNIT` piece of 580 g at 6,50 € shows
-"aprox. 580 g" and "6,50 €".
+"~580 g" and "6,50 €".
 
 ## 1. The model
 
@@ -148,20 +159,34 @@ whenever `approxWeight` is set, whatever `soldAs` answers.
 
 ## 2. The views
 
-- **The size text** (`productSizeText`): a product with a weight answers the "aprox." text of
+- **The size text** (`productSizeText`): a product with a weight answers the "~" text of
   target state 2, whatever its unit. A `BY_THE_KILO` product answers null, as today. A fixed
   pack answers its size, as today. The two never meet: the server refuses a weight beside a
   size.
 - **The price text** (`priceText`): a `KILO_PIECE` answers `piecePrice`. A `BY_THE_KILO`
-  product answers the price with the unit ("13,42 € / kg", through the existing
-  `catalog.unit.KILOGRAM` key). A `PACK` answers `price`, as today.
+  product answers the price with the unit ("13,42 € / kg"). A `PACK` answers `price`, as
+  today.
+- **A price is two words, not one string.** Every price a view answers is a
+  `PriceWords { amount, per }`: the number, and what it is per ("/ kg", "/ L") or null. The
+  template draws `per` smaller, in the muted colour, close after the number; the accessible
+  name and every sentence join the two with a space (`priceWordsText`). The suffixes are the
+  keys `catalog.per.<basis>`, which replace `catalog.unit.<basis>` ("{{price}} / kg"): one
+  sentence pattern cannot be drawn in two sizes. Both languages write the unit after the
+  number, so the join is a space.
+- **The detail wraps at its separator** when it has no room beside a two line price, so the
+  weight is never cut to "~1,…": the brand gives way to a second line, the number does not.
+  Each size and weight text holds its number and its unit with a no-break space, so "750 ml"
+  and "~1,56 kg" are never split either.
 - **The unit price line** (`unitPriceText`): a `KILO_PIECE` always answers the price per kilo,
   also when it equals the piece price (a piece of exactly 1 kg). A `BY_THE_KILO` product
   answers null, because the headline already says "/ kg". A `PACK` keeps the rule of velista
   `0101`, rule 5, which for a piece priced as one shows the chain's unit price when it differs
   from the price (Mercadona compares such a piece per piece, so it is usually hidden).
 - **The basket row** (`basket-row.ts`, `productPrice`): the same rules. Today the basket row
-  draws no unit price line. Add it for a `KILO_PIECE` only, as the mock shows.
+  draws no unit price line. Add it for a `KILO_PIECE` only, as the mock shows, after the price
+  and before the lists on the caption line. At a shop the row's price comes from `atShop`,
+  which carries no `piecePrice`: `shownOffer` reads it from the offer of `offers` whose scope
+  is the one `atShop` names, and a kilo piece with no such figure is unpriced there.
 - **The cheaper mark and the chain comparison** keep comparing `price` (a price per kilo for
   both kinds sold by the kilo), so a 395 g piece and a 1.56 kg piece compare by the kilo.
 
@@ -182,10 +207,10 @@ whenever `approxWeight` is set, whatever `soldAs` answers.
    negative number answers null.
 3. `soldAs` specs for the three answers, for a `UNIT` product with a weight (`PACK`), and for a
    unit that is not `KILOGRAM`.
-4. View specs: the cheese answers "aprox. 1,56 kg", "20,94 €" and "13,42 € / kg" in `es`, and
-   the same in `en` with its own separators. A 395 g piece answers "aprox. 395 g". A loose
-   product answers "13,42 € / kg" and no unit price line. A 580 g `UNIT` piece answers
-   "aprox. 580 g" and "6,50 €". A 1 kg milk carton is unchanged.
+4. View specs: the cheese answers "~1,56 kg", "20,94 €" and "13,42 € / kg" in `es`, and
+   the same in `en` with its own separators. A 395 g piece answers "~395 g". A loose
+   product answers "13,42 €" with "/ kg" as its `per` and no unit price line. A 580 g `UNIT`
+   piece answers "~580 g" and "6,50 €". A 1 kg milk carton is unchanged.
 5. Total specs of section 3.
 6. `npx nx affected -t lint test` is green, and `npx nx build velista` builds.
 
