@@ -87,6 +87,7 @@ function item(
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 
@@ -100,6 +101,7 @@ function offer(price: number, priceScopeId: string): ProductOffer {
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId,
+    piecePrice: null,
   };
 }
 

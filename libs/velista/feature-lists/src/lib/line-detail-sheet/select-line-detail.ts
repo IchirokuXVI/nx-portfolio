@@ -4,6 +4,7 @@ import {
   inLocale,
   lineName,
   lineProductPrices,
+  priceWordsText,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -16,8 +17,9 @@ import {
   type LineSettlement,
   type ProductOffer,
 } from '@portfolio/velista/models';
-import { formatMoney } from '@portfolio/velista/platform';
+
 import {
+  priceWords,
   productBrandSizeText,
   type SizeTranslate,
 } from '@portfolio/velista/ui';
@@ -163,12 +165,27 @@ function chipOf(itemId: string, input: LineDetailInput): LineItemChipVm {
       item === null
         ? null
         : productBrandSizeText(item, input.locale, input.translate),
-    price:
-      offer === null || offer.price === null
-        ? null
-        : formatMoney(offer.price, offer.currency, input.locale),
+    price: chipPrice(offer, item, input),
     chain: chain === '' ? null : chain,
   };
+}
+
+/**
+ * The chip's price as text: the piece price of a kilo piece, a price per kilo
+ * with its "/ kg", or the price (velista `0179`), or null for none.
+ */
+function chipPrice(
+  offer: ProductOffer | null,
+  item: CatalogItem | null,
+  input: LineDetailInput
+): string | null {
+  const words = priceWords(
+    offer,
+    item ?? { unit: null, size: null, approxWeight: null },
+    input.locale,
+    input.translate
+  );
+  return words === null ? null : priceWordsText(words);
 }
 
 /**

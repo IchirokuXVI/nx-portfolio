@@ -15,7 +15,7 @@ function card(overrides: Partial<LineProductCardVm> = {}): LineProductCardVm {
     detail: '400 ml · Deliplus',
     imageUrl: null,
     priceKind: 'priced',
-    price: '2,15 €',
+    price: { amount: '2,15 €', per: null },
     caption: 'Mercadona · 5,38 € / L',
     cheapest: false,
     favorite: false,
@@ -68,6 +68,16 @@ describe('LineProductRail', () => {
     expect(text).toContain('400 ml · Deliplus');
     expect(text).toContain('2,15 €');
     expect(text).toContain('Mercadona · 5,38 € / L');
+  });
+
+  it('draws what a price is per small after its number (velista 0179)', async () => {
+    const { fixture } = await render({
+      cards: [card({ price: { amount: '13,42 €', per: '/ kg' } })],
+    });
+
+    const price = root(fixture).querySelector('.price');
+    expect(price?.firstChild?.textContent).toBe('13,42 €');
+    expect(price?.querySelector('.per')?.textContent).toBe('/ kg');
   });
 
   it('opens the product of the card that was pressed', async () => {

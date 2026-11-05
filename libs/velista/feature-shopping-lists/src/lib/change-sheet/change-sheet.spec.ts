@@ -41,6 +41,7 @@ function offer(price: number, unitPrice: number): ProductOffer {
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId: 'scope-mercadona',
+    piecePrice: null,
   };
 }
 
@@ -63,6 +64,7 @@ function item(
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 
@@ -91,6 +93,7 @@ const PRODUCT: BasketProduct = {
   atShop: null,
   categories: [],
   sectionIds: null,
+  approxWeight: null,
 };
 
 const LISTS = new Map<string, BasketListRef>([

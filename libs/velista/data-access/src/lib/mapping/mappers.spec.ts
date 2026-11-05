@@ -22,6 +22,7 @@ import {
   toMembership,
   toMyZone,
   toPage,
+  toProductOffer,
   toSessionTokens,
   toShoppingList,
   toZone,
@@ -1087,6 +1088,7 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       brand: 'Hacendado',
       size: 0.5,
       unit: 'LITER',
+      approxWeight: null,
       productGroupId: 'group-milk',
       // Absent on this fixture, so it has none (velista `0118`).
       categories: [],
@@ -1237,6 +1239,7 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      piecePrice: null,
       observedAt: new Date('2026-09-01T08:00:00.000Z'),
       sourceKind: 'OFFICIAL_WEB',
       // Read off the wire (backend plan 0080, section 5), never inferred.
@@ -1563,6 +1566,52 @@ describe('toCatalogSuggestions', () => {
 });
 
 /** Backend `0162`: how many units a pack holds, a whole number from 2. */
+describe('a piece whose weight varies (velista 0179, backend 0244)', () => {
+  const cheese = {
+    id: 'item-cheese',
+    name: { es: 'Queso curado', en: 'Cured cheese' },
+    brand: 'Hacendado',
+    unitSize: null,
+    defaultUnit: 'KILOGRAM',
+    approxWeight: 1560,
+    bestOffer: {
+      price: 13.42,
+      currency: 'EUR',
+      unitPrice: 13.42,
+      unitPriceLabel: 'EUR/kg',
+      piecePrice: 20.94,
+      observedAt: '2026-11-01T08:00:00.000Z',
+      sourceKind: 'OFFICIAL_API',
+      priceScopeId: 'scope-mercadona',
+    },
+  };
+
+  it('reads the approximate weight and the piece price', () => {
+    const mapped = toCatalogItem(cheese);
+    expect(mapped?.approxWeight).toBe(1560);
+    expect(mapped?.offer?.piecePrice).toBe(20.94);
+  });
+
+  it.each([
+    ['a string', '1560'],
+    ['a negative number', -1],
+    ['zero', 0],
+    ['not a finite number', Number.NaN],
+    ['an absent field', undefined],
+  ])('reads %s as no weight and no piece price', (_, value) => {
+    const mapped = toCatalogItem({
+      ...cheese,
+      approxWeight: value,
+      bestOffer: { ...cheese.bestOffer, piecePrice: value },
+    });
+    expect(mapped?.approxWeight).toBeNull();
+    expect(mapped?.offer?.piecePrice).toBeNull();
+    expect(
+      toProductOffer({ ...cheese.bestOffer, piecePrice: value })?.piecePrice
+    ).toBeNull();
+  });
+});
+
 describe('toCatalogItem: the pack count', () => {
   it('reads a whole number from 2 and nothing else', () => {
     expect(toCatalogItem({ id: 'i', packCount: 6 })?.packCount).toBe(6);

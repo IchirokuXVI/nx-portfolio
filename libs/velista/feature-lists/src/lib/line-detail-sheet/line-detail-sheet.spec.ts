@@ -67,6 +67,7 @@ const MILK: CatalogItem = {
   size: 1,
   unit: 'LITER',
   productGroupId: null,
+  approxWeight: null,
 };
 
 function line(overrides: Partial<Line> = {}): Line {

@@ -2,6 +2,7 @@ import type { SettlementOutcome } from './enums';
 import type { LineProductPriceKind } from './line-products';
 import type { LineIndicator } from './list-view';
 import { formatMinorMoney } from './purchases';
+import type { PriceWords } from './sold-as';
 
 /**
  * What the detail sheet and the line page draw, as plain data (velista plan
@@ -323,8 +324,11 @@ export interface LineProductCardVm {
   /** The picture, or null for the carton glyph. */
   readonly imageUrl: string | null;
   readonly priceKind: LineProductPriceKind;
-  /** The price, formatted. Set exactly when {@link priceKind} is `priced`. */
-  readonly price: string | null;
+  /**
+   * The price as two words (velista `0179`), set exactly when {@link priceKind}
+   * is `priced`.
+   */
+  readonly price: PriceWords | null;
   /**
    * The line under the price: the chain and the price for each kilo or litre.
    * With a supermarket chosen for the line, only the unit price, because the row

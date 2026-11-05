@@ -1742,12 +1742,14 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       sourceKind: 'OFFICIAL_WEB',
       stale: false,
       priceScopeId: 's-dia',
+      piecePrice: null,
     },
     offers: [],
     atShop: null,
     productGroupId: null,
     categories: [],
     sectionIds: null,
+    approxWeight: null,
   };
   const products = new Map([[MILK.id, MILK]]);
   const milkRow = (over: Partial<BasketRow> = {}) =>
@@ -1809,6 +1811,35 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
     expect(el(fixture).querySelector('.subtitle')?.textContent?.trim()).toBe(
       'basket.sheet.each · basket.sheet.toGet'
     );
+  });
+
+  it('says no price of one for a kilo piece with a price and no piece price (velista 0179)', async () => {
+    const cheese: BasketProduct = {
+      ...MILK,
+      unit: 'KILOGRAM',
+      approxWeight: 1560,
+      offer: MILK.offer === null ? null : { ...MILK.offer, piecePrice: null },
+    };
+    const priced: BasketProduct = {
+      ...cheese,
+      offer: MILK.offer === null ? null : { ...MILK.offer, piecePrice: 1.44 },
+    };
+
+    const unpriced = await render({
+      lines: [milkRow()],
+      products: new Map([[MILK.id, cheese]]),
+    });
+    expect(
+      el(unpriced.fixture).querySelector('.subtitle')?.textContent?.trim()
+    ).toBe('basket.sheet.toGet');
+
+    const piece = await render({
+      lines: [milkRow()],
+      products: new Map([[MILK.id, priced]]),
+    });
+    expect(
+      el(piece.fixture).querySelector('.subtitle')?.textContent?.trim()
+    ).toBe('basket.sheet.each · basket.sheet.toGet');
   });
 
   it('draws no price for a row with no product, and says how many are left', async () => {
@@ -2123,6 +2154,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         sourceKind: 'OFFICIAL_WEB',
         stale: false,
         priceScopeId: 's-dia',
+        piecePrice: null,
       },
     };
     const priced = new Map([[PRICED.id, PRICED]]);
@@ -2189,6 +2221,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         sourceKind: 'OFFICIAL_WEB',
         stale: false,
         priceScopeId: 's-dia',
+        piecePrice: null,
       },
       atShop: {
         priceScopeId: 's-merca-store',

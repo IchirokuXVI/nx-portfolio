@@ -118,7 +118,13 @@ function itemView(
           row.name,
           item.brand,
           pack,
-          productSizeText(item.size, item.unit, locale, translate),
+          productSizeText(
+            item.size,
+            item.unit,
+            locale,
+            translate,
+            item.approxWeight
+          ),
         ]
           .filter((part): part is string => part !== null && part !== '')
           .join(', ') || row.name,
@@ -164,7 +170,7 @@ function groupView(
       imageUrl: null,
       // Labelled "from" by the card, because it is the cheapest of several and
       // not the price of a thing (rule 4).
-      price,
+      price: price === null ? null : { amount: price, per: null },
       unitPrice: null,
       seen: stale ? priceAgeText(suggestion.offer, options.now, locale) : null,
       stale,

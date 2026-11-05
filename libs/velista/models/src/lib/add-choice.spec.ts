@@ -20,6 +20,7 @@ const MILK: CatalogItem = {
   chainPrices: [],
   imageUrl: 'https://img/milk.jpg',
   packCount: null,
+  approxWeight: null,
 };
 
 const CHOICE: AddChoice = {

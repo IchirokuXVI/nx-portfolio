@@ -115,6 +115,7 @@ function product(
         name: { en: 'Not yet categorised', es: 'Sin categoría' },
       },
     ],
+    approxWeight: null,
   };
 }
 
@@ -1702,6 +1703,7 @@ describe('BasketViewStore: the estimated total', () => {
         sourceKind: 'OFFICIAL_WEB',
         stale: false,
         priceScopeId: 'scope-dia',
+        piecePrice: null,
       },
       atShop:
         atShop === null

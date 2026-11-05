@@ -51,7 +51,14 @@ import { ProductPicture } from './product-picture';
 
             @switch (card.priceKind) {
               @case ('priced') {
-                <span class="price">{{ card.price }}</span>
+                @if (card.price; as price) {
+                  <span class="price"
+                    ><span>{{ price.amount }}</span>
+                    @if (price.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
+                }
               }
               @case ('loading') {
                 <span aria-hidden="true" class="price bone"></span>

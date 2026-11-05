@@ -83,6 +83,7 @@ const offer = (priceScopeId: string, price: number): ProductOffer => ({
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
   priceScopeId,
+  piecePrice: null,
 });
 
 /**
@@ -112,6 +113,7 @@ const MILK: BasketProduct = {
       name: { en: 'Milk', es: 'Leche' },
     },
   ],
+  approxWeight: null,
 };
 
 /** The same product with no price at the shop: what an "unlisted" mark is about. */

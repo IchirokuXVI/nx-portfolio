@@ -120,7 +120,10 @@ describe('suggestionCardView, an item', () => {
   });
 
   it('quotes the price of this packet', () => {
-    expect(itemCard({ offer: offer(0.95) }).row.price).toBe(money(0.95));
+    expect(itemCard({ offer: offer(0.95) }).row.price).toEqual({
+      amount: money(0.95),
+      per: null,
+    });
   });
 
   describe('the price per unit (rule 5)', () => {
@@ -131,9 +134,10 @@ describe('suggestionCardView, an item', () => {
         unitBasis: 'LITER',
       });
 
-      expect(card.row.unitPrice).toBe(
-        `catalog.unit.LITER {"price":"${money(1.09)}"}`
-      );
+      expect(card.row.unitPrice).toEqual({
+        amount: money(1.09),
+        per: 'catalog.per.LITER',
+      });
     });
 
     it('is not drawn when it is the same number, a one litre carton', () => {
@@ -291,7 +295,7 @@ describe('suggestionCardView, a group (rule 4)', () => {
   it('labels its price as a floor, "from", and not as the price of a thing', () => {
     const card = groupCard(6, five);
 
-    expect(card.row.price).toBe(money(0.89));
+    expect(card.row.price).toEqual({ amount: money(0.89), per: null });
     expect(card.row.label).toBe(
       `Milk, list.add.card.groupBadge, list.add.card.from ${money(0.89)}`
     );

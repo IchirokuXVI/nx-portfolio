@@ -2,6 +2,7 @@ import {
   catalogName,
   lineShownProduct,
   listCost,
+  soldAs,
   type CatalogItem,
   type Line,
   type LineAction,
@@ -408,9 +409,16 @@ function costOf(
   const cost = listCost(
     lines.map((line) => {
       const shown = line.quantity > 0 ? shownProductOf(line, catalog) : null;
+      const item = shown === null ? null : catalog.itemOf(shown.itemId);
       return {
         quantity: line.quantity,
         offer: shown?.kind === 'priced' ? shown.offer : null,
+        // How the shown product is priced, so a kilo piece adds its piece price
+        // (velista `0179`). A product the catalog has not named is a pack.
+        soldAs:
+          item === null
+            ? 'PACK'
+            : soldAs(item.unit, item.size, item.approxWeight),
       };
     })
   );

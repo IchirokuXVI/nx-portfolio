@@ -555,10 +555,14 @@ export class LineDetailSheet {
         detail: choice.detail,
         caption: null,
         imageUrl: choice.imageUrl,
-        price: choice.price,
+        price:
+          choice.price === null ? null : { amount: choice.price, per: null },
         // The line under the price names the chain that has it, as the mock
         // draws it, rather than a price per litre or kilo.
-        unitPrice: choice.price === null ? null : choice.chain,
+        unitPrice:
+          choice.price === null || choice.chain === null
+            ? null
+            : { amount: choice.chain, per: null },
         seen: null,
         stale: false,
         chains: null,

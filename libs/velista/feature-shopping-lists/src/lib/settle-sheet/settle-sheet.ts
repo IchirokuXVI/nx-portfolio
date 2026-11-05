@@ -28,11 +28,13 @@ import {
   type LineServiceI,
 } from '@portfolio/velista/data-access';
 import {
+  amountOfOne,
   APP_BASE_PATH,
   basketRowProduct,
   catalogName,
   LINE_CONTENT_MAX_LENGTH,
   shownOffer,
+  soldAs,
   toSettlementRow,
   type BasketParticipant,
   type BasketProduct,
@@ -489,12 +491,12 @@ export class SettleSheet {
       return null;
     }
     const locale = this._locale();
-    const offer = shownOffer(this._product(), this._view.readAtShop());
+    const price = this._onePrice();
     const parts = [
-      offer === null
+      price === null
         ? null
         : this._translator.t('basket.sheet.each', undefined, locale, {
-            price: formatMoney(offer.price, offer.currency, locale),
+            price,
           }),
       this.finished()
         ? null
@@ -519,7 +521,6 @@ export class SettleSheet {
       return null;
     }
     const locale = this._locale();
-    const offer = shownOffer(this._product(), this._view.readAtShop());
     const chosen = this._view.readAtShop() ? this._view.chosenShop() : null;
     const where =
       chosen === null
@@ -527,8 +528,7 @@ export class SettleSheet {
         : chosen.shop === null
           ? chosen.chain
           : `${chosen.chain}, ${chosen.shop}`;
-    const price =
-      offer === null ? null : formatMoney(offer.price, offer.currency, locale);
+    const price = this._onePrice();
     const key =
       price === null
         ? 'basket.sheet.got'
@@ -541,6 +541,26 @@ export class SettleSheet {
       shop: where ?? '',
     });
   });
+
+  /**
+   * What one unit costs as the row draws it, formatted, or null for none: the
+   * piece price of a kilo piece and the price of every other product (velista
+   * `0179`), so a kilo piece with no piece price says no price.
+   */
+  private _onePrice(): string | null {
+    const product = this._product();
+    const offer = shownOffer(product, this._view.readAtShop());
+    if (product === null || offer === null) {
+      return null;
+    }
+    const amount = amountOfOne(
+      offer,
+      soldAs(product.unit, product.size, product.approxWeight)
+    );
+    return amount === null
+      ? null
+      : formatMoney(amount, offer.currency, this._locale());
+  }
 
   /**
    * The primary button: "Got all 6", or "Got the other 4" once some of it is

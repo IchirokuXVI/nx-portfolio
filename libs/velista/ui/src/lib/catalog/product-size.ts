@@ -22,13 +22,23 @@ export type SizeTranslate = (
  * One function for every card and row that names a product: the product card of
  * the catalog and the search, a zone list line and a shopping list row. A unit
  * this build has no words for answers null, so a key never reaches the screen.
+ *
+ * **A weight answers before a size, whatever the unit** (velista `0179`, target
+ * state 2): a piece whose weight varies says "~1,56 kg", or "~395 g" under a
+ * kilo, for a kilo piece and for a piece priced as one alike. The tilde is in
+ * the translation, so a language can move it. The server refuses a weight beside
+ * a size, so the two never meet.
  */
 export function productSizeText(
   size: number | null,
   unit: string | null,
   locale: string,
-  translate: SizeTranslate
+  translate: SizeTranslate,
+  approxWeight: number | null
 ): string | null {
+  if (approxWeight !== null && approxWeight > 0) {
+    return weightText(approxWeight, locale, translate);
+  }
   if (size === null || size <= 0 || unit === null) {
     return null;
   }
@@ -49,6 +59,29 @@ export function productSizeText(
   return text === key ? null : text;
 }
 
+/** The approximate weight in grams as words: kilos from 1000, grams below. */
+function weightText(
+  grams: number,
+  locale: string,
+  translate: SizeTranslate
+): string | null {
+  const inKilos = grams >= 1000;
+  const value = inKilos ? grams / 1000 : grams;
+  let number: string;
+  try {
+    number = new Intl.NumberFormat(locale, {
+      maximumFractionDigits: inKilos ? 2 : 0,
+    }).format(value);
+  } catch {
+    number = String(
+      inKilos ? Math.round(value * 100) / 100 : Math.round(value)
+    );
+  }
+  const key = `list.add.weight.${inKilos ? 'KILOGRAM' : 'GRAM'}`;
+  const text = translate(key, { size: number });
+  return text === key ? null : text;
+}
+
 /**
  * What tells one product from another of the same name: its format, then its
  * brand, joined by the separator a row already uses. Null when the catalog knows
@@ -58,13 +91,20 @@ export function productDetailText(
   product: {
     readonly size: number | null;
     readonly unit: string | null;
+    readonly approxWeight: number | null;
     readonly brand: string | null;
   },
   locale: string,
   translate: SizeTranslate
 ): string | null {
   const parts = [
-    productSizeText(product.size, product.unit, locale, translate),
+    productSizeText(
+      product.size,
+      product.unit,
+      locale,
+      translate,
+      product.approxWeight
+    ),
     product.brand,
   ].filter((part): part is string => part !== null && part.trim() !== '');
   return parts.length === 0 ? null : parts.join(' · ');
@@ -79,6 +119,7 @@ export function productBrandSizeText(
   product: {
     readonly size: number | null;
     readonly unit: string | null;
+    readonly approxWeight: number | null;
     readonly brand: string | null;
   },
   locale: string,
@@ -86,7 +127,13 @@ export function productBrandSizeText(
 ): string | null {
   const parts = [
     product.brand,
-    productSizeText(product.size, product.unit, locale, translate),
+    productSizeText(
+      product.size,
+      product.unit,
+      locale,
+      translate,
+      product.approxWeight
+    ),
   ].filter((part): part is string => part !== null && part.trim() !== '');
   return parts.length === 0 ? null : parts.join(' · ');
 }

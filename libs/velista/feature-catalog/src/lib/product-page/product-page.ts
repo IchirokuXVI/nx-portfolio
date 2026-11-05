@@ -53,7 +53,6 @@ import {
 import {
   appPath,
   CATALOG_PATHS,
-  formatMoney,
   PageNavigation,
   productPagePath,
   sheetSegments,
@@ -65,11 +64,14 @@ import {
   PageHeader,
   PriceHistory,
   PriceTable,
+  priceWords,
   ProductPicture,
   ProductRow,
   ProductRowSkeleton,
   productRowView,
+  unitPriceWords,
   type ListsTableStep,
+  type PricedProduct,
   type PriceHistoryLine,
   type PriceTableRow,
   type ProductRowAdd,
@@ -90,6 +92,13 @@ type PageStatus = 'loading' | 'ready' | 'failed' | 'gone';
 type SectionStatus = 'loading' | 'ready' | 'failed';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Before the product is read: a price table row is then priced as a pack. */
+const UNKNOWN_KIND: PricedProduct = {
+  unit: null,
+  size: null,
+  approxWeight: null,
+};
 
 /**
  * One product, on a page of its own (velista `0134`, section 5).
@@ -268,28 +277,22 @@ export class ProductPage {
   protected readonly prices = computed<readonly PriceTableRow[]>(() => {
     const locale = this._locale();
     this._translator.loaded();
-    const basis = this._item()?.unitBasis ?? null;
+    const item = this._item() ?? UNKNOWN_KIND;
+    const translate = (key: string): string =>
+      this._translator.t(key, undefined, locale);
     return this._prices().map((line) => {
       const offer = line.offer;
       const chain = catalogName(line.chain, locale);
+      const price = priceWords(offer, item, locale, translate);
       return {
         supermarketId: line.supermarketId,
         logo: { logoUrl: line.logoUrl, name: chain, store: false },
         chain,
-        kind: line.kind,
-        price:
-          offer !== null && offer.price !== null
-            ? formatMoney(offer.price, offer.currency, locale)
-            : null,
-        unitPrice:
-          offer !== null &&
-          offer.price !== null &&
-          offer.unitPrice !== null &&
-          basis !== null
-            ? this._translator.t(`catalog.unit.${basis}`, undefined, locale, {
-                price: formatMoney(offer.unitPrice, offer.currency, locale),
-              })
-            : null,
+        // A kilo piece whose offer has no piece price is unpriced here, as
+        // everywhere else (velista `0179`): velista never derives one.
+        kind: line.kind === 'priced' && price === null ? 'unpriced' : line.kind,
+        price,
+        unitPrice: unitPriceWords(offer, item, locale, translate),
         cheapest: line.cheapest,
         stale: offer?.stale === true,
       };

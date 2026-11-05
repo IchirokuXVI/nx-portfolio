@@ -2,6 +2,7 @@ import type { CatalogBrowseContext, ProductShopPrice } from './catalog-browse';
 import type { CatalogItem, Line, ProductOffer } from './domain';
 import { compareGroupOffers } from './product-group';
 import type { LocalizedName } from './shopping-profile';
+import { amountOfOne, type SoldAs } from './sold-as';
 
 /**
  * What the line page knows about the prices of one product (velista `0135`,
@@ -327,6 +328,11 @@ export interface ListCostLine {
   readonly quantity: number;
   /** The price of the product the line shows, or null for none. */
   readonly offer: ProductOffer | null;
+  /**
+   * How the shown product is priced (velista `0179`), which decides whether the
+   * line adds its price or its piece price.
+   */
+  readonly soldAs: SoldAs;
 }
 
 /**
@@ -334,9 +340,11 @@ export interface ListCostLine {
  * no priced line.
  *
  * The sum, over the lines with a quantity above zero, of the quantity times the
- * price of the product the line shows. A line with no product or no price adds
- * nothing. The first currency counted is the currency of the sum, and a price in
- * another is left out rather than added to it.
+ * price of the product the line shows: the piece price for a kilo piece, the
+ * price for every other product (velista `0179`, section 3). A line with no
+ * product or no such amount adds nothing, so a kilo piece with a price and no
+ * piece price adds nothing. The first currency counted is the currency of the
+ * sum, and a price in another is left out rather than added to it.
  */
 export function listCost(
   lines: readonly ListCostLine[]
@@ -344,7 +352,7 @@ export function listCost(
   let amount = 0;
   let currency: string | null | undefined;
   for (const line of lines) {
-    const price = line.offer?.price ?? null;
+    const price = amountOfOne(line.offer, line.soldAs);
     if (line.quantity <= 0 || price === null || line.offer === null) {
       continue;
     }
