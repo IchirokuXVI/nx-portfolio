@@ -105,8 +105,9 @@ exactly what they are.
 - The derivation is one pure function, used by the write path and by the backfill's
   reference spec. The SQL of the backfill is a translation of it, and a spec proves both
   equal on the five kinds of row in section 1.
-- Decisions C1 to C6 below are the reviewer's, and the owner may overrule them before the
-  build. Nothing in this plan reopens D1 to D4 or R1 to R6 of plan `0244`.
+- Decisions C1 to C6 below are the reviewer's, and **the owner accepted all six on 2026-11-05**.
+  They are settled, and a builder does not reopen them. Nothing in this plan reopens D1 to D4
+  or R1 to R6 of plan `0244`.
 - No dashes as punctuation in any prose.
 
 ### Action boundaries
