@@ -586,15 +586,15 @@ Chosen in this plan, and open to the owner's correction:
 - **The code match is a candidate and never a mapping**, by plan `0154`'s rule.
 - **No opening hours.** The calendar is filled by a script, and reading it is a separate cost.
 
-**Owner** (ask, do not choose):
+**Owner** (answered 2026-11-06):
 
-1. **May a code match map a source location by itself?** The code is the chain's own key on
-   both pages, so it is an identity and not a fuzzy name. Plan `0154` says that no automated
-   match maps a shop. A yes would add a `matchedBy` value and an automatic map on link or
-   import. This plan builds the proposal only.
-2. **Is the postal code queue to ask DEZA of every due code?** Turning `listsItsOwnStores` on
-   does that. The cost away from Córdoba is one request per code per cooldown period. The
-   alternative is a second capability that keeps DEZA out of the queue and only frees the
-   spawn from the postal code.
-3. **Which street is right for T4**, `21` on the shop page or `48` on the pin and in
-   OpenStreetMap. The plan writes the page street and reports the disagreement.
+1. **A code match may map a source location by itself, in principle.** The owner reads the
+   code as an identity. This plan still builds the proposal only (`sameCode` on the candidate),
+   because the automatic map on link or import touches the trusted import and the link of plan
+   `0193`, which the Scope leaves alone, and needs a `matchedBy` value. The automatic map is a
+   follow up. For the record: Mercadona and LIDL have no `source_locations` rows. Their places
+   carry a `scopeKey`, and the trusted import joins each one to a shop and a scope by that key
+   (plan `0152`). That is the analogy the owner had in mind.
+2. **`listsItsOwnStores` is on for `deza-web`.** The queue asks DEZA of every due code.
+3. **T4's street is open.** The plan writes the page street (`21`) and reports the
+   disagreement. The PR description carries the question.
