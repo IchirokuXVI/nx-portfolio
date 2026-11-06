@@ -11,7 +11,7 @@
 # Pinned by digest rather than by the `node:24` tag so the image is reproducible until
 # someone changes this line on purpose. Bump it with
 # `docker buildx imagetools inspect node:24 --format '{{println .Manifest.Digest}}'`.
-FROM node:24@sha256:6449e19d8184d84062525b6a7524def03146c2cb04a7f08b076680d0e8e4240a
+FROM node:24@sha256:e7add2a490bb17d97b485b8641bd88455fff7839ade0f5eba493c3508124d413
 WORKDIR /app
 # Copy only dependency files first to leverage Docker cache
 COPY --parents **/package*.json .
