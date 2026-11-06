@@ -584,11 +584,14 @@ Chosen in this plan, and open to the owner's correction:
 
 **Owner** (answered 2026-11-06):
 
-1. **Not decided.** The owner thinks Carrefour Express and Carrefour will be one chain in
-   velista, possibly with different adapters under one chain. Nothing beyond the plan is built:
-   the default formats stay `HIPERMERCADO` and `MARKET`, and `EXPRESS` and `EXPRESS_CEPSA` are
-   reached only by listing them on the row.
+1. **Carrefour and Carrefour Express are shown as one chain** (decided 2026-11-06). Several
+   adapters under that one chain stay possible. This plan's build is unchanged: the default
+   formats stay `HIPERMERCADO` and `MARKET`, and `EXPRESS` and `EXPRESS_CEPSA` are reached
+   only by listing them on the row. Bringing the Express shops under the chain by default, and
+   what velista shows for them, is a follow up plan.
 2. **`listsItsOwnStores` is on for `carrefour-web`.** The queue asks Carrefour of every due
    code.
-3. **Per sale point prices: open.** The owner checks later. The PR description carries the
-   question.
+3. **Per sale point prices are to be measured** (decided 2026-11-06), because each shop may
+   price differently. Today every Carrefour price is the El Pinar hypermarket's (sale point
+   `005290`). The measurement is a follow up plan, and this plan's `carrefour:salePoint` tag is
+   what it starts from.

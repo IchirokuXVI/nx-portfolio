@@ -196,6 +196,11 @@ export class DezaStoreDiscoveryRunner implements StoreDiscoveryRunner {
         name: directory.menuTitles.get(url) || page.title || entry.title,
         latitude: entry.latitude,
         longitude: entry.longitude,
+        // The page's street is the registered address, kept even where it is
+        // wrong. T4 is registered as Av. Isla Fuerteventura, 21, which is a
+        // residential block some way off; the shop stands where the pin puts
+        // it, by number 48. The owner keeps 21 for consistency (plan 0222,
+        // owner answer 3), so T4 in `addressDisagreements` is expected.
         street: page.street,
         city: page.city,
         postalCode: page.postalCode,

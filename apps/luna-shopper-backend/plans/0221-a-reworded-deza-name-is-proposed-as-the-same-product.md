@@ -337,7 +337,7 @@ the row to a new product. The old row is untouched.
 | The old row is `REJECTED`                                       | No product is proposed, because a run does not reopen a decision. When the bucket holds exactly one `REJECTED` row and no `ACTIVE` row, the new row is queued as a `CANDIDATE` with `matchedBy: NAME_WORDS_SIZE`, no `itemId`, and the rejected row in `candidateEntryId`, so the queue points at the rejection. The same holds on a touch of an `UNRESOLVED` row with no proposal. The run report counts these as `wordOrderRejectedPointers`, apart from `wordOrderProposals`. The owner decided this on 2026-11-05 (Decisions, owner answer 3). |
 | The old row is still `UNRESOLVED` or `CANDIDATE`                | No product in the bucket. Nothing is proposed. When a person accepts the old row, the next walk asks the new row again (section 3.5). |
 | The old row is still listed                                     | The same as a rename. Both rows end on one product.                                                                        |
-| The rejected row that a pointer names is later accepted         | Today the pointer row stays a `CANDIDATE` with no item and is not asked again, because a touch asks only an `UNRESOLVED` row with no proposal (section 3.5). The admin shows it as a sibling proposal of another row. An accept of the pointer row still names its own item. The owner is being asked whether such a row should be asked again on the next touch. |
+| The rejected row that a pointer names is later accepted         | Today the pointer row stays a `CANDIDATE` with no item and is not asked again, because a touch asks only an `UNRESOLVED` row with no proposal (section 3.5). The admin shows it as a sibling proposal of another row. An accept of the pointer row still names its own item. The owner decided on 2026-11-06 that such a row is asked again on the next touch (Decisions, owner answer 5). Not built by this plan; it is a follow up. |
 
 ## 6. Completeness is not read
 
@@ -551,3 +551,12 @@ Chosen in this plan, and open to the owner's correction:
    `accept` names its product itself and `reject` clears the pointer, so neither changes.
 4. **A looser match is wanted later**, with its false proposals measured first. That is a future
    plan.
+
+**Owner** (answered 2026-11-06, after the build):
+
+5. **A pointer row is asked again once its rejected row is accepted.** Today a `CANDIDATE` row
+   that points at a `REJECTED` row through `candidateEntryId` is never asked again, because a
+   touch asks only an `UNRESOLVED` row with no proposal (section 3.5). When the row it points at
+   is later accepted onto a product, the next touch asks the pointer row again, so it can propose
+   that product through the word order key. This plan's build does not do it. It is a follow up,
+   and the rule of section 3.5 for every other `CANDIDATE` row stays.

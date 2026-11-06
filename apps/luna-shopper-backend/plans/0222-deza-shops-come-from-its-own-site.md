@@ -466,7 +466,8 @@ User-Agent. `robots.txt` disallows only `/wp-admin/` and allows `/centros/`.
   la Barca`, `Avda. de Libia`, `Fuente de la salud`, `Zoco`, `SuperCash (Quemadas)` and
   `SuperCash (Sector Sur)`, for T1 to T7, Z1, C1 and C2. The menu lists the shops in the same
   order.
-- The pin and the page disagree on one street: T4, `48` on the pin and `21` on the page.
+- The pin and the page disagree on one street: T4, `48` on the pin and `21` on the page. The
+  page is the registered address and the pin is where the shop is (owner answer 3).
   Plan `0154` quotes OpenStreetMap as `Isla de Fuerteventura 48`.
 - The calendar page holds no hours in its markup. `/wp-json/wp/v2/pages?parent=40` and
   `/wp-json/wp/v2/types` answer 404.
@@ -598,5 +599,12 @@ Chosen in this plan, and open to the owner's correction:
    carry a `scopeKey`, and the trusted import joins each one to a shop and a scope by that key
    (plan `0152`). That is the analogy the owner had in mind.
 2. **`listsItsOwnStores` is on for `deza-web`.** The queue asks DEZA of every due code.
-3. **T4's street is open.** The plan writes the page street (`21`) and reports the
-   disagreement. The PR description carries the question.
+3. **T4's street is `21`, the officially registered address, and it is known to be wrong.**
+   The shop page, Google Maps and DEZA's own listing all print
+   `Av. Isla Fuerteventura, 21, Noroeste, 14011 Córdoba`, and that is the address the shop is
+   registered with. The owner checked it on 2026-11-06: number 21 is a residential block some way
+   from the shop, and the shop stands where the pin puts it, beside number `48`. The place keeps
+   `21` for consistency with the registered address. The coordinates come from the pin and are
+   right. The run keeps naming T4 in `addressDisagreements`, and that entry is expected, not a
+   fault to fix. A comment in `deza-store-discovery.runner.ts` says the same where the street
+   is written.
