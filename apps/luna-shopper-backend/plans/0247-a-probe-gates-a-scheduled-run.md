@@ -72,7 +72,9 @@ rules.
   3.2). That is acceptable: the probe still proves the client reaches and parses the storefront.
 - The newest harvester migration on `dev` at the time of writing is plan `0221`'s
   `1760200000000-NameWordsSizeMatch.ts`. Plans `0216`, `0222` and `0223` may add one each, so
-  take the next free timestamp on `dev` at build time.
+  take the next free timestamp on `dev` at build time. At build time the newest was
+  `PriceRefreshes1760300000000`, and this plan's migration is `1760400000000-ProbeGate.ts`, class
+  `ProbeGate1760400000000`.
 
 ### Target state
 
@@ -192,7 +194,10 @@ image breaks the walk too. Owner question 2 confirms it.
 
 `HarvestScheduleOutcome.SKIPPED_PROBE_FAILED` is added as the last value, documented as "the
 probe that the slot ran, or waited for, was not PASSED; the note names the probe and its status".
-The builder reads `1759400000000-HarvestSchedules.ts`: if `lastOutcome` is a Postgres enum type,
+The builder reads `1759400000000-HarvestSchedules.ts`: if `lastOutcome` is a Postgres enum type
+(it is: the Postgres enum `harvest_schedule_outcome`, so the migration exists; `harvest_alerts.kind`
+is the Postgres enum `harvest_alert_kind`, so the same migration adds the two alert kinds of
+section 4),
 a migration adds the value with `ADD VALUE IF NOT EXISTS` and a `down` that moves such rows to
 `REFUSED` and rebuilds the type, as `1757600000000-SharedEan.ts` does; if it is a `varchar`, no
 migration is needed and the plan says so in its PR.
@@ -395,15 +400,27 @@ Chosen in this plan, and open to the owner's correction:
 - The slot alert compares the status word, not the note (section 4.2).
 - No recovery mail (section 4.1).
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-06):
 
 1. **A skipped slot.** Final for the slot (this plan), or retried on each later tick inside the
    late window of plan `0206` (half the gap to the next slot) when a probe passes meanwhile?
+   Answer: Final for the slot, as the plan says. The next slot tries again, the daily probe and
+   its retries keep looking in between.
 2. **`ERROR`.** A browser failure or another fault of ours also skips the slot here. Keep that,
    or let the walk try?
+   Answer: Keep the skip. A run must not execute when the probe does not pass, `ERROR` included.
 3. **A recovery mail.** When a chain goes back to `PASSED` after a `PROBE_FAILED` alert, send one
    mail that says so?
+   Answer: No recovery mail now. The daily probe and the schedule view show it; a mail can be
+   added later without a schema change.
 4. **The 15 minutes.** Counted from the probe's start (this plan), or from its finish? The
    difference is at most the probe's own duration.
+   Answer: From the probe's start.
 5. **A manual start on a red chain.** Not gated here. Should the back office warn before a person
    starts a preset whose chain's newest probe is red? That is an admin follow up and needs a mock.
+   Answer (the owner's words): "It needs a warning, but a run can be started anyway. As part of
+   your work, add a new plan to implement that warning on the admin." The plan is
+   `apps/luna-shopper-admin/plans/0069-a-start-warns-when-the-newest-probe-is-red.md`, written in
+   this PR and not built by it.
+
+On items 1 to 4 the owner wrote: "Everything else is fine as you wrote".
