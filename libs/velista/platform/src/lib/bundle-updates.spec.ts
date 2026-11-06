@@ -78,7 +78,6 @@ function fakeLiveUpdates() {
       return state.downloads;
     },
     apply: async (bundle) => void state.calls.push(`apply ${bundle}`),
-    applyAtNextStart: async (bundle) => void state.calls.push(`next ${bundle}`),
     resetToBuiltin: async () => void state.calls.push('reset'),
     confirmBoot: async () => void state.calls.push('confirm'),
     failedBundles: async () => state.failures,
@@ -274,11 +273,81 @@ describe('BundleUpdates and the native AppUpdates', () => {
       ]);
     });
 
-    it('marks a downloaded bundle for the next cold start at once', async () => {
-      // The default of D6's last paragraph, until target 1 says otherwise.
-      await TestBed.inject(BundleUpdates).check();
+    it('keeps a downloaded bundle waiting and applies nothing at the download', async () => {
+      // On the device `next()` applies at the next move to the background over a
+      // held form, so nothing is queued with the updater (D6).
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
 
-      expect(live.state.calls).toContain(`next ${NEWER}`);
+      expect(bundles.hasReadyBundle()).toBe(true);
+      expect(live.state.calls.some((call) => call.startsWith('apply'))).toBe(
+        false
+      );
+    });
+
+    it('drops a waiting bundle when a newer manifest names another one', async () => {
+      const OTHER = '0.21.0+eeeeeeeeeeee';
+      const bundles = TestBed.inject(BundleUpdates);
+      await expect(bundles.check()).resolves.toBe('ready');
+
+      live.state.manifest = JSON.stringify(manifest({ bundle: OTHER }));
+      live.state.downloads = false;
+      jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
+      await expect(bundles.check()).resolves.toBe('none');
+
+      expect(bundles.hasReadyBundle()).toBe(false);
+      await expect(bundles.applyNow()).resolves.toBe(false);
+      expect(live.state.calls).not.toContain(`apply ${NEWER}`);
+    });
+
+    it('drops a waiting bundle when the manifest names the running one', async () => {
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
+
+      live.state.manifest = JSON.stringify(manifest({ bundle: BUILTIN_ID }));
+      jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
+      await expect(bundles.check()).resolves.toBe('current');
+
+      expect(bundles.hasReadyBundle()).toBe(false);
+    });
+
+    it('drops a waiting bundle when a manifest needs a newer nativeApi', async () => {
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
+
+      live.state.manifest = JSON.stringify(
+        manifest({ bundle: '0.21.0+eeeeeeeeeeee', nativeApi: 2 })
+      );
+      jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
+      await expect(bundles.check()).resolves.toBe('needs-native');
+
+      expect(bundles.hasReadyBundle()).toBe(false);
+    });
+
+    it('drops a waiting bundle when the manifest names a failed one', async () => {
+      const FAILED = '0.21.0+eeeeeeeeeeee';
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
+
+      local.set(StorageKeys.failedBundles, JSON.stringify([FAILED]));
+      live.state.manifest = JSON.stringify(manifest({ bundle: FAILED }));
+      jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
+      await expect(bundles.check()).resolves.toBe('failed');
+
+      expect(bundles.hasReadyBundle()).toBe(false);
+    });
+
+    it('replaces a waiting bundle with the built-in one the manifest names', async () => {
+      live.state.current = '0.18.0+ffffffffffff';
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
+
+      live.state.manifest = JSON.stringify(manifest({ bundle: BUILTIN_ID }));
+      jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
+      await expect(bundles.check()).resolves.toBe('ready');
+      await bundles.applyNow();
+
+      expect(live.state.calls).toContain('reset');
       expect(live.state.calls).not.toContain(`apply ${NEWER}`);
     });
 
@@ -304,6 +373,32 @@ describe('BundleUpdates and the native AppUpdates', () => {
       live.state.failures = [];
       jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
       await expect(bundles.check()).resolves.toBe('failed');
+      expect(downloads()).toEqual([]);
+    });
+
+    it('records a failure the updater answers once, for this document and the next', async () => {
+      // The native source answers each failure once and then forgets it, so the
+      // first read is the only one that carries it.
+      let answer: LiveUpdateFailure[] = [{ bundle: NEWER }];
+      live.api.failedBundles = async () => {
+        const once = answer;
+        answer = [];
+        return once;
+      };
+      const bundles = TestBed.inject(BundleUpdates);
+
+      await expect(bundles.check()).resolves.toBe('failed');
+      jest.advanceTimersByTime(OTA_CHECK_INTERVAL_MS);
+      await expect(bundles.check()).resolves.toBe('failed');
+
+      // A new document: a fresh updater that answers no failure, and the storage.
+      const stored = new Map(local);
+      TestBed.resetTestingModule();
+      configure();
+      stored.forEach((value, key) => local.set(key, value));
+      await expect(TestBed.inject(BundleUpdates).check()).resolves.toBe(
+        'failed'
+      );
       expect(downloads()).toEqual([]);
     });
 
@@ -450,6 +545,48 @@ describe('BundleUpdates and the native AppUpdates', () => {
       expect(reload).not.toHaveBeenCalled();
     });
 
+    it('applies a waiting bundle once when the document goes hidden and nothing is held', async () => {
+      navigate(1);
+      await flush();
+
+      visible.set(false);
+      TestBed.tick();
+      await flush();
+      visible.set(true);
+      TestBed.tick();
+      visible.set(false);
+      TestBed.tick();
+      await flush();
+
+      expect(
+        live.state.calls.filter((call) => call === `apply ${NEWER}`)
+      ).toHaveLength(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('applies nothing on hidden while a form is held, then at the next idle navigation', async () => {
+      navigate(1);
+      await flush();
+      const release = blocker.block();
+
+      visible.set(false);
+      TestBed.tick();
+      await flush();
+      visible.set(true);
+      TestBed.tick();
+      await flush();
+      expect(live.state.calls).not.toContain(`apply ${NEWER}`);
+
+      // The release alone applies nothing: the hidden moment was skipped, not queued.
+      release();
+      await flush();
+      expect(live.state.calls).not.toContain(`apply ${NEWER}`);
+
+      navigate(2);
+      await flush();
+      expect(live.state.calls).toContain(`apply ${NEWER}`);
+    });
+
     it('checks on a resume, and not on the first frame', async () => {
       TestBed.tick();
       await flush();
@@ -546,10 +683,47 @@ describe('BundleUpdates and the native AppUpdates', () => {
       refuse();
       await flush();
 
-      expect(store.state.calls).toContain('immediate');
+      // D9: no flexible dialog first, because the refusal forces the update.
+      expect(store.state.calls).toEqual(['immediate']);
       expect(downloads()).toEqual([]);
       expect(updates.updateFailed()).toBe(false);
       expect(session.has(StorageKeys.updateAttempt)).toBe(false);
+    });
+
+    it('applies a critical bundle found by a refusal once, and never asks Play', async () => {
+      live.state.manifest = JSON.stringify(manifest({ critical: true }));
+      store.state.info = playOffers(20000);
+      const updates = TestBed.inject(AppUpdates);
+
+      refuse();
+      await flush();
+
+      expect(
+        live.state.calls.filter((call) => call.startsWith('apply'))
+      ).toEqual([`apply ${NEWER}`]);
+      expect(store.state.calls).not.toContain('immediate');
+      expect(updates.updateFailed()).toBe(false);
+    });
+
+    it('answers a second applyNow while the first apply is in flight with that apply', async () => {
+      let finish: () => void = () => undefined;
+      live.api.apply = (bundle) =>
+        new Promise<void>((resolve) => {
+          live.state.calls.push(`apply ${bundle}`);
+          finish = resolve;
+        });
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
+
+      const first = bundles.applyNow();
+      const second = bundles.applyNow();
+      finish();
+
+      await expect(first).resolves.toBe(true);
+      await expect(second).resolves.toBe(true);
+      expect(
+        live.state.calls.filter((call) => call.startsWith('apply'))
+      ).toHaveLength(1);
     });
 
     it('ends on the dead end when Play cannot help either', async () => {

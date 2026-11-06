@@ -77,14 +77,14 @@ export interface LiveUpdatesI {
   /**
    * Download a zip in the background, checked against its SHA-256. True once the
    * bundle is stored and ready to apply, false when the updater refused or failed.
+   * A bundle the updater already holds answers true without a second download: the
+   * app queues nothing with the updater's `next()`, so a process that dies forgets
+   * the waiting bundle and the next check asks for it again (D6).
    */
   download(request: LiveUpdateDownload): Promise<boolean>;
 
   /** Switch to a downloaded bundle now. The updater's `set()`, which reloads (D6). */
   apply(bundle: string): Promise<void>;
-
-  /** Switch to a downloaded bundle at the next cold start. The updater's `next()`. */
-  applyAtNextStart(bundle: string): Promise<void>;
 
   /** Return to the APK's own bundle. The updater's `reset()` (D8). */
   resetToBuiltin(): Promise<void>;
@@ -107,7 +107,6 @@ export const UNAVAILABLE_LIVE_UPDATES: LiveUpdatesI = {
   fetchText: () => Promise.resolve(null),
   download: () => Promise.resolve(false),
   apply: () => Promise.resolve(),
-  applyAtNextStart: () => Promise.resolve(),
   resetToBuiltin: () => Promise.resolve(),
   confirmBoot: () => Promise.resolve(),
   failedBundles: () => Promise.resolve([]),

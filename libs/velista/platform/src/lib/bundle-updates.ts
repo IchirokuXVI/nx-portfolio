@@ -82,6 +82,7 @@ export class BundleUpdates {
   private _checkInFlight: Promise<OtaCheckOutcome> | null = null;
   private _lastCheckAt: number | null = null;
   private _ready: ReadyBundle | null = null;
+  private _applying: Promise<boolean> | null = null;
   private _navigated = false;
 
   /** True when a verified bundle is downloaded and waits to apply. */
@@ -120,6 +121,18 @@ export class BundleUpdates {
   }
 
   /**
+   * The document went hidden (D6, last paragraph). A waiting bundle applies now when
+   * nothing holds a blocker: a `set()` while hidden drops nothing the person sees, so
+   * a resume lands on the new bundle and never on a dropped form. A held blocker
+   * skips it, and the bundle waits for the next idle navigation.
+   */
+  hidden(): void {
+    if (this._ready !== null && !this._blocker.isBlocked()) {
+      void this.applyNow();
+    }
+  }
+
+  /**
    * Ask for the manifest, verify it, and download the bundle it names when this
    * device may apply it. At most one check in flight, and at most one per
    * {@link OTA_CHECK_INTERVAL_MS} unless `force`, which only a refusal passes.
@@ -141,7 +154,8 @@ export class BundleUpdates {
     }
     this._lastCheckAt = now;
 
-    const running = this._check().catch((): OtaCheckOutcome => 'none');
+    const force = options.force === true;
+    const running = this._check(force).catch((): OtaCheckOutcome => 'none');
     this._checkInFlight = running;
     void running.finally(() => {
       this._checkInFlight = null;
@@ -153,15 +167,29 @@ export class BundleUpdates {
    * Apply the waiting bundle now, past any blocker. False when none waits.
    *
    * The updater's `set()`, or `reset()` for the built-in bundle, and never a plain
-   * reload, which would load the running bundle again (D6).
+   * reload, which would load the running bundle again (D6). A call while an apply is
+   * in flight starts none and answers what that apply answers, so a second caller
+   * never reads "none waits" from the moment between the two.
    */
-  async applyNow(): Promise<boolean> {
+  applyNow(): Promise<boolean> {
+    if (this._applying !== null) {
+      return this._applying;
+    }
     const ready = this._ready;
     if (ready === null) {
-      return false;
+      return Promise.resolve(false);
     }
     this._ready = null;
 
+    const applying = this._apply(ready);
+    this._applying = applying;
+    void applying.finally(() => {
+      this._applying = null;
+    });
+    return applying;
+  }
+
+  private async _apply(ready: ReadyBundle): Promise<boolean> {
     try {
       if (ready.builtin) {
         await this._live.resetToBuiltin();
@@ -194,15 +222,21 @@ export class BundleUpdates {
     }
   }
 
-  private async _check(): Promise<OtaCheckOutcome> {
-    const outcome = await this._checkManifest();
+  /**
+   * One check. `force` is a refusal's: its caller applies what it finds and goes on
+   * to Play's immediate flow, so nothing here schedules an apply or a dialog for it.
+   */
+  private async _check(force: boolean): Promise<OtaCheckOutcome> {
+    const outcome = await this._checkManifest(force);
     // Whatever the bundle answered, a newer native build on Play gets its one
-    // flexible prompt per version code (D9, Q6).
-    await this._askFlexibleOnce();
+    // flexible prompt per version code, when nothing forces the update (D9, Q6).
+    if (!force) {
+      await this._askFlexibleOnce();
+    }
     return outcome;
   }
 
-  private async _checkManifest(): Promise<OtaCheckOutcome> {
+  private async _checkManifest(force: boolean): Promise<OtaCheckOutcome> {
     const info = await this._infoOnce();
     if (info === null || info.otaBaseUrl === '' || info.otaPublicKey === '') {
       return 'none';
@@ -236,16 +270,23 @@ export class BundleUpdates {
       return 'none';
     }
 
-    return this._decide(manifest, info, base);
+    const outcome = await this._decide(manifest, info, base, force);
+    // D8, follow the cluster: a bundle that this manifest does not name never applies.
+    if (outcome !== 'ready') {
+      this._ready = null;
+    }
+    return outcome;
   }
 
   private async _decide(
     manifest: OtaManifest,
     info: LiveUpdatesInfo,
-    base: string
+    base: string,
+    force: boolean
   ): Promise<OtaCheckOutcome> {
     // D7: a recorded failure is never downloaded again, and the record clears when
-    // the manifest names another bundle.
+    // the manifest names another bundle. The native half answers each failure once,
+    // so the record is written here before anything else is decided.
     const failed = await this._recordFailures();
     if (failed.includes(manifest.bundle)) {
       return 'failed';
@@ -265,18 +306,19 @@ export class BundleUpdates {
       return 'none';
     }
     if (running === manifest.bundle) {
-      this._ready = null;
       return 'current';
     }
 
     // The APK already holds the bundle the cluster names, so nothing downloads.
     if (manifest.bundle === info.builtinBundle) {
-      return this._becomeReady({
-        bundle: manifest.bundle,
-        critical: manifest.critical,
-        builtin: true,
-      });
+      return this._becomeReady(
+        { bundle: manifest.bundle, critical: manifest.critical, builtin: true },
+        force
+      );
     }
+
+    // A bundle of an older manifest is not what the cluster names any more (D8).
+    this._ready = null;
 
     // D4 and Q8: a bundle the APK cannot run waits for Play. Nothing is broken yet,
     // so the app goes on with its bundle and Play gets a flexible prompt.
@@ -293,36 +335,26 @@ export class BundleUpdates {
       return 'none';
     }
 
-    await this._afterDownload(manifest.bundle);
-    return this._becomeReady({
-      bundle: manifest.bundle,
-      critical: manifest.critical,
-      builtin: false,
-    });
+    // Nothing is queued with the updater's `next()`: on the device it applies at the
+    // next move to the background with no regard for a held form (D6). The bundle
+    // waits here for a navigation, a hidden document or, when critical, the blocker.
+    // A process that dies loses it, and the next check downloads it again, which the
+    // native half answers at once for a bundle it already holds.
+    return this._becomeReady(
+      { bundle: manifest.bundle, critical: manifest.critical, builtin: false },
+      force
+    );
   }
 
-  private _becomeReady(ready: ReadyBundle): OtaCheckOutcome {
+  private _becomeReady(ready: ReadyBundle, force: boolean): OtaCheckOutcome {
     this._ready = ready;
     // D6: a critical bundle applies as soon as nothing is held, without waiting for
-    // a navigation. Through the blocker, never through a plain reload.
-    if (ready.critical) {
+    // a navigation. Through the blocker, never through a plain reload. A forced
+    // check is a refusal's, whose caller applies past the blocker itself.
+    if (ready.critical && !force) {
       this._blocker.whenIdle(() => void this.applyNow());
     }
     return 'ready';
-  }
-
-  /**
-   * What happens to a bundle the moment its download completes (D6, last
-   * paragraph). **Depends on target 1**: if `next()` in manual mode also applies on a
-   * move to the background, this moves to a background hook that runs only while the
-   * blocker is free. Until then the default: mark it for the next cold start at once.
-   */
-  private async _afterDownload(bundle: string): Promise<void> {
-    try {
-      await this._live.applyAtNextStart(bundle);
-    } catch {
-      // The navigation path still applies it.
-    }
   }
 
   /**

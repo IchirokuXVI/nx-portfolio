@@ -366,9 +366,10 @@ export class AppUpdates {
   }
 
   /**
-   * The native triggers (velista `0180`, D6): every completed navigation, and every
-   * resume through `AppResumed` rather than a listener of its own. `BundleUpdates`
-   * decides what each one means.
+   * The native triggers (velista `0180`, D6): every completed navigation, every
+   * resume through `AppResumed` rather than a listener of its own, and every move to
+   * hidden through {@link BrowserFacade.visible}. `BundleUpdates` decides what each
+   * one means.
    */
   private _watchNative(bundles: BundleUpdates): void {
     const resumed = inject(AppResumed);
@@ -383,6 +384,15 @@ export class AppUpdates {
       untracked(() => {
         if (count > 0) {
           bundles.resumed();
+        }
+      });
+    });
+
+    effect(() => {
+      const visible = this._browser.visible();
+      untracked(() => {
+        if (!visible) {
+          bundles.hidden();
         }
       });
     });
