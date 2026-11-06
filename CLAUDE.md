@@ -363,7 +363,7 @@ After the remote generator, check each of these; the generator does none of them
 
 ## Luna Shopper backend
 
-### The harvester is deployed, three switches and a row control it
+### The harvester is deployed, four switches and a row control it
 
 `luna-shopper-backend-harvester` (plan 0038) fetches prices from supermarket storefronts and store locations from OpenStreetMap. It writes its results into catalog over NATS. It owns the fourth Postgres, after auth, core and catalog. **Its fourth run mode fetches nothing.** `LEAFLET_IMPORT` (plan 0081) reads a JSON document that an admin uploads. The output is identical to the output of a crawl, and only the fetch differs. That is why it is a run here and not a write in catalog.
 
@@ -385,9 +385,9 @@ The configuration has **four** switches, because they are four different decisio
 - `HARVEST_SCHEDULER_ENABLED` (Helm `schedulerEnabled`) decides that a due schedule starts its preset with nobody asking. A tick needs it and `HARVEST_ENABLED` both. It is true in `values.production.yaml` only. Staging and every `luna-slot` keep it false, because two clusters that fetch one chain on one timer double what the chain sees.
 - `HARVEST_REFRESH_ENABLED` (Helm `refreshEnabled`) decides that a pod can refresh the price of one product at a shopper's request. It is true in `values.staging.yaml` only, until velista ships the control. It is false everywhere else.
 
-The first three have the default false everywhere, also in the `.env` that `luna-slot.sh` writes. The fourth is on in staging only. To start the service, to let it start runs and to let it start runs by itself are not the same thing. Section 8.1 of plan 0038 and section 10 of plan 0206 explain why they are separate.
+All four have the default false, also in the `.env` that `luna-slot.sh` writes. To start the service, to let it start runs, to let it start runs by itself and to let a shopper start one fetch are four different things. Section 8.1 of plan 0038 and section 10 of plan 0206 explain why they are separate.
 
-**The fourth switch is `HARVEST_REFRESH_ENABLED`** (Helm `refreshEnabled`, plan 0216). It decides that a registered shopper can make the pod fetch the price of one product. A refresh needs it, `HARVEST_ENABLED` and the row of the chain. It is true in `values.staging.yaml` only, until velista has the control; production and every `luna-slot` keep it false. Rules that are easy to break by accident:
+**A refresh needs the fourth switch, the second one and the row of the chain** (plan 0216). `HARVEST_REFRESH_ENABLED` alone starts nothing: `HARVEST_ENABLED` must be true too, and the row of the chain must be on. Rules that are easy to break by accident:
 
 - **A refresh is not a run.** It has no `harvest_runs` row and takes no lock that a run takes. A walk never blocks it, and it never blocks a walk or a schedule. Its record is `price_refreshes`.
 - **It writes only through `SourceIngest.writeRefreshedPrices`**, which calls the two writes a walk makes. It creates no row, item, candidate, scope or copy target, and a 404 writes no availability. Only `mercadona-api` and `lidl-api` state `refreshesOneProduct`.
