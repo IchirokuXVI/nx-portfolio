@@ -76,6 +76,10 @@ export * from './lib/events/realtime.events';
 // tests, so a future .NET/Spring service can hold the same contract.
 export * from './schemas';
 
+// The harvester's alerts to the owner (plan 0218): the kind and status of an
+// alert row, and the one test subject.
+export * from './lib/enums/harvest-alert.enums';
+export * from './lib/messages/harvest-alert.messages';
 // A probe per chain checks the storefront shape (plan 0219): the status, the
 // views, the subjects, and the step helpers every adapter library's `probe`
 // shares. Framework free and browser reachable.

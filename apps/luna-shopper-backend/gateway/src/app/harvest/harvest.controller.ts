@@ -18,6 +18,7 @@ import {
   BRAND_PATTERNS,
   brandKey,
   DISCOVERED_PLACE_PATTERNS,
+  HARVEST_ALERT_PATTERNS,
   HARVEST_PATTERNS,
   HARVEST_PRESET_PATTERNS,
   HARVEST_SCHEDULE_PATTERNS,
@@ -42,6 +43,7 @@ import {
   type HarvestRunView,
   type HarvestSchedulePage,
   type HarvestScheduleView,
+  type HarvestTestAlertView,
   type ItemSourceEntryPage,
   type LinkPlacesByRefResult,
   type PlaceLinkResult,
@@ -1445,6 +1447,39 @@ export class AdminHarvestPostalCodesController {
     return this.nats.send<PostalCodeDiscoveryRequestView>(
       POSTAL_CODE_DISCOVERY_PATTERNS.dismiss,
       { ...adminCredential(admin), requestId: id }
+    );
+  }
+}
+
+/**
+ * The harvester's alerts to the owner (plan 0218, section 7).
+ *
+ * One route: queue a test alert. An alert path that nobody has seen deliver
+ * is a trap, so the owner calls this once after a deploy and looks in the
+ * inbox. The answer says whether the row will be sent or suppressed, and never
+ * the address, which lives in a Secret.
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest/alerts', version: '1' })
+export class AdminHarvestAlertsController {
+  constructor(private readonly nats: NatsClient) {}
+
+  /**
+   * Queue one `TEST` alert. The harvester's worker sends it within 30
+   * seconds, or marks it `SUPPRESSED` when no recipient or SMTP host is
+   * configured, which the two flags of the answer say.
+   */
+  @Post('test')
+  @ApiContractResponse(HARVEST_ALERT_PATTERNS.sendTest, {
+    status: HttpStatus.CREATED,
+  })
+  sendTest(@ActingAdmin() admin: CurrentAdmin): Promise<HarvestTestAlertView> {
+    return this.nats.send<HarvestTestAlertView>(
+      HARVEST_ALERT_PATTERNS.sendTest,
+      adminCredential(admin)
     );
   }
 }

@@ -68,6 +68,10 @@ import {
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
+  harvestAlertMessageContracts,
+  harvestAlertSchemas,
+} from './messages/harvest-alert.schemas';
+import {
   harvestMessageContracts,
   harvestSchemas,
 } from './messages/harvest.schemas';
@@ -132,6 +136,8 @@ export const messageContracts: Record<string, MessageContract> = {
   ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
   ...purchaseMessageContracts,
+  // The harvester's test alert (plan 0218).
+  ...harvestAlertMessageContracts,
   // A probe per chain checks the storefront shape (plan 0219).
   ...sourceProbeMessageContracts,
 };
@@ -186,6 +192,8 @@ export const allSchemas: JsonSchema[] = [
   // harvester exports, validated by the gateway before it crosses the broker and
   // by the harvester again at the spawn, found by its own `$id`.
   ...harvestDocumentSchemas,
+  // The harvester's alerts to the owner (plan 0218).
+  ...harvestAlertSchemas,
   // A probe per chain checks the storefront shape (plan 0219).
   ...sourceProbeSchemas,
 ];

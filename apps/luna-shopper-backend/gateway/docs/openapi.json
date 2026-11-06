@@ -29746,6 +29746,82 @@
         ]
       }
     },
+    "/v1/admin/harvest/alerts/test": {
+      "post": {
+        "operationId": "AdminHarvestAlertsController_sendTest_v1",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": "The `harvestAlert.sendTest` contract response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.HarvestTestAlertView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "admin-harvest"
+        ]
+      }
+    },
     "/v1/admin/harvest/sources/{supermarketId}/probes": {
       "post": {
         "operationId": "AdminHarvestProbesController_start_v1",
@@ -44206,6 +44282,33 @@
           "estimate",
           "createdAt",
           "updatedAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.HarvestTestAlertView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "queuedAt": {
+            "type": "string",
+            "minLength": 1,
+            "format": "date-time"
+          },
+          "recipientConfigured": {
+            "type": "boolean"
+          },
+          "smtpConfigured": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "queuedAt",
+          "recipientConfigured",
+          "smtpConfigured"
         ],
         "additionalProperties": false
       },
