@@ -268,16 +268,29 @@ afterEach(() => {
   TestBed.resetTestingModule();
 });
 
-describe('a shop, on the record page', () => {
-  it('opens on its details, reading', async () => {
-    const fixture = await boot(CENTRO);
+/**
+ * The first boot of the file compiles every component of the section, which
+ * the later tests find compiled. It takes about four times as long as any other
+ * test here, and on a loaded CI runner that went past Jest's five second
+ * default (2026-11-06). The limit is stated for that one test, so a slow test
+ * anywhere else still fails at five seconds.
+ */
+const COLD_BOOT_TIMEOUT = 20_000;
 
-    expect(url()).toBe(`${CENTRO}/details`);
-    expect(pages(fixture)).toHaveLength(2);
-    expect(chainPage(fixture).descriptor.name).toBe('supermarkets');
-    expect(page(fixture).descriptor.name).toBe('locations');
-    expect(page(fixture).store().mode()).toBe('read');
-  });
+describe('a shop, on the record page', () => {
+  it(
+    'opens on its details, reading',
+    async () => {
+      const fixture = await boot(CENTRO);
+
+      expect(url()).toBe(`${CENTRO}/details`);
+      expect(pages(fixture)).toHaveLength(2);
+      expect(chainPage(fixture).descriptor.name).toBe('supermarkets');
+      expect(page(fixture).descriptor.name).toBe('locations');
+      expect(page(fixture).store().mode()).toBe('read');
+    },
+    COLD_BOOT_TIMEOUT
+  );
 
   /** The address is what tells two shops of a chain apart. */
   it('is titled with the address, over the town and the postal code', async () => {
