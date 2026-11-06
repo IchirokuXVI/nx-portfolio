@@ -802,10 +802,10 @@ describe('HarvestRunService.spawn', () => {
   });
 
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
-    // A chain that publishes an assortment and no store list is still a radius
-    // over OpenStreetMap and still needs a centre. Mercadona was this case
-    // until plan 0106 read its own store finder.
-    const { service } = build({ source: { adapterKey: 'deza-web' } });
+    // A chain that publishes no store list is still a radius over
+    // OpenStreetMap and still needs a centre. Mercadona was this case until
+    // plan 0106 read its own store finder, and DEZA until plan 0222.
+    const { service } = build({ source: { adapterKey: 'manual' } });
     await expect(
       service.spawn({
         userId: ADMIN,
