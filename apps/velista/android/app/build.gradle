@@ -6,6 +6,18 @@ apply plugin: 'com.android.application'
 def velistaVersionName = (project.findProperty('velistaVersionName') ?: '0.0.0-dev').toString()
 def velistaVersionCode = (project.findProperty('velistaVersionCode') ?: '1').toString().toInteger()
 
+// What the over the air path needs to know about this APK (velista plan 0180), all from
+// build-android.mjs: the native compatibility key of native-api.json, the base URL of the
+// flavor's manifest (empty turns OTA off), the flavor's public key that judges a manifest,
+// and the id of the bundle built in. A plain Gradle build gets OTA off.
+def velistaNativeApi = (project.findProperty('velistaNativeApi') ?: '0').toString().toInteger()
+def velistaOtaBaseUrl = (project.findProperty('velistaOtaBaseUrl') ?: '').toString()
+def velistaOtaPublicKey = (project.findProperty('velistaOtaPublicKey') ?: '').toString()
+def velistaBuiltinBundle = (project.findProperty('velistaBuiltinBundle') ?: '').toString()
+def javaString = { String value ->
+    '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('\r', '').replace('\n', '\\n') + '"'
+}
+
 // The keystore lives outside the repository. Its properties file is named by a Gradle
 // property, else expected beside the Android project. With neither, a release build
 // signs with the debug key so it still installs (D4).
@@ -21,6 +33,9 @@ if (hasReleaseKeystore) {
 android {
     namespace = "app.velista"
     compileSdk = rootProject.ext.compileSdkVersion
+    buildFeatures {
+        buildConfig true
+    }
     defaultConfig {
         applicationId "app.velista"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -28,6 +43,10 @@ android {
         versionCode velistaVersionCode
         versionName velistaVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "int", "VELISTA_NATIVE_API", velistaNativeApi.toString()
+        buildConfigField "String", "VELISTA_OTA_BASE_URL", javaString(velistaOtaBaseUrl)
+        buildConfigField "String", "VELISTA_OTA_PUBLIC_KEY", javaString(velistaOtaPublicKey)
+        buildConfigField "String", "VELISTA_BUILTIN_BUNDLE", javaString(velistaBuiltinBundle)
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
              // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
@@ -74,6 +93,33 @@ android {
             signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
         }
     }
+}
+
+// An OTA test on the emulator reads its files over http from the machine through adb
+// reverse (plan 0180, section 5). Android refuses cleartext by default, so only then the
+// release source set gets a network security configuration that allows it to localhost
+// alone. It is written under build/ and merged in, so an ordinary build carries none.
+// build-android.mjs refuses --bundle with it.
+if ((project.findProperty('velistaCleartextLocalhost') ?: 'false').toString() == 'true') {
+    logger.warn('velista: cleartext to localhost is allowed in this build, for an OTA test only')
+    def overlay = new File(layout.buildDirectory.get().asFile, 'generated/velista-cleartext-localhost')
+    def xmlDir = new File(overlay, 'res/xml')
+    xmlDir.mkdirs()
+    new File(xmlDir, 'velista_cleartext_localhost.xml').text = '''<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+    </domain-config>
+</network-security-config>
+'''
+    new File(overlay, 'AndroidManifest.xml').text = '''<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application android:networkSecurityConfig="@xml/velista_cleartext_localhost" />
+</manifest>
+'''
+    android.sourceSets.release.res.srcDirs += new File(overlay, 'res')
+    android.sourceSets.release.manifest.srcFile new File(overlay, 'AndroidManifest.xml')
 }
 
 repositories {
