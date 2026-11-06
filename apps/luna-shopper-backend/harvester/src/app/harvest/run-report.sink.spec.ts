@@ -1,8 +1,10 @@
 import {
   HarvestRunWrites,
+  HarvestWarningCode,
   PriceSourceKind,
   SourceEntryStatus,
   SourceLocationStatus,
+  type ApproxWeightFill,
   type PackCountFill,
 } from '@portfolio/luna-shopper/contracts';
 import { packCountIn as dezaPackCount } from '@portfolio/luna-shopper/deza';
@@ -111,6 +113,10 @@ function build(
     writes?: HarvestRunWrites;
     /** Products whose pack count catalog already holds (plan 0162). */
     packCountSet?: string[];
+    /** Products catalog holds with a size, so it skips a weight (plan 0244). */
+    weightHasSize?: string[];
+    /** Products whose weight a person wrote (plan 0244). */
+    weightSetByAdmin?: string[];
     /** Whether the chain may declare a whole listing (plan 0220, 15.3). */
     provesDelisting?: boolean;
     /**
@@ -136,6 +142,8 @@ function build(
       pricesRecorded: 0,
       pricesWritten: 0,
       pricesConfirmed: 0,
+      wordOrderProposals: 0,
+      wordOrderRejectedPointers: 0,
       ...options.counters,
     },
     copies: {
@@ -170,6 +178,8 @@ function build(
                 itemId: resolved?.itemId ?? null,
                 // The row holds what the observation stated (plan 0162).
                 packCount: each.packCount ?? null,
+                // And the weight of one piece (plan 0244).
+                approxWeight: each.approxWeight ?? null,
               } as SourceCatalogEntry,
               created: true,
               rung: 1 as const,
@@ -221,6 +231,22 @@ function build(
         (entry) => !options.packCountSet?.includes(entry.itemId)
       ).length,
     })),
+    // Catalog's rule, restated for the double (plan 0244, section 3): a
+    // product with a size and one whose weight a person wrote are skipped.
+    // The real statement is proved against Postgres in catalog.
+    setApproxWeights: jest.fn(async (entries: ApproxWeightFill[]) => {
+      const sized = entries.filter((entry) =>
+        options.weightHasSize?.includes(entry.itemId)
+      ).length;
+      const byAdmin = entries.filter((entry) =>
+        options.weightSetByAdmin?.includes(entry.itemId)
+      ).length;
+      return {
+        written: entries.length - sized - byAdmin,
+        skippedHasSize: sized,
+        skippedSetByAdmin: byAdmin,
+      };
+    }),
   } as unknown as CatalogClient;
 
   // Where per shop claims are kept and what sends them (plan 0182). Which
@@ -289,6 +315,7 @@ function build(
     runId: RUN,
     report: jest.fn(async () => undefined),
     advance: jest.fn(async () => undefined),
+    warn: jest.fn(),
   } as unknown as RunContext;
 
   const sink = new RunReportSink(
@@ -388,6 +415,18 @@ describe('RunReportSink', () => {
       imagesUnlinked: 2,
       imageLinksFailed: 5,
     });
+  });
+
+  it('carries the rows the ingest proposed by their words in any order (plan 0221)', async () => {
+    const { sink } = build({
+      counters: { wordOrderProposals: 14, wordOrderRejectedPointers: 2 },
+    });
+    sink.product(observation());
+
+    const written = await sink.drain();
+
+    expect(written.wordOrderProposals).toBe(14);
+    expect(written.wordOrderRejectedPointers).toBe(2);
   });
 
   it('names the price conflicts the ingest counted, and no more than a report can hold', async () => {
@@ -535,6 +574,134 @@ describe('RunReportSink', () => {
 
       expect(catalog.fillPackCounts).toHaveBeenCalledTimes(2);
       expect(written.packCountsFilled).toBe(1001);
+    });
+  });
+
+  describe('the weight of one piece (plan 0244, section 5.7)', () => {
+    it('writes the weight one row states onto its product', async () => {
+      const { sink, catalog, context } = build({
+        resolves: { '50946': { itemId: 'item-cheese', active: true } },
+      });
+
+      sink.product(observation({ externalId: '50946', approxWeight: 1540 }));
+      const written = await sink.drain();
+
+      expect(catalog.setApproxWeights).toHaveBeenCalledTimes(1);
+      expect(catalog.setApproxWeights).toHaveBeenCalledWith([
+        { itemId: 'item-cheese', approxWeight: 1540 },
+      ]);
+      expect(written).toMatchObject({
+        approxWeightsWritten: 1,
+        approxWeightsSkippedSetByAdmin: 0,
+        approxWeightsSkippedHasSize: 0,
+      });
+      expect(context.warn).not.toHaveBeenCalled();
+    });
+
+    it('writes nothing for two rows with different weights on one product, and warns', async () => {
+      const { sink, catalog, context } = build({
+        resolves: {
+          '24700': { itemId: 'item-merged', active: true },
+          '24701': { itemId: 'item-merged', active: true },
+          fine: { itemId: 'item-fine', active: true },
+        },
+      });
+
+      sink.product(observation({ externalId: '24701', approxWeight: 1560 }));
+      sink.product(observation({ externalId: '24700', approxWeight: 820 }));
+      sink.product(observation({ externalId: 'fine', approxWeight: 400 }));
+      await sink.drain();
+
+      expect(catalog.setApproxWeights).toHaveBeenCalledWith([
+        { itemId: 'item-fine', approxWeight: 400 },
+      ]);
+      expect(context.warn).toHaveBeenCalledTimes(1);
+      const [warning] = (context.warn as jest.Mock).mock.calls[0];
+      expect(warning).toMatchObject({
+        code: HarvestWarningCode.APPROX_WEIGHT_ROWS_DISAGREE,
+      });
+      // The product and both rows, lighter first.
+      expect(warning.message).toContain('item-merged');
+      expect(warning.message).toMatch(/24700 \(entry-24700\) at 820 g.*24701/);
+    });
+
+    it('writes one weight for two rows that agree, and the same row twice once', async () => {
+      const { sink, catalog, context } = build({
+        resolves: {
+          a: { itemId: 'item-1', active: true },
+          b: { itemId: 'item-1', active: true },
+        },
+      });
+
+      sink.product(observation({ externalId: 'a', approxWeight: 580 }));
+      sink.product(observation({ externalId: 'b', approxWeight: 580 }));
+      sink.product(observation({ externalId: 'a', approxWeight: 580 }));
+      await sink.drain();
+
+      expect(catalog.setApproxWeights).toHaveBeenCalledWith([
+        { itemId: 'item-1', approxWeight: 580 },
+      ]);
+      expect(context.warn).not.toHaveBeenCalled();
+    });
+
+    it('sends nothing for a row with no weight, or one bound only as a proposal', async () => {
+      const { sink, catalog } = build({
+        resolves: {
+          proposed: { itemId: 'item-p', active: false },
+          sized: { itemId: 'item-s', active: true },
+        },
+      });
+
+      sink.product(observation({ externalId: 'proposed', approxWeight: 580 }));
+      sink.product(observation({ externalId: 'sized', approxWeight: null }));
+      sink.product(observation({ externalId: 'loose', approxWeight: 580 }));
+      await sink.drain();
+
+      expect(catalog.setApproxWeights).not.toHaveBeenCalled();
+    });
+
+    it('carries the weight of a partial observation, which the row holds', async () => {
+      const { sink, catalog } = build({
+        resolves: { '50946': { itemId: 'item-cheese', active: true } },
+      });
+
+      sink.product({
+        externalId: '50946',
+        detailFetched: false,
+        observedAt: new Date('2026-09-09T10:00:00.000Z'),
+        soldByWeight: true,
+        approxWeight: 1540,
+        prices: [],
+      } as unknown as SourceObservation);
+      await sink.drain();
+
+      expect(catalog.setApproxWeights).toHaveBeenCalledWith([
+        { itemId: 'item-cheese', approxWeight: 1540 },
+      ]);
+    });
+
+    it('counts what catalog skipped, and splits a long list into calls catalog accepts', async () => {
+      const resolves: Record<string, { itemId: string; active: boolean }> = {};
+      for (let i = 0; i < 1001; i += 1) {
+        resolves[`p${i}`] = { itemId: `item-${i}`, active: true };
+      }
+      const { sink, catalog } = build({
+        resolves,
+        weightHasSize: ['item-0'],
+        weightSetByAdmin: ['item-1', 'item-2'],
+      });
+
+      for (let i = 0; i < 1001; i += 1) {
+        sink.product(observation({ externalId: `p${i}`, approxWeight: 350 }));
+      }
+      const written = await sink.drain();
+
+      expect(catalog.setApproxWeights).toHaveBeenCalledTimes(2);
+      expect(written).toMatchObject({
+        approxWeightsWritten: 998,
+        approxWeightsSkippedHasSize: 1,
+        approxWeightsSkippedSetByAdmin: 2,
+      });
     });
   });
 

@@ -14,10 +14,12 @@ import {
   type LineItemChipVm,
   type LineProductPriceRead,
   type LineSettlement,
+  type PriceWords,
   type ProductOffer,
 } from '@portfolio/velista/models';
-import { formatMoney } from '@portfolio/velista/platform';
+
 import {
+  priceWords,
   productBrandSizeText,
   type SizeTranslate,
 } from '@portfolio/velista/ui';
@@ -163,12 +165,23 @@ function chipOf(itemId: string, input: LineDetailInput): LineItemChipVm {
       item === null
         ? null
         : productBrandSizeText(item, input.locale, input.translate),
-    price:
-      offer === null || offer.price === null
-        ? null
-        : formatMoney(offer.price, offer.currency, input.locale),
+    price: chipPrice(offer, item, input),
     chain: chain === '' ? null : chain,
   };
+}
+
+/**
+ * The chip's price as two words: the piece price of a kilo piece, a price per
+ * kilo with its "/ kg", or the price (velista `0179`), or null for none. A
+ * product the catalog has not named yet is priced by its offer alone
+ * (`soldAsOf`), so a kilo piece still draws its piece price.
+ */
+function chipPrice(
+  offer: ProductOffer | null,
+  item: CatalogItem | null,
+  input: LineDetailInput
+): PriceWords | null {
+  return priceWords(offer, item, input.locale, input.translate);
 }
 
 /**

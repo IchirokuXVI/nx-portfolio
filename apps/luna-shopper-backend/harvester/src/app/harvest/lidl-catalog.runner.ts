@@ -245,6 +245,10 @@ function declareRegions(
  * weight item does not say it either: `product-short-code.json` carries one
  * and prints a fixed `400 g`. So the row is left as it is, and a person
  * decides the unit when the product is created.
+ *
+ * **It does state the weight of a tray printed `Aprox.`** (plan 0244, section
+ * 5.2). LIDL prints one price for that tray and none per kilo, so it is a
+ * piece priced as one: no size, the weight, and not sold by weight.
  */
 function observationOf(product: LidlProduct): SourceObservation {
   return {
@@ -256,6 +260,11 @@ function observationOf(product: LidlProduct): SourceObservation {
     // The unit the adapter converted the printed size into (plan 0177): `75cl`
     // is 750 here and `1,28 l` is 1.28, and this is what says which is which.
     sizeUnit: product.unitSize === null ? null : sourceSizeUnitOf(product.unit),
+    // `Aprox. 350 g` (plan 0244, section 5.2): a tray priced as one piece. The
+    // adapter answers the grams here and no size, the price is the tray's, and
+    // the row is not sold by weight. A printed range parses to neither.
+    soldByWeight: false,
+    approxWeight: product.approxWeight,
     sizeFormat: product.sizeFormat,
     packCount: product.packCount,
     categoryPath: product.categoryPath,

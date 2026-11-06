@@ -44,6 +44,8 @@ lunaShopperBackend:
     # database they are about to write to. ADMIN_DEV_AUTOLOGIN is absent here for
     # the same reason it is absent from production.
     environmentName: staging
+    # Where a harvest alert mail links a run (plan 0218, section 8).
+    adminAppBaseUrl: https://admin.staging.velista.app
     # Support sessions (plan 0194). On in staging, where the people are the
     # owner's own test accounts. Production does not set this.
     impersonationEnabled: true

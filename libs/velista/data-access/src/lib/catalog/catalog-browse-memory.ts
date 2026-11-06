@@ -469,6 +469,7 @@ function offerAt(row: Fixture, chain: ChainKey): ProductOffer {
             (price / (row.basis === 'DOZEN' ? row.size / 12 : row.size)) * 100
           ) / 100,
     unitPriceLabel: null,
+    piecePrice: null,
     observedAt: price === null ? null : observedAt(),
     sourceKind: 'OFFICIAL_API',
     stale: row.stale === true,
@@ -507,5 +508,6 @@ function toProduct(
     categories: [memoryCategory(row.category)],
     offer: best,
     unitBasis: best === null ? null : row.basis,
+    approxWeight: null,
   };
 }

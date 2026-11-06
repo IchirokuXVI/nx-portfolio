@@ -34,8 +34,15 @@ import {
   SaveBar,
   Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
-import type { ItemScopePrices } from '../catalog-seed';
-import { ITEM_PRICES_PATH, ITEM_SCOPE_PRICES_PATH } from '../catalog-sources';
+import { PIECE_SEED, type ItemScopePrices } from '../catalog-seed';
+import {
+  ITEM_PRICES_PATH,
+  ITEM_SCOPE_PRICES_PATH,
+  itemPriceSource,
+  itemScopePricesSource,
+  itemSource,
+  priceSource,
+} from '../catalog-sources';
 import { CHAIN_RESOURCES, chainsRoutes } from '../chains/chains-routes';
 import { PriceFormPage } from '../price-form-page';
 import {
@@ -660,6 +667,118 @@ describe('the prices of a product', () => {
     expect(toShownBecause('SOMETHING_NEW')).toBe('UNKNOWN');
     expect(toShownBecause(null)).toBeNull();
     expect(toShownBecause('NEWEST')).toBe('NEWEST');
+  });
+});
+
+/**
+ * The memory gateways, with the two pieces of {@link PIECE_SEED} added to
+ * the tables beside the ordinary seed. `prices` stands in for their offers.
+ */
+function withPieces(
+  prices: readonly Wire.CatalogAdminSupermarketItemView[] = PIECE_SEED.prices
+): ResourceGatewaysI {
+  const memory = new ResourceMemoryGateways();
+  const tables = memory.tables();
+  const add = <T extends ResourceRow>(
+    source: ResourceSource<T>,
+    rows: readonly T[]
+  ) => tables.table(source).push(...rows);
+  add(itemSource(), PIECE_SEED.items);
+  add(priceSource(), prices);
+  add(itemPriceSource(), PIECE_SEED.itemPrices);
+  add(itemScopePricesSource(), PIECE_SEED.scopes);
+  return memory;
+}
+
+/** The one Mercadona scope of a piece, as the tab draws it. */
+const pieceScope = (fixture: ComponentFixture<TestHost>) =>
+  pricesTab(fixture)
+    .chains()
+    .find((chain) => chain.id === 'sm_mercadona')?.scopes[0];
+
+/** Admin plan 0068, criterion 5. */
+describe('the prices of a piece', () => {
+  it("prints the server's piece price of a kilo piece beside its price per kilo", async () => {
+    const fixture = await boot('/products/it_cheese_piece/prices', [
+      { provide: RESOURCE_GATEWAYS, useValue: withPieces() },
+    ]);
+    const scope = pieceScope(fixture);
+
+    expect(scope?.price).toBe('€20.94');
+    expect(scope?.unitPrice).toBe('€13.42 / kg');
+    expect(scope?.perKilo).toBe(true);
+    const row = fixture.nativeElement.querySelector(
+      '[data-scope="ps_mercadona_4661"]'
+    ) as HTMLElement;
+    expect(row.querySelector('.price')?.textContent?.trim()).toBe('€20.94');
+    expect(row.querySelector('.unit')?.textContent?.trim()).toBe('€13.42 / kg');
+  });
+
+  it('labels every price behind the scope of a kilo piece as a price per kilo', async () => {
+    const fixture = await boot('/products/it_cheese_piece/prices', [
+      { provide: RESOURCE_GATEWAYS, useValue: withPieces() },
+    ]);
+
+    expect(pieceScope(fixture)?.rows.map((row) => row.price)).toEqual([
+      '€13.42 / kg',
+    ]);
+  });
+
+  it('prints the price per kilo once when the server gave no piece price', async () => {
+    // Sold by the kilo with no weight: the offer carries no piece price.
+    const gateways = withPieces(
+      PIECE_SEED.prices.map((offer) => ({ ...offer, piecePrice: null }))
+    );
+    const fixture = await boot('/products/it_cheese_piece/prices', [
+      { provide: RESOURCE_GATEWAYS, useValue: gateways },
+    ]);
+    const scope = pieceScope(fixture);
+
+    expect(scope?.price).toBe('€13.42 / kg');
+    expect(scope?.unitPrice).toBe('');
+    expect(scope?.perKilo).toBe(false);
+  });
+
+  it('prints the price of a piece priced as one once, with no unit price that repeats it', async () => {
+    const fixture = await boot('/products/it_melon_piece/prices', [
+      { provide: RESOURCE_GATEWAYS, useValue: withPieces() },
+    ]);
+    const scope = pieceScope(fixture);
+
+    expect(scope?.price).toBe('€6.50');
+    expect(scope?.perKilo).toBe(false);
+    expect(scope?.unitPrice).toBe('');
+    expect(scope?.rows.map((row) => row.price)).toEqual(['€6.50']);
+    const row = fixture.nativeElement.querySelector(
+      '[data-scope="ps_mercadona_4661"]'
+    ) as HTMLElement;
+    expect(row.querySelector('.price')?.textContent?.trim()).toBe('€6.50');
+    expect(row.querySelector('.unit')?.textContent?.trim()).toBe('');
+  });
+
+  it('keeps the tab drawn with no piece price when the offers cannot be read', async () => {
+    const gateways = withPieces();
+    const failingOffers: ResourceGatewaysI = {
+      for: <T extends ResourceRow>(source: ResourceSource<T>) => {
+        const inner = gateways.for(source);
+        if (source.path !== priceSource().path) {
+          return inner;
+        }
+        return {
+          ...inner,
+          list: async () => {
+            throw unavailable();
+          },
+        } satisfies ResourceGateway<T>;
+      },
+    };
+    const fixture = await boot('/products/it_cheese_piece/prices', [
+      { provide: RESOURCE_GATEWAYS, useValue: failingOffers },
+    ]);
+    const scope = pieceScope(fixture);
+
+    expect(scope?.price).toBe('€13.42 / kg');
+    expect(scope?.unitPrice).toBe('');
   });
 });
 

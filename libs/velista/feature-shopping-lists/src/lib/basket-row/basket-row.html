@@ -180,15 +180,35 @@
       </span>
 
       <!--
-        The caption (velista 0139, section 1): the price, then the lists that
+        The caption (velista 0139, section 1): the price, the price per kilo of
+        a kilo piece (velista 0179), then the lists that
         ask, then what the chosen shop makes of it. One line: the lists give way
         and are cut at their end, so a mark after them is never the part that is
         lost. The separator is drawn by the stylesheet between the pieces.
       -->
-      @if (productPrice() || listsText() || markCaption() || groupCaption()) {
+      @if (
+        productPrice() ||
+        unitPriceCaption() ||
+        listsText() ||
+        markCaption() ||
+        groupCaption()
+      ) {
         <span class="caption">
           @if (productPrice(); as price) {
-            <span class="caption-price">{{ price }}</span>
+            <span class="caption-price"
+              ><span>{{ price.amount }}</span>
+              @if (price.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
+          }
+          @if (unitPriceCaption(); as unit) {
+            <span class="caption-unit"
+              ><span>{{ unit.amount }}</span>
+              @if (unit.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
           }
           @if (listsText(); as names) {
             <span class="caption-lists">{{ names }}</span>

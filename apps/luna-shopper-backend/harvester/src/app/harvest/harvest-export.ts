@@ -204,6 +204,13 @@ function toProduct(
     ...(entry.brand ? { brand: entry.brand } : {}),
     ...(entry.ean ? { ean: entry.ean } : {}),
     ...(size ? { size } : {}),
+    // The weight of one piece (plan 0244), so the round trip keeps it. The row
+    // holds it only beside no size, which is what the reader requires.
+    ...(entry.approxWeight !== null &&
+    entry.approxWeight !== undefined &&
+    !size?.quantity
+      ? { approx_weight: Number(entry.approxWeight) }
+      : {}),
     prices: rows.map((price) => toPrice(price, scopes)),
     observed_at: (rows[0]?.observedAt ?? entry.lastSeenAt).toISOString(),
     ...(entry.categoryPath?.length

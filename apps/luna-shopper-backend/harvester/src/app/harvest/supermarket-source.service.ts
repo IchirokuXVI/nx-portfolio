@@ -26,6 +26,8 @@ import { SupermarketSource } from '../entities';
 import { HarvestRunStore } from './harvest-run.store';
 import { toSupermarketSourceView } from './harvest.mappers';
 import { PlatformAdminService } from './platform-admin.service';
+import { toSourceProbeSummary } from './probes/source-probe.mappers';
+import { SourceProbeStore } from './probes/source-probe.store';
 
 interface SourceCursor {
   value: string;
@@ -47,7 +49,10 @@ export class SupermarketSourceService {
     private readonly sources: Repository<SupermarketSource>,
     private readonly admin: PlatformAdminService,
     private readonly config: ConfigService,
-    private readonly runs: HarvestRunStore
+    private readonly runs: HarvestRunStore,
+    // Plan 0219: the newest probe of each row, for its view. Optional, so a
+    // spec that builds this service without probes still can.
+    private readonly probes?: SourceProbeStore
   ) {}
 
   private defaults(): HarvesterConfig {
@@ -104,12 +109,12 @@ export class SupermarketSourceService {
       row.maxRequestsPerSecond = req.maxRequestsPerSecond;
     }
 
-    return toSupermarketSourceView(await this.sources.save(row));
+    return this.withLastProbe(await this.sources.save(row));
   }
 
   async get(req: SupermarketSourceIdRequest): Promise<SupermarketSourceView> {
     await this.admin.requireAdmin(req);
-    return toSupermarketSourceView(await this.load(req.supermarketId));
+    return this.withLastProbe(await this.load(req.supermarketId));
   }
 
   async setEnabled(
@@ -118,7 +123,7 @@ export class SupermarketSourceService {
     await this.admin.requireAdmin(req);
     const row = await this.load(req.supermarketId);
     row.enabled = req.enabled;
-    return toSupermarketSourceView(await this.sources.save(row));
+    return this.withLastProbe(await this.sources.save(row));
   }
 
   /**
@@ -176,12 +181,37 @@ export class SupermarketSourceService {
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
     return {
-      items: page.map(toSupermarketSourceView),
+      items: await this.withLastProbes(page),
       nextCursor:
         hasMore && last
           ? encodeCursor({ value: last.createdAt.toISOString(), id: last.id })
           : null,
     };
+  }
+
+  /** One row's view with its newest probe that is not ABORTED (plan 0219). */
+  private async withLastProbe(
+    row: SupermarketSource
+  ): Promise<SupermarketSourceView> {
+    const [view] = await this.withLastProbes([row]);
+    return view;
+  }
+
+  /** Every row's newest probe in one query, never one query per row. */
+  private async withLastProbes(
+    rows: SupermarketSource[]
+  ): Promise<SupermarketSourceView[]> {
+    if (!this.probes) {
+      return rows.map((row) => toSupermarketSourceView(row));
+    }
+    const latest = await this.probes.latestBySources(rows.map((row) => row.id));
+    return rows.map((row) => {
+      const probe = latest.get(row.id);
+      return toSupermarketSourceView(
+        row,
+        probe ? toSourceProbeSummary(probe) : null
+      );
+    });
   }
 
   /** The row a run reads its knobs from. Used by the runners, not the surface. */

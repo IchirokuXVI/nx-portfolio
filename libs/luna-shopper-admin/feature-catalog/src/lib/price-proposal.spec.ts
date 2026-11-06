@@ -19,6 +19,38 @@ describe('the proposed unit price', () => {
     });
   });
 
+  /** Admin plan 0068, criterion 6. */
+  it('proposes the price itself for a product sold by the kilo, size or none', () => {
+    expect(proposeUnitPrice(13.42, null, 'KILOGRAM')).toEqual({
+      unitPrice: '13.42',
+      label: '1 kg',
+    });
+    expect(proposeUnitPrice(13.42, null, 'KILOGRAM', 1560)).toEqual({
+      unitPrice: '13.42',
+      label: '1 kg',
+    });
+    expect(proposeUnitPrice(13.42, 2, 'KILOGRAM')).toEqual({
+      unitPrice: '13.42',
+      label: '1 kg',
+    });
+  });
+
+  it('proposes a piece priced as one per kilo of its weight', () => {
+    expect(proposeUnitPrice(6.5, null, 'UNIT', 580)).toEqual({
+      unitPrice: '11.2069',
+      label: '1 kg',
+    });
+  });
+
+  it('divides a piece with a size by its size, and not by a weight', () => {
+    expect(proposeUnitPrice(6, 3, 'UNIT', 580)).toEqual({
+      unitPrice: '2.00',
+      label: '1 ud',
+    });
+    expect(proposeUnitPrice(6.5, null, 'UNIT', null)).toBeNull();
+    expect(proposeUnitPrice(6.5, null, 'GRAM', 580)).toBeNull();
+  });
+
   it('proposes nothing without a size, a price or a known unit', () => {
     expect(proposeUnitPrice(1, null, 'LITER')).toBeNull();
     expect(proposeUnitPrice(1, 0, 'LITER')).toBeNull();

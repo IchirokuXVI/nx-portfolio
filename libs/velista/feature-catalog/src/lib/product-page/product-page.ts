@@ -53,7 +53,6 @@ import {
 import {
   appPath,
   CATALOG_PATHS,
-  formatMoney,
   PageNavigation,
   productPagePath,
   sheetSegments,
@@ -65,10 +64,12 @@ import {
   PageHeader,
   PriceHistory,
   PriceTable,
+  priceWords,
   ProductPicture,
   ProductRow,
   ProductRowSkeleton,
   productRowView,
+  unitPriceWords,
   type ListsTableStep,
   type PriceHistoryLine,
   type PriceTableRow,
@@ -268,29 +269,27 @@ export class ProductPage {
   protected readonly prices = computed<readonly PriceTableRow[]>(() => {
     const locale = this._locale();
     this._translator.loaded();
-    const basis = this._item()?.unitBasis ?? null;
+    // Before the product is read, a row is priced by its offer alone
+    // (`soldAsOf`): a set piece price names a kilo piece.
+    const item = this._item();
+    const translate = (key: string): string =>
+      this._translator.t(key, undefined, locale);
     return this._prices().map((line) => {
       const offer = line.offer;
       const chain = catalogName(line.chain, locale);
+      const price = priceWords(offer, item, locale, translate);
+      // A kilo piece whose offer has no piece price is unpriced here, as
+      // everywhere else (velista `0179`): velista never derives one. An
+      // unpriced row is never the cheapest either.
+      const unpriced = line.kind === 'priced' && price === null;
       return {
         supermarketId: line.supermarketId,
         logo: { logoUrl: line.logoUrl, name: chain, store: false },
         chain,
-        kind: line.kind,
-        price:
-          offer !== null && offer.price !== null
-            ? formatMoney(offer.price, offer.currency, locale)
-            : null,
-        unitPrice:
-          offer !== null &&
-          offer.price !== null &&
-          offer.unitPrice !== null &&
-          basis !== null
-            ? this._translator.t(`catalog.unit.${basis}`, undefined, locale, {
-                price: formatMoney(offer.unitPrice, offer.currency, locale),
-              })
-            : null,
-        cheapest: line.cheapest,
+        kind: unpriced ? 'unpriced' : line.kind,
+        price,
+        unitPrice: unitPriceWords(offer, item, locale, translate),
+        cheapest: unpriced ? false : line.cheapest,
         stale: offer?.stale === true,
       };
     });

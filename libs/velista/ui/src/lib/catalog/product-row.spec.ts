@@ -35,6 +35,7 @@ const OFFER: ProductOffer = {
   sourceKind: 'OFFICIAL_API',
   stale: false,
   priceScopeId: 'scope-m',
+  piecePrice: null,
 };
 
 const OIL: CatalogProduct = {
@@ -54,6 +55,7 @@ const OIL: CatalogProduct = {
   ],
   offer: OFFER,
   unitBasis: 'LITER',
+  approxWeight: null,
 };
 
 function options(
@@ -74,7 +76,7 @@ describe('productRowView', () => {
 
     expect(view.name).toBe('Extra virgin olive oil');
     expect(view.detail).toBe('Hacendado · list.add.size.LITER {"size":"1"}');
-    expect(view.price).toBe('€8.45');
+    expect(view.price).toEqual({ amount: '€8.45', per: null });
     expect(view.chains).toEqual({
       lead: 'Mercadona',
       marks: [{ id: 'scope-m', initial: 'M' }],
@@ -88,7 +90,7 @@ describe('productRowView', () => {
   it('leaves the chain line out while one chain is chosen, where every card would name it', () => {
     const view = productRowView(OIL, options({ chainChosen: true }));
 
-    expect(view.price).toBe('€8.45');
+    expect(view.price).toEqual({ amount: '€8.45', per: null });
     expect(view.chains).toBeNull();
   });
 
@@ -99,7 +101,10 @@ describe('productRowView', () => {
         options()
       );
 
-      expect(view.unitPrice).toBe('catalog.unit.LITER {"price":"€8.45"}');
+      expect(view.unitPrice).toEqual({
+        amount: '€8.45',
+        per: 'catalog.per.LITER',
+      });
     });
 
     it('is not drawn when it is the same number, a one litre bottle', () => {
@@ -134,10 +139,145 @@ describe('productRowView', () => {
       options({ now: new Date('2026-10-08T10:00:00.000Z') })
     );
 
-    expect(view.price).toBe('€6.34');
+    expect(view.price).toEqual({ amount: '€6.34', per: null });
     expect(view.stale).toBe(true);
     expect(view.seen).toBe('18 days ago');
     expect(view.unitPrice).toBeNull();
+  });
+
+  describe('a piece whose weight varies (velista 0179)', () => {
+    /** The weight in the words the app ships, every other key echoed. */
+    function weighed(key: string, args?: Record<string, unknown>): string {
+      const size = String(args?.['size'] ?? '');
+      switch (key) {
+        case 'list.add.weight.KILOGRAM':
+          return `~${size}\u00a0kg`;
+        case 'list.add.weight.GRAM':
+          return `~${size}\u00a0g`;
+        default:
+          return translate(key, args);
+      }
+    }
+
+    const CHEESE_OFFER: ProductOffer = {
+      ...OFFER,
+      price: 13.42,
+      unitPrice: 13.42,
+      unitPriceLabel: 'EUR/kg',
+      piecePrice: 20.94,
+    };
+
+    const CHEESE: CatalogProduct = {
+      ...OIL,
+      id: 'item-cheese',
+      name: { es: 'Queso curado', en: 'Cured cheese' },
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: 1560,
+      offer: CHEESE_OFFER,
+      unitBasis: 'KILOGRAM',
+    };
+
+    it('draws the weight, the piece price and the price per kilo of a kilo piece', () => {
+      const es = productRowView(
+        CHEESE,
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(es.detail).toBe('~1,56\u00a0kg');
+      expect(es.price).toEqual({ amount: '20,94\u00a0€', per: null });
+      expect(es.unitPrice).toEqual({
+        amount: '13,42\u00a0€',
+        per: 'catalog.per.KILOGRAM',
+      });
+
+      const en = productRowView(CHEESE, options({ translate: weighed }));
+      expect(en.detail).toBe('~1.56\u00a0kg');
+      expect(en.price).toEqual({ amount: '€20.94', per: null });
+      expect(en.unitPrice).toEqual({
+        amount: '€13.42',
+        per: 'catalog.per.KILOGRAM',
+      });
+      // What a kilo costs is in the name too, so a screen reader hears both
+      // numbers the card draws.
+      expect(en.label).toBe(
+        'Cured cheese, ~1.56\u00a0kg, €20.94, €13.42 catalog.per.KILOGRAM'
+      );
+    });
+
+    it('says the weight of a piece under a kilo in grams', () => {
+      const view = productRowView(
+        { ...CHEESE, approxWeight: 395 },
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(view.detail).toBe('~395\u00a0g');
+    });
+
+    it('still draws the price per kilo of a piece of exactly a kilo', () => {
+      const view = productRowView(
+        {
+          ...CHEESE,
+          approxWeight: 1000,
+          offer: { ...CHEESE_OFFER, price: 10, unitPrice: 10, piecePrice: 10 },
+        },
+        options({ translate: weighed })
+      );
+      expect(view.detail).toBe('~1\u00a0kg');
+      expect(view.price).toEqual({ amount: '€10.00', per: null });
+      expect(view.unitPrice).toEqual({
+        amount: '€10.00',
+        per: 'catalog.per.KILOGRAM',
+      });
+    });
+
+    it('says no price for a kilo piece with a price and no piece price', () => {
+      const view = productRowView(
+        { ...CHEESE, offer: { ...CHEESE_OFFER, piecePrice: null } },
+        options({ translate: weighed })
+      );
+      expect(view.price).toBeNull();
+      expect(view.label).toContain('catalog.row.noPrice');
+    });
+
+    it('draws a product sold by the kilo with its "/ kg" and no unit price line', () => {
+      const view = productRowView(
+        {
+          ...CHEESE,
+          approxWeight: null,
+          offer: { ...CHEESE_OFFER, piecePrice: null },
+        },
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(view.detail).toBeNull();
+      expect(view.price).toEqual({
+        amount: '13,42\u00a0€',
+        per: 'catalog.per.KILOGRAM',
+      });
+      expect(view.unitPrice).toBeNull();
+      expect(view.label).toContain('13,42\u00a0€ catalog.per.KILOGRAM');
+    });
+
+    it('draws a piece priced as one as a pack, with its weight', () => {
+      const view = productRowView(
+        {
+          ...CHEESE,
+          unit: 'UNIT',
+          approxWeight: 580,
+          offer: { ...OFFER, price: 6.5, unitPrice: 6.5, piecePrice: null },
+          unitBasis: 'UNIT',
+        },
+        options({ locale: 'es', translate: weighed })
+      );
+      expect(view.detail).toBe('~580\u00a0g');
+      expect(view.price).toEqual({ amount: '6,50\u00a0€', per: null });
+      expect(view.unitPrice).toBeNull();
+    });
+
+    it('leaves the one litre bottle as it was', () => {
+      const view = productRowView(OIL, options({ translate: weighed }));
+      expect(view.price).toEqual({ amount: '€8.45', per: null });
+      expect(view.unitPrice).toBeNull();
+    });
   });
 
   it('puts the pack after the brand and the size (velista 0162)', () => {
@@ -339,7 +479,7 @@ describe('ProductRow', () => {
       )
     );
     expect(host(differs).querySelector('.price .unit')?.textContent).toContain(
-      'catalog.unit.LITER'
+      'catalog.per.LITER'
     );
 
     const same = await render(productRowView(OIL, options()));
@@ -1115,11 +1255,17 @@ describe('ProductRow, the one card', () => {
 
   describe('every shop’s price (the search)', () => {
     const SHOPS: ProductRowShop[] = [
-      { id: 'c-m', name: 'Mercadona', price: '€8.45', note: null, best: true },
+      {
+        id: 'c-m',
+        name: 'Mercadona',
+        price: { amount: '€8.45', per: null },
+        note: null,
+        best: true,
+      },
       {
         id: 'c-e',
         name: 'El Jamón',
-        price: '€9.10',
+        price: { amount: '€9.10', per: '/ kg' },
         note: 'seen 3 days ago',
         best: false,
       },
@@ -1155,6 +1301,14 @@ describe('ProductRow, the one card', () => {
       expect(rows[1]?.querySelector('.shop-note')?.textContent).toBe(
         'seen 3 days ago'
       );
+      // What a price is per is drawn small after its number (velista 0179).
+      expect(
+        rows[0]?.querySelector('.shop-price')?.firstElementChild?.textContent
+      ).toBe('€8.45');
+      expect(rows[0]?.querySelector('.shop-price .per')).toBeNull();
+      expect(rows[1]?.querySelector('.shop-price .per')?.textContent).toBe(
+        '/ kg'
+      );
       expect(line?.getAttribute('aria-expanded')).toBe('true');
     });
   });
@@ -1174,7 +1328,7 @@ describe('ProductRow, the one card', () => {
       detail: 'Adds its 4 products',
       caption: null,
       imageUrl: null,
-      price: '€1.00',
+      price: { amount: '€1.00', per: null },
       unitPrice: null,
       seen: null,
       stale: false,

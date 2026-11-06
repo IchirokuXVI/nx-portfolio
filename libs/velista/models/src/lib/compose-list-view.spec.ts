@@ -74,6 +74,7 @@ describe('lineCategories', () => {
       chainPrices: [],
       imageUrl: null,
       packCount: null,
+      approxWeight: null,
     };
   }
 

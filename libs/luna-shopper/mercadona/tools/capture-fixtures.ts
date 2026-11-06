@@ -40,6 +40,8 @@ const PRODUCTS: Array<{
   id: string;
   lang: 'es' | 'en';
   why: string;
+  /** Asked in this order when the warehouse of the postal code answers 404. */
+  fallbackWarehouses?: string[];
 }> = [
   {
     file: 'product-detail-es.json',
@@ -90,6 +92,15 @@ const PRODUCTS: Array<{
     why: 'a piece of cheese sold by approximate weight, with an in-store barcode (plan 0181)',
   },
   {
+    file: 'product-approximate-weight-per-piece.json',
+    id: '60226',
+    lang: 'es',
+    why: 'a piece of approximate weight that the chain compares and prices per piece (plan 0244)',
+    // The evidence of plan 0244 read it from these when the default
+    // warehouse answered 404 (docs/kilo-pieces-2026-11, section 2).
+    fallbackWarehouses: ['4661', '3769', '4694'],
+  },
+  {
     file: 'product-fixed-pack-in-store-barcode.json',
     id: '84692',
     lang: 'es',
@@ -134,7 +145,40 @@ const LISTINGS: Array<{ file: string; id: string; why: string }> = [
   },
 ];
 
+/**
+ * `--only <file>[,<file>]` captures the named fixtures and leaves every other
+ * file as it is, so a new fixture can be added without refreshing the values
+ * the existing specs pin. With no `--only` the whole list is refreshed, as
+ * before.
+ */
+const ONLY = readOnly(process.argv.slice(2));
+
+function readOnly(args: string[]): Set<string> | null {
+  const names: string[] = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === '--only' && args[i + 1] !== undefined) {
+      names.push(...args[i + 1].split(','));
+      i += 1;
+    } else if (arg.startsWith('--only=')) {
+      names.push(...arg.slice('--only='.length).split(','));
+    }
+  }
+  const files = names.map((name) => name.trim()).filter(Boolean);
+  return files.length > 0 ? new Set(files) : null;
+}
+
+function wanted(file: string): boolean {
+  return ONLY === null || ONLY.has(file);
+}
+
+/** One request every two seconds, sequential (the evidence of plan 0244). */
+const MIN_INTERVAL_MS = 2000;
+
 async function main(): Promise<void> {
+  if (ONLY !== null) {
+    process.stdout.write(`capturing only ${[...ONLY].join(', ')}\n`);
+  }
   await captureStores();
 
   const warehouse = await MercadonaClient.resolveWarehouse(POSTAL_CODE, {
@@ -151,27 +195,36 @@ async function main(): Promise<void> {
     `postal code ${POSTAL_CODE} -> warehouse ${warehouse}\n`
   );
 
-  const client = new MercadonaClient({
-    warehouse,
-    userAgent: USER_AGENT,
-    // One request every 250 ms, sequential. Well inside section 6.3's default.
-    minIntervalMs: 250,
-  });
+  const clientFor = (code: string) =>
+    new MercadonaClient({
+      warehouse: code,
+      userAgent: USER_AGENT,
+      // Sequential and slow. Well inside section 6.3's default.
+      minIntervalMs: MIN_INTERVAL_MS,
+    });
+  const client = clientFor(warehouse);
 
-  const tree = await client.listCategories('es');
-  write('categories-tree.json', { results: tree });
-  process.stdout.write(`captured ${tree.length} root categories\n`);
+  if (wanted('categories-tree.json') || wanted('category-expanded.json')) {
+    const tree = await client.listCategories('es');
+    if (wanted('categories-tree.json')) {
+      write('categories-tree.json', { results: tree });
+      process.stdout.write(`captured ${tree.length} root categories\n`);
+    }
 
-  const firstLevelOne = tree[0]?.children[0];
-  if (firstLevelOne) {
-    const expanded = await client.getProduct(String(firstLevelOne.id));
-    write('category-expanded.json', expanded);
+    const firstLevelOne = tree[0]?.children[0];
+    if (firstLevelOne && wanted('category-expanded.json')) {
+      const expanded = await client.getProduct(String(firstLevelOne.id));
+      write('category-expanded.json', expanded);
+    }
   }
 
   for (const { file, id, why } of LISTINGS) {
+    if (!wanted(file)) {
+      continue;
+    }
     // The same pacing the client keeps, on the one request it has no raw
     // method for: the client answers a listing already normalized.
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, MIN_INTERVAL_MS));
     const query = new URLSearchParams({ lang: 'es', wh: warehouse });
     const response = await fetch(
       `${MERCADONA_BASE_URL}/categories/${id}/?${query.toString()}`,
@@ -187,12 +240,27 @@ async function main(): Promise<void> {
     write(file, await response.json());
   }
 
-  for (const { file, id, lang, why } of PRODUCTS) {
-    const payload = await client.getProduct(id, lang);
+  for (const { file, id, lang, why, fallbackWarehouses = [] } of PRODUCTS) {
+    if (!wanted(file)) {
+      continue;
+    }
+    let payload = await client.getProduct(id, lang);
+    for (const code of fallbackWarehouses) {
+      if (payload !== null || code === warehouse) {
+        continue;
+      }
+      process.stdout.write(
+        `product ${id} answered 404 in warehouse ${warehouse}; asking ${code}\n`
+      );
+      payload = await clientFor(code).getProduct(id, lang);
+    }
     if (payload === null) {
       process.stderr.write(
-        `product ${id} answered 404 in warehouse ${warehouse}; ` +
-          `the fixture for "${why}" was left as it was\n`
+        `product ${id} answered 404 in warehouse ${warehouse}` +
+          (fallbackWarehouses.length > 0
+            ? ` and in ${fallbackWarehouses.join(', ')}`
+            : '') +
+          `; the fixture for "${why}" was left as it was\n`
       );
       continue;
     }
@@ -213,6 +281,9 @@ async function captureStores(): Promise<void> {
     ['stores.js', MERCADONA_STORES_URL],
     ['stores-total.js', MERCADONA_STORES_TOTAL_URL],
   ] as const) {
+    if (!wanted(file)) {
+      continue;
+    }
     const response = await fetch(url, {
       headers: { accept: '*/*', 'user-agent': USER_AGENT },
     });

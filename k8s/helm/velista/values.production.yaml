@@ -87,6 +87,8 @@ lunaShopperBackend:
     # refuses to boot with it on against a non local database, and
     # `provision-release.sh --check` asserts no rendered manifest carries it.
     environmentName: production
+    # Where a harvest alert mail links a run (plan 0218, section 8).
+    adminAppBaseUrl: https://admin.velista.app
     # The web client velista-web in Google Cloud project velista-512817, owned by
     # admin@velista.app. Its secret is GOOGLE_CLIENT_SECRET in the Secret.
     googleClientId: 717012688744-diupovqba48a48vpjpbta5caipv9bn16.apps.googleusercontent.com

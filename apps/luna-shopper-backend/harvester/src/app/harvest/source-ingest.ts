@@ -21,6 +21,7 @@ import { toItemPriceDetails } from './harvest.mappers';
 import {
   ChainEanIndex,
   FUZZY_CONFIDENCE,
+  isNameKeyed,
   ItemMatchIndex,
   SiblingEntryIndex,
   type MatchResult,
@@ -106,6 +107,18 @@ export interface SourceObservation {
    * prints no prices at all, and LIDL, Carrefour and DIA have no field for it.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece, in grams (plan 0244, section 5.5).
+   *
+   * Independent of {@link soldByWeight}: a cheese sold by the kilo has one,
+   * and so does a tray priced as one piece, which is not sold by weight. The
+   * row holds it only when it holds no size, so a size here clears it.
+   *
+   * Null is a statement that the source prints none, and clears it. Absent is
+   * a source that never reads one (Carrefour, El Jamón, DEZA, a document with
+   * no `approx_weight`), and leaves the stored weight alone.
+   */
+  approxWeight?: number | null;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
@@ -161,6 +174,16 @@ export interface PartialSourceObservation {
    * together. Absent means the listing does not say, and the row is left alone.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece in grams, when the listing states it
+   * (plan 0244, section 5.5). It travels with {@link soldByWeight} for the
+   * same reason: the listing has it, and the piece price is read from it.
+   *
+   * Absent leaves the stored weight alone. Null is a statement that the
+   * listing prints none, and clears it. A weight clears the row's size, as
+   * the full read path holds it.
+   */
+  approxWeight?: number | null;
   /**
    * The photo address, when the listing prints one (plan 0198, section 2).
    *
@@ -303,6 +326,21 @@ export interface SourceIngestCounters {
    * `PRICE_SOLD_ANOTHER_WAY`, that names the row.
    */
   pricesSoldAnotherWay: number;
+  /**
+   * Rows this run proposed by the second key of rung 4, the words of the name
+   * in any order (plan 0221): new rows and waiting rows together. Each is a
+   * `CANDIDATE` with `NAME_WORDS_SIZE`, most often a reworded DEZA name, and
+   * waits for a person.
+   */
+  wordOrderProposals: number;
+  /**
+   * Rows this run queued pointing at the one `REJECTED` row their words meet
+   * (plan 0221, the owner's answer of 2026-11-05): a `CANDIDATE` with
+   * `NAME_WORDS_SIZE`, no product, and the rejected row in
+   * `candidateEntryId`. Kept apart from {@link wordOrderProposals}, which
+   * counts rows proposed as a product.
+   */
+  wordOrderRejectedPointers: number;
 }
 
 /**
@@ -526,6 +564,7 @@ export class SourceIngest {
         // Asked before the write, because the write is what makes it false.
         changed =
           soldByWeightChanged(held, observation) ||
+          approxWeightChanged(held, observation) ||
           imageChanged(held, observation);
         outcome = await this.see(
           held,
@@ -545,7 +584,16 @@ export class SourceIngest {
             sourceGroupChanged(held, fields)
           : false;
         outcome = held
-          ? await this.touch(held, fields, context.runId, seenAt, items, eans)
+          ? await this.touch(
+              held,
+              fields,
+              context.runId,
+              seenAt,
+              items,
+              eans,
+              siblings,
+              counters
+            )
           : await this.create(
               fields,
               input.supermarketId,
@@ -554,7 +602,8 @@ export class SourceIngest {
               observation,
               items,
               siblings,
-              eans
+              eans,
+              counters
             );
       }
       observations.push(observation);
@@ -1067,6 +1116,11 @@ export class SourceIngest {
    *
    * `sizeFormat`, `externalId` and the name are not touched in either case.
    *
+   * **The weight of one piece moves with it** (plan 0244), when the listing
+   * states it. A weight clears the size and its unit, because a row holds a
+   * weight only when it holds no size. An observation that does not carry the
+   * field leaves the stored weight alone, and one that carries null clears it.
+   *
    * **The other is the photo address, when the listing prints one** (plan
    * 0198). It is not an identity field. An observation that does not carry
    * the field leaves the stored address alone, and one that carries null
@@ -1083,7 +1137,14 @@ export class SourceIngest {
     if (soldByWeightChanged(row, observation)) {
       row.soldByWeight = observation.soldByWeight === true;
     }
-    if (observation.soldByWeight === true) {
+    if (observation.approxWeight !== undefined) {
+      row.approxWeight = observation.approxWeight;
+    }
+    if (
+      observation.soldByWeight === true ||
+      (observation.approxWeight !== undefined &&
+        observation.approxWeight !== null)
+    ) {
       row.unitSize = null;
       row.sizeUnit = null;
     }
@@ -1155,6 +1216,10 @@ export class SourceIngest {
    * and the kind of the row stay, and the row is asked the EAN rung with the
    * EAN it holds, as {@link see} asks it. The prices are written by the
    * caller either way, under the kind of the run.
+   *
+   * **A waiting row with no proposal is asked the second key of rung 4** (plan
+   * 0221, section 3.5), when the EAN rung bound nothing: {@link proposeAnyOrder}.
+   * That is what reaches the renames already in the queue.
    */
   private async touch(
     row: SourceCatalogEntry,
@@ -1162,7 +1227,9 @@ export class SourceIngest {
     runId: string,
     seenAt: Date,
     items: ItemMatchIndex,
-    eans: ChainEanIndex
+    eans: ChainEanIndex,
+    siblings: SiblingEntryIndex,
+    counters: SourceIngestCounters
   ): Promise<SourceEntryOutcome> {
     const writes = writesSourceGroup(row, fields.sourceKind);
     const learnedEan = writes && fields.ean !== null && row.ean !== fields.ean;
@@ -1180,6 +1247,8 @@ export class SourceIngest {
         name: fields.name,
         brand: fields.brand,
         unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+        approxWeight:
+          row.approxWeight === null ? null : Number(row.approxWeight),
       });
       // Only the EAN rung promotes. A name match here would be a fuzzy proposal
       // made at the very moment the identifier that makes fuzziness unnecessary
@@ -1198,6 +1267,9 @@ export class SourceIngest {
       }
     } else if (bindWaitingByEan(row, items, eans, seenAt)) {
       rung = 2;
+    }
+    if (rung === 1) {
+      countAnyOrder(counters, proposeAnyOrder(row, siblings));
     }
 
     const saved = await this.entries.save(row);
@@ -1218,7 +1290,8 @@ export class SourceIngest {
     observation: SourceObservation,
     items: ItemMatchIndex,
     siblings: SiblingEntryIndex,
-    eans: ChainEanIndex
+    eans: ChainEanIndex,
+    counters: SourceIngestCounters
   ): Promise<SourceEntryOutcome> {
     const draft = this.entries.create({
       supermarketId,
@@ -1248,6 +1321,9 @@ export class SourceIngest {
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
       unitSize: fields.unitSize,
+      // The weight of one piece stands in for the size it does not have (plan
+      // 0244, section 5.8), so a piece never proposes one of another weight.
+      approxWeight: fields.approxWeight ?? null,
     });
     if (match && isSharedEan(match, observation.ean, eans)) {
       proposeSharedEan(draft, match.itemId);
@@ -1267,7 +1343,8 @@ export class SourceIngest {
       const sibling = siblings.match(
         observation.name,
         observation.sizeFormat,
-        fields.unitSize
+        fields.unitSize,
+        fields.approxWeight ?? null
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -1276,6 +1353,36 @@ export class SourceIngest {
         draft.matchedBy = ItemSourceMatch.NAME_SIZE;
         draft.confidence = FUZZY_CONFIDENCE;
         rung = 4;
+      } else if (isNameKeyed(draft)) {
+        // The second key of rung 4 (plan 0221): the same words in another
+        // order, without "de" and "en", at the same size. Asked only when the
+        // exact key answered nothing, and only for a row keyed on its own
+        // text, which the index holds on the other side too.
+        const reworded = siblings.matchAnyOrder(
+          draft.name,
+          draft.sizeFormat,
+          draft.unitSize,
+          null,
+          draft.approxWeight
+        );
+        const rejected = reworded?.itemId
+          ? null
+          : siblings.rejectedAnyOrder(
+              draft.name,
+              draft.sizeFormat,
+              draft.unitSize,
+              null,
+              draft.approxWeight
+            );
+        if (reworded?.itemId) {
+          proposeReworded(draft, reworded.itemId);
+          counters.wordOrderProposals += 1;
+          rung = 4;
+        } else if (rejected !== null) {
+          pointAtRejection(draft, rejected);
+          counters.wordOrderRejectedPointers += 1;
+          rung = 4;
+        }
       }
     }
 
@@ -1520,6 +1627,8 @@ function emptyCounters(): SourceIngestCounters {
     pricesConfirmed: 0,
     pricesConflicted: 0,
     pricesSoldAnotherWay: 0,
+    wordOrderProposals: 0,
+    wordOrderRejectedPointers: 0,
   };
 }
 
@@ -1656,6 +1765,21 @@ function soldByWeightChanged(
 }
 
 /**
+ * Whether a partial observation states another weight than the row holds
+ * (plan 0244). Never when the listing does not say.
+ */
+function approxWeightChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  if (observation.approxWeight === undefined) {
+    return false;
+  }
+  const held = row.approxWeight === null ? null : Number(row.approxWeight);
+  return held !== observation.approxWeight;
+}
+
+/**
  * A row nobody has decided, which is the only kind a new EAN may promote.
  *
  * A `REJECTED` row is the owner saying this is not a product he tracks, and an
@@ -1721,6 +1845,101 @@ function bindWaitingByEan(
   return true;
 }
 
+/**
+ * The second key of rung 4, asked again for a row that is waiting (plan 0221,
+ * section 3.5).
+ *
+ * Only a row nobody has decided, that is `UNRESOLVED`, that proposes nothing
+ * yet, and that is keyed on its own text. A `CANDIDATE` row already proposes
+ * something, and a person may be reading that proposal. The exact key is not
+ * asked again here.
+ *
+ * When the words meet no product but exactly one `REJECTED` row and no
+ * `ACTIVE` one, the row is queued pointing at that rejection
+ * ({@link pointAtRejection}).
+ *
+ * Mutates the row and leaves the save to the caller. Answers what it wrote.
+ */
+function proposeAnyOrder(
+  row: SourceCatalogEntry,
+  siblings: SiblingEntryIndex
+): 'product' | 'rejected' | null {
+  if (
+    !undecided(row) ||
+    row.status !== SourceEntryStatus.UNRESOLVED ||
+    row.itemId !== null ||
+    row.candidateEntryId !== null ||
+    !isNameKeyed(row)
+  ) {
+    return null;
+  }
+  const reworded = siblings.matchAnyOrder(
+    row.name,
+    row.sizeFormat,
+    row.unitSize,
+    row,
+    row.approxWeight
+  );
+  if (reworded?.itemId) {
+    proposeReworded(row, reworded.itemId);
+    return 'product';
+  }
+  const rejected = siblings.rejectedAnyOrder(
+    row.name,
+    row.sizeFormat,
+    row.unitSize,
+    row,
+    row.approxWeight
+  );
+  if (rejected !== null) {
+    pointAtRejection(row, rejected);
+    return 'rejected';
+  }
+  return null;
+}
+
+function countAnyOrder(
+  counters: SourceIngestCounters,
+  answer: 'product' | 'rejected' | null
+): void {
+  if (answer === 'product') {
+    counters.wordOrderProposals += 1;
+  } else if (answer === 'rejected') {
+    counters.wordOrderRejectedPointers += 1;
+  }
+}
+
+/**
+ * The words of a new name meet one row a person rejected (plan 0221, the
+ * owner's answer to question 3 of 2026-11-05). The run decides nothing: the
+ * row is not rejected by itself. It is queued pointing at the rejection
+ * through `candidateEntryId`, with no product, so the queue shows the person
+ * which rejected row the new name matches. Reject and create work on it as on
+ * any waiting row, and an accept names its product itself.
+ */
+function pointAtRejection(row: SourceCatalogEntry, rejectedId: string): void {
+  row.itemId = null;
+  row.candidateEntryId = rejectedId;
+  row.status = SourceEntryStatus.CANDIDATE;
+  row.matchedBy = ItemSourceMatch.NAME_WORDS_SIZE;
+  row.confidence = FUZZY_CONFIDENCE;
+  row.decidedAt = null;
+}
+
+/**
+ * A proposal by the second key of rung 4 (plan 0221, section 3.4): a
+ * `CANDIDATE` for the product, never `ACTIVE`. It writes no price and sends no
+ * claim. Only a person's accept binds it.
+ */
+function proposeReworded(row: SourceCatalogEntry, itemId: string): void {
+  row.itemId = itemId;
+  row.candidateEntryId = null;
+  row.status = SourceEntryStatus.CANDIDATE;
+  row.matchedBy = ItemSourceMatch.NAME_WORDS_SIZE;
+  row.confidence = FUZZY_CONFIDENCE;
+  row.decidedAt = null;
+}
+
 function fieldsOf(
   observation: SourceObservation,
   sourceKind: PriceSourceKind
@@ -1745,6 +1964,10 @@ function fieldsOf(
     // number describes nothing, and the column's own doc says it is null then.
     sizeUnit: unitSize === null ? null : observation.sizeUnit,
     soldByWeight,
+    // The weight of one piece (plan 0244), held only beside no size: a size
+    // writes a null weight whatever the observation said. With no size, a
+    // source that never reads a weight leaves the stored one alone.
+    approxWeight: unitSize === null ? observation.approxWeight : null,
     sizeFormat: observation.sizeFormat,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
@@ -1864,6 +2087,9 @@ export class SourceIngestSession {
     this.counters.pricesConfirmed += result.counters.pricesConfirmed;
     this.counters.pricesConflicted += result.counters.pricesConflicted;
     this.counters.pricesSoldAnotherWay += result.counters.pricesSoldAnotherWay;
+    this.counters.wordOrderProposals += result.counters.wordOrderProposals;
+    this.counters.wordOrderRejectedPointers +=
+      result.counters.wordOrderRejectedPointers;
     this.priceConflicts.push(...result.priceConflicts);
     this.images.linked += result.images.linked;
     this.images.moved += result.images.moved;

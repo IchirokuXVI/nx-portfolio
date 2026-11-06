@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import type { PriceWords } from '@portfolio/velista/models';
 import {
   BasketIcon,
   ChevronDownIcon,
@@ -48,13 +49,17 @@ export interface ProductRowView {
   readonly caption: string | null;
   /** Null draws the product glyph. */
   readonly imageUrl: string | null;
-  /** The price, formatted, or null for a card with none. */
-  readonly price: string | null;
+  /**
+   * The price as two words, the number and what it is per (velista `0179`), or
+   * null for a card with none. `per` is drawn smaller, muted, close after it.
+   */
+  readonly price: PriceWords | null;
   /**
    * The line under the price: the price per litre or kilo when it differs from
-   * the price, or the chain that has the price (the line detail sheet), or null.
+   * the price, always for a kilo piece, or the chain that has the price (the line
+   * detail sheet, as an amount with no `per`), or null.
    */
-  readonly unitPrice: string | null;
+  readonly unitPrice: PriceWords | null;
   /** Under a stale price, how long ago it was seen ("18 days ago"), or null. */
   readonly seen: string | null;
   /** The server judged the price old. Drawn muted, with its age and the clock. */
@@ -136,8 +141,11 @@ export interface ProductRowStepper {
 export interface ProductRowShop {
   readonly id: string;
   readonly name: string;
-  /** Null for a chain that carries the product with no price on it. */
-  readonly price: string | null;
+  /**
+   * The chain's price as two words (velista `0179`), or null for a chain that
+   * carries the product with no price on it.
+   */
+  readonly price: PriceWords | null;
   /** "seen 12 days ago" when the server marked this price stale, else null. */
   readonly note: string | null;
   /** The cheapest, which carries the number at the top of the card. */
@@ -285,9 +293,19 @@ export type ProductRowExpanded = 'shops' | 'members';
           @if (group() !== null) {
             <span class="unit">{{ 'list.add.card.from' | rokuT }}</span>
           }
-          <span class="amount">{{ price }}</span>
+          <span class="amount"
+            ><span>{{ price.amount }}</span>
+            @if (price.per; as per) {
+              <span class="per">{{ per }}</span>
+            }
+          </span>
           @if (row().unitPrice; as unit) {
-            <span class="unit">{{ unit }}</span>
+            <span class="unit"
+              ><span>{{ unit.amount }}</span>
+              @if (unit.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
           } @else if (row().seen; as seen) {
             <span class="unit seen">
               <lib-clock-icon aria-hidden="true" class="clock" />
@@ -464,7 +482,12 @@ export type ProductRowExpanded = 'shops' | 'members';
                   <span class="shop-note">{{ note }}</span>
                 }
                 @if (shop.price; as price) {
-                  <span class="shop-price">{{ price }}</span>
+                  <span class="shop-price"
+                    ><span>{{ price.amount }}</span>
+                    @if (price.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
                 }
               </li>
             }

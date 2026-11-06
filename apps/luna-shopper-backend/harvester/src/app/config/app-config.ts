@@ -156,6 +156,28 @@ export const harvesterValidationSchema = Joi.object({
   OVERPASS_URL: Joi.string().allow('').default(''),
   NOMINATIM_URL: Joi.string().allow('').default(''),
 
+  /**
+   * Who hears when a run fails (plan 0218, section 8). One setting for the
+   * whole deployment and never one per chain: a comma separated list of
+   * addresses, from the app Secret, empty by default. With it empty every
+   * alert ends `SUPPRESSED` and no mail is sent, which is how staging and
+   * every luna slot run.
+   */
+  HARVEST_ALERT_EMAIL: Joi.string().allow('').default(''),
+  /**
+   * The SMTP relay auth already uses, from the same ConfigMap keys and the
+   * same Secret key. With no host the alerts end `SUPPRESSED` too.
+   */
+  SMTP_HOST: Joi.string().allow('').default(''),
+  SMTP_PORT: Joi.number().port().default(587),
+  SMTP_USER: Joi.string().allow('').default(''),
+  SMTP_PASS: Joi.string().allow('').default(''),
+  MAIL_FROM: Joi.string().allow('').default(''),
+  /** What the subject of an alert names the deployment by. */
+  ENVIRONMENT_NAME: Joi.string().default('development'),
+  /** The back office origin a mail links a run to. Empty names the run id only. */
+  ADMIN_APP_BASE_URL: Joi.string().allow('').default(''),
+
   // Required since plan 0216: the refresh cooldowns live in Redis. Nothing
   // else here uses it, and readiness does not probe it, so an outage refuses
   // refreshes and nothing else.
@@ -199,6 +221,31 @@ export interface HarvesterConfig {
   lidlStoresApiKey: string | undefined;
   overpassUrl: string | undefined;
   nominatimUrl: string | undefined;
+  /** The alerts to the owner (plan 0218). */
+  alerts: HarvestAlertConfig;
+}
+
+/** Where an alert goes, and how (plan 0218, section 8). */
+export interface HarvestAlertConfig {
+  /** `HARVEST_ALERT_EMAIL`, split on commas. Empty sends nothing. */
+  recipients: string[];
+  smtp: {
+    host: string;
+    port: number;
+    user: string;
+    pass: string;
+    from: string;
+  };
+  environmentName: string;
+  adminAppBaseUrl: string;
+}
+
+/** A comma separated list of addresses, with the blanks left out. */
+export function parseRecipients(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((address) => address.trim())
+    .filter((address) => address.length > 0);
 }
 
 /** Joi coerces to a real boolean, but process.env is read directly here too. */
@@ -269,5 +316,17 @@ export const harvesterConfiguration = registerAs(
     lidlStoresApiKey: optional(process.env.LIDL_STORES_API_KEY),
     overpassUrl: optional(process.env.OVERPASS_URL),
     nominatimUrl: optional(process.env.NOMINATIM_URL),
+    alerts: {
+      recipients: parseRecipients(process.env.HARVEST_ALERT_EMAIL),
+      smtp: {
+        host: (process.env.SMTP_HOST ?? '').trim(),
+        port: Number(process.env.SMTP_PORT ?? 587),
+        user: process.env.SMTP_USER ?? '',
+        pass: process.env.SMTP_PASS ?? '',
+        from: (process.env.MAIL_FROM ?? '').trim(),
+      },
+      environmentName: process.env.ENVIRONMENT_NAME || 'development',
+      adminAppBaseUrl: (process.env.ADMIN_APP_BASE_URL ?? '').trim(),
+    },
   })
 );

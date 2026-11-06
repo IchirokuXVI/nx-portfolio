@@ -493,6 +493,54 @@ describe('FileImportRunner (plan 0086)', () => {
     });
   });
 
+  describe('the weight of one piece (plan 0244, section 5.5)', () => {
+    const tile = (over: Record<string, unknown> = {}) =>
+      document({
+        schema_version: 2,
+        products: [
+          {
+            name: 'Queso curado pieza',
+            size: { label: 'pieza 1,5 kg aprox' },
+            approx_weight: 1500,
+            prices: [
+              {
+                amount: null,
+                currency: 'EUR',
+                unit_price: { amount: 12.9, label: 'kg' },
+              },
+            ],
+            extra: { basis: 'kg' },
+            ...over,
+          },
+        ],
+      } as Partial<HarvestDocument>);
+
+    it('passes approx_weight to the observation, and the row holds it', async () => {
+      const { runner, context, saved } = build({ document: tile() });
+
+      await runner.run(context, input);
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        approxWeight: 1500,
+        sizeFormat: 'pieza 1,5 kg aprox',
+      });
+    });
+
+    it('refuses approx_weight beside a size', async () => {
+      const { runner, context } = build({
+        document: tile({
+          size: { label: '1,5 kg', quantity: 1.5, unit: 'kg' },
+        }),
+      });
+
+      await expect(runner.run(context, input)).rejects.toThrow(
+        /approx_weight .*beside a size/
+      );
+    });
+  });
+
   it('gives two products with one key no price at all, and warns once each', async () => {
     const { runner, context, priceRows, warnings } = build({
       document: document({

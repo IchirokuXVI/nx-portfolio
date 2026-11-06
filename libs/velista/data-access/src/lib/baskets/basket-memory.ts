@@ -135,6 +135,7 @@ const offer = (
   currency: 'EUR',
   unitPrice,
   unitPriceLabel,
+  piecePrice: null,
   observedAt: new Date('2026-09-01T06:00:00.000Z'),
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
@@ -177,6 +178,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     imageUrl: null,
     categories: [memoryCategory('milk')],
     sectionIds: null,
+    approxWeight: null,
   },
   {
     id: 'item-milk-pascual',
@@ -194,6 +196,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     imageUrl: null,
     categories: [memoryCategory('milk')],
     sectionIds: null,
+    approxWeight: null,
   },
   {
     id: 'item-milk-central',
@@ -211,6 +214,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     imageUrl: null,
     categories: [memoryCategory('milk')],
     sectionIds: null,
+    approxWeight: null,
   },
   {
     id: 'item-eggs',
@@ -225,6 +229,7 @@ const PRODUCTS: readonly BasketProduct[] = [
     imageUrl: null,
     categories: [memoryCategory('eggs')],
     sectionIds: null,
+    approxWeight: null,
   },
 ];
 

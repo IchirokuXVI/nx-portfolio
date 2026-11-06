@@ -6,6 +6,8 @@
 > owner still has to decide. It does not decide what happens next. The general backend status is
 > [0171](./0171-plan-status-2026-09-29.md), and the status of every project is in
 > [`docs/plans/0001`](../../../docs/plans/0001-plan-status-2026-09-29.md).
+>
+> **Superseded on 2026-11-05.** The owner decided W1 to W4 of plan `0246` section 0: a unit is chosen only on a line with several products, a single product keeps its unit, the price of one compares the products of a line, and no conversion table exists. Those replace the "any unit is selectable" and "equivalence" lines of section 2 below and answer questions 3 to 7 and 9 of section 7 (`0246` sections 0, 3.5 and 9). Questions 1 and 2 were answered by plans `0157`, `0181` and `0245`. Question 8 by plan `0181`.
 
 ## Brief for the agent
 

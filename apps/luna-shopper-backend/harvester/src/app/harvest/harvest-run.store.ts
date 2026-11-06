@@ -10,6 +10,11 @@ import {
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { In, LessThan, QueryFailedError, Repository } from 'typeorm';
 import { HarvestRun } from '../entities';
+import {
+  runAlertFor,
+  type HarvestAlertDraft,
+} from './alerts/harvest-alert.rules';
+import { insertAlert } from './alerts/harvest-alert.store';
 import type { RunSample } from './run-estimate';
 
 const PG_UNIQUE_VIOLATION = '23505';
@@ -527,23 +532,50 @@ export class HarvestRunStore {
   /**
    * Finalize a run. `stopReason` says why a `FAILED` run stopped before its
    * work was done (plan 0215), and is null for every other run.
+   *
+   * `alert` is the outcome's alert to the owner (plan 0218, section 4.1).
+   * With one, the status and the alert row are written in **one
+   * transaction**, so no alert exists for a status that did not commit, and
+   * an alert that cannot be written leaves the run as it was. Without one,
+   * the write is the single update it always was.
    */
   async finish(
     runId: string,
     status: HarvestRunStatus,
     error?: string,
-    stopReason?: HarvestRunStopReason
+    stopReason?: HarvestRunStopReason,
+    alert?: HarvestAlertDraft
   ): Promise<void> {
-    await this.runs.update(
-      { id: runId },
-      {
-        status,
-        finishedAt: new Date(),
-        heartbeatAt: new Date(),
-        error: error ?? null,
-        stopReason: stopReason ?? null,
-      }
+    const write = {
+      status,
+      finishedAt: new Date(),
+      heartbeatAt: new Date(),
+      error: error ?? null,
+      stopReason: stopReason ?? null,
+    };
+    if (!alert) {
+      await this.runs.update({ id: runId }, write);
+      return;
+    }
+    await this.runs.manager.transaction(async (manager) => {
+      await manager.update(HarvestRun, { id: runId }, write);
+      await insertAlert(manager, alert);
+    });
+  }
+
+  /**
+   * How many schedules of a chain are on (plan 0218, section 3), for the one
+   * failure that takes the chain's counter to three. No other run reads it.
+   */
+  async countEnabledSchedules(supermarketId: string): Promise<number> {
+    const [row]: { count: number }[] = await this.runs.query(
+      `SELECT count(*)::int AS "count"
+         FROM "harvest_schedules"
+        WHERE "supermarketId" = $1
+          AND "enabled"`,
+      [supermarketId]
     );
+    return Number(row?.count ?? 0);
   }
 
   /**
@@ -568,13 +600,67 @@ export class HarvestRunStore {
           run.heartbeatAt?.toISOString() ?? 'never'
         }`
       );
-      await this.finish(
-        run.id,
-        HarvestRunStatus.STALE,
-        'No heartbeat; the run was reaped so the lock could be released.'
-      );
+      const sentence =
+        'No heartbeat; the run was reaped so the lock could be released.';
+      try {
+        await this.finish(
+          run.id,
+          HarvestRunStatus.STALE,
+          sentence,
+          undefined,
+          // A stale run alerts like a failed one (plan 0218, the owner's
+          // answer 5). The rule of what is stale above does not change.
+          (await this.staleAlertOf(run, olderThanSeconds)) ?? undefined
+        );
+      } catch (error) {
+        // The status and the alert commit together, so an alert insert that
+        // keeps failing would leave the run RUNNING and its chain locked on
+        // every tick. The run is reaped without its alert instead: the lock
+        // is released, and no alert exists for an outcome that did not commit.
+        this.logger.error(
+          `The stale alert of harvest run ${run.id} could not be written, ` +
+            `so the run is reaped without it: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+        );
+        await this.finish(run.id, HarvestRunStatus.STALE, sentence);
+      }
     }
     return stale.length;
+  }
+
+  /**
+   * The `RUN_STALE` alert of a run the reaper marks, with the reaper's own
+   * sentence as its error. The chain's adapter key is read for the message's
+   * fallback name, and a failed read leaves it out rather than the alert.
+   */
+  private async staleAlertOf(
+    run: HarvestRun,
+    olderThanSeconds: number
+  ): Promise<HarvestAlertDraft | null> {
+    let adapterKey: string | null = null;
+    if (run.sourceId) {
+      try {
+        adapterKey =
+          (await this.sourcesFor([run.sourceId], []))[0]?.adapterKey ?? null;
+      } catch {
+        adapterKey = null;
+      }
+    }
+    return runAlertFor({
+      run,
+      status: HarvestRunStatus.STALE,
+      error:
+        `The stale reaper marked the run after no heartbeat for ` +
+        `${olderThanSeconds} seconds, the stale window, and released its ` +
+        'lock. A scheduled run is started again by the scheduler.',
+      refusal: false,
+      adapterKey,
+      failuresBefore: null,
+      enabledSchedules: 0,
+      finishedAt: new Date(),
+      staleAfterSeconds: olderThanSeconds,
+    });
   }
 
   /**

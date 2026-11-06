@@ -4,6 +4,7 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
 import {
   RokuLocaleStore,
+  RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -141,6 +142,10 @@ async function render<T>(
     lines?: readonly Line[];
     permissions?: readonly ListPermission[];
     itemNames?: FakeItemNames;
+    /** What each product costs at the scopes near the reader. */
+    offers?: (itemId: string) => readonly CatalogScopeOffer[];
+    /** A translator that echoes the values a sentence was given. */
+    echoValues?: boolean;
   } = {}
 ): Promise<Rendered<T>> {
   TestBed.resetTestingModule();
@@ -156,7 +161,9 @@ async function render<T>(
   const browse = {
     context: jest.fn().mockResolvedValue(CONTEXT),
     scopeOffers: jest.fn(async (itemId: string) =>
-      offers(itemId === 'normal' ? 2.15 : 3.45)
+      options.offers === undefined
+        ? offers(itemId === 'normal' ? 2.15 : 3.45)
+        : options.offers(itemId)
     ),
   };
   const map = convertToParamMap({
@@ -186,6 +193,28 @@ async function render<T>(
       { provide: SheetNavigation, useValue: sheets },
       { provide: Router, useValue: { navigateByUrl: jest.fn() } },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      // Listed after the testing module's own, which is what makes it win.
+      ...(options.echoValues === true
+        ? [
+            {
+              provide: RokuTranslatorService,
+              useValue: {
+                loaded: signal(true),
+                locale: signal('en'),
+                getLocale: () => 'en',
+                t: (
+                  key: string,
+                  _ns?: string,
+                  _l?: string,
+                  values?: unknown
+                ) =>
+                  values === undefined
+                    ? key
+                    : `${key}:${JSON.stringify(values)}`,
+              },
+            },
+          ]
+        : []),
       {
         provide: ActivatedRoute,
         useValue: {
@@ -553,6 +582,31 @@ describe('LineSupermarketSheet', () => {
       price: null,
     });
     expect(radios(fixture)).toHaveLength(3);
+  });
+
+  it('says the lowest price of a kilo piece is a price per kilo (velista 0179)', async () => {
+    const { fixture } = await render(LineSupermarketSheet, {
+      echoValues: true,
+      offers: (itemId) =>
+        offers(itemId === 'normal' ? 13.42 : 14.1).map((row) => ({
+          ...row,
+          offer: { ...row.offer, piecePrice: itemId === 'normal' ? 20.94 : 22 },
+        })),
+    });
+
+    expect(fixture.componentInstance.choices()[1].price).toBe(
+      'list.supermarket.from:{"price":"€13.42 catalog.per.KILOGRAM"}'
+    );
+  });
+
+  it('says the lowest price of a pack bare', async () => {
+    const { fixture } = await render(LineSupermarketSheet, {
+      echoValues: true,
+    });
+
+    expect(fixture.componentInstance.choices()[1].price).toBe(
+      'list.supermarket.from:{"price":"€2.15"}'
+    );
   });
 
   it('writes the supermarket that was picked and closes', async () => {

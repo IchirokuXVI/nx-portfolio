@@ -9,6 +9,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
+import { DEZA_RENAMES_2026_10_16 } from './__fixtures__/deza-renames-2026-10-16';
 import type { CatalogClient } from './catalog-client.service';
 import { entryKey } from './matching';
 import type { RunContext } from './run-context';
@@ -39,6 +40,8 @@ interface CatalogItem {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  /** The weight of one piece in grams (plan 0244). */
+  approxWeight?: number | null;
 }
 
 interface PriceRow {
@@ -2282,6 +2285,171 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
       });
       expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
     });
+
+    describe('the weight of one piece (plan 0244, section 5.5)', () => {
+      it('carries the weight the listing states, and clears the size beside it', async () => {
+        const { ingest, context, saved } = build({ rows: [stale] });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('50946', 9.41), approxWeight: 1540 }],
+        });
+
+        expect(saved[0]).toMatchObject({
+          soldByWeight: true,
+          approxWeight: 1540,
+          unitSize: null,
+          sizeUnit: null,
+          sizeFormat: 'kg',
+        });
+        expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+      });
+
+      it('carries the weight of a piece priced as one, which is not sold by weight', async () => {
+        const { ingest, context, saved } = build({
+          rows: [{ ...stale, externalId: '60226', unitSize: 0.58 }],
+        });
+
+        await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('60226', 6.5, false), approxWeight: 580 }],
+        });
+
+        expect(saved[0]).toMatchObject({
+          soldByWeight: false,
+          approxWeight: 580,
+          unitSize: null,
+          sizeUnit: null,
+        });
+      });
+
+      it('leaves the stored weight alone when the listing does not carry one', async () => {
+        const { ingest, context, saved } = build({
+          rows: [
+            {
+              ...stale,
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: 1540,
+            },
+          ],
+        });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [seen('50946', 9.41)],
+        });
+
+        expect(saved[0].approxWeight).toBe(1540);
+        expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+      });
+
+      it('clears the stored weight when the listing carries null', async () => {
+        const { ingest, context, saved } = build({
+          rows: [
+            {
+              ...stale,
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: 1540,
+            },
+          ],
+        });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('50946', 9.41), approxWeight: null }],
+        });
+
+        expect(saved[0].approxWeight).toBeNull();
+        expect(counters.updated).toBe(1);
+      });
+
+      it('counts a numeric weight Postgres answers as text as the same weight', async () => {
+        const { ingest, context } = build({
+          rows: [
+            {
+              ...stale,
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: '1540.0000' as unknown as number,
+            },
+          ],
+        });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('50946', 9.41), approxWeight: 1540 }],
+        });
+
+        expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+      });
+    });
+  });
+
+  describe('a whole read and the weight of one piece (plan 0244, section 5.5)', () => {
+    it('writes the weight beside no size, on a row sold by weight', async () => {
+      const { ingest, context, saved } = build({});
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          observation({
+            externalId: '50946',
+            name: 'Queso semicurado mezcla Hacendado',
+            sizeFormat: 'kg',
+            unitSize: 1.54,
+            sizeUnit: UnitOfMeasure.KILOGRAM,
+            soldByWeight: true,
+            approxWeight: 1540,
+          }),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        approxWeight: 1540,
+      });
+    });
+
+    it('writes a null weight beside a size, whatever the observation said', async () => {
+      const { ingest, context, saved } = build({
+        rows: [{ externalId: 'p-1', name: 'Queso', approxWeight: 350 }],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          observation({
+            externalId: 'p-1',
+            name: 'Queso',
+            unitSize: 350,
+            sizeUnit: UnitOfMeasure.GRAM,
+            approxWeight: 350,
+          }),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({ unitSize: 350, approxWeight: null });
+    });
+
+    it('leaves the weight alone for a source that never reads one', async () => {
+      const { ingest, context, saved } = build({
+        rows: [{ externalId: 'p-2', name: 'Bacalao', approxWeight: 800 }],
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [observation({ externalId: 'p-2', name: 'Bacalao' })],
+      });
+
+      expect(saved[0].approxWeight).toBe(800);
+      expect(counters.unchanged).toBe(1);
+    });
   });
 
   it('writes a row sold by weight with no size, and leaves its key alone', async () => {
@@ -2378,6 +2546,97 @@ describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {
       status: SourceEntryStatus.CANDIDATE,
       itemId: 'item-bottle',
     });
+  });
+});
+
+describe('SourceIngest, rungs 3 and 4 compare the weight of one piece (plan 0244, section 5.8)', () => {
+  /** The two UNRESOLVED twins of the evidence: one name, two pieces. */
+  const twin = (externalId: string, approxWeight: number) =>
+    observation({
+      externalId,
+      name: 'Queso curado de oveja',
+      brand: 'Hacendado',
+      sizeFormat: 'kg',
+      soldByWeight: true,
+      approxWeight,
+    });
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+
+  it("rung 4: 24700 at its weight does not propose 24701's product", async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          id: 'piece-24701',
+          externalId: '24701',
+          name: 'Queso curado de oveja',
+          sizeFormat: 'kg',
+          soldByWeight: true,
+          // Postgres answers `numeric` as text.
+          approxWeight: '1560.0000' as unknown as number,
+          status: SourceEntryStatus.ACTIVE,
+          matchedBy: ItemSourceMatch.MANUAL,
+          itemId: 'item-24701',
+        },
+      ],
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      ...session,
+      observations: [twin('24700', 820), twin('24702', 1560)],
+    });
+
+    expect(outcomes.map((outcome) => outcome.rung)).toEqual([5, 4]);
+    expect(saved[0]).toMatchObject({
+      externalId: '24700',
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+    });
+    // The same weight is the same piece, and is proposed.
+    expect(saved[1]).toMatchObject({
+      externalId: '24702',
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: 'item-24701',
+    });
+  });
+
+  it('rung 3: a piece proposes no product of another weight, nor one with none', async () => {
+    const product = (id: string, approxWeight: number | null) => ({
+      id,
+      name: { es: 'Queso curado de oveja', en: null },
+      brand: 'Hacendado',
+      ean: null,
+      unitSize: null,
+      approxWeight,
+    });
+    const { ingest, context, saved } = build({
+      items: [product('item-heavy', 1560)],
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      ...session,
+      observations: [twin('24700', 820), twin('24702', 1560)],
+    });
+
+    expect(outcomes.map((outcome) => outcome.rung)).toEqual([5, 3]);
+    expect(saved[0]).toMatchObject({ externalId: '24700', itemId: null });
+    expect(saved[1]).toMatchObject({
+      externalId: '24702',
+      status: SourceEntryStatus.CANDIDATE,
+      matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
+      itemId: 'item-heavy',
+    });
+
+    // Loose cheese, a product with no weight, is not proposed for a piece.
+    const loose = build({ items: [product('item-loose', null)] });
+    const answer = await loose.ingest.ingest(loose.context, {
+      ...session,
+      observations: [twin('24700', 820)],
+    });
+    expect(answer.outcomes[0].rung).toBe(5);
   });
 });
 
@@ -3052,10 +3311,9 @@ describe('SourceIngest, the photo a row states (plan 0198)', () => {
   });
 
   it('does not fail the chunk when the link message fails, and counts the rows', async () => {
-    const built = withLinks(
-      [{ externalId: 'a', name: 'Leche', ...bound }],
-      { failLinks: true }
-    );
+    const built = withLinks([{ externalId: 'a', name: 'Leche', ...bound }], {
+      failLinks: true,
+    });
 
     const { images, outcomes } = await run(built, [
       observation({ externalId: 'a', name: 'Leche', imageUrl: PHOTO }),
@@ -3087,5 +3345,558 @@ describe('SourceIngest, the photo a row states (plan 0198)', () => {
 
     expect(built.linkItemImages).toHaveBeenCalledTimes(2);
     expect(images.linked).toBe(2);
+  });
+});
+
+/**
+ * Rung 4's second key (plan 0221): a reworded DEZA name is proposed as the
+ * product its old row is bound to, and only a person binds it.
+ */
+describe('SourceIngest, a reworded name is proposed as the same product (plan 0221)', () => {
+  const OLD = 'Chorizo ibérico de bellota ESENCIA ÚNICA Covap';
+  const NEW = 'Chorizo de bellota ibérico ESENCIA ÚNICA Covap';
+
+  /** A DEZA row: keyed on its own text, as the walk keys it. */
+  function web(
+    over: Partial<SourceCatalogEntry> & { name: string }
+  ): Partial<SourceCatalogEntry> {
+    const sizeFormat = over.sizeFormat === undefined ? '60 g' : over.sizeFormat;
+    return {
+      externalId: entryKey(over.name, sizeFormat),
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      sizeFormat,
+      unitSize: 60,
+      ...over,
+    };
+  }
+
+  const bound = {
+    status: SourceEntryStatus.ACTIVE,
+    matchedBy: ItemSourceMatch.MANUAL,
+    confidence: 1,
+    decidedAt: new Date('2026-10-06T10:00:00.000Z'),
+  };
+
+  function walk(name: string, over: Partial<SourceObservation> = {}) {
+    return observation({
+      name,
+      sizeFormat: '60 g',
+      unitSize: 60,
+      ...over,
+    });
+  }
+
+  async function ingestWeb(
+    built: ReturnType<typeof build>,
+    observations: SourceObservation[]
+  ) {
+    return built.ingest.ingest(built.context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+      observations,
+    });
+  }
+
+  it('queues a new name keyed row as a CANDIDATE for the one product its words match', async () => {
+    const built = build({
+      rows: [web({ id: 'old', name: OLD, itemId: 'item-chorizo', ...bound })],
+    });
+
+    const { outcomes, counters } = await ingestWeb(built, [
+      walk(NEW, { price: PRICE }),
+    ]);
+
+    expect(outcomes[0]).toMatchObject({ rung: 4, created: true, itemId: null });
+    expect(built.saved[0]).toMatchObject({
+      name: NEW,
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: 'item-chorizo',
+      candidateEntryId: null,
+      matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+      confidence: 0.6,
+      decidedAt: null,
+    });
+    expect(counters.wordOrderProposals).toBe(1);
+    // A proposal, not a decision: the price stays on the source row.
+    expect(built.catalog.addPrices).not.toHaveBeenCalled();
+    // And the old row is not touched.
+    expect(built.stored[0]).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-chorizo',
+      name: OLD,
+    });
+  });
+
+  it('asks the exact key first, and it wins when both keys could answer', async () => {
+    const built = build({
+      rows: [
+        // A leaflet row under a chain code, the exact name and size.
+        {
+          id: 'exact',
+          externalId: 'LEAFLET-7',
+          name: NEW,
+          sizeFormat: '60 g',
+          unitSize: 60,
+          itemId: 'item-exact',
+          ...bound,
+        },
+        web({ id: 'old', name: OLD, itemId: 'item-reworded', ...bound }),
+      ],
+    });
+
+    const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+    expect(built.saved[0]).toMatchObject({
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: 'item-exact',
+      matchedBy: ItemSourceMatch.NAME_SIZE,
+    });
+    expect(counters.wordOrderProposals).toBe(0);
+  });
+
+  it('never asks a new row keyed by an article code', async () => {
+    const built = build({
+      rows: [web({ id: 'old', name: OLD, itemId: 'item-chorizo', ...bound })],
+    });
+
+    const { outcomes, counters } = await ingestWeb(built, [
+      walk(NEW, { externalId: 'ART-0042' }),
+    ]);
+
+    expect(outcomes[0].rung).toBe(5);
+    expect(built.saved[0]).toMatchObject({
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+      matchedBy: null,
+    });
+    expect(counters.wordOrderProposals).toBe(0);
+  });
+
+  it('leaves the El Jamón pairs apart: both sides keyed by an article code', async () => {
+    // Section 3.2: a person bound "chorizo pavo" and "chorizo de pavo" to two
+    // brands. The rows are keyed on article codes, so the key reaches neither.
+    const built = build({
+      rows: [
+        {
+          id: 'old',
+          externalId: '000184',
+          name: 'Chorizo pavo',
+          sizeFormat: null,
+          itemId: 'item-a',
+          ...bound,
+        },
+        {
+          id: 'tuna',
+          externalId: '000311',
+          name: 'Atún en aceite girasol',
+          sizeFormat: null,
+          itemId: 'item-c',
+          ...bound,
+        },
+      ],
+    });
+
+    const { counters } = await ingestWeb(built, [
+      observation({ externalId: '000185', name: 'Chorizo de pavo' }),
+      observation({ externalId: '000312', name: 'Atún aceite girasol' }),
+      // A name keyed row cannot reach an article keyed one either.
+      observation({ name: 'Pavo chorizo' }),
+    ]);
+
+    expect(built.saved.map((row) => row.status)).toEqual([
+      SourceEntryStatus.UNRESOLVED,
+      SourceEntryStatus.UNRESOLVED,
+      SourceEntryStatus.UNRESOLVED,
+    ]);
+    expect(counters.wordOrderProposals).toBe(0);
+  });
+
+  it('keeps "zero zero" and "con fresa" apart from the products a person bound', async () => {
+    const built = build({
+      rows: [
+        web({
+          id: 'zero',
+          name: 'Refresco zero COCA COLA',
+          sizeFormat: '2 L',
+          unitSize: 2,
+          itemId: 'item-zero',
+          ...bound,
+        }),
+        web({
+          id: 'fresa',
+          name: 'Yogur griego ALTEZA fresa',
+          sizeFormat: '4x125 g',
+          unitSize: 4,
+          itemId: 'item-fresa',
+          ...bound,
+        }),
+      ],
+    });
+
+    const { counters } = await ingestWeb(built, [
+      observation({
+        name: 'Refresco zero zero COCA COLA',
+        sizeFormat: '2 L',
+        unitSize: 2,
+      }),
+      observation({
+        name: 'Yogur griego ALTEZA con fresa',
+        sizeFormat: '4x125 g',
+        unitSize: 4,
+      }),
+    ]);
+
+    expect(built.saved.map((row) => row.status)).toEqual([
+      SourceEntryStatus.UNRESOLVED,
+      SourceEntryStatus.UNRESOLVED,
+    ]);
+    expect(counters.wordOrderProposals).toBe(0);
+  });
+
+  it('proposes nothing when the words name two bound products', async () => {
+    const built = build({
+      rows: [
+        web({ id: 'a', name: OLD, itemId: 'item-1', ...bound }),
+        web({
+          id: 'b',
+          name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+          itemId: 'item-2',
+          ...bound,
+        }),
+      ],
+    });
+
+    const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+    expect(built.saved[0]).toMatchObject({
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+    });
+    expect(counters.wordOrderProposals).toBe(0);
+  });
+
+  it('asks a touched UNRESOLVED row with no proposal, and proposes it', async () => {
+    const built = build({
+      rows: [
+        web({ id: 'old', name: OLD, itemId: 'item-chorizo', ...bound }),
+        // Queued by an earlier walk, before the key existed.
+        web({ id: 'waiting', name: NEW }),
+      ],
+    });
+
+    const { outcomes, counters } = await ingestWeb(built, [walk(NEW)]);
+
+    expect(outcomes[0]).toMatchObject({ created: false, itemId: null });
+    expect(built.saved[0]).toMatchObject({
+      id: 'waiting',
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: 'item-chorizo',
+      candidateEntryId: null,
+      matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+      confidence: 0.6,
+      decidedAt: null,
+    });
+    expect(counters.wordOrderProposals).toBe(1);
+    expect(built.catalog.addPrices).not.toHaveBeenCalled();
+  });
+
+  it('leaves a touched CANDIDATE row and a REJECTED row as they are', async () => {
+    const built = build({
+      rows: [
+        web({ id: 'old', name: OLD, itemId: 'item-chorizo', ...bound }),
+        web({
+          id: 'candidate',
+          name: NEW,
+          status: SourceEntryStatus.CANDIDATE,
+          matchedBy: ItemSourceMatch.NAME_SIZE,
+          candidateEntryId: 'someone',
+          confidence: 0.6,
+        }),
+        web({
+          id: 'rejected',
+          name: 'Chorizo bellota de ibérico ESENCIA ÚNICA Covap',
+          status: SourceEntryStatus.REJECTED,
+          decidedAt: new Date('2026-10-07T10:00:00.000Z'),
+        }),
+      ],
+    });
+
+    const { counters } = await ingestWeb(built, [
+      walk(NEW),
+      walk('Chorizo bellota de ibérico ESENCIA ÚNICA Covap'),
+    ]);
+
+    expect(built.saved[0]).toMatchObject({
+      id: 'candidate',
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: null,
+      candidateEntryId: 'someone',
+      matchedBy: ItemSourceMatch.NAME_SIZE,
+    });
+    expect(built.saved[1]).toMatchObject({
+      id: 'rejected',
+      status: SourceEntryStatus.REJECTED,
+      itemId: null,
+      matchedBy: null,
+    });
+    expect(counters.wordOrderProposals).toBe(0);
+  });
+
+  it('proposes the old product for two new rows of one walk with the same words', async () => {
+    const built = build({
+      rows: [web({ id: 'old', name: OLD, itemId: 'item-chorizo', ...bound })],
+    });
+
+    const { counters } = await ingestWeb(built, [
+      walk(NEW),
+      walk('Chorizo bellota de ibérico ESENCIA ÚNICA Covap'),
+    ]);
+
+    expect(built.saved).toHaveLength(2);
+    for (const row of built.saved) {
+      expect(row).toMatchObject({
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: 'item-chorizo',
+        candidateEntryId: null,
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+      });
+    }
+    expect(counters.wordOrderProposals).toBe(2);
+  });
+
+  it('counts creates and touches together, across the chunks of one session', async () => {
+    const built = build({
+      rows: [
+        web({ id: 'old', name: OLD, itemId: 'item-chorizo', ...bound }),
+        web({ id: 'waiting', name: NEW }),
+      ],
+    });
+    const session = await built.ingest.open(built.context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_WEB,
+    });
+
+    await session.push([walk(NEW)]);
+    await session.push([
+      walk('Chorizo bellota de ibérico ESENCIA ÚNICA Covap'),
+    ]);
+    const { counters } = await session.close();
+
+    expect(counters).toMatchObject({
+      created: 1,
+      wordOrderProposals: 2,
+    });
+  });
+
+  describe('a reworded name of a rejected row (owner, 2026-11-05)', () => {
+    const rejected = {
+      status: SourceEntryStatus.REJECTED,
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      itemId: null,
+      decidedAt: new Date('2026-10-07T10:00:00.000Z'),
+    };
+
+    it('queues the new row pointing at the one REJECTED row, and decides nothing', async () => {
+      const built = build({
+        rows: [web({ id: 'rejected', name: OLD, ...rejected })],
+      });
+
+      const { outcomes, counters } = await ingestWeb(built, [
+        walk(NEW, { price: PRICE }),
+      ]);
+
+      expect(outcomes[0]).toMatchObject({
+        rung: 4,
+        created: true,
+        itemId: null,
+      });
+      expect(built.saved[0]).toMatchObject({
+        name: NEW,
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: null,
+        candidateEntryId: 'rejected',
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+        confidence: 0.6,
+        decidedAt: null,
+      });
+      expect(counters).toMatchObject({
+        wordOrderProposals: 0,
+        wordOrderRejectedPointers: 1,
+      });
+      expect(built.catalog.addPrices).not.toHaveBeenCalled();
+      expect(built.stored[0].status).toBe(SourceEntryStatus.REJECTED);
+    });
+
+    it('proposes the product when a REJECTED row sits beside an ACTIVE one', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'rejected', name: OLD, ...rejected }),
+          web({
+            id: 'kept',
+            name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+            itemId: 'item-chorizo',
+            ...bound,
+          }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: 'item-chorizo',
+        candidateEntryId: null,
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+      });
+      expect(counters).toMatchObject({
+        wordOrderProposals: 1,
+        wordOrderRejectedPointers: 0,
+      });
+    });
+
+    it('points at nothing for two REJECTED rows', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'a', name: OLD, ...rejected }),
+          web({
+            id: 'b',
+            name: 'Chorizo ibérico bellota ESENCIA ÚNICA Covap',
+            ...rejected,
+          }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        status: SourceEntryStatus.UNRESOLVED,
+        candidateEntryId: null,
+        matchedBy: null,
+      });
+      expect(counters.wordOrderRejectedPointers).toBe(0);
+    });
+
+    it('finds the pointer for a touched UNRESOLVED row with no proposal', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'rejected', name: OLD, ...rejected }),
+          web({ id: 'waiting', name: NEW }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        id: 'waiting',
+        status: SourceEntryStatus.CANDIDATE,
+        itemId: null,
+        candidateEntryId: 'rejected',
+        matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+        decidedAt: null,
+      });
+      expect(counters.wordOrderRejectedPointers).toBe(1);
+    });
+
+    it('does not ask a CANDIDATE row again', async () => {
+      const built = build({
+        rows: [
+          web({ id: 'rejected', name: OLD, ...rejected }),
+          web({
+            id: 'pointing',
+            name: NEW,
+            status: SourceEntryStatus.CANDIDATE,
+            matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+            candidateEntryId: 'rejected',
+            confidence: 0.6,
+          }),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, [walk(NEW)]);
+
+      expect(built.saved[0]).toMatchObject({
+        id: 'pointing',
+        status: SourceEntryStatus.CANDIDATE,
+        candidateEntryId: 'rejected',
+      });
+      expect(counters).toMatchObject({
+        wordOrderProposals: 0,
+        wordOrderRejectedPointers: 0,
+      });
+    });
+  });
+
+  describe('the fourteen renames of the walk of 2026-10-16 (section 1)', () => {
+    const olds = () =>
+      DEZA_RENAMES_2026_10_16.map((pair, index) =>
+        web({
+          id: `old-${index}`,
+          name: pair.before,
+          sizeFormat: pair.sizeFormat,
+          unitSize: pair.unitSize,
+          itemId: `item-${index}`,
+          ...bound,
+        })
+      );
+    const news = () =>
+      DEZA_RENAMES_2026_10_16.map((pair) =>
+        observation({
+          name: pair.after,
+          sizeFormat: pair.sizeFormat,
+          unitSize: pair.unitSize,
+          price: PRICE,
+        })
+      );
+
+    function expectProposed(built: ReturnType<typeof build>): void {
+      expect(built.saved).toHaveLength(DEZA_RENAMES_2026_10_16.length);
+      built.saved.forEach((row, index) => {
+        expect(row).toMatchObject({
+          name: DEZA_RENAMES_2026_10_16[index].after,
+          status: SourceEntryStatus.CANDIDATE,
+          itemId: `item-${index}`,
+          candidateEntryId: null,
+          matchedBy: ItemSourceMatch.NAME_WORDS_SIZE,
+          confidence: 0.6,
+        });
+      });
+      expect(built.catalog.addPrices).not.toHaveBeenCalled();
+    }
+
+    it('proposes each of them as the walk creates its new row', async () => {
+      const built = build({ rows: olds() });
+
+      const { counters } = await ingestWeb(built, news());
+
+      expectProposed(built);
+      expect(counters.wordOrderProposals).toBe(DEZA_RENAMES_2026_10_16.length);
+    });
+
+    it('proposes each of them on the first walk after the deploy, from the queue', async () => {
+      const built = build({
+        rows: [
+          ...olds(),
+          ...DEZA_RENAMES_2026_10_16.map((pair, index) =>
+            web({
+              id: `waiting-${index}`,
+              name: pair.after,
+              sizeFormat: pair.sizeFormat,
+              unitSize: pair.unitSize,
+            })
+          ),
+        ],
+      });
+
+      const { counters } = await ingestWeb(built, news());
+
+      expectProposed(built);
+      expect(counters).toMatchObject({
+        created: 0,
+        wordOrderProposals: DEZA_RENAMES_2026_10_16.length,
+      });
+    });
   });
 });

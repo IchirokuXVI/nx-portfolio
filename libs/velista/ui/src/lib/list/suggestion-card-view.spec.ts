@@ -120,7 +120,10 @@ describe('suggestionCardView, an item', () => {
   });
 
   it('quotes the price of this packet', () => {
-    expect(itemCard({ offer: offer(0.95) }).row.price).toBe(money(0.95));
+    expect(itemCard({ offer: offer(0.95) }).row.price).toEqual({
+      amount: money(0.95),
+      per: null,
+    });
   });
 
   describe('the price per unit (rule 5)', () => {
@@ -131,9 +134,10 @@ describe('suggestionCardView, an item', () => {
         unitBasis: 'LITER',
       });
 
-      expect(card.row.unitPrice).toBe(
-        `catalog.unit.LITER {"price":"${money(1.09)}"}`
-      );
+      expect(card.row.unitPrice).toEqual({
+        amount: money(1.09),
+        per: 'catalog.per.LITER',
+      });
     });
 
     it('is not drawn when it is the same number, a one litre carton', () => {
@@ -214,12 +218,49 @@ describe('suggestionCardView, an item', () => {
       expect(
         card.shops.map((shop) => [shop.name, shop.price, shop.best])
       ).toEqual([
-        ['Mercadona', money(1.19), true],
-        ['Carrefour', money(1.25), false],
-        ['Dia', money(1.29), false],
-        ['Lidl', money(1.32), false],
-        ['Deza', money(1.38), false],
+        ['Mercadona', { amount: money(1.19), per: null }, true],
+        ['Carrefour', { amount: money(1.25), per: null }, false],
+        ['Dia', { amount: money(1.29), per: null }, false],
+        ['Lidl', { amount: money(1.32), per: null }, false],
+        ['Deza', { amount: money(1.38), per: null }, false],
       ]);
+    });
+
+    it('prices each chain of a kilo piece by the piece (velista 0179)', () => {
+      const piece = (id: string, name: string, kilo: number, one: number) => ({
+        chain: { id, name: { es: name, en: name } },
+        offer: offer(kilo, { priceScopeId: `scope-${id}`, piecePrice: one }),
+      });
+      const card = itemCard({
+        size: null,
+        unit: 'KILOGRAM',
+        approxWeight: 1560,
+        offer: offer(13.42, { piecePrice: 20.94 }),
+        chainPrices: [
+          piece('mercadona', 'Mercadona', 13.42, 20.94),
+          piece('dia', 'Dia', 14.1, 22),
+        ],
+      });
+
+      expect(card.shops.map((shop) => shop.price)).toEqual([
+        { amount: money(20.94), per: null },
+        { amount: money(22), per: null },
+      ]);
+    });
+
+    it('says each chain of a loose product prices it by the kilo (velista 0179)', () => {
+      const card = itemCard({
+        size: null,
+        unit: 'KILOGRAM',
+        approxWeight: null,
+        offer: offer(2.49),
+        chainPrices: [chain('mercadona', 'Mercadona', 2.49)],
+      });
+
+      expect(card.shops[0]?.price).toEqual({
+        amount: money(2.49),
+        per: 'catalog.per.KILOGRAM',
+      });
     });
 
     it('says how old a stale chain price is on its own row', () => {
@@ -291,7 +332,7 @@ describe('suggestionCardView, a group (rule 4)', () => {
   it('labels its price as a floor, "from", and not as the price of a thing', () => {
     const card = groupCard(6, five);
 
-    expect(card.row.price).toBe(money(0.89));
+    expect(card.row.price).toEqual({ amount: money(0.89), per: null });
     expect(card.row.label).toBe(
       `Milk, list.add.card.groupBadge, list.add.card.from ${money(0.89)}`
     );
@@ -337,5 +378,64 @@ describe('suggestionCardView, a group (rule 4)', () => {
 
   it('draws no price for a group nobody prices', () => {
     expect(groupCard(6, five, null).row.price).toBeNull();
+  });
+
+  describe('a group of products sold by the kilo (velista 0179)', () => {
+    const pieces = [20.94, 22].map((one, index) =>
+      product({
+        id: `p${index}`,
+        size: null,
+        unit: 'KILOGRAM',
+        approxWeight: 1560,
+        offer: offer(13.42 + index, {
+          priceScopeId: `scope-${index}`,
+          piecePrice: one,
+        }),
+      })
+    );
+    const loose = [
+      product({
+        id: 'l0',
+        size: null,
+        unit: 'KILOGRAM',
+        approxWeight: null,
+        offer: offer(2.49),
+      }),
+    ];
+
+    it('prices the floor of kilo pieces by its member, the piece price', () => {
+      const card = groupCard(2, pieces, pieces[0].offer);
+
+      expect(card.row.price).toEqual({ amount: money(20.94), per: null });
+      expect(card.group?.members.map((member) => member.price)).toEqual([
+        money(20.94),
+        money(22),
+      ]);
+    });
+
+    it('prices the floor by its offer alone when no member shown has it', () => {
+      const card = groupCard(
+        3,
+        pieces,
+        offer(12, { priceScopeId: 'scope-other', piecePrice: 18.72 })
+      );
+
+      expect(card.row.price).toEqual({ amount: money(18.72), per: null });
+    });
+
+    it('says a loose member and its floor are priced by the kilo', () => {
+      const card = groupCard(1, loose, loose[0].offer);
+
+      expect(card.row.price).toEqual({
+        amount: money(2.49),
+        per: 'catalog.per.KILOGRAM',
+      });
+      expect(card.row.label).toContain(
+        `list.add.card.from ${money(2.49)} catalog.per.KILOGRAM`
+      );
+      expect(card.group?.members[0]?.price).toBe(
+        `${money(2.49)} catalog.per.KILOGRAM`
+      );
+    });
   });
 });

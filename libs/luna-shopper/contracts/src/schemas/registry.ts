@@ -68,6 +68,10 @@ import {
   catalogSchemas,
 } from './messages/catalog.schemas';
 import {
+  harvestAlertMessageContracts,
+  harvestAlertSchemas,
+} from './messages/harvest-alert.schemas';
+import {
   harvestMessageContracts,
   harvestSchemas,
 } from './messages/harvest.schemas';
@@ -99,6 +103,10 @@ import {
   shopWalkMessageContracts,
   shopWalkSchemas,
 } from './messages/shop-walk.schemas';
+import {
+  sourceProbeMessageContracts,
+  sourceProbeSchemas,
+} from './messages/source-probe.schemas';
 import { statsMessageContracts, statsSchemas } from './messages/stats.schemas';
 import { zoneMessageContracts, zoneSchemas } from './messages/zone.schemas';
 
@@ -132,6 +140,10 @@ export const messageContracts: Record<string, MessageContract> = {
   ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
   ...purchaseMessageContracts,
+  // The harvester's test alert (plan 0218).
+  ...harvestAlertMessageContracts,
+  // A probe per chain checks the storefront shape (plan 0219).
+  ...sourceProbeMessageContracts,
   // A shopper refreshes the price of one product (plan 0216).
   ...priceRefreshMessageContracts,
 };
@@ -186,6 +198,10 @@ export const allSchemas: JsonSchema[] = [
   // harvester exports, validated by the gateway before it crosses the broker and
   // by the harvester again at the spawn, found by its own `$id`.
   ...harvestDocumentSchemas,
+  // The harvester's alerts to the owner (plan 0218).
+  ...harvestAlertSchemas,
+  // A probe per chain checks the storefront shape (plan 0219).
+  ...sourceProbeSchemas,
   // A shopper refreshes the price of one product (plan 0216).
   ...priceRefreshSchemas,
 ];

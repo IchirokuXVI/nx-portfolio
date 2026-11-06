@@ -36,6 +36,7 @@ import {
   lineName,
   lineNameChange,
   lineNameRefused,
+  priceWordsText,
   type BasketShop,
   type Line,
   type SettlementOutcome,
@@ -549,6 +550,7 @@ export class LineDetailSheet {
       // yet" (velista `0047`, section 1.2): it is one of the products this line
       // carries, offered as a choice.
       const name = choice.name ?? t('list.detail.unnamedProduct');
+      const price = choice.price === null ? null : priceWordsText(choice.price);
       return {
         id: choice.itemId,
         name,
@@ -558,14 +560,17 @@ export class LineDetailSheet {
         price: choice.price,
         // The line under the price names the chain that has it, as the mock
         // draws it, rather than a price per litre or kilo.
-        unitPrice: choice.price === null ? null : choice.chain,
+        unitPrice:
+          choice.price === null || choice.chain === null
+            ? null
+            : { amount: choice.chain, per: null },
         seen: null,
         stale: false,
         chains: null,
         label: [
           name,
           choice.detail,
-          choice.price ?? t('catalog.row.noPrice'),
+          price ?? t('catalog.row.noPrice'),
           choice.price === null ? null : choice.chain,
         ]
           .filter((part): part is string => part !== null && part !== '')

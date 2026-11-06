@@ -10,6 +10,7 @@ import type { FileImportRunner } from './file-import.runner';
 import type { HarvestRunStore } from './harvest-run.store';
 import type { RunContext } from './run-context';
 import { RunExecutor, SHUTDOWN_STOPPED_RUN } from './run-executor.service';
+import type { SourceIngestCounters } from './source-ingest';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
 /**
@@ -26,6 +27,25 @@ import type { SupermarketSourceService } from './supermarket-source.service';
  */
 
 const CHAIN = '02060206-0000-4000-a000-000000000001';
+
+/** What a file import answers, every key of its type. */
+function counters(
+  overrides: Partial<SourceIngestCounters> = {}
+): SourceIngestCounters {
+  return {
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    pricesRecorded: 0,
+    pricesWritten: 0,
+    pricesConfirmed: 0,
+    pricesConflicted: 0,
+    pricesSoldAnotherWay: 0,
+    wordOrderProposals: 0,
+    wordOrderRejectedPointers: 0,
+    ...overrides,
+  };
+}
 
 type Ending = 'throws' | 'returns';
 
@@ -76,12 +96,7 @@ function build(ending: Ending = 'throws') {
             if (ending === 'throws') {
               reject(new Error('The operation was aborted.'));
             } else {
-              resolve({
-                pricesRecorded: 0,
-                pricesWritten: 0,
-                pricesConfirmed: 0,
-                pricesConflicted: 0,
-              });
+              resolve(counters());
             }
           });
         })
@@ -177,6 +192,26 @@ describe('RunExecutor, a run that is stopped (plan 0206)', () => {
       'run-1',
       HarvestRunStatus.ABORTED,
       'The operation was aborted.'
+    );
+  });
+
+  it('writes the two word order counts of a file import into the report (plan 0221)', async () => {
+    const { executor, store } = build();
+    const importing = executor['fileImport'] as unknown as {
+      run: jest.Mock;
+    };
+    importing.run.mockImplementationOnce(async () =>
+      counters({ wordOrderProposals: 2, wordOrderRejectedPointers: 1 })
+    );
+
+    await executor.runToCompletion('run-1');
+
+    expect(store.setReport).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({
+        wordOrderProposals: 2,
+        wordOrderRejectedPointers: 1,
+      })
     );
   });
 

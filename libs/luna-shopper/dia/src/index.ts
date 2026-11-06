@@ -64,3 +64,13 @@ export type {
   DiaStoreFile,
   DiaStoreRecord,
 } from './lib/types';
+export {
+  isSoldByWeight,
+  scopePrice,
+  weighedPrice,
+  weightOf,
+} from './lib/weight';
+export type { DiaWeight } from './lib/weight';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeDia } from './lib/probe';
+export type { DiaProbeOptions } from './lib/probe';

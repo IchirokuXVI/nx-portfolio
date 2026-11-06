@@ -1,4 +1,4 @@
-> **Status: not built, pending re-evaluation.** Much of the catalog, pricing and line model changed after this plan was written. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0121](./0121-plan-status-2026-09-17.md).
+> **Status: replaced on 2026-11-05 by plan `0246`.** The unit column, the unit on every write, the delta that names its unit and the mismatch refusal survive there. Section 4 (the basket line) is obsolete since plan `0130`, and "any unit is selectable" was reversed by the owner (plan `0246` W1, W2).
 
 # 0101 A line counts in the unit the shopper chose
 

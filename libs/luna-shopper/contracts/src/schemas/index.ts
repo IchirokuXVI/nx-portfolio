@@ -56,5 +56,9 @@ export {
   validateSchema,
 } from './validator';
 export type { ValidationResult } from './validator';
+// The harvester's alerts to the owner (plan 0218).
+export { HARVEST_ALERT_SCHEMA_IDS } from './messages/harvest-alert.schemas';
+// A probe per chain checks the storefront shape (plan 0219).
+export { SOURCE_PROBE_SCHEMA_IDS } from './messages/source-probe.ids';
 // A shopper refreshes the price of one product (plan 0216).
 export { PRICE_REFRESH_SCHEMA_IDS } from './messages/price-refresh.schemas';
