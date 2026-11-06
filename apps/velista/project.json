@@ -123,6 +123,14 @@
       },
       "defaultConfiguration": "development"
     },
+    "ota-bundle": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": false,
+      "options": {
+        "command": "node apps/velista/scripts/ota-bundle.mjs"
+      }
+    },
     "serve": {
       "continuous": true,
       "executor": "@nx/angular:dev-server",
