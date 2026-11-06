@@ -89,6 +89,11 @@ export class SourceProbeStore {
      * 0247, section 2).
      */
     attempt?: number;
+    /**
+     * The schedule whose slot runs this probe as its gate (plan 0247, the
+     * owner on 2026-11-06). Null or absent for a manual probe.
+     */
+    scheduleId?: string | null;
   }): Promise<SourceProbe | null> {
     try {
       return await this.probes.save(
@@ -108,6 +113,7 @@ export class SourceProbeStore {
           steps: [],
           error: null,
           requestedByUserId: input.requestedByUserId,
+          scheduleId: input.scheduleId ?? null,
         })
       );
     } catch (error) {

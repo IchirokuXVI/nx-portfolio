@@ -81,6 +81,12 @@ export interface SourceProbeView {
   /** One sentence naming the step and its first problem, null when it passed. */
   error: string | null;
   requestedByUserId: string | null;
+  /**
+   * The schedule whose slot ran this probe as its gate, null for a daily or
+   * manual probe (plan 0247). A gate probe and a daily probe both carry
+   * trigger `SCHEDULED`, and this tells them apart.
+   */
+  scheduleId: string | null;
 }
 
 /** The newest probe of a source that is not `ABORTED`, on its source view. */

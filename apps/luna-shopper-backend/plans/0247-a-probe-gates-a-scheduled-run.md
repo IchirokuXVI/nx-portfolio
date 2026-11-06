@@ -106,8 +106,8 @@ admin wire types are regenerated for the two new enum values.
 - The gate is a pure function over the schedule, the source, the newest finished probe and the
   clock. It decides one of three things: start now, probe first, skip. The worker does the
   reading and the probing around it.
-- A gate probe is an ordinary probe row with `trigger: SCHEDULED`. It obeys every rule of plan
-  `0219`: one `RUNNING` probe per source, the 5 minute deadline, the verdict, `attempt` from
+- A gate probe is an ordinary probe row with `trigger: SCHEDULED` and `scheduleId` set to the
+  schedule it gates (section 2, step 6). It obeys every rule of plan `0219`: one `RUNNING` probe per source, the 5 minute deadline, the verdict, `attempt` from
   `probeDueAttempt` with the interval ignored, and it moves the chain's next daily probe.
 - The gate never starts a probe while a run of the chain is in flight. `startScheduled` answers
   `SKIPPED_BUSY` for that case before the gate runs, so the order is: late, failing, busy, then
@@ -147,6 +147,7 @@ Report after each of these, with the spec output:
 | The decision: start, probe first, or skip           | `harvest/schedule-probe-gate.ts`, pure            |
 | The gate in the slot and in the deploy retry        | `harvest-schedule.worker.ts`                      |
 | A probe run for a slot                              | `probes/source-probe.service.ts`, `runForSchedule` |
+| `source_probes.scheduleId`, a gate probe's schedule | the migration, the entity, `SourceProbeView`      |
 | `HarvestScheduleOutcome.SKIPPED_PROBE_FAILED`       | contracts, and the Postgres type if one exists    |
 | `HarvestScheduleBlock.PROBE_NOT_PASSED`             | contracts and `harvest-run.service.ts`            |
 | `PROBE_FAILED` and `SLOT_PROBE_FAILED` alerts       | `alerts/harvest-alert.rules.ts`, `.message.ts`    |
@@ -179,8 +180,14 @@ After the claim, in this order. Each step that answers ends the slot.
    that finished `PASSED` answers start. A probe that is still `RUNNING` after that is left to the
    reaper and the slot is skipped with the note `a probe of the chain did not finish`.
 6. **Probe first.** `SourceProbeService.runForSchedule(source, scheduleId)` inserts a `RUNNING`
-   row with `trigger: SCHEDULED`, `attempt` from `probeDueAttempt` with the interval ignored,
-   runs the probe and awaits it. Its verdict is the verdict of plan `0219`.
+   row with `trigger: SCHEDULED`, `scheduleId` set to the schedule's id, `attempt` from
+   `probeDueAttempt` with the interval ignored, runs the probe and awaits it. Its verdict is the
+   verdict of plan `0219`. The daily probe also carries `trigger: SCHEDULED`, so
+   `source_probes.scheduleId` is what tells the two apart: it names the schedule for a gate
+   probe, the slot's and the deploy retry's alike, and it is null for a daily or a manual probe.
+   The column is nullable and has no foreign key, so a deleted schedule keeps its probes. A new
+   trigger value was not used, because the probe `trigger` column reuses the Postgres type
+   `harvest_run_trigger`, and a new value there would also become a legal run trigger.
 7. **The verdict.** `PASSED` answers start, and the run starts in the same tick. Anything else
    answers `SKIPPED_PROBE_FAILED` with the note `probe <id> <status>: <error>`, where `<error>`
    is the probe's one sentence.
@@ -218,7 +225,9 @@ is the Postgres enum `harvest_alert_kind`, so the same migration adds the two al
 section 4),
 a migration adds the value with `ADD VALUE IF NOT EXISTS` and a `down` that moves such rows to
 `REFUSED` and rebuilds the type, as `1757600000000-SharedEan.ts` does; if it is a `varchar`, no
-migration is needed and the plan says so in its PR.
+migration is needed and the plan says so in its PR. The same migration,
+`1760400000000-ProbeGate.ts`, adds the nullable column `source_probes.scheduleId` of section 2,
+step 6, and its `down` drops it.
 
 `HarvestScheduleBlock.PROBE_NOT_PASSED` is added as the **last** value of the computed block, so
 that every existing block keeps its precedence. It is answered when the newest finished probe of
@@ -242,7 +251,14 @@ Three rules join `harvest-alert.rules.ts`. All three are pure, as the two of pla
 | ---------------------------------------------------- | ------------- |
 | `SHAPE_CHANGED` with `changed: true`                 | `PROBE_FAILED` |
 | `BLOCKED` with `changed: true`                       | `PROBE_FAILED` |
+| `SHAPE_CHANGED` or `BLOCKED` with `previousStatus: null`, the first probe of the chain | `PROBE_FAILED` |
 | `UNREACHABLE` with `attempt: 3`                      | `PROBE_FAILED` |
+
+`previousStatus` is the status of the newest finished probe of the source, other than this one,
+that is not `ABORTED` (`SourceProbeStore.previousStatus`), so it is null exactly when the chain
+has no such probe. Then `changed` is false with nothing to compare against, and without the
+third row the very first probe of a chain that is red would never alert. The owner decided on
+2026-11-06 that it alerts.
 
 Nothing else alerts. In particular: `UNREACHABLE` at attempt 1 and 2 (the retries are the
 answer), `ERROR` (our fault, and the slot alert of section 4.2 covers the consequence),
@@ -287,8 +303,11 @@ A probe body: one sentence that says what to do (for `SHAPE_CHANGED`: run the li
 chain answers again; for `UNREACHABLE`: the chain was unreachable for three probes in a row,
 and the last of them started at the time the payload names. A gate probe joins the series with no
 30 minute wait, so the three can be minutes apart, and the mail claims no hour), the
-chain, the trigger, the attempt, each step's name and whether it was ok, the first problem, the
-request count and the probe id. No link, because no back office screen shows a probe yet (plan
+chain, the trigger, which kind of probe it was, the attempt, each step's name and whether it was
+ok, the first problem, the request count and the probe id. The kind is one line: "Run as the
+gate of schedule <id>" when the payload names `scheduleId`, else "Daily probe" for trigger
+`SCHEDULED` and "Manual probe" for trigger `MANUAL`. The probe alert's payload and its outbox
+row carry `scheduleId` for a gate probe. No link, because no back office screen shows a probe yet (plan
 `0219`, section 13). A slot body: the slot time, the schedule and the preset, the probe's status
 and sentence, and that the next slot tries again.
 
@@ -369,8 +388,11 @@ the chain passed inside the last 15 minutes, else the slot runs one and is skipp
 - [ ] A `MANUAL` start and a `SYSTEM` start are not gated.
 - [ ] The deploy retry is gated.
 - [ ] `HarvestScheduleBlock.PROBE_NOT_PASSED` is answered last, for a red newest probe only.
-- [ ] A `SHAPE_CHANGED` or `BLOCKED` probe with `changed: true`, and an `UNREACHABLE` probe at
-      attempt 3, write one `PROBE_FAILED` alert in the transaction of the probe's verdict.
+- [ ] A `SHAPE_CHANGED` or `BLOCKED` probe with `changed: true` or with no earlier probe to
+      compare against (`previousStatus: null`), and an `UNREACHABLE` probe at attempt 3, write
+      one `PROBE_FAILED` alert in the transaction of the probe's verdict.
+- [ ] A gate probe row carries the schedule's id in `scheduleId`, and a daily or manual probe
+      carries null.
 - [ ] A skipped slot writes one `SLOT_PROBE_FAILED` alert, and not again while the status word
       stays the same.
 - [ ] No probe function, probe verdict, probe claim, counter or run status changed.
@@ -420,6 +442,11 @@ Chosen in this plan, and open to the owner's correction:
   after (section 4.3).
 - The slot alert compares the status word, not the note (section 4.2).
 - No recovery mail (section 4.1).
+- Owner, 2026-11-06: a gate probe is told apart by `source_probes.scheduleId` (section 2, step
+  6). In the owner's words: "They need something to tell them apart." The column is null for a
+  daily or a manual probe, and no new trigger value is added.
+- Owner, 2026-11-06: the first probe of a chain alerts when it is red (section 4.1). In the
+  owner's words: "If the probe fails, even if it's the very first one, it should alert."
 
 **Owner** (answered 2026-11-06):
 

@@ -430,6 +430,35 @@ describe('the probe alerts (plan 0247, section 4.4)', () => {
     expect(body).not.toContain('Run:');
   });
 
+  it('says which kind of probe alerted: a gate probe by its schedule, else daily or manual by the trigger', () => {
+    const gate = alertMail(
+      probeAlert('chain-mercadona', SourceProbeStatus.SHAPE_CHANGED, {
+        scheduleId: 'schedule-3',
+      }),
+      named
+    ).body;
+    expect(gate).toContain('Run as the gate of schedule schedule-3');
+    expect(gate).not.toContain('Daily probe');
+
+    const daily = alertMail(
+      probeAlert('chain-mercadona', SourceProbeStatus.SHAPE_CHANGED, {
+        scheduleId: null,
+      }),
+      named
+    ).body;
+    expect(daily).toContain('Daily probe');
+    expect(daily).not.toContain('Run as the gate');
+
+    const manual = alertMail(
+      probeAlert('chain-mercadona', SourceProbeStatus.BLOCKED, {
+        scheduleId: null,
+        trigger: HarvestRunTrigger.MANUAL,
+      }),
+      named
+    ).body;
+    expect(manual).toContain('Manual probe');
+  });
+
   it('names no fixtures target for a refusal or an outage', () => {
     for (const status of [
       SourceProbeStatus.BLOCKED,

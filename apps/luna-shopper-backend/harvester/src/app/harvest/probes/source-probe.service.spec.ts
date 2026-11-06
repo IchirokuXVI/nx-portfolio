@@ -11,12 +11,18 @@ import {
   NotFoundException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { HarvestRun, SupermarketSource } from '../../entities';
+import type {
+  HarvestRun,
+  SourceProbe,
+  SupermarketSource,
+} from '../../entities';
 import type { HarvestRunStore } from '../harvest-run.store';
 import type { PlatformAdminService } from '../platform-admin.service';
 import type { SupermarketSourceService } from '../supermarket-source.service';
+import { toSourceProbeView } from './source-probe.mappers';
 import type { SourceProbeDispatcher } from './source-probe.runner';
 import { SourceProbeService } from './source-probe.service';
+import type { ClaimedProbe } from './source-probe.store';
 import { FakeSourceProbeStore } from './source-probe.store.fake';
 
 /**
@@ -469,6 +475,45 @@ describe('SourceProbeService.runForSchedule (plan 0247)', () => {
       context.service.runForSchedule(source(), 'schedule-1')
     ).resolves.toBeNull();
     expect(context.signals).toHaveLength(0);
+  });
+
+  it('writes the schedule id on the gate probe row and on the view (the owner, 2026-11-06)', async () => {
+    const context = build({ answers: [passed] });
+
+    const probe = await context.service.runForSchedule(source(), 'schedule-1');
+
+    expect(probe?.scheduleId).toBe('schedule-1');
+    expect(context.store.rows[0].scheduleId).toBe('schedule-1');
+    expect(toSourceProbeView(probe as SourceProbe).scheduleId).toBe(
+      'schedule-1'
+    );
+  });
+
+  it('writes no schedule id for a daily probe or a manual probe', async () => {
+    const daily = build({ answers: [passed] });
+    daily.store.sources = [source()];
+    const claimed = await daily.store.claimDue(NOW, ['mercadona-api']);
+    expect(claimed).not.toBeNull();
+    await daily.service.runClaimed(claimed as ClaimedProbe);
+    expect(daily.store.rows[0]).toEqual(
+      expect.objectContaining({
+        trigger: HarvestRunTrigger.SCHEDULED,
+        status: SourceProbeStatus.PASSED,
+        scheduleId: null,
+      })
+    );
+
+    const manual = build({ answers: [passed] });
+    const view = await manual.service.start(req);
+    await flush();
+    await flush();
+    expect(view.scheduleId).toBeNull();
+    expect(manual.store.rows[0]).toEqual(
+      expect.objectContaining({
+        trigger: HarvestRunTrigger.MANUAL,
+        scheduleId: null,
+      })
+    );
   });
 
   it('writes the alert of a manual probe too', async () => {

@@ -181,7 +181,9 @@ export class SourceProbeService implements OnApplicationShutdown {
    * keeps one `RUNNING` probe per source, the deadline and the verdict are
    * those of every probe, and the attempt is the one the due rule gives the
    * series, with the interval ignored. It thus moves the chain's next daily
-   * probe as any probe does.
+   * probe as any probe does. The row names `scheduleId`, which tells it
+   * apart from a daily probe that carries the same trigger (the owner,
+   * 2026-11-06).
    *
    * The caller has checked the switch, the row and the run in flight, so
    * this checks only that the adapter has a probe.
@@ -202,6 +204,7 @@ export class SourceProbeService implements OnApplicationShutdown {
       startedAt: this.clock(),
       requestedByUserId: null,
       attempt,
+      scheduleId,
     });
     if (!probe) {
       return null;

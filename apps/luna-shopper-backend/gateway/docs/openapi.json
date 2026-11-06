@@ -46790,6 +46790,13 @@
               "string",
               "null"
             ]
+          },
+          "scheduleId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The schedule whose slot ran this probe as its gate, null for a daily or manual probe."
           }
         },
         "required": [
@@ -46808,7 +46815,8 @@
           "requests",
           "steps",
           "error",
-          "requestedByUserId"
+          "requestedByUserId",
+          "scheduleId"
         ],
         "additionalProperties": false
       },

@@ -54,6 +54,7 @@ export class FakeSourceProbeStore {
       steps: [],
       error: null,
       requestedByUserId: null,
+      scheduleId: null,
       createdAt: row.startedAt,
       updatedAt: row.startedAt,
       ...row,
@@ -84,12 +85,14 @@ export class FakeSourceProbeStore {
     startedAt: Date;
     requestedByUserId: string | null;
     attempt?: number;
+    scheduleId?: string | null;
   }): Promise<SourceProbe | null> {
     if (await this.findRunning(input.source.id)) {
       return null;
     }
     return this.seed({
       attempt: input.attempt ?? 1,
+      scheduleId: input.scheduleId ?? null,
       sourceId: input.source.id,
       supermarketId: input.source.supermarketId,
       adapterKey: input.source.adapterKey,

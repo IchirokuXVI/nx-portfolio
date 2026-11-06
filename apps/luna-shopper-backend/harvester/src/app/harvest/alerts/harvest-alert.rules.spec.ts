@@ -371,6 +371,7 @@ describe('probeAlertFor (plan 0247, section 4.1)', () => {
       previousStatus: SourceProbeStatus.PASSED,
       changed: true,
       attempt: 1,
+      scheduleId: null,
       startedAt: new Date('2026-11-06T03:00:00.000Z'),
       finishedAt: new Date('2026-11-06T03:00:10.000Z'),
       error: 'listing: 2 of 40 rows carried a price above zero',
@@ -421,6 +422,59 @@ describe('probeAlertFor (plan 0247, section 4.1)', () => {
     ]) {
       expect(probeAlertFor({ probe: probe(over), at: AT })).toBeNull();
     }
+  });
+
+  it.each([SourceProbeStatus.SHAPE_CHANGED, SourceProbeStatus.BLOCKED])(
+    'alerts the very first probe of a chain when it is %s, with nothing before it to compare against',
+    (status) => {
+      expect(
+        probeAlertFor({
+          probe: probe({ status, previousStatus: null, changed: false }),
+          at: AT,
+        })
+      ).toMatchObject({
+        kind: HarvestAlertKind.PROBE_FAILED,
+        dedupeKey: 'probe:probe-7',
+        payload: expect.objectContaining({ status, previousStatus: null }),
+      });
+    }
+  );
+
+  it('gives nothing for a second red probe that stays SHAPE_CHANGED', () => {
+    expect(
+      probeAlertFor({
+        probe: probe({
+          status: SourceProbeStatus.SHAPE_CHANGED,
+          previousStatus: SourceProbeStatus.SHAPE_CHANGED,
+          changed: false,
+        }),
+        at: AT,
+      })
+    ).toBeNull();
+  });
+
+  it('gives nothing for a first probe that is UNREACHABLE at attempt 1, ERROR or PASSED', () => {
+    for (const status of [
+      SourceProbeStatus.UNREACHABLE,
+      SourceProbeStatus.ERROR,
+      SourceProbeStatus.PASSED,
+    ]) {
+      expect(
+        probeAlertFor({
+          probe: probe({ status, previousStatus: null, changed: false }),
+          at: AT,
+        })
+      ).toBeNull();
+    }
+  });
+
+  it('names the schedule of a gate probe on the draft and in the payload', () => {
+    expect(
+      probeAlertFor({ probe: probe({ scheduleId: 'schedule-3' }), at: AT })
+    ).toMatchObject({
+      scheduleId: 'schedule-3',
+      payload: expect.objectContaining({ scheduleId: 'schedule-3' }),
+    });
   });
 });
 

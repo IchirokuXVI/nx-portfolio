@@ -3,11 +3,19 @@ import type { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * A probe gates a scheduled run (plan 0247, sections 3 and 4).
  *
- * Additive: two Postgres enum types gain labels, and no row changes.
+ * Additive: two Postgres enum types gain labels, `source_probes` gains a
+ * nullable column, and no row changes.
  *
  * - `harvest_schedule_outcome` gains `SKIPPED_PROBE_FAILED`, the slot whose
  *   probe did not pass.
  * - `harvest_alert_kind` gains `PROBE_FAILED` and `SLOT_PROBE_FAILED`.
+ * - `source_probes.scheduleId` names the schedule whose slot ran a probe as
+ *   its gate, and is null for a daily or a manual probe (the owner,
+ *   2026-11-06). A gate probe and a daily probe both carry trigger
+ *   `SCHEDULED`, and a new trigger value would also become a legal run
+ *   trigger, because the column reuses `harvest_run_trigger`. The column has
+ *   **no foreign key**: deleting a schedule must not delete the probes it
+ *   ran, which stay the history of the chain.
  *
  * **Each type is rebuilt** by rename, create and convert, as `SharedEan` and
  * `OneSourceProduct` do, rather than with `ALTER TYPE ... ADD VALUE`.
@@ -31,6 +39,9 @@ export class ProbeGate1760400000000 implements MigrationInterface {
       'PROBE_FAILED',
       'SLOT_PROBE_FAILED',
     ]);
+    await queryRunner.query(
+      `ALTER TABLE "source_probes" ADD COLUMN "scheduleId" uuid NULL`
+    );
   }
 
   /**
@@ -42,9 +53,12 @@ export class ProbeGate1760400000000 implements MigrationInterface {
    * note. A `PROBE_FAILED` alert has no kind before this plan that could
    * describe it, and a mail of another kind would print a wrong message, so
    * those outbox rows are deleted. They report a probe, not a harvest, and
-   * the probe rows themselves stay.
+   * the probe rows themselves stay, without the schedule a gate probe named.
    */
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "source_probes" DROP COLUMN "scheduleId"`
+    );
     await queryRunner.query(
       `UPDATE "harvest_schedules"
           SET "lastOutcome" = 'REFUSED'

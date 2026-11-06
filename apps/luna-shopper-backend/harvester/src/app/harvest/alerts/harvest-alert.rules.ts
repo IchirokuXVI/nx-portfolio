@@ -87,6 +87,11 @@ export interface ProbeAlertPayload {
   previousStatus: SourceProbeStatus | null;
   changed: boolean;
   attempt: number;
+  /**
+   * The schedule whose slot ran the probe as its gate, null for a daily or a
+   * manual probe (the owner, 2026-11-06).
+   */
+  scheduleId: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   error: string | null;
@@ -337,6 +342,8 @@ export interface ProbeAlertProbe {
   previousStatus: SourceProbeStatus | null;
   changed: boolean;
   attempt: number;
+  /** The schedule a gate probe ran for, null for any other probe. */
+  scheduleId: string | null;
   startedAt: Date | null;
   finishedAt: Date | null;
   error: string | null;
@@ -352,6 +359,11 @@ export const PROBE_ALERT_ATTEMPT = 3;
  *
  * - `SHAPE_CHANGED` or `BLOCKED` alerts when it is a change (`changed`), so
  *   a red probe that stays red sends one mail and not one a day.
+ * - `SHAPE_CHANGED` or `BLOCKED` also alerts when `previousStatus` is null:
+ *   the chain has no earlier finished probe that is not `ABORTED`, so
+ *   `changed` is false with nothing to compare against, and the very first
+ *   probe of a chain that is red would otherwise never alert (the owner,
+ *   2026-11-06).
  * - `UNREACHABLE` alerts at its third attempt only: the two retries are the
  *   answer to the first two.
  * - Anything else is null: `PASSED` (no recovery mail, the owner on
@@ -366,7 +378,7 @@ export function probeAlertFor(input: {
   const alerts =
     ((probe.status === SourceProbeStatus.SHAPE_CHANGED ||
       probe.status === SourceProbeStatus.BLOCKED) &&
-      probe.changed) ||
+      (probe.changed || probe.previousStatus === null)) ||
     (probe.status === SourceProbeStatus.UNREACHABLE &&
       probe.attempt >= PROBE_ALERT_ATTEMPT);
   if (!alerts) {
@@ -381,6 +393,7 @@ export function probeAlertFor(input: {
     previousStatus: probe.previousStatus ?? null,
     changed: probe.changed,
     attempt: probe.attempt,
+    scheduleId: probe.scheduleId ?? null,
     startedAt: isoOrNull(probe.startedAt),
     finishedAt: isoOrNull(probe.finishedAt),
     error: probe.error ?? null,
@@ -396,7 +409,7 @@ export function probeAlertFor(input: {
     dedupeKey: `probe:${probe.id}`,
     supermarketId: probe.supermarketId,
     runId: null,
-    scheduleId: null,
+    scheduleId: probe.scheduleId ?? null,
     payload: { ...payload },
   };
 }

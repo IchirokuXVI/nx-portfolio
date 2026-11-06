@@ -11,9 +11,9 @@
 > probe routes, section 13 for the back office follow up), backend `0247` sections 2, 3 and 6,
 > and admin plan `0067` (the schedule page, its words for `blockedBy` and `lastOutcome`).
 >
-> Mock: none yet. The owner's rule for admin screens is a mock before the plan is built.
-> Section 3 says what is drawn, in the parts the back office already has. **Ask the owner
-> before you build whether a mock comes first** (Decisions, question 1).
+> Mock: none, by the owner's answer of 2026-11-06 (Decisions). The plan is built directly from
+> section 3, as admin `0067` was. Section 3 says what is drawn, in the parts the back office
+> already has.
 
 ## Brief for the agent
 
@@ -64,8 +64,16 @@ skills.
   `0219` section 13 and are not this plan. The two i18n strings for `PROBE_NOT_PASSED` and
   `SKIPPED_PROBE_FAILED` belong to this plan (target 6), because they are the words of the same
   warning on the schedule page. The review round of backend `0247` (PR #934) shipped both
-  strings in `ui/assets/i18n/en.json` with the words of target 6, so this plan only decides the
-  chip of the new block.
+  strings in `ui/assets/i18n/en.json` with the words of target 6. The chip of the new block is
+  decided (Decisions, 2026-11-06): the schedules list keeps the "Will not run" state chip for
+  `PROBE_NOT_PASSED`. `scheduleState` (`models/src/lib/harvest/harvest-schedule.ts`) answers
+  `blocked` for any `blockedBy` that is not null, so it already draws that chip for the new
+  block and needs no change.
+- **A gate probe is told apart from the daily probe** by `source_probes.scheduleId` (backend
+  `0247`, section 2, step 6). `HarvestSourceProbeView.scheduleId` names the schedule whose slot
+  ran the probe as its gate, and is null for a daily or a manual probe. Both of the first two
+  carry trigger `SCHEDULED`, so the warning can read this field if it wants to say which kind
+  of probe was red.
 - **Strings** live in `libs/luna-shopper-admin/ui/assets/i18n/en.json` (English only), under
   `harvest.*`, as admin `0067` put its strings under `harvest.schedules`.
 
@@ -121,15 +129,15 @@ skills.
   title, at most four points of at most 25 words and one caution. It is a notice, not an info
   panel, so prefer a plain `role="status"` paragraph that the spec does not read.
 - No named action is added, so `ui/src/lib/action-question-heading.spec.ts` changes nothing.
-  If the owner asks for a question instead of a notice (Decisions, question 2), its heading
+  If the owner asks for a question instead of a notice (Decisions, question 3), its heading
   holds no placeholder, as that spec requires.
 - The tone is the quiet warning tone the harvest feature already uses for "Will not run" on a
   schedule (admin `0067`, target 2): no tinted container, no alert role, nothing that moves.
 
 ### Action boundaries
 
-- Ask the owner whether a mock comes first, and the other questions of Decisions. Proceed
-  only after the answers.
+- No mock comes first (the owner, 2026-11-06). Ask the owner the questions of Decisions that
+  are still open before you decide them yourself.
 - Do not start a run or a probe against a live storefront. On a Luna slot, point the chain's
   `config` base URL at a closed local port to make a red probe, as backend `0247`'s slot check
   does.
@@ -238,16 +246,22 @@ Chosen in this plan, and open to the owner's correction:
 - The probe list route, read once per chain with a page of 10, rather than a backend change to
   the summary (Context). The summary has no `error`, and it can be `RUNNING`.
 - The two schedule page strings ride in this plan because they are the same warning
-  (target 6). The chips stay with backend `0219` section 13.
+  (target 6). The new block keeps the existing "Will not run" chip (the owner, 2026-11-06).
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-06). In the owner's words: "No need for a mock, and the will not
+run chip needs to be shown".
 
-1. **The mock.** The owner's rule is a mock before an admin screen is built. Admin `0067` was
-   built without one at the owner's request. Draw a mock first, or build from section 3?
-2. **Notice or question.** The owner asked for a warning and a free start. A notice keeps the
+1. **The mock.** No mock. The plan is built directly from section 3, as admin `0067` was.
+2. **The chip of `PROBE_NOT_PASSED`.** The schedules list keeps showing the "Will not run"
+   state chip for a schedule whose block is `PROBE_NOT_PASSED`. `scheduleState` already answers
+   `blocked` for it, so it needs no change for this block, and this plan changes nothing there.
+
+**Owner**: still open, ask, do not choose.
+
+3. **Notice or question.** The owner asked for a warning and a free start. A notice keeps the
    start one click. A question ("Start anyway?") makes the person read it. Keep the notice?
-3. **The summary.** Should a later backend plan add `error` and `attempt` to
+4. **The summary.** Should a later backend plan add `error` and `attempt` to
    `HarvestSourceProbeSummary`, so the sources list can show the same sentence without the
    probe route? This plan does not need it.
-4. **The source page.** Show the same notice on the source record page beside its probe
+5. **The source page.** Show the same notice on the source record page beside its probe
    button, or leave that page to backend `0219` section 13?

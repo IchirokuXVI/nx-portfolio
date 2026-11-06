@@ -93,4 +93,12 @@ export class SourceProbe extends BaseEntity {
 
   @Column({ type: 'uuid', nullable: true })
   requestedByUserId!: string | null;
+
+  /**
+   * The schedule whose slot ran this probe as its gate, null for a daily or
+   * a manual probe (plan 0247, the owner on 2026-11-06). No foreign key, so a
+   * deleted schedule keeps its probes.
+   */
+  @Column({ type: 'uuid', nullable: true })
+  scheduleId!: string | null;
 }

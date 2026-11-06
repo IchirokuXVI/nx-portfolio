@@ -5365,6 +5365,7 @@ export type HarvestSourceProbeView = {
   steps: HarvestSourceProbeStepView[];
   error: string | null;
   requestedByUserId: string | null;
+  scheduleId: string | null;
 };
 
 /**

@@ -15,6 +15,8 @@ import { ProbeGate1760400000000 } from './migrations/1760400000000-ProbeGate';
  * - **`down` removes them**: a skipped slot becomes `REFUSED` with its note,
  *   a slot alert becomes `SLOT_REFUSED`, a probe alert is deleted, and `up`
  *   brings the labels back.
+ * - **`source_probes.scheduleId`** is added as a nullable uuid with no
+ *   foreign key, dropped by `down` with its rows kept, and added again.
  *
  * It runs against a probe database of its own, as the `SourceProbes` spec
  * does, so `down` never touches the slot's own schema. Every read is raw SQL.
@@ -58,6 +60,32 @@ describeIntegration('ProbeGate1760400000000 (real Postgres)', () => {
                'probe p-1 BLOCKED: listing: HTTP 403', $3, $3)
        RETURNING "id"`,
       [CHAIN, outcome, ADMIN]
+    );
+    return row.id;
+  };
+
+  /** `source_probes.scheduleId` as the catalog describes it, or null. */
+  const scheduleIdColumn = async (): Promise<{
+    type: string;
+    nullable: string;
+  } | null> => {
+    const rows: { type: string; nullable: string }[] = await probe.query(
+      `SELECT data_type AS "type", is_nullable AS "nullable"
+         FROM information_schema.columns
+        WHERE table_name = 'source_probes' AND column_name = 'scheduleId'`
+    );
+    return rows[0] ?? null;
+  };
+
+  const insertProbe = async (scheduleId: string | null): Promise<string> => {
+    const [row]: { id: string }[] = await probe.query(
+      `INSERT INTO "source_probes"
+         ("sourceId", "supermarketId", "adapterKey", "trigger", "status",
+          "attempt", "startedAt", "finishedAt", "scheduleId")
+       VALUES (gen_random_uuid(), $1, 'mercadona-api', 'SCHEDULED', 'PASSED',
+               1, now(), now(), $2)
+       RETURNING "id"`,
+      [CHAIN, scheduleId]
     );
     return row.id;
   };
@@ -131,12 +159,34 @@ describeIntegration('ProbeGate1760400000000 (real Postgres)', () => {
     await probe.query(`DELETE FROM "harvest_schedules"`);
   });
 
+  it('adds source_probes.scheduleId as a nullable uuid with no foreign key', async () => {
+    expect(await scheduleIdColumn()).toEqual({ type: 'uuid', nullable: 'YES' });
+    const foreignKeys: { name: string }[] = await probe.query(
+      `SELECT conname AS "name"
+         FROM pg_constraint
+        WHERE conrelid = '"source_probes"'::regclass AND contype = 'f'`
+    );
+    expect(foreignKeys).toEqual([]);
+    const schedule = '02470247-0000-4000-a000-0000000000cc';
+    const gate = await insertProbe(schedule);
+    const daily = await insertProbe(null);
+    const rows: { id: string; scheduleId: string | null }[] = await probe.query(
+      `SELECT "id", "scheduleId" FROM "source_probes" WHERE "id" = ANY($1)`,
+      [[gate, daily]]
+    );
+    expect(
+      Object.fromEntries(rows.map((row) => [row.id, row.scheduleId]))
+    ).toEqual({ [gate]: schedule, [daily]: null });
+    await probe.query(`DELETE FROM "source_probes"`);
+  });
+
   it('goes down to the old labels, moving each row it can and deleting probe alerts, and up again', async () => {
     const skipped = await insertSchedule('SKIPPED_PROBE_FAILED');
     const started = await insertSchedule('STARTED');
     await insertAlert('PROBE_FAILED', 'it-0247:probe');
     await insertAlert('SLOT_PROBE_FAILED', 'it-0247:slot');
     await insertAlert('RUN_FAILED', 'it-0247:run');
+    const gateProbe = await insertProbe('02470247-0000-4000-a000-0000000000cc');
 
     const migration = new ProbeGate1760400000000();
     const runner = probe.createQueryRunner();
@@ -172,11 +222,24 @@ describeIntegration('ProbeGate1760400000000 (real Postgres)', () => {
         { dedupeKey: 'it-0247:run', kind: 'RUN_FAILED' },
         { dedupeKey: 'it-0247:slot', kind: 'SLOT_REFUSED' },
       ]);
+      // The column goes, and the probe row it was on stays.
+      expect(await scheduleIdColumn()).toBeNull();
+      const kept: { id: string }[] = await probe.query(
+        `SELECT "id" FROM "source_probes" WHERE "id" = $1`,
+        [gateProbe]
+      );
+      expect(kept).toEqual([{ id: gateProbe }]);
 
       await migration.up(runner);
     } finally {
       await runner.release();
     }
+    expect(await scheduleIdColumn()).toEqual({ type: 'uuid', nullable: 'YES' });
+    const back: { scheduleId: string | null }[] = await probe.query(
+      `SELECT "scheduleId" FROM "source_probes" WHERE "id" = $1`,
+      [gateProbe]
+    );
+    expect(back).toEqual([{ scheduleId: null }]);
     expect(await labels('harvest_schedule_outcome')).toContain(
       'SKIPPED_PROBE_FAILED'
     );

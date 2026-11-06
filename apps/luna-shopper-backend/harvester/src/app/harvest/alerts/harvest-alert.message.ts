@@ -1,6 +1,7 @@
 import {
   HarvestAlertKind,
   HarvestRunMode,
+  HarvestRunTrigger,
   SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import { SCHEDULES_STOP_AFTER } from './harvest-alert.rules';
@@ -289,6 +290,10 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
         lines.push(`Before: ${text(p['previousStatus'])}`);
       }
       lines.push(`Trigger: ${text(p['trigger'])}`);
+      const kindLine = probeKindLine(p);
+      if (kindLine) {
+        lines.push(kindLine);
+      }
       lines.push(`Attempt: ${numberOr(p['attempt'], 1)}`);
       lines.push(`Started: ${madridTime(p['startedAt'])}`);
       lines.push(`Finished: ${madridTime(p['finishedAt'])}`);
@@ -321,6 +326,26 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
     }
     default:
       return lead;
+  }
+}
+
+/**
+ * Which kind of probe alerted (the owner, 2026-11-06). A gate probe and a
+ * daily probe both carry trigger `SCHEDULED`, and only the schedule id tells
+ * them apart. Null for a payload that names neither.
+ */
+function probeKindLine(payload: Record<string, unknown>): string | null {
+  const scheduleId = payload['scheduleId'];
+  if (typeof scheduleId === 'string' && scheduleId !== '') {
+    return `Run as the gate of schedule ${scheduleId}`;
+  }
+  switch (payload['trigger']) {
+    case HarvestRunTrigger.SCHEDULED:
+      return 'Daily probe';
+    case HarvestRunTrigger.MANUAL:
+      return 'Manual probe';
+    default:
+      return null;
   }
 }
 
