@@ -265,6 +265,31 @@ describe('HarvestAlertWorker', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('spends an attempt on a row whose mail cannot be built, and sends nothing', async () => {
+    // An object with no prototype has no toString, so the message's
+    // String() of the error throws while the mail is built.
+    const rows = [
+      alertRow({
+        payload: {
+          mode: HarvestRunMode.CATALOG_DISCOVERY,
+          error: Object.create(null),
+        },
+      }),
+    ];
+    const { worker, channel } = build(rows);
+
+    await worker.tick();
+
+    expect(channel.send).not.toHaveBeenCalled();
+    expect(rows[0]).toMatchObject({
+      status: HarvestAlertStatus.PENDING,
+      attempts: 1,
+      claimedAt: null,
+    });
+    expect(rows[0].lastError).toEqual(expect.any(String));
+    expect((rows[0].nextAttemptAt.getTime() - NOW.getTime()) / MINUTE).toBe(1);
+  });
+
   it('does not send a row before its nextAttemptAt', async () => {
     const rows = [
       alertRow({ nextAttemptAt: new Date(NOW.getTime() + MINUTE) }),

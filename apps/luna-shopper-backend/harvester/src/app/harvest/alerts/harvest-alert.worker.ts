@@ -24,6 +24,7 @@ import {
   alertMail,
   digestMail,
   type AlertForMessage,
+  type AlertMail,
   type MessageContext,
 } from './harvest-alert.message';
 import { HarvestAlertStore } from './harvest-alert.store';
@@ -135,24 +136,35 @@ export class HarvestAlertWorker
     const context = await this.context(rows, settings);
     if (rows.length <= ALERT_DIGEST_OVER) {
       for (const row of rows) {
-        const mail = alertMail(forMessage(row), context);
-        await this.attempt([row], mail.subject, mail.body, now);
+        await this.attempt(
+          [row],
+          () => alertMail(forMessage(row), context),
+          now
+        );
       }
       return;
     }
-    const mail = digestMail(rows.map(forMessage), context);
-    await this.attempt(rows, mail.subject, mail.body, now);
+    await this.attempt(
+      rows,
+      () => digestMail(rows.map(forMessage), context),
+      now
+    );
   }
 
-  /** One send of one mail, and what it does to the rows it carries. */
+  /**
+   * One send of one mail, and what it does to the rows it carries. The mail
+   * is built inside the same try as the send, so a payload the message cannot
+   * read spends attempts like a refused send and ends `GAVE_UP`, rather than
+   * leaving its rows claimed to come back every 10 minutes.
+   */
   private async attempt(
     rows: HarvestAlert[],
-    subject: string,
-    body: string,
+    build: () => AlertMail,
     now: Date
   ): Promise<void> {
     try {
-      await this.channel.send(subject, body);
+      const mail = build();
+      await this.channel.send(mail.subject, mail.body);
     } catch (error) {
       const message = describeError(error).message;
       for (const row of rows) {

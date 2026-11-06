@@ -29,6 +29,6 @@ export interface HarvestTestAlertView {
   queuedAt: string;
   /** `HARVEST_ALERT_EMAIL` holds at least one address. */
   recipientConfigured: boolean;
-  /** `SMTP_HOST` is set. */
+  /** An SMTP host and a sender are set. */
   smtpConfigured: boolean;
 }

@@ -289,6 +289,17 @@ describe('the fixed words', () => {
       alertMail(runAlert(HarvestAlertKind.RUN_STALE), context()),
       alertMail(slotAlert(true), context()),
       alertMail(postalAlert('run-9'), context()),
+      alertMail(
+        {
+          kind: HarvestAlertKind.TEST,
+          supermarketId: null,
+          runId: null,
+          scheduleId: null,
+          createdAt: CREATED,
+          payload: { requestedByUserId: 'admin-1', at: CREATED.toISOString() },
+        },
+        context()
+      ),
       digestMail(
         [
           slotAlert(),

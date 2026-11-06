@@ -420,6 +420,11 @@ The chain name comes from `CatalogClient.getSupermarket` at send time, as the ex
 (`run-executor.service.ts:95`). On any error the message uses the `adapterKey` from the payload.
 A name is never a reason not to send.
 
+Departure found by the review (2026-11-06): a slot alert falls back to the chain id when catalog
+cannot name the chain. The schedule worker reads no source row, and no existing read gives it the
+adapter key, so its draft carries `adapterKey: null`. A run alert still falls back to the adapter
+key.
+
 ## 7. The test alert
 
 One NATS pattern in a new `HARVEST_ALERT_PATTERNS`:
@@ -597,11 +602,17 @@ helm template k8s/helm -f k8s/helm/values.yaml -f k8s/helm/values.production.yam
 
 The slot check, on an ephemeral slot:
 
-1. `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up <n>` with
-   `HARVEST_ALERT_EMAIL=owner@example.test` in the environment of the harvester.
+1. Run `bash k8s/e2e/luna-shopper-backend/luna-slot.sh --ephemeral --up <n>`. Ephemeral mode
+   exports the rendered env files, and they override the caller's environment, so a
+   `HARVEST_ALERT_EMAIL` in your shell does not reach the harvester. Edit
+   `$TMPDIR/luna-slot-ephemeral/slot<n>/env/apps/luna-shopper-backend/harvester/.env`, set
+   `HARVEST_ALERT_EMAIL` to a test address, and run
+   `--ephemeral --restart <n> --services harvester`.
 2. Call the test route with an operator token. The mail is in the slot's Mailpit within a minute.
-3. Turn a source row on, set `HARVEST_ENABLED=true`, point its adapter at an unreachable base URL,
-   start a run, and see the `RUN_FAILED` mail with the run link.
+3. Turn a source row on and point its adapter at an unreachable base URL. Set
+   `HARVEST_ENABLED=true` in the same harvester `.env` of step 1, because the env file overrides
+   the caller's environment here too, and run `--ephemeral --restart <n> --services harvester`.
+   Start a run, and see the `RUN_FAILED` mail with the run link.
 4. Restart the harvester and confirm that Mailpit holds one copy of each mail.
 5. `--ephemeral --down <n>`.
 

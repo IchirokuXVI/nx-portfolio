@@ -209,6 +209,49 @@ describeIntegration('harvest alerts (real Postgres)', () => {
     expect(await alertsByKey('run-rolls-back')).toHaveLength(0);
   });
 
+  it('writes one RUN_STALE alert for a reaped run, and none more when its process finishes it later', async () => {
+    const run = await runningRun();
+    await one.query(
+      `UPDATE "harvest_runs" SET "heartbeatAt" = now() - interval '1 hour'
+        WHERE "id" = $1`,
+      [run.id]
+    );
+
+    await runs.reapStale(900);
+
+    expect((await runs.load(run.id)).status).toBe(HarvestRunStatus.STALE);
+    const staleRows = (): Promise<HarvestAlert[]> =>
+      one.query(`SELECT * FROM "harvest_alerts" WHERE "dedupeKey" = $1`, [
+        `run:${run.id}`,
+      ]);
+    const [row, ...more] = await staleRows();
+    expect(more).toHaveLength(0);
+    expect(row).toMatchObject({
+      kind: HarvestAlertKind.RUN_STALE,
+      runId: run.id,
+    });
+    expect(row.payload.staleAfterSeconds).toBe(900);
+
+    await runs.finish(
+      run.id,
+      HarvestRunStatus.FAILED,
+      'finished after the reaper',
+      undefined,
+      {
+        kind: HarvestAlertKind.RUN_FAILED,
+        dedupeKey: `run:${run.id}`,
+        supermarketId: CHAIN,
+        runId: run.id,
+        scheduleId: null,
+        payload: { error: 'late' },
+      } as HarvestAlertDraft
+    );
+
+    const after = await staleRows();
+    expect(after).toHaveLength(1);
+    expect(after[0].kind).toBe(HarvestAlertKind.RUN_STALE);
+  });
+
   it('leaves one row for two inserts with one key', async () => {
     const first = await alertsOne.queue(draft('twice'));
     const second = await alertsTwo.queue(draft('twice', { payload: { n: 2 } }));

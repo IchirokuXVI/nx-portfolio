@@ -1,16 +1,19 @@
 import type { ConfigService } from '@nestjs/config';
 import {
   HarvestAlertKind,
+  HarvestRunMode,
   HarvestRunStatus,
+  HarvestRunTrigger,
   HarvestScheduleOutcome,
   PostalCodeDiscoveryStatus,
 } from '@portfolio/luna-shopper/contracts';
 import type {
+  HarvestRun,
   HarvestSchedule,
   PostalCodeDiscoveryRequest,
 } from '../../entities';
 import type { HarvestRunService, ScheduledStart } from '../harvest-run.service';
-import type { HarvestRunStore } from '../harvest-run.store';
+import { HarvestRunStore } from '../harvest-run.store';
 import type {
   ClaimedSlot,
   HarvestScheduleStore,
@@ -264,5 +267,75 @@ describe('PostalCodeDiscoveryWorker and the owner alert (answer 4)', () => {
       dedupeKey: `code:14013:attempt-q-1-${Date.parse('2026-11-05T03:00:00.000Z')}`,
       runId: null,
     });
+  });
+});
+
+describe('HarvestRunStore.reapStale and the owner alert (answer 5)', () => {
+  function staleRun(id: string): HarvestRun {
+    return {
+      id,
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      trigger: HarvestRunTrigger.MANUAL,
+      supermarketId: 'chain-1',
+      sourceId: null,
+      presetId: null,
+      scheduleId: null,
+      status: HarvestRunStatus.RUNNING,
+      requestedAt: new Date('2026-11-05T02:00:00.000Z'),
+      startedAt: new Date('2026-11-05T02:00:05.000Z'),
+      heartbeatAt: new Date('2026-11-05T02:10:00.000Z'),
+      failed: 0,
+      totalPlanned: null,
+    } as unknown as HarvestRun;
+  }
+
+  function build(runs: HarvestRun[], failingTransactions: number) {
+    let failures = failingTransactions;
+    const update = jest.fn(async () => undefined);
+    const transaction = jest.fn(
+      async (work: (manager: unknown) => Promise<unknown>) => {
+        if (failures > 0) {
+          failures -= 1;
+          throw new Error('the alert insert failed');
+        }
+        return work({ update: jest.fn(), query: jest.fn(async () => []) });
+      }
+    );
+    const repository = {
+      find: jest.fn(async () => runs),
+      update,
+      manager: { transaction },
+    } as unknown as ConstructorParameters<typeof HarvestRunStore>[0];
+    const store = new HarvestRunStore(repository);
+    jest
+      .spyOn(
+        (store as unknown as { logger: { error: () => void } }).logger,
+        'error'
+      )
+      .mockImplementation(() => undefined);
+    return { store, update, transaction };
+  }
+
+  it('reaps a run without its alert when the alert cannot be written, and goes on to the next run', async () => {
+    const { store, update, transaction } = build(
+      [staleRun('run-1'), staleRun('run-2')],
+      1
+    );
+
+    await expect(store.reapStale(900)).resolves.toBe(2);
+
+    // run-1: the transaction with its alert threw, so a plain update reaped
+    // it with no alert. run-2: its transaction with the alert committed.
+    expect(transaction).toHaveBeenCalledTimes(2);
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update).toHaveBeenCalledWith(
+      { id: 'run-1' },
+      expect.objectContaining({
+        status: HarvestRunStatus.STALE,
+        error:
+          'No heartbeat; the run was reaped so the lock could be released.',
+        stopReason: null,
+      })
+    );
   });
 });

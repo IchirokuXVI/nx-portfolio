@@ -636,11 +636,12 @@ export class RunExecutor implements OnApplicationShutdown {
       // The owner's alert, written in the same transaction as the status
       // (plan 0218, section 4.1). Decided before the verdict, from the
       // counter the source had when this run started (section 2.2).
+      const [stopReason] = stopReasonOf(guard);
       const alert = await this.alertOf(run, finished, source, status, {
         error: error ?? null,
-        refusal: Boolean(guard?.stop),
+        refusal: stopReason === HarvestRunStopReason.SOURCE_BLOCKED,
       });
-      await this.finishWith(runId, status, error, guard, alert);
+      await this.finishWith(runId, status, error, stopReason, alert);
       await this.recordVerdict(source, status);
       return status;
     } catch (error) {
@@ -658,11 +659,12 @@ export class RunExecutor implements OnApplicationShutdown {
         this.shutdownSentence(runId, status) ??
         stopSentenceOf(guard, finished) ??
         describeError(error).message;
+      const [stopReason] = stopReasonOf(guard);
       const alert = await this.alertOf(run, finished, source, status, {
         error: sentence,
-        refusal: Boolean(guard?.stop),
+        refusal: stopReason === HarvestRunStopReason.SOURCE_BLOCKED,
       });
-      await this.finishWith(runId, status, sentence, guard, alert);
+      await this.finishWith(runId, status, sentence, stopReason, alert);
       await this.recordVerdict(source, status);
       this.logger.error(
         `Harvest run ${runId} ended as ${status}: ${describeError(error).message}`
@@ -740,26 +742,25 @@ export class RunExecutor implements OnApplicationShutdown {
    * The final write of a run (plan 0218, section 4.1): the stop reason and
    * the alert for a run that alerts, in one transaction, and exactly what
    * plan 0215 passed for any other, so a finish with no alert is called as
-   * it always was.
+   * it always was. The caller passes the stop reason it read its alert's
+   * refusal from, so the reason written and the alert cannot disagree.
    */
   private async finishWith(
     runId: string,
     status: HarvestRunStatus,
     error: string | undefined,
-    guard: SourceGuard | null,
+    stopReason: HarvestRunStopReason | undefined,
     alert: HarvestAlertDraft | null
   ): Promise<void> {
     if (alert) {
-      await this.store.finish(
-        runId,
-        status,
-        error,
-        stopReasonOf(guard)[0],
-        alert
-      );
+      await this.store.finish(runId, status, error, stopReason, alert);
       return;
     }
-    await this.store.finish(runId, status, error, ...stopReasonOf(guard));
+    if (stopReason) {
+      await this.store.finish(runId, status, error, stopReason);
+      return;
+    }
+    await this.store.finish(runId, status, error);
   }
 
   /**

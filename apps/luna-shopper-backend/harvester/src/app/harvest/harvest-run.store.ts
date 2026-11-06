@@ -600,15 +600,31 @@ export class HarvestRunStore {
           run.heartbeatAt?.toISOString() ?? 'never'
         }`
       );
-      await this.finish(
-        run.id,
-        HarvestRunStatus.STALE,
-        'No heartbeat; the run was reaped so the lock could be released.',
-        undefined,
-        // A stale run alerts like a failed one (plan 0218, the owner's
-        // answer 5). The rule of what is stale above does not change.
-        (await this.staleAlertOf(run, olderThanSeconds)) ?? undefined
-      );
+      const sentence =
+        'No heartbeat; the run was reaped so the lock could be released.';
+      try {
+        await this.finish(
+          run.id,
+          HarvestRunStatus.STALE,
+          sentence,
+          undefined,
+          // A stale run alerts like a failed one (plan 0218, the owner's
+          // answer 5). The rule of what is stale above does not change.
+          (await this.staleAlertOf(run, olderThanSeconds)) ?? undefined
+        );
+      } catch (error) {
+        // The status and the alert commit together, so an alert insert that
+        // keeps failing would leave the run RUNNING and its chain locked on
+        // every tick. The run is reaped without its alert instead: the lock
+        // is released, and no alert exists for an outcome that did not commit.
+        this.logger.error(
+          `The stale alert of harvest run ${run.id} could not be written, ` +
+            `so the run is reaped without it: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+        );
+        await this.finish(run.id, HarvestRunStatus.STALE, sentence);
+      }
     }
     return stale.length;
   }
