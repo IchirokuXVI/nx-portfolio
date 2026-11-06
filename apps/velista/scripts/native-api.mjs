@@ -6,7 +6,8 @@
 // `apps/velista/native-api.json` holds `nativeApi`, which every OTA bundle declares as the
 // least it needs, and the fingerprint of the native surface it was last reviewed at. The
 // fingerprint covers:
-//   - every git tracked file under apps/velista/android, line endings read as LF
+//   - every git tracked file under apps/velista/android, a binary file byte for byte and a
+//     text file with its line endings read as LF
 //   - the resolved version of every @capacitor/*, @capgo/* and @capawesome/* package in
 //     package-lock.json
 //   - libs/velista/native/src/lib/native-plugins.ts, every native method a bundle can call
@@ -21,7 +22,7 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -34,9 +35,24 @@ export const LOCK_FILE = 'package-lock.json';
 export const KEY_FILE = 'apps/velista/native-api.json';
 const SCOPES = ['@capacitor/', '@capgo/', '@capawesome/'];
 
-/** Text with CRLF read as LF, so a checkout's line endings never move the key. */
-function normalized(bytes) {
-  return bytes.toString('utf8').replace(/\r\n/g, '\n');
+/**
+ * The bytes the key hashes for one file. Nothing is decoded, so every byte counts. A file
+ * with a NUL byte is binary by git's own rule and is hashed as it is. In any other file
+ * each CRLF is read as LF, so a checkout's line endings never move the key.
+ */
+export function normalized(bytes) {
+  if (bytes.includes(0)) {
+    return bytes;
+  }
+  const out = Buffer.alloc(bytes.length);
+  let length = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] === 0x0d && bytes[i + 1] === 0x0a) {
+      continue;
+    }
+    out[length++] = bytes[i];
+  }
+  return out.subarray(0, length);
 }
 
 /** The resolved native package versions of a lock file, as sorted `name@version` lines. */
@@ -83,7 +99,13 @@ export function fingerprint(root, androidFiles = trackedAndroidFiles(root)) {
     hash.update('\n');
   };
   for (const path of androidFiles) {
-    part(`file ${path}`, normalized(readFileSync(join(root, path))));
+    // A tracked file deleted from the working tree is a change like any other, and the
+    // check reports it as a mismatch rather than dying on ENOENT.
+    if (existsSync(join(root, path))) {
+      part(`file ${path}`, normalized(readFileSync(join(root, path))));
+    } else {
+      part(`deleted ${path}`, '');
+    }
   }
   part(
     'packages',
@@ -157,20 +179,36 @@ export function runMode(mode, root, androidFiles) {
   }
   return {
     ok: false,
-    message: 'native-api: pass exactly one of --check, --bump, --accept',
+    message: USAGE,
   };
+}
+
+const MODES = ['--check', '--bump', '--accept'];
+const USAGE = 'native-api: pass exactly one of --check, --bump, --accept';
+
+/** The command line: exactly one mode and nothing else, or a refusal that names the three. */
+export function runCli(args, root, androidFiles) {
+  const unknown = args.filter((arg) => !MODES.includes(arg));
+  if (unknown.length > 0) {
+    return {
+      ok: false,
+      message: `native-api: unknown argument ${unknown.join(' ')}. Pass exactly one of --check, --bump, --accept`,
+    };
+  }
+  if (args.length !== 1) {
+    return { ok: false, message: USAGE };
+  }
+  return runMode(args[0], root, androidFiles);
 }
 
 if (
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 ) {
-  const modes = process.argv
-    .slice(2)
-    .filter((arg) => ['--check', '--bump', '--accept'].includes(arg));
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-  const result =
-    modes.length === 1 ? runMode(modes[0], root) : runMode('(none)', root, []);
+  const result = runCli(
+    process.argv.slice(2),
+    resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
+  );
   (result.ok ? console.log : console.error)(result.message);
   process.exit(result.ok ? 0 : 1);
 }

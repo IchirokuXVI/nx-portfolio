@@ -166,6 +166,35 @@ describe('refusal', () => {
     );
   });
 
+  it('refuses --bundle when the flavor has no committed public key, and names the file', () => {
+    const message = refusal({
+      ...ok,
+      bundle: true,
+      otaUrl: 'https://velista.app/ota/android/',
+      publicKeyFile: 'apps/velista/ota-keys/production.pub.pem',
+      publicKeyExists: false,
+    });
+    assert.match(message, /apps\/velista\/ota-keys\/production\.pub\.pem/);
+    assert.match(message, /key ceremony/);
+  });
+
+  it('refuses --bundle with VELISTA_OTA_PUBLIC_KEY', () => {
+    assert.match(
+      refusal({
+        ...ok,
+        bundle: true,
+        otaUrl: 'https://velista.app/ota/android/',
+        publicKeyOverride: true,
+      }),
+      /VELISTA_OTA_PUBLIC_KEY/
+    );
+  });
+
+  it('lets an APK without --bundle through with a missing key or a test key', () => {
+    assert.equal(refusal({ ...ok, publicKeyExists: false }), null);
+    assert.equal(refusal({ ...ok, publicKeyOverride: true }), null);
+  });
+
   it('refuses while dist/apps/velista/ota exists, so the APK never carries the OTA files', () => {
     assert.match(
       refusal({ ...ok, otaDirExists: true }),
@@ -185,6 +214,14 @@ describe('needsCleartextLocalhost', () => {
       false
     );
     assert.equal(needsCleartextLocalhost(''), false);
+  });
+
+  it('reads the protocol as the refusal does, whatever its case', () => {
+    assert.equal(
+      needsCleartextLocalhost('HTTP://localhost:8787/ota/android/'),
+      true
+    );
+    assert.equal(needsCleartextLocalhost('http-not-a-url'), false);
   });
 });
 

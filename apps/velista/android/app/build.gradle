@@ -101,6 +101,10 @@ android {
 // alone. It is written under build/ and merged in, so an ordinary build carries none.
 // build-android.mjs refuses --bundle with it.
 if ((project.findProperty('velistaCleartextLocalhost') ?: 'false').toString() == 'true') {
+    // Gradle holds the rule itself too, so a switch passed by hand never reaches Play.
+    if (gradle.startParameter.taskNames.any { it.toLowerCase().contains('bundle') }) {
+        throw new GradleException('velistaCleartextLocalhost=true refuses a bundle task: a Play build allows no cleartext')
+    }
     logger.warn('velista: cleartext to localhost is allowed in this build, for an OTA test only')
     def overlay = new File(layout.buildDirectory.get().asFile, 'generated/velista-cleartext-localhost')
     def xmlDir = new File(overlay, 'res/xml')

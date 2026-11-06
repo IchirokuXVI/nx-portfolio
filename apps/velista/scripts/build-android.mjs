@@ -27,7 +27,9 @@
 //                                        adb reverse, and the APK then allows cleartext to
 //                                        localhost alone
 //   VELISTA_OTA_PUBLIC_KEY               a PEM file that replaces the flavor's committed
-//                                        public key, for a throwaway key pair in a test
+//                                        public key, for a throwaway key pair in a test;
+//                                        --bundle refuses it, and refuses a flavor whose
+//                                        committed key is missing
 
 import { spawnSync } from 'node:child_process';
 import {
@@ -98,13 +100,37 @@ export function otaBaseUrl({ flavor, env, noOta }) {
 
 /** True when the APK must allow cleartext to localhost, for an http OTA URL. */
 export function needsCleartextLocalhost(url) {
-  return url.startsWith('http:');
+  try {
+    return new URL(url).protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
-/** The first reason this build must not run, or null. */
-export function refusal({ bundle, noOta, otaUrl, otaDirExists }) {
+/**
+ * The first reason this build must not run, or null. `publicKeyFile` names the flavor's
+ * committed key, `publicKeyExists` says whether it is there, and `publicKeyOverride` is
+ * true when VELISTA_OTA_PUBLIC_KEY replaces it.
+ */
+export function refusal({
+  bundle,
+  noOta,
+  otaUrl,
+  otaDirExists,
+  publicKeyFile = '',
+  publicKeyExists = true,
+  publicKeyOverride = false,
+}) {
   if (bundle && noOta) {
     return '--bundle refuses --no-ota: a Play build always asks its cluster for bundles';
+  }
+  // The key that judges every later bundle is compiled in (D5), and only a new APK
+  // replaces it, so a Play build carries the flavor's committed key and no other.
+  if (bundle && publicKeyOverride) {
+    return '--bundle refuses VELISTA_OTA_PUBLIC_KEY: a Play build carries the committed public key of its flavor, never a test key';
+  }
+  if (bundle && !publicKeyExists) {
+    return `--bundle needs the OTA public key ${publicKeyFile}, and it does not exist. Without it the AAB never asks for a bundle. Make the key pair first (the key ceremony in apps/velista/README.md)`;
   }
   if (otaUrl !== '') {
     let parsed;
@@ -257,16 +283,32 @@ function main() {
 
   const otaDir = join(workspaceRoot, 'dist/apps/velista/ota');
   let otaUrl = otaBaseUrl({ flavor, env: process.env, noOta });
-  const early = refusal({ bundle, noOta, otaUrl, otaDirExists: false });
+
+  // The key that judges the next bundle is compiled in (D5). Until the owner commits the
+  // flavor's public key, an APK carries none and asks for no manifest, and --bundle refuses.
+  const committedKeyFile = join(appRoot, 'ota-keys', `${flavor}.pub.pem`);
+  const publicKeyOverride = Boolean(process.env.VELISTA_OTA_PUBLIC_KEY);
+  const keyFile = publicKeyOverride
+    ? resolve(process.env.VELISTA_OTA_PUBLIC_KEY)
+    : committedKeyFile;
+  const keyRules = {
+    publicKeyFile: relative(workspaceRoot, committedKeyFile).replace(
+      /\\/g,
+      '/'
+    ),
+    publicKeyExists: existsSync(committedKeyFile),
+    publicKeyOverride,
+  };
+  const early = refusal({
+    bundle,
+    noOta,
+    otaUrl,
+    otaDirExists: false,
+    ...keyRules,
+  });
   if (early !== null) {
     fail(early);
   }
-
-  // The key that judges the next bundle is compiled in (D5). Until the owner commits the
-  // flavor's public key, the APK carries none and asks for no manifest.
-  const keyFile = process.env.VELISTA_OTA_PUBLIC_KEY
-    ? resolve(process.env.VELISTA_OTA_PUBLIC_KEY)
-    : join(appRoot, 'ota-keys', `${flavor}.pub.pem`);
   let otaPublicKey = '';
   if (existsSync(keyFile)) {
     otaPublicKey = readFileSync(keyFile, 'utf8').replace(/\r\n/g, '\n').trim();
@@ -276,9 +318,8 @@ function main() {
     );
     otaUrl = '';
   }
-  const cleartext = needsCleartextLocalhost(
-    process.env.VELISTA_OTA_URL && !noOta ? process.env.VELISTA_OTA_URL : ''
-  );
+  // Read off the final URL, so an APK whose OTA ended up off allows no cleartext.
+  const cleartext = needsCleartextLocalhost(otaUrl);
 
   let nativeApi;
   try {
@@ -368,6 +409,7 @@ function main() {
     noOta,
     otaUrl,
     otaDirExists: existsSync(otaDir),
+    ...keyRules,
   });
   if (late !== null) {
     fail(late);

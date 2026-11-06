@@ -24,7 +24,13 @@ function appHostname(): string {
  * --bundle with it, so a Play build always keeps the refusal.
  */
 function otaOverCleartext(): boolean {
-  return (process.env.VELISTA_OTA_URL ?? '').startsWith('http:');
+  // Read through URL, as build-android.mjs reads it, so `HTTP://` counts too. This file
+  // must never throw, so a value that is not a URL counts as not http.
+  try {
+    return new URL(process.env.VELISTA_OTA_URL ?? '').protocol === 'http:';
+  } catch {
+    return false;
+  }
 }
 
 const config: CapacitorConfig = {
@@ -57,8 +63,9 @@ const config: CapacitorConfig = {
     // app reads its own signed manifest and calls download, set and next itself. The
     // three URLs are empty so the plugin never talks to Capgo's cloud (D11); the build
     // spike proved that an empty string stays empty. A bundle that does not call
-    // notifyAppReady within 20 s rolls back (D7), and a new APK from Play drops every
-    // downloaded bundle and boots its own (D1).
+    // notifyAppReady in time rolls back (D7): appReadyTimeout is the window of a bundle
+    // that has booted well once, and the updater gives a pending bundle at least 30 s.
+    // A new APK from Play drops every downloaded bundle and boots its own (D1).
     CapacitorUpdater: {
       autoUpdate: 'off',
       updateUrl: '',

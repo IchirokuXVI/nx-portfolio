@@ -20,6 +20,8 @@ import {
   fingerprint,
   KEY_FILE,
   nativePackageVersions,
+  normalized,
+  runCli,
   runMode,
 } from './native-api.mjs';
 
@@ -104,6 +106,50 @@ describe('native-api', () => {
     );
     write('apps/velista/capacitor.config.ts', 'export default {};\r\n');
     assert.equal(runMode('--check', root, ANDROID_FILES).ok, true);
+  });
+
+  it('fails when a binary file changes in a byte that is not valid UTF-8', () => {
+    const icon = 'apps/velista/android/app/src/main/res/mipmap/icon.png';
+    const files = [...ANDROID_FILES, icon];
+    write(icon, Buffer.from([0x89, 0x50, 0x00, 0xff, 0x01]));
+    runMode('--accept', root, files);
+    write(icon, Buffer.from([0x89, 0x50, 0x00, 0xfe, 0x01]));
+    assert.equal(runMode('--check', root, files).ok, false);
+  });
+
+  it('hashes the bytes of a file, never a decoded text', () => {
+    assert.notDeepEqual(
+      normalized(Buffer.from([0x89, 0x50, 0xff, 0x01])),
+      normalized(Buffer.from([0x89, 0x50, 0xfe, 0x01]))
+    );
+    assert.deepEqual(
+      normalized(Buffer.from('a\r\nb\r\n')),
+      Buffer.from('a\nb\n')
+    );
+  });
+
+  it('keeps a CRLF inside a binary file', () => {
+    const bytes = Buffer.from([0x00, 0x0d, 0x0a]);
+    assert.deepEqual(normalized(bytes), bytes);
+  });
+
+  it('reports a tracked file missing from the working tree as a mismatch', () => {
+    const result = runMode('--check', root, [
+      ...ANDROID_FILES,
+      'apps/velista/android/app/src/main/res/xml/gone.xml',
+    ]);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /--bump/);
+  });
+
+  it('refuses an unknown flag and names the three modes', () => {
+    const result = runCli(['--chek'], root, ANDROID_FILES);
+    assert.equal(result.ok, false);
+    assert.match(result.message, /--chek/);
+    assert.match(result.message, /--check, --bump, --accept/);
+    assert.equal(runCli(['--check', '--force'], root, ANDROID_FILES).ok, false);
+    assert.equal(runCli([], root, ANDROID_FILES).ok, false);
+    assert.equal(runCli(['--check'], root, ANDROID_FILES).ok, true);
   });
 
   it('fails when a Capacitor version in the lock file changes', () => {
