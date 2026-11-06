@@ -10,9 +10,11 @@ import {
 import { NavigationEnd, Router } from '@angular/router';
 import { SwUpdate } from '@angular/service-worker';
 import { filter } from 'rxjs';
+import { AppResumed } from './app-resumed';
 import { APP_RUNTIME } from './app-runtime';
 import { BackendReadiness } from './backend-readiness';
 import { BrowserFacade } from './browser-facade';
+import { BundleUpdates } from './bundle-updates';
 import { ReloadBlocker } from './reload-blocker';
 import { StorageKeys } from './storage-keys';
 
@@ -96,12 +98,19 @@ export class AppUpdates {
   private readonly _destroyRef = inject(DestroyRef);
 
   /**
-   * Inside a native shell (velista `0166`, target 3). The bundle there changes only
-   * with the app, so there is nothing to check and nothing a reload could fetch, and a
-   * worker that registered anyway would leave `checkForUpdate()` waiting for a
-   * controller that never comes.
+   * Inside a native shell (velista `0166`, target 3). The service worker is never
+   * asked there: a worker that registered anyway would leave `checkForUpdate()`
+   * waiting for a controller that never comes, and a reload loads the running bundle
+   * again. The bundle changes through the updater instead (velista `0180`).
    */
   private readonly _native = inject(APP_RUNTIME) === 'native';
+
+  /**
+   * The rules of the native bundle (velista `0180`, D6 to D9), or null on the web.
+   * Injected only inside the native shell, so the web never touches the updater or
+   * Google Play.
+   */
+  private readonly _bundles = this._native ? inject(BundleUpdates) : null;
 
   /**
    * Set when a new version is downloaded and the reload is waiting for the user to
@@ -149,6 +158,11 @@ export class AppUpdates {
     // `index.html` and a fresh bundle, and it is bounded by the same one attempt.
     this._watchRefusals();
 
+    if (this._bundles !== null) {
+      this._watchNative(this._bundles);
+      return;
+    }
+
     if (this._native || !this._updates?.isEnabled) {
       return;
     }
@@ -173,7 +187,9 @@ export class AppUpdates {
    * with a rejection.
    */
   checkNow(): void {
-    if (this._native) {
+    // Native: the manifest, under its own ten minute floor (velista `0180`, D6).
+    if (this._bundles !== null) {
+      void this._bundles.check();
       return;
     }
 
@@ -203,17 +219,16 @@ export class AppUpdates {
     }
     this._demanded = true;
 
+    // Native: the order of velista `0180` D9, which spends the same one attempt.
+    if (this._bundles !== null) {
+      void this._demandBundle(this._bundles);
+      return;
+    }
+
     // D4, and the reason it is checked before anything else: this document has
     // already reloaded once for this, and come back refused. Another check and
     // another twenty seconds would only delay the same screen.
     if (this._attemptSpent()) {
-      this._giveUp();
-      return;
-    }
-
-    // Native: a reload would load the same bundle and be refused again, so the dead
-    // end face comes at once, and that face offers the store instead (D3).
-    if (this._native) {
       this._giveUp();
       return;
     }
@@ -280,15 +295,16 @@ export class AppUpdates {
    * document is then the newest there is, and the page is a real 404.
    */
   newerVersionForUnknownPage(url: string): Promise<boolean> {
-    // Native: the bundled version is the newest this app has. The 404 sits inside the
-    // layout and behind its startup gate, so the gate answers about the backend and the
-    // version first, and `false` here means only that the page itself asks nothing more.
-    if (this._native) {
+    if (this._browser.readSessionStorage(StorageKeys.notFoundUpdate) === url) {
       return Promise.resolve(false);
     }
 
-    if (this._browser.readSessionStorage(StorageKeys.notFoundUpdate) === url) {
-      return Promise.resolve(false);
+    // Native: a verified bundle already downloaded is newer, and nothing else is
+    // asked (velista `0180`, target state item 6). The 404 sits inside the layout and
+    // behind its startup gate, so the gate answers about the backend and the version
+    // first, and `false` here means only that the page itself asks nothing more.
+    if (this._bundles !== null) {
+      return Promise.resolve(this._bundles.hasReadyBundle());
     }
 
     if (this._reloadAtNextNavigation) {
@@ -309,7 +325,69 @@ export class AppUpdates {
   reloadForUnknownPage(url: string): void {
     this._browser.writeSessionStorage(StorageKeys.notFoundUpdate, url);
     this._reloadAtNextNavigation = false;
+
+    // Native: a reload would load the running bundle again, so the waiting one is
+    // applied through the updater (velista `0180`, D6).
+    if (this._bundles !== null) {
+      void this._bundles.applyNow();
+      return;
+    }
+
     this._browser.reload();
+  }
+
+  /**
+   * A refused build inside the native shell, in the order of velista `0180` D9: a
+   * verified bundle already downloaded, then a fresh manifest check and download,
+   * both within the one attempt of plan 0072 D4; then Google Play's immediate update;
+   * then the dead end face, whose store action stays the last resort.
+   *
+   * The bundle applies past `ReloadBlocker`, for the reason a refused build reloads
+   * past it on the web (plan 0072 D7): nothing behind the blocker can be submitted.
+   */
+  private async _demandBundle(bundles: BundleUpdates): Promise<void> {
+    if (!this._attemptSpent()) {
+      const ready =
+        bundles.hasReadyBundle() ||
+        (await bundles.check({ force: true })) === 'ready';
+      if (ready) {
+        this._browser.writeSessionStorage(StorageKeys.updateAttempt, '1');
+        if (await bundles.applyNow()) {
+          return;
+        }
+      }
+    }
+
+    if (await bundles.immediateUpdate()) {
+      return;
+    }
+
+    this._giveUp();
+  }
+
+  /**
+   * The native triggers (velista `0180`, D6): every completed navigation, and every
+   * resume through `AppResumed` rather than a listener of its own. `BundleUpdates`
+   * decides what each one means.
+   */
+  private _watchNative(bundles: BundleUpdates): void {
+    const resumed = inject(AppResumed);
+
+    const navigated = this._router.events
+      .pipe(filter((event) => event instanceof NavigationEnd))
+      .subscribe(() => bundles.navigated());
+
+    // Zero is the app's first frame and not a resume.
+    effect(() => {
+      const count = resumed.resumes();
+      untracked(() => {
+        if (count > 0) {
+          bundles.resumed();
+        }
+      });
+    });
+
+    this._destroyRef.onDestroy(() => navigated.unsubscribe());
   }
 
   /**

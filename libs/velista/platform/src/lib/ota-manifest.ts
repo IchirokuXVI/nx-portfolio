@@ -157,14 +157,14 @@ function toBytes(value: Uint8Array | string): Uint8Array<ArrayBuffer> {
  * - `publicKeyPem`: the flavor's key as a PEM SPKI (`-----BEGIN PUBLIC KEY-----`).
  *
  * False for every failure, never a throw: a key that does not import, a signature of
- * the wrong length, a host with no WebCrypto. `subtle` is a parameter only so a spec
+ * the wrong length, a host with no WebCrypto (`subtle` null). It is a parameter only so a spec
  * can hand in Node's.
  */
 export async function verifyOtaManifest(
   bytes: Uint8Array | string,
   signature: Uint8Array | string,
   publicKeyPem: string,
-  subtle: SubtleCrypto | undefined = globalThis.crypto?.subtle
+  subtle: SubtleCrypto | null = globalThis.crypto?.subtle ?? null
 ): Promise<boolean> {
   try {
     if (!subtle) {

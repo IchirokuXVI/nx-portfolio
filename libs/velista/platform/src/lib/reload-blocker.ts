@@ -19,7 +19,11 @@ export class ReloadBlocker {
   private readonly _browser = inject(BrowserFacade);
 
   private readonly _blockers = signal<ReadonlySet<symbol>>(new Set());
-  private _reloadPending = false;
+  /**
+   * The action waiting for the last blocker, if any. One slot and not a queue: every
+   * action here replaces the document, so only the latest request can still matter.
+   */
+  private _pending: (() => void) | null = null;
 
   /** True while at least one component holds unsaved state. */
   readonly isBlocked = () => this._blockers().size > 0;
@@ -56,14 +60,28 @@ export class ReloadBlocker {
    * blocking screen.
    */
   reloadWhenIdle(): void {
-    this._reloadPending = true;
+    this.whenIdle(() => this._browser.reload());
+  }
+
+  /**
+   * Run `action` now if nothing is held, and otherwise as soon as everything is
+   * released (velista `0180`, D6).
+   *
+   * For the ways of replacing the document that are not a plain reload. Inside the
+   * native shell a reload loads the running bundle again, so a new bundle applies
+   * through the updater instead, and it still must not land on a held form. A later
+   * request replaces one that is still waiting.
+   */
+  whenIdle(action: () => void): void {
+    this._pending = action;
     this._flushIfIdle();
   }
 
   private _flushIfIdle(): void {
-    if (this._reloadPending && !this.isBlocked()) {
-      this._reloadPending = false;
-      this._browser.reload();
+    const action = this._pending;
+    if (action !== null && !this.isBlocked()) {
+      this._pending = null;
+      action();
     }
   }
 }

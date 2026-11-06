@@ -11,6 +11,7 @@ export * from './lib/audio-recorder';
 export * from './lib/back-stack';
 export * from './lib/backend-readiness';
 export * from './lib/browser-facade';
+export * from './lib/bundle-updates';
 export * from './lib/catalog-paths';
 export * from './lib/column-scroll';
 export * from './lib/connection-state';
