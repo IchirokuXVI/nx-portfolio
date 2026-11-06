@@ -1,3 +1,5 @@
+> **PR:** [#929](https://github.com/IchirokuXVI/nx-portfolio/pull/929)
+
 # 0216: a shopper refreshes the price of one product
 
 > This plan promotes backlog `0006` (the public item refresh and the global fetch cooldown). That
