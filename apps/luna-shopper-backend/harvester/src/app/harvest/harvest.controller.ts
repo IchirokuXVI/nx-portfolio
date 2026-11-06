@@ -11,6 +11,7 @@ import {
   POSTAL_CODE_EVENTS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
+  SOURCE_PROBE_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   type AcceptSourceEntryRequest,
   type AddPostalCodeDiscoveryRequest,
@@ -56,6 +57,7 @@ import {
   type ListSourceEntriesByItemRequest,
   type ListSourceEntriesRequest,
   type ListSourceLocationsRequest,
+  type ListSourceProbesRequest,
   type ListSupermarketSourcesRequest,
   type MapSourceLocationRequest,
   type PlaceLinkResult,
@@ -76,7 +78,11 @@ import {
   type SourceLocationIdRequest,
   type SourceLocationPage,
   type SourceLocationView,
+  type SourceProbeIdRequest,
+  type SourceProbePage,
+  type SourceProbeView,
   type SpawnHarvestRunRequest,
+  type StartSourceProbeRequest,
   type SupermarketSourceIdRequest,
   type SupermarketSourcePage,
   type SupermarketSourceView,
@@ -91,6 +97,7 @@ import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestScheduleService } from './harvest-schedule.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import { SourceProbeService } from './probes/source-probe.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryService } from './source-entry.service';
 import { SourceLocationService } from './source-location.service';
@@ -122,7 +129,8 @@ export class HarvestController {
     private readonly dashboard: HarvestDashboardService,
     private readonly presets: HarvestRunPresetService,
     private readonly schedules: HarvestScheduleService,
-    private readonly alerts: HarvestAlertService
+    private readonly alerts: HarvestAlertService,
+    private readonly probes: SourceProbeService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -575,5 +583,27 @@ export class HarvestController {
     @Payload() req: SendHarvestTestAlertRequest
   ): Promise<HarvestTestAlertView> {
     return this.alerts.sendTest(req);
+  }
+
+  // --- Probes: a probe per chain checks the storefront shape (plan 0219) ---
+
+  /** Answers the RUNNING row. The probe goes on after the answer. */
+  @MessagePattern(SOURCE_PROBE_PATTERNS.start)
+  startProbe(
+    @Payload() req: StartSourceProbeRequest
+  ): Promise<SourceProbeView> {
+    return this.probes.start(req);
+  }
+
+  @MessagePattern(SOURCE_PROBE_PATTERNS.list)
+  listProbes(
+    @Payload() req: ListSourceProbesRequest
+  ): Promise<SourceProbePage> {
+    return this.probes.list(req);
+  }
+
+  @MessagePattern(SOURCE_PROBE_PATTERNS.get)
+  getProbe(@Payload() req: SourceProbeIdRequest): Promise<SourceProbeView> {
+    return this.probes.get(req);
   }
 }

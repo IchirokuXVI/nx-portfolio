@@ -40,3 +40,6 @@ export type {
   DezaSection,
   DezaShop,
 } from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeDeza } from './lib/probe';
+export type { DezaProbeOptions } from './lib/probe';

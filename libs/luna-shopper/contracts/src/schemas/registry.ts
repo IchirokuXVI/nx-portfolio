@@ -99,6 +99,10 @@ import {
   shopWalkMessageContracts,
   shopWalkSchemas,
 } from './messages/shop-walk.schemas';
+import {
+  sourceProbeMessageContracts,
+  sourceProbeSchemas,
+} from './messages/source-probe.schemas';
 import { statsMessageContracts, statsSchemas } from './messages/stats.schemas';
 import { zoneMessageContracts, zoneSchemas } from './messages/zone.schemas';
 
@@ -134,6 +138,8 @@ export const messageContracts: Record<string, MessageContract> = {
   ...purchaseMessageContracts,
   // The harvester's test alert (plan 0218).
   ...harvestAlertMessageContracts,
+  // A probe per chain checks the storefront shape (plan 0219).
+  ...sourceProbeMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -188,6 +194,8 @@ export const allSchemas: JsonSchema[] = [
   ...harvestDocumentSchemas,
   // The harvester's alerts to the owner (plan 0218).
   ...harvestAlertSchemas,
+  // A probe per chain checks the storefront shape (plan 0219).
+  ...sourceProbeSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);
