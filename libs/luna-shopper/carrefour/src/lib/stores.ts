@@ -42,11 +42,21 @@ export interface CarrefourStore {
   postalCode: string;
   phone: string | null;
   web: string | null;
-  /** `hours1`, `hours2`, `hours3`, verbatim, absent ones left out. */
-  hours: string[];
+  /**
+   * `hours1`, `hours2`, `hours3`, verbatim, each under its own name and null
+   * when blank. A blank `hours1` beside a present `hours2` stays `hours2`.
+   */
+  hours: CarrefourStoreHours;
   features: string[];
   codsa: string | null;
   codat: string | null;
+}
+
+/** The three opening hours attributes of a marker, by name. */
+export interface CarrefourStoreHours {
+  hours1: string | null;
+  hours2: string | null;
+  hours3: string | null;
 }
 
 export interface CarrefourDroppedRecord {
@@ -99,14 +109,22 @@ export function decodeXmlAttribute(value: string): string {
     /&(?:#(\d+)|#x([0-9a-fA-F]+)|([a-zA-Z]+));/g,
     (whole: string, decimal?: string, hex?: string, name?: string) => {
       if (decimal !== undefined) {
-        return String.fromCodePoint(Number(decimal));
+        return codePoint(Number(decimal), whole);
       }
       if (hex !== undefined) {
-        return String.fromCodePoint(Number.parseInt(hex, 16));
+        return codePoint(Number.parseInt(hex, 16), whole);
       }
       return XML_ENTITIES[name ?? ''] ?? whole;
     }
   );
+}
+
+/**
+ * The character a numeric entity names, or the entity's raw text when the
+ * number is past the last code point, where `String.fromCodePoint` throws.
+ */
+function codePoint(value: number, whole: string): string {
+  return value <= 0x10ffff ? String.fromCodePoint(value) : whole;
 }
 
 /** The attributes of one marker, decoded, by name. */
@@ -116,6 +134,11 @@ function attributesOf(body: string): Map<string, string> {
     attributes.set(match[1], decodeXmlAttribute(match[2] ?? match[3] ?? ''));
   }
   return attributes;
+}
+
+/** A value as it was written, or null when it holds only spaces. */
+function verbatim(value: string | undefined): string | null {
+  return present(value) === null ? null : (value ?? null);
 }
 
 /** A value with its spaces trimmed, or null when nothing is left. */
@@ -191,9 +214,11 @@ export function parseStoreLocator(xml: string): CarrefourStoreList {
       postalCode,
       phone: present(attributes.get('phone')),
       web: present(attributes.get('web')),
-      hours: ['hours1', 'hours2', 'hours3']
-        .map((key) => attributes.get(key))
-        .filter((value): value is string => present(value) !== null),
+      hours: {
+        hours1: verbatim(attributes.get('hours1')),
+        hours2: verbatim(attributes.get('hours2')),
+        hours3: verbatim(attributes.get('hours3')),
+      },
       features: (attributes.get('features') ?? '')
         .split(',')
         .map((feature) => feature.trim())

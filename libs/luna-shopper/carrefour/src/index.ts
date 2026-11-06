@@ -72,6 +72,7 @@ export {
   type CarrefourDroppedRecord,
   type CarrefourFormat,
   type CarrefourStore,
+  type CarrefourStoreHours,
   type CarrefourStoreList,
 } from './lib/stores';
 export {

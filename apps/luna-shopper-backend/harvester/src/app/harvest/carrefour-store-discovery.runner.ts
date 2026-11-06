@@ -91,7 +91,7 @@ export class CarrefourStoreDiscoveryRunner implements StoreDiscoveryRunner {
       if (list.stores.length < EXPECTED_AT_LEAST) {
         warnings.push(
           `The store finder named ${list.stores.length} grocery shop(s). It ` +
-            `named 1,597 on 2026-10-22, so a count under ${EXPECTED_AT_LEAST} ` +
+            `kept 1,586 on 2026-11-06, so a count under ${EXPECTED_AT_LEAST} ` +
             'suggests the document changed.'
         );
       }
@@ -222,8 +222,9 @@ export class CarrefourStoreDiscoveryRunner implements StoreDiscoveryRunner {
 const PROVIDER = 'CARREFOUR';
 
 /**
- * 1,597 grocery records on 2026-10-22 and 1,586 kept on 2026-11-06. Fewer than
- * this is a warning (section 6.4).
+ * The floor for the shops the parser keeps, which is what the warning counts:
+ * 1,586 on 2026-11-06. (The 1,597 of 2026-10-22 counted the grocery records
+ * before the drops.) Fewer than this is a warning (section 6.4).
  */
 const EXPECTED_AT_LEAST = 1400;
 
@@ -282,9 +283,9 @@ function tagsOf(
     ['carrefour:codat', store.codat],
     ['phone', store.phone],
     ['addr:province', store.province],
-    ['carrefour:hours1', store.hours[0]],
-    ['carrefour:hours2', store.hours[1]],
-    ['carrefour:hours3', store.hours[2]],
+    ['carrefour:hours1', store.hours.hours1],
+    ['carrefour:hours2', store.hours.hours2],
+    ['carrefour:hours3', store.hours.hours3],
     [
       'carrefour:features',
       store.features.length > 0 ? store.features.join(',') : null,

@@ -97,4 +97,41 @@ describe('salePointsByShop', () => {
     };
     expect(salePointsByShop(STORES, [far]).size).toBe(0);
   });
+
+  describe('at the 150 m limit, against one shop', () => {
+    const shop = STORES.find(
+      (store) => store.name === 'Carrefour El Pinar'
+    ) as CarrefourStore;
+    /** A drive due north of the shop, by a latitude offset in degrees. */
+    const northOf = (salePointId: string, offset: number): CarrefourDrive => ({
+      salePointId,
+      storeId: salePointId,
+      name: `Drive ${salePointId}`,
+      latitude: shop.latitude + offset,
+      longitude: shop.longitude,
+      postalCode: null,
+    });
+
+    it('joins a drive about 140 m away', () => {
+      const joined = salePointsByShop([shop], [northOf('near', 0.00126)]);
+      expect(joined.get(shop.externalRef)?.salePointId).toBe('near');
+    });
+
+    it('joins nothing to a drive about 160 m away', () => {
+      expect(salePointsByShop([shop], [northOf('far', 0.00144)]).size).toBe(0);
+    });
+
+    it('keeps the nearer of two drives that reach the same shop', () => {
+      const nearer = northOf('nearer', 0.0005);
+      const farther = northOf('farther', 0.001);
+      for (const drives of [
+        [nearer, farther],
+        [farther, nearer],
+      ]) {
+        const joined = salePointsByShop([shop], drives);
+        expect(joined.size).toBe(1);
+        expect(joined.get(shop.externalRef)?.salePointId).toBe('nearer');
+      }
+    });
+  });
 });

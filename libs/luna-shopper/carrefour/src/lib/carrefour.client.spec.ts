@@ -421,8 +421,17 @@ describe('CarrefourClient, the store finder and the drive list (plan 0223)', () 
   it('reads both documents through one session, paced at the floor', async () => {
     const { client, asked, waits, opened } = documents(serve);
 
-    const list = await client.readStoreLocator();
-    const drives = await client.readDrives();
+    // A clock that stands still, so the second wait is the whole floor and
+    // not the floor less however long the first load took.
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    let list: Awaited<ReturnType<CarrefourClient['readStoreLocator']>>;
+    let drives: Awaited<ReturnType<CarrefourClient['readDrives']>>;
+    try {
+      list = await client.readStoreLocator();
+      drives = await client.readDrives();
+    } finally {
+      now.mockRestore();
+    }
 
     expect(list.recordsRead).toBe(1976);
     expect(drives).toHaveLength(179);
@@ -433,9 +442,7 @@ describe('CarrefourClient, the store finder and the drive list (plan 0223)', () 
     expect(client.loads).toBe(2);
     expect(opened()).toBe(1);
     // The second load waited for the floor, as every page of the walk does.
-    expect(waits).toHaveLength(1);
-    expect(waits[0]).toBeGreaterThan(CARREFOUR_MIN_DELAY_MS - 500);
-    expect(waits[0]).toBeLessThanOrEqual(CARREFOUR_MIN_DELAY_MS);
+    expect(waits).toEqual([CARREFOUR_MIN_DELAY_MS]);
   });
 
   it('counts a 403 toward the refusal limit, as a page does', async () => {
@@ -486,15 +493,44 @@ describe('CarrefourClient, the store finder and the drive list (plan 0223)', () 
     ).resolves.toBe(XML);
   });
 
-  it('refuses a text read on a session that cannot read text', async () => {
+  it('refuses a text read on a session that cannot read text, before any cost', async () => {
+    const guard = new SourceGuard(CARREFOUR_REFUSAL_POLICY);
+    const inconclusive = jest.spyOn(guard, 'inconclusive');
+    const waits: number[] = [];
+    let acquired = 0;
+    let opened = 0;
+    let closed = 0;
     const client = new CarrefourClient({
       userAgent: 'x',
-      openSession: async () => ({
-        goto: async () => ({ status: 200, state: null }),
-        close: async () => undefined,
-      }),
-      sleepImpl: async () => undefined,
+      openSession: async () => {
+        opened += 1;
+        return {
+          goto: async () => ({ status: 200, state: null }),
+          close: async () => {
+            closed += 1;
+          },
+        };
+      },
+      sleepImpl: async (ms) => {
+        waits.push(ms);
+      },
+      acquire: async () => {
+        acquired += 1;
+      },
+      guard,
     });
+
     await expect(client.readDrives()).rejects.toThrow(/cannot read a document/);
+    await expect(client.readStoreLocator()).rejects.toThrow(
+      /cannot read a document/
+    );
+
+    // Not paced, not counted, nothing told to the guard, and the session kept.
+    expect(acquired).toBe(0);
+    expect(waits).toEqual([]);
+    expect(client.loads).toBe(0);
+    expect(inconclusive).not.toHaveBeenCalled();
+    expect(closed).toBe(0);
+    expect(opened).toBe(1);
   });
 });

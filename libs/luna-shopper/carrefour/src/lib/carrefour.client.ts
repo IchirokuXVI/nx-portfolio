@@ -360,14 +360,13 @@ export class CarrefourClient {
   }
 
   /** One path read as text through {@link load}, so it obeys every rule a page does. */
-  private text(path: string): Promise<string | null> {
+  private async text(path: string): Promise<string | null> {
+    // Refused before `load`, so a session that cannot read text costs no
+    // pacing wait and no load, tells the guard nothing and is not dropped.
+    this.options.signal?.throwIfAborted();
+    readsText(await this.open());
     return this.load(path, async (session, url) => {
-      if (!session.fetchText) {
-        throw new Error(
-          'This browser session cannot read a document as text, so the store ' +
-            'finder and the drive list are out of its reach'
-        );
-      }
+      readsText(session);
       const { status, body } = await session.fetchText(url);
       return { status, value: body };
     });
@@ -469,6 +468,19 @@ export class CarrefourClient {
           );
     }
     return this.session;
+  }
+}
+
+/** Throws unless the session can read a document as text. */
+function readsText(
+  session: CarrefourSession
+): asserts session is CarrefourSession &
+  Required<Pick<CarrefourSession, 'fetchText'>> {
+  if (!session.fetchText) {
+    throw new Error(
+      'This browser session cannot read a document as text, so the store ' +
+        'finder and the drive list are out of its reach'
+    );
   }
 }
 

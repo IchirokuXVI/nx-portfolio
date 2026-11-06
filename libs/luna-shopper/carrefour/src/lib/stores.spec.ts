@@ -108,6 +108,27 @@ describe('parseStoreLocator', () => {
     );
   });
 
+  it('keeps a numeric entity past the last code point as written', () => {
+    expect(decodeXmlAttribute('a &#99999999; b &#x110000;')).toBe(
+      'a &#99999999; b &#x110000;'
+    );
+  });
+
+  it('keeps each hours value under its own name when hours1 is blank', () => {
+    const parsed = parseStoreLocator(
+      '<markers>' +
+        '<marker name="A" lat="40.1" lng="-3.2" category="Hipermercado" ' +
+        'address="Calle Uno, 1" postal="28001" tcm="tcm:1" ' +
+        'hours1=" " hours2="de 10:00 a 14:00" />' +
+        '</markers>'
+    );
+    expect(parsed.stores[0].hours).toEqual({
+      hours1: null,
+      hours2: 'de 10:00 a 14:00',
+      hours3: null,
+    });
+  });
+
   it('reads the fields of one hypermarket', () => {
     expect(
       list.stores.find((store) => store.externalRef === 'tcm:5-3850')
@@ -125,7 +146,11 @@ describe('parseStoreLocator', () => {
       postalCode: '50018',
       phone: '602438643',
       web: '/tiendas-carrefour/hipermercados/carrefour/actur_zaragoza.aspx',
-      hours: ['de 09:00 a 22:00', 'de 09:00 a 22:00'],
+      hours: {
+        hours1: 'de 09:00 a 22:00',
+        hours2: 'de 09:00 a 22:00',
+        hours3: null,
+      },
       features: expect.arrayContaining([
         'Carrefour Drive',
         'Entrega a domicilio',
