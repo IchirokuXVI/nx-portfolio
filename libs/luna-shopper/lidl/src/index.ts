@@ -63,3 +63,6 @@ export type {
   LidlRegionPrice,
   LidlStore,
 } from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeLidl } from './lib/probe';
+export type { LidlProbeOptions } from './lib/probe';

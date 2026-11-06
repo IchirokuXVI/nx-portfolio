@@ -1,3 +1,5 @@
+> **PR:** [#919](https://github.com/IchirokuXVI/nx-portfolio/pull/919)
+
 # 0068 A piece sold by the kilo is edited with its weight
 
 > Backend half: plan `0244` of `apps/luna-shopper-backend/plans/` (a piece sold by the kilo
@@ -62,7 +64,7 @@ What the back office does today (evidence section 4):
 3. **The two refusals** have messages in the admin translations, and the form maps each to the
    field it names (the size for `item_kilogram_has_size`, the weight for
    `item_approx_weight_beside_size`).
-4. **The product list and the record** print "approx. 1.56 kg" for any product with a weight
+4. **The product list and the record** print "~1.56 kg" for any product with a weight
    (`formatSize`), and "by the kilo" for a product sold by the kilo with no weight.
 5. **The prices tab** prints, for a kilo piece, the piece price of the offer ("20,94 €") beside
    the price per kilo ("13,42 € / kg"). For a product sold by the kilo with no weight, it prints
@@ -94,9 +96,9 @@ What the back office does today (evidence section 4):
 
 Each criterion of section 3 with its spec output, `npx nx build luna-shopper-admin`, and one
 walk on a slot with backend `0244`: the cheese of the evidence folder (or a seeded piece) shows
-"approx. 1.56 kg", a person edits the weight to 1500, a Mercadona run over fixtures leaves it
+"~1.56 kg", a person edits the weight to 1500, a Mercadona run over fixtures leaves it
 at 1500, and "Use the chain's weight" hands it back to the next run. A seeded `UNIT` piece of
-580 g shows "approx. 580 g" and its price as a pack's.
+580 g shows "~580 g" and its price as a pack's.
 
 ## 1. Copy
 
@@ -129,7 +131,7 @@ column.
 2. A spec per refusal maps the error to its field with the message of section 1.
 3. Queue specs: a row sold by weight with a weight proposes `KILOGRAM`, no size, the weight. A
    row not sold by weight with a weight proposes `UNIT`, no size, the weight.
-4. `formatSize` specs: 1560 answers "approx. 1.56 kg", 395 answers "approx. 395 g" for a
+4. `formatSize` specs: 1560 answers "~1.56 kg", 395 answers "~395 g" for a
    `UNIT` product too, a loose product answers "by the kilo", a 250 g pack is unchanged.
 5. A prices tab spec: a kilo piece prints its `piecePrice` and its price per kilo; a `UNIT`
    piece prints its price once.

@@ -38,6 +38,7 @@ import type {
   OfferKeptReason,
   UnitBasis,
 } from './catalog.messages';
+import type { SourceProbeSummary } from './source-probe.messages';
 
 /**
  * Harvester message contracts (plan 0038). The gateway calls these on the
@@ -648,6 +649,11 @@ export interface SupermarketSourceView {
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   consecutiveFailures: number;
+  /**
+   * The newest probe of the source that is not `ABORTED`, or null when none
+   * (plan 0219, section 8). Optional, as `presetId` is on a run.
+   */
+  lastProbe?: SourceProbeSummary | null;
 }
 
 /**
