@@ -363,7 +363,9 @@ Play for native changes.
   clock runs from the creation of the WebView, so a slow network would read as a broken
   bundle. An offline boot is a good boot. `appReadyTimeout` is 20 s, twice Capgo's
   default, because the cold boot of an old phone with a slow WebView is the case that
-  matters, and a false rollback costs a full download again. Without the call, the
+  matters, and a false rollback costs a full download again. The updater gives a bundle
+  that has never booted at least 30 s whatever the setting, so the setting shortens
+  nothing on the first boot. Without the call, the
   updater returns to the previous bundle or to the built-in one. On the next boot the app reads the failed bundle
   (the `updateFailed` event or a `list()` entry in error) and records its `bundle` id under
   a new `StorageKeys` entry in local storage. A recorded id is never downloaded again. The
@@ -643,7 +645,7 @@ and refuses `--bundle` in that case. Use a throwaway key pair for the local sign
 | 5 | Serve a critical bundle | Applies at once when nothing is held. |
 | 6 | Serve a zip whose SHA-256 differs from the manifest | Download refused. The running bundle stays. |
 | 7 | Serve a manifest with a wrong signature | No download at all. |
-| 8 | Serve a bundle whose `main.js` throws at boot | Rollback within 20 s. The id is recorded. A relaunch does not download it again. |
+| 8 | Serve a bundle whose `main.js` throws at boot | Rollback within 30 s. The id is recorded. A relaunch does not download it again. |
 | 9 | Serve a bundle with a higher `nativeApi` | Not downloaded. The flexible update is asked once and answers unavailable (not installed from Play). The app goes on with its bundle. The immediate flow and the dead end face come only on a refusal. |
 | 10 | Background the app, resume | One manifest request per resume, at most one per 10 minutes. |
 | 11 | `adb install -r` a higher version code | The new APK boots its own bundle (`resetWhenUpdate`). |
