@@ -1,4 +1,4 @@
-// node --test apps/velista/scripts/ota-bundle.test.mjs
+// node --test apps/velista/scripts/ota-bundle.node-test.mjs
 import assert from 'node:assert/strict';
 import { createPublicKey, webcrypto } from 'node:crypto';
 import {

@@ -1,4 +1,4 @@
-// node --test apps/velista/scripts/ota-keygen.test.mjs
+// node --test apps/velista/scripts/ota-keygen.node-test.mjs
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createPrivateKey, createPublicKey } from 'node:crypto';
