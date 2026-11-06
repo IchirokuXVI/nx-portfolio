@@ -71,10 +71,9 @@ export class NativeAppStoreUpdates implements AppStoreUpdatesI {
     const offered =
       availability === UPDATE_AVAILABLE || availability === UPDATE_IN_PROGRESS;
     const installStatus = installStatusFrom(raw['installStatus']);
-    // A flexible update downloaded in an earlier session waits for its install.
-    if (installStatus === 'downloaded') {
-      this._flexibleReady.set(true);
-    }
+    // A flexible update downloaded in an earlier session waits for its install. Any
+    // other status clears the signal, so a stale true does not survive this answer.
+    this._flexibleReady.set(installStatus === 'downloaded');
 
     return {
       availableVersionCode: offered

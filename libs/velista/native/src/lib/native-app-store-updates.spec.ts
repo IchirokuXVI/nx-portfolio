@@ -109,6 +109,26 @@ describe('NativeAppStoreUpdates', () => {
     expect(store.flexibleReady()).toBe(true);
   });
 
+  it('clears a stale ready mark when a later info() sees no download', async () => {
+    doubles.appUpdateInfoAnswer = {
+      currentVersionCode: '20000',
+      availableVersionCode: '21000',
+      updateAvailability: 2,
+      installStatus: 11,
+    };
+    await store.info();
+    expect(store.flexibleReady()).toBe(true);
+
+    doubles.appUpdateInfoAnswer = {
+      currentVersionCode: '21000',
+      availableVersionCode: '21000',
+      updateAvailability: 1,
+      installStatus: 0,
+    };
+    await store.info();
+    expect(store.flexibleReady()).toBe(false);
+  });
+
   it('resolves every method when Play rejects them all', async () => {
     for (const method of [
       'getAppUpdateInfo',

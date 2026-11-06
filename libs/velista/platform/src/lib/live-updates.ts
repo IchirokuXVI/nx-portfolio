@@ -55,7 +55,10 @@ export interface LiveUpdateFailure {
  * not keep that promise.
  */
 export interface LiveUpdatesI {
-  /** True when a native updater is bound at all. False on the web and in specs. */
+  /**
+   * True when a native updater is bound and the APK carries an OTA base URL. False on
+   * the web, in specs, with no updater, or when OTA is off for this build.
+   */
   available(): boolean;
 
   /** The facts of the installed APK, or null when the native plugin cannot answer. */
@@ -83,11 +86,19 @@ export interface LiveUpdatesI {
    */
   download(request: LiveUpdateDownload): Promise<boolean>;
 
-  /** Switch to a downloaded bundle now. The updater's `set()`, which reloads (D6). */
-  apply(bundle: string): Promise<void>;
+  /**
+   * Switch to a downloaded bundle now. The updater's `set()`, which reloads (D6).
+   * True once `set()` resolved. False when the updater holds no usable copy of the
+   * bundle (a rollback or a cleanup removed it) or `set()` rejected, and then the
+   * running bundle stays.
+   */
+  apply(bundle: string): Promise<boolean>;
 
-  /** Return to the APK's own bundle. The updater's `reset()` (D8). */
-  resetToBuiltin(): Promise<void>;
+  /**
+   * Return to the APK's own bundle. The updater's `reset()` (D8). True once `reset()`
+   * resolved, false when it rejected and the running bundle stays.
+   */
+  resetToBuiltin(): Promise<boolean>;
 
   /** Tell the updater this bundle booted, so it is kept (D7). `notifyAppReady()`. */
   confirmBoot(): Promise<void>;
@@ -106,8 +117,8 @@ export const UNAVAILABLE_LIVE_UPDATES: LiveUpdatesI = {
   current: () => Promise.resolve(null),
   fetchText: () => Promise.resolve(null),
   download: () => Promise.resolve(false),
-  apply: () => Promise.resolve(),
-  resetToBuiltin: () => Promise.resolve(),
+  apply: () => Promise.resolve(false),
+  resetToBuiltin: () => Promise.resolve(false),
   confirmBoot: () => Promise.resolve(),
   failedBundles: () => Promise.resolve([]),
 };

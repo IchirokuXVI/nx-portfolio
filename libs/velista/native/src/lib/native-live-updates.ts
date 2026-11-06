@@ -136,26 +136,33 @@ export class NativeLiveUpdates implements LiveUpdatesI {
     }
   }
 
-  async apply(bundle: string): Promise<void> {
+  /**
+   * False when `list()` holds no usable copy (`autoDeleteFailed` or
+   * `autoDeletePrevious` removed it) or `set()` rejects ("Update failed, id … does
+   * not exist"). The running bundle stays in both cases.
+   */
+  async apply(bundle: string): Promise<boolean> {
     try {
       const { updater } = await this._plugins();
       const held = await usableBundle(updater, bundle);
       if (held === null) {
-        return;
+        return false;
       }
       // Reloads into the bundle at once.
       await updater.set({ id: held.id });
+      return true;
     } catch {
-      // The running bundle stays.
+      return false;
     }
   }
 
-  async resetToBuiltin(): Promise<void> {
+  async resetToBuiltin(): Promise<boolean> {
     try {
       const { updater } = await this._plugins();
       await updater.reset();
+      return true;
     } catch {
-      // The running bundle stays.
+      return false;
     }
   }
 

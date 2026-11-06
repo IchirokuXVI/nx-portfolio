@@ -119,24 +119,48 @@ describe('NativeLiveUpdates', () => {
         ],
       };
 
-      await live.apply(BUNDLE);
+      await expect(live.apply(BUNDLE)).resolves.toBe(true);
 
       expect(doubles.sets).toEqual([{ id: 'r4nd0m1d00' }]);
     });
 
-    it('switches to nothing when no usable bundle has that version', async () => {
+    it('answers false and switches to nothing when no usable bundle has that version', async () => {
       doubles.listAnswer = {
         bundles: [{ id: 'r4nd0m1d00', version: BUNDLE, status: 'error' }],
       };
 
-      await live.apply(BUNDLE);
+      await expect(live.apply(BUNDLE)).resolves.toBe(false);
 
       expect(doubles.sets).toEqual([]);
+    });
+
+    it('answers false when list() holds no entry for the version', async () => {
+      doubles.listAnswer = {
+        bundles: [
+          {
+            id: 'oldoldold0',
+            version: '0.19.0+aaaaaaaaaaaa',
+            status: 'success',
+          },
+        ],
+      };
+
+      await expect(live.apply(BUNDLE)).resolves.toBe(false);
+      expect(doubles.sets).toEqual([]);
+    });
+
+    it('answers false when list() holds the bundle and only set() rejects', async () => {
+      doubles.listAnswer = {
+        bundles: [{ id: 'r4nd0m1d00', version: BUNDLE, status: 'pending' }],
+      };
+      doubles.updaterErrors.add('set');
+
+      await expect(live.apply(BUNDLE)).resolves.toBe(false);
     });
   });
 
   it('resets to the built-in bundle', async () => {
-    await live.resetToBuiltin();
+    await expect(live.resetToBuiltin()).resolves.toBe(true);
 
     expect(doubles.resets).toBe(1);
   });
@@ -150,6 +174,18 @@ describe('NativeLiveUpdates', () => {
       ];
 
       await expect(live.failedBundles()).resolves.toEqual([{ bundle: BUNDLE }]);
+      await expect(live.failedBundles()).resolves.toEqual([]);
+    });
+
+    it('answers an empty list for a malformed answer', async () => {
+      doubles.failedAnswers = [
+        { id: 'r4nd0m1d00', version: BUNDLE },
+        { bundle: { id: 'r4nd0m1d00', version: 21 } },
+        { bundle: { id: 'r4nd0m1d00' } },
+      ];
+
+      await expect(live.failedBundles()).resolves.toEqual([]);
+      await expect(live.failedBundles()).resolves.toEqual([]);
       await expect(live.failedBundles()).resolves.toEqual([]);
     });
   });
@@ -227,8 +263,8 @@ describe('NativeLiveUpdates', () => {
       await expect(
         live.download({ bundle: BUNDLE, url: 'https://x', sha256: 'a' })
       ).resolves.toBe(false);
-      await expect(live.apply(BUNDLE)).resolves.toBeUndefined();
-      await expect(live.resetToBuiltin()).resolves.toBeUndefined();
+      await expect(live.apply(BUNDLE)).resolves.toBe(false);
+      await expect(live.resetToBuiltin()).resolves.toBe(false);
       await expect(live.confirmBoot()).resolves.toBeUndefined();
       await expect(live.failedBundles()).resolves.toEqual([]);
     });
@@ -251,8 +287,8 @@ describe('NativeLiveUpdates', () => {
       await expect(
         broken.download({ bundle: BUNDLE, url: 'https://x', sha256: 'a' })
       ).resolves.toBe(false);
-      await expect(broken.apply(BUNDLE)).resolves.toBeUndefined();
-      await expect(broken.resetToBuiltin()).resolves.toBeUndefined();
+      await expect(broken.apply(BUNDLE)).resolves.toBe(false);
+      await expect(broken.resetToBuiltin()).resolves.toBe(false);
       await expect(broken.confirmBoot()).resolves.toBeUndefined();
       await expect(broken.failedBundles()).resolves.toEqual([]);
     });

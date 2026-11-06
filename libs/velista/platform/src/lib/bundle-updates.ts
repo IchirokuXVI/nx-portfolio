@@ -164,7 +164,8 @@ export class BundleUpdates {
   }
 
   /**
-   * Apply the waiting bundle now, past any blocker. False when none waits.
+   * Apply the waiting bundle now, past any blocker. False when none waits or the
+   * updater could not switch to it, so a caller can go on to another way out.
    *
    * The updater's `set()`, or `reset()` for the built-in bundle, and never a plain
    * reload, which would load the running bundle again (D6). A call while an apply is
@@ -191,12 +192,10 @@ export class BundleUpdates {
 
   private async _apply(ready: ReadyBundle): Promise<boolean> {
     try {
-      if (ready.builtin) {
-        await this._live.resetToBuiltin();
-      } else {
-        await this._live.apply(ready.bundle);
-      }
-      return true;
+      const applied = ready.builtin
+        ? await this._live.resetToBuiltin()
+        : await this._live.apply(ready.bundle);
+      return applied === true;
     } catch {
       return false;
     }

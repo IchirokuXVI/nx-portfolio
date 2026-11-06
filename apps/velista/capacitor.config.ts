@@ -60,7 +60,7 @@ const config: CapacitorConfig = {
       style: 'DARK',
     },
     // Over the air web bundles from the app's own cluster (plan 0180). Manual mode: the
-    // app reads its own signed manifest and calls download, set and next itself. The
+    // app reads its own signed manifest and calls download, set and reset itself. The
     // three URLs are empty so the plugin never talks to Capgo's cloud (D11); the build
     // spike proved that an empty string stays empty. A bundle that does not call
     // notifyAppReady in time rolls back (D7): appReadyTimeout is the window of a bundle

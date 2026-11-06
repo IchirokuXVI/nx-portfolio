@@ -61,6 +61,7 @@ function fakeLiveUpdates() {
     manifest: JSON.stringify(manifest()) as string | null,
     signature: 'c2ln' as string | null,
     downloads: true,
+    applies: true,
     failures: [] as LiveUpdateFailure[],
     calls: [] as string[],
   };
@@ -77,8 +78,14 @@ function fakeLiveUpdates() {
       state.calls.push(`download ${bundle} ${url} ${sha256}`);
       return state.downloads;
     },
-    apply: async (bundle) => void state.calls.push(`apply ${bundle}`),
-    resetToBuiltin: async () => void state.calls.push('reset'),
+    apply: async (bundle) => {
+      state.calls.push(`apply ${bundle}`);
+      return state.applies;
+    },
+    resetToBuiltin: async () => {
+      state.calls.push('reset');
+      return state.applies;
+    },
     confirmBoot: async () => void state.calls.push('confirm'),
     failedBundles: async () => state.failures,
   };
@@ -705,12 +712,21 @@ describe('BundleUpdates and the native AppUpdates', () => {
       expect(updates.updateFailed()).toBe(false);
     });
 
+    it('answers false from applyNow when the updater cannot switch', async () => {
+      live.state.applies = false;
+      const bundles = TestBed.inject(BundleUpdates);
+      await bundles.check();
+
+      await expect(bundles.applyNow()).resolves.toBe(false);
+      expect(live.state.calls).toContain(`apply ${NEWER}`);
+    });
+
     it('answers a second applyNow while the first apply is in flight with that apply', async () => {
       let finish: () => void = () => undefined;
       live.api.apply = (bundle) =>
-        new Promise<void>((resolve) => {
+        new Promise<boolean>((resolve) => {
           live.state.calls.push(`apply ${bundle}`);
-          finish = resolve;
+          finish = () => resolve(true);
         });
       const bundles = TestBed.inject(BundleUpdates);
       await bundles.check();
@@ -747,6 +763,19 @@ describe('BundleUpdates and the native AppUpdates', () => {
       await flush();
 
       expect(manifestFetches()).toHaveLength(0);
+      expect(store.state.calls).toContain('immediate');
+      expect(updates.updateFailed()).toBe(true);
+    });
+
+    it('goes on to Play and then the dead end when the apply fails', async () => {
+      live.state.applies = false;
+      store.state.info = playOffers(20000);
+      const updates = TestBed.inject(AppUpdates);
+
+      refuse();
+      await flush();
+
+      expect(live.state.calls).toContain(`apply ${NEWER}`);
       expect(store.state.calls).toContain('immediate');
       expect(updates.updateFailed()).toBe(true);
     });
