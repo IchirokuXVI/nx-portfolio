@@ -3,8 +3,11 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestScheduleOutcome,
+  SourceProbeStatus,
   type HarvestRunMode,
+  type SourceProbeStepView,
 } from '@portfolio/luna-shopper/contracts';
+import { readGateNote } from '../schedule-probe-gate';
 
 /**
  * Which outcome makes an alert, as pure functions (plan 0218, sections 2 and
@@ -55,7 +58,7 @@ export interface RunAlertPayload {
   staleAfterSeconds: number | null;
 }
 
-/** The facts of a refused slot. */
+/** The facts of a refused slot, or of a slot its probe skipped. */
 export interface SlotAlertPayload {
   presetId: string;
   scheduleId: string;
@@ -63,6 +66,38 @@ export interface SlotAlertPayload {
   slot: string;
   retry: boolean;
   note: string | null;
+  at: string;
+  /**
+   * The probe of a slot the gate skipped, read back from its note (plan
+   * 0247, section 4.2). Absent for a refused slot, null for a skip whose
+   * probe did not finish.
+   */
+  probeId?: string | null;
+  probeStatus?: string | null;
+  probeError?: string | null;
+}
+
+/** The facts of a probe that alerts (plan 0247, section 4.1). */
+export interface ProbeAlertPayload {
+  probeId: string;
+  sourceId: string;
+  adapterKey: string;
+  trigger: HarvestRunTrigger;
+  status: SourceProbeStatus;
+  previousStatus: SourceProbeStatus | null;
+  changed: boolean;
+  attempt: number;
+  /**
+   * The schedule whose slot ran the probe as its gate, null for a daily or a
+   * manual probe (the owner, 2026-11-06).
+   */
+  scheduleId: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  requests: number;
+  /** Each step's name and whether it was ok, in order. */
+  steps: Array<{ name: string; ok: boolean }>;
   at: string;
 }
 
@@ -204,6 +239,13 @@ export interface SlotAlertSchedule {
  * off sends one mail and not one a day. `schedule` is the row as it was
  * before the claim. A refused retry always alerts: the outcome before it is
  * the `STARTED` of the run it retries.
+ *
+ * A `SKIPPED_PROBE_FAILED` slot is `SLOT_PROBE_FAILED` (plan 0247, section
+ * 4.2), and alerts **unless the previous outcome of the same schedule was
+ * `SKIPPED_PROBE_FAILED` with the same probe status**. The note names a probe
+ * whose id changes every day, so the status word is read out of the note and
+ * compared, not the whole note. A retry it skipped always alerts, for the
+ * reason a refused retry does.
  */
 export function slotAlertFor(input: {
   schedule: SlotAlertSchedule;
@@ -214,6 +256,9 @@ export function slotAlertFor(input: {
   at: Date;
 }): HarvestAlertDraft | null {
   const { schedule, result } = input;
+  if (result.outcome === HarvestScheduleOutcome.SKIPPED_PROBE_FAILED) {
+    return probeSkipAlertFor(input);
+  }
   if (result.outcome !== HarvestScheduleOutcome.REFUSED) {
     return null;
   }
@@ -240,6 +285,131 @@ export function slotAlertFor(input: {
     supermarketId: schedule.supermarketId,
     runId: null,
     scheduleId: schedule.id,
+    payload: { ...payload },
+  };
+}
+
+/** The `SLOT_PROBE_FAILED` half of {@link slotAlertFor}. */
+function probeSkipAlertFor(input: {
+  schedule: SlotAlertSchedule;
+  slot: Date;
+  retry: boolean;
+  result: { outcome: HarvestScheduleOutcome; note: string | null };
+  adapterKey: string | null;
+  at: Date;
+}): HarvestAlertDraft | null {
+  const { schedule, result } = input;
+  const now = readGateNote(result.note);
+  if (
+    !input.retry &&
+    schedule.lastOutcome === HarvestScheduleOutcome.SKIPPED_PROBE_FAILED &&
+    (readGateNote(schedule.lastOutcomeNote)?.status ?? null) ===
+      (now?.status ?? null)
+  ) {
+    return null;
+  }
+  const slot = input.slot.toISOString();
+  const payload: SlotAlertPayload = {
+    presetId: schedule.presetId,
+    scheduleId: schedule.id,
+    adapterKey: input.adapterKey,
+    slot,
+    retry: input.retry,
+    note: result.note ?? null,
+    at: input.at.toISOString(),
+    probeId: now?.probeId ?? null,
+    probeStatus: now?.status ?? null,
+    probeError: now?.error ?? null,
+  };
+  return {
+    kind: HarvestAlertKind.SLOT_PROBE_FAILED,
+    dedupeKey: `slot:${schedule.id}:${slot}${input.retry ? ':retry' : ''}`,
+    supermarketId: schedule.supermarketId,
+    runId: null,
+    scheduleId: schedule.id,
+    payload: { ...payload },
+  };
+}
+
+/** What a probe alert needs to know about the probe. */
+export interface ProbeAlertProbe {
+  id: string;
+  sourceId: string;
+  supermarketId: string;
+  adapterKey: string;
+  trigger: HarvestRunTrigger;
+  status: SourceProbeStatus;
+  previousStatus: SourceProbeStatus | null;
+  changed: boolean;
+  attempt: number;
+  /** The schedule a gate probe ran for, null for any other probe. */
+  scheduleId: string | null;
+  startedAt: Date | null;
+  finishedAt: Date | null;
+  error: string | null;
+  requests: number;
+  steps: readonly Pick<SourceProbeStepView, 'name' | 'ok'>[];
+}
+
+/** The attempt of an `UNREACHABLE` series that alerts: its last. */
+export const PROBE_ALERT_ATTEMPT = 3;
+
+/**
+ * The alert of a finished probe, or null (plan 0247, section 4.1).
+ *
+ * - `SHAPE_CHANGED` or `BLOCKED` alerts when it is a change (`changed`), so
+ *   a red probe that stays red sends one mail and not one a day.
+ * - `SHAPE_CHANGED` or `BLOCKED` also alerts when `previousStatus` is null:
+ *   the chain has no earlier finished probe that is not `ABORTED`, so
+ *   `changed` is false with nothing to compare against, and the very first
+ *   probe of a chain that is red would otherwise never alert (the owner,
+ *   2026-11-06).
+ * - `UNREACHABLE` alerts at its third attempt only: the two retries are the
+ *   answer to the first two.
+ * - Anything else is null: `PASSED` (no recovery mail, the owner on
+ *   2026-11-06), `ERROR` (our fault, and the slot alert covers what it
+ *   stopped), `ABORTED` and `RUNNING`.
+ */
+export function probeAlertFor(input: {
+  probe: ProbeAlertProbe;
+  at: Date;
+}): HarvestAlertDraft | null {
+  const { probe } = input;
+  const alerts =
+    ((probe.status === SourceProbeStatus.SHAPE_CHANGED ||
+      probe.status === SourceProbeStatus.BLOCKED) &&
+      (probe.changed || probe.previousStatus === null)) ||
+    (probe.status === SourceProbeStatus.UNREACHABLE &&
+      probe.attempt >= PROBE_ALERT_ATTEMPT);
+  if (!alerts) {
+    return null;
+  }
+  const payload: ProbeAlertPayload = {
+    probeId: probe.id,
+    sourceId: probe.sourceId,
+    adapterKey: probe.adapterKey,
+    trigger: probe.trigger,
+    status: probe.status,
+    previousStatus: probe.previousStatus ?? null,
+    changed: probe.changed,
+    attempt: probe.attempt,
+    scheduleId: probe.scheduleId ?? null,
+    startedAt: isoOrNull(probe.startedAt),
+    finishedAt: isoOrNull(probe.finishedAt),
+    error: probe.error ?? null,
+    requests: Number(probe.requests ?? 0),
+    steps: (probe.steps ?? []).map((step) => ({
+      name: String(step.name),
+      ok: step.ok === true,
+    })),
+    at: input.at.toISOString(),
+  };
+  return {
+    kind: HarvestAlertKind.PROBE_FAILED,
+    dedupeKey: `probe:${probe.id}`,
+    supermarketId: probe.supermarketId,
+    runId: null,
+    scheduleId: probe.scheduleId ?? null,
     payload: { ...payload },
   };
 }

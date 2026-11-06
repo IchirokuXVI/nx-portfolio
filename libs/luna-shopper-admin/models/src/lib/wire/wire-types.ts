@@ -4041,7 +4041,8 @@ export type EnumsHarvestScheduleBlock =
   | 'HARVEST_DISABLED'
   | 'SCHEDULER_DISABLED'
   | 'SOURCE_DISABLED'
-  | 'SOURCE_FAILING';
+  | 'SOURCE_FAILING'
+  | 'PROBE_NOT_PASSED';
 
 /**
  * `enums.HarvestScheduleOutcome` in the gateway's OpenAPI document.
@@ -4051,7 +4052,8 @@ export type EnumsHarvestScheduleOutcome =
   | 'SKIPPED_LATE'
   | 'SKIPPED_FAILING'
   | 'REFUSED'
-  | 'SKIPPED_BUSY';
+  | 'SKIPPED_BUSY'
+  | 'SKIPPED_PROBE_FAILED';
 
 /**
  * `enums.HarvestWarningCode` in the gateway's OpenAPI document.
@@ -5363,6 +5365,7 @@ export type HarvestSourceProbeView = {
   steps: HarvestSourceProbeStepView[];
   error: string | null;
   requestedByUserId: string | null;
+  scheduleId: string | null;
 };
 
 /**

@@ -1,3 +1,5 @@
+> **PR:** [#934](https://github.com/IchirokuXVI/nx-portfolio/pull/934)
+
 # 0247: a probe gates a scheduled run
 
 > Plan `0219` gives each chain a probe: two to six requests through the real client and parsers,
@@ -72,7 +74,9 @@ rules.
   3.2). That is acceptable: the probe still proves the client reaches and parses the storefront.
 - The newest harvester migration on `dev` at the time of writing is plan `0221`'s
   `1760200000000-NameWordsSizeMatch.ts`. Plans `0216`, `0222` and `0223` may add one each, so
-  take the next free timestamp on `dev` at build time.
+  take the next free timestamp on `dev` at build time. At build time the newest was
+  `PriceRefreshes1760300000000`, and this plan's migration is `1760400000000-ProbeGate.ts`, class
+  `ProbeGate1760400000000`.
 
 ### Target state
 
@@ -85,9 +89,13 @@ admin wire types are regenerated for the two new enum values.
   - `apps/luna-shopper-backend/harvester/src/app/harvest/`: `harvest-schedule.worker.ts`, a new
     `schedule-probe-gate.ts` beside it (the pure decision), `harvest-run.service.ts` (the schedule
     block only), `probes/source-probe.service.ts` (one new method), `probes/source-probe.store.ts`
-    (the optional alert draft on the finishing write and one read), `alerts/harvest-alert.rules.ts`,
-    `alerts/harvest-alert.message.ts`, a migration if section 3 needs one, and their specs.
-  - `libs/luna-shopper/contracts`: the two enum values, the alert kinds, their schemas.
+    (the alert draft on the finishing write, one read, `scheduleId` on `insertRunning`),
+    `alerts/harvest-alert.rules.ts`, `alerts/harvest-alert.message.ts`, the migration of section 3,
+    and their specs.
+  - `apps/luna-shopper-backend/harvester/src/app/entities/source-probe.entity.ts`: the `scheduleId`
+    column (owner, 2026-11-06).
+  - `libs/luna-shopper/contracts`: the two enum values, the alert kinds, their schemas, and
+    `scheduleId` on `SourceProbeView` and its schema.
   - The harvester paragraph of `CLAUDE.md` that plan `0219` added: two sentences.
   - The generated files, through their generators.
 - Do NOT touch: the probe functions of the six libraries, the probe worker's claim, the probe
@@ -102,9 +110,10 @@ admin wire types are regenerated for the two new enum values.
 - The gate is a pure function over the schedule, the source, the newest finished probe and the
   clock. It decides one of three things: start now, probe first, skip. The worker does the
   reading and the probing around it.
-- A gate probe is an ordinary probe row with `trigger: SCHEDULED`. It obeys every rule of plan
-  `0219`: one `RUNNING` probe per source, the 5 minute deadline, the verdict, `attempt` from
-  `probeDueAttempt` with the interval ignored, and it moves the chain's next daily probe.
+- A gate probe is an ordinary probe row with `trigger: SCHEDULED` and `scheduleId` set to the
+  schedule it gates (section 2, step 6). It obeys every rule of plan `0219`: one `RUNNING` probe
+  per source, the 5 minute deadline, the verdict, `attempt` from `probeDueAttempt` with the
+  interval ignored, and it moves the chain's next daily probe.
 - The gate never starts a probe while a run of the chain is in flight. `startScheduled` answers
   `SKIPPED_BUSY` for that case before the gate runs, so the order is: late, failing, busy, then
   the gate, then the start.
@@ -143,6 +152,7 @@ Report after each of these, with the spec output:
 | The decision: start, probe first, or skip           | `harvest/schedule-probe-gate.ts`, pure            |
 | The gate in the slot and in the deploy retry        | `harvest-schedule.worker.ts`                      |
 | A probe run for a slot                              | `probes/source-probe.service.ts`, `runForSchedule` |
+| `source_probes.scheduleId`, a gate probe's schedule | the migration, the entity, `SourceProbeView`      |
 | `HarvestScheduleOutcome.SKIPPED_PROBE_FAILED`       | contracts, and the Postgres type if one exists    |
 | `HarvestScheduleBlock.PROBE_NOT_PASSED`             | contracts and `harvest-run.service.ts`            |
 | `PROBE_FAILED` and `SLOT_PROBE_FAILED` alerts       | `alerts/harvest-alert.rules.ts`, `.message.ts`    |
@@ -166,19 +176,41 @@ After the claim, in this order. Each step that answers ends the slot.
    Any trigger counts: a person's probe, the daily probe, a gate probe of another schedule of the
    chain.
 5. **Is a probe running?** A `RUNNING` probe of the source, by any trigger and in any process,
-   is waited for: the worker reads its row every 5 seconds until it finishes or until 6 minutes
-   passed since its `startedAt` (the deadline of plan `0219` plus the reaper's margin). A probe
+   is waited for: the worker reads its row every 5 seconds until it finishes or until 11 minutes
+   passed since its `startedAt`. The wait outlasts the reaper's 10 minutes by one tick of the
+   probe worker, so the reaper usually reaps a row that a killed pod left `RUNNING` inside the
+   wait. A reaper tick that is busy with a five minute probe can come after the wait ends, and
+   then the slot is skipped with the note `a probe of the chain did not finish`.
+   `PROBE_WAIT_MS` is derived from `PROBE_REAP_AFTER_MS` so the two cannot drift. A probe
    that finished `PASSED` answers start. A probe that is still `RUNNING` after that is left to the
    reaper and the slot is skipped with the note `a probe of the chain did not finish`.
 6. **Probe first.** `SourceProbeService.runForSchedule(source, scheduleId)` inserts a `RUNNING`
-   row with `trigger: SCHEDULED`, `attempt` from `probeDueAttempt` with the interval ignored,
-   runs the probe and awaits it. Its verdict is the verdict of plan `0219`.
+   row with `trigger: SCHEDULED`, `scheduleId` set to the schedule's id, `attempt` from
+   `probeDueAttempt` with the interval ignored, runs the probe and awaits it. Its verdict is the
+   verdict of plan `0219`. The daily probe also carries `trigger: SCHEDULED`, so
+   `source_probes.scheduleId` is what tells the two apart: it names the schedule for a gate
+   probe, the slot's and the deploy retry's alike, and it is null for a daily or a manual probe.
+   The column is nullable and has no foreign key, so a deleted schedule keeps its probes. A new
+   trigger value was not used, because the probe `trigger` column reuses the Postgres type
+   `harvest_run_trigger`, and a new value there would also become a legal run trigger.
 7. **The verdict.** `PASSED` answers start, and the run starts in the same tick. Anything else
    answers `SKIPPED_PROBE_FAILED` with the note `probe <id> <status>: <error>`, where `<error>`
    is the probe's one sentence.
 
 The same gate runs in `retryInterrupted` before the retry starts. A retry that the gate skips
 writes the same outcome and is spent, as a retry that meets a busy chain is spent today.
+
+**A deploy during the gate decides nothing** (review round 1 of PR #934). A gate probe that ends
+`ABORTED`, a wait that the shutdown ends, or a probe the stopping service refuses to start writes
+no outcome and no alert, because an abort is not a failure of the chain. The worker logs one line.
+The slot stays claimed and undecided: `lastSlotAttempts` is 0 and `lastOutcomeAt` is older than
+`lastSlotAt`, with no run of the schedule requested since the slot. The retry after the restart
+claims such a slot by setting the attempts to 2 and runs it one time through the same gate, so a
+`PASSED` probe inside 15 minutes is reused, and a second interruption spends it. The row alone
+cannot tell a slot that a live worker is still deciding from one whose worker died, so a worker
+holds a Postgres session advisory lock on the schedule (`HarvestScheduleStore.holdSlot`, key
+`247` and the schedule id) while it decides a slot or its retry. The retry takes only a slot it
+can hold, and Postgres frees the lock when a process or its connection dies.
 
 **A skipped slot is final for that slot.** The next slot tries again, and the daily probe and
 its retries keep looking in between. Owner question 1 asks whether a slot should instead keep
@@ -192,10 +224,15 @@ image breaks the walk too. Owner question 2 confirms it.
 
 `HarvestScheduleOutcome.SKIPPED_PROBE_FAILED` is added as the last value, documented as "the
 probe that the slot ran, or waited for, was not PASSED; the note names the probe and its status".
-The builder reads `1759400000000-HarvestSchedules.ts`: if `lastOutcome` is a Postgres enum type,
+The builder reads `1759400000000-HarvestSchedules.ts`: if `lastOutcome` is a Postgres enum type
+(it is: the Postgres enum `harvest_schedule_outcome`, so the migration exists; `harvest_alerts.kind`
+is the Postgres enum `harvest_alert_kind`, so the same migration adds the two alert kinds of
+section 4),
 a migration adds the value with `ADD VALUE IF NOT EXISTS` and a `down` that moves such rows to
 `REFUSED` and rebuilds the type, as `1757600000000-SharedEan.ts` does; if it is a `varchar`, no
-migration is needed and the plan says so in its PR.
+migration is needed and the plan says so in its PR. The same migration,
+`1760400000000-ProbeGate.ts`, adds the nullable column `source_probes.scheduleId` of section 2,
+step 6, and its `down` drops it.
 
 `HarvestScheduleBlock.PROBE_NOT_PASSED` is added as the **last** value of the computed block, so
 that every existing block keeps its precedence. It is answered when the newest finished probe of
@@ -219,7 +256,14 @@ Three rules join `harvest-alert.rules.ts`. All three are pure, as the two of pla
 | ---------------------------------------------------- | ------------- |
 | `SHAPE_CHANGED` with `changed: true`                 | `PROBE_FAILED` |
 | `BLOCKED` with `changed: true`                       | `PROBE_FAILED` |
+| `SHAPE_CHANGED` or `BLOCKED` with `previousStatus: null`, the first probe of the chain | `PROBE_FAILED` |
 | `UNREACHABLE` with `attempt: 3`                      | `PROBE_FAILED` |
+
+`previousStatus` is the status of the newest finished probe of the source, other than this one,
+that is not `ABORTED` (`SourceProbeStore.previousStatus`), so it is null exactly when the chain
+has no such probe. Then `changed` is false with nothing to compare against, and without the
+third row the very first probe of a chain that is red would never alert. The owner decided on
+2026-11-06 that it alerts.
 
 Nothing else alerts. In particular: `UNREACHABLE` at attempt 1 and 2 (the retries are the
 answer), `ERROR` (our fault, and the slot alert of section 4.2 covers the consequence),
@@ -255,14 +299,20 @@ Subjects, in the form of plan `0218`:
 
 - `[production] Mercadona: the storefront changed shape` (`SHAPE_CHANGED`)
 - `[production] DIA: the chain refused the probe` (`BLOCKED`)
-- `[production] LIDL: the chain was unreachable for an hour` (`UNREACHABLE` at attempt 3)
+- `[production] LIDL: the chain was unreachable for three probes in a row` (`UNREACHABLE` at
+  attempt 3)
 - `[production] DEZA: a scheduled run was skipped, its probe did not pass` (`SLOT_PROBE_FAILED`)
 
 A probe body: one sentence that says what to do (for `SHAPE_CHANGED`: run the library's
 `capture-fixtures` target and read the diff; for `BLOCKED`: wait, the daily probe says when the
-chain answers again; for `UNREACHABLE`: the chain was down for three probes over an hour), the
-chain, the trigger, the attempt, each step's name and whether it was ok, the first problem, the
-request count and the probe id. No link, because no back office screen shows a probe yet (plan
+chain answers again; for `UNREACHABLE`: the chain was unreachable for three probes in a row,
+and the last of them started at the time the payload names. A gate probe joins the series with no
+30 minute wait, so the three can be minutes apart, and the mail claims no hour), the
+chain, the trigger, which kind of probe it was, the attempt, each step's name and whether it was
+ok, the first problem, the request count and the probe id. The kind is one line: "Run as the
+gate of schedule <id>" when the payload names `scheduleId`, else "Daily probe" for trigger
+`SCHEDULED` and "Manual probe" for trigger `MANUAL`. The probe alert's payload and its outbox
+row carry `scheduleId` for a gate probe. No link, because no back office screen shows a probe yet (plan
 `0219`, section 13). A slot body: the slot time, the schedule and the preset, the probe's status
 and sentence, and that the next slot tries again.
 
@@ -281,7 +331,9 @@ and sentence, and that the next slot tries again.
 ## 6. What this plan does not do
 
 - **No gate on a manual run.** The person sees `lastProbe` on the source (plan `0219`) and the
-  block on the schedule (section 3), and decides.
+  block on the schedule (section 3), and decides. The warning before such a start is admin plan
+  `0069`, which also records that the schedules list keeps its "Will not run" chip for the new
+  block.
 - **No gate on the postal code queue.** Its runs read OpenStreetMap, which has no probe.
 - **No change to the daily probe, its interval or its retry.** The gate probe is one more probe
   in the same series.
@@ -311,7 +363,7 @@ the chain passed inside the last 15 minutes, else the slot runs one and is skipp
   run and runs no probe; a slot with no probe runs one and starts after `PASSED`; a slot whose
   probe is `BLOCKED` records `SKIPPED_PROBE_FAILED` and starts nothing; the gate runs after the
   busy and failing rules (a busy chain gets no probe); a `RUNNING` probe is waited for and its
-  verdict used; a wait past 6 minutes skips with the note; the deploy retry is gated; the skip
+  verdict used; a wait past 11 minutes skips with the note; the deploy retry is gated; the skip
   passes a draft to `recordOutcome`.
 - **`harvest-alert.rules.spec.ts`**: each row of section 4.1 alerts with key `probe:<id>`;
   `UNREACHABLE` at attempt 1 and 2, `ERROR`, `ABORTED`, `PASSED` and a `SHAPE_CHANGED` with
@@ -343,8 +395,11 @@ the chain passed inside the last 15 minutes, else the slot runs one and is skipp
 - [ ] A `MANUAL` start and a `SYSTEM` start are not gated.
 - [ ] The deploy retry is gated.
 - [ ] `HarvestScheduleBlock.PROBE_NOT_PASSED` is answered last, for a red newest probe only.
-- [ ] A `SHAPE_CHANGED` or `BLOCKED` probe with `changed: true`, and an `UNREACHABLE` probe at
-      attempt 3, write one `PROBE_FAILED` alert in the transaction of the probe's verdict.
+- [ ] A `SHAPE_CHANGED` or `BLOCKED` probe with `changed: true` or with no earlier probe to
+      compare against (`previousStatus: null`), and an `UNREACHABLE` probe at attempt 3, write
+      one `PROBE_FAILED` alert in the transaction of the probe's verdict.
+- [ ] A gate probe row carries the schedule's id in `scheduleId`, and a daily or manual probe
+      carries null.
 - [ ] A skipped slot writes one `SLOT_PROBE_FAILED` alert, and not again while the status word
       stays the same.
 - [ ] No probe function, probe verdict, probe claim, counter or run status changed.
@@ -386,7 +441,7 @@ Chosen in this plan, and open to the owner's correction:
   insert of the run (section 2).
 - A valid probe is any `PASSED` probe of the chain that started inside the last 15 minutes,
   whatever its trigger (section 2).
-- A `RUNNING` probe is waited for, up to 6 minutes (section 2).
+- A `RUNNING` probe is waited for, up to 11 minutes, one probe worker tick past the reaper (section 2).
 - A skipped slot is final for that slot (section 2).
 - Every status but `PASSED` skips, `ERROR` included (section 2).
 - The new outcome and the new block are the last values of their enums (section 3).
@@ -394,16 +449,33 @@ Chosen in this plan, and open to the owner's correction:
   after (section 4.3).
 - The slot alert compares the status word, not the note (section 4.2).
 - No recovery mail (section 4.1).
+- Owner, 2026-11-06: a gate probe is told apart by `source_probes.scheduleId` (section 2, step
+  6). In the owner's words: "They need something to tell them apart." The column is null for a
+  daily or a manual probe, and no new trigger value is added.
+- Owner, 2026-11-06: the first probe of a chain alerts when it is red (section 4.1). In the
+  owner's words: "If the probe fails, even if it's the very first one, it should alert."
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-06):
 
 1. **A skipped slot.** Final for the slot (this plan), or retried on each later tick inside the
    late window of plan `0206` (half the gap to the next slot) when a probe passes meanwhile?
+   Answer: Final for the slot, as the plan says. The next slot tries again, the daily probe and
+   its retries keep looking in between.
 2. **`ERROR`.** A browser failure or another fault of ours also skips the slot here. Keep that,
    or let the walk try?
+   Answer: Keep the skip. A run must not execute when the probe does not pass, `ERROR` included.
 3. **A recovery mail.** When a chain goes back to `PASSED` after a `PROBE_FAILED` alert, send one
    mail that says so?
+   Answer: No recovery mail now. The daily probe and the schedule view show it; a mail can be
+   added later without a schema change.
 4. **The 15 minutes.** Counted from the probe's start (this plan), or from its finish? The
    difference is at most the probe's own duration.
+   Answer: From the probe's start.
 5. **A manual start on a red chain.** Not gated here. Should the back office warn before a person
    starts a preset whose chain's newest probe is red? That is an admin follow up and needs a mock.
+   Answer (the owner's words): "It needs a warning, but a run can be started anyway. As part of
+   your work, add a new plan to implement that warning on the admin." The plan is
+   `apps/luna-shopper-admin/plans/0069-a-start-warns-when-the-newest-probe-is-red.md`, written in
+   this PR and not built by it.
+
+On items 1 to 4 the owner wrote: "Everything else is fine as you wrote".

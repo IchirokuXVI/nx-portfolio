@@ -67,6 +67,11 @@ const sourceProbeView = object(
     steps: array(ref(SOURCE_PROBE_SCHEMA_IDS.sourceProbeStepView)),
     error: nullableString(),
     requestedByUserId: nullableString(),
+    scheduleId: {
+      ...nullableString(),
+      description:
+        'The schedule whose slot ran this probe as its gate, null for a daily or manual probe.',
+    },
   },
   [
     'id',
@@ -85,6 +90,7 @@ const sourceProbeView = object(
     'steps',
     'error',
     'requestedByUserId',
+    'scheduleId',
   ]
 );
 

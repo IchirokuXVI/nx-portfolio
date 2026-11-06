@@ -18,6 +18,13 @@ export enum HarvestAlertKind {
   SLOT_REFUSED = 'SLOT_REFUSED',
   /** A person asked for a test mail. */
   TEST = 'TEST',
+  /**
+   * A probe found the storefront changed shape or refusing, as a change, or
+   * unreachable at its third attempt (plan 0247, section 4.1).
+   */
+  PROBE_FAILED = 'PROBE_FAILED',
+  /** A schedule slot or its retry was skipped because its probe did not pass (plan 0247). */
+  SLOT_PROBE_FAILED = 'SLOT_PROBE_FAILED',
 }
 
 /**

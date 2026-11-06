@@ -100,6 +100,23 @@ export interface ScheduledStart {
   runId: string | null;
 }
 
+/**
+ * What a gate on a scheduled start is told (plan 0247, section 2): the chain's
+ * source row and the mode of the preset, after every check of the moment.
+ */
+export interface ScheduledStartCheck {
+  source: SupermarketSource | null;
+  mode: HarvestRunMode;
+}
+
+/**
+ * A last check before a scheduled run is inserted (plan 0247, section 2). It
+ * answers null to let the run start, or the outcome of the slot to stop it.
+ */
+export type ScheduledStartGate = (
+  check: ScheduledStartCheck
+) => Promise<ScheduledStart | null>;
+
 /** One run, preset or schedule an estimate is asked for (plan 0206, section 8). */
 export interface EstimateKey {
   presetId: string | null;
@@ -176,6 +193,30 @@ function takesScopeList(capabilities: AdapterCapabilities): boolean {
 /** A slot that started nothing because something was refused. */
 function refused(note: string): ScheduledStart {
   return { outcome: HarvestScheduleOutcome.REFUSED, note, runId: null };
+}
+
+/**
+ * What the source row answers for a scheduled start, in the order of
+ * `startScheduled`: a row that is off, then a source that keeps failing. Null
+ * when the row lets the start go on.
+ */
+function sourceStandsInTheWay(
+  source: SupermarketSource | null
+): ScheduledStart | null {
+  if (source && !source.enabled) {
+    return refused(SOURCE_DISABLED);
+  }
+  if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
+    return {
+      outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
+      note:
+        `The source has failed ${source.consecutiveFailures} runs in a row. ` +
+        'The first run a person starts that completes lets the schedule ' +
+        'fire again.',
+      runId: null,
+    };
+  }
+  return null;
 }
 
 /** The ids that are set, each once. */
@@ -322,9 +363,18 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
    * that `blockedBy` uses too: the source row off or missing, then the source
    * failing, then the preset refused, then a run in the way. An error it does
    * not expect is thrown, and the worker writes it as `REFUSED`.
+   *
+   * **`gate` runs after every one of those checks and before the run is
+   * inserted** (plan 0247, section 2), so a chain that is off, failing or
+   * busy never reaches it. With a gate the run in the way is read before
+   * the gate rather than learned from the insert, because the gate may run a
+   * probe, and a probe must never run beside a run of its chain. The insert's
+   * conflict stays the backstop. A caller that passes no gate gets exactly
+   * what it got before.
    */
   async startScheduled(
-    schedule: Pick<HarvestSchedule, 'id' | 'presetId'>
+    schedule: Pick<HarvestSchedule, 'id' | 'presetId'>,
+    gate?: ScheduledStartGate
   ): Promise<ScheduledStart> {
     this.requireHarvesting();
     let preset: HarvestRunPreset;
@@ -342,19 +392,10 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       ...preset.input,
       supermarketId: preset.supermarketId,
     };
-    const source = await this.sources.findBySupermarket(preset.supermarketId);
-    if (source && !source.enabled) {
-      return refused(SOURCE_DISABLED);
-    }
-    if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
-      return {
-        outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
-        note:
-          `The source has failed ${source.consecutiveFailures} runs in a row. ` +
-          'The first run a person starts that completes lets the schedule ' +
-          'fire again.',
-        runId: null,
-      };
+    let source = await this.sources.findBySupermarket(preset.supermarketId);
+    const sourceAnswer = sourceStandsInTheWay(source);
+    if (sourceAnswer) {
+      return sourceAnswer;
     }
 
     let validated: ValidatedRunRequest;
@@ -369,6 +410,36 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         );
       }
       throw error;
+    }
+
+    if (gate) {
+      const inTheWay = await this.activeRunNote(
+        request.mode,
+        preset.supermarketId
+      );
+      if (inTheWay) {
+        return {
+          outcome: HarvestScheduleOutcome.SKIPPED_BUSY,
+          note: inTheWay,
+          runId: null,
+        };
+      }
+      const gated = await gate({ source, mode: request.mode });
+      if (gated) {
+        return gated;
+      }
+      // The gate may have taken minutes, and a person may have turned the
+      // row off or a run may have failed it meanwhile. The row is read again
+      // and asked what it was asked before the gate.
+      const before = source;
+      source = await this.sources.findBySupermarket(preset.supermarketId);
+      if (before && !source) {
+        return refused(SOURCE_DISABLED);
+      }
+      const afterGate = sourceStandsInTheWay(source);
+      if (afterGate) {
+        return afterGate;
+      }
     }
 
     try {
@@ -416,6 +487,19 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
     supermarketId: string,
     fallback: string
   ): Promise<string> {
+    return (await this.activeRunNote(mode, supermarketId)) ?? fallback;
+  }
+
+  /**
+   * The run that would be in the way of a scheduled start, named, or null
+   * when none is in flight. The same two reads as the partial unique indexes
+   * of `harvest_runs`: a run of the chain, and for a store discovery any
+   * store discovery.
+   */
+  private async activeRunNote(
+    mode: HarvestRunMode,
+    supermarketId: string
+  ): Promise<string | null> {
     const ofChain = await this.store.findActiveBySupermarket(supermarketId);
     if (ofChain) {
       return `A run of this chain is in progress: ${ofChain.id}.`;
@@ -430,7 +514,7 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
-    return fallback;
+    return null;
   }
 
   /**

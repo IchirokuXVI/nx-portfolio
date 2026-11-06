@@ -25,6 +25,8 @@ import type {
 } from '../postal-code-discovery.service';
 import type { PostalCodeDiscoveryStore } from '../postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from '../postal-code-discovery.worker';
+import type { SourceProbeService } from '../probes/source-probe.service';
+import type { SourceProbeStore } from '../probes/source-probe.store';
 import type { RunExecutor } from '../run-executor.service';
 
 /**
@@ -71,6 +73,10 @@ describe('HarvestScheduleWorker and the owner alert', () => {
       recordOutcome: jest.fn(async () => undefined),
       findInterrupted: jest.fn(async () => options.interrupted ?? []),
       claimRetry: jest.fn(async () => true),
+      findUndecided: jest.fn(async () => []),
+      claimUndecided: jest.fn(async () => false),
+      holdSlot: jest.fn(async () => ({ release: async () => undefined })),
+      isUndecided: jest.fn(async () => true),
     } as unknown as HarvestScheduleStore & { recordOutcome: jest.Mock };
     const runs = {
       startScheduled: jest.fn(async () => result),
@@ -78,7 +84,14 @@ describe('HarvestScheduleWorker and the owner alert', () => {
     const config = {
       getOrThrow: () => ({ harvestEnabled: true, schedulerEnabled: true }),
     } as unknown as ConfigService;
-    const worker = new HarvestScheduleWorker(store, runs, config, () => NOW);
+    const worker = new HarvestScheduleWorker(
+      store,
+      runs,
+      config,
+      () => NOW,
+      {} as SourceProbeService,
+      {} as SourceProbeStore
+    );
     return { worker, store, reset: () => (claimed = []) };
   }
 

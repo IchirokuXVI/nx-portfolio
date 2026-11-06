@@ -2,6 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import {
   HarvestRunMode,
   HarvestScheduleBlock,
+  SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import {
   NotFoundException,
@@ -15,6 +16,11 @@ import type { HarvestRunStore, SourceRef } from './harvest-run.store';
 import { HarvestScheduleService } from './harvest-schedule.service';
 import type { HarvestScheduleStore } from './harvest-schedule.store';
 import type { PlatformAdminService } from './platform-admin.service';
+import type {
+  LatestProbe,
+  SourceProbeStore,
+} from './probes/source-probe.store';
+import { FakeSourceProbeStore } from './probes/source-probe.store.fake';
 
 /**
  * Creating, changing and switching a schedule (plan 0206, sections 4 and 6).
@@ -57,6 +63,12 @@ function build(
     existing?: HarvestSchedule;
     config?: Partial<HarvesterConfig>;
     source?: Partial<SourceRef> | null;
+    /** The newest probe of the source that is not `ABORTED` (plan 0247). */
+    lastProbe?: Partial<LatestProbe>;
+    /** The mode of the preset, catalog discovery when absent. */
+    presetMode?: HarvestRunMode;
+    /** An in memory `source_probes` instead of `lastProbe`. */
+    probeStore?: SourceProbeStore;
   } = {}
 ) {
   const saved: HarvestSchedule[] = [];
@@ -81,7 +93,7 @@ function build(
     id: PRESET,
     supermarketId: CHAIN,
     name: 'Weekly Mercadona',
-    input: { mode: HarvestRunMode.CATALOG_DISCOVERY },
+    input: { mode: overrides.presetMode ?? HarvestRunMode.CATALOG_DISCOVERY },
   } as HarvestRunPreset;
   const presets = {
     load: jest.fn(async (id: string) => {
@@ -126,6 +138,19 @@ function build(
     }),
   } as unknown as ConfigService;
 
+  const probes =
+    overrides.probeStore ??
+    ({
+      latestBySources: jest.fn(
+        async () =>
+          new Map(
+            overrides.lastProbe && source
+              ? [[source.id, { sourceId: source.id, ...overrides.lastProbe }]]
+              : []
+          )
+      ),
+    } as unknown as SourceProbeStore);
+
   const service = new HarvestScheduleService(
     store,
     presets,
@@ -133,7 +158,8 @@ function build(
     runs,
     admin,
     config,
-    () => NOW
+    () => NOW,
+    probes
   );
   return { service, store, saved };
 }
@@ -360,5 +386,89 @@ describe('HarvestScheduleService, blockedBy (section 6)', () => {
     const view = await service.get({ userId: ADMIN, scheduleId: SCHEDULE });
 
     expect(view.blockedBy).toBe(expected);
+  });
+});
+
+describe('HarvestScheduleService, PROBE_NOT_PASSED (plan 0247, section 3)', () => {
+  const red = {
+    id: 'probe-1',
+    status: SourceProbeStatus.BLOCKED,
+    startedAt: NOW,
+    finishedAt: NOW,
+    changed: true,
+  };
+  const blockedBy = async (options: Parameters<typeof build>[0]) => {
+    const { service } = build(options);
+    return (await service.get({ userId: ADMIN, scheduleId: SCHEDULE }))
+      .blockedBy;
+  };
+
+  it('answers a red newest probe of a chain the preset reads', async () => {
+    expect(await blockedBy({ lastProbe: red })).toBe(
+      HarvestScheduleBlock.PROBE_NOT_PASSED
+    );
+    expect(
+      await blockedBy({
+        lastProbe: { ...red, status: SourceProbeStatus.ERROR },
+      })
+    ).toBe(HarvestScheduleBlock.PROBE_NOT_PASSED);
+  });
+
+  it('answers nothing for a green probe, for none and for a probe that is running', async () => {
+    expect(
+      await blockedBy({
+        lastProbe: { ...red, status: SourceProbeStatus.PASSED },
+      })
+    ).toBeNull();
+    expect(await blockedBy({})).toBeNull();
+    expect(
+      await blockedBy({
+        lastProbe: { ...red, status: SourceProbeStatus.RUNNING },
+      })
+    ).toBeNull();
+  });
+
+  it('comes after every existing block', async () => {
+    expect(
+      await blockedBy({ lastProbe: red, source: { consecutiveFailures: 3 } })
+    ).toBe(HarvestScheduleBlock.SOURCE_FAILING);
+    expect(
+      await blockedBy({ lastProbe: red, source: { enabled: false } })
+    ).toBe(HarvestScheduleBlock.SOURCE_DISABLED);
+    expect(
+      await blockedBy({ lastProbe: red, config: { schedulerEnabled: false } })
+    ).toBe(HarvestScheduleBlock.SCHEDULER_DISABLED);
+  });
+
+  it('keeps the block of a red finished probe while a newer probe runs', async () => {
+    const store = new FakeSourceProbeStore();
+    store.seed({
+      sourceId: 'src-1',
+      status: SourceProbeStatus.SHAPE_CHANGED,
+      startedAt: new Date(NOW.getTime() - 60 * 60_000),
+    });
+    store.seed({
+      sourceId: 'src-1',
+      status: SourceProbeStatus.RUNNING,
+      startedAt: NOW,
+      finishedAt: null,
+    });
+
+    expect(await blockedBy({ probeStore: store.asStore() })).toBe(
+      HarvestScheduleBlock.PROBE_NOT_PASSED
+    );
+    // The source list's read still shows the running probe as the newest.
+    expect((await store.latestBySources(['src-1'])).get('src-1')?.status).toBe(
+      SourceProbeStatus.RUNNING
+    );
+  });
+
+  it('answers nothing for a preset the gate does not apply to', async () => {
+    expect(
+      await blockedBy({
+        lastProbe: red,
+        presetMode: HarvestRunMode.FILE_IMPORT,
+      })
+    ).toBeNull();
   });
 });

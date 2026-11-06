@@ -1972,7 +1972,8 @@
         "HARVEST_DISABLED": "This cluster cannot start harvest runs.",
         "SCHEDULER_DISABLED": "Schedules do not start by themselves on this cluster. Only production starts them.",
         "SOURCE_DISABLED": "{{chain}} may not be fetched. Turn its source on and leave it on.",
-        "SOURCE_FAILING": "{{chain}} failed three runs in a row. Start the preset by hand. When it completes, the schedule runs again."
+        "SOURCE_FAILING": "{{chain}} failed three runs in a row. Start the preset by hand. When it completes, the schedule runs again.",
+        "PROBE_NOT_PASSED": "{{chain}}'s last probe did not pass. The next slot runs a probe first and is skipped if it fails again."
       },
       "blockLink": {
         "source": "Open the source",
@@ -1984,6 +1985,7 @@
         "SKIPPED_FAILING": "Skipped, the chain is failing",
         "REFUSED": "Refused",
         "SKIPPED_BUSY": "Skipped, a run was already going",
+        "SKIPPED_PROBE_FAILED": "Skipped, the probe did not pass",
         "none": "No slot has come yet"
       },
       "next": {

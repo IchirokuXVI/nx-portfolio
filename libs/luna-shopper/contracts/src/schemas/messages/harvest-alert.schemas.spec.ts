@@ -61,7 +61,7 @@ describe('harvest alert contracts', () => {
     for (const value of Object.values(HarvestAlertKind)) {
       expect(kind?.(value)).toBe(true);
     }
-    expect(Object.values(HarvestAlertKind)).toHaveLength(6);
+    expect(Object.values(HarvestAlertKind)).toHaveLength(8);
     expect(kind?.('ABORTED')).toBe(false);
   });
 });

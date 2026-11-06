@@ -33,6 +33,7 @@ export function toSourceProbeView(row: SourceProbe): SourceProbeView {
     steps: row.steps ?? [],
     error: row.error ?? null,
     requestedByUserId: row.requestedByUserId ?? null,
+    scheduleId: row.scheduleId ?? null,
   };
 }
 

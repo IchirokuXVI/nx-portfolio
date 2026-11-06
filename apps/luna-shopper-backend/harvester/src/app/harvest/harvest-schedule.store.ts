@@ -2,11 +2,37 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { HarvestScheduleOutcome } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { Repository, type QueryRunner } from 'typeorm';
 import { HarvestSchedule } from '../entities';
 import type { HarvestAlertDraft } from './alerts/harvest-alert.rules';
 import { insertAlert } from './alerts/harvest-alert.store';
 import { nextSlot, previousSlot } from './schedule-slot';
+
+/**
+ * A claimed slot with no decision, over `s` (see `findUndecided`). The same
+ * text in the read and in the conditional claim, so the two cannot disagree.
+ */
+const NO_OUTCOME = `s."lastSlotAttempts" = 0
+          AND s."lastSlotAt" IS NOT NULL
+          AND (s."lastOutcomeAt" IS NULL OR s."lastOutcomeAt" < s."lastSlotAt")`;
+const UNDECIDED = `s."enabled"
+          AND ${NO_OUTCOME}
+          AND NOT EXISTS (
+                SELECT 1 FROM "harvest_runs" AS r
+                 WHERE r."scheduleId" = s."id"
+                   AND r."requestedAt" >= s."lastSlotAt"
+              )`;
+
+/**
+ * The first key of the advisory lock that holds a schedule while its slot is
+ * decided, the plan's number, so it cannot meet a lock of other code.
+ */
+const SLOT_LOCK_CLASS = 247;
+
+/** A schedule held by {@link HarvestScheduleStore.holdSlot}. */
+export interface SlotHold {
+  release(): Promise<void>;
+}
 
 /** A slot the worker claimed, and the row as the claim left it. */
 export interface ClaimedSlot {
@@ -224,7 +250,139 @@ export class HarvestScheduleStore {
     return rows.length > 0;
   }
 
+  /**
+   * The schedules whose current slot was claimed and never decided: a
+   * shutdown came while the probe gate of plan 0247 ran or waited for a
+   * probe, so the worker wrote no outcome (an abort is not a failure of the
+   * chain).
+   *
+   * The claim writes `lastSlotAt` and sets `lastSlotAttempts` to 0, and every
+   * decision writes `lastOutcomeAt` at or after the claim, which is at or
+   * after the slot. A decision of an earlier slot is older than this slot. So
+   * attempts 0 and no outcome at or after `lastSlotAt` is a claim with no
+   * decision, and nothing else. A row whose run of this schedule was requested
+   * at or after the slot is left out: its slot started, whatever its outcome
+   * write did.
+   */
+  async findUndecided(): Promise<HarvestSchedule[]> {
+    return this.schedules.query(
+      `SELECT s.*
+         FROM "harvest_schedules" AS s
+        WHERE ${UNDECIDED}
+        ORDER BY s."lastSlotAt" ASC, s."id" ASC`
+    );
+  }
+
+  /**
+   * Claim the one retry of an undecided slot before it runs, as
+   * {@link claimRetry} does for a stopped run: attempts go to 2, so the retry
+   * is spent whether it then decides the slot or is interrupted again, and a
+   * second process or a second restart cannot retry it a second time.
+   */
+  async claimUndecided(scheduleId: string, slot: Date): Promise<boolean> {
+    const [rows]: [{ id: string }[], number] = await this.schedules.query(
+      `UPDATE "harvest_schedules" AS s
+          SET "lastSlotAttempts" = 2
+        WHERE s."id" = $1
+          AND s."lastSlotAt" = $2
+          AND ${UNDECIDED}
+       RETURNING s."id"`,
+      [scheduleId, slot]
+    );
+    return rows.length > 0;
+  }
+
+  /**
+   * Whether the slot still has no outcome and no retry, for a worker that has
+   * just taken the hold of its own claim: a retry of another process may have
+   * decided it in between. A retry writes its outcome or its attempts before
+   * it lets the hold go, so this needs no read of the runs.
+   */
+  async isUndecided(scheduleId: string, slot: Date): Promise<boolean> {
+    const rows: { id: string }[] = await this.schedules.query(
+      `SELECT s."id"
+         FROM "harvest_schedules" AS s
+        WHERE s."id" = $1
+          AND s."lastSlotAt" = $2
+          AND ${NO_OUTCOME}`,
+      [scheduleId, slot]
+    );
+    return rows.length > 0;
+  }
+
+  /**
+   * Hold a schedule while its slot is decided, or answer null when another
+   * connection holds it.
+   *
+   * **The row cannot say that a live process is still deciding a slot**, only
+   * that no outcome was written, and a gate can take minutes. A session
+   * advisory lock on a connection of its own can: it lasts while the decision
+   * runs, and Postgres frees it the moment that process or its connection
+   * dies. So the retry of an undecided slot never takes a slot that a live
+   * worker is still deciding (plan 0247, review round 1). No schema change.
+   */
+  async holdSlot(scheduleId: string): Promise<SlotHold | null> {
+    const runner = this.schedules.manager.connection.createQueryRunner();
+    await runner.connect();
+    try {
+      const [row]: { held: boolean }[] = await runner.query(
+        `SELECT pg_try_advisory_lock(${SLOT_LOCK_CLASS}, hashtext($1)) AS "held"`,
+        [scheduleId]
+      );
+      if (!row?.held) {
+        await runner.release();
+        return null;
+      }
+    } catch (error) {
+      // The lock may have been taken before the answer was lost.
+      await discardRunner(runner, error);
+      throw error;
+    }
+    return {
+      release: async () => {
+        try {
+          await runner.query(
+            `SELECT pg_advisory_unlock(${SLOT_LOCK_CLASS}, hashtext($1))`,
+            [scheduleId]
+          );
+        } catch (error) {
+          // The session may still hold the lock. Back in the pool, the
+          // connection would keep it for whoever borrows it next, and every
+          // other process would read the slot as in progress until that
+          // connection closes. Destroyed, it frees the lock with it.
+          await discardRunner(runner, error);
+          throw error;
+        }
+        await runner.release();
+      },
+    };
+  }
+
   repository(): Repository<HarvestSchedule> {
     return this.schedules;
   }
+}
+
+/**
+ * Give up a runner's connection without returning it to the pool. A pg-pool
+ * client released with an error is removed and closed, and Postgres frees
+ * every session lock of a connection that closes. TypeORM's postgres runner
+ * passes that error on through `releasePostgresConnection`, which `release`
+ * calls with none; the method is private in the typings only. A runner of
+ * another driver has no such method and is released as before.
+ */
+async function discardRunner(
+  runner: QueryRunner,
+  error: unknown
+): Promise<void> {
+  const postgres = runner as unknown as {
+    releasePostgresConnection?: (err: Error) => Promise<void>;
+  };
+  if (typeof postgres.releasePostgresConnection !== 'function') {
+    await runner.release();
+    return;
+  }
+  await postgres.releasePostgresConnection(
+    error instanceof Error ? error : new Error(String(error))
+  );
 }

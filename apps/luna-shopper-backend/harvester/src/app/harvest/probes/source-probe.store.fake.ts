@@ -4,6 +4,8 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import type { SourceProbe, SupermarketSource } from '../../entities';
+import type { HarvestAlertDraft } from '../alerts/harvest-alert.rules';
+import type { GateProbe } from '../schedule-probe-gate';
 import { probeDueAttempt, type NewestProbe } from './source-probe.due';
 import type {
   ClaimedProbe,
@@ -26,6 +28,8 @@ export class FakeSourceProbeStore {
   sources: SupermarketSource[] = [];
   /** The chains with a run `PENDING` or `RUNNING`. */
   readonly busyChains = new Set<string>();
+  /** The alert drafts `finish` wrote with a verdict (plan 0247), in order. */
+  readonly alerts: HarvestAlertDraft[] = [];
   private next = 0;
 
   asStore(): SourceProbeStore {
@@ -50,6 +54,7 @@ export class FakeSourceProbeStore {
       steps: [],
       error: null,
       requestedByUserId: null,
+      scheduleId: null,
       createdAt: row.startedAt,
       updatedAt: row.startedAt,
       ...row,
@@ -79,11 +84,15 @@ export class FakeSourceProbeStore {
     trigger: HarvestRunTrigger;
     startedAt: Date;
     requestedByUserId: string | null;
+    attempt?: number;
+    scheduleId?: string | null;
   }): Promise<SourceProbe | null> {
     if (await this.findRunning(input.source.id)) {
       return null;
     }
     return this.seed({
+      attempt: input.attempt ?? 1,
+      scheduleId: input.scheduleId ?? null,
       sourceId: input.source.id,
       supermarketId: input.source.supermarketId,
       adapterKey: input.source.adapterKey,
@@ -152,13 +161,50 @@ export class FakeSourceProbeStore {
     return { probe, source: { ...chosen.source } };
   }
 
-  async finish(id: string, write: SourceProbeFinish): Promise<boolean> {
+  async finish(
+    id: string,
+    write: SourceProbeFinish,
+    alert?: HarvestAlertDraft
+  ): Promise<boolean> {
     const row = this.rows.find((each) => each.id === id);
     if (!row || row.status !== SourceProbeStatus.RUNNING) {
       return false;
     }
     Object.assign(row, write);
+    if (alert) {
+      this.alerts.push(alert);
+    }
     return true;
+  }
+
+  async gateProbes(sourceId: string, since: Date): Promise<GateProbe[]> {
+    return this.rows
+      .filter(
+        (row) =>
+          row.sourceId === sourceId &&
+          (row.status === SourceProbeStatus.RUNNING ||
+            row.startedAt.getTime() >= since.getTime())
+      )
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())
+      .map((row) => ({
+        id: row.id,
+        status: row.status,
+        startedAt: row.startedAt,
+        error: row.error,
+      }));
+  }
+
+  async newestForSeries(sourceId: string): Promise<NewestProbe | null> {
+    const row = this.rows
+      .filter(
+        (each) =>
+          each.sourceId === sourceId &&
+          each.status !== SourceProbeStatus.RUNNING
+      )
+      .sort((a, b) => b.startedAt.getTime() - a.startedAt.getTime())[0];
+    return row
+      ? { status: row.status, attempt: row.attempt, startedAt: row.startedAt }
+      : null;
   }
 
   async previousStatus(
@@ -185,7 +231,10 @@ export class FakeSourceProbeStore {
       .map((row) => ({ ...row }));
   }
 
-  async latestBySources(ids: string[]): Promise<Map<string, LatestProbe>> {
+  async latestBySources(
+    ids: string[],
+    options: { finishedOnly?: boolean } = {}
+  ): Promise<Map<string, LatestProbe>> {
     const latest = new Map<string, LatestProbe>();
     for (const row of [...this.rows].sort(
       (a, b) => b.startedAt.getTime() - a.startedAt.getTime()
@@ -193,6 +242,7 @@ export class FakeSourceProbeStore {
       if (
         ids.includes(row.sourceId) &&
         row.status !== SourceProbeStatus.ABORTED &&
+        !(options.finishedOnly && row.status === SourceProbeStatus.RUNNING) &&
         !latest.has(row.sourceId)
       ) {
         latest.set(row.sourceId, {

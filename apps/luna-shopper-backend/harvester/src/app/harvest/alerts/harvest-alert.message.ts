@@ -1,6 +1,8 @@
 import {
   HarvestAlertKind,
   HarvestRunMode,
+  HarvestRunTrigger,
+  SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import { SCHEDULES_STOP_AFTER } from './harvest-alert.rules';
 
@@ -61,7 +63,53 @@ export const LEAD_SENTENCES: Readonly<Record<HarvestAlertKind, string>> = {
     'A schedule reached its slot and could not start its run. This mail does not repeat until the schedule starts a run or the reason changes.',
   [HarvestAlertKind.TEST]:
     'This is a test alert from the harvester. If you can read it, harvest alerts reach this address.',
+  [HarvestAlertKind.PROBE_FAILED]:
+    'A probe of the chain did not pass. Read the steps below.',
+  [HarvestAlertKind.SLOT_PROBE_FAILED]:
+    'A schedule reached its slot and ran no walk, because the probe of the chain did not pass. The next slot tries again, and this mail does not repeat while the probe keeps the same status.',
 };
+
+/**
+ * The sentence a probe alert opens with, by the probe's status (plan 0247,
+ * section 4.4). Each one says what to do. Exported for the spec.
+ */
+export const PROBE_LEAD_SENTENCES: Readonly<
+  Partial<Record<SourceProbeStatus, string>>
+> = {
+  [SourceProbeStatus.SHAPE_CHANGED]:
+    'The probe read the storefront and found it changed shape, so a walk would store little or mark products wrong. Run the capture fixtures target of the library named below and read the diff of its fixtures.',
+  [SourceProbeStatus.BLOCKED]:
+    'The chain refused the probe. Wait: the daily probe says when the chain answers again, and a run started now is likely to be refused too.',
+  [SourceProbeStatus.UNREACHABLE]:
+    'The chain was unreachable for three probes in a row. The daily probe keeps looking, and nothing is to be done here until the chain answers.',
+};
+
+/**
+ * The lead of an `UNREACHABLE` alert, with the start of the last probe when
+ * the payload holds it. Three probes in a row is all the attempt proves: a
+ * probe a slot runs joins the series with no wait, so the three can be
+ * minutes apart and not an hour. The payload does not hold the start of the
+ * first probe of the series, so the mail does not name it.
+ */
+function unreachableLead(
+  sentence: string,
+  payload: Record<string, unknown>
+): string {
+  const last = toDate(payload['startedAt']);
+  if (last) {
+    return `${sentence} The last of them started at ${madridTime(last)}.`;
+  }
+  return sentence;
+}
+
+/** The Nx project whose `capture-fixtures` target refreshes a chain's fixtures. */
+export function fixturesProjectOf(adapterKey: unknown): string | null {
+  if (typeof adapterKey !== 'string' || !adapterKey) {
+    return null;
+  }
+  const library = adapterKey.split('-')[0];
+  return library ? `luna-shopper/${library}` : null;
+}
 
 /** The sentence a run that stopped the chain's schedules adds (section 2.2). */
 export function schedulesStoppedSentence(count: number): string {
@@ -128,8 +176,28 @@ function headline(alert: AlertForMessage, context: MessageContext): string {
       );
     case HarvestAlertKind.TEST:
       return 'Harvest alerts: a test mail';
+    case HarvestAlertKind.PROBE_FAILED:
+      return `${chainOf(alert, context)}: ${probeHeadline(p['status'])}`;
+    case HarvestAlertKind.SLOT_PROBE_FAILED:
+      return p['retry'] === true
+        ? `${chainOf(alert, context)}: the retry of a scheduled run was skipped, its probe did not pass`
+        : `${chainOf(alert, context)}: a scheduled run was skipped, its probe did not pass`;
     default:
       return `Harvest alert ${String(alert.kind)}`;
+  }
+}
+
+/** What a probe alert says happened, by the probe's status. */
+function probeHeadline(status: unknown): string {
+  switch (status) {
+    case SourceProbeStatus.SHAPE_CHANGED:
+      return 'the storefront changed shape';
+    case SourceProbeStatus.BLOCKED:
+      return 'the chain refused the probe';
+    case SourceProbeStatus.UNREACHABLE:
+      return 'the chain was unreachable for three probes in a row';
+    default:
+      return `a probe ended ${text(status)}`;
   }
 }
 
@@ -206,9 +274,92 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
       lines.push(`Environment: ${context.environmentName}`);
       return [lead, lines.join('\n')].join('\n\n');
     }
+    case HarvestAlertKind.PROBE_FAILED: {
+      const status = p['status'];
+      const statusLead =
+        typeof status === 'string'
+          ? (PROBE_LEAD_SENTENCES[status as SourceProbeStatus] ?? lead)
+          : lead;
+      const probeLead =
+        status === SourceProbeStatus.UNREACHABLE
+          ? unreachableLead(statusLead, p)
+          : statusLead;
+      lines.push(`Chain: ${chainOf(alert, context)}`);
+      lines.push(`Status: ${text(status)}`);
+      if (p['previousStatus']) {
+        lines.push(`Before: ${text(p['previousStatus'])}`);
+      }
+      lines.push(`Trigger: ${text(p['trigger'])}`);
+      const kindLine = probeKindLine(p);
+      if (kindLine) {
+        lines.push(kindLine);
+      }
+      lines.push(`Attempt: ${numberOr(p['attempt'], 1)}`);
+      lines.push(`Started: ${madridTime(p['startedAt'])}`);
+      lines.push(`Finished: ${madridTime(p['finishedAt'])}`);
+      lines.push(`Steps:\n${stepLines(p['steps'])}`);
+      lines.push(`First problem: ${text(p['error'])}`);
+      lines.push(`Requests: ${numberOr(p['requests'], 0)}`);
+      lines.push(`Probe id: ${text(p['probeId'])}`);
+      const sections = [probeLead, lines.join('\n')];
+      const project = fixturesProjectOf(p['adapterKey']);
+      if (status === SourceProbeStatus.SHAPE_CHANGED && project) {
+        sections.push(`Fixtures: npx nx run ${project}:capture-fixtures`);
+      }
+      return sections.join('\n\n');
+    }
+    case HarvestAlertKind.SLOT_PROBE_FAILED: {
+      lines.push(`Chain: ${chainOf(alert, context)}`);
+      lines.push(`Schedule: ${text(p['scheduleId'] ?? alert.scheduleId)}`);
+      lines.push(`Preset: ${text(p['presetId'])}`);
+      lines.push(
+        `${p['retry'] === true ? 'Retry of the slot' : 'Slot'}: ${madridTime(p['slot'])}`
+      );
+      if (p['probeId']) {
+        lines.push(`Probe: ${text(p['probeId'])}`);
+        lines.push(`Probe status: ${text(p['probeStatus'])}`);
+        lines.push(`Probe sentence: ${text(p['probeError'])}`);
+      } else {
+        lines.push(`Reason: ${text(p['note'])}`);
+      }
+      return [lead, lines.join('\n')].join('\n\n');
+    }
     default:
       return lead;
   }
+}
+
+/**
+ * Which kind of probe alerted (the owner, 2026-11-06). A gate probe and a
+ * daily probe both carry trigger `SCHEDULED`, and only the schedule id tells
+ * them apart. Null for a payload that names neither.
+ */
+function probeKindLine(payload: Record<string, unknown>): string | null {
+  const scheduleId = payload['scheduleId'];
+  if (typeof scheduleId === 'string' && scheduleId !== '') {
+    return `Run as the gate of schedule ${scheduleId}`;
+  }
+  switch (payload['trigger']) {
+    case HarvestRunTrigger.SCHEDULED:
+      return 'Daily probe';
+    case HarvestRunTrigger.MANUAL:
+      return 'Manual probe';
+    default:
+      return null;
+  }
+}
+
+/** One line per probe step, `  listing: ok` or `  listing: not ok`. */
+function stepLines(steps: unknown): string {
+  if (!Array.isArray(steps) || steps.length === 0) {
+    return '  none recorded';
+  }
+  return steps
+    .map((step) => {
+      const record = (step ?? {}) as Record<string, unknown>;
+      return `  ${text(record['name'])}: ${record['ok'] === true ? 'ok' : 'not ok'}`;
+    })
+    .join('\n');
 }
 
 function footer(context: MessageContext): string {

@@ -42925,7 +42925,8 @@
           "HARVEST_DISABLED",
           "SCHEDULER_DISABLED",
           "SOURCE_DISABLED",
-          "SOURCE_FAILING"
+          "SOURCE_FAILING",
+          "PROBE_NOT_PASSED"
         ]
       },
       "enums.HarvestScheduleOutcome": {
@@ -42935,7 +42936,8 @@
           "SKIPPED_LATE",
           "SKIPPED_FAILING",
           "REFUSED",
-          "SKIPPED_BUSY"
+          "SKIPPED_BUSY",
+          "SKIPPED_PROBE_FAILED"
         ]
       },
       "enums.HarvestWarningCode": {
@@ -46788,6 +46790,13 @@
               "string",
               "null"
             ]
+          },
+          "scheduleId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The schedule whose slot ran this probe as its gate, null for a daily or manual probe."
           }
         },
         "required": [
@@ -46806,7 +46815,8 @@
           "requests",
           "steps",
           "error",
-          "requestedByUserId"
+          "requestedByUserId",
+          "scheduleId"
         ],
         "additionalProperties": false
       },
