@@ -1,4 +1,4 @@
-// node --test apps/velista/scripts/build-android.spec.mjs
+// node --test apps/velista/scripts/build-android.node-test.mjs
 //
 // The decisions of build-android.mjs that need no Gradle and no SDK (plan 0180, target 2).
 import assert from 'node:assert/strict';

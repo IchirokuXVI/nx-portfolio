@@ -1,4 +1,7 @@
-// node --test apps/velista/scripts/native-api.spec.mjs
+// node --test apps/velista/scripts/native-api.node-test.mjs
+//
+// Not `*.spec.mjs`: the Nx Jest preset matches .mjs specs, and velista:test would load this
+// node:test file as a Jest suite.
 //
 // Every case runs against a fixture workspace in a temp directory, never the real tree. The
 // Android file list is passed in, so the fixture needs no git repository.
