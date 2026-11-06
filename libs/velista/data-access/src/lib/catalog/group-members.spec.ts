@@ -25,6 +25,7 @@ function product(id: string, groupId: string): CatalogItem {
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 

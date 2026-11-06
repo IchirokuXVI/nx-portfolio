@@ -1,3 +1,5 @@
+> **PR:** [#929](https://github.com/IchirokuXVI/nx-portfolio/pull/929)
+
 # 0216: a shopper refreshes the price of one product
 
 > This plan promotes backlog `0006` (the public item refresh and the global fetch cooldown). That
@@ -655,13 +657,28 @@ Chosen in this plan, and open to the owner's correction:
 - The shopper polls, and no realtime event is built (section 8).
 - A refresh 403 does not feed plan `0215`'s stop (section 11).
 
-**Owner**: ask, do not choose.
+**Owner** (answered 2026-11-06):
 
-1. May a guest (a `TEMPORARY` account) refresh a price? This plan says no.
-2. Are the default numbers of section 5 right? Backlog `0006` had one fetch per five minutes for
-   the whole platform, and nothing has measured either.
-3. Where is `HARVEST_REFRESH_ENABLED` turned on, and when: staging first, production after the
-   velista control ships?
-4. Should El Jamón refresh from its product page although a walk writes the listing price, which
-   can differ? This plan says no.
-5. Should a refresh that meets a 403 count toward plan `0215`'s stop of a chain?
+1. **No guest refreshes.** A `TEMPORARY` account is refused on all three routes, as section 10
+   says.
+2. **The defaults of section 5 stand.** Nothing has measured them yet. They are to be measured
+   later, and each is changed in one place.
+3. **Staging first, production after velista has the refresh control.** `values.staging.yaml`
+   sets `refreshEnabled: true` in this plan's PR. `values.production.yaml` keeps it false until
+   the velista follow up ships.
+4. **El Jamón does not refresh from its product page.** The owner is not sure and took the
+   plan's recommendation for now: a refresh and the next walk would write each other's numbers.
+5. **A refresh 403 does not count toward plan `0215`'s stop.** It sets the refresh blocked key
+   only, as section 11 says.
+6. **Step 5 of section 7.1 reads plan `0215`'s state as: the chain's newest finished run ended
+   with `stopReason: SOURCE_BLOCKED`, and its `finishedAt` is less than
+   `HARVEST_REFRESH_BLOCKED_MINUTES` ago.** Then the refresh is refused with `CHAIN_REFUSING`.
+   A run in flight is not read. This is the plan's own example reading, which the owner accepted.
+
+**Builder** (2026-11-06):
+
+1. **A refresh whose read disagrees with the row on selling by weight writes nothing.** It ends
+   `FAILED` with an explanation. Section 13 says "as the walk does", but a refresh writes no row,
+   and the walk rewrites the flag before it writes the price. The next walk settles it.
+2. **`CHAIN_REFUSING` ignores `FILE_IMPORT` runs**, the mode once called `LEAFLET_IMPORT`. They
+   fetch nothing from the storefront, so they can neither block a chain nor clear a block.

@@ -10,7 +10,18 @@
  * disagree unless the two pods were given different values.
  */
 
-/** The repository's templates. Bumped in the PR that changes their meaning. */
+/**
+ * The repository's templates. Bumped in the PR that changes their meaning.
+ *
+ * Due at the next privacy bump: the policy still says "browser" twice, and most
+ * people now use velista as the Android app. Reword both in each language, in
+ * `libs/velista/feature-legal/assets/legal/privacy.{en,es}.json`. One is the
+ * user agent line of section `data`, which a joiner's browser or the app sends.
+ * The other is section `photos` (two paragraphs in Spanish), where the browser
+ * or the app loads a supermarket photo. They were left as they are so that a
+ * copy change alone did not need a new policy version. Delete this note in the
+ * PR that rewords them.
+ */
 export const LEGAL_TEMPLATES = {
   terms: { version: '2026-10-29' },
   privacy: { updatedOn: '2026-10-29' },

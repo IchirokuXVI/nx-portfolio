@@ -108,6 +108,7 @@ describeIntegration(
       unitSize: 1,
       packCount: 6,
       defaultUnit: 'LITER' as ItemSnapshot['defaultUnit'],
+      approxWeight: null,
     };
     const OAT_NAME: ItemSnapshot = {
       name: { en: 'Oat drink', es: 'Bebida de avena' },
@@ -115,6 +116,7 @@ describeIntegration(
       unitSize: 1,
       packCount: null,
       defaultUnit: 'LITER' as ItemSnapshot['defaultUnit'],
+      approxWeight: null,
     };
 
     /** A buy at a shop: the scope, the shop, its chain and a price. */
@@ -589,7 +591,7 @@ describeIntegration(
       expect(await settlementsOf(milk.id)).toHaveLength(0);
     });
 
-    it('copies only the five fields of the snapshot', async () => {
+    it('copies only the six fields of the snapshot', async () => {
       const { listId, a } = await world();
       const milk = await line(listId, a.userId, 'Milk', 1);
 

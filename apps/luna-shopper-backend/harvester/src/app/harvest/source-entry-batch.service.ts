@@ -26,7 +26,7 @@ import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName, lacksEnglish } from './source-entry-name';
-import { createdSize } from './source-entry-size';
+import { createdSize, createdWeight } from './source-entry-size';
 import {
   barcodesOf,
   bindFields,
@@ -878,6 +878,8 @@ function itemFrom(
     // for the whole file (plan 0166, section 7).
     categoryIds,
     defaultUnit: size.unit,
+    // The weight of one piece the row states, as the source's (plan 0244).
+    ...createdWeight(size),
   };
 }
 

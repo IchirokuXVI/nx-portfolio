@@ -60,3 +60,6 @@ export type {
   CarrefourProduct,
   CarrefourStateLoader,
 } from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeCarrefour } from './lib/probe';
+export type { CarrefourProbeOptions } from './lib/probe';

@@ -8,7 +8,9 @@ import {
   DiaSessionError,
   photoAddressRead,
   regularPrice,
+  scopePrice,
   splitSize,
+  weightOf,
   type DiaLeaf,
   type DiaListingPage,
   type DiaListingRow,
@@ -685,13 +687,29 @@ function observationOf(
     return null;
   }
   const size = splitSize(row.displayName);
+  // `800 g aprox.` (plan 0244, section 5.3): no size, the weight of one piece,
+  // and sold by weight when the identity row compares per `KILO`. Any other
+  // comparison is a piece priced as one.
+  const weight = weightOf(size, row.prices);
   const prices: SourceObservationPrice[] = [];
   for (const scope of walk.scopes) {
     const listed = scope.listed.get(product.skuId);
     if (!listed?.prices || !walked.includes(scope.key)) {
       continue;
     }
-    const regular = regularPrice(listed.prices, listed.promotions);
+    // The price of a kilo for a row sold by weight, club scaling of plan 0174
+    // D2 included. The piece price DIA prints is not written (plan 0244, D1).
+    // "Sold by weight" is the identity row's answer, decided once: a scope
+    // whose listing prints no price per kilo writes no price, and never its
+    // piece price under a row sold by weight.
+    const regular = scopePrice(
+      listed.prices,
+      listed.promotions,
+      weight.soldByWeight
+    );
+    if (regular === null) {
+      continue;
+    }
     const price = {
       price: regular.price,
       currency: regular.currency,
@@ -728,8 +746,10 @@ function observationOf(
     brand: row.brand,
     // Neither the listing nor the detail carries one (section 1).
     ean: null,
-    unitSize: size.unitSize,
-    sizeUnit: size.sizeUnit,
+    unitSize: weight.unitSize,
+    sizeUnit: weight.sizeUnit,
+    soldByWeight: weight.soldByWeight,
+    approxWeight: weight.approxWeight,
     sizeFormat: size.sizeFormat,
     packCount: packCountOf(size.packCount),
     categoryPath: [product.firstLeaf.rootName, product.firstLeaf.name],

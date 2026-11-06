@@ -1254,6 +1254,7 @@ describe('the number on a row', () => {
             sourceKind: 'OFFICIAL_WEB',
             stale: false,
             priceScopeId: 's-dia',
+            piecePrice: null,
           },
           offers: [],
           atShop: null,
@@ -1266,6 +1267,7 @@ describe('the number on a row', () => {
               name: { en: 'Milk', es: 'Leche' },
             },
           ],
+          approxWeight: null,
         },
       ],
     ]);
@@ -1755,6 +1757,7 @@ describe('searching the basket', () => {
           name: { en: 'Not yet categorised', es: 'Sin categoría' },
         },
       ],
+      approxWeight: null,
     };
   }
 
@@ -2400,6 +2403,7 @@ describe('searching the basket', () => {
           name: { en: 'Milk', es: 'Leche' },
         },
       ],
+      approxWeight: null,
       ...over,
     });
 
@@ -3646,6 +3650,7 @@ describe('the composer and the list it adds to', () => {
               imageUrl: null,
               packCount: null,
               unitBasis: null,
+              approxWeight: null,
             },
           ],
         });
@@ -3767,6 +3772,7 @@ describe('the composer and the list it adds to', () => {
           productGroupId: null,
           categories: [],
           sectionIds: [],
+          approxWeight: null,
         };
         const milk = line('Leche entera', {
           productId: 'i-milk',
@@ -3981,6 +3987,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       imageUrl: null,
       packCount: null,
       unitBasis: null,
+      approxWeight: null,
     },
   };
 
@@ -4231,6 +4238,7 @@ describe('similar products on the basket', () => {
     currency: 'EUR',
     unitPrice: 1.2,
     unitPriceLabel: 'EUR/L',
+    piecePrice: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB' as const,
     stale: false,
@@ -4256,6 +4264,7 @@ describe('similar products on the basket', () => {
         name: { en: 'Milk', es: 'Leche' },
       },
     ],
+    approxWeight: null,
   };
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
@@ -4278,6 +4287,7 @@ describe('similar products on the basket', () => {
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   });
 
   const milkRow = (listId: string | null) =>
@@ -4429,6 +4439,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
         },
       ],
       sectionIds,
+      approxWeight: null,
     };
   }
 
@@ -4614,6 +4625,7 @@ describe('BasketPage: the map of the shop you are in', () => {
     productGroupId: null,
     categories: [],
     sectionIds: ['sec-dairy'],
+    approxWeight: null,
   };
 
   function detail(hasMap: boolean): ShopDetailRead {
@@ -4882,6 +4894,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
         sourceKind: 'OFFICIAL_WEB',
         stale: false,
         priceScopeId: 's-dia',
+        piecePrice: null,
       },
       offers: [],
       atShop:
@@ -4896,6 +4909,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
       productGroupId: null,
       categories: [],
       sectionIds: null,
+      approxWeight: null,
     };
   }
 

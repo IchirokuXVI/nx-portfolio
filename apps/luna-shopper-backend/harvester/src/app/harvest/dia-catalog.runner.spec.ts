@@ -434,6 +434,115 @@ describe('DiaCatalogRunner', () => {
     });
   });
 
+  describe('a row printed aprox. (plan 0244, section 5.3)', () => {
+    /** As `listing-weight.json` prints it: 1.59 the piece, 1.99 a kilo. */
+    const APPLES: FakeDiaRow = {
+      sku: '275431',
+      name: 'Manzana roja granel 800 g aprox.',
+      price: 1.59,
+      unitPrice: 1.99,
+      unit: 'KILO',
+    };
+    const run = async (row: FakeDiaRow) => {
+      const runner = new TestRunner(
+        world({ listings: { '13835': { L2108: [row] } } })
+      );
+      await runner.run(
+        context(),
+        report,
+        input({ priceScopes: [MADRID] }),
+        source()
+      );
+      return report.products[0];
+    };
+
+    it('is sold by weight at the price of a kilo, with no size and the weight of one piece', async () => {
+      const apples = await run(APPLES);
+
+      expect(apples).toMatchObject({
+        soldByWeight: true,
+        approxWeight: 800,
+        unitSize: null,
+        sizeUnit: null,
+        sizeFormat: '800 g aprox.',
+      });
+      // The piece price DIA prints is not written (D1).
+      expect(apples.prices.map((price) => price.price)).toEqual([1.99, 1.99]);
+      expect(apples.prices.map((price) => price.unitPrice)).toEqual([
+        1.99, 1.99,
+      ]);
+    });
+
+    it('is a piece priced as one when its comparison is not per kilo', async () => {
+      const tray = await run({ ...APPLES, unit: 'UNIDAD', unitPrice: 1.59 });
+
+      expect(tray).toMatchObject({
+        soldByWeight: false,
+        approxWeight: 800,
+        unitSize: null,
+        sizeUnit: null,
+      });
+      expect(tray.prices.map((price) => price.price)).toEqual([1.59, 1.59]);
+    });
+
+    it('applies the club scaling of plan 0174 to the price of a kilo', async () => {
+      // A club row: 1.59 for members, 1.79 regular, 1.99 a kilo at the club
+      // price. D2 scales the kilo to the regular price: 1.99 × 1.79 / 1.59.
+      const club = await run({
+        ...APPLES,
+        price: 1.59,
+        strikethrough: 1.79,
+        club: true,
+        promotions: [{ description: '10% DTO.', only_club_dia: true }],
+      });
+
+      expect(club.soldByWeight).toBe(true);
+      expect(club.prices.map((price) => price.price)).toEqual([2.24, 2.24]);
+      expect(club.prices[0].price).toBe(club.prices[0].unitPrice);
+    });
+
+    it('writes no price for a scope whose listing prints no price per kilo on a row sold by weight', async () => {
+      // Madrid is the identity row and compares per KILO. Barcelona lists
+      // the same piece compared per UNIDAD, so it prints only the piece.
+      const runner = new TestRunner(
+        world({
+          listings: {
+            '13835': { L2108: [APPLES] },
+            '959': { L2108: [{ ...APPLES, unit: 'UNIDAD', unitPrice: 1.59 }] },
+          },
+        })
+      );
+      await runner.run(context(), report, input(), source());
+      const [apples] = report.products;
+
+      expect(apples.soldByWeight).toBe(true);
+      expect(
+        apples.prices.map((price) => [price.scopeKey, price.price])
+      ).toEqual([
+        ['13835', 1.99],
+        [null, 1.99],
+      ]);
+    });
+
+    it('leaves a fixed pack beside it exactly as it was', async () => {
+      const pears = await run({
+        sku: '1',
+        name: 'Pera conferencia bandeja 700 g',
+        price: 1.79,
+        unitPrice: 2.56,
+        unit: 'KILO',
+      });
+
+      expect(pears).toMatchObject({
+        soldByWeight: false,
+        approxWeight: null,
+        unitSize: 700,
+        sizeUnit: 'GRAM',
+      });
+      expect(pears.prices[0].price).toBe(1.79);
+    });
+  });
+
   it('states availability per store: in stock, and listed with no stock as sold and out of stock (plan 0220)', async () => {
     const runner = new TestRunner(
       world({

@@ -68,6 +68,7 @@ const OIL: CatalogItem = {
   imageUrl: null,
   packCount: null,
   unitBasis: 'LITER',
+  approxWeight: null,
 };
 
 const RICE: CatalogItem = {
@@ -500,8 +501,8 @@ describe('ProductPage', () => {
       const { fixture } = await render();
 
       expect(prices(fixture)).toEqual([
-        'Mercadona catalog.product.cheapest €8.45 catalog.unit.LITER',
-        'Deza €8.95 catalog.unit.LITER',
+        'Mercadona catalog.product.cheapest €8.45',
+        'Deza €8.95',
         'Carrefour catalog.product.notSold',
       ]);
       expect(host(fixture).querySelectorAll('.cheapest')).toHaveLength(1);
@@ -530,14 +531,20 @@ describe('ProductPage', () => {
       });
 
       expect(prices(fixture)).toEqual([
-        'Deza catalog.product.cheapest €8.95 catalog.unit.LITER',
+        'Deza catalog.product.cheapest €8.95',
         'Mercadona catalog.product.notSold',
         'Carrefour catalog.product.notSold',
       ]);
     });
 
-    it('draws the unit price under each price, and none for a product with no basis', async () => {
-      const priced = await render();
+    it('draws the unit price under each price where it differs, and none for a product with no basis', async () => {
+      const real =
+        (await new CatalogBrowseMemory().scopeOffers('item-oil')) ?? [];
+      const smaller = real.map((row) => ({
+        ...row,
+        offer: { ...row.offer, unitPrice: 11.27 },
+      }));
+      const priced = await render({ rows: smaller });
       const price = host(priced.fixture).querySelector(
         'lib-price-table .price'
       );
@@ -545,16 +552,51 @@ describe('ProductPage', () => {
         '€8.45'
       );
       expect(
-        price?.querySelector('.amount')?.nextElementSibling?.textContent?.trim()
-      ).toBe('catalog.unit.LITER');
+        price?.querySelector('.unit')?.firstChild?.textContent?.trim()
+      ).toBe('€11.27');
+      expect(price?.querySelector('.unit .per')?.textContent).toBe(
+        'catalog.per.LITER'
+      );
 
-      const plain = await render({ items: [{ ...OIL, unitBasis: null }] });
+      const same = await render();
+      expect(
+        host(same.fixture).querySelector('lib-price-table .unit')
+      ).toBeNull();
+
+      const plain = await render({
+        rows: smaller,
+        items: [{ ...OIL, unitBasis: null }],
+      });
       expect(
         host(plain.fixture).querySelector('lib-price-table .unit')
       ).toBeNull();
       expect(prices(plain.fixture)[0]).toBe(
         'Mercadona catalog.product.cheapest €8.45'
       );
+    });
+
+    it('never marks a kilo piece with no piece price the cheapest (velista 0179)', async () => {
+      const real =
+        (await new CatalogBrowseMemory().scopeOffers('item-oil')) ?? [];
+      const { fixture } = await render({
+        items: [
+          {
+            ...OIL,
+            size: null,
+            unit: 'KILOGRAM',
+            approxWeight: 1560,
+            unitBasis: 'KILOGRAM',
+          },
+          RICE,
+        ],
+        rows: real.map((row) => ({
+          ...row,
+          offer: { ...row.offer, piecePrice: null },
+        })),
+      });
+
+      expect(host(fixture).querySelectorAll('.cheapest')).toHaveLength(0);
+      expect(host(fixture).querySelector('lib-price-table .amount')).toBeNull();
     });
 
     it('says when the prices were seen, under the table', async () => {
@@ -1309,9 +1351,7 @@ describe('ProductPage', () => {
       host(fixture).querySelector('.about-name')?.textContent?.trim()
     ).toBe('Short grain rice');
     // The rice's own prices: three chains, Deza the cheapest.
-    expect(prices(fixture)[0]).toBe(
-      'Deza catalog.product.cheapest €1.29 catalog.unit.KILOGRAM'
-    );
+    expect(prices(fixture)[0]).toBe('Deza catalog.product.cheapest €1.29');
     expect(prices(fixture)).toHaveLength(3);
     // And its own lists: the weekly shop holds the oil, not the rice.
     expect(lines.linesHoldingItem).toHaveBeenLastCalledWith('item-rice');

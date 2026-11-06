@@ -28,6 +28,11 @@ export interface MatchCandidate {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The approximate weight of one piece in grams, read from the observation
+   * (plan 0244, section 5.8). It stands in for the size when there is none.
+   */
+  approxWeight?: number | null;
 }
 
 export interface MatchResult {
@@ -70,10 +75,12 @@ export function entryNameKey(name: string, sizeFormat: string | null): string {
  * section 6, generalized by plan 0086 D2).
  *
  * **The consequence, stated because it is real: a reworded description is a new
- * candidate and orphans the old one.** There is no id to notice that they are
- * the same product. The previous row stops being seen and ages out on
- * `lastSeenAt`, and an operator who had already accepted it sees a new candidate
- * for a product the catalog holds, which rung 4 then proposes a match for.
+ * row and orphans the old one.** There is no id to notice that they are the
+ * same product. The previous row stops being seen and ages out on
+ * `lastSeenAt`. Rung 4 proposes the new row as the old row's product only when
+ * the words of the two names agree in another order, without "de" and "en", at
+ * the same size ({@link wordOrderKey}, plan 0221). Any other rewording waits
+ * for a person.
  */
 export function entryKey(name: string, sizeFormat: string | null): string {
   return createHash('sha1')
@@ -116,7 +123,8 @@ export class ItemMatchIndex {
       const key = itemNameKey(
         item.name.es ?? item.name.en ?? '',
         item.brand,
-        item.unitSize
+        item.unitSize,
+        item.approxWeight ?? null
       );
       const bucket = this.byNameKey.get(key);
       if (bucket) {
@@ -160,7 +168,8 @@ export class ItemMatchIndex {
     const key = itemNameKey(
       candidate.name,
       candidate.brand,
-      candidate.unitSize
+      candidate.unitSize,
+      candidate.approxWeight ?? null
     );
     const bucket = this.byNameKey.get(key);
     // Exactly one item under the key, or it is not a match: two products that
@@ -192,19 +201,79 @@ export interface SiblingProposal {
  * candidates pointed at another size of the same product. The number is
  * normalized, because Postgres answers a `numeric` column as text (`"0.3300"`).
  *
+ * **A piece with no size takes its weight in that place** (plan 0244, section
+ * 5.8): `name|kg|1560` for a cheese of about 1.56 kg and `name|kg|` for loose
+ * cheese. Two pieces of one name at different weights are two products (owner,
+ * 2026-11-03), so they never share a key, and a piece never proposes a row
+ * with no weight.
+ *
  * It is not {@link entryNameKey}, and that one must not change: hashed, it is
- * also the row identity of a source with no id of its own.
+ * also the row identity of a source with no id of its own, and a weight that
+ * moves between weeks must not move a row's identity.
  */
 export function siblingKey(
   name: string,
   sizeFormat: string | null,
-  unitSize: number | string | null | undefined
+  unitSize: number | string | null | undefined,
+  approxWeight?: number | string | null
 ): string {
-  const size =
-    unitSize === null || unitSize === undefined ? NaN : Number(unitSize);
+  const size = sizeToken(unitSize, approxWeight);
   return `${entryNameKey(name, sizeFormat)}|${
     Number.isFinite(size) ? String(size) : ''
   }`;
+}
+
+/**
+ * The words that {@link wordOrderKey} drops, and no more (plan 0221, section
+ * 3.1). Adding "con" joins "Yogur griego ALTEZA fresa" and "Yogur griego ALTEZA
+ * con fresa", which a person bound to two products.
+ */
+const WORD_ORDER_STOP_WORDS = new Set(['de', 'en']);
+
+/**
+ * Rung 4's second key (plan 0221, section 3.1): the words of the normalized
+ * name without "de" and "en", sorted, then the size half of {@link siblingKey}.
+ *
+ * **Repeated words are kept.** "Refresco zero COCA COLA" and "Refresco zero
+ * zero COCA COLA" are two products, and a key that read the name as a set
+ * would join them.
+ *
+ * The size half is taken from {@link siblingKey} itself, so this key is never
+ * looser on size than the exact one. That includes the weight of one piece
+ * (plan 0244, section 5.8): two reworded pieces at different weights are two
+ * products here too.
+ */
+export function wordOrderKey(
+  name: string,
+  sizeFormat: string | null,
+  unitSize: number | string | null | undefined,
+  approxWeight?: number | string | null
+): string {
+  const words = normalizeName(name)
+    .split(' ')
+    .filter((word) => word !== '' && !WORD_ORDER_STOP_WORDS.has(word))
+    .sort();
+  // `siblingKey` of an empty name is `|<size text>|<unit size>`.
+  return `${words.join(' ')}${siblingKey(
+    '',
+    sizeFormat,
+    unitSize,
+    approxWeight
+  )}`;
+}
+
+/**
+ * Whether a row is keyed on its own printed text (plan 0221, section 3.2): its
+ * `externalId` is the {@link entryKey} of its name and size text.
+ *
+ * A chain id never equals a SHA1 of a name, so the test is exact. It is true
+ * for a DEZA walk row and for a file import row with no `external_id`, and
+ * false for every row a chain gave an id or an article code.
+ */
+export function isNameKeyed(
+  row: Pick<SourceCatalogEntry, 'externalId' | 'name' | 'sizeFormat'>
+): boolean {
+  return row.externalId === entryKey(row.name, row.sizeFormat);
 }
 
 /**
@@ -224,6 +293,12 @@ export function siblingKey(
  */
 export class SiblingEntryIndex {
   private readonly byNameKey = new Map<string, SourceCatalogEntry[]>();
+  /**
+   * The name keyed rows only, under {@link wordOrderKey} (plan 0221). A row
+   * keyed by a chain id or an article code is never in it: El Jamón prints no
+   * brand, and the key would join two brands of one kind of food.
+   */
+  private readonly byWordOrderKey = new Map<string, SourceCatalogEntry[]>();
 
   constructor(rows: Iterable<SourceCatalogEntry>) {
     for (const row of rows) {
@@ -233,12 +308,17 @@ export class SiblingEntryIndex {
 
   /** Rows this run created are siblings too, from the moment they exist. */
   add(row: SourceCatalogEntry): void {
-    const key = siblingKey(row.name, row.sizeFormat, row.unitSize);
-    const bucket = this.byNameKey.get(key);
-    if (bucket) {
-      bucket.push(row);
-    } else {
-      this.byNameKey.set(key, [row]);
+    push(
+      this.byNameKey,
+      siblingKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight),
+      row
+    );
+    if (isNameKeyed(row)) {
+      push(
+        this.byWordOrderKey,
+        wordOrderKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight),
+        row
+      );
     }
   }
 
@@ -255,10 +335,13 @@ export class SiblingEntryIndex {
   match(
     name: string,
     sizeFormat: string | null,
-    unitSize: number | string | null
+    unitSize: number | string | null,
+    approxWeight: number | string | null = null
   ): SiblingProposal | null {
     const siblings = (
-      this.byNameKey.get(siblingKey(name, sizeFormat, unitSize)) ?? []
+      this.byNameKey.get(
+        siblingKey(name, sizeFormat, unitSize, approxWeight)
+      ) ?? []
     ).filter((row) => row.status !== SourceEntryStatus.REJECTED);
     if (siblings.length === 0) {
       return null;
@@ -278,6 +361,85 @@ export class SiblingEntryIndex {
     return siblings.length === 1
       ? { itemId: null, entryId: siblings[0].id }
       : null;
+  }
+
+  /**
+   * The second key of rung 4 (plan 0221, section 3.3): the one product the
+   * `ACTIVE` rows under {@link wordOrderKey} name, or null.
+   *
+   * The caller asks it only for a name keyed row, and only when the exact key
+   * answered nothing. `REJECTED` rows and `self`, the row being asked on a
+   * touch, are dropped. Two products in the bucket, or none, propose nothing.
+   *
+   * **It never proposes a lone sibling through `entryId`.** Two waiting rows
+   * whose words agree are almost always the listing repeating one product in
+   * one walk, and a sibling proposal there sends a person in a circle between
+   * two rows nobody has decided.
+   */
+  matchAnyOrder(
+    name: string,
+    sizeFormat: string | null,
+    unitSize: number | string | null,
+    self: SourceCatalogEntry | null = null,
+    approxWeight: number | string | null = null
+  ): SiblingProposal | null {
+    const itemIds = new Set(
+      (
+        this.byWordOrderKey.get(
+          wordOrderKey(name, sizeFormat, unitSize, approxWeight)
+        ) ?? []
+      )
+        .filter(
+          (row) =>
+            row !== self &&
+            (self === null || row.id !== self.id) &&
+            row.status === SourceEntryStatus.ACTIVE &&
+            row.itemId
+        )
+        .map((row) => row.itemId as string)
+    );
+    return itemIds.size === 1
+      ? { itemId: [...itemIds][0], entryId: null }
+      : null;
+  }
+
+  /**
+   * The one `REJECTED` row the words of this name meet, or null (plan 0221,
+   * the owner's answer to question 3 of 2026-11-05).
+   *
+   * Asked only after {@link matchAnyOrder} proposed nothing. It answers the
+   * id of the rejected row when the bucket, `self` left out, holds exactly one
+   * `REJECTED` row and no `ACTIVE` row. The run decides nothing with it: the
+   * new row is queued pointing at the rejection, and a person decides.
+   */
+  rejectedAnyOrder(
+    name: string,
+    sizeFormat: string | null,
+    unitSize: number | string | null,
+    self: SourceCatalogEntry | null = null,
+    approxWeight: number | string | null = null
+  ): string | null {
+    const bucket = (
+      this.byWordOrderKey.get(
+        wordOrderKey(name, sizeFormat, unitSize, approxWeight)
+      ) ?? []
+    ).filter((row) => row !== self && (self === null || row.id !== self.id));
+    if (bucket.some((row) => row.status === SourceEntryStatus.ACTIVE)) {
+      return null;
+    }
+    const rejected = bucket.filter(
+      (row) => row.status === SourceEntryStatus.REJECTED
+    );
+    return rejected.length === 1 ? rejected[0].id : null;
+  }
+}
+
+function push<T>(map: Map<string, T[]>, key: string, value: T): void {
+  const bucket = map.get(key);
+  if (bucket) {
+    bucket.push(value);
+  } else {
+    map.set(key, [value]);
   }
 }
 
@@ -493,14 +655,37 @@ function namesOf(location: LocationCandidate): string[] {
   );
 }
 
+/**
+ * Rung 3's key: name, brand and size. A product with no size takes the
+ * weight of one piece in its place (plan 0244, section 5.8): `name|brand|1560`
+ * for the cheese piece, `name|brand|` for loose cheese.
+ */
 function itemNameKey(
   name: string,
   brand: string | null,
-  unitSize: number | null
+  unitSize: number | null,
+  approxWeight: number | null
 ): string {
+  const size = sizeToken(unitSize, approxWeight);
   return [
     normalizeName(name),
     brand ? normalizeName(brand) : '',
-    unitSize === null ? '' : String(Number(unitSize)),
+    Number.isFinite(size) ? String(size) : '',
   ].join('|');
+}
+
+/**
+ * The size, else the weight of one piece, else NaN. Both are normalized,
+ * because Postgres answers a `numeric` column as text (`"1560.0000"`).
+ */
+function sizeToken(
+  unitSize: number | string | null | undefined,
+  approxWeight: number | string | null | undefined
+): number {
+  if (unitSize !== null && unitSize !== undefined) {
+    return Number(unitSize);
+  }
+  return approxWeight === null || approxWeight === undefined
+    ? NaN
+    : Number(approxWeight);
 }

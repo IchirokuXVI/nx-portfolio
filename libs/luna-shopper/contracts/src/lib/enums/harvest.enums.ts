@@ -21,7 +21,8 @@
  * threw away the price it had already fetched for all 4,232 of them. Plan 0086
  * (D4) makes the walk write what it saw, which leaves the refresh with nothing
  * to do that the walk did not already do. A per item refresh for a shopper is a
- * different thing and stays in backlog 0006.
+ * different thing, and it is not a run at all: plan 0216 gives it its own
+ * table, its own cooldowns and no `harvest_runs` row.
  */
 export enum HarvestRunMode {
   /** Geocode a postal code, then one Overpass query for the supermarkets near it. */
@@ -243,6 +244,14 @@ export enum ItemSourceMatch {
    * never an ACTIVE, and writes no price until a person accepts the row.
    */
   SHARED_EAN = 'SHARED_EAN',
+  /**
+   * The words of the name in any order, without "de" and "en", and the size
+   * (plan 0221). Asked only between two rows keyed on their own printed text,
+   * which is how a reworded DEZA name finds its product. Produces a CANDIDATE,
+   * never an ACTIVE. With no product, it points at the one rejected row its
+   * words meet (the owner's decision of 2026-11-05).
+   */
+  NAME_WORDS_SIZE = 'NAME_WORDS_SIZE',
 }
 
 /**
@@ -363,6 +372,13 @@ export enum HarvestWarningCode {
   SOURCE_PAUSED = 'SOURCE_PAUSED',
   /** A probe after the pause was answered, and the run goes on (plan 0215). */
   SOURCE_RESUMED = 'SOURCE_RESUMED',
+  /**
+   * Two or more `ACTIVE` rows of one chain bound to one product state
+   * different weights of one piece (plan 0244, section 5.7). Two pieces of
+   * different weight are two products, so this is a merge for a person to
+   * undo. No weight is written onto that product.
+   */
+  APPROX_WEIGHT_ROWS_DISAGREE = 'APPROX_WEIGHT_ROWS_DISAGREE',
 }
 
 /**

@@ -289,8 +289,13 @@ import { ReferencesControl } from './references-control';
       outline-offset: 2px;
     }
 
+    /* A box that takes no typing reads as one: the resting wash behind the
+       muted ink, 5.6 to 1, and no fade that would take the words under AA.
+       The colour of the background only, so a select keeps its arrow. */
     :disabled {
-      opacity: 0.55;
+      background-color: var(--admin-neutral-wash);
+      color: var(--admin-ink-muted);
+      cursor: not-allowed;
     }
 
     /* A number, an amount, a date and a code are short, and a box as wide as

@@ -2,10 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
+  UnitOfMeasure,
   type BasketScopePrice,
   type CatalogScopeView,
   type GetItemsRequest,
   type GetItemsResult,
+  type ItemOfferView,
   type ItemSnapshot,
   type ItemView,
   type SettlePick,
@@ -316,11 +318,17 @@ export class SettlePriceService {
     }
     const itemSnapshot = snapshotOf(product);
     const at = shop === null ? null : atShopOf(product, shop);
+    // What one piece cost at that scope (plan 0244, section 4): the piece
+    // price of a kilo piece, and the price of anything else.
+    const paidAt =
+      at === null || at.priceScopeId === null
+        ? null
+        : paidPriceOf(product, offerAtScope(product, at.priceScopeId));
     if (
       shop === null ||
       at === null ||
       at.priceScopeId === null ||
-      at.price === null ||
+      paidAt === null ||
       at.currency === null
     ) {
       this.log.debug('Settle shop not recorded: no price for the product there');
@@ -333,7 +341,7 @@ export class SettlePriceService {
         supermarketId: shop.supermarket.id,
         // Catalog holds the price in currency units with two decimals
         // (`numeric(12,2)`), and this column is the minor unit.
-        pricePaidCents: Math.round(at.price * 100),
+        pricePaidCents: Math.round(paidAt * 100),
         pricePaidCurrency: at.currency,
       },
       itemSnapshot,
@@ -365,14 +373,17 @@ export class SettlePriceService {
       return NOTHING;
     }
     const best = product.bestOffer ?? null;
+    // The piece price of a kilo piece, as at a shop (plan 0244, section 4).
+    // The cheapest offer is still catalog's, chosen by the price of a kilo.
+    const paid = paidPriceOf(product, best);
     return {
       paid:
-        best && best.price !== null && best.currency !== null
+        best && paid !== null && best.currency !== null
           ? {
               priceScopeId: best.priceScopeId,
               supermarketLocationId: null,
               supermarketId: null,
-              pricePaidCents: Math.round(best.price * 100),
+              pricePaidCents: Math.round(paid * 100),
               pricePaidCurrency: best.currency,
             }
           : null,
@@ -393,14 +404,16 @@ export class SettlePriceService {
     const asked = new Set(scopes);
     const prices: BasketScopePrice[] = [];
     for (const offer of product?.offers ?? []) {
+      // A rewritten buy records what one piece cost too (plan 0244).
+      const paid = product ? paidPriceOf(product, offer) : null;
       if (
         asked.has(offer.priceScopeId) &&
-        offer.price !== null &&
+        paid !== null &&
         offer.currency !== null
       ) {
         prices.push({
           priceScopeId: offer.priceScopeId,
-          pricePaidCents: Math.round(offer.price * 100),
+          pricePaidCents: Math.round(paid * 100),
           pricePaidCurrency: offer.currency,
         });
       }
@@ -498,9 +511,11 @@ export class SettlePriceService {
 /**
  * What a product is called, as a buy copies it (plan 0202, section 1).
  *
- * Five fields of the view, under the names the view uses, and the whole
+ * Six fields of the view, under the names the view uses, and the whole
  * localized name: a buy has no reader yet, and whoever reads the history later
- * chooses the locale. Nothing else of the product is copied.
+ * chooses the locale. Nothing else of the product is copied. `approxWeight`
+ * (plan 0244, section 4) keeps the weight of the piece on the buy after the
+ * product moves.
  */
 export function snapshotOf(product: ItemView): ItemSnapshot {
   return {
@@ -509,7 +524,59 @@ export function snapshotOf(product: ItemView): ItemSnapshot {
     unitSize: product.unitSize ?? null,
     packCount: product.packCount ?? null,
     defaultUnit: product.defaultUnit,
+    approxWeight: product.approxWeight ?? null,
   };
+}
+
+/**
+ * Whether a product is a kilo piece (plan 0244, section 1): `KILOGRAM` with
+ * an approximate weight, whose `price` is a kilo and whose piece is priced
+ * by `piecePrice`.
+ */
+function isKiloPiece(product: ItemView): boolean {
+  return (
+    product.defaultUnit === UnitOfMeasure.KILOGRAM &&
+    product.approxWeight !== null &&
+    product.approxWeight !== undefined
+  );
+}
+
+/**
+ * What one buy of the product cost under this offer, in currency units, or
+ * null when nothing can be recorded (plan 0244, section 4).
+ *
+ * A kilo piece records its `piecePrice`, and anything else its `price`. A
+ * kilo piece whose offer has a price and no piece price is recorded with no
+ * price, as a product with no offer is: **the price of a kilo is never
+ * written as a price paid.**
+ */
+export function paidPriceOf(
+  product: ItemView,
+  offer: ItemOfferView | null | undefined
+): number | null {
+  if (!offer) {
+    return null;
+  }
+  if (isKiloPiece(product)) {
+    return offer.piecePrice ?? null;
+  }
+  return offer.price;
+}
+
+/**
+ * The offer of the product at one scope, read as `atShopOf` reads it: the
+ * scope's entry of `offers`, else `bestOffer` when it is that scope's.
+ */
+function offerAtScope(
+  product: ItemView,
+  priceScopeId: string
+): ItemOfferView | null {
+  return (
+    product.offers?.find((offer) => offer.priceScopeId === priceScopeId) ??
+    (product.bestOffer?.priceScopeId === priceScopeId
+      ? product.bestOffer
+      : null)
+  );
 }
 
 /**

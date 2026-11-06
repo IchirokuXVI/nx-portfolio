@@ -29,6 +29,16 @@ export const ACCOUNT_THROTTLE_LIMITS = {
    * a fold of the whole map, so a loop is refused well before it costs much.
    */
   shopWalkEntries: { ttl: minutes(1), limit: scaleThrottleLimit(10) },
+  /**
+   * Asking the harvester for a fresh price of one product (harvester plan
+   * 0216, section 10).
+   *
+   * Ten in ten minutes is one refresh a minute for ten minutes, more than a
+   * person checks prices by hand, and few enough that a script with a good
+   * token spends its bucket before it spends a chain's. The harvester's own
+   * cooldowns per chain and per product stand behind it.
+   */
+  priceRefresh: { ttl: minutes(10), limit: scaleThrottleLimit(10) },
 };
 
 /** Declares what one account may do on this route, per {@link AccountThrottlerGuard}. */

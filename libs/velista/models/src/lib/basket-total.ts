@@ -6,6 +6,7 @@ import {
   type BasketProduct,
   type BasketRow,
 } from './basket-view';
+import { amountOfOne, soldAs } from './sold-as';
 
 /**
  * What the visible lines of a basket come to (velista `0132`, section 2).
@@ -75,7 +76,12 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
  * - **No price**: nobody priced the product, or the chosen shop does not list
  *   it. With a shop chosen the cheapest price elsewhere is not a fallback,
  *   because that is the row's rule too, and that holds at a shop that prices
- *   no row at all (velista `0153`): it totals zero, with every row counted.
+ *   no row at all (velista `0153`): it totals zero, with every row counted. A
+ *   kilo piece whose offer has a price and no piece price is unpriced too
+ *   (velista `0179`, section 3): velista never derives a piece price.
+ *
+ * The amount of one unit is the piece price for a kilo piece and the price for
+ * every other product ({@link amountOfOne}).
  *
  * ## The quantity
  *
@@ -131,6 +137,13 @@ export function basketTotal(
     if (offer === null) {
       continue;
     }
+    const amount = amountOfOne(
+      offer,
+      soldAs(product.unit, product.size, product.approxWeight)
+    );
+    if (amount === null) {
+      continue;
+    }
     if (offer.currency !== null) {
       if (currency !== null && offer.currency !== currency) {
         continue;
@@ -139,7 +152,7 @@ export function basketTotal(
     }
     withPrice += 1;
 
-    const cents = Math.round(offer.price * 100);
+    const cents = Math.round(amount * 100);
     boughtCents += cents * row.bought;
     totalCents += cents * (row.bought + row.left);
   }

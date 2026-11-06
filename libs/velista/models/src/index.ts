@@ -52,6 +52,7 @@ export * from './lib/shop-section';
 export * from './lib/shop-walks';
 export * from './lib/shopping-lists-view';
 export * from './lib/shopping-profile';
+export * from './lib/sold-as';
 export * from './lib/trip-date';
 export * from './lib/trips';
 export * from './lib/zone-view';

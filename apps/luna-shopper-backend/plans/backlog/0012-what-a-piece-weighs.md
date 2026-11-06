@@ -1,6 +1,7 @@
 # 0012 (backlog) What a piece weighs
 
-> **Status: backlog. Not scheduled for development.**
+> **Status: closed on 2026-11-05.** The weight of a piece is `approxWeight` on the product (plan `0244`, built in PR #914), stated by the chain and not by an operator, and a line for one product counts in the unit of that product (plan `0246` W2), so a count of pieces on a product sold by the kilo is not a line velista can write. Answers 1 and 2 below are thus built in another form, and 3 and 4 stay refused.
+> **Status before that: backlog. Not scheduled for development.**
 > Plans in `plans/backlog/` are designed and agreed but are not part of the build order, and
 > nothing in them has been built. They carry their own numbering starting at `0001`, separate
 > from the sequence in `plans/`. When one is picked up it moves into `plans/` and takes the next

@@ -3117,6 +3117,7 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
       imageUrl: null,
       categories: [memoryCategory('natural-and-skimmed-yogurts')],
       sectionIds: null,
+      approxWeight: null,
     };
 
     async function grouped(overrides: Partial<BasketServiceI> = {}) {

@@ -55,6 +55,7 @@ import {
 } from '../builders';
 import { adminCredentialProperties, COMMON_IDS } from '../common.schemas';
 import { CATALOG_SCHEMA_IDS, categorySlugs } from './catalog.schemas';
+import { SOURCE_PROBE_SCHEMA_IDS } from './source-probe.ids';
 
 /**
  * Harvester schemas (plan 0038). The harvester's own surface: runs and their
@@ -254,6 +255,14 @@ const supermarketSourceView = object(
     lastRunAt: nullableString(),
     lastSuccessAt: nullableString(),
     consecutiveFailures: integer({ minimum: 0 }),
+    // Plan 0219: the newest probe that is not ABORTED. Not required, so a
+    // typed fixture written before it stays valid.
+    lastProbe: {
+      anyOf: [
+        ref(SOURCE_PROBE_SCHEMA_IDS.sourceProbeSummary),
+        { type: 'null' },
+      ],
+    },
   },
   [
     'id',
@@ -592,6 +601,9 @@ const sourceCatalogEntryProperties = {
   sizeUnit: sizeUnitOrNull(),
   // Whether the source sells the product by weight (plan 0181).
   soldByWeight: boolean(),
+  // Plan 0244: the approximate weight of one piece in grams, null beside a
+  // size. Stated but not required, so a reader built before it validates.
+  approxWeight: numberOrNull(),
   sizeFormat: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),

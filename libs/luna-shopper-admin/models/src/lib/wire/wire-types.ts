@@ -325,6 +325,7 @@ export type CreateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -521,9 +522,17 @@ export type ItemExpectationDto = {
   name?: LocalizedTextDto;
   brand?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
   categorySlugs?: string[];
+};
+
+/**
+ * `ItemRefreshBodyDto` in the gateway's OpenAPI document.
+ */
+export type ItemRefreshBodyDto = {
+  priceScopeId: string;
 };
 
 /**
@@ -710,6 +719,7 @@ export type ProblemDetails = {
     | 'item_expectation_failed'
     | 'item_unit_not_base'
     | 'item_kilogram_has_size'
+    | 'item_approx_weight_beside_size'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -740,6 +750,7 @@ export type ProblemDetails = {
     | 'invalid_google_token'
     | 'google_sign_in_needs_consent'
     | 'assistant_allowance_reached'
+    | 'price_not_refreshable'
     | 'internal';
   detail?: string;
   message: string;
@@ -1259,6 +1270,7 @@ export type UpdateItemBatchEntryDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -1278,6 +1290,7 @@ export type UpdateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -2417,6 +2430,8 @@ export type BasketBasketProductView = {
   ean: string | null;
   eans: string[];
   unitSize: number | null;
+  approxWeight?: number | null;
+  approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -2680,6 +2695,7 @@ export type CatalogAdminSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
   itemName: CatalogLocalizedText | null;
 };
 
@@ -2890,6 +2906,7 @@ export type CatalogItemOfferView = {
   priceCopiedFromScopeId?: string | null;
   stale: boolean;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**
@@ -3053,6 +3070,7 @@ export type CatalogItemSnapshot = {
   unitSize: number | null;
   packCount: number | null;
   defaultUnit: EnumsUnitOfMeasure;
+  approxWeight?: number | null;
 };
 
 /**
@@ -3071,6 +3089,8 @@ export type CatalogItemView = {
   ean: string | null;
   eans: string[];
   unitSize: number | null;
+  approxWeight?: number | null;
+  approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -3716,6 +3736,7 @@ export type CatalogSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**
@@ -4050,7 +4071,8 @@ export type EnumsHarvestWarningCode =
   | 'DETAIL_SKIPPED_UNKNOWN'
   | 'PRICE_SOLD_ANOTHER_WAY'
   | 'SOURCE_PAUSED'
-  | 'SOURCE_RESUMED';
+  | 'SOURCE_RESUMED'
+  | 'APPROX_WEIGHT_ROWS_DISAGREE';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
@@ -4070,7 +4092,8 @@ export type EnumsItemSourceMatch =
   | 'NAME_BRAND_SIZE'
   | 'NAME_SIZE'
   | 'MANUAL'
-  | 'SHARED_EAN';
+  | 'SHARED_EAN'
+  | 'NAME_WORDS_SIZE';
 
 /**
  * `enums.LineApprovalStatus` in the gateway's OpenAPI document.
@@ -4188,6 +4211,29 @@ export type EnumsPostalCodeDiscoveryStatus =
 export type EnumsPostalCodeSource = 'SOURCE' | 'DERIVED' | 'MANUAL';
 
 /**
+ * `enums.PriceRefreshRefusal` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceRefreshRefusal =
+  | 'REFRESH_OFF'
+  | 'NOT_HARVESTED'
+  | 'AMBIGUOUS'
+  | 'SOURCE_OFF'
+  | 'NO_SINGLE_FETCH'
+  | 'CHAIN_REFUSING'
+  | 'FRESH';
+
+/**
+ * `enums.PriceRefreshStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceRefreshStatus =
+  | 'FRESH'
+  | 'PENDING'
+  | 'DONE'
+  | 'NOT_STOCKED'
+  | 'FAILED'
+  | 'BLOCKED';
+
+/**
  * `enums.PriceScopeKind` in the gateway's OpenAPI document.
  */
 export type EnumsPriceScopeKind =
@@ -4302,6 +4348,18 @@ export type EnumsSourceEntryStatus =
  * `enums.SourceLocationStatus` in the gateway's OpenAPI document.
  */
 export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
+
+/**
+ * `enums.SourceProbeStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsSourceProbeStatus =
+  | 'RUNNING'
+  | 'PASSED'
+  | 'SHAPE_CHANGED'
+  | 'BLOCKED'
+  | 'UNREACHABLE'
+  | 'ERROR'
+  | 'ABORTED';
 
 /**
  * `enums.TripKind` in the gateway's OpenAPI document.
@@ -4427,6 +4485,7 @@ export const HarvestAdapterCapabilityTable = {
     },
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: true,
   },
   'deza-web': {
     writesPrices: false,
@@ -4438,6 +4497,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: 'per-shop',
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -4449,6 +4509,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   'lidl-api': {
     writesPrices: true,
@@ -4460,6 +4521,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -4471,6 +4533,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: true,
+    refreshesOneProduct: false,
   },
   'dia-api': {
     writesPrices: true,
@@ -4485,6 +4548,7 @@ export const HarvestAdapterCapabilityTable = {
     },
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: false,
   },
   'osm-places': {
     writesPrices: false,
@@ -4496,6 +4560,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   manual: {
     writesPrices: false,
@@ -4507,6 +4572,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
 } as const;
 
@@ -4805,6 +4871,16 @@ export type HarvestHarvestScheduleView = {
 };
 
 /**
+ * `harvest.HarvestTestAlertView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestTestAlertView = {
+  id: string;
+  queuedAt: string;
+  recipientConfigured: boolean;
+  smtpConfigured: boolean;
+};
+
+/**
  * `harvest.ItemSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4828,6 +4904,7 @@ export type HarvestItemSourceEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -4961,6 +5038,30 @@ export type HarvestPostalCodeDiscoverySummaryView = {
 };
 
 /**
+ * `harvest.PriceRefreshCheckView` in the gateway's OpenAPI document.
+ */
+export type HarvestPriceRefreshCheckView = {
+  refreshable: boolean;
+  reason: EnumsPriceRefreshRefusal | null;
+  retryAfterSeconds: number;
+  pendingRefreshId: string | null;
+  observedAt: string | null;
+};
+
+/**
+ * `harvest.PriceRefreshView` in the gateway's OpenAPI document.
+ */
+export type HarvestPriceRefreshView = {
+  id: string | null;
+  itemId: string;
+  priceScopeId: string;
+  status: EnumsPriceRefreshStatus;
+  observedAt: string | null;
+  requestedAt: string | null;
+  finishedAt: string | null;
+};
+
+/**
  * `harvest.QueuedSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -4984,6 +5085,7 @@ export type HarvestQueuedSourceEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -5075,6 +5177,7 @@ export type HarvestSourceCatalogEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -5204,6 +5307,65 @@ export type HarvestSourceLocationView = {
 };
 
 /**
+ * `harvest.SourceProbePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestSourceProbePage = {
+  items: HarvestSourceProbeView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.SourceProbeStepView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeStepView = {
+  name: string;
+  url: string | null;
+  ok: boolean;
+  httpStatus: number | null;
+  error: string | null;
+  problems: string[];
+  sample: {
+    [key: string]: string | number | boolean | null;
+  };
+  durationMs: number;
+};
+
+/**
+ * `harvest.SourceProbeSummary` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeSummary = {
+  id: string;
+  status: EnumsSourceProbeStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  changed: boolean;
+};
+
+/**
+ * `harvest.SourceProbeView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeView = {
+  id: string;
+  sourceId: string;
+  supermarketId: string;
+  adapterKey: EnumsAdapterKey;
+  trigger: EnumsHarvestRunTrigger;
+  status: EnumsSourceProbeStatus;
+  previousStatus: EnumsSourceProbeStatus | null;
+  changed: boolean;
+  attempt: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  requests: number;
+  steps: HarvestSourceProbeStepView[];
+  error: string | null;
+  requestedByUserId: string | null;
+};
+
+/**
  * `harvest.SupermarketSourcePage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -5230,6 +5392,7 @@ export type HarvestSupermarketSourceView = {
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   consecutiveFailures: number;
+  lastProbe?: HarvestSourceProbeSummary | null;
 };
 
 /**

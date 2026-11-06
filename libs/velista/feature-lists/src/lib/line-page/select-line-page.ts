@@ -9,10 +9,14 @@ import {
   type LineProductCardVm,
   type LineProductPrice,
   type LineProductPriceRead,
+  type PriceWords,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { formatMoney } from '@portfolio/velista/platform';
-import { productDetailText } from '@portfolio/velista/ui';
+import {
+  priceWords,
+  productDetailText,
+  unitPriceWords,
+} from '@portfolio/velista/ui';
 
 /**
  * What the line page draws (velista plan `0135`, section 2).
@@ -126,6 +130,13 @@ function cardOf(
 ): LineProductCardVm {
   const item = input.itemNameOf(itemId);
   const offer = price.offer;
+  // A product the catalog has not named yet is priced by its offer alone
+  // (`soldAsOf`): a set piece price names a kilo piece.
+  const words = priceWords(offer, item, input.locale, input.translate);
+  // A kilo piece whose offer has no piece price is unpriced, as everywhere
+  // else (velista `0179`): velista never derives one. An unpriced card is never
+  // the cheapest either.
+  const unpriced = price.kind === 'priced' && words === null;
 
   return {
     itemId,
@@ -135,24 +146,17 @@ function cardOf(
         ? null
         : productDetailText(item, input.locale, input.translate),
     imageUrl: item?.imageUrl ?? null,
-    priceKind: price.kind,
-    price:
-      offer !== null && offer.price !== null
-        ? formatMoney(offer.price, offer.currency, input.locale)
-        : null,
-    caption: captionOf(
-      price,
-      item,
-      line.preferredSupermarketId !== null,
-      input
-    ),
-    cheapest: price.cheapest,
+    priceKind: unpriced ? 'noPrice' : price.kind,
+    price: words,
+    ...captionOf(price, item, line.preferredSupermarketId !== null, input),
+    cheapest: unpriced ? false : price.cheapest,
     favorite: line.favoriteItemId === itemId,
   };
 }
 
 /**
- * The line under the price: "Mercadona · 5,38 € / L".
+ * The line under the price: "Mercadona · 5,38 € / L", as the chain and the
+ * unit price in two words, so the rail draws the "/ L" small (velista `0179`).
  *
  * With a supermarket chosen for the line the chain is left out, because every
  * card would repeat the name the row under the cards already says.
@@ -162,28 +166,19 @@ function captionOf(
   item: CatalogItem | null,
   chosen: boolean,
   input: Pick<LinePageInput, 'locale' | 'translate'>
-): string | null {
+): { readonly chain: string | null; readonly unit: PriceWords | null } {
   const offer = price.offer;
   if (offer === null) {
-    return null;
+    return { chain: null, unit: null };
   }
 
-  const basis = item?.unitBasis ?? null;
-  const unit =
-    offer.unitPrice !== null && basis !== null
-      ? input.translate(`catalog.unit.${basis}`, {
-          price: formatMoney(offer.unitPrice, offer.currency, input.locale),
-        })
-      : null;
+  const unit = unitPriceWords(offer, item, input.locale, input.translate);
   const chain =
     chosen || price.chain === null
       ? null
       : catalogName(price.chain, input.locale);
 
-  const parts = [chain, unit].filter(
-    (part): part is string => part !== null && part !== ''
-  );
-  return parts.length === 0 ? null : parts.join(' · ');
+  return { chain: chain === '' ? null : chain, unit };
 }
 
 /**

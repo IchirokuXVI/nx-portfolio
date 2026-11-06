@@ -14,6 +14,10 @@ import {
 import { describeError } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
 import type { PostalCodeDiscoveryRequest } from '../entities';
+import {
+  postalCodeAlertFor,
+  type HarvestAlertDraft,
+} from './alerts/harvest-alert.rules';
 import { ActiveRunExistsError, HarvestRunStore } from './harvest-run.store';
 import {
   PostalCodeDiscoveryService,
@@ -175,11 +179,13 @@ export class PostalCodeDiscoveryWorker
       // Reading the configuration failed, which says nothing about the code.
       // It still costs the attempt this claim already counted, because the
       // alternative is a row that spins on every tick.
+      const reason = describeError(error).message;
       await this.queue.markAttemptFailed(
         row,
-        describeError(error).message,
+        reason,
         settings.discoveryMaxAttempts,
-        null
+        null,
+        ...givingUpAlert(row, reason, settings.discoveryMaxAttempts, null)
       );
       return true;
     }
@@ -197,6 +203,8 @@ export class PostalCodeDiscoveryWorker
     let answeredBy: string | null = null;
     /** One line per source that did not answer, kept for the row's error. */
     const failures: string[] = [];
+    /** The last run that did not complete, which an alert links to (plan 0218). */
+    let failedRunId: string | null = null;
     let asked = 0;
 
     for (const source of due) {
@@ -214,6 +222,7 @@ export class PostalCodeDiscoveryWorker
       }
       if (outcome.failure) {
         failures.push(`${source.label}: ${outcome.failure}`);
+        failedRunId = outcome.runId ?? failedRunId;
       } else {
         answeredBy = outcome.runId ?? answeredBy;
       }
@@ -235,11 +244,15 @@ export class PostalCodeDiscoveryWorker
       await this.queue.markDone(row.id, answeredBy);
       return true;
     }
+    const reason = failures.join(' ');
     await this.queue.markAttemptFailed(
       row,
-      failures.join(' '),
+      reason,
       settings.discoveryMaxAttempts,
-      answeredBy
+      answeredBy,
+      // The attempt that gives up tells the owner, in the same write (plan
+      // 0218, the owner's answer 4). Any earlier attempt passes nothing.
+      ...givingUpAlert(row, reason, settings.discoveryMaxAttempts, failedRunId)
     );
     return true;
   }
@@ -312,4 +325,26 @@ export class PostalCodeDiscoveryWorker
       return { runId, failure: describeError(error).message };
     }
   }
+}
+
+/**
+ * The fifth argument of `markAttemptFailed` for the attempt that gives up,
+ * and none for any other, so an attempt that was always four arguments stays
+ * four. The rule of when a code gives up is the store's, and this reads it
+ * the same way.
+ */
+function givingUpAlert(
+  row: PostalCodeDiscoveryRequest,
+  reason: string,
+  maxAttempts: number,
+  runId: string | null
+): [] | [HarvestAlertDraft] {
+  const alert = postalCodeAlertFor({
+    request: row,
+    maxAttempts,
+    error: reason,
+    runId,
+    at: new Date(),
+  });
+  return alert ? [alert] : [];
 }

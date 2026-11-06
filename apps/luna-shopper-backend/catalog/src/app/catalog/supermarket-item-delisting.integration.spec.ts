@@ -219,12 +219,12 @@ describeIntegration(
       const row = await offer(itemId);
       expect(row.available).toBe(true);
       expect(row.outOfStockAt).toBeInstanceOf(Date);
-      expect(toSupermarketItemView(row)).toMatchObject({
+      expect(toSupermarketItemView(row, null)).toMatchObject({
         available: true,
         delistedAt: null,
         outOfStockAt: row.outOfStockAt?.toISOString(),
       });
-      expect(toItemOfferView(row).outOfStockAt).toBe(
+      expect(toItemOfferView(row, null).outOfStockAt).toBe(
         row.outOfStockAt?.toISOString()
       );
 

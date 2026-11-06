@@ -1,9 +1,10 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import searchPage from './__fixtures__/search-page.json';
+import productApproximateWeight from './__fixtures__/product-approximate-weight.json';
 import productShortCode from './__fixtures__/product-short-code.json';
 import productSinglePrice from './__fixtures__/product-single-price.json';
 import productTwoRegionPrices from './__fixtures__/product-two-region-prices.json';
 import productUnpriced from './__fixtures__/product-unpriced.json';
+import searchPage from './__fixtures__/search-page.json';
 import storePage from './__fixtures__/store-page.json';
 import { isGroceryCategory } from './categories';
 import {
@@ -197,6 +198,18 @@ describe('normalizeProduct', () => {
     expect(product?.categorySlug).toBe('detergents');
   });
 
+  it('weighs a tray printed "Aprox." and gives it no size (plan 0244)', () => {
+    // Captured on 2026-11-05: a chorizo tray printed `Aprox.450 g`, one
+    // price and no price per kilo, so a piece priced as one.
+    const product = readFixture(productApproximateWeight, '11031963');
+
+    expect(product?.sizeFormat).toBe('Aprox.450 g');
+    expect(product?.approxWeight).toBe(450);
+    expect(product?.unitSize).toBeNull();
+    expect(product?.unit).toBeNull();
+    expect(product?.prices.length).toBeGreaterThan(0);
+  });
+
   it('never reads an eight digit code as an EAN', () => {
     const product = readFixture(productShortCode, '11029954');
 
@@ -205,6 +218,7 @@ describe('normalizeProduct', () => {
     expect(product?.ian).toBe('80532');
     expect(product?.unitSize).toBe(400);
     expect(product?.unit).toBe(UnitOfMeasure.GRAM);
+    expect(product?.approxWeight).toBeNull();
     expect(product?.sizeFormat).toBe('400 g');
     // A single size is not a pack (plan 0162).
     expect(product?.packCount).toBeNull();

@@ -180,6 +180,13 @@ export interface HarvestDocumentProduct {
   ean?: string | null;
   size?: HarvestDocumentSize | null;
   /**
+   * The approximate weight of one piece, in grams, version 2 (plan 0244,
+   * section 5.5): a cheese sold by the kilo, a tray priced as one piece.
+   * Refused beside a `size.quantity`, because a row with a size has no
+   * weight. Absent leaves the weight a row holds alone.
+   */
+  approx_weight?: number | null;
+  /**
    * The till price for **one unit**, version 1 only.
    *
    * Version 2 states {@link HarvestDocumentProduct.prices} instead, and the

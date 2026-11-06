@@ -478,12 +478,12 @@
     "sheet": {
       "close": "Cerrar"
     },
-    "unit": {
-      "KILOGRAM": "{{price}} / kg",
-      "LITER": "{{price}} / L",
-      "UNIT": "{{price}} / unidad",
-      "DOZEN": "{{price}} / docena",
-      "WASH": "{{price}} / lavado"
+    "per": {
+      "KILOGRAM": "/ kg",
+      "LITER": "/ L",
+      "UNIT": "/ unidad",
+      "DOZEN": "/ docena",
+      "WASH": "/ lavado"
     },
     "empty": {
       "title": "No hay nada que coincida con \"{{query}}\"",
@@ -803,12 +803,16 @@
       "groupAdds_one": "Añade su único producto",
       "groupAdds_other": "Añade sus {{count}} productos",
       "size": {
-        "UNIT": "{{size}} uds",
-        "GRAM": "{{size}} g",
-        "KILOGRAM": "{{size}} kg",
-        "MILLILITER": "{{size}} ml",
-        "LITER": "{{size}} L",
-        "PACK": "{{size}} packs"
+        "UNIT": "{{size}} uds",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
+      "weight": {
+        "KILOGRAM": "~{{size}} kg",
+        "GRAM": "~{{size}} g"
       },
       "asWritten": "Añadir “{{text}}” tal cual",
       "card": {

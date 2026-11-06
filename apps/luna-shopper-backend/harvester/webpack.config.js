@@ -38,5 +38,18 @@ module.exports = {
       outputHashing: 'none',
       generatePackageJson: false,
     }),
+    // The one off command of release task 0006 (plan 0244, section 7). A third
+    // entry, for the same reason as the second: the task runs `node
+    // kilo-pieces.js` inside the harvester pod, so it has to be in the image.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/kilo-pieces.ts',
+      outputFileName: 'kilo-pieces.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
   ],
 };

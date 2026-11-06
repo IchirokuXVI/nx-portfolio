@@ -521,6 +521,33 @@ describe('toBasket: the product’s aisle', () => {
   });
 });
 
+describe('toBasket: the weight of a piece (velista 0179)', () => {
+  function productOf(product: unknown) {
+    return toBasket({ ...BASKET, products: [product] })?.products.get('i-1');
+  }
+
+  it('reads the approximate weight and the piece price of the best offer', () => {
+    const read = productOf({
+      id: 'i-1',
+      defaultUnit: 'KILOGRAM',
+      unitSize: null,
+      approxWeight: 1560,
+      bestOffer: { price: 13.42, piecePrice: 20.94, priceScopeId: 's-1' },
+    });
+    expect(read?.approxWeight).toBe(1560);
+    expect(read?.offer?.piecePrice).toBe(20.94);
+  });
+
+  it.each([
+    ['a string', '1560'],
+    ['a negative number', -5],
+    ['zero', 0],
+    ['an absent field', undefined],
+  ])('reads %s as no weight', (_, approxWeight) => {
+    expect(productOf({ id: 'i-1', approxWeight })?.approxWeight).toBeNull();
+  });
+});
+
 describe('toBasket: the shop’s aisles a product is in (velista `0120`)', () => {
   function sectionIdsOf(raw: unknown) {
     return toBasket({
