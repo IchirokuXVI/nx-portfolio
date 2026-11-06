@@ -4805,6 +4805,16 @@ export type HarvestHarvestScheduleView = {
 };
 
 /**
+ * `harvest.HarvestTestAlertView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestTestAlertView = {
+  id: string;
+  queuedAt: string;
+  recipientConfigured: boolean;
+  smtpConfigured: boolean;
+};
+
+/**
  * `harvest.ItemSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.

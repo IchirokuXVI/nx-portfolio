@@ -1,4 +1,5 @@
 import { DiscoveredPlace } from './discovered-place.entity';
+import { HarvestAlert } from './harvest-alert.entity';
 import { HarvestRunPreset } from './harvest-run-preset.entity';
 import { HarvestRun } from './harvest-run.entity';
 import { HarvestSchedule } from './harvest-schedule.entity';
@@ -12,6 +13,7 @@ import { SupermarketSource } from './supermarket-source.entity';
 
 export { BaseEntity } from './base.entity';
 export { DiscoveredPlace } from './discovered-place.entity';
+export { HarvestAlert } from './harvest-alert.entity';
 export { HarvestRunPreset } from './harvest-run-preset.entity';
 export { HarvestRun } from './harvest-run.entity';
 export { HarvestSchedule } from './harvest-schedule.entity';
@@ -44,4 +46,6 @@ export const HARVESTER_ENTITIES = [
   SourceEntryScopePresence,
   DiscoveredPlace,
   PostalCodeDiscoveryRequest,
+  // The outbox of alerts to the owner (plan 0218).
+  HarvestAlert,
 ];

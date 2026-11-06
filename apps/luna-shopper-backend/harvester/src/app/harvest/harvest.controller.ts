@@ -3,6 +3,7 @@ import { EventPattern, MessagePattern, Payload } from '@nestjs/microservices';
 import {
   ADMIN_DASHBOARD_PATTERNS,
   DISCOVERED_PLACE_PATTERNS,
+  HARVEST_ALERT_PATTERNS,
   HARVEST_PATTERNS,
   HARVEST_PRESET_PATTERNS,
   HARVEST_SCHEDULE_PATTERNS,
@@ -40,6 +41,7 @@ import {
   type HarvestScheduleIdRequest,
   type HarvestSchedulePage,
   type HarvestScheduleView,
+  type HarvestTestAlertView,
   type ImportDiscoveredPlaceRequest,
   type ItemSourceEntryPage,
   type LinkDiscoveredPlaceRequest,
@@ -62,6 +64,7 @@ import {
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
+  type SendHarvestTestAlertRequest,
   type SetHarvestScheduleEnabledRequest,
   type SetSupermarketSourceEnabledRequest,
   type SettleItemAtChainRequest,
@@ -81,6 +84,7 @@ import {
   type UpdateHarvestScheduleRequest,
   type UpsertSupermarketSourceRequest,
 } from '@portfolio/luna-shopper/contracts';
+import { HarvestAlertService } from './alerts/harvest-alert.service';
 import { HarvestDashboardService } from './dashboard.service';
 import { DiscoveredPlaceService } from './discovered-place.service';
 import { HarvestRunPresetService } from './harvest-run-preset.service';
@@ -117,7 +121,8 @@ export class HarvestController {
     private readonly discovery: PostalCodeDiscoveryService,
     private readonly dashboard: HarvestDashboardService,
     private readonly presets: HarvestRunPresetService,
-    private readonly schedules: HarvestScheduleService
+    private readonly schedules: HarvestScheduleService,
+    private readonly alerts: HarvestAlertService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -560,5 +565,15 @@ export class HarvestController {
     @Payload() req: SupermarketSourceIdRequest
   ): Promise<{ id: string }> {
     return this.sources.delete(req);
+  }
+
+  // --- Alerts to the owner (plan 0218) ---------------------------------------
+
+  /** Queue one test alert, which the worker sends within 30 seconds. */
+  @MessagePattern(HARVEST_ALERT_PATTERNS.sendTest)
+  sendTestAlert(
+    @Payload() req: SendHarvestTestAlertRequest
+  ): Promise<HarvestTestAlertView> {
+    return this.alerts.sendTest(req);
   }
 }
