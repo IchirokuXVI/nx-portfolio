@@ -14,6 +14,8 @@ import {
   requiredEnv,
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import type { Logger } from 'nestjs-pino';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 import {
   HARVESTER_ENTITIES,
@@ -52,6 +54,30 @@ import type { SupermarketSourceService } from './supermarket-source.service';
  *   LUNA_INTEGRATION=1 HARVESTER_DB_URL=... REDIS_URL=... \
  *     npx nx run luna-shopper-backend-harvester:test-integration --testFile=price-refresh.integration.spec.ts
  */
+
+/**
+ * Redis, from the environment or from the shared backend `.env`. The slot
+ * script writes `REDIS_URL` there and not into the harvester's own `.env`,
+ * which is the only file Nx loads for this target.
+ */
+function redisUrl(): string {
+  const exported = process.env['REDIS_URL'];
+  if (exported) {
+    return exported;
+  }
+  const file = join(__dirname, '../../../../.env.luna-shopper-backend');
+  const line = existsSync(file)
+    ? /^REDIS_URL=(.+)$/m.exec(readFileSync(file, 'utf8'))
+    : null;
+  if (!line) {
+    throw new Error(
+      'REDIS_URL is not set and apps/luna-shopper-backend/.env.luna-shopper-backend ' +
+        'does not state it. Run the slot script, or export the variable.'
+    );
+  }
+  return line[1].trim();
+}
+
 describeIntegration('price refresh (real Postgres and Redis)', () => {
   /** Ids nothing else in this database uses, so cleanup is exact. */
   const CHAIN = '02160216-0000-4000-8000-111111111111';
@@ -203,7 +229,7 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
       synchronize: false,
     });
     await dataSource.initialize();
-    redis = new RedisService(requiredEnv('REDIS_URL'), silent);
+    redis = new RedisService(redisUrl(), silent);
     await redis.whenReady();
   });
 
