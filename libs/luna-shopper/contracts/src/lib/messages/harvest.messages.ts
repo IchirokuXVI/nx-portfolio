@@ -467,7 +467,10 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
   'deza-web': {
     writesPrices: false,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    // `/centros/` names every shop of the chain with its code, and each shop
+    // page states the postal code (plan 0222). Away from Córdoba a run of the
+    // postal code queue costs one request.
+    listsItsOwnStores: true,
     hasProductPages: false,
     skipsKnownDetails: false,
     printedLocale: 'es',
@@ -1142,6 +1145,11 @@ export interface SourceLocationCandidate {
   postalCode: string | null;
   score: number;
   strong: boolean;
+  /**
+   * The chain's own shop list names a shop with this row's code, and that shop
+   * is linked to this location (plan 0222). A proposal, never a mapping.
+   */
+  sameCode?: boolean;
 }
 
 // --- Run requests ----------------------------------------------------------
