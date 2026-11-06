@@ -148,6 +148,25 @@ describe('judgeProbe', () => {
     });
   });
 
+  it('is SHAPE_CHANGED on a body that is not JSON, a SyntaxError with no status', () => {
+    // What `response.json()` throws when a JSON API answers HTML with a 200.
+    const error = new SyntaxError(
+      `Unexpected token '<', "<!DOCTYPE "... is not valid JSON`
+    );
+    expect(judgeProbe(failed({ error: error.message }, error))).toEqual({
+      status: SourceProbeStatus.SHAPE_CHANGED,
+      error: `listing: ${error.message}`,
+    });
+  });
+
+  it('keeps the status of a SyntaxError that carries one', () => {
+    const error = Object.assign(new SyntaxError('not JSON'), { status: 503 });
+    expect(
+      judgeProbe(failed({ httpStatus: 503, error: error.message }, error))
+        .status
+    ).toBe(SourceProbeStatus.UNREACHABLE);
+  });
+
   it('takes the rows in order when two apply: a refusal over a server error', () => {
     // A guard that stopped on a 500 is still the chain refusing the client.
     const blocked = blockedError();

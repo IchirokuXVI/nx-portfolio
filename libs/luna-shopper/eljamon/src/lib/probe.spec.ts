@@ -44,6 +44,28 @@ function storefront(url: URL): { status?: number; body: string } {
   return { status: 404, body: '' };
 }
 
+/** Page 1 of the fixture, whose first `lost` articles print no price. */
+function listingWithout(lost: number): string {
+  const page = fixture('category-page-1.html');
+  const starts = [
+    ...page.matchAll(/<div id="[^"]*_articulo_\d+" class="articulo">/g),
+  ].map((match) => match.index ?? 0);
+  if (starts.length < 10) {
+    throw new Error('The listing fixture holds fewer than ten articles.');
+  }
+  const blocks = starts.map((at, n) => page.slice(at, starts[n + 1]));
+  return (
+    page.slice(0, starts[0]) +
+    blocks
+      .map((block, n) =>
+        n < lost
+          ? block.replace(/<p class="precio">/g, '<p class="sin-precio">')
+          : block
+      )
+      .join('')
+  );
+}
+
 const run = (fetchImpl: typeof fetch) =>
   probeElJamon({
     userAgent: 'LunaShopperTest/1.0',
@@ -119,5 +141,64 @@ describe('probeElJamon', () => {
       })
     );
     expect(urls).toHaveLength(3);
+  });
+
+  it('fails the 80 per cent rule when most rows lost their price', async () => {
+    const { fetchImpl, urls } = fakeSite((url) =>
+      url.pathname.startsWith('/categorias/')
+        ? { body: listingWithout(12) }
+        : undefined
+    );
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps[1]).toEqual(
+      expect.objectContaining({
+        name: 'listing',
+        ok: false,
+        problems: ['8 of 20 rows carried a price above zero'],
+      })
+    );
+    expect(urls).toHaveLength(3);
+  });
+
+  it('passes the 80 per cent rule when a few rows lost their price', async () => {
+    const { fetchImpl } = fakeSite((url) =>
+      url.pathname.startsWith('/categorias/')
+        ? { body: listingWithout(2) }
+        : undefined
+    );
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps[1]).toEqual(
+      expect.objectContaining({ name: 'listing', ok: true })
+    );
+    expect(result.steps[1].sample['rows']).toBe(20);
+    expect(result.steps.every((step) => step.ok)).toBe(true);
+  });
+
+  it('reads a locator page with no locations object as a problem', async () => {
+    const { fetchImpl, urls } = fakeSite((url) =>
+      url.toString().startsWith(LOCATOR)
+        ? { body: '<html><body>Mapa</body></html>' }
+        : undefined
+    );
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps[3]).toEqual(
+      expect.objectContaining({
+        name: 'shops',
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: [
+          'The El Jamón store locator answered without a locations object.',
+        ],
+      })
+    );
+    expect(result.failure).toBeUndefined();
+    expect(urls).toHaveLength(5);
   });
 });

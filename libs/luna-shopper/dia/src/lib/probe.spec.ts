@@ -156,6 +156,52 @@ describe('probeDia', () => {
     ]);
     expect(passed.steps.every((step) => step.ok)).toBe(true);
   });
+
+  it('reads a store finder page that names no shop file as a problem', async () => {
+    const { fetchImpl, paths } = fakeSite((path) =>
+      path === '/tiendas/buscador-tiendas-folletos'
+        ? { body: '<html><body>No file here</body></html>' }
+        : undefined
+    );
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps[2]).toEqual(
+      expect.objectContaining({
+        name: 'shops',
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: ['The DIA store finder page names no shop file.'],
+      })
+    );
+    expect(result.failure).toBeUndefined();
+    expect(paths.some((path) => path.startsWith('/clubdia/'))).toBe(false);
+    expect(paths).toHaveLength(3);
+  });
+
+  it('reads a shop file that is not a list as a problem', async () => {
+    const { fetchImpl, paths } = fakeSite((path) =>
+      path.startsWith('/clubdia/') ? { body: '{"stores":[]}' } : undefined
+    );
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps[2]).toEqual(
+      expect.objectContaining({
+        name: 'shops',
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: ['The DIA shop file is not a list of records.'],
+      })
+    );
+    expect(result.failure).toBeUndefined();
+    expect(
+      paths.some((path) => path.startsWith('/tiendas/buscadorTiendas.html'))
+    ).toBe(false);
+    expect(paths).toHaveLength(4);
+  });
 });
 
 describe('DiaClient retryForbidden (plan 0219, section 3.6)', () => {

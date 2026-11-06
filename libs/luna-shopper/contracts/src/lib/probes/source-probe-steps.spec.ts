@@ -5,6 +5,7 @@ import {
   httpStatusOf,
   mostRowsCarry,
   pacedAcquire,
+  parserErrorsAsProblems,
 } from './source-probe-steps';
 
 /** The step helpers every chain's probe shares (plan 0219, section 3.1). */
@@ -143,5 +144,64 @@ describe('the other helpers', () => {
     await counter.fetchImpl('https://a.example');
     await counter.fetchImpl('https://b.example');
     expect(counter.count()).toBe(2);
+  });
+});
+
+describe('parserErrorsAsProblems', () => {
+  const shapeError = new Error('The page names no shop file.');
+  const recognizes = (error: unknown) => error === shapeError;
+
+  it('records a recognized parser error as the one problem of a step', async () => {
+    const probe = new SourceProbeRecorder(() => 0);
+    const later = jest.fn(async () => 1);
+
+    await probe.step(
+      'shops',
+      'u1',
+      parserErrorsAsProblems(async () => {
+        throw shapeError;
+      }, recognizes),
+      () => ({ problems: [] })
+    );
+    await probe.step('product', 'u2', later, () => ({ problems: [] }));
+
+    const result = probe.result(1);
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        name: 'shops',
+        url: 'u1',
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: ['The page names no shop file.'],
+      }),
+    ]);
+    expect(result.failure).toBeUndefined();
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it('throws on any error it does not recognize', async () => {
+    const probe = new SourceProbeRecorder(() => 0);
+    const other = Object.assign(new Error('answered 503'), { status: 503 });
+
+    await probe.step(
+      'shops',
+      'u1',
+      parserErrorsAsProblems(async () => {
+        throw other;
+      }, recognizes),
+      () => ({ problems: [] })
+    );
+
+    const result = probe.result(1);
+    expect(result.steps[0]).toEqual(
+      expect.objectContaining({
+        ok: false,
+        httpStatus: 503,
+        error: 'answered 503',
+        problems: [],
+      })
+    );
+    expect(result.failure).toBe(other);
   });
 });

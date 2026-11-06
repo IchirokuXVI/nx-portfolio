@@ -1,6 +1,7 @@
 import listingPage from './__fixtures__/listing-page.json';
 import productPage from './__fixtures__/product-page.json';
-import { CarrefourBrowserError } from './errors';
+import { CarrefourClient } from './carrefour.client';
+import { CarrefourBrowserError, CarrefourHttpError } from './errors';
 import { probeCarrefour } from './probe';
 import { readDetail } from './state';
 import type { CarrefourSession } from './types';
@@ -75,6 +76,10 @@ const run = (browser: FakeBrowser) =>
   });
 
 describe('probeCarrefour', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('passes both steps over the fixtures, in two pages, and closes the browser', async () => {
     const browser = new FakeBrowser(site());
 
@@ -138,6 +143,7 @@ describe('probeCarrefour', () => {
   });
 
   it('closes the client when a step throws, and keeps the browser error for the verdict', async () => {
+    const close = jest.spyOn(CarrefourClient.prototype, 'close');
     const browser = new FakeBrowser(() => ({
       throws: new CarrefourBrowserError('loading the page'),
     }));
@@ -151,10 +157,11 @@ describe('probeCarrefour', () => {
     // The client drops a session whose page threw, and the probe's own close
     // still runs on the way out.
     expect(browser.opened).toBe(1);
-    expect(browser.closed).toBeGreaterThanOrEqual(1);
+    expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('closes a client that never opened a page', async () => {
+    const close = jest.spyOn(CarrefourClient.prototype, 'close');
     const controller = new AbortController();
     controller.abort();
     const browser = new FakeBrowser(site());
@@ -168,5 +175,56 @@ describe('probeCarrefour', () => {
 
     expect(result.steps[0].ok).toBe(false);
     expect(browser.opened).toBe(0);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads a 5xx on the seed listing as its status, with no second page', async () => {
+    const browser = new FakeBrowser(() => ({ status: 503 }));
+
+    const result = await run(browser);
+
+    expect(result.steps).toEqual([
+      expect.objectContaining({ name: 'listing', ok: false, httpStatus: 503 }),
+    ]);
+    expect(result.steps[0].problems).toEqual([]);
+    expect(result.failure).toBeInstanceOf(CarrefourHttpError);
+    expect(browser.asked).toHaveLength(1);
+    expect(browser.closed).toBe(1);
+  });
+
+  it('reads a 5xx on the product page as its status', async () => {
+    const browser = new FakeBrowser((url) =>
+      url.includes('/supermercado/la-despensa/cat20001/c')
+        ? { status: 200, state: listing() }
+        : { status: 502 }
+    );
+
+    const result = await run(browser);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['product', false],
+    ]);
+    expect(result.steps[1]).toEqual(
+      expect.objectContaining({ httpStatus: 502, problems: [] })
+    );
+    expect(result.failure).toBeInstanceOf(CarrefourHttpError);
+    expect(browser.asked).toHaveLength(2);
+  });
+
+  it('still reads a page that answered 200 with no state as a problem', async () => {
+    const browser = new FakeBrowser(() => ({ status: 200 }));
+
+    const result = await run(browser);
+
+    expect(result.steps[0]).toEqual(
+      expect.objectContaining({
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: ['the seed listing answered no page state'],
+      })
+    );
+    expect(result.failure).toBeUndefined();
   });
 });

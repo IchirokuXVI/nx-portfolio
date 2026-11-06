@@ -6,6 +6,7 @@ import {
   isPositive,
   mostRowsCarry,
   pacedAcquire,
+  parserErrorsAsProblems,
   type SourceProbeResult,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -166,7 +167,7 @@ export async function probeElJamon(
   await probe.step(
     'shops',
     options.locatorUrl ?? ELJAMON_LOCATOR_URL,
-    () => client.listStores(),
+    parserErrorsAsProblems(() => client.listStores(), isElJamonShapeError),
     (list) => {
       const whole = list.stores.filter(
         (shop) =>
@@ -195,4 +196,18 @@ function cents(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value)
     ? Math.round(value * 100)
     : null;
+}
+
+/**
+ * The plain error the store locator's parser throws when the page holds no
+ * `locations` object. It is the storefront changing, so the probe records it
+ * as a problem (plan 0219, section 5).
+ */
+function isElJamonShapeError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    !('status' in error) &&
+    error.message ===
+      'The El Jamón store locator answered without a locations object.'
+  );
 }

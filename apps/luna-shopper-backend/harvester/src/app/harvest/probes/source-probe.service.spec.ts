@@ -234,9 +234,14 @@ describe('SourceProbeService.start', () => {
   });
 
   it('writes nothing to supermarket_sources', async () => {
-    const { service, sourceWrites } = build();
+    const { service, sourceWrites, store } = build();
     await service.start(req);
     await flush();
+    await flush();
+    // The probe ran to its end, so a throw that was logged cannot pass this.
+    expect(store.rows).toEqual([
+      expect.objectContaining({ status: SourceProbeStatus.PASSED }),
+    ]);
     expect(sourceWrites).toEqual([]);
   });
 });

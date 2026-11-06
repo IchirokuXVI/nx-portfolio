@@ -400,7 +400,7 @@ export const DEFAULT_SEED_PATH = '/supermercado/la-despensa/cat20001/c';
  * It is a class of its own so that everything above it is testable with a fake
  * loader: nothing in CI reaches this file's `start`.
  */
-class PlaywrightSession {
+export class PlaywrightSession {
   private constructor(
     private readonly browser: {
       close(): Promise<void>;

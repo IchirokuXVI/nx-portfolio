@@ -1472,7 +1472,7 @@ export class AdminHarvestProbesController {
   @ApiContractResponse(SOURCE_PROBE_PATTERNS.start, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true, conflict: true })
+  @ApiProblemResponses({ body: true, conflict: true, notConfigured: true })
   start(
     @ActingAdmin() admin: CurrentAdmin,
     @UuidParam('supermarketId') supermarketId: string

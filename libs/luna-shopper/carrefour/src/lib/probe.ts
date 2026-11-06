@@ -6,7 +6,12 @@ import {
   mostRowsCarry,
   type SourceProbeResult,
 } from '@portfolio/luna-shopper/contracts';
-import { CarrefourClient, DEFAULT_SEED_PATH } from './carrefour.client';
+import {
+  CarrefourClient,
+  DEFAULT_SEED_PATH,
+  PlaywrightSession,
+} from './carrefour.client';
+import { CarrefourHttpError } from './errors';
 import { readCards } from './listing';
 import {
   CARREFOUR_ORIGIN,
@@ -50,33 +55,66 @@ export interface CarrefourProbeOptions {
  * A 403 or a 429 on the first page is one refusal, so the client throws
  * `CarrefourHttpError` with its status and the probe stops there.
  *
- * **What the client hides.** A page that answers neither 200 nor a refusal
- * comes back as no page state, a 5xx included, so such a step reports a
- * problem and not a status.
+ * **What the client hides, and how the probe reads it.** A page that answers
+ * neither 200 nor a refusal comes back from the client as no page state, a
+ * 5xx included. The probe wraps the session and keeps the status of the last
+ * page it loaded. When a read answers null and that status is 500 or more, the
+ * step throws `CarrefourHttpError` with the status, so the harvester reads it
+ * as `UNREACHABLE` and tries again. Any other null is a problem of the step.
  */
 export async function probeCarrefour(
   options: CarrefourProbeOptions
 ): Promise<SourceProbeResult> {
+  // The status of the last page loaded, which the client does not hand back.
+  let lastStatus: number | null = null;
+  const start =
+    options.openSession ??
+    (() =>
+      PlaywrightSession.start(options.userAgent, options.blockAssets ?? true));
+  const openSession = async (): Promise<CarrefourSession> => {
+    const session = await start();
+    return {
+      goto: async (url) => {
+        const answer = await session.goto(url);
+        lastStatus = answer.status;
+        return answer;
+      },
+      close: () => session.close(),
+    };
+  };
   const client = new CarrefourClient({
     userAgent: options.userAgent,
     baseUrl: options.baseUrl,
     delayMs: options.delayMs,
     acquire: options.acquire,
     signal: options.signal,
-    openSession: options.openSession,
+    openSession,
     blockAssets: options.blockAssets,
     sleepImpl: options.sleepImpl,
   });
+  /** A null read of a page that answered 500 or more is the status, not a shape. */
+  const read = async <T>(
+    url: string,
+    load: () => Promise<T | null>
+  ): Promise<T | null> => {
+    lastStatus = null;
+    const value = await load();
+    if (value === null && lastStatus !== null && lastStatus >= 500) {
+      throw new CarrefourHttpError(lastStatus, url);
+    }
+    return value;
+  };
   const base = (options.baseUrl ?? CARREFOUR_ORIGIN).replace(/\/+$/, '');
   const seedPath = options.seedPath ?? DEFAULT_SEED_PATH;
   const probe = new SourceProbeRecorder(options.now);
 
   try {
     let cards: CarrefourProduct[] = [];
+    const listingUrl = `${base}${seedPath}`;
     const listing = await probe.step(
       'listing',
-      `${base}${seedPath}`,
-      () => client.readListing(seedPath),
+      listingUrl,
+      () => read(listingUrl, () => client.readListing(seedPath)),
       (value) => {
         if (value === null) {
           return { problems: ['the seed listing answered no page state'] };
@@ -112,10 +150,11 @@ export async function probeCarrefour(
     }
 
     const path = card.path;
+    const productUrl = path.startsWith('http') ? path : `${base}${path}`;
     await probe.step(
       'product',
-      path.startsWith('http') ? path : `${base}${path}`,
-      () => client.readDetail(path),
+      productUrl,
+      () => read(productUrl, () => client.readDetail(path)),
       (detail) => {
         if (detail === null) {
           return { problems: ['the product page answered no product'] };

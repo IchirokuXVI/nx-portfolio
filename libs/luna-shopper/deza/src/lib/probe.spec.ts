@@ -23,6 +23,14 @@ function stubFetch(pages: Array<{ status?: number; body?: string }>) {
   return { fetchImpl, methods };
 }
 
+/** The landing page with the shop popup of its first `lost` rows renamed. */
+function shopsLostOn(lost: number): string {
+  let seen = 0;
+  return LANDING.replace(/pop-up-artic-tiendas/g, (match) =>
+    seen++ < lost ? 'pop-up-artic-otras' : match
+  );
+}
+
 const run = (fetchImpl: typeof fetch) =>
   probeDeza({
     userAgent: 'LunaShopperTest/1.0',
@@ -91,5 +99,37 @@ describe('probeDeza', () => {
 
     expect(result.steps[1].ok).toBe(false);
     expect(result.steps[1].problems.join(' ')).toContain('a shop code');
+  });
+
+  it('fails the 80 per cent rule when most rows lost their shops', async () => {
+    const { fetchImpl } = stubFetch([
+      { body: LANDING },
+      { body: shopsLostOn(9) },
+    ]);
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps[1]).toEqual(
+      expect.objectContaining({
+        name: 'listing',
+        ok: false,
+        problems: ['6 of 15 rows carried a shop code'],
+      })
+    );
+  });
+
+  it('passes the 80 per cent rule when a few rows lost their shops', async () => {
+    const { fetchImpl } = stubFetch([
+      { body: LANDING },
+      { body: shopsLostOn(2) },
+    ]);
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['categories', true],
+      ['listing', true],
+    ]);
+    expect(result.steps[1].sample['rows']).toBe(15);
   });
 });

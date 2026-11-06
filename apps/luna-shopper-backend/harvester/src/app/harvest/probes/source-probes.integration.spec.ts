@@ -133,10 +133,31 @@ describeIntegration('source probes (real Postgres)', () => {
       [SOURCE]
     );
 
+  /**
+   * The other sources of this database that were on, turned off for each
+   * spec so a worker can claim only this spec's source, and turned on after.
+   * A slot whose own rows are on then changes nothing here.
+   */
+  let othersOn: string[] = [];
+
   beforeAll(async () => {
     one = await boot();
     two = await boot();
     await clean();
+  });
+
+  beforeEach(async () => {
+    const rows: { id: string }[] = await one.dataSource.query(
+      `SELECT "id" FROM "supermarket_sources" WHERE "enabled" AND "id" <> $1`,
+      [SOURCE]
+    );
+    othersOn = rows.map((row) => row.id);
+    if (othersOn.length > 0) {
+      await one.dataSource.query(
+        `UPDATE "supermarket_sources" SET "enabled" = false WHERE "id" = ANY($1)`,
+        [othersOn]
+      );
+    }
   });
 
   afterEach(async () => {
@@ -146,6 +167,13 @@ describeIntegration('source probes (real Postgres)', () => {
     }
     await new Promise((resolve) => setImmediate(resolve));
     await clean();
+    if (othersOn.length > 0) {
+      await one.dataSource.query(
+        `UPDATE "supermarket_sources" SET "enabled" = true WHERE "id" = ANY($1)`,
+        [othersOn]
+      );
+      othersOn = [];
+    }
   });
 
   afterAll(async () => {

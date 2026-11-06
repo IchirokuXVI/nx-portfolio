@@ -119,11 +119,13 @@ export class SourceProbeStore {
    * owner's decision of 2026-11-06).
    *
    * **The lock is on the source rows**, with `FOR UPDATE SKIP LOCKED`, so a
-   * second harvester skips every row the first is claiming. The newest probes
-   * are read after the lock by a statement of their own: under READ COMMITTED
-   * it sees a probe that a process which held the lock committed before this
-   * one took it, so a source is never claimed twice for one due slot. The
-   * unique index on a running probe is the last backstop.
+   * second harvester skips every row the first is still claiming. The lock
+   * alone does not prevent a double claim. Under READ COMMITTED a second
+   * process can lock the row just after the first committed, take its first
+   * snapshot before the new `RUNNING` row was visible, leave `RUNNING` rows
+   * out of the newest probes, and decide the source is due. The insert is
+   * thus `ON CONFLICT DO NOTHING` on `uq_source_probe_running`: that process
+   * inserts nothing, the claim answers null, and its tick starts nothing.
    */
   async claimDue(
     now: Date,
@@ -177,6 +179,7 @@ export class SourceProbeStore {
            ("sourceId", "supermarketId", "adapterKey", "trigger", "status",
             "attempt", "startedAt")
          VALUES ($1, $2, $3, $4, 'RUNNING', $5, $6)
+         ON CONFLICT ("sourceId") WHERE "status" = 'RUNNING' DO NOTHING
          RETURNING *`,
         [
           source.id,
@@ -187,6 +190,10 @@ export class SourceProbeStore {
           now,
         ]
       );
+      // A probe of the source that another process committed meanwhile.
+      if (inserted.length === 0) {
+        return null;
+      }
       return { probe: inserted[0], source };
     });
   }

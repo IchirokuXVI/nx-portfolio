@@ -22,6 +22,7 @@ export interface SourceProbeVerdict {
  * | `httpStatus` 500 or more, a network error or a timeout      | `UNREACHABLE`   |
  * | `httpStatus` 404 or 410                                     | `SHAPE_CHANGED` |
  * | problems and no exception                                  | `SHAPE_CHANGED` |
+ * | a `SyntaxError` with no status, a body that is not JSON     | `SHAPE_CHANGED` |
  * | any other exception, `CarrefourBrowserError` among them    | `ERROR`         |
  *
  * Every step ok is `PASSED`. A probe a shutdown stopped never reaches here:
@@ -54,6 +55,11 @@ function statusOf(
     return SourceProbeStatus.SHAPE_CHANGED;
   }
   if (step.error === null && failure === undefined) {
+    return SourceProbeStatus.SHAPE_CHANGED;
+  }
+  // A JSON API that answers a page of HTML with a 200: the body is not the
+  // shape the parser reads, so it is a change and not our fault.
+  if (status === null && failure instanceof SyntaxError) {
     return SourceProbeStatus.SHAPE_CHANGED;
   }
   return SourceProbeStatus.ERROR;

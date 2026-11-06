@@ -5,6 +5,7 @@ import {
   isFiniteNumber,
   isPositive,
   mostRowsCarry,
+  parserErrorsAsProblems,
   type SourceProbeResult,
 } from '@portfolio/luna-shopper/contracts';
 import { DIA_BASE_URL, DiaClient } from './dia.client';
@@ -112,12 +113,12 @@ export async function probeDia(
   await probe.step(
     'shops',
     `${base}/tiendas/buscador-tiendas-folletos`,
-    async () => {
+    parserErrorsAsProblems(async () => {
       const file = await client.storeFile();
       const first = file.stores[0];
       const detail = first ? await client.storeDetail(first.idTienda) : null;
       return { file, detail };
-    },
+    }, isDiaShapeError),
     ({ file, detail }) => {
       const whole = file.stores.filter(
         (store) =>
@@ -152,6 +153,22 @@ export async function probeDia(
     }
   );
   return probe.result(client.requests);
+}
+
+/**
+ * The two plain errors DIA's shop reads throw when the chain answered in a
+ * shape they do not read: a store finder page that names no shop file, and a
+ * shop file that is not a list. Each one is the storefront changing, so the
+ * probe records it as a problem (plan 0219, section 5).
+ */
+function isDiaShapeError(error: unknown): boolean {
+  if (!(error instanceof Error) || 'status' in error) {
+    return false;
+  }
+  return (
+    error.message === 'The DIA store finder page names no shop file.' ||
+    error.message === 'The DIA shop file is not a list of records.'
+  );
 }
 
 function cents(value: number | null | undefined): number | null {

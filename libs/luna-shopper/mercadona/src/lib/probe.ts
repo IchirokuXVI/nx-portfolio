@@ -7,6 +7,7 @@ import {
   isPositive,
   mostRowsCarry,
   pacedAcquire,
+  parserErrorsAsProblems,
   type SourceProbeResult,
 } from '@portfolio/luna-shopper/contracts';
 import type { Json } from './json';
@@ -97,11 +98,14 @@ export async function probeMercadona(
   const warehouse = await probe.step(
     'warehouse',
     `${base}/postal-codes/actions/change-pc/`,
-    () =>
-      MercadonaClient.resolveWarehouse(postalCode, {
-        ...shared,
-        baseUrl: options.baseUrl,
-      }),
+    parserErrorsAsProblems(
+      () =>
+        MercadonaClient.resolveWarehouse(postalCode, {
+          ...shared,
+          baseUrl: options.baseUrl,
+        }),
+      isMercadonaShapeError
+    ),
     (value) => ({
       problems: hasText(value)
         ? []
@@ -180,12 +184,15 @@ export async function probeMercadona(
   await probe.step(
     'shops',
     options.storesUrl ?? MERCADONA_STORES_URL,
-    () =>
-      MercadonaClient.listStores({
-        ...shared,
-        storesUrl: options.storesUrl,
-        totalsUrl: options.totalsUrl,
-      }),
+    parserErrorsAsProblems(
+      () =>
+        MercadonaClient.listStores({
+          ...shared,
+          storesUrl: options.storesUrl,
+          totalsUrl: options.totalsUrl,
+        }),
+      isMercadonaShapeError
+    ),
     (list) => {
       const placed = list.stores.filter(
         (store) =>
@@ -208,6 +215,22 @@ export async function probeMercadona(
     }
   );
   return probe.result(counter.count());
+}
+
+/**
+ * The two plain errors the client throws when Mercadona answered in a shape it
+ * does not read: a warehouse answer with no `x-customer-wh` header, and a
+ * store document that answered 404. Each one is the storefront changing, so
+ * the probe records it as a problem (plan 0219, section 5).
+ */
+function isMercadonaShapeError(error: unknown): boolean {
+  if (!(error instanceof Error) || 'status' in error) {
+    return false;
+  }
+  return (
+    error.message.includes('returned no x-customer-wh header') ||
+    error.message.startsWith("Mercadona's store list answered 404")
+  );
 }
 
 /** The raw keys the live spec has always asserted, and a product out of them. */

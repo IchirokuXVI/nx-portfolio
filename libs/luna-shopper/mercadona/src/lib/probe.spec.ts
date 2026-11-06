@@ -65,6 +65,7 @@ interface Answers {
   tree?: () => Response;
   listing?: () => Response;
   product?: () => Response;
+  stores?: () => Response;
 }
 
 const json =
@@ -99,7 +100,7 @@ function fakeFetch(answers: Answers = {}) {
       return new Response(TOTALS);
     }
     if (url.includes('tiendas')) {
-      return new Response(STORES);
+      return (answers.stores ?? (() => new Response(STORES)))();
     }
     throw new Error(`Unexpected request to ${url}`);
   }) as unknown as typeof fetch;
@@ -223,6 +224,51 @@ describe('probeMercadona', () => {
       '2 roots were read, and the floor is 10',
       '4 level 1 categories were read, and the floor is 50',
     ]);
+  });
+
+  it('reads a warehouse answer with no x-customer-wh header as a problem', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      warehouse: () => new Response(null, { status: 200 }),
+    });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        name: 'warehouse',
+        ok: false,
+        httpStatus: null,
+        error: null,
+      }),
+    ]);
+    expect(result.steps[0].problems).toHaveLength(1);
+    expect(result.steps[0].problems[0]).toContain('x-customer-wh');
+    expect(result.failure).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
+  it('reads a store document that answered 404 as a problem', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      stores: () => new Response('gone', { status: 404 }),
+    });
+
+    const result = await run(fetchImpl);
+
+    const shops = result.steps[4];
+    expect(shops).toEqual(
+      expect.objectContaining({
+        name: 'shops',
+        ok: false,
+        httpStatus: null,
+        error: null,
+      })
+    );
+    expect(shops.problems).toHaveLength(1);
+    expect(shops.problems[0]).toContain('answered 404');
+    expect(result.failure).toBeUndefined();
+    // The companion count document is never read after the 404.
+    expect(calls.some((url) => url.includes('tiendas_total'))).toBe(false);
+    expect(calls).toHaveLength(5);
   });
 
   it('reads a 404 tree, which the client answers as empty, as a change of shape', async () => {

@@ -240,7 +240,7 @@ Each library exports one function, `probeMercadona`, `probeDia`, `probeLidl`, `p
 
 | Chain (`adapterKey`) | Steps and their client calls                                                                                                                                                                                       | Requests |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| `mercadona-api`      | warehouse: `resolveWarehouse` (:181). categories: `listCategories` (:263). listing: `listCategoryProducts` of the first child (:275). product: `getProduct` of the first listed id (:293). shops: `listStores` (:225) | 5        |
+| `mercadona-api`      | warehouse: `resolveWarehouse` (:181). categories: `listCategories` (:263). listing: `listCategoryProducts` of the first child (:275). product: `getProduct` of the first listed id (:293). shops: `listStores` (:225), which also reads the store count document | 6        |
 | `dia-api`            | categories: `menu` (`dia.client.ts:142`). listing: `listing` of the first leaf (:156). shops: `storeFile` (:270, two requests) and `storeDetail` of the first shop (:291)                                         | 5        |
 | `lidl-api`           | listing: the search page at offset 0 through `normalizeListPage` (`lidl.client.ts:114`). product: `getProduct` of the first row (:143). shops: one store page of five through `normalizeStorePage` (:204)           | 3        |
 | `eljamon-web`        | categories: `topCategories` (`eljamon.client.ts:113`, two requests for the session at :241). listing: page 1 of the first category through `walkCategory` (:138). product: `getProduct` (:198). shops: `listStores` (:108) | 5        |
@@ -256,6 +256,9 @@ walk, not the template:
   rows, so the listing step checks them.
 - **Carrefour has no separate category step.** The seed listing names the first level, and a
   third page would cost two more seconds and a third chance of a refusal.
+
+Mercadona makes six requests and not five. Its shop step is one call, and `listStores` reads the
+store finder's document and then its companion count document.
 
 The shop step exists for the chains whose store discovery reads the chain itself: Mercadona, DIA,
 LIDL and El Jamón. Plans `0222` and `0223` add shop discovery for DEZA and Carrefour, and neither
@@ -315,6 +318,11 @@ still closes, because `close` is idempotent (`carrefour.client.ts:201`).
   redesign.
 - A 403 on the first page is one refusal, not three, so the client throws `CarrefourHttpError`
   with status 403 and the probe stops there.
+- A 5xx is not hidden from the probe. The client answers a page of 500 or more as no page state,
+  so `probeCarrefour` wraps the session and keeps the status of the last page it loaded. When
+  `readListing` or `readDetail` answers null and that status is 500 or more, the step throws
+  `CarrefourHttpError` with the status. The verdict is then `UNREACHABLE`, and the retry of
+  section 7 applies.
 
 On a developer machine the probe needs Playwright's Chromium, as the `capture-fixtures` target of
 the Carrefour library already does.
@@ -402,6 +410,7 @@ The first step that is not ok decides the status, in this order:
 | `httpStatus` is 500 or more, or the error is a network error or a timeout       | `UNREACHABLE`   |
 | `httpStatus` is 404 or 410                                                       | `SHAPE_CHANGED` |
 | `problems` is not empty, with no exception                                       | `SHAPE_CHANGED` |
+| a `SyntaxError` with no `httpStatus`                                             | `SHAPE_CHANGED` |
 | any other exception, `CarrefourBrowserError` among them                          | `ERROR`         |
 
 Every step ok is `PASSED`. A probe stopped by a shutdown is `ABORTED`.
@@ -410,6 +419,18 @@ A 404 on a path the probe has to read is a moved URL, which is a change of the s
 uses. Some clients throw it with its status, and the table catches that. Others answer null on a
 404, as Mercadona's `getJson` does (`mercadona.client.ts:263` and `:293`), and the step then sees
 an empty result and reports a problem. Both end `SHAPE_CHANGED`.
+
+**A parser error the library recognizes is a problem, not an exception.** Some parsers throw a
+plain `Error` with no status when the source answered in a shape they do not read: Mercadona's
+warehouse answer with no `x-customer-wh` header and its store document on a 404, DIA's store
+finder page that names no shop file and its shop file that is not a list, El Jamón's locator
+page with no `locations` object. Each one is the storefront changing. The probe of that chain
+wraps the step's read in `parserErrorsAsProblems` (`contracts`, `source-probe-steps.ts`) and
+names exactly those errors. The step is then not ok, the error's message is its one problem, and
+it has no `httpStatus`, so the verdict is `SHAPE_CHANGED`. A `SyntaxError` with no status is the
+same case for a JSON API that answers HTML with a 200, and the verdict reads it as
+`SHAPE_CHANGED` with no wrapper. A network error, a timeout, `SourceBlockedError` and
+`CarrefourBrowserError` keep their rows.
 
 `error` on the row is one sentence that names the step and the first problem, for example
 `listing: 2 of 40 rows carried a price above zero`. The steps hold the rest.
@@ -421,7 +442,7 @@ and a manual start answers the refusal in the right column.
 
 | Condition                                                       | Manual refusal                           |
 | --------------------------------------------------------------- | ---------------------------------------- |
-| `HARVEST_ENABLED` is true                                       | `ValidationException`, the spawn's text  |
+| `HARVEST_ENABLED` is true                                       | `NotConfiguredException`, as the spawn   |
 | the source row exists                                           | `NotFoundException`                      |
 | `adapterKey` is one of the six chains of section 3.2            | `ValidationException`, names the adapter |
 | the source row is on (option (a) of **O1**)                     | `ValidationException`, the spawn's text  |
@@ -448,7 +469,7 @@ cleared in `onModuleDestroy`, a `stopping` flag in `onApplicationShutdown`, the 
 `HARVEST_CLOCK`, and one tick at a time in a process.
 
 - **The interval is 60 seconds**, a constant in the worker, as `SCHEDULE_TICK_MS` is.
-- **A tick does nothing unless `HARVEST_ENABLED` and `HARVEST_SCHEDULER_ENABLED` are both true.**
+- **A tick starts no probe unless `HARVEST_ENABLED` and `HARVEST_SCHEDULER_ENABLED` are both true.**
   A probe the worker starts is a fetch nobody asked for, which is what the third switch decides.
   It is true in production only, so staging and every luna slot probe only by hand.
 - **A source is due** when section 6 allows it and its newest probe started more than
@@ -470,7 +491,10 @@ cleared in `onModuleDestroy`, a `stopping` flag in `onApplicationShutdown`, the 
 - **The reaper.** Each tick first marks `ABORTED` every `RUNNING` probe whose `startedAt` is more
   than 10 minutes old. A probe lives in the memory of the process that started it, and a pod
   killed during one leaves the row `RUNNING`. Ten minutes is twice the deadline of section 9.
-- **The retention** of section 4.2 runs in the first tick after midnight UTC.
+- **The retention** of section 4.2 runs in the first tick of each UTC day.
+- **The reaper and the retention run whatever the switches say.** Only the start of a probe needs
+  both switches. A row that a killed pod left `RUNNING` is thus marked `ABORTED` on staging and
+  on every luna slot too.
 - The worker never throws out of a tick. An error is logged.
 
 The worker does not read `harvest_schedules`. A probe is not a preset and starts no run, so the
@@ -585,7 +609,10 @@ parser change updates the probe in the same file set.
   scheduler stays in the harvester.
 - **No fixture refresh.** A red probe tells a person to run the library's `capture-fixtures` and
   read the diff. The probe never writes a fixture.
-- **No per chain cadence.** One constant interval for every chain.
+- **A cadence per chain, and nothing more.** The owner decided on 2026-11-06 that the interval is
+  `probeIntervalHours` in the row's `config`, 24 hours when absent and 0 for never by itself
+  (section 7). A schedule of probes like the schedules of runs, or a probe just before a run, is
+  not built here.
 - **No probe of the price of a known product.** A price moves, so it cannot be asserted, and the
   walk already writes it.
 
@@ -629,7 +656,8 @@ parser change updates the probe in the same file set.
 - [ ] A probe writes only `source_probes`.
 - [ ] A probe is classified `PASSED`, `SHAPE_CHANGED`, `BLOCKED`, `UNREACHABLE`, `ERROR` or
       `ABORTED` by the rules of section 5.
-- [ ] With both switches on, each enabled chain is probed once per 24 hours, one probe per tick.
+- [ ] With both switches on, each enabled chain is probed once per the chain's interval, 24 hours
+      by default, one probe per tick.
 - [ ] With `HARVEST_SCHEDULER_ENABLED` false, no probe starts by itself.
 - [ ] No probe starts while a run of the same chain is in flight.
 - [ ] Two harvester processes on one database start one probe for one due source.

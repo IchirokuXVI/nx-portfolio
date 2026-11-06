@@ -70,6 +70,10 @@ export class SourceProbeRecorder {
     try {
       value = await read();
     } catch (error) {
+      if (error instanceof SourceProbeShapeProblem) {
+        this.push(name, url, startedAt, [error.message], {});
+        return undefined;
+      }
       this.fail(name, url, startedAt, error);
       return undefined;
     }
@@ -80,22 +84,14 @@ export class SourceProbeRecorder {
       this.fail(name, url, startedAt, error);
       return undefined;
     }
-    const ok = verdict.problems.length === 0;
-    this.steps.push({
+    const ok = this.push(
       name,
-      url: verdict.url !== undefined ? verdict.url : url,
-      ok,
-      httpStatus: null,
-      error: null,
-      problems: [...verdict.problems],
-      sample: trimSample(verdict.sample ?? {}),
-      durationMs: Math.max(0, this.clock() - startedAt),
-    });
-    if (!ok) {
-      this.halted = true;
-      return undefined;
-    }
-    return value;
+      verdict.url !== undefined ? verdict.url : url,
+      startedAt,
+      verdict.problems,
+      verdict.sample ?? {}
+    );
+    return ok ? value : undefined;
   }
 
   /** The steps so far, the request count the caller kept, and the failure. */
@@ -105,6 +101,31 @@ export class SourceProbeRecorder {
       result.failure = this.failure;
     }
     return result;
+  }
+
+  /** Records a step that ended with an answer. Not ok when it has problems. */
+  private push(
+    name: string,
+    url: string | null,
+    startedAt: number,
+    problems: readonly string[],
+    sample: SourceProbeSample
+  ): boolean {
+    const ok = problems.length === 0;
+    this.steps.push({
+      name,
+      url,
+      ok,
+      httpStatus: null,
+      error: null,
+      problems: [...problems],
+      sample: trimSample(sample),
+      durationMs: Math.max(0, this.clock() - startedAt),
+    });
+    if (!ok) {
+      this.halted = true;
+    }
+    return ok;
   }
 
   private fail(
@@ -126,6 +147,41 @@ export class SourceProbeRecorder {
       durationMs: Math.max(0, this.clock() - startedAt),
     });
   }
+}
+
+/** A parser error the library recognized, carried out of a step's read. */
+class SourceProbeShapeProblem extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SourceProbeShapeProblem';
+  }
+}
+
+/**
+ * Wraps a step's `read` so that a parser error the library recognizes is a
+ * problem and not an exception (plan 0219, section 5).
+ *
+ * Some parsers throw a plain `Error` when the source answered and what it
+ * answered is not the shape they read: a header that is gone, a document that
+ * names no file. Recorded as an exception, that step would be judged `ERROR`.
+ * Through this wrapper the step is not ok, its one problem is the error's
+ * message, and it has no `httpStatus` and no `error`, so it is judged
+ * `SHAPE_CHANGED`. Any error `recognizes` does not name is thrown on as it was.
+ */
+export function parserErrorsAsProblems<T>(
+  read: () => Promise<T>,
+  recognizes: (error: unknown) => boolean
+): () => Promise<T> {
+  return async () => {
+    try {
+      return await read();
+    } catch (error) {
+      if (recognizes(error)) {
+        throw new SourceProbeShapeProblem(messageOf(error));
+      }
+      throw error;
+    }
+  };
 }
 
 /** The numeric `status` an adapter's HTTP error carries, or null. */
