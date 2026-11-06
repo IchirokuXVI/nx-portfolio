@@ -14,7 +14,10 @@ import {
   CategoryNotFoundException,
   ForbiddenException,
   ITEM_EAN_HOLDER_DETAIL,
+  ITEM_GRAMS_DETAIL,
+  ITEM_UNIT_SIZE_DETAIL,
   ItemEanHeldException,
+  ItemKilogramHasSizeException,
 } from '@portfolio/luna-shopper/platform';
 import type { FindOperator, Repository } from 'typeorm';
 import type {
@@ -1186,7 +1189,11 @@ describe('SourceEntryService', () => {
 
         it.each([
           [kilo, UnitOfMeasure.GRAM, 250],
-          [kilo, UnitOfMeasure.KILOGRAM, 0.25],
+          [
+            { unitSize: 2.5, sizeUnit: UnitOfMeasure.GRAM, sizeFormat: 'g' },
+            UnitOfMeasure.GRAM,
+            2.5,
+          ],
           [
             { unitSize: 1.5, sizeUnit: UnitOfMeasure.LITER, sizeFormat: 'l' },
             UnitOfMeasure.MILLILITER,
@@ -1205,6 +1212,14 @@ describe('SourceEntryService', () => {
           expect(await sizeOf(row, { defaultUnit })).toHaveBeenCalledWith(
             expect.objectContaining({ unitSize, defaultUnit })
           );
+        });
+
+        it('refuses KILOGRAM over a row that states a size (plan 0237, section 3.3)', async () => {
+          // Expressed in the named unit, 0.25 kg is a sized KILOGRAM, which
+          // no product route stores. Refused here rather than one hop later.
+          await expect(
+            sizeOf(kilo, { defaultUnit: UnitOfMeasure.KILOGRAM })
+          ).rejects.toBeInstanceOf(ItemKilogramHasSizeException);
         });
 
         it('keeps the number when the two units are of different kinds', async () => {
@@ -1250,6 +1265,63 @@ describe('SourceEntryService', () => {
             defaultUnit: UnitOfMeasure.LITER,
           })
         );
+      });
+
+      describe('a named KILOGRAM beside a size (plan 0237, section 3.3)', () => {
+        const kilo = {
+          unitSize: 0.25,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          sizeFormat: 'kg',
+        };
+
+        it('is refused with item_kilogram_has_size before anything is read or written', async () => {
+          const { service, createItem, saved, findItemByEan, fetchEnglish } =
+            build({
+              row: entry(kilo),
+              source: { adapterKey: 'mercadona-api' },
+            });
+
+          const refusal = await service
+            .createItem({
+              userId: ADMIN,
+              entryId: 'e-1',
+              unitSize: 400,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+            .then(
+              () => {
+                throw new Error('expected the create to be refused');
+              },
+              (error: unknown) => error
+            );
+
+          expect(refusal).toBeInstanceOf(ItemKilogramHasSizeException);
+          // The same details as catalog's own refusal of the pair.
+          expect((refusal as ItemKilogramHasSizeException).details).toEqual({
+            [ITEM_UNIT_SIZE_DETAIL]: 400,
+            [ITEM_GRAMS_DETAIL]: 400_000,
+          });
+          // Nothing created, nothing bound, and nothing asked of catalog or
+          // of the chain: the row is still waiting for a decision.
+          expect(createItem).not.toHaveBeenCalled();
+          expect(saved).toEqual([]);
+          expect(findItemByEan).not.toHaveBeenCalled();
+          expect(fetchEnglish).not.toHaveBeenCalled();
+        });
+
+        it('passes KILOGRAM with a null size, which is a product sold by weight', async () => {
+          expect(
+            await sizeOf(kilo, {
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          ).toHaveBeenCalledWith(
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            })
+          );
+        });
       });
     });
 

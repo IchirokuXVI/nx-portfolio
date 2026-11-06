@@ -4,6 +4,11 @@ import {
   type BaseUnitSize,
 } from '@portfolio/luna-shopper/contracts';
 import { mapSizeFormat } from '@portfolio/luna-shopper/mercadona';
+import {
+  ITEM_GRAMS_DETAIL,
+  ITEM_UNIT_SIZE_DETAIL,
+  ItemKilogramHasSizeException,
+} from '@portfolio/luna-shopper/platform';
 import type { SourceCatalogEntry } from '../entities';
 
 /** The size and the unit an accept or a bulk create may name. */
@@ -64,6 +69,19 @@ export type CreatedSize = BaseUnitSize & { approxWeight: number | null };
  * `GRAM`. When the row states no unit, or the two are of different kinds (a
  * weight row and a named `UNIT`), nothing can convert one into the other and
  * the row's number is written as it stands.
+ *
+ * **A named `KILOGRAM` beside a size is refused, not converted** (plan 0237,
+ * section 3.3). A product sold by the kilo has no size, and catalog refuses
+ * the pair with `item_kilogram_has_size` on every product route. The
+ * harvester asks the same question first, with the same code and the same
+ * details, so the operator hears it before the row is touched, before the
+ * barcode is looked up and before the chain is asked for an English name.
+ * The pair is a contradiction, and nothing can tell which half the person
+ * meant: 400 `KILOGRAM` is a 400 kilo product or a typo for 400 `GRAM`. A
+ * conversion would decide that for them, and plan 0183 converts only what
+ * the row states, never what a person names. A request that names
+ * `KILOGRAM` with a null size, or over a row with no size, is a product sold
+ * by weight and passes.
  */
 export function createdSize(
   entry: Pick<
@@ -127,17 +145,41 @@ function sizeOf(
       : named.unitSize;
   if (named.defaultUnit !== undefined) {
     const unit = named.defaultUnit as UnitOfMeasure;
-    return {
+    return requireNoSizeOnKilogram({
       unitSize:
         named.unitSize === undefined
           ? inUnit(unitSize, entry.sizeUnit, unit)
           : unitSize,
       unit,
-    };
+    });
   }
   return toBaseUnit(
     unitSize,
     entry.sizeUnit ?? mapSizeFormat(entry.sizeFormat) ?? UnitOfMeasure.UNIT
+  );
+}
+
+/**
+ * The pair as it came, unless it is a `KILOGRAM` with a size: that one is
+ * refused with `item_kilogram_has_size`, whose details name the size and the
+ * grams it would be, as catalog's `requireBaseUnit` names them (plan 0237,
+ * section 3.3). Only a pair a person named reaches here; the pairs the row
+ * states go through `toBaseUnit`, which never answers a sized `KILOGRAM`.
+ */
+function requireNoSizeOnKilogram(size: BaseUnitSize): BaseUnitSize {
+  if (size.unit !== UnitOfMeasure.KILOGRAM || size.unitSize === null) {
+    return size;
+  }
+  const grams = toBaseUnit(size.unitSize, UnitOfMeasure.KILOGRAM).unitSize;
+  throw new ItemKilogramHasSizeException(
+    `A product sold by the kilo has no size: send a null size, or ` +
+      `${grams} ${UnitOfMeasure.GRAM}.`,
+    {
+      details: {
+        [ITEM_UNIT_SIZE_DETAIL]: size.unitSize,
+        [ITEM_GRAMS_DETAIL]: grams,
+      },
+    }
   );
 }
 

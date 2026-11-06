@@ -560,6 +560,15 @@ export class SourceEntryService {
   ): Promise<SourceEntryAcceptResult> {
     await this.admin.requireAdmin(req);
     const entry = await this.load(req.entryId);
+    // The row's size in a base unit, unless the request names its own (plan
+    // 0183): a row of 0.25 `KILOGRAM` creates a product of 250 `GRAM`. The
+    // unit the row states comes before the guess from the printed text (plan
+    // 0177): `75 cl` is held as 750 `MILLILITER`, and the text alone maps to
+    // nothing, which made the product 750 units. Asked first, because a
+    // named `KILOGRAM` beside a size is refused (plan 0237, section 3.3), and
+    // the refusal reads only the row and the request: it costs no lookup in
+    // catalog and no request to the chain, and the row stays undecided.
+    const size = createdSize(entry, req);
     // Read before the bind, which overwrites it.
     const left = leftItemOf(entry, null);
     // A real barcode or none (plan 0184). The row keeps what the chain
@@ -617,12 +626,6 @@ export class SourceEntryService {
       }
     }
 
-    // The row's size in a base unit, unless the request names its own (plan
-    // 0183): a row of 0.25 `KILOGRAM` creates a product of 250 `GRAM`. The
-    // unit the row states comes before the guess from the printed text (plan
-    // 0177): `75 cl` is held as 750 `MILLILITER`, and the text alone maps to
-    // nothing, which made the product 750 units.
-    const size = createdSize(entry, req);
     const item: ItemView = await this.catalog.createItem({
       // Plan 0079 reverses plan 0038 section 11: a product the source does not
       // translate gets no `en` key rather than a copy of the Spanish string. A
