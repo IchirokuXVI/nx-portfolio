@@ -1,3 +1,5 @@
+> **PR:** [#914](https://github.com/IchirokuXVI/nx-portfolio/pull/914)
+
 # 0244: a piece sold by the kilo states its approximate weight
 
 > Found on 2026-11-03 in production: Mercadona's 1.56 kg piece of "Queso viejo tostado mezcla"

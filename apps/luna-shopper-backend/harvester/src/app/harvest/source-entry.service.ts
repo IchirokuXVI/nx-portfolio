@@ -59,7 +59,7 @@ import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName } from './source-entry-name';
 import { SourceEntrySettler } from './source-entry-settle';
-import { createdSize } from './source-entry-size';
+import { createdSize, createdWeight } from './source-entry-size';
 import {
   bindFields,
   chainEanCounts,
@@ -646,6 +646,8 @@ export class SourceEntryService {
       sku: null,
       categoryIds,
       defaultUnit: size.unit,
+      // The weight of one piece the row states, as the source's (plan 0244).
+      ...createdWeight(size),
     });
 
     const bound = await this.bind(entry, item.id);

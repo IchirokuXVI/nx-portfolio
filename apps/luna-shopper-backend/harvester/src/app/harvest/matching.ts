@@ -28,6 +28,11 @@ export interface MatchCandidate {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  /**
+   * The approximate weight of one piece in grams, read from the observation
+   * (plan 0244, section 5.8). It stands in for the size when there is none.
+   */
+  approxWeight?: number | null;
 }
 
 export interface MatchResult {
@@ -118,7 +123,8 @@ export class ItemMatchIndex {
       const key = itemNameKey(
         item.name.es ?? item.name.en ?? '',
         item.brand,
-        item.unitSize
+        item.unitSize,
+        item.approxWeight ?? null
       );
       const bucket = this.byNameKey.get(key);
       if (bucket) {
@@ -162,7 +168,8 @@ export class ItemMatchIndex {
     const key = itemNameKey(
       candidate.name,
       candidate.brand,
-      candidate.unitSize
+      candidate.unitSize,
+      candidate.approxWeight ?? null
     );
     const bucket = this.byNameKey.get(key);
     // Exactly one item under the key, or it is not a match: two products that
@@ -194,16 +201,23 @@ export interface SiblingProposal {
  * candidates pointed at another size of the same product. The number is
  * normalized, because Postgres answers a `numeric` column as text (`"0.3300"`).
  *
+ * **A piece with no size takes its weight in that place** (plan 0244, section
+ * 5.8): `name|kg|1560` for a cheese of about 1.56 kg and `name|kg|` for loose
+ * cheese. Two pieces of one name at different weights are two products (owner,
+ * 2026-11-03), so they never share a key, and a piece never proposes a row
+ * with no weight.
+ *
  * It is not {@link entryNameKey}, and that one must not change: hashed, it is
- * also the row identity of a source with no id of its own.
+ * also the row identity of a source with no id of its own, and a weight that
+ * moves between weeks must not move a row's identity.
  */
 export function siblingKey(
   name: string,
   sizeFormat: string | null,
-  unitSize: number | string | null | undefined
+  unitSize: number | string | null | undefined,
+  approxWeight?: number | string | null
 ): string {
-  const size =
-    unitSize === null || unitSize === undefined ? NaN : Number(unitSize);
+  const size = sizeToken(unitSize, approxWeight);
   return `${entryNameKey(name, sizeFormat)}|${
     Number.isFinite(size) ? String(size) : ''
   }`;
@@ -225,19 +239,27 @@ const WORD_ORDER_STOP_WORDS = new Set(['de', 'en']);
  * would join them.
  *
  * The size half is taken from {@link siblingKey} itself, so this key is never
- * looser on size than the exact one.
+ * looser on size than the exact one. That includes the weight of one piece
+ * (plan 0244, section 5.8): two reworded pieces at different weights are two
+ * products here too.
  */
 export function wordOrderKey(
   name: string,
   sizeFormat: string | null,
-  unitSize: number | string | null | undefined
+  unitSize: number | string | null | undefined,
+  approxWeight?: number | string | null
 ): string {
   const words = normalizeName(name)
     .split(' ')
     .filter((word) => word !== '' && !WORD_ORDER_STOP_WORDS.has(word))
     .sort();
   // `siblingKey` of an empty name is `|<size text>|<unit size>`.
-  return `${words.join(' ')}${siblingKey('', sizeFormat, unitSize)}`;
+  return `${words.join(' ')}${siblingKey(
+    '',
+    sizeFormat,
+    unitSize,
+    approxWeight
+  )}`;
 }
 
 /**
@@ -288,13 +310,13 @@ export class SiblingEntryIndex {
   add(row: SourceCatalogEntry): void {
     push(
       this.byNameKey,
-      siblingKey(row.name, row.sizeFormat, row.unitSize),
+      siblingKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight),
       row
     );
     if (isNameKeyed(row)) {
       push(
         this.byWordOrderKey,
-        wordOrderKey(row.name, row.sizeFormat, row.unitSize),
+        wordOrderKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight),
         row
       );
     }
@@ -313,10 +335,13 @@ export class SiblingEntryIndex {
   match(
     name: string,
     sizeFormat: string | null,
-    unitSize: number | string | null
+    unitSize: number | string | null,
+    approxWeight: number | string | null = null
   ): SiblingProposal | null {
     const siblings = (
-      this.byNameKey.get(siblingKey(name, sizeFormat, unitSize)) ?? []
+      this.byNameKey.get(
+        siblingKey(name, sizeFormat, unitSize, approxWeight)
+      ) ?? []
     ).filter((row) => row.status !== SourceEntryStatus.REJECTED);
     if (siblings.length === 0) {
       return null;
@@ -355,10 +380,15 @@ export class SiblingEntryIndex {
     name: string,
     sizeFormat: string | null,
     unitSize: number | string | null,
-    self: SourceCatalogEntry | null = null
+    self: SourceCatalogEntry | null = null,
+    approxWeight: number | string | null = null
   ): SiblingProposal | null {
     const itemIds = new Set(
-      (this.byWordOrderKey.get(wordOrderKey(name, sizeFormat, unitSize)) ?? [])
+      (
+        this.byWordOrderKey.get(
+          wordOrderKey(name, sizeFormat, unitSize, approxWeight)
+        ) ?? []
+      )
         .filter(
           (row) =>
             row !== self &&
@@ -386,10 +416,13 @@ export class SiblingEntryIndex {
     name: string,
     sizeFormat: string | null,
     unitSize: number | string | null,
-    self: SourceCatalogEntry | null = null
+    self: SourceCatalogEntry | null = null,
+    approxWeight: number | string | null = null
   ): string | null {
     const bucket = (
-      this.byWordOrderKey.get(wordOrderKey(name, sizeFormat, unitSize)) ?? []
+      this.byWordOrderKey.get(
+        wordOrderKey(name, sizeFormat, unitSize, approxWeight)
+      ) ?? []
     ).filter((row) => row !== self && (self === null || row.id !== self.id));
     if (bucket.some((row) => row.status === SourceEntryStatus.ACTIVE)) {
       return null;
@@ -622,14 +655,37 @@ function namesOf(location: LocationCandidate): string[] {
   );
 }
 
+/**
+ * Rung 3's key: name, brand and size. A product with no size takes the
+ * weight of one piece in its place (plan 0244, section 5.8): `name|brand|1560`
+ * for the cheese piece, `name|brand|` for loose cheese.
+ */
 function itemNameKey(
   name: string,
   brand: string | null,
-  unitSize: number | null
+  unitSize: number | null,
+  approxWeight: number | null
 ): string {
+  const size = sizeToken(unitSize, approxWeight);
   return [
     normalizeName(name),
     brand ? normalizeName(brand) : '',
-    unitSize === null ? '' : String(Number(unitSize)),
+    Number.isFinite(size) ? String(size) : '',
   ].join('|');
+}
+
+/**
+ * The size, else the weight of one piece, else NaN. Both are normalized,
+ * because Postgres answers a `numeric` column as text (`"1560.0000"`).
+ */
+function sizeToken(
+  unitSize: number | string | null | undefined,
+  approxWeight: number | string | null | undefined
+): number {
+  if (unitSize !== null && unitSize !== undefined) {
+    return Number(unitSize);
+  }
+  return approxWeight === null || approxWeight === undefined
+    ? NaN
+    : Number(approxWeight);
 }

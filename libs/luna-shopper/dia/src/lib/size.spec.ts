@@ -230,6 +230,7 @@ describe('splitSize', () => {
         sizeUnit: null,
         packCount: null,
         approximate: false,
+        approxWeight: null,
       });
     });
 
@@ -278,6 +279,7 @@ describe('splitSize', () => {
       sizeUnit: null,
       packCount: null,
       approximate: false,
+      approxWeight: null,
     });
   });
 
@@ -303,6 +305,35 @@ describe('splitSize', () => {
     expect(splitSize('  Coca-Cola   2  L ')).toMatchObject({
       name: 'Coca-Cola',
       sizeFormat: '2 L',
+    });
+  });
+
+  describe('the approximate weight of a piece (plan 0244)', () => {
+    it.each([
+      ['Manzana roja granel 800 g aprox.', 800],
+      ['Manzana reineta granel 1 Kg aprox.', 1000],
+      [
+        'Pechuga de pollo entera formato familiar Selección de Dia 1.3 Kg aprox.',
+        1300,
+      ],
+      ['Pollo entero Selección de Dia 2.1 Kg aprox.', 2100],
+      ['Pechugas fileteadas Selección de Dia bandeja 650 g aprox.', 650],
+    ])('%s weighs %d g', (printed, grams) => {
+      expect(splitSize(printed)).toMatchObject({
+        approximate: true,
+        approxWeight: grams,
+      });
+    });
+
+    it.each([
+      // A size the chain promises is a size and no weight.
+      'Pera conferencia bandeja 700 g',
+      'Manzana roja dulce 1 Kg',
+      'Coca-Cola 2 L',
+      // An approximate volume is not a weight.
+      'Sopa casera 1 L aprox.',
+    ])('%s states no weight', (printed) => {
+      expect(splitSize(printed).approxWeight).toBeNull();
     });
   });
 });

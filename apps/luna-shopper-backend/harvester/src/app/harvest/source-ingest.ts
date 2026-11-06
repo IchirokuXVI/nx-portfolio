@@ -107,6 +107,18 @@ export interface SourceObservation {
    * prints no prices at all, and LIDL, Carrefour and DIA have no field for it.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece, in grams (plan 0244, section 5.5).
+   *
+   * Independent of {@link soldByWeight}: a cheese sold by the kilo has one,
+   * and so does a tray priced as one piece, which is not sold by weight. The
+   * row holds it only when it holds no size, so a size here clears it.
+   *
+   * Null is a statement that the source prints none, and clears it. Absent is
+   * a source that never reads one (Carrefour, El Jamón, DEZA, a document with
+   * no `approx_weight`), and leaves the stored weight alone.
+   */
+  approxWeight?: number | null;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
@@ -162,6 +174,16 @@ export interface PartialSourceObservation {
    * together. Absent means the listing does not say, and the row is left alone.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece in grams, when the listing states it
+   * (plan 0244, section 5.5). It travels with {@link soldByWeight} for the
+   * same reason: the listing has it, and the piece price is read from it.
+   *
+   * Absent leaves the stored weight alone. Null is a statement that the
+   * listing prints none, and clears it. A weight clears the row's size, as
+   * the full read path holds it.
+   */
+  approxWeight?: number | null;
   /**
    * The photo address, when the listing prints one (plan 0198, section 2).
    *
@@ -509,6 +531,7 @@ export class SourceIngest {
         // Asked before the write, because the write is what makes it false.
         changed =
           soldByWeightChanged(held, observation) ||
+          approxWeightChanged(held, observation) ||
           imageChanged(held, observation);
         outcome = await this.see(
           held,
@@ -1060,6 +1083,11 @@ export class SourceIngest {
    *
    * `sizeFormat`, `externalId` and the name are not touched in either case.
    *
+   * **The weight of one piece moves with it** (plan 0244), when the listing
+   * states it. A weight clears the size and its unit, because a row holds a
+   * weight only when it holds no size. An observation that does not carry the
+   * field leaves the stored weight alone, and one that carries null clears it.
+   *
    * **The other is the photo address, when the listing prints one** (plan
    * 0198). It is not an identity field. An observation that does not carry
    * the field leaves the stored address alone, and one that carries null
@@ -1076,7 +1104,14 @@ export class SourceIngest {
     if (soldByWeightChanged(row, observation)) {
       row.soldByWeight = observation.soldByWeight === true;
     }
-    if (observation.soldByWeight === true) {
+    if (observation.approxWeight !== undefined) {
+      row.approxWeight = observation.approxWeight;
+    }
+    if (
+      observation.soldByWeight === true ||
+      (observation.approxWeight !== undefined &&
+        observation.approxWeight !== null)
+    ) {
       row.unitSize = null;
       row.sizeUnit = null;
     }
@@ -1179,6 +1214,8 @@ export class SourceIngest {
         name: fields.name,
         brand: fields.brand,
         unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+        approxWeight:
+          row.approxWeight === null ? null : Number(row.approxWeight),
       });
       // Only the EAN rung promotes. A name match here would be a fuzzy proposal
       // made at the very moment the identifier that makes fuzziness unnecessary
@@ -1251,6 +1288,9 @@ export class SourceIngest {
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
       unitSize: fields.unitSize,
+      // The weight of one piece stands in for the size it does not have (plan
+      // 0244, section 5.8), so a piece never proposes one of another weight.
+      approxWeight: fields.approxWeight ?? null,
     });
     if (match && isSharedEan(match, observation.ean, eans)) {
       proposeSharedEan(draft, match.itemId);
@@ -1270,7 +1310,8 @@ export class SourceIngest {
       const sibling = siblings.match(
         observation.name,
         observation.sizeFormat,
-        fields.unitSize
+        fields.unitSize,
+        fields.approxWeight ?? null
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -1287,14 +1328,18 @@ export class SourceIngest {
         const reworded = siblings.matchAnyOrder(
           draft.name,
           draft.sizeFormat,
-          draft.unitSize
+          draft.unitSize,
+          null,
+          draft.approxWeight
         );
         const rejected = reworded?.itemId
           ? null
           : siblings.rejectedAnyOrder(
               draft.name,
               draft.sizeFormat,
-              draft.unitSize
+              draft.unitSize,
+              null,
+              draft.approxWeight
             );
         if (reworded?.itemId) {
           proposeReworded(draft, reworded.itemId);
@@ -1608,6 +1653,21 @@ function soldByWeightChanged(
 }
 
 /**
+ * Whether a partial observation states another weight than the row holds
+ * (plan 0244). Never when the listing does not say.
+ */
+function approxWeightChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  if (observation.approxWeight === undefined) {
+    return false;
+  }
+  const held = row.approxWeight === null ? null : Number(row.approxWeight);
+  return held !== observation.approxWeight;
+}
+
+/**
  * A row nobody has decided, which is the only kind a new EAN may promote.
  *
  * A `REJECTED` row is the owner saying this is not a product he tracks, and an
@@ -1705,7 +1765,8 @@ function proposeAnyOrder(
     row.name,
     row.sizeFormat,
     row.unitSize,
-    row
+    row,
+    row.approxWeight
   );
   if (reworded?.itemId) {
     proposeReworded(row, reworded.itemId);
@@ -1715,7 +1776,8 @@ function proposeAnyOrder(
     row.name,
     row.sizeFormat,
     row.unitSize,
-    row
+    row,
+    row.approxWeight
   );
   if (rejected !== null) {
     pointAtRejection(row, rejected);
@@ -1790,6 +1852,10 @@ function fieldsOf(
     // number describes nothing, and the column's own doc says it is null then.
     sizeUnit: unitSize === null ? null : observation.sizeUnit,
     soldByWeight,
+    // The weight of one piece (plan 0244), held only beside no size: a size
+    // writes a null weight whatever the observation said. With no size, a
+    // source that never reads a weight leaves the stored one alone.
+    approxWeight: unitSize === null ? observation.approxWeight : null,
     sizeFormat: observation.sizeFormat,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,

@@ -80,10 +80,50 @@ export function validateHarvestDocument(
   // document does. It is checked here rather than left to the import, because a
   // price pointing at nothing is a number with no meaning (plan 0103, D4).
   const dangling = valid ? danglingScopes(value) : [];
+  // A weight of one piece beside a size is refused (plan 0244, section 5.5):
+  // a row with a size has no weight. Checked here so the gateway and the
+  // harvester answer the same.
+  const weighed = valid ? weightsBesideSize(value) : [];
+  const refused = [...dangling, ...weighed];
   return {
-    valid: valid && dangling.length === 0,
-    failures: [...failures, ...dangling],
+    valid: valid && refused.length === 0,
+    failures: [...failures, ...refused],
   };
+}
+
+/** Every product that states `approx_weight` and a `size.quantity` both. */
+function weightsBesideSize(value: unknown): HarvestDocumentValidationFailure[] {
+  const products =
+    (
+      value as {
+        products?: Array<{
+          id?: unknown;
+          approx_weight?: unknown;
+          size?: { quantity?: unknown } | null;
+        }>;
+      }
+    ).products ?? [];
+  const failures: HarvestDocumentValidationFailure[] = [];
+  products.forEach((product, productIndex) => {
+    const weight = product?.approx_weight;
+    const quantity = product?.size?.quantity;
+    if (
+      weight === null ||
+      weight === undefined ||
+      quantity === null ||
+      quantity === undefined
+    ) {
+      return;
+    }
+    failures.push({
+      path: `/products/${productIndex}/approx_weight`,
+      productId: typeof product?.id === 'string' ? product.id : null,
+      productIndex,
+      message:
+        'states the weight of one piece beside a size, and a product with a size has no weight',
+    });
+  });
+  return failures;
 }
 
 /**

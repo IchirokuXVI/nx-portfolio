@@ -369,6 +369,88 @@ describe('the sibling key with size (plan 0155)', () => {
     expect(entryNameKey('Refresco cola', 'l')).toBe('refresco cola|l');
     expect(siblingKey('Refresco cola', 'l', 1)).toBe('refresco cola|l|1');
   });
+
+  describe('the weight of one piece (plan 0244, section 5.8)', () => {
+    const piece = (over: Partial<SourceCatalogEntry>) =>
+      row({
+        id: 'piece-24701',
+        name: 'Queso curado de oveja',
+        sizeFormat: 'kg',
+        unitSize: null,
+        approxWeight: '1560.0000' as unknown as number,
+        itemId: 'item-24701',
+        ...over,
+      });
+
+    it('takes the weight as the size token when there is no size', () => {
+      expect(siblingKey('Queso', 'kg', null, 1560)).toBe('queso|kg|1560');
+      expect(siblingKey('Queso', 'kg', null, '1560.0000')).toBe(
+        'queso|kg|1560'
+      );
+      expect(siblingKey('Queso', 'kg', null, null)).toBe('queso|kg|');
+      // A size wins over a weight, which a row never holds beside one.
+      expect(siblingKey('Queso', 'kg', 0.25, 1560)).toBe('queso|kg|0.25');
+    });
+
+    it("does not propose 24701's product for 24700 at its own weight", () => {
+      const index = new SiblingEntryIndex([piece({})]);
+
+      expect(index.match('Queso curado de oveja', 'kg', null, 820)).toBeNull();
+      expect(index.match('Queso curado de oveja', 'kg', null, 1560)).toEqual({
+        itemId: 'item-24701',
+        entryId: null,
+      });
+    });
+
+    it('proposes no piece for a row with no weight, nor the reverse', () => {
+      const index = new SiblingEntryIndex([piece({})]);
+      expect(index.match('Queso curado de oveja', 'kg', null)).toBeNull();
+
+      const loose = new SiblingEntryIndex([piece({ approxWeight: null })]);
+      expect(loose.match('Queso curado de oveja', 'kg', null, 1560)).toBeNull();
+    });
+  });
+});
+
+describe('rung 3 and the weight of one piece (plan 0244, section 5.8)', () => {
+  const cheese = (id: string, approxWeight: number | null) =>
+    item({
+      id,
+      name: { es: 'Queso curado de oveja', en: null },
+      brand: 'Hacendado',
+      unitSize: null,
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      approxWeight,
+    });
+  const candidate = (approxWeight: number | null) => ({
+    name: 'Queso curado de oveja',
+    brand: 'Hacendado',
+    ean: null,
+    unitSize: null,
+    approxWeight,
+  });
+
+  it('proposes the product of the same weight', () => {
+    const index = new ItemMatchIndex([cheese('item-heavy', 1560)]);
+
+    expect(index.match(candidate(1560))).toMatchObject({
+      itemId: 'item-heavy',
+      matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
+      status: SourceEntryStatus.CANDIDATE,
+    });
+  });
+
+  it('proposes no product of another weight, and none with no weight', () => {
+    const index = new ItemMatchIndex([
+      cheese('item-heavy', 1560),
+      cheese('item-loose', null),
+    ]);
+
+    expect(index.match(candidate(820))).toBeNull();
+    // Loose cheese is keyed with no size token, and a piece never reaches it.
+    expect(index.match(candidate(1560))?.itemId).toBe('item-heavy');
+    expect(index.match(candidate(null))?.itemId).toBe('item-loose');
+  });
 });
 
 describe('the chain EAN index (plan 0155)', () => {
@@ -615,6 +697,26 @@ describe('the sibling row index, second key (plan 0221, section 3.3)', () => {
     const index = new SiblingEntryIndex([named({ externalId: 'ART-0012' })]);
 
     expect(index.matchAnyOrder(NEW, '60 g', 60)).toBeNull();
+  });
+
+  it('keeps two reworded pieces at different weights apart (plan 0244)', () => {
+    const piece = named({
+      sizeFormat: null,
+      unitSize: null,
+      approxWeight: '1560.0000' as unknown as number,
+    });
+    const index = new SiblingEntryIndex([piece]);
+
+    expect(index.matchAnyOrder(NEW, null, null, null, 1560)?.itemId).toBe(
+      'item-chorizo'
+    );
+    expect(index.matchAnyOrder(NEW, null, null, null, 395)).toBeNull();
+    expect(index.matchAnyOrder(NEW, null, null)).toBeNull();
+    expect(
+      new SiblingEntryIndex([
+        { ...piece, status: SourceEntryStatus.REJECTED, itemId: null },
+      ]).rejectedAnyOrder(NEW, null, null, null, 395)
+    ).toBeNull();
   });
 
   it('never answers an entryId, even for a lone waiting sibling', () => {

@@ -115,7 +115,8 @@ export interface ProblemResponseOptions {
    * The route writes a product's unit or size (plan 0237, section 3.3), so a
    * unit the catalog does not store answers 400 with one of two codes of its
    * own: `LITER` or `PACK`, and `KILOGRAM` with a size. Each names what the
-   * client should send instead.
+   * client should send instead. Since plan 0244 it also writes the weight of
+   * a piece, so a weight beside a size answers a third code.
    */
   baseUnit?: boolean;
   /**
@@ -302,7 +303,9 @@ export function ApiProblemResponses(
   if (options.baseUnit) {
     codes.push(
       ERROR_CODES.ITEM_UNIT_NOT_BASE,
-      ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE
+      ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE,
+      // Plan 0244, section 3.2: a weight never beside a size.
+      ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE
     );
   }
   if (options.itemExpectation) {

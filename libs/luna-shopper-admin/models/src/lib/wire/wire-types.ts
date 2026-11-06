@@ -325,6 +325,7 @@ export type CreateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -521,6 +522,7 @@ export type ItemExpectationDto = {
   name?: LocalizedTextDto;
   brand?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
   categorySlugs?: string[];
@@ -710,6 +712,7 @@ export type ProblemDetails = {
     | 'item_expectation_failed'
     | 'item_unit_not_base'
     | 'item_kilogram_has_size'
+    | 'item_approx_weight_beside_size'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -1259,6 +1262,7 @@ export type UpdateItemBatchEntryDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -1278,6 +1282,7 @@ export type UpdateItemDto = {
   sku?: string | null;
   ean?: string | null;
   unitSize?: number | null;
+  approxWeight?: number | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -2417,6 +2422,8 @@ export type BasketBasketProductView = {
   ean: string | null;
   eans: string[];
   unitSize: number | null;
+  approxWeight?: number | null;
+  approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -2680,6 +2687,7 @@ export type CatalogAdminSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
   itemName: CatalogLocalizedText | null;
 };
 
@@ -2890,6 +2898,7 @@ export type CatalogItemOfferView = {
   priceCopiedFromScopeId?: string | null;
   stale: boolean;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**
@@ -3053,6 +3062,7 @@ export type CatalogItemSnapshot = {
   unitSize: number | null;
   packCount: number | null;
   defaultUnit: EnumsUnitOfMeasure;
+  approxWeight?: number | null;
 };
 
 /**
@@ -3071,6 +3081,8 @@ export type CatalogItemView = {
   ean: string | null;
   eans: string[];
   unitSize: number | null;
+  approxWeight?: number | null;
+  approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -3716,6 +3728,7 @@ export type CatalogSupermarketItemView = {
   available: boolean;
   delistedAt?: string | null;
   outOfStockAt?: string | null;
+  piecePrice?: number | null;
 };
 
 /**
@@ -4050,7 +4063,8 @@ export type EnumsHarvestWarningCode =
   | 'DETAIL_SKIPPED_UNKNOWN'
   | 'PRICE_SOLD_ANOTHER_WAY'
   | 'SOURCE_PAUSED'
-  | 'SOURCE_RESUMED';
+  | 'SOURCE_RESUMED'
+  | 'APPROX_WEIGHT_ROWS_DISAGREE';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
@@ -4851,6 +4865,7 @@ export type HarvestItemSourceEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -5007,6 +5022,7 @@ export type HarvestQueuedSourceEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];
@@ -5098,6 +5114,7 @@ export type HarvestSourceCatalogEntryView = {
   unitSize: number | null;
   sizeUnit: 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'UNIT' | null;
   soldByWeight: boolean;
+  approxWeight?: number | null;
   sizeFormat: string | null;
   packCount: number | null;
   categoryPath: string[];

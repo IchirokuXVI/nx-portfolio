@@ -1018,6 +1018,12 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // the products whose sources disagreed, which a person looks at.
     packCountsFilled: written.packCountsFilled,
     packCountConflicts: written.packCountConflicts,
+    // Plan 0244, section 5.7: weights of one piece written onto products, and
+    // the products catalog skipped because a person wrote the weight or the
+    // product is still a sized pack.
+    approxWeightsWritten: written.approxWeightsWritten,
+    approxWeightsSkippedSetByAdmin: written.approxWeightsSkippedSetByAdmin,
+    approxWeightsSkippedHasSize: written.approxWeightsSkippedHasSize,
   };
 }
 

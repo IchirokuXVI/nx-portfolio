@@ -1,5 +1,5 @@
 import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
-import { packCountIn, parseSize } from './size';
+import { approxWeightIn, packCountIn, parseSize } from './size';
 
 /**
  * Every string here was printed by the live assortment on 2026-09-06 (plan
@@ -116,5 +116,45 @@ describe('parseSize', () => {
     expect(parseSize('1stueck')).toBeNull();
     expect(parseSize('')).toBeNull();
     expect(parseSize(null)).toBeNull();
+  });
+});
+
+/**
+ * The strings below are the four shapes the review of 2026-11-04 read on the
+ * live site (plan 0244, section 5.2, and the evidence README, section 6.2).
+ */
+describe('approxWeightIn (plan 0244)', () => {
+  it('reads the grams of a weight the chain does not promise', () => {
+    expect(parseSize('Aprox. 350 g')).toMatchObject({
+      unitSize: 350,
+      unit: UnitOfMeasure.GRAM,
+      approximate: true,
+    });
+    expect(approxWeightIn('Aprox. 350 g')).toBe(350);
+    expect(parseSize('Aprox.350 g')).toMatchObject({
+      unitSize: 350,
+      approximate: true,
+    });
+    expect(approxWeightIn('Aprox.350 g')).toBe(350);
+  });
+
+  it('reads an approximate weight in kilos as grams', () => {
+    expect(approxWeightIn('Aprox. 1,2 kg')).toBe(1200);
+  });
+
+  it('answers neither a size nor a weight for a printed range', () => {
+    expect(parseSize('Aprox. 360-460g')).toBeNull();
+    expect(approxWeightIn('Aprox. 360-460g')).toBeNull();
+    expect(parseSize('aprox 700-900g')).toBeNull();
+    expect(approxWeightIn('aprox 700-900g')).toBeNull();
+  });
+
+  it('answers no weight for a size the chain promises', () => {
+    expect(approxWeightIn('350 g')).toBeNull();
+    expect(approxWeightIn('6x200ml')).toBeNull();
+  });
+
+  it('answers no weight for an approximate volume, which is not a weight', () => {
+    expect(approxWeightIn('Aprox. 24 l')).toBeNull();
   });
 });

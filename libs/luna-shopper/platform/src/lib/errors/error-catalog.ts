@@ -228,6 +228,10 @@ export const ERROR_CATALOG: Record<
     en: 'A product sold by the kilo has no size. Clear the size, or store the weight in grams.',
     es: 'Un producto que se vende por kilo no tiene tamaño. Quita el tamaño o guarda el peso en gramos.',
   },
+  [ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE]: {
+    en: 'A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.',
+    es: 'Un producto tiene un tamaño fijo o un peso aproximado, nunca los dos, y el peso es mayor que cero. Quita uno de los dos.',
+  },
   [ERROR_CODES.ITEM_MERGED]: {
     en: 'This product was merged into another one. Work on the product it was merged into.',
     es: 'Este producto se fusionó con otro. Trabaja con el producto con el que se fusionó.',
@@ -237,8 +241,8 @@ export const ERROR_CATALOG: Record<
     es: 'La misma cadena vende los dos productos, así que el producto fusionado tendría dos artículos de esa cadena. Permite un segundo artículo para fusionarlos igualmente.',
   },
   [ERROR_CODES.ITEM_MERGE_FORMAT_DIFFERS]: {
-    en: 'The two products have a different size or unit, so they are two products. Allow the format difference to merge them anyway.',
-    es: 'Los dos productos tienen un tamaño o una unidad distintos, así que son dos productos. Permite la diferencia de formato para fusionarlos igualmente.',
+    en: 'The two products have a different size, unit or approximate weight, so they are two products. Allow the format difference to merge them anyway.',
+    es: 'Los dos productos tienen un tamaño, una unidad o un peso aproximado distintos, así que son dos productos. Permite la diferencia de formato para fusionarlos igualmente.',
   },
   [ERROR_CODES.ITEM_IN_USE]: {
     en: 'Prices, queue rows, shopping lists or other products still name this product. Merge it into the product that replaces it instead.',

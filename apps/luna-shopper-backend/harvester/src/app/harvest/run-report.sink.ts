@@ -1,9 +1,12 @@
 import { Logger } from '@nestjs/common';
 import {
+  APPROX_WEIGHT_FILL_MAX,
   HarvestRunWrites,
+  HarvestWarningCode,
   PACK_COUNT_FILL_MAX,
   PriceSourceKind,
   SourceEntryStatus,
+  type ApproxWeightFill,
   type PackCountFill,
   type SupermarketItemAvailabilityEntry,
 } from '@portfolio/luna-shopper/contracts';
@@ -58,6 +61,13 @@ const PRODUCT_CHUNK = 400;
 
 /** How many places are written in one pass. */
 const PLACE_CHUNK = 100;
+
+/** One bound row and the weight of one piece it states (plan 0244). */
+interface WeighedRow {
+  entryId: string;
+  externalId: string;
+  approxWeight: number;
+}
 
 /** How many availability rows go to catalog in one call. */
 const AVAILABILITY_BATCH = 200;
@@ -266,6 +276,15 @@ export interface RunReportResult {
    * {@link shopsUnmapped}.
    */
   packCountConflicts: { itemId: string; packCounts: number[] }[];
+  /**
+   * Products whose weight of one piece this run wrote (plan 0244, section
+   * 5.7). A product that already held the same weight is not counted.
+   */
+  approxWeightsWritten: number;
+  /** Products skipped because a person wrote their weight. */
+  approxWeightsSkippedSetByAdmin: number;
+  /** Products skipped because they are still a sized pack. */
+  approxWeightsSkippedHasSize: number;
 }
 
 export class RunReportSink implements RunReport {
@@ -346,6 +365,9 @@ export class RunReportSink implements RunReport {
     availabilityCopied: {},
     packCountsFilled: 0,
     packCountConflicts: [],
+    approxWeightsWritten: 0,
+    approxWeightsSkippedSetByAdmin: 0,
+    approxWeightsSkippedHasSize: 0,
   };
 
   constructor(
@@ -503,6 +525,7 @@ export class RunReportSink implements RunReport {
       this.result.pricedScopes = [...copies.pricedScopes];
       this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
       await this.fillPackCounts(outcomes);
+      await this.writeApproxWeights(outcomes);
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
     this.resolveWholeListings();
@@ -562,6 +585,85 @@ export class RunReportSink implements RunReport {
       );
       this.result.packCountsFilled += written;
     }
+  }
+
+  /**
+   * The weight of one piece this run read, onto the products its rows are
+   * bound to (plan 0244, section 5.7). After the prices, in the shape of
+   * {@link fillPackCounts}.
+   *
+   * Only an `ACTIVE` row names its product. Unlike a pack count, a weight is
+   * rewritten on every run, so the latest run wins (D2). Catalog skips a
+   * product that has a size and one whose weight a person wrote, and the
+   * report counts both.
+   *
+   * **Rows that disagree write nothing.** Two pieces of different weight are
+   * two products (owner, 2026-11-03), so two `ACTIVE` rows of this chain on
+   * one product with two weights are a bad merge. That product is left out
+   * and the run warns `APPROX_WEIGHT_ROWS_DISAGREE`, naming it and the rows.
+   *
+   * A partial observation carries the row's stored weight, which is what the
+   * listing or the last full read said, so a walk that fetched no detail
+   * still writes.
+   */
+  private async writeApproxWeights(
+    outcomes: readonly SourceEntryOutcome[]
+  ): Promise<void> {
+    // Per product, per row: the same row twice in a run is one row.
+    const byItem = new Map<string, Map<string, WeighedRow>>();
+    for (const outcome of outcomes) {
+      const weight = outcome.entry.approxWeight ?? null;
+      if (!outcome.itemId || weight === null) {
+        continue;
+      }
+      const rows = byItem.get(outcome.itemId) ?? new Map<string, WeighedRow>();
+      rows.set(outcome.entry.id, {
+        entryId: outcome.entry.id,
+        externalId: outcome.entry.externalId,
+        approxWeight: Number(weight),
+      });
+      byItem.set(outcome.itemId, rows);
+    }
+
+    const fills: ApproxWeightFill[] = [];
+    for (const [itemId, rows] of byItem) {
+      const weights = new Set(
+        [...rows.values()].map((row) => row.approxWeight)
+      );
+      if (weights.size === 1) {
+        fills.push({ itemId, approxWeight: [...weights][0] });
+        continue;
+      }
+      this.warnWeightsDisagree(itemId, [...rows.values()]);
+    }
+    for (let i = 0; i < fills.length; i += APPROX_WEIGHT_FILL_MAX) {
+      const answer = await this.deps.catalog.setApproxWeights(
+        fills.slice(i, i + APPROX_WEIGHT_FILL_MAX)
+      );
+      this.result.approxWeightsWritten += answer.written;
+      this.result.approxWeightsSkippedSetByAdmin += answer.skippedSetByAdmin;
+      this.result.approxWeightsSkippedHasSize += answer.skippedHasSize;
+    }
+  }
+
+  private warnWeightsDisagree(itemId: string, rows: WeighedRow[]): void {
+    const named = [...rows]
+      .sort((a, b) => a.approxWeight - b.approxWeight)
+      .map(
+        (row) => `${row.externalId} (${row.entryId}) at ${row.approxWeight} g`
+      )
+      .join(', ');
+    this.context.warn({
+      code: HarvestWarningCode.APPROX_WEIGHT_ROWS_DISAGREE,
+      message:
+        `The product ${itemId} is bound to rows of this chain that state ` +
+        `different weights of one piece: ${named}. Two pieces of different ` +
+        'weight are two products, so no weight was written onto it. Split ' +
+        'the product, or remove the row that does not belong.',
+      offerId: rows[0]?.externalId ?? null,
+      page: null,
+      name: null,
+    });
   }
 
   /**
