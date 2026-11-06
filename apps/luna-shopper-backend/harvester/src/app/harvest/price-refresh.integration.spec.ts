@@ -291,8 +291,10 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
     await refreshes.settled();
 
     // Both pass the product read at once, and the chain claim lets one
-    // through. The other is refused with the chain's time left, or, when it
-    // reads after the first row is written, joins that row.
+    // through. The other is refused with the chain's time left; when it reads
+    // after the first row is written, it joins that row; and when it reads
+    // after the first fetch finished, the price is FRESH and it starts
+    // nothing (an id of null). Whichever, one fetch ran.
     const refused = answers.filter((answer) => answer.status === 'rejected');
     for (const answer of refused) {
       const reason = (answer as PromiseRejectedResult).reason;
@@ -306,8 +308,9 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
         .filter((answer) => answer.status === 'fulfilled')
         .map(
           (answer) =>
-            (answer as PromiseFulfilledResult<{ id: string }>).value.id
+            (answer as PromiseFulfilledResult<{ id: string | null }>).value.id
         )
+        .filter((id) => id !== null)
     );
     expect(ids.size).toBe(1);
     expect(fetches).toBe(1);
