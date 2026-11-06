@@ -439,8 +439,11 @@ export class UpdateSupermarketLocationDto extends CreateSupermarketLocationDto {
  * The unit rules catalog holds every product write to (plan 0237, section
  * 3.3), stated once for the create and the edit.
  */
+const APPROX_WEIGHT_DESCRIPTION =
+  'The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it.';
+
 const BASE_UNIT_DESCRIPTION =
-  'A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size.';
+  'A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. A piece with an approximate weight sends `approxWeight` instead. An edit is checked as the product will be saved, and only when it names the unit or the size.';
 
 export class CreateItemDto {
   @ApiProperty({ type: LocalizedTextDto })
@@ -487,6 +490,14 @@ export class CreateItemDto {
   @IsNumber()
   @Min(0)
   unitSize?: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: APPROX_WEIGHT_DESCRIPTION,
+  })
+  @IsOptional()
+  @IsNumber()
+  approxWeight?: number | null;
 
   @ApiPropertyOptional({
     type: 'integer',
@@ -623,6 +634,14 @@ export class ItemExpectationDto {
   @IsNumber()
   unitSize?: number | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Compared as a number of grams, as `unitSize` is (plan 0244).',
+  })
+  @IsOptional()
+  @IsNumber()
+  approxWeight?: number | null;
+
   @ApiPropertyOptional({ enum: UnitOfMeasure })
   @IsOptional()
   @IsEnum(UnitOfMeasure)
@@ -692,6 +711,14 @@ export class UpdateItemDto {
   @IsNumber()
   @Min(0)
   unitSize?: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: APPROX_WEIGHT_DESCRIPTION,
+  })
+  @IsOptional()
+  @IsNumber()
+  approxWeight?: number | null;
 
   @ApiPropertyOptional({
     type: 'integer',

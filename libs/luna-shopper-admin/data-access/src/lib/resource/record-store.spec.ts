@@ -818,3 +818,91 @@ describe('RecordStore, deleting a record', () => {
     expect(store.busy()).toBe(false);
   });
 });
+
+/** What one change rules out, applied by `set` (admin plan 0068). */
+describe('RecordStore, a change that rules out another field', () => {
+  interface Piece extends ResourceRow {
+    id: string;
+    unit: string;
+    size: number | null;
+    weight: number | null;
+  }
+
+  const pieces = defineResource<Piece>({
+    name: 'pieces',
+    segment: 'pieces',
+    labels: { one: 'pieces.one', many: 'pieces.many' },
+    title: (piece) => piece.id,
+    fields: [
+      { kind: 'text', name: 'id', label: 'pieces.id', editable: false },
+      {
+        kind: 'enum',
+        name: 'unit',
+        label: 'pieces.unit',
+        options: [
+          { value: 'GRAM', label: 'pieces.gram' },
+          { value: 'KILO', label: 'pieces.kilo' },
+        ],
+      },
+      {
+        kind: 'number',
+        name: 'size',
+        label: 'pieces.size',
+        nullable: true,
+        shown: (piece) => piece.unit !== 'KILO',
+        excludes: 'weight',
+      },
+      {
+        kind: 'number',
+        name: 'weight',
+        label: 'pieces.weight',
+        // Required here only so that a touched empty weight would complain.
+        required: true,
+        nullable: true,
+        excludes: 'size',
+      },
+    ],
+    list: { columns: ['id'], compact: ['id'] },
+    gateway: () => {
+      throw new Error('not used');
+    },
+  });
+
+  const piece: Piece = { id: 'p1', unit: 'GRAM', size: 250, weight: null };
+
+  async function openedPiece(gateway: ResourceGateway<ResourceRow>) {
+    const store = new RecordStore<ResourceRow>(pieces, gateway, 'p1');
+    await store.load();
+    store.edit();
+    return store;
+  }
+
+  it('empties the excluded field, and touches only the one that was typed into', async () => {
+    const gateway = gatewayOf({ read: async () => piece });
+    const store = await openedPiece(gateway);
+
+    store.set('weight', '1560');
+    expect(store.draft()['size']).toBe('');
+    expect(store.messagesFor('size')).toEqual([]);
+
+    store.set('size', '300');
+    expect(store.draft()['weight']).toBe('');
+    // Emptied, and not touched: the required weight says nothing yet.
+    expect(store.messagesFor('weight')).toEqual([]);
+  });
+
+  it('empties a field the new value hides, and sends it as null', async () => {
+    const gateway = gatewayOf({ read: async () => piece });
+    const store = await openedPiece(gateway);
+
+    store.set('unit', 'KILO');
+    store.set('weight', '1560');
+    expect(store.draft()['size']).toBe('');
+    expect(store.changed()).toEqual(['unit', 'size', 'weight']);
+
+    await store.submit();
+    expect(gateway.updated).toEqual([
+      { id: 'p1', input: { unit: 'KILO', size: null, weight: 1560 } },
+    ]);
+  });
+});

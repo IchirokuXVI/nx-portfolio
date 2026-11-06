@@ -1,4 +1,5 @@
 import { DiscoveredPlace } from './discovered-place.entity';
+import { HarvestAlert } from './harvest-alert.entity';
 import { HarvestRunPreset } from './harvest-run-preset.entity';
 import { HarvestRun } from './harvest-run.entity';
 import { HarvestSchedule } from './harvest-schedule.entity';
@@ -8,10 +9,12 @@ import { SourceEntryAvailability } from './source-entry-availability.entity';
 import { SourceEntryPrice } from './source-entry-price.entity';
 import { SourceEntryScopePresence } from './source-entry-scope-presence.entity';
 import { SourceLocation } from './source-location.entity';
+import { SourceProbe } from './source-probe.entity';
 import { SupermarketSource } from './supermarket-source.entity';
 
 export { BaseEntity } from './base.entity';
 export { DiscoveredPlace } from './discovered-place.entity';
+export { HarvestAlert } from './harvest-alert.entity';
 export { HarvestRunPreset } from './harvest-run-preset.entity';
 export { HarvestRun } from './harvest-run.entity';
 export { HarvestSchedule } from './harvest-schedule.entity';
@@ -21,6 +24,7 @@ export { SourceEntryAvailability } from './source-entry-availability.entity';
 export { SourceEntryPrice } from './source-entry-price.entity';
 export { SourceEntryScopePresence } from './source-entry-scope-presence.entity';
 export { SourceLocation } from './source-location.entity';
+export { SourceProbe } from './source-probe.entity';
 export { SupermarketSource } from './supermarket-source.entity';
 
 /** Every harvester entity, for TypeOrmModule registration and the CLI data source. */
@@ -44,4 +48,8 @@ export const HARVESTER_ENTITIES = [
   SourceEntryScopePresence,
   DiscoveredPlace,
   PostalCodeDiscoveryRequest,
+  // The outbox of alerts to the owner (plan 0218).
+  HarvestAlert,
+  // One probe of one chain's storefront (plan 0219).
+  SourceProbe,
 ];

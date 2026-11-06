@@ -124,8 +124,18 @@ export interface LidlProduct {
    * null when the table names no node of it. A slug and never an id.
    */
   categorySlug: string | null;
+  /** Null beside an {@link approxWeight}: a weight that varies is no size. */
   unitSize: number | null;
+  /** Null beside an {@link approxWeight}, as {@link unitSize} is. */
   unit: UnitOfMeasure | null;
+  /**
+   * The approximate weight of one piece in grams (plan 0244, section 5.2):
+   * the number of a printed `Aprox. 350 g`. LIDL prints one price for such a
+   * tray and no price per kilo, so the row is a piece priced as one and never
+   * sold by weight. Null for a size it promises, for a printed range and for
+   * anything that is not a weight.
+   */
+  approxWeight: number | null;
   /** The printed size, verbatim, so nothing is lost when the parse gives up. */
   sizeFormat: string | null;
   /** The `N` of a printed `NxQ` (plan 0162), or null for a size that multiplies nothing. */

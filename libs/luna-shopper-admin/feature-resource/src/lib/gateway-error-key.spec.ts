@@ -81,6 +81,18 @@ describe('gatewayErrorKey', () => {
     ]);
   });
 
+  /** A size or a weight, never both (backend plan 0244, admin plan 0068). */
+  it('names each refusal about the size of a product apart', () => {
+    expect(
+      ['item_kilogram_has_size', 'item_approx_weight_beside_size'].map((code) =>
+        gatewayErrorKey(failure({ code }))
+      )
+    ).toEqual([
+      'resource.error.itemKilogramHasSize',
+      'resource.error.itemApproxWeightBesideSize',
+    ]);
+  });
+
   /** The shop section refusals (backend plan 0200, admin plan 0063). */
   it('names each shop section refusal apart', () => {
     expect(

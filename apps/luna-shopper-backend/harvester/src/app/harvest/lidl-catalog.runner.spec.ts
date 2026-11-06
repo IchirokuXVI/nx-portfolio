@@ -337,6 +337,49 @@ describe('LidlCatalogRunner', () => {
     });
   });
 
+  it('writes a tray printed Aprox. as a piece priced as one (plan 0244, section 5.2)', async () => {
+    const printed = ['Aprox. 350 g', 'Aprox. 360-460g', '500 g'];
+    const group = [{ priceId: 'a', regions: ['1'], price: 4.99 }];
+    const runner = new TestRunner({
+      index: printed.map((size, index) =>
+        row({ id: String(index + 1), title: 'Lomo', category: 'Food', size })
+      ),
+      products: Object.fromEntries(
+        printed.map((size, index) => [
+          `/p/x/p${index + 1}`,
+          product({ id: String(index + 1), size, groups: group }),
+        ])
+      ),
+    });
+
+    await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+    const bySize = Object.fromEntries(
+      report.products.map((observation) => [
+        observation.sizeFormat,
+        observation,
+      ])
+    );
+    expect(bySize['Aprox. 350 g']).toMatchObject({
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: 350,
+      soldByWeight: false,
+      // The tray's price, unchanged.
+      prices: [expect.objectContaining({ price: 4.99 })],
+    });
+    // A printed range is neither a size nor a weight.
+    expect(bySize['Aprox. 360-460g']).toMatchObject({
+      unitSize: null,
+      approxWeight: null,
+    });
+    expect(bySize['500 g']).toMatchObject({
+      unitSize: 500,
+      sizeUnit: 'GRAM',
+      approxWeight: null,
+    });
+  });
+
   it('declares one scope per region, and creates none itself', async () => {
     const runner = new TestRunner({
       index: [row({ id: '1', title: 'Queso', category: 'Food' })],

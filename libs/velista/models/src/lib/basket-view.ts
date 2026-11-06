@@ -341,6 +341,12 @@ export interface BasketProduct {
   /** e.g. `1` with {@link BasketProduct.unit} `LITER`. Null when catalog does not know. */
   size: number | null;
   unit: string | null;
+  /**
+   * The approximate weight of one piece in grams, when the chain says it varies
+   * (backend 0244). Null for a product with a size, and for a product sold by
+   * the kilo with no stated weight.
+   */
+  readonly approxWeight: number | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
   /**
@@ -847,6 +853,11 @@ export interface ShownPrice {
   readonly price: number;
   readonly currency: string | null;
   readonly priceScopeId: string;
+  /**
+   * The server's price of one piece of a kilo piece (backend 0244), or null.
+   * See {@link ProductOffer.piecePrice}.
+   */
+  readonly piecePrice: number | null;
 }
 
 /**
@@ -857,6 +868,11 @@ export interface ShownPrice {
  * it, also at a shop that prices nothing on the basket (velista `0153`). The
  * cheapest at the run's scopes otherwise. Null when there is no price, which draws
  * the same blank either way.
+ *
+ * **The piece price at a shop is read off {@link BasketProduct.offers}** (velista
+ * `0179`, section 2): the wire's at shop view carries no piece price, and the
+ * server's figure is on the offer of the scope `atShop` names. A kilo piece with
+ * no such offer is unpriced there, because velista never derives a piece price.
  *
  * @param atShop Whether the rows are read at a chosen shop, which is
  *   `basketReadAtShop` and never a test of this product alone.
@@ -876,6 +892,10 @@ export function shownOffer(
           price: here.price,
           currency: here.currency,
           priceScopeId: here.priceScopeId,
+          piecePrice:
+            product.offers.find(
+              (offer) => offer.priceScopeId === here.priceScopeId
+            )?.piecePrice ?? null,
         };
   }
   const offer = product.offer;
@@ -885,6 +905,7 @@ export function shownOffer(
         price: offer.price,
         currency: offer.currency,
         priceScopeId: offer.priceScopeId,
+        piecePrice: offer.piecePrice,
       };
 }
 

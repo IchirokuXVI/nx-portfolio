@@ -133,6 +133,37 @@ export function packCountIn(printed: string | null | undefined): number | null {
   return size ? packCountOf(size.count) : null;
 }
 
+/** What one of a weight unit is worth in grams. */
+const GRAMS_IN: Partial<Record<UnitOfMeasure, number>> = {
+  [UnitOfMeasure.GRAM]: 1,
+  [UnitOfMeasure.KILOGRAM]: 1000,
+};
+
+/**
+ * The approximate weight of one piece in grams (plan 0244, section 5.2), or
+ * null when the printed size promises its number or is not a weight.
+ *
+ * `Aprox. 350 g` is a tray whose weight varies: LIDL prints one price for it
+ * and no price per kilo, so it is a piece priced as one, with a weight and no
+ * size. A printed range (`Aprox. 360-460g`) parses to no size at all, so it
+ * answers no weight either. An approximate volume (`Aprox. 24 l`) is not a
+ * weight and answers null, and its size stays as printed.
+ */
+export function approxWeightOf(size: LidlSize | null): number | null {
+  if (size === null || !size.approximate) {
+    return null;
+  }
+  const grams = GRAMS_IN[size.unit];
+  return grams === undefined ? null : round(size.unitSize * grams);
+}
+
+/** {@link approxWeightOf} of the printed size. */
+export function approxWeightIn(
+  printed: string | null | undefined
+): number | null {
+  return approxWeightOf(parseSize(printed));
+}
+
 function round(value: number): number {
   return Math.round(value * 10_000) / 10_000;
 }

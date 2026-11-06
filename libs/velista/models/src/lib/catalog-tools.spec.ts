@@ -191,8 +191,10 @@ function product(
           sourceKind: 'OFFICIAL_WEB',
           stale: false,
           priceScopeId: 'scope-1',
+          piecePrice: null,
         }
       : null,
     unitBasis: null,
+    approxWeight: null,
   };
 }

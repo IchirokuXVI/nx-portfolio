@@ -25,7 +25,10 @@
 
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { isGroceryCategory } from '../src/lib/categories';
 import { LidlClient } from '../src/lib/lidl.client';
+import { approxWeightIn } from '../src/lib/size';
+import type { LidlListRow } from '../src/lib/types';
 
 const FIXTURES = join(__dirname, '..', 'src', 'lib', '__fixtures__');
 
@@ -66,11 +69,58 @@ const PRODUCTS: ReadonlyArray<{ name: string; path: string; why: string }> = [
   },
 ];
 
+/**
+ * A case whose product is found in the week's index rather than named, because
+ * the shape is rare and the rolling window replaces the product every week.
+ * The first grocery row the predicate accepts is captured.
+ */
+const FOUND: ReadonlyArray<{
+  name: string;
+  accepts: (row: LidlListRow) => boolean;
+  why: string;
+}> = [
+  {
+    name: 'product-approximate-weight',
+    // `Aprox. 350 g`, one number: a range states no weight (plan 0244).
+    accepts: (row) =>
+      isGroceryCategory(row.siteCategory) &&
+      approxWeightIn(row.sizeFormat) !== null,
+    why: 'a tray printed `Aprox. N g`, a piece priced as one with an approximate weight (plan 0244)',
+  },
+];
+
+/**
+ * How many index rows one request of the search for {@link FOUND} asks for:
+ * the page a run walks, so the search sees the window a run sees.
+ */
+const FIND_PAGE_SIZE = 100;
+
+/**
+ * `--only=<name>[,<name>]` captures the named fixtures (file names without
+ * `.json`) and leaves every other file as it is. With no `--only` every
+ * fixture is refreshed, as before.
+ */
+const ONLY = readOnly(process.argv.slice(2));
+
+function readOnly(args: string[]): Set<string> | null {
+  const names = args
+    .filter((arg) => arg.startsWith('--only='))
+    .flatMap((arg) => arg.slice('--only='.length).split(','))
+    .map((name) => name.trim().replace(/\.json$/, ''))
+    .filter(Boolean);
+  return names.length > 0 ? new Set(names) : null;
+}
+
+function wanted(name: string): boolean {
+  return ONLY === null || ONLY.has(name);
+}
+
 async function main(): Promise<void> {
   mkdirSync(FIXTURES, { recursive: true });
+  const userAgent =
+    'LunaShopperBot/1.0 (+https://velista.app; contact: hola@velista.app)';
   const client = new LidlClient({
-    userAgent:
-      'LunaShopperBot/1.0 (+https://velista.app; contact: hola@velista.app)',
+    userAgent,
     pageSize: SEARCH_PAGE_SIZE,
     // The site is polite to a browser's pace and this tool has no run behind it
     // to hold a token bucket, so it keeps its own floor.
@@ -78,12 +128,19 @@ async function main(): Promise<void> {
   });
 
   let written = 0;
-  const planned = PRODUCTS.length + 2;
+  let planned = 0;
 
-  const search = await client.captureSearchPage(SEARCH_OFFSET);
-  written += write('search-page', search, 'one page of the in-store index');
+  if (wanted('search-page')) {
+    planned += 1;
+    const search = await client.captureSearchPage(SEARCH_OFFSET);
+    written += write('search-page', search, 'one page of the in-store index');
+  }
 
   for (const product of PRODUCTS) {
+    if (!wanted(product.name)) {
+      continue;
+    }
+    planned += 1;
     const payload = await client.captureProductPayload(product.path);
     if (!payload) {
       console.error(`  !! ${product.name}: no payload; ${product.why}`);
@@ -92,8 +149,47 @@ async function main(): Promise<void> {
     written += write(product.name, payload, product.why);
   }
 
-  const stores = await client.captureStorePage(5);
-  written += write('store-page', stores, 'five shops, each naming its price region');
+  const found = FOUND.filter((entry) => wanted(entry.name));
+  if (found.length > 0) {
+    const finder = new LidlClient({
+      userAgent,
+      pageSize: FIND_PAGE_SIZE,
+      minIntervalMs: 700,
+    });
+    const rows: LidlListRow[] = [];
+    for await (const row of finder.walkInStore()) {
+      rows.push(row);
+    }
+    for (const entry of found) {
+      planned += 1;
+      const row = rows.find((candidate) => entry.accepts(candidate));
+      if (!row?.path) {
+        console.error(
+          `  !! ${entry.name}: no row of this week's ${rows.length} accepts it; ${entry.why}`
+        );
+        continue;
+      }
+      console.log(
+        `  .. ${entry.name}: ${row.path} prints ${JSON.stringify(row.sizeFormat)}`
+      );
+      const payload = await client.captureProductPayload(row.path);
+      if (!payload) {
+        console.error(`  !! ${entry.name}: no payload; ${entry.why}`);
+        continue;
+      }
+      written += write(entry.name, payload, entry.why);
+    }
+  }
+
+  if (wanted('store-page')) {
+    planned += 1;
+    const stores = await client.captureStorePage(5);
+    written += write(
+      'store-page',
+      stores,
+      'five shops, each naming its price region'
+    );
+  }
 
   console.log(`\n${written} of ${planned} fixture(s) written.`);
   if (written < planned) {
@@ -108,7 +204,11 @@ function write(name: string, payload: unknown, why: string): number {
     console.error(`  !! ${name}: nothing answered; ${why}`);
     return 0;
   }
-  writeFileSync(join(FIXTURES, `${name}.json`), JSON.stringify(payload), 'utf8');
+  writeFileSync(
+    join(FIXTURES, `${name}.json`),
+    JSON.stringify(payload),
+    'utf8'
+  );
   console.log(`  ok ${name}  (${why})`);
   return 1;
 }

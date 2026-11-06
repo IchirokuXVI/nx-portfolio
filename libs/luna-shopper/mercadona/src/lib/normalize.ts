@@ -82,7 +82,8 @@ function toListProduct(
     thumbnail: readString(raw, 'thumbnail'),
     published: readBoolean(raw, 'published') ?? true,
     soldByWeight,
-    unitSize: soldByWeight ? null : readUnitSize(price),
+    approxWeight: readApproxWeight(price),
+    unitSize: isApproximatePiece(price) ? null : readUnitSize(price),
     unit: mapSizeFormat(sizeFormat),
     sizeFormat,
     packCount: readPackCount(price),
@@ -133,7 +134,8 @@ export function normalizeProduct(
     },
     brand: readString(raw, 'brand'),
     soldByWeight,
-    unitSize: soldByWeight ? null : readUnitSize(price),
+    approxWeight: readApproxWeight(price),
+    unitSize: isApproximatePiece(price) ? null : readUnitSize(price),
     unit: mapSizeFormat(sizeFormat),
     packCount: readPackCount(price),
     categorySlug: resolveCategory(path),
@@ -173,12 +175,55 @@ export function normalizeProduct(
  *
  * The size format must be `kg` as well, because the price written for such a
  * product is the price of a kilo, and `bulk_price` is one only then.
+ *
+ * **The chain must also compare it per kilo (plan 0244, section 5.1).** The
+ * label that is true of `bulk_price` ({@link readUnitPriceLabel}) must be
+ * `kg`. A piece the chain compares per piece answers `ud` there, and its
+ * `bulk_price` is the price of the piece and not of a kilo. Proved by
+ * `product-approximate-weight-per-piece.json`, product 60226, a salad tub of
+ * about 0.58 kg priced 6.50 the piece: `approx_size: true`, `size_format:
+ * "kg"`, `reference_format: "ud"`, and `unit_price`, `bulk_price` and
+ * `reference_price` all 6.50. Such a piece is priced as one, and its weight
+ * is still read ({@link readApproxWeight}).
  */
 function readSoldByWeight(price: Json): boolean {
+  return (
+    isApproximatePiece(price) &&
+    mapSizeFormat(readUnitPriceLabel(price)) === UnitOfMeasure.KILOGRAM
+  );
+}
+
+/**
+ * Whether the chain states a weight that is not the same on every piece:
+ * `approx_size` on a product sized in `kg` (plans 0181 and 0244). Such a
+ * product has no size, whether it is sold by the kilo or priced as one.
+ */
+function isApproximatePiece(price: Json): boolean {
   return (
     readBoolean(price, 'approx_size') === true &&
     mapSizeFormat(readString(price, 'size_format')) === UnitOfMeasure.KILOGRAM
   );
+}
+
+/**
+ * The approximate weight of one piece, in grams (plan 0244, section 5.1), or
+ * null when the chain states none.
+ *
+ * It is `unit_size` in grams, rounded to four decimals, exactly when the
+ * product is an approximate piece ({@link isApproximatePiece}). Both kinds
+ * carry it: a piece sold by the kilo, whose piece price every read derives
+ * from it, and a piece priced as one, where it is information. A fixed pack
+ * answers null, because its size is the size.
+ */
+function readApproxWeight(price: Json): number | null {
+  if (!isApproximatePiece(price)) {
+    return null;
+  }
+  const kilos = readNumber(price, 'unit_size');
+  if (kilos === null || kilos <= 0) {
+    return null;
+  }
+  return Math.round(kilos * 1000 * 10_000) / 10_000;
 }
 
 /**
@@ -200,8 +245,9 @@ function readPrice(price: Json, soldByWeight: boolean): number | null {
  * The size the chain states, or null when the number it sent is not one (plan
  * 0183).
  *
- * A product sold by weight never reaches this: its size is null, because the
- * weight the payload states is an estimate (plan 0181).
+ * An approximate piece never reaches this: its size is null, because the
+ * weight the payload states is an estimate (plan 0181). That weight is kept
+ * apart, as {@link readApproxWeight} (plan 0244).
  *
  * `unit_size` is the size as it stands for every product but two kinds.
  *
@@ -501,6 +547,7 @@ export function unavailableProduct(
     name: {},
     brand: null,
     soldByWeight: false,
+    approxWeight: null,
     unitSize: null,
     unit: null,
     packCount: null,

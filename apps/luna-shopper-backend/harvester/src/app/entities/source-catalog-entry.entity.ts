@@ -146,6 +146,18 @@ export class SourceCatalogEntry extends BaseEntity {
   @Column({ type: 'boolean', default: false })
   soldByWeight!: boolean;
 
+  /**
+   * The approximate weight of one piece in grams, as the source printed it
+   * (plan 0244, section 5.5). The source's, like `soldByWeight`: every run
+   * that states it rewrites it.
+   *
+   * Independent of {@link soldByWeight}: a cheese sold by the kilo has one,
+   * and so does a tray priced as one piece. Null whenever {@link unitSize} is
+   * set, which `chk_source_catalog_entries_approx_weight` holds.
+   */
+  @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
+  approxWeight!: number | null;
+
   /** The source's own token (`kg`, `l`, `ud`, `m`), not a `UnitOfMeasure`. */
   @Column({ type: 'varchar', nullable: true })
   sizeFormat!: string | null;

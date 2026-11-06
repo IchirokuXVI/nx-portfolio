@@ -16,6 +16,7 @@ function offer(price: number | null, unitPrice: number | null): ProductOffer {
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId: 'scope-1',
+    piecePrice: null,
   };
 }
 
@@ -40,6 +41,7 @@ function item(id: string, priced: ProductOffer | null): CatalogItem {
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   };
 }
 

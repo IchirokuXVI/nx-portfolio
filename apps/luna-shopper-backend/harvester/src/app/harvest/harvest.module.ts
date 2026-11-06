@@ -5,6 +5,10 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
+import { ALERT_CHANNEL, SmtpAlertChannel } from './alerts/alert-mailer';
+import { HarvestAlertService } from './alerts/harvest-alert.service';
+import { HarvestAlertStore } from './alerts/harvest-alert.store';
+import { HarvestAlertWorker } from './alerts/harvest-alert.worker';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
@@ -38,6 +42,10 @@ import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { PriceScopeResolver } from './price-scope-resolver';
+import { SourceProbeDispatcher } from './probes/source-probe.runner';
+import { SourceProbeService } from './probes/source-probe.service';
+import { SourceProbeStore } from './probes/source-probe.store';
+import { SourceProbeWorker } from './probes/source-probe.worker';
 import { RunExecutor } from './run-executor.service';
 import { HARVEST_CLOCK } from './schedule-slot';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
@@ -150,6 +158,27 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PostalCodeDiscoveryWorker,
     // The dashboard's harvest block (plan 0088), behind the same gate.
     HarvestDashboardService,
+    // The alerts to the owner (plan 0218): the outbox, the test alert, the
+    // SMTP channel built from the cluster's mail keys, and the worker that
+    // sends what the outcomes wrote.
+    HarvestAlertStore,
+    HarvestAlertService,
+    {
+      provide: ALERT_CHANNEL,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new SmtpAlertChannel(
+          config.getOrThrow<HarvesterConfig>('harvester').alerts
+        ),
+    },
+    HarvestAlertWorker,
+    // A probe per chain checks the storefront shape (plan 0219): the one
+    // table it writes, the dispatcher on the adapter, the service the routes
+    // reach, and the daily worker with its reaper.
+    SourceProbeStore,
+    SourceProbeDispatcher,
+    SourceProbeService,
+    SourceProbeWorker,
   ],
 })
 export class HarvestModule {}

@@ -53,6 +53,18 @@ export function nullableNum(value: unknown): number | null {
 }
 
 /**
+ * A finite number above zero, else null.
+ *
+ * For a figure where zero is no answer either: a weight of nothing and a price
+ * of nothing for one piece (backend `0244`) state something nobody measured.
+ */
+export function positiveNum(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
+    ? value
+    : null;
+}
+
+/**
  * Narrows a string to one of a known set, falling back when it is not among them.
  *
  * This is the function that makes a newer backend safe: a status this build has never

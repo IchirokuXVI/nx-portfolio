@@ -581,6 +581,21 @@ export class ItemKilogramHasSizeException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The `details` key of the weight a refused write would store (plan 0244). */
+export const ITEM_APPROX_WEIGHT_DETAIL = 'approxWeight';
+
+/**
+ * A product write would store an approximate weight beside a size, or a
+ * weight that is not above zero (plan 0244, section 3.2). The details are
+ * public: the weight under {@link ITEM_APPROX_WEIGHT_DETAIL}, the size under
+ * {@link ITEM_UNIT_SIZE_DETAIL}, the unit under `defaultUnit`, with `itemId`
+ * or `index` as for {@link ItemUnitNotBaseException}.
+ */
+export class ItemApproxWeightBesideSizeException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE;
+  override readonly exposesDetails = true;
+}
+
 /**
  * The `details` keys of the merge refusals (plan 0239): the product the
  * refusal is about, and the product it was merged into.

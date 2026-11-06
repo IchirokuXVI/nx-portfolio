@@ -187,6 +187,59 @@ export function draftFor<T extends ResourceRow>(
   return draft;
 }
 
+/**
+ * The draft after one field changed, with every field that change rules out
+ * emptied (admin plan 0068).
+ *
+ * Two rules, both read off the descriptor. A field that holds a value empties
+ * every field it {@link FieldDescriptor.excludes}: a typed size empties the
+ * weight. And a field whose `shown` answers no against the row with the draft
+ * over it is emptied, so a value the operator can no longer see is never
+ * sent: choosing "Kilogram" empties the size.
+ *
+ * Only `changed` excludes. The field it empties is not asked in turn, so two
+ * fields that exclude each other cannot empty each other in one change.
+ *
+ * It empties and never fills, so the rule at the top of this file holds:
+ * nothing here works out one value from another. Only a field the draft holds
+ * is touched, which is an editable one. Answers the same draft when nothing
+ * was emptied, so a caller can compare by identity.
+ */
+export function settleDraft<T extends ResourceRow>(
+  descriptor: ResourceDescriptor<T>,
+  draft: ResourceDraft,
+  row: Partial<T> | null,
+  changed: string
+): ResourceDraft {
+  const changedField = descriptor.fields.find(
+    (field) => field.name === changed
+  );
+  const excluded =
+    changedField?.excludes !== undefined && !isEmptyValue(draft[changed] ?? '')
+      ? changedField.excludes
+      : undefined;
+  const held = { ...(row ?? {}), ...draft } as Partial<T>;
+
+  let settled: Record<string, DraftValue> | null = null;
+  for (const field of descriptor.fields) {
+    if (!(field.name in draft) || field.name === changed) {
+      continue;
+    }
+    const hidden = field.shown !== undefined && !field.shown(held);
+    if (field.name !== excluded && !hidden) {
+      continue;
+    }
+    const empty = emptyValue(field);
+    if (sameValue(draft[field.name], empty)) {
+      continue;
+    }
+    settled ??= { ...draft };
+    settled[field.name] = empty;
+  }
+
+  return settled ?? draft;
+}
+
 /** Whether a control value counts as nothing having been entered. */
 export function isEmptyValue(value: DraftValue): boolean {
   if (value === null) {

@@ -1,5 +1,6 @@
 import {
   UnitOfMeasure,
+  type ApproxWeightSetBy,
   type LocalizedText,
 } from '@portfolio/luna-shopper/contracts';
 import { Column, Entity } from 'typeorm';
@@ -72,6 +73,24 @@ export class Item extends BaseEntity {
   /** Without it `defaultUnit` says nothing: "LITER" is not a size. */
   @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
   unitSize!: number | null;
+
+  /**
+   * The approximate weight of one piece, in grams, or null (plan 0244).
+   *
+   * Set only when {@link unitSize} is null, which the check
+   * `item_approx_weight_beside_no_size` restates. It is never a price: the
+   * piece price of a kilo piece is derived from it on every read.
+   */
+  @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
+  approxWeight!: number | null;
+
+  /**
+   * Who wrote {@link approxWeight}: `SOURCE` (a run, which the next run may
+   * change) or `ADMIN` (a person, which no run changes). Null exactly when the
+   * weight is null, which `item_approx_weight_has_a_writer` restates.
+   */
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  approxWeightSetBy!: ApproxWeightSetBy | null;
 
   /**
    * How many units the pack holds, 2 to 1000, or null (plan 0162).

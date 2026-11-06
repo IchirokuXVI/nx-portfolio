@@ -220,6 +220,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
         imageUrl: null,
         packCount: null,
         unitBasis: null,
+        approxWeight: null,
       },
     };
 
@@ -313,6 +314,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
         imageUrl: null,
         packCount: null,
         unitBasis: null,
+        approxWeight: null,
       },
     };
 

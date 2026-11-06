@@ -44,6 +44,15 @@ export interface SourceEntryFields {
    * so it is not a size.
    */
   soldByWeight: boolean;
+  /**
+   * The approximate weight of one piece in grams, or null (plan 0244). Null
+   * whenever `unitSize` is set.
+   *
+   * **Absent means the source does not read weights at all**, as for
+   * {@link packCount}: it leaves the stored weight alone. Null is a
+   * statement, and is written.
+   */
+  approxWeight?: number | null;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, or null (plan 0162).
@@ -89,6 +98,8 @@ export function sourceGroupChanged(
     // did not say before.
     (existing.sizeUnit ?? null) !== fields.sizeUnit ||
     (existing.soldByWeight ?? false) !== fields.soldByWeight ||
+    (fields.approxWeight !== undefined &&
+      numeric(existing.approxWeight) !== numeric(fields.approxWeight)) ||
     existing.url !== fields.url ||
     // A row from before plan 0198 holds none, so the first run that states
     // one reports it `updated`, which is true.
@@ -119,6 +130,9 @@ export function applySourceGroup(
   row.unitSize = fields.unitSize;
   row.sizeUnit = fields.sizeUnit;
   row.soldByWeight = fields.soldByWeight;
+  if (fields.approxWeight !== undefined) {
+    row.approxWeight = fields.approxWeight;
+  }
   row.sizeFormat = fields.sizeFormat;
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;

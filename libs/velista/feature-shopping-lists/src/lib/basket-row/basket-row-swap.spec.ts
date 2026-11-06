@@ -27,6 +27,7 @@ const MILK: BasketProduct = {
       name: { en: 'Milk', es: 'Leche' },
     },
   ],
+  approxWeight: null,
 };
 
 function row(): BasketRow {

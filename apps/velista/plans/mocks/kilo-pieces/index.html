@@ -1,0 +1,359 @@
+<title>Velista: a piece sold by the kilo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 28px 0 56px;
+    background: #11141f;
+    color: #f7f8fc;
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  }
+  header { padding: 0 28px; max-width: 860px; }
+  h1 {
+    margin: 0 0 8px;
+    font-family: 'Marcellus', Georgia, serif;
+    font-weight: 400;
+    font-size: 32px;
+    letter-spacing: 0.03em;
+  }
+  .lede { margin: 0; font-size: 14px; line-height: 1.6; color: #98a0bb; }
+  .lede code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; color: #c2c8db; }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 22px 28px 14px;
+    font-size: 13px;
+    color: #98a0bb;
+  }
+  .controls button {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c2c8db;
+    font: inherit;
+    cursor: pointer;
+  }
+  .controls button[aria-pressed='true'] { border-color: #ffb454; color: #ffb454; }
+
+  /* The canvas scrolls inside itself so the page body never scrolls sideways. */
+  .viewport { overflow-x: auto; overflow-y: hidden; padding: 0 28px 28px; }
+  .canvas { position: relative; transform-origin: top left; }
+  .board { position: absolute; margin: 0; }
+  figcaption {
+    margin-bottom: 9px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #98a0bb;
+  }
+  .frame {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    background: #0a0c14;
+    overflow: hidden;
+    position: relative;
+  }
+  .note {
+    position: absolute;
+    padding: 14px 16px;
+    border: 1px solid rgba(255, 180, 84, 0.28);
+    border-radius: 10px;
+    background: rgba(255, 180, 84, 0.07);
+    color: #e4e7f1;
+    font-size: 12.5px;
+    line-height: 1.55;
+  }
+  .note p { margin: 0 0 7px; }
+  .note p:last-child { margin-bottom: 0; }
+#ab-Rows * { box-sizing: border-box; }
+#ab-Rows .kp { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+#ab-Rows .col { display: flex; flex-direction: column; gap: 10px; width: 380px; }
+#ab-Rows .cap { font-size: 14px; color: #525a78; line-height: 1.45; }
+#ab-Rows .cap b { color: #11141f; }
+#ab-Rows .phone { width: 380px; border-radius: 22px; overflow: hidden; position: relative; background: var(--d-ground); color: var(--d-text); border: 1px solid #c9cedd; }
+#ab-Rows .day { --d-ground: #f7f8fc; --d-raised: #ffffff; --d-sunken: #eef0f7; --d-text: #11141f; --d-text-2: #525a78; --d-text-3: #616a8a; --d-border: #dde1ed; --d-border-strong: #6f7899; }
+#ab-Rows .night { --d-ground: #0a0c14; --d-raised: #161a28; --d-sunken: #11141f; --d-text: #f7f8fc; --d-text-2: #c2c8db; --d-text-3: #98a0bb; --d-border: rgba(255, 255, 255, 0.08); --d-border-strong: rgba(255, 255, 255, 0.35); border-color: #2a2f40; }
+#ab-Rows .ph-head { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Rows .ph-head svg { width: 22px; height: 22px; color: var(--d-text-2); flex: none; }
+#ab-Rows .ph-title { font-family: Marcellus, Georgia, serif; font-size: 23px; letter-spacing: 0.01em; }
+#ab-Rows .ph-input { margin: 12px 16px 4px; height: 44px; border-radius: 12px; background: var(--d-raised); border: 1px solid var(--d-border-strong); display: flex; align-items: center; padding: 0 14px; font-size: 16px; }
+#ab-Rows .pc { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto 44px; column-gap: 12px; align-items: start; padding: 12px 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Rows .pc.last { border-bottom: 0; }
+#ab-Rows .thumb { width: 52px; height: 52px; border-radius: 10px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#ab-Rows .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#ab-Rows .thumb.none { background: var(--d-sunken); color: var(--d-text-3); }
+#ab-Rows .thumb.none svg { width: 22px; height: 22px; }
+#ab-Rows .pc-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }
+#ab-Rows .pc-body > span { min-width: 0; }
+#ab-Rows .pc-name { font-size: 16px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+#ab-Rows .pc-detail { font-size: 14px; color: var(--d-text-2); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+#ab-Rows .pc-chains { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--d-text-2); margin-top: 4px; }
+#ab-Rows .mark { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--d-text); }
+#ab-Rows .lead { margin: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+#ab-Rows .pc-price { text-align: right; display: grid; gap: 1px; padding-top: 1px; }
+#ab-Rows .amount { font-size: 16px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ab-Rows .unit { font-size: 13px; color: var(--d-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ab-Rows .add { width: 44px; height: 44px; border-radius: 999px; border: 1.5px solid var(--d-border-strong); background: var(--d-raised); color: var(--d-text); display: flex; align-items: center; justify-content: center; }
+#ab-Rows .add svg { width: 20px; height: 20px; }
+#ab-Rows .kind { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--d-text-3); padding: 14px 16px 0; }
+#ab-Rows .per { font-size: 0.82em; font-weight: 400; color: var(--d-text-3); margin-left: 0.22em; word-spacing: -0.18em; }
+#ab-Basket * { box-sizing: border-box; }
+#ab-Basket .kp { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+#ab-Basket .col { display: flex; flex-direction: column; gap: 10px; width: 380px; }
+#ab-Basket .cap { font-size: 14px; color: #525a78; line-height: 1.45; }
+#ab-Basket .cap b { color: #11141f; }
+#ab-Basket .phone { width: 380px; border-radius: 22px; overflow: hidden; position: relative; background: var(--d-ground); color: var(--d-text); border: 1px solid #c9cedd; }
+#ab-Basket .day { --d-ground: #f7f8fc; --d-raised: #ffffff; --d-sunken: #eef0f7; --d-text: #11141f; --d-text-2: #525a78; --d-text-3: #616a8a; --d-border: #dde1ed; --d-border-strong: #6f7899; --d-action: #ffb454; }
+#ab-Basket .night { --d-ground: #0a0c14; --d-raised: #161a28; --d-sunken: #11141f; --d-text: #f7f8fc; --d-text-2: #c2c8db; --d-text-3: #98a0bb; --d-border: rgba(255, 255, 255, 0.08); --d-border-strong: rgba(255, 255, 255, 0.35); --d-action: #ffb454; border-color: #2a2f40; }
+#ab-Basket .ph-head { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Basket .ph-head svg { width: 22px; height: 22px; color: var(--d-text-2); flex: none; }
+#ab-Basket .ph-title { font-family: Marcellus, Georgia, serif; font-size: 23px; letter-spacing: 0.01em; }
+#ab-Basket .ph-progress { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; color: var(--d-text-2); }
+#ab-Basket .ph-progress b { color: var(--d-text); font-weight: 650; font-variant-numeric: tabular-nums; }
+#ab-Basket .bar { height: 6px; border-radius: 999px; background: var(--d-sunken); }
+#ab-Basket .brow { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) 56px; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Basket .brow.last { border-bottom: 0; }
+#ab-Basket .thumb { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#ab-Basket .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#ab-Basket .thumb.none { background: var(--d-sunken); color: var(--d-text-3); }
+#ab-Basket .thumb.none svg { width: 20px; height: 20px; }
+#ab-Basket .circle { width: 24px; height: 24px; border-radius: 999px; border: 2px solid var(--d-border-strong); }
+#ab-Basket .brow-body { min-width: 0; display: grid; gap: 1px; }
+#ab-Basket .brow-name { font-size: 16px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Basket .brow-sub { font-size: 13px; color: var(--d-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; }
+#ab-Basket .brow-sub > span { flex: none; }
+#ab-Basket .brow-sub > .lists { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#ab-Basket .brow-sub > span + span::before { content: '\00B7'; padding: 0 4px; }
+#ab-Basket .qty { width: 52px; height: 40px; border-radius: 12px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; font-size: 18px; font-variant-numeric: tabular-nums; }
+#ab-Basket .per { font-size: 0.82em; font-weight: 400; color: var(--d-text-3); margin-left: 0.22em; word-spacing: -0.18em; }
+#ab-Product * { box-sizing: border-box; }
+#ab-Product .kp { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+#ab-Product .col { display: flex; flex-direction: column; gap: 10px; width: 380px; }
+#ab-Product .cap { font-size: 14px; color: #525a78; line-height: 1.45; }
+#ab-Product .cap b { color: #11141f; }
+#ab-Product .phone { width: 380px; border-radius: 22px; overflow: hidden; position: relative; background: var(--d-ground); color: var(--d-text); border: 1px solid #c9cedd; }
+#ab-Product .day { --d-ground: #f7f8fc; --d-raised: #ffffff; --d-sunken: #eef0f7; --d-text: #11141f; --d-text-2: #525a78; --d-text-3: #616a8a; --d-border: #dde1ed; --d-border-strong: #6f7899; --d-quiet-fg: #8a5a12; }
+#ab-Product .night { --d-ground: #0a0c14; --d-raised: #161a28; --d-sunken: #11141f; --d-text: #f7f8fc; --d-text-2: #c2c8db; --d-text-3: #98a0bb; --d-border: rgba(255, 255, 255, 0.08); --d-border-strong: rgba(255, 255, 255, 0.35); --d-quiet-fg: #ffb454; border-color: #2a2f40; }
+#ab-Product .ph-head { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Product .ph-head svg { width: 22px; height: 22px; color: var(--d-text-2); flex: none; }
+#ab-Product .ph-title { font-family: Marcellus, Georgia, serif; font-size: 23px; letter-spacing: 0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Product .product { display: flex; gap: 16px; padding: 20px 16px 8px; }
+#ab-Product .picture { width: 96px; height: 96px; border-radius: 14px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; overflow: hidden; flex: none; }
+#ab-Product .picture img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#ab-Product .picture.none { background: var(--d-sunken); color: var(--d-text-3); }
+#ab-Product .picture.none svg { width: 34px; height: 34px; }
+#ab-Product .about { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+#ab-Product .about-name { font-size: 20px; font-weight: 650; line-height: 1.2; }
+#ab-Product .about-detail { margin-top: 4px; font-size: 14px; color: var(--d-text-3); }
+#ab-Product .about-category { margin-top: auto; padding-top: 8px; font-size: 14px; color: var(--d-quiet-fg); font-weight: 600; display: flex; align-items: center; gap: 4px; }
+#ab-Product .about-category svg { width: 14px; height: 14px; }
+#ab-Product .section-title { padding: 18px 16px 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--d-text-2); }
+#ab-Product .prow { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Product .prow.last { border-bottom: 0; }
+#ab-Product .logo { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+#ab-Product .chain { font-size: 16px; display: flex; align-items: center; gap: 8px; min-width: 0; }
+#ab-Product .chain span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#ab-Product .cheapest { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--d-quiet-fg); flex: none; }
+#ab-Product .price { text-align: right; display: grid; gap: 1px; }
+#ab-Product .amount { font-size: 16px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ab-Product .unit { font-size: 13px; color: var(--d-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ab-Product .absent { font-size: 14px; color: var(--d-text-3); white-space: nowrap; }
+#ab-Product .per { font-size: 0.82em; font-weight: 400; color: var(--d-text-3); margin-left: 0.22em; word-spacing: -0.18em; }
+#ab-Headline * { box-sizing: border-box; }
+#ab-Headline .kp { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: grid; grid-template-columns: 380px 380px; gap: 24px 32px; align-items: start; background: #e9ebf3; }
+#ab-Headline .cap { font-size: 14px; color: #525a78; line-height: 1.45; grid-column: 1 / -1; }
+#ab-Headline .cap b { color: #11141f; }
+#ab-Headline .sheet { width: 380px; border-radius: 16px; overflow: hidden; background: var(--d-ground); color: var(--d-text); border: 1px solid #c9cedd; }
+#ab-Headline .day { --d-ground: #f7f8fc; --d-raised: #ffffff; --d-sunken: #eef0f7; --d-text: #11141f; --d-text-2: #525a78; --d-text-3: #616a8a; --d-border: #dde1ed; --d-border-strong: #6f7899; }
+#ab-Headline .night { --d-ground: #0a0c14; --d-raised: #161a28; --d-sunken: #11141f; --d-text: #f7f8fc; --d-text-2: #c2c8db; --d-text-3: #98a0bb; --d-border: rgba(255, 255, 255, 0.08); --d-border-strong: rgba(255, 255, 255, 0.35); border-color: #2a2f40; }
+#ab-Headline .letter { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; color: var(--d-text-3); padding: 12px 16px 0; }
+#ab-Headline .pc { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto 44px; column-gap: 12px; align-items: start; padding: 12px 16px; border-bottom: 1px solid var(--d-border); }
+#ab-Headline .pc.last { border-bottom: 0; }
+#ab-Headline .thumb { width: 52px; height: 52px; border-radius: 10px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#ab-Headline .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+#ab-Headline .pc-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }
+#ab-Headline .pc-name { font-size: 16px; line-height: 1.3; }
+#ab-Headline .pc-chains { display: flex; align-items: center; gap: 4px; font-size: 13px; color: var(--d-text-2); margin-top: 4px; }
+#ab-Headline .mark { flex: none; width: 18px; height: 18px; border-radius: 5px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--d-text); }
+#ab-Headline .pc-price { text-align: right; display: grid; gap: 1px; padding-top: 1px; }
+#ab-Headline .amount { font-size: 16px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; }
+#ab-Headline .add { width: 44px; height: 44px; border-radius: 999px; border: 1.5px solid var(--d-border-strong); background: var(--d-raised); color: var(--d-text); display: flex; align-items: center; justify-content: center; }
+#ab-Headline .add svg { width: 20px; height: 20px; }
+#ab-Headline .per { font-size: 0.82em; font-weight: 400; color: var(--d-text-3); margin-left: 0.22em; word-spacing: -0.18em; }
+</style>
+
+<header>
+  <h1>Velista: a piece sold by the kilo</h1>
+  <p class="lede">Plan <code>0179</code>, with backend <code>0244</code> behind it. The catalog now has four kinds of product: a fixed pack, a product sold by the kilo, a kilo piece (a cheese of about 1,56 kg priced per kilo) and a piece priced as one (a 580 g salad at 6,50 €). Today velista shows the cheese as "1560 g" for "13,42 €" and a basket line of one piece adds 13,42 €. The piece costs 20,94 €. These boards show the four kinds in the product row, the shopping list row and the product page, Day in Spanish and Night in English, with no new element and no new colour: the weight is a size, the piece price is the price, and the price per kilo is the unit line the card already has. The piece price is the server's, never computed here. Photos are the Open Food Facts copies from <code>../typeahead/photos</code>, CC BY-SA 3.0. Generated from the committed <code>*.dc.html</code> artboards and the notes in <code>canvas.json</code>.</p>
+</header>
+
+<div class="controls">
+  <span>Scale</span>
+  <button type="button" data-scale="1" aria-pressed="true">100%</button>
+  <button type="button" data-scale="0.66" aria-pressed="false">66%</button>
+  <button type="button" data-scale="0.4" aria-pressed="false">40%</button>
+</div>
+
+<div class="viewport">
+  <div class="canvas" id="canvas" style="width: 1780px; height: 2020px;">
+      <figure class="board" style="left: 0px; top: 440px; width: 860px;">
+        <figcaption>The product row: the four kinds, Day and Night</figcaption>
+        <div class="frame" id="ab-Rows" style="width: 860px; height: 900px;">
+          <div class="kp">
+
+          <div class="col">
+          <div class="cap"><b>Catalog tab, Day, Spanish.</b> The same card for all four kinds. The weight is a size: it sits where the size sits, after the brand, and starts with <b>~</b>, the sign the total already uses for an estimate (the owner, 2026-11-05: not "aprox.", to save room). If the detail still has no room beside a two line price, it wraps at its separator instead of cutting: the brand on one line, the whole weight on the next. A kilo piece prices the piece and always keeps its price per kilo under it. A product sold by the kilo says "/ kg" in the headline, small and after the number, and has no second line.</div>
+          <div class="phone day">
+            <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span class="ph-title">Catálogo</span></div>
+            <div class="ph-input">hacendado</div>
+            <div class="kind">Envase fijo</div>
+            <div class="pc"><div class="thumb"><img src="photos/olive-oil.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Aceite de oliva virgen extra</span><span class="pc-detail">Hacendado&nbsp;· 750&nbsp;ml</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">6,34 €</span><span class="unit">8,45 €<span class="per">/ L</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="kind">A granel, por kilo</div>
+            <div class="pc"><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Plátano de Canarias IGP</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">2,80 €<span class="per">/ kg</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="kind">Pieza, por kilo</div>
+            <div class="pc"><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="pc-body"><span class="pc-name">Queso viejo tostado mezcla</span><span class="pc-detail">Hacendado&nbsp;· ~1,56&nbsp;kg</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">20,94 €</span><span class="unit">13,42 €<span class="per">/ kg</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="kind">Pieza, precio por unidad</div>
+            <div class="pc last"><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="pc-body"><span class="pc-name">Ensalada completa</span><span class="pc-detail">Hacendado&nbsp;· ~580&nbsp;g</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">6,50 €</span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          </div>
+          </div>
+
+          <div class="col">
+          <div class="cap"><b>Night, English.</b> The same rows with the English separators. The small uppercase words over each row are the artboard's own labels, not something the app draws.</div>
+          <div class="phone night">
+            <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg><span class="ph-title">Catalog</span></div>
+            <div class="ph-input">hacendado</div>
+            <div class="kind">Fixed pack</div>
+            <div class="pc"><div class="thumb"><img src="photos/olive-oil.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Extra virgin olive oil</span><span class="pc-detail">Hacendado&nbsp;· 750&nbsp;ml</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€6.34</span><span class="unit">€8.45<span class="per">/ L</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="kind">Sold by the kilo</div>
+            <div class="pc"><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Canary Islands PGI banana</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€2.80<span class="per">/ kg</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="kind">Kilo piece</div>
+            <div class="pc"><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="pc-body"><span class="pc-name">Aged toasted mixed cheese</span><span class="pc-detail">Hacendado&nbsp;· ~1.56&nbsp;kg</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€20.94</span><span class="unit">€13.42<span class="per">/ kg</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+            <div class="kind">Piece priced as one</div>
+            <div class="pc last"><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="pc-body"><span class="pc-name">Complete salad</span><span class="pc-detail">Hacendado&nbsp;· ~580&nbsp;g</span><span class="pc-chains"><span class="mark">M</span><span class="lead">Mercadona</span></span></div><div class="pc-price"><span class="amount">€6.50</span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          </div>
+          </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 920px; top: 440px; width: 860px;">
+        <figcaption>The shopping list row and its total</figcaption>
+        <div class="frame" id="ab-Basket" style="width: 860px; height: 560px;">
+          <div class="kp">
+
+          <div class="col">
+          <div class="cap"><b>Shopping list, Day, Spanish.</b> The row's name is the product, the brand and the size, as today, so the weight follows the brand. The caption keeps its order: the price, then the lists. A kilo piece is the one row that puts its price per kilo after the price. Every "/ kg" is drawn smaller than its number. Two cheese pieces add 41,88 € to the total, not 26,84 €.</div>
+          <div class="phone day">
+            <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg><span class="ph-title">5 nov 2026</span></div>
+            <div class="ph-progress"><span>0 de 4 comprados · <b>~57,52 €</b></span><span class="bar"></span></div>
+            <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/olive-oil.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Aceite de oliva virgen extra Hacendado 750 ml</div><div class="brow-sub"><span>6,34 €</span><span class="lists">Compra semanal</span></div></div><span class="qty">1</span></div>
+            <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Plátano de Canarias IGP</div><div class="brow-sub"><span>2,80 €<span class="per">/ kg</span></span><span class="lists">Compra semanal</span></div></div><span class="qty">1</span></div>
+            <div class="brow"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Queso viejo tostado mezcla Hacendado ~1,56 kg</div><div class="brow-sub"><span>20,94 €</span><span>13,42 €<span class="per">/ kg</span></span><span class="lists">Compra semanal, Cumple de Lucía</span></div></div><span class="qty">2</span></div>
+            <div class="brow last"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Ensalada completa Hacendado ~580 g</div><div class="brow-sub"><span>6,50 €</span><span class="lists">Compra semanal</span></div></div><span class="qty">1</span></div>
+          </div>
+          </div>
+
+          <div class="col">
+          <div class="cap"><b>Night, English.</b> The lists still give way first when the line is long: the price and the price per kilo are never the part that is cut.</div>
+          <div class="phone night">
+            <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg><span class="ph-title">Nov 5, 2026</span></div>
+            <div class="ph-progress"><span>0 of 4 got · <b>~€57.52</b></span><span class="bar"></span></div>
+            <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/olive-oil.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Extra virgin olive oil Hacendado 750 ml</div><div class="brow-sub"><span>€6.34</span><span class="lists">Weekly shop</span></div></div><span class="qty">1</span></div>
+            <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Canary Islands PGI banana</div><div class="brow-sub"><span>€2.80<span class="per">/ kg</span></span><span class="lists">Weekly shop</span></div></div><span class="qty">1</span></div>
+            <div class="brow"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Aged toasted mixed cheese Hacendado ~1.56 kg</div><div class="brow-sub"><span>€20.94</span><span>€13.42<span class="per">/ kg</span></span><span class="lists">Weekly shop, Lucía's birthday</span></div></div><span class="qty">2</span></div>
+            <div class="brow last"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Complete salad Hacendado ~580 g</div><div class="brow-sub"><span>€6.50</span><span class="lists">Weekly shop</span></div></div><span class="qty">1</span></div>
+          </div>
+          </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 0px; top: 1420px; width: 860px;">
+        <figcaption>The product page: a kilo piece, and a product sold by the kilo</figcaption>
+        <div class="frame" id="ab-Product" style="width: 860px; height: 600px;">
+          <div class="kp">
+
+          <div class="col">
+          <div class="cap"><b>Product page, Day, Spanish: the kilo piece.</b> The detail under the name is the row's detail, so it says the weight the same way. Each supermarket's row prices the piece and keeps the price per kilo under it, which is the number that made it the cheapest.</div>
+          <div class="phone day">
+            <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg><span class="ph-title">Queso viejo tostado mezcla</span></div>
+            <div class="product"><div class="picture none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="about"><div class="about-name">Queso viejo tostado mezcla</div><div class="about-detail">Hacendado · ~1,56 kg</div><div class="about-category">Lácteos · Quesos <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
+            <div class="section-title">Precio en tus supermercados</div>
+            <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">MÁS BARATO</span></span><span class="price"><span class="amount">20,94 €</span><span class="unit">13,42 €<span class="per">/ kg</span></span></span></div>
+            <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">22,35 €</span><span class="unit">14,33 €<span class="per">/ kg</span></span></span></div>
+            <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="absent">aquí no se vende</span></div>
+          </div>
+          </div>
+
+          <div class="col">
+          <div class="cap"><b>Night, English: sold by the kilo.</b> A product with no weight has no detail to add. Each row says "/ kg" in the price itself and draws no second line, because there is nothing a second line could say that the first does not.</div>
+          <div class="phone night">
+            <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5L8 12l6.5 6.5"/></svg><span class="ph-title">Canary Islands PGI banana</span></div>
+            <div class="product"><div class="picture"><img src="photos/bananas.jpg" alt=""></div><div class="about"><div class="about-name">Canary Islands PGI banana</div><div class="about-category">Fruit and vegetables · Fruit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></div></div></div>
+            <div class="section-title">Price at your supermarkets</div>
+            <div class="prow"><span class="logo">M</span><span class="chain"><span>Mercadona</span><span class="cheapest">CHEAPEST</span></span><span class="price"><span class="amount">€2.80<span class="per">/ kg</span></span></span></div>
+            <div class="prow"><span class="logo">C</span><span class="chain"><span>Carrefour</span></span><span class="price"><span class="amount">€2.99<span class="per">/ kg</span></span></span></div>
+            <div class="prow last"><span class="logo">D</span><span class="chain"><span>Dia</span></span><span class="price"><span class="amount">€3.15<span class="per">/ kg</span></span></span></div>
+          </div>
+          </div>
+
+          </div>
+        </div>
+      </figure>
+      <figure class="board" style="left: 920px; top: 1080px; width: 860px;">
+        <figcaption>A or B: the headline of a product sold by the kilo</figcaption>
+        <div class="frame" id="ab-Headline" style="width: 860px; height: 400px;">
+          <div class="kp">
+          <div class="cap"><b>The headline of a product sold by the kilo: B, chosen by the owner on 2026-11-05.</b> A was one string in the price's own weight, as the plan first wrote it. B keeps the number at the price's weight and sets "/ kg" smaller, in the unit line's colour, close after it, with less room around the slash. The number thus lines up with the other prices and the unit takes little space. Day and Night of each, A kept for the record.</div>
+
+          <div class="sheet day"><div class="letter">A · ONE STRING</div>
+            <div class="pc last"><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Plátano de Canarias IGP</span><span class="pc-chains"><span class="mark">M</span><span>Mercadona</span></span></div><div class="pc-price"><span class="amount">2,80 € / kg</span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          </div>
+          <div class="sheet night"><div class="letter">A · ONE STRING</div>
+            <div class="pc last"><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Canary Islands PGI banana</span><span class="pc-chains"><span class="mark">M</span><span>Mercadona</span></span></div><div class="pc-price"><span class="amount">€2.80 / kg</span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          </div>
+
+          <div class="sheet day"><div class="letter">B · THE UNIT SMALLER</div>
+            <div class="pc last"><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Plátano de Canarias IGP</span><span class="pc-chains"><span class="mark">M</span><span>Mercadona</span></span></div><div class="pc-price"><span class="amount">2,80 €<span class="per">/ kg</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          </div>
+          <div class="sheet night"><div class="letter">B · THE UNIT SMALLER</div>
+            <div class="pc last"><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="pc-body"><span class="pc-name">Canary Islands PGI banana</span><span class="pc-chains"><span class="mark">M</span><span>Mercadona</span></span></div><div class="pc-price"><span class="amount">€2.80<span class="per">/ kg</span></span></div><div class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></div></div>
+          </div>
+
+          </div>
+        </div>
+      </figure>
+      <aside class="note" style="left: 0px; top: 0px; width: 420px;"><p>THE FOUR KINDS (backend 0244, section 1).</p><p>Fixed pack: a size, price is the pack. Unchanged.</p><p>Sold by the kilo: KILOGRAM, no size, no weight. Price is a kilo.</p><p>Kilo piece: KILOGRAM, no size, approxWeight in grams. Price is a kilo, piecePrice comes from the server.</p><p>Piece priced as one: UNIT, no size, approxWeight. Price is the piece, as a pack.</p></aside>
+      <aside class="note" style="left: 460px; top: 0px; width: 420px;"><p>WHAT EACH PLACE SAYS.</p><p>The weight line: "~1,56 kg" or "~580 g", for any product with a weight, in the size's place, through Intl. Always with the tilde: the weight is an estimate, and the tilde is the sign the total already uses for one.</p><p>The headline: piecePrice for a kilo piece, "13,42 € / kg" for a product sold by the kilo, price for everything else.</p><p>The unit line: always on a kilo piece, also at exactly 1 kg. Never on a product sold by the kilo. Rule 5 of 0101 for a pack and for a piece priced as one.</p><p>Every "/ kg" and "/ L" is drawn smaller than its number, in the muted colour, close after it, wherever a price is drawn: the headline, the unit line, the basket caption and the price table.</p><p>The detail wraps at its separator when it does not fit beside a two line price, so the weight is never cut short. The brand gives way to a second line, the number does not.</p></aside>
+      <aside class="note" style="left: 920px; top: 0px; width: 420px;"><p>THE TOTALS.</p><p>A list total and a basket total add piecePrice for a kilo piece and price for every other product. Two cheese pieces are 41,88 €.</p><p>A kilo piece whose offer has a price and no piecePrice adds nothing and counts as unpriced.</p><p>A loose product still adds quantity times the price per kilo. The owner set that aside on 2026-11-03 (0244, D4).</p></aside>
+      <aside class="note" style="left: 1380px; top: 0px; width: 400px;"><p>THE OWNER'S CHOICES, 2026-11-05.</p><p>1. The tilde, not "aprox.", on every weight, to save room.</p><p>2. "/ kg" smaller than its number everywhere. A product sold by the kilo took too much room and its number sat out of line with the other prices.</p><p>3. B for the headline of a product sold by the kilo, with less room on both sides of the slash.</p></aside>
+  </div>
+</div>
+
+<script>
+  // The only script on the page. It scales the canvas for reading on a laptop and
+  // does nothing else: these are artboards, not an editor.
+  (function () {
+    var canvas = document.getElementById('canvas');
+    var w = 1780;
+    var h = 2020;
+    var buttons = document.querySelectorAll('.controls button');
+    buttons.forEach(function (button) {
+      button.addEventListener('click', function () {
+        var scale = parseFloat(button.dataset.scale);
+        canvas.style.transform = 'scale(' + scale + ')';
+        canvas.style.width = w * scale + 'px';
+        canvas.style.height = h * scale + 'px';
+        buttons.forEach(function (other) {
+          other.setAttribute('aria-pressed', String(other === button));
+        });
+      });
+    });
+  })();
+</script>

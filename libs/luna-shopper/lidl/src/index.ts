@@ -42,7 +42,12 @@ export type {
 } from './lib/normalize';
 export { PHOTO_HOSTS, photoAddress, photoAddressRead } from './lib/photo';
 export type { PhotoFields, PhotoRead } from './lib/photo';
-export { packCountIn, parseSize } from './lib/size';
+export {
+  approxWeightIn,
+  approxWeightOf,
+  packCountIn,
+  parseSize,
+} from './lib/size';
 export type { LidlSize } from './lib/size';
 export {
   LIDL_BASE_URL,
@@ -58,3 +63,6 @@ export type {
   LidlRegionPrice,
   LidlStore,
 } from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeLidl } from './lib/probe';
+export type { LidlProbeOptions } from './lib/probe';

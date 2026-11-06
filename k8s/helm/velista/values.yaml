@@ -215,6 +215,9 @@ lunaShopperBackend:
     # production data has been warned about the wrong thing in the harmless
     # direction only if the colour is alarming, so both clusters state their own.
     environmentName: development
+    # The back office origin a harvest alert mail links a run to (plan 0218).
+    # Empty names the run id only. Each environment file states its own.
+    adminAppBaseUrl: ''
     # Support sessions (plan 0194): an operator opens the app as a user, for
     # two hours at most. Off here, so a cluster allows it only when its own
     # values file says so. values.staging.yaml does. values.production.yaml

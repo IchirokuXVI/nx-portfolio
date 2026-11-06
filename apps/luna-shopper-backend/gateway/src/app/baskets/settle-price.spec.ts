@@ -62,6 +62,8 @@ const offer = (
   sourceKind: PriceSourceKind.OFFICIAL_API,
   priceCopiedFromScopeId: null,
   stale: false,
+  outOfStockAt: null,
+  piecePrice: null,
   ...extra,
 });
 
@@ -72,6 +74,8 @@ const SNAPSHOT: ItemSnapshot = {
   unitSize: 1,
   packCount: 6,
   defaultUnit: UnitOfMeasure.LITER,
+  // Plan 0244: a pack has no weight of a piece.
+  approxWeight: null,
 };
 
 /**
@@ -459,6 +463,7 @@ describe('the name a settle records (plan 0202, section 1)', () => {
 
     expect(snapshot).toEqual(SNAPSHOT);
     expect(Object.keys(snapshot).sort()).toEqual([
+      'approxWeight',
       'brand',
       'defaultUnit',
       'name',
@@ -482,7 +487,114 @@ describe('the name a settle records (plan 0202, section 1)', () => {
       unitSize: null,
       packCount: null,
       defaultUnit: UnitOfMeasure.UNIT,
+      approxWeight: null,
     });
+  });
+});
+
+/**
+ * A kilo piece records what one piece cost (plan 0244, section 4).
+ *
+ * The cheese of the plan: `KILOGRAM`, about 1560 g, at 13.42 a kilo, whose
+ * offer carries the piece price catalog derived, 20.94. A pack records its
+ * `price` as before. A kilo piece whose offer has a price and no piece price
+ * records no price at all: the price of a kilo is never a price paid.
+ */
+describe('what a settle of a kilo piece records (plan 0244, section 4)', () => {
+  const CHEESE_SNAPSHOT: ItemSnapshot = {
+    name: { es: 'Queso viejo tostado mezcla' },
+    brand: 'Hacendado',
+    unitSize: null,
+    packCount: null,
+    defaultUnit: UnitOfMeasure.KILOGRAM,
+    approxWeight: 1560,
+  };
+  const cheese = (
+    offers: ItemOfferView[],
+    bestOffer: ItemOfferView | null = offers[0] ?? null
+  ): ItemView =>
+    ({
+      id: ITEM,
+      ...CHEESE_SNAPSHOT,
+      offers,
+      bestOffer,
+    }) as unknown as ItemView;
+
+  it('records the piece price with no shop, and the weight in the snapshot', async () => {
+    const w = build({
+      items: [cheese([], offer(SCOPE, 13.42, { piecePrice: 20.94 }))],
+    });
+
+    expect(await w.service.choose(input())).toEqual({
+      paid: {
+        priceScopeId: SCOPE,
+        supermarketLocationId: null,
+        supermarketId: null,
+        pricePaidCents: 2094,
+        pricePaidCurrency: 'EUR',
+      },
+      itemSnapshot: CHEESE_SNAPSHOT,
+    });
+  });
+
+  it('records the piece price at a shop', async () => {
+    const w = build({
+      items: [cheese([offer(SCOPE, 13.42, { piecePrice: 20.94 })])],
+    });
+
+    expect((await w.service.choose(atShop())).paid).toMatchObject({
+      priceScopeId: SCOPE,
+      supermarketLocationId: SHOP,
+      pricePaidCents: 2094,
+    });
+  });
+
+  it('records the piece price on a rewritten buy', async () => {
+    const w = build({
+      items: [cheese([offer(SCOPE, 13.42, { piecePrice: 20.94 })])],
+    });
+
+    const rewrite = await w.service.chooseForRewrite({
+      ...input(),
+      itemId: ITEM,
+      priceScopeIds: [SCOPE],
+      unscoped: false,
+    });
+    expect(rewrite.prices).toEqual([
+      { priceScopeId: SCOPE, pricePaidCents: 2094, pricePaidCurrency: 'EUR' },
+    ]);
+    expect(rewrite.itemSnapshot).toEqual(CHEESE_SNAPSHOT);
+  });
+
+  it('records no price for a kilo piece whose offer has no piece price, and still the name', async () => {
+    const w = build({ items: [cheese([offer(SCOPE, 13.42)])] });
+
+    expect(await w.service.choose(input())).toEqual({
+      paid: null,
+      itemSnapshot: CHEESE_SNAPSHOT,
+    });
+    expect(await w.service.choose(atShop())).toEqual({
+      paid: null,
+      itemSnapshot: CHEESE_SNAPSHOT,
+    });
+  });
+
+  it('records the price of a pack, and of a piece priced as one, as before', async () => {
+    const pack = build({ items: [product([offer(SCOPE, 0.95)])] });
+    expect((await pack.service.choose(input())).paid?.pricePaidCents).toBe(95);
+
+    const salad = build({
+      items: [
+        {
+          ...cheese([offer(SCOPE, 6.5)]),
+          defaultUnit: UnitOfMeasure.UNIT,
+          approxWeight: 580,
+        },
+      ],
+    });
+    expect((await salad.service.choose(input())).paid?.pricePaidCents).toBe(
+      650
+    );
   });
 });
 

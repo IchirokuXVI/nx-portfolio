@@ -146,6 +146,13 @@ export interface DiaClientOptions {
   /** How long a 403 waits before its one retry. Default 60 s. */
   forbiddenRetryMs?: number;
   /**
+   * Whether a 403 waits `forbiddenRetryMs` and is sent once more. Default
+   * true, which every walk keeps. A probe passes false (plan 0219, section
+   * 3.6): it never retries a refusal, so the 403 goes straight to the guard
+   * and throws `DiaHttpError` with status 403.
+   */
+  retryForbidden?: boolean;
+  /**
    * The least time between two requests, held beside `acquire` and never
    * replaced by it. Default 500 ms, which is 2 requests per second whatever the
    * source row says (section 10).
