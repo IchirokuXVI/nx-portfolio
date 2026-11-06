@@ -1,3 +1,5 @@
+> **PR:** [#934](https://github.com/IchirokuXVI/nx-portfolio/pull/934)
+
 # 0247: a probe gates a scheduled run
 
 > Plan `0219` gives each chain a probe: two to six requests through the real client and parsers,
