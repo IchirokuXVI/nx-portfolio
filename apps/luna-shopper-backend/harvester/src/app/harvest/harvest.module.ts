@@ -37,6 +37,14 @@ import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
+import { PriceRefreshCooldown } from './price-refresh.cooldown';
+import {
+  PRICE_REFRESH_FETCHERS,
+  REFRESH_FETCHERS,
+} from './price-refresh.fetchers';
+import { PriceRefreshResolver } from './price-refresh.resolver';
+import { PriceRefreshService } from './price-refresh.service';
+import { PriceRefreshStore } from './price-refresh.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { RunExecutor } from './run-executor.service';
 import { HARVEST_CLOCK } from './schedule-slot';
@@ -150,6 +158,13 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PostalCodeDiscoveryWorker,
     // The dashboard's harvest block (plan 0088), behind the same gate.
     HarvestDashboardService,
+    // A shopper refreshes the price of one product (plan 0216): not a run, so
+    // none of the run machinery above is involved but the ingest write.
+    PriceRefreshStore,
+    PriceRefreshResolver,
+    PriceRefreshCooldown,
+    { provide: REFRESH_FETCHERS, useValue: PRICE_REFRESH_FETCHERS },
+    PriceRefreshService,
   ],
 })
 export class HarvestModule {}

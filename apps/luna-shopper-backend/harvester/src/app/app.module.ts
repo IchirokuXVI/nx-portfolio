@@ -10,6 +10,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import {
   PlatformHealthModule,
   PlatformModule,
+  RedisModule,
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from './config/app-config';
 import {
@@ -32,6 +33,10 @@ import { HarvestModule } from './harvest/harvest.module';
       validationOptions: { abortEarly: false, allowUnknown: true },
     }),
     PlatformModule.forRoot({ serviceName: 'luna-shopper-backend-harvester' }),
+    // The refresh cooldowns (plan 0216, section 5), and nothing else. Runs do
+    // not touch Redis, and readiness below does not probe it: an outage
+    // refuses refreshes with a 429 and leaves every run alone.
+    RedisModule.forRoot(),
     // The harvester owns its private Postgres, the third in the system. Schema is
     // committed migrations only.
     TypeOrmModule.forRootAsync({
