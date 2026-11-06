@@ -103,6 +103,12 @@ describe('adapterCapabilities', () => {
     expect(ADAPTER_CAPABILITIES['manual'].printedLocale).toBeNull();
   });
 
+  it('says Carrefour names its own shops (plan 0223)', () => {
+    // The store finder's document names every point of sale, so a store
+    // discovery takes no postal code and the queue asks Carrefour too.
+    expect(ADAPTER_CAPABILITIES['carrefour-web'].listsItsOwnStores).toBe(true);
+  });
+
   it('lets a DIA walk write LOCAL_AREA scopes and nothing else', () => {
     // A fulfilment store is what DIA prices by, as a warehouse is for
     // Mercadona (plan 0174, section 3.1). The chain's NATIONAL scope is the

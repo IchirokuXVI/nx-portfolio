@@ -481,7 +481,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
   'carrefour-web': {
     writesPrices: true,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    // The store finder's document names every point of sale (plan 0223).
+    listsItsOwnStores: true,
     hasProductPages: true,
     skipsKnownDetails: false,
     printedLocale: 'es',

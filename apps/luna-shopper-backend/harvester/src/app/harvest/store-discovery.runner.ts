@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { AdapterKey } from '@portfolio/luna-shopper/contracts';
 import type { SupermarketSource } from '../entities';
+import { CarrefourStoreDiscoveryRunner } from './carrefour-store-discovery.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
@@ -45,13 +46,15 @@ export class StoreDiscoveryRunner {
     lidl: LidlStoreDiscoveryRunner,
     mercadona: MercadonaStoreDiscoveryRunner,
     elJamon: ElJamonStoreDiscoveryRunner,
-    dia: DiaStoreDiscoveryRunner
+    dia: DiaStoreDiscoveryRunner,
+    carrefour: CarrefourStoreDiscoveryRunner
   ) {
     this.cases = {
       'lidl-api': lidl,
       'mercadona-api': mercadona,
       'eljamon-web': elJamon,
       'dia-api': dia,
+      'carrefour-web': carrefour,
     };
   }
 
@@ -77,8 +80,9 @@ export class StoreDiscoveryRunner {
    * A lookup rather than a conditional, so a third chain that names its own
    * shops is a table entry. Everything that is not in the table is
    * OpenStreetMap, which is the honest default rather than a refusal:
-   * `deza-web` and `carrefour-web` publish an assortment and no store list, and
-   * a run with no source at all is the queue's.
+   * `deza-web` publishes an assortment and no store list, and a run with no
+   * source at all is the queue's. `carrefour-web` was in that sentence until
+   * plan 0223 found the store finder's document.
    */
   private runnerFor(adapterKey: AdapterKey | undefined): StoreDiscoveryCase {
     return (adapterKey ? this.cases[adapterKey] : undefined) ?? this.osm;
