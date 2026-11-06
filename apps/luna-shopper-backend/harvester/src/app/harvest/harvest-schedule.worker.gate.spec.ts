@@ -118,6 +118,9 @@ function build(
       undecidedAttempts.set(id, 2);
       return true;
     }),
+    // The advisory hold, free here; the integration spec contends for it.
+    holdSlot: jest.fn(async () => ({ release: async () => undefined })),
+    isUndecided: jest.fn(async () => true),
   } as unknown as HarvestScheduleStore;
 
   let runNumber = 0;
@@ -488,6 +491,30 @@ describe('HarvestScheduleWorker, the probe gate (plan 0247)', () => {
         // The retry's claim wrote 2, and a started retry leaves it.
         attempts: null,
       });
+    });
+
+    it('leaves an undecided slot that another process holds, and a claimed slot it holds', async () => {
+      const undecided = schedule({ lastSlotAt: SLOT, lastSlotAttempts: 0 });
+      const { worker, store, runs, outcomes } = build({
+        undecided: [undecided],
+      });
+      (store.holdSlot as jest.Mock).mockResolvedValue(null);
+
+      await worker.tick();
+
+      expect(store.claimUndecided).not.toHaveBeenCalled();
+      expect(runs.startScheduled).not.toHaveBeenCalled();
+      expect(outcomes).toHaveLength(0);
+    });
+
+    it('decides nothing for its own claim when a retry decided it before the hold', async () => {
+      const { worker, store, runs, outcomes } = build();
+      (store.isUndecided as jest.Mock).mockResolvedValue(false);
+
+      await worker.tick();
+
+      expect(runs.startScheduled).not.toHaveBeenCalled();
+      expect(outcomes).toHaveLength(0);
     });
 
     it('spends the retry of an undecided slot when a second deploy interrupts it too', async () => {

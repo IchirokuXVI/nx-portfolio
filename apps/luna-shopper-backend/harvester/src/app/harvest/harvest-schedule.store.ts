@@ -12,15 +12,27 @@ import { nextSlot, previousSlot } from './schedule-slot';
  * A claimed slot with no decision, over `s` (see `findUndecided`). The same
  * text in the read and in the conditional claim, so the two cannot disagree.
  */
-const UNDECIDED = `s."enabled"
-          AND s."lastSlotAttempts" = 0
+const NO_OUTCOME = `s."lastSlotAttempts" = 0
           AND s."lastSlotAt" IS NOT NULL
-          AND (s."lastOutcomeAt" IS NULL OR s."lastOutcomeAt" < s."lastSlotAt")
+          AND (s."lastOutcomeAt" IS NULL OR s."lastOutcomeAt" < s."lastSlotAt")`;
+const UNDECIDED = `s."enabled"
+          AND ${NO_OUTCOME}
           AND NOT EXISTS (
                 SELECT 1 FROM "harvest_runs" AS r
                  WHERE r."scheduleId" = s."id"
                    AND r."requestedAt" >= s."lastSlotAt"
               )`;
+
+/**
+ * The first key of the advisory lock that holds a schedule while its slot is
+ * decided, the plan's number, so it cannot meet a lock of other code.
+ */
+const SLOT_LOCK_CLASS = 247;
+
+/** A schedule held by {@link HarvestScheduleStore.holdSlot}. */
+export interface SlotHold {
+  release(): Promise<void>;
+}
 
 /** A slot the worker claimed, and the row as the claim left it. */
 export interface ClaimedSlot {
@@ -278,6 +290,65 @@ export class HarvestScheduleStore {
       [scheduleId, slot]
     );
     return rows.length > 0;
+  }
+
+  /**
+   * Whether the slot still has no outcome and no retry, for a worker that has
+   * just taken the hold of its own claim: a retry of another process may have
+   * decided it in between. A retry writes its outcome or its attempts before
+   * it lets the hold go, so this needs no read of the runs.
+   */
+  async isUndecided(scheduleId: string, slot: Date): Promise<boolean> {
+    const rows: { id: string }[] = await this.schedules.query(
+      `SELECT s."id"
+         FROM "harvest_schedules" AS s
+        WHERE s."id" = $1
+          AND s."lastSlotAt" = $2
+          AND ${NO_OUTCOME}`,
+      [scheduleId, slot]
+    );
+    return rows.length > 0;
+  }
+
+  /**
+   * Hold a schedule while its slot is decided, or answer null when another
+   * connection holds it.
+   *
+   * **The row cannot say that a live process is still deciding a slot**, only
+   * that no outcome was written, and a gate can take minutes. A session
+   * advisory lock on a connection of its own can: it lasts while the decision
+   * runs, and Postgres frees it the moment that process or its connection
+   * dies. So the retry of an undecided slot never takes a slot that a live
+   * worker is still deciding (plan 0247, review round 1). No schema change.
+   */
+  async holdSlot(scheduleId: string): Promise<SlotHold | null> {
+    const runner = this.schedules.manager.connection.createQueryRunner();
+    await runner.connect();
+    try {
+      const [row]: { held: boolean }[] = await runner.query(
+        `SELECT pg_try_advisory_lock(${SLOT_LOCK_CLASS}, hashtext($1)) AS "held"`,
+        [scheduleId]
+      );
+      if (!row?.held) {
+        await runner.release();
+        return null;
+      }
+    } catch (error) {
+      await runner.release();
+      throw error;
+    }
+    return {
+      release: async () => {
+        try {
+          await runner.query(
+            `SELECT pg_advisory_unlock(${SLOT_LOCK_CLASS}, hashtext($1))`,
+            [scheduleId]
+          );
+        } finally {
+          await runner.release();
+        }
+      },
+    };
   }
 
   repository(): Repository<HarvestSchedule> {

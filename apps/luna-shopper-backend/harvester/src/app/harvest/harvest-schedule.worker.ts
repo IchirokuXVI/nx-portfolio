@@ -186,7 +186,7 @@ export class HarvestScheduleWorker
         return;
       }
       try {
-        await this.decide(claimed);
+        await this.decideHeld(claimed);
       } catch (error) {
         // The slot is spent by its claim. Losing its outcome is the cost of
         // never firing it twice, and the next schedule still gets its turn.
@@ -195,6 +195,31 @@ export class HarvestScheduleWorker
             describeError(error).message
         );
       }
+    }
+  }
+
+  /**
+   * Decide a claimed slot while holding its schedule, so the retry of an
+   * undecided slot in another process leaves it alone until this ends. A
+   * hold that another process has, or a slot it decided in the instant
+   * between the claim and the hold, is that process's to decide.
+   */
+  private async decideHeld(claimed: ClaimedSlot): Promise<void> {
+    const { schedule, slot } = claimed;
+    const hold = await this.store.holdSlot(schedule.id);
+    if (!hold) {
+      this.logger.log(
+        `Schedule ${schedule.id}: the slot of ${slot.toISOString()} is held ` +
+          'by another process, which decides it.'
+      );
+      return;
+    }
+    try {
+      if (await this.store.isUndecided(schedule.id, slot)) {
+        await this.decide(claimed);
+      }
+    } finally {
+      await hold.release();
     }
   }
 
@@ -289,10 +314,20 @@ export class HarvestScheduleWorker
         continue;
       }
       try {
-        if (!(await this.store.claimUndecided(schedule.id, slot))) {
+        // Held first: a slot a live worker is still deciding is held by it,
+        // and is not undecided but in progress.
+        const hold = await this.store.holdSlot(schedule.id);
+        if (!hold) {
           continue;
         }
-        await this.retry(schedule, slot);
+        try {
+          if (!(await this.store.claimUndecided(schedule.id, slot))) {
+            continue;
+          }
+          await this.retry(schedule, slot);
+        } finally {
+          await hold.release();
+        }
       } catch (error) {
         this.logger.error(
           `Schedule ${schedule.id} could not retry the undecided slot of ` +

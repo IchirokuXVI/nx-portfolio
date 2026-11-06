@@ -386,6 +386,37 @@ describeIntegration('the probe gate (real Postgres)', () => {
     expect(await schedules.claimUndecided(id, SLOT)).toBe(false);
   });
 
+  it('leaves an undecided slot alone while a live worker holds it', async () => {
+    const id = await dueSchedule();
+    answer = passed;
+    await dataSource.query(
+      `UPDATE "harvest_schedules"
+          SET "lastSlotAt" = $2, "lastSlotAttempts" = 0,
+              "nextRunAt" = $3
+        WHERE "id" = $1`,
+      [id, SLOT, new Date(SLOT.getTime() + 86_400_000)]
+    );
+    // Another process is still deciding the slot, on its own connection.
+    const hold = await schedules.holdSlot(id);
+    expect(hold).not.toBeNull();
+    expect(await schedules.holdSlot(id)).toBeNull();
+
+    await worker.tick();
+
+    let row = await scheduleRow(id);
+    expect(row.lastSlotAttempts).toBe(0);
+    expect(await runsOfChain()).toHaveLength(0);
+
+    // That process died: its connection, and so its hold, is gone.
+    await hold?.release();
+    await worker.tick();
+
+    row = await scheduleRow(id);
+    expect(row.lastSlotAttempts).toBe(2);
+    expect(row.lastOutcome).toBe(HarvestScheduleOutcome.STARTED);
+    expect(await runsOfChain()).toHaveLength(1);
+  });
+
   it('does not read a decided slot, or a slot whose run started, as undecided', async () => {
     const id = await dueSchedule();
     // Claimed, then decided with an outcome that started nothing.

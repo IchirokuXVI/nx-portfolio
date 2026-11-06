@@ -88,6 +88,10 @@ function build(
     // gate spec covers. None here.
     findUndecided: jest.fn(async () => []),
     claimUndecided: jest.fn(async () => false),
+    // The advisory hold of a slot being decided, which only real Postgres
+    // can contend for. Here it is always free.
+    holdSlot: jest.fn(async () => ({ release: async () => undefined })),
+    isUndecided: jest.fn(async () => true),
     claimRetry: jest.fn(async (_id: string, runId: string) => {
       if (row.lastSlotAttempts !== 1 || row.lastRunId !== runId) {
         return false;

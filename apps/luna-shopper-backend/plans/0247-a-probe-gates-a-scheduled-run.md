@@ -192,7 +192,11 @@ no outcome and no alert, because an abort is not a failure of the chain. The wor
 The slot stays claimed and undecided: `lastSlotAttempts` is 0 and `lastOutcomeAt` is older than
 `lastSlotAt`, with no run of the schedule requested since the slot. The retry after the restart
 claims such a slot by setting the attempts to 2 and runs it one time through the same gate, so a
-`PASSED` probe inside 15 minutes is reused, and a second interruption spends it.
+`PASSED` probe inside 15 minutes is reused, and a second interruption spends it. The row alone
+cannot tell a slot that a live worker is still deciding from one whose worker died, so a worker
+holds a Postgres session advisory lock on the schedule (`HarvestScheduleStore.holdSlot`, key
+`247` and the schedule id) while it decides a slot or its retry. The retry takes only a slot it
+can hold, and Postgres frees the lock when a process or its connection dies.
 
 **A skipped slot is final for that slot.** The next slot tries again, and the daily probe and
 its retries keep looking in between. Owner question 1 asks whether a slot should instead keep
