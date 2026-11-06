@@ -20,7 +20,8 @@
       "//": "Refreshes the checked in fixtures from the live site (plan 0090, section 10). Never run by CI: it launches Chromium and makes real requests, and the fixtures are what keeps every other test off both.",
       "executor": "nx:run-commands",
       "options": {
-        "command": "npx tsx libs/luna-shopper/carrefour/tools/capture-fixtures.ts"
+        "//tsconfig": "The workspace has no root tsconfig.json, so tsx is pointed at the base one or the `@portfolio/luna-shopper/source-guard` import does not resolve.",
+        "command": "npx tsx --tsconfig tsconfig.base.json libs/luna-shopper/carrefour/tools/capture-fixtures.ts"
       }
     }
   }

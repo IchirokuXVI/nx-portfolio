@@ -1,3 +1,5 @@
+> **PR:** [#927](https://github.com/IchirokuXVI/nx-portfolio/pull/927)
+
 # 0223: carrefour shops come from its own site
 
 > Carrefour shops reach the catalog today only through OpenStreetMap. Plan `0090` section 2
@@ -580,16 +582,13 @@ Chosen in this plan, and open to the owner's correction:
 - **A failed drive read does not fail the run.** A refusal does.
 - **The hours are tags.** They carry no label to parse against.
 
-**Owner** (ask, do not choose):
+**Owner** (answered 2026-11-06):
 
-1. **Are Carrefour Express shops part of the Carrefour chain in the catalog?** If yes, the row
-   lists `EXPRESS` and `EXPRESS_CEPSA` and their 1,219 Spanish records reach the queue under the
-   Carrefour chain. If they are a chain of their own, a second `Supermarket` and a store run per
-   chain are needed, and this plan does not build that.
-2. **Is the postal code queue to ask Carrefour of every due code?** Turning
-   `listsItsOwnStores` on does that, at one browser launch per code per cooldown period. The
-   alternative is a second capability that frees the spawn and keeps the queue out.
-3. **Does the owner want per sale point prices measured?** This plan finds that the walk reads
-   the El Pinar hypermarket's online prices and names the 179 shops that have a sale point. A
-   plan that compares two sale points would decide whether Carrefour needs a scope per sale
-   point.
+1. **Not decided.** The owner thinks Carrefour Express and Carrefour will be one chain in
+   velista, possibly with different adapters under one chain. Nothing beyond the plan is built:
+   the default formats stay `HIPERMERCADO` and `MARKET`, and `EXPRESS` and `EXPRESS_CEPSA` are
+   reached only by listing them on the row.
+2. **`listsItsOwnStores` is on for `carrefour-web`.** The queue asks Carrefour of every due
+   code.
+3. **Per sale point prices: open.** The owner checks later. The PR description carries the
+   question.

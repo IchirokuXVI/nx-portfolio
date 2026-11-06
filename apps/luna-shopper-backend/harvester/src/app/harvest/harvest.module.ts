@@ -11,6 +11,7 @@ import { HarvestAlertStore } from './alerts/harvest-alert.store';
 import { HarvestAlertWorker } from './alerts/harvest-alert.worker';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
+import { CarrefourStoreDiscoveryRunner } from './carrefour-store-discovery.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
@@ -197,6 +198,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PriceRefreshService,
     // DEZA's own shop list, the store discovery case of `deza-web` (plan 0222).
     DezaStoreDiscoveryRunner,
+    // Carrefour's shops from its own store finder (plan 0223).
+    CarrefourStoreDiscoveryRunner,
   ],
 })
 export class HarvestModule {}
