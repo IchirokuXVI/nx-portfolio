@@ -309,7 +309,7 @@ describe('a product, on the record page', () => {
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
       [
         'catalog.items.section.sold',
-        ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
+        ['defaultUnit', 'unitSize', 'approxWeight', 'imageUrl', 'shownPhoto'],
       ],
     ]);
     // The brand is the text the product holds, and no picker.
@@ -352,6 +352,40 @@ describe('a product, on the record page', () => {
     );
   });
 
+  /**
+   * The two refusals about a size (backend plan 0244, admin plan 0068), each
+   * said under the field it names, with its own sentence.
+   */
+  it.each([
+    [
+      'item_kilogram_has_size',
+      'unitSize',
+      'resource.error.itemKilogramHasSize',
+    ],
+    [
+      'item_approx_weight_beside_size',
+      'approxWeight',
+      'resource.error.itemApproxWeightBesideSize',
+    ],
+  ])('says %s under %s', async (code, field, key) => {
+    const fixture = await boot('/products/it_milk_1l/details', [
+      { provide: RESOURCE_GATEWAYS, useValue: refusingProducts(code) },
+    ]);
+    const store = page(fixture).store();
+
+    page(fixture).edit();
+    await settle(fixture);
+    await settle(fixture);
+    store.set('brand', 'Another');
+    await view(fixture).save();
+    await settle(fixture);
+    await settle(fixture);
+
+    expect(store.mode()).toBe('edit');
+    expect(view(fixture).messages()[field]).toEqual([{ kind: 'key', key }]);
+    expect(view(fixture).shownRefusal()).toBeNull();
+  });
+
   /** The three codes of `errorFields`, each said under "Categories". */
   it.each([
     'category_not_a_leaf',
@@ -375,6 +409,200 @@ describe('a product, on the record page', () => {
     expect(store.mode()).toBe('edit');
     expect(view(fixture).messages()['categoryIds']?.length).toBeGreaterThan(0);
     expect(view(fixture).messages()['brand'] ?? []).toEqual([]);
+  });
+
+  /** Admin plan 0068, criterion 1: a size or a weight, never both. */
+  describe('the size and the weight of a product', () => {
+    async function editing(id: string, providers: Provider[] = []) {
+      const fixture = await boot(`/products/${id}/details`, providers);
+      page(fixture).edit();
+      await settle(fixture);
+      await settle(fixture);
+      return { fixture, store: page(fixture).store() };
+    }
+
+    /** The names of the rows the Sold section draws, in order. */
+    const soldRows = (fixture: ComponentFixture<TestHost>) =>
+      view(fixture)
+        .layout()
+        .sections[2].fields.filter((field) => view(fixture).isShown(field))
+        .map((field) => field.name);
+
+    it('clears and disables the weight once a size is typed, and the other way round', async () => {
+      const { fixture, store } = await editing('it_milk_1l');
+
+      // The milk has a size, so the weight is shut out from the start.
+      expect(view(fixture).isExcluded(itemField('approxWeight'))).toBe(true);
+      expect(view(fixture).isExcluded(itemField('unitSize'))).toBe(false);
+
+      store.set('approxWeight', '1560');
+      await settle(fixture);
+      expect(store.draft()['unitSize']).toBe('');
+      expect(view(fixture).isExcluded(itemField('unitSize'))).toBe(true);
+      expect(view(fixture).isExcluded(itemField('approxWeight'))).toBe(false);
+
+      store.set('unitSize', '2');
+      await settle(fixture);
+      expect(store.draft()['approxWeight']).toBe('');
+      expect(view(fixture).isExcluded(itemField('approxWeight'))).toBe(true);
+    });
+
+    it('offers no size for the kilo, and offers it again for grams', async () => {
+      const { fixture, store } = await editing('it_milk_1l');
+      expect(soldRows(fixture)).toEqual([
+        'defaultUnit',
+        'unitSize',
+        'approxWeight',
+        'imageUrl',
+        'shownPhoto',
+      ]);
+
+      store.set('defaultUnit', 'KILOGRAM');
+      await settle(fixture);
+      expect(soldRows(fixture)).toEqual([
+        'defaultUnit',
+        'approxWeight',
+        'imageUrl',
+        'shownPhoto',
+      ]);
+      expect(store.draft()['unitSize']).toBe('');
+      // The weight is empty by default, and open to a value.
+      expect(store.draft()['approxWeight']).toBe('');
+      expect(view(fixture).isExcluded(itemField('approxWeight'))).toBe(false);
+      expect(view(fixture).noteOf(itemField('defaultUnit'))?.text).toEqual({
+        kind: 'key',
+        key: 'catalog.items.pricesPerKilo',
+      });
+
+      store.set('approxWeight', '1560');
+      store.set('defaultUnit', 'GRAM');
+      await settle(fixture);
+      expect(soldRows(fixture)).toContain('unitSize');
+      expect(view(fixture).noteOf(itemField('defaultUnit'))).toBeNull();
+      // The weight stays while the size is empty, and goes once one is typed.
+      expect(store.draft()['approxWeight']).toBe('1560');
+      store.set('unitSize', '500');
+      expect(store.draft()['approxWeight']).toBe('');
+    });
+
+    it('saves a kilo piece with its weight and no size', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const { fixture, store } = await editing('it_milk_1l', [
+        { provide: RESOURCE_GATEWAYS, useValue: gateways },
+      ]);
+
+      store.set('defaultUnit', 'KILOGRAM');
+      store.set('approxWeight', '1560');
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([
+        { defaultUnit: 'KILOGRAM', unitSize: null, approxWeight: 1560 },
+      ]);
+    });
+
+    it('saves a piece priced as one with its weight and no size', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const { fixture, store } = await editing('it_dish_soap', [
+        { provide: RESOURCE_GATEWAYS, useValue: gateways },
+      ]);
+
+      store.set('defaultUnit', 'UNIT');
+      store.set('approxWeight', '580');
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([
+        { defaultUnit: 'UNIT', unitSize: null, approxWeight: 580 },
+      ]);
+    });
+
+    it('says who set the weight, and hands a typed one back to the chain', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const typed = readingProducts((row) => ({
+        ...row,
+        unitSize: null,
+        defaultUnit: 'KILOGRAM',
+        approxWeight: 1500,
+        approxWeightSetBy: 'ADMIN',
+      }));
+      const both: ResourceGatewaysI = {
+        for: <T extends ResourceRow>(source: ResourceSource<T>) => ({
+          ...typed.for(source),
+          update: gateways.for(source).update,
+        }),
+      };
+      const fixture = await boot('/products/it_milk_1l/details', [
+        { provide: RESOURCE_GATEWAYS, useValue: both },
+      ]);
+
+      expect(view(fixture).noteOf(itemField('approxWeight'))).toEqual({
+        text: { kind: 'key', key: 'catalog.items.approxWeightFrom.admin' },
+        action: { label: 'catalog.items.approxWeightFrom.useChain', value: '' },
+      });
+
+      page(fixture).edit();
+      await settle(fixture);
+      await settle(fixture);
+      const press = fixture.nativeElement.querySelector(
+        '[data-note-action]'
+      ) as HTMLButtonElement;
+      expect(press.textContent?.trim()).toBe(
+        'catalog.items.approxWeightFrom.useChain'
+      );
+      press.click();
+      await settle(fixture);
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([{ approxWeight: null }]);
+    });
+
+    it('says a weight from the chain is rewritten by each run, and a person holds one typed over it', async () => {
+      const fixture = await boot('/products/it_milk_1l/details', [
+        {
+          provide: RESOURCE_GATEWAYS,
+          useValue: readingProducts((row) => ({
+            ...row,
+            unitSize: null,
+            approxWeight: 395,
+            approxWeightSetBy: 'SOURCE',
+          })),
+        },
+      ]);
+
+      expect(view(fixture).noteOf(itemField('approxWeight'))).toEqual({
+        text: { kind: 'key', key: 'catalog.items.approxWeightFrom.source' },
+      });
+      expect(
+        fixture.nativeElement.querySelector('[data-note-action]')
+      ).toBeNull();
+
+      // A weight typed over the chain's is the person's from the save on,
+      // and there is nothing yet to hand back.
+      page(fixture).edit();
+      await settle(fixture);
+      const store = page(fixture).store();
+      store.set('approxWeight', '1500');
+      await settle(fixture);
+      expect(view(fixture).noteOf(itemField('approxWeight'))).toEqual({
+        text: { kind: 'key', key: 'catalog.items.approxWeightFrom.admin' },
+      });
+      expect(
+        fixture.nativeElement.querySelector('[data-note-action]')
+      ).toBeNull();
+
+      // The chain's weight typed back is the chain's again.
+      store.set('approxWeight', '395');
+      expect(view(fixture).noteOf(itemField('approxWeight'))).toEqual({
+        text: { kind: 'key', key: 'catalog.items.approxWeightFrom.source' },
+      });
+      store.set('approxWeight', '');
+      expect(view(fixture).noteOf(itemField('approxWeight'))).toBeNull();
+    });
   });
 
   it('opens the form from a link that asks for it', async () => {

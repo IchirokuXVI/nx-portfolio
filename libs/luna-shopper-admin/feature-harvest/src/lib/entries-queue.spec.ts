@@ -1058,6 +1058,171 @@ describe('the one queue, deciding a row', () => {
     expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({});
   });
 
+  /** Admin plan 0068, criterion 3. */
+  describe('a row with no size and a weight', () => {
+    /**
+     * The queue opened on a first row that states the weight of one piece.
+     * Every row of the seed is a fixed pack, so the read is bent here.
+     */
+    async function openedOnPiece(soldByWeight: boolean) {
+      const listEntries = HarvestMemory.prototype.listEntries;
+      jest
+        .spyOn(HarvestMemory.prototype, 'listEntries')
+        .mockImplementation(async function (this: HarvestMemory, query) {
+          const page = await listEntries.call(this, query);
+          return {
+            ...page,
+            items: page.items.map((entry, index) =>
+              index === 0
+                ? { ...entry, unitSize: null, soldByWeight, approxWeight: 1560 }
+                : entry
+            ),
+          };
+        });
+      const held = await opened(MERCADONA);
+      held.page.openPanel('create');
+      held.fixture.detectChanges();
+      return held;
+    }
+
+    const weightLine = (fixture: ComponentFixture<EntriesQueuePage>) =>
+      fixture.nativeElement.querySelector(
+        '[data-weight]'
+      ) as HTMLElement | null;
+
+    it('proposes the kilo, no size and the weight for a row sold by weight', async () => {
+      const { fixture, page } = await openedOnPiece(true);
+
+      expect(page.defaultUnit()).toBe('KILOGRAM');
+      expect(page.unitSize()).toBe('');
+      expect(page.shownWeight()).toBe(1560);
+      expect(weightLine(fixture)?.textContent).toContain('1560');
+      expect(weightLine(fixture)?.textContent).toContain(
+        'harvest.entries.create.approxWeightHelp'
+      );
+    });
+
+    it('proposes a unit, no size and the weight for a row not sold by weight', async () => {
+      const { page } = await openedOnPiece(false);
+
+      expect(page.defaultUnit()).toBe('UNIT');
+      expect(page.unitSize()).toBe('');
+      expect(page.shownWeight()).toBe(1560);
+    });
+
+    it('sends nothing when the proposal is left as it is, and the server derives it', async () => {
+      const { page, calls } = await openedOnPiece(true);
+
+      page.createItem();
+      await drain();
+
+      expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({});
+    });
+
+    it('drops the weight line once a size is typed, and sends the size', async () => {
+      const { fixture, page, calls } = await openedOnPiece(true);
+
+      page.unitSize.set('250');
+      page.defaultUnit.set('GRAM');
+      fixture.detectChanges();
+      expect(weightLine(fixture)).toBeNull();
+
+      page.createItem();
+      await drain();
+
+      expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({
+        unitSize: 250,
+        defaultUnit: 'GRAM',
+      });
+    });
+
+    it('sends the unit a person chose over the proposal', async () => {
+      const { page, calls } = await openedOnPiece(true);
+
+      page.defaultUnit.set('UNIT');
+      page.createItem();
+      await drain();
+
+      expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({
+        defaultUnit: 'UNIT',
+      });
+    });
+
+    const sizeBox = (fixture: ComponentFixture<EntriesQueuePage>) =>
+      fixture.nativeElement.querySelector(
+        '[data-size]'
+      ) as HTMLInputElement | null;
+
+    it('offers no size box beside Kilogram, and choosing it empties the box', async () => {
+      const { fixture, page } = await openedOnPiece(false);
+
+      page.unitSize.set('400');
+      fixture.detectChanges();
+      expect(sizeBox(fixture)).not.toBeNull();
+
+      const select = fixture.nativeElement.querySelector(
+        '[data-unit]'
+      ) as HTMLSelectElement;
+      select.value = 'KILOGRAM';
+      select.dispatchEvent(new Event('change'));
+      fixture.detectChanges();
+
+      expect(page.defaultUnit()).toBe('KILOGRAM');
+      expect(page.unitSize()).toBe('');
+      expect(sizeBox(fixture)).toBeNull();
+    });
+
+    it('sends the kept unit beside a typed size', async () => {
+      const { page, calls } = await openedOnPiece(false);
+
+      page.unitSize.set('6');
+      page.createItem();
+      await drain();
+
+      expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({
+        unitSize: 6,
+        defaultUnit: 'UNIT',
+      });
+    });
+
+    it('drops the weight line while the unit differs from the proposal, and draws it again when put back', async () => {
+      const { fixture, page } = await openedOnPiece(true);
+
+      page.defaultUnit.set('UNIT');
+      fixture.detectChanges();
+      expect(page.shownWeight()).toBeNull();
+      expect(weightLine(fixture)).toBeNull();
+
+      page.defaultUnit.set('KILOGRAM');
+      fixture.detectChanges();
+      expect(page.shownWeight()).toBe(1560);
+      expect(weightLine(fixture)).not.toBeNull();
+    });
+
+    it('sends nothing when "As the row says" is chosen over a proposed unit', async () => {
+      const { fixture, page, calls } = await openedOnPiece(true);
+
+      page.defaultUnit.set('');
+      fixture.detectChanges();
+      expect(weightLine(fixture)).not.toBeNull();
+
+      page.createItem();
+      await drain();
+
+      expect(named(calls, 'createItemFromEntry')[0][1]).toEqual({});
+    });
+
+    it('opens any other row with no unit and no weight line', async () => {
+      const { fixture, page } = await opened(MERCADONA);
+      page.openPanel('create');
+      fixture.detectChanges();
+
+      expect(page.defaultUnit()).toBe('');
+      expect(page.shownWeight()).toBeNull();
+      expect(weightLine(fixture)).toBeNull();
+    });
+  });
+
   /**
    * An empty English name is not a name. Storing one would hide the missing
    * translation tag that asks somebody to write a real one (backend plan 0079).

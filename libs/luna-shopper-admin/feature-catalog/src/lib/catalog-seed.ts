@@ -681,3 +681,128 @@ export const LOCATION_ITEM_SEED: readonly Wire.CatalogSupermarketLocationItemVie
       itemBrand: 'Hacendado',
     },
   ];
+
+/**
+ * Two pieces with no size and a weight (backend plan 0244, admin plan 0068),
+ * apart from the tables above so the lists and counts of every other screen
+ * stay as they are. A spec that needs them adds them to the memory tables.
+ *
+ * The cheese is a piece sold by the kilo: 13.42 a kilo, and the server's
+ * price of one piece of 1560 g beside it on its offer. The back office prints
+ * that one and works out none. The melon is a piece priced as one: its price
+ * is the piece's, and it has no piece price.
+ */
+export const PIECE_SEED: {
+  readonly items: readonly Wire.CatalogItemView[];
+  readonly prices: readonly Wire.CatalogAdminSupermarketItemView[];
+  readonly itemPrices: readonly Wire.CatalogItemPriceView[];
+  readonly scopes: readonly ItemScopePrices[];
+} = (() => {
+  const piece = (
+    id: string,
+    name: { en: string; es: string },
+    defaultUnit: Wire.CatalogItemView['defaultUnit'],
+    approxWeight: number
+  ): Wire.CatalogItemView => ({
+    id,
+    name,
+    brand: 'Hacendado',
+    ...itemPhotos(null, []),
+    sku: null,
+    ean: null,
+    eans: [],
+    unitSize: null,
+    approxWeight,
+    approxWeightSetBy: 'SOURCE',
+    packCount: null,
+    categories: categoriesOf('uncategorised'),
+    defaultUnit,
+    productGroupId: null,
+  });
+  const cheese = { en: 'Cured cheese piece', es: 'Queso curado pieza' };
+  const melon = { en: 'Piel de sapo melon', es: 'Melón piel de sapo' };
+  const seen = '2026-09-03T06:12:00.000Z';
+
+  const offer = (
+    itemId: string,
+    itemName: { en: string; es: string },
+    price: number,
+    label: string,
+    piecePrice: number | null
+  ): Wire.CatalogAdminSupermarketItemView => ({
+    id: `si_${itemId}`,
+    itemId,
+    itemName,
+    priceScopeId: 'ps_mercadona_4661',
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: label,
+    observedAt: seen,
+    sourceKind: 'OFFICIAL_API',
+    stale: false,
+    validUntil: null,
+    itemPriceId: `ip_${itemId}`,
+    available: true,
+    piecePrice,
+  });
+
+  const row = (
+    itemId: string,
+    price: number,
+    label: string,
+    unitBasis: Wire.CatalogItemPriceView['unitBasis'] = null
+  ): Wire.CatalogItemPriceView => ({
+    id: `ip_${itemId}`,
+    itemId,
+    priceScopeId: 'ps_mercadona_4661',
+    sourceKind: 'OFFICIAL_API',
+    price,
+    currency: 'EUR',
+    unitPrice: price,
+    unitPriceLabel: label,
+    unitBasis,
+    observedAt: seen,
+    lastObservedAt: seen,
+    validFrom: null,
+    validUntil: null,
+    sourceRunId: null,
+    lastObservedRunId: null,
+    overrides: null,
+    protectedUntil: null,
+    details: null,
+  });
+
+  const itemPrices = [
+    row('it_cheese_piece', 13.42, '1 kg'),
+    // A piece priced as one: the run writes its price per unit beside it.
+    row('it_melon_piece', 6.5, '1 ud', 'UNIT'),
+  ];
+
+  return {
+    items: [
+      piece('it_cheese_piece', cheese, 'KILOGRAM', 1560),
+      piece('it_melon_piece', melon, 'UNIT', 580),
+    ],
+    prices: [
+      offer('it_cheese_piece', cheese, 13.42, '1 kg', 20.94),
+      offer('it_melon_piece', melon, 6.5, '1 ud', null),
+    ],
+    itemPrices,
+    scopes: itemPrices.map((priced) => ({
+      itemId: priced.itemId,
+      priceScopeId: 'ps_mercadona_4661',
+      supermarketId: MERCADONA,
+      scopeKind: 'REGION',
+      scopeExternalKey: '4661',
+      scopeLabel: { en: 'Córdoba warehouse', es: 'Almacén de Córdoba' },
+      scopePriority: 300,
+      rows: [priced],
+      shownItemPriceId: priced.id,
+      shownBecause: 'ONLY_ROW',
+      stale: false,
+      protectedUntil: null,
+      overrides: null,
+    })),
+  };
+})();

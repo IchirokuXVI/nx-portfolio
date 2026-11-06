@@ -535,10 +535,34 @@ const BRAND_SEARCH_DELAY_MS = 250;
                 <span>{{ 'harvest.entries.create.ean' | rokuT }}</span>
                 <input [(ngModel)]="ean" name="ean" type="text" />
               </label>
-              <label>
-                <span>{{ 'harvest.entries.create.unitSize' | rokuT }}</span>
-                <input [(ngModel)]="unitSize" name="unitSize" type="text" />
-              </label>
+              <!-- Not offered beside Kilogram: a product sold by the kilo has
+                   no size (backend plan 0237, section 3.3). -->
+              @if (defaultUnit() !== 'KILOGRAM') {
+                <label>
+                  <span>{{ 'harvest.entries.create.unitSize' | rokuT }}</span>
+                  <input
+                    [(ngModel)]="unitSize"
+                    name="unitSize"
+                    type="text"
+                    data-size
+                  />
+                </label>
+              }
+              <!-- The weight of one piece, read only: the request cannot carry
+                   one, and the server takes it off the row when no size is
+                   sent (backend plan 0244, section 5.6). A typed size drops
+                   it, so the line goes. -->
+              @if (shownWeight(); as grams) {
+                <div class="field weight" data-weight>
+                  <span>{{
+                    'harvest.entries.create.approxWeight' | rokuT
+                  }}</span>
+                  <div class="weight-value">{{ grams }}</div>
+                  <p class="hint">
+                    {{ 'harvest.entries.create.approxWeightHelp' | rokuT }}
+                  </p>
+                </div>
+              }
               <div class="field categories">
                 <label for="entries-categories">{{
                   'harvest.entries.create.categories' | rokuT
@@ -558,7 +582,12 @@ const BRAND_SEARCH_DELAY_MS = 250;
               </div>
               <label>
                 <span>{{ 'harvest.entries.create.defaultUnit' | rokuT }}</span>
-                <select [(ngModel)]="defaultUnit" name="defaultUnit">
+                <select
+                  (ngModelChange)="chooseUnit($event)"
+                  [ngModel]="defaultUnit()"
+                  name="defaultUnit"
+                  data-unit
+                >
                   <option value="">
                     {{ 'harvest.entries.create.fromRow' | rokuT }}
                   </option>
@@ -896,6 +925,15 @@ const BRAND_SEARCH_DELAY_MS = 250;
       max-inline-size: 24rem;
     }
 
+    /* A read only line beside the size, as wide as the boxes around it. */
+    .field.weight {
+      flex: 1 1 12rem;
+    }
+
+    .weight-value {
+      font-variant-numeric: tabular-nums;
+    }
+
     .field > span,
     label > span,
     .field > label {
@@ -1029,6 +1067,25 @@ export class EntriesQueuePage implements OnDestroy {
    */
   readonly categoryIds = signal<readonly string[]>([]);
   readonly defaultUnit = signal<Wire.EnumsUnitOfMeasure | ''>('');
+  /**
+   * The grams of one piece the row states, for a row with no size and a
+   * weight, or `null` (admin plan 0068). Read only: the create request has no
+   * weight, and the server takes it off the row.
+   */
+  readonly rowWeight = signal<number | null>(null);
+  /**
+   * The weight line, drawn only while the request would leave the weight to
+   * the row: the size box empty, and the unit the row proposed or none. A
+   * size or another unit in the request drops the weight on the server
+   * (backend plan 0244, section 5.6), so the line goes with it.
+   */
+  readonly shownWeight = computed(() => {
+    const unit = this.defaultUnit();
+    return this.unitSize().trim() === '' &&
+      (unit === '' || unit === this._unitAsRead())
+      ? this.rowWeight()
+      : null;
+  });
 
   /** Whether the rejection confirmation is up. Nothing is decided until it is. */
   readonly rejecting = signal(false);
@@ -1082,6 +1139,12 @@ export class EntriesQueuePage implements OnDestroy {
    * different strings.
    */
   private readonly _sizeAsRead = signal('');
+  /**
+   * The unit the form proposed for the open row, or `''` for none, kept for
+   * the reason {@link _sizeAsRead} is. A proposal left as it is sends
+   * nothing, and the server derives the same unit and weight from the row.
+   */
+  private readonly _unitAsRead = signal<Wire.EnumsUnitOfMeasure | ''>('');
 
   /** The brand filter's settle, so a screen left mid typing reloads nothing. */
   private _brandTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1641,8 +1704,25 @@ export class EntriesQueuePage implements OnDestroy {
       ...(unitSize === this._sizeAsRead() || Number.isNaN(size)
         ? {}
         : { unitSize: unitSize === '' ? null : size }),
-      ...(defaultUnit === '' ? {} : { defaultUnit }),
+      // A kept proposal stands for what the server derives from the row,
+      // but only while no size is named. Beside a typed size the unit is
+      // sent, so the server never reads the size in a unit of its own.
+      ...(defaultUnit === '' ||
+      (defaultUnit === this._unitAsRead() && unitSize === this._sizeAsRead())
+        ? {}
+        : { defaultUnit }),
     };
+  }
+
+  /**
+   * The unit select changed. Kilogram empties the size box, which is not
+   * offered beside it: a product sold by the kilo has no size.
+   */
+  chooseUnit(unit: Wire.EnumsUnitOfMeasure | ''): void {
+    this.defaultUnit.set(unit);
+    if (unit === 'KILOGRAM') {
+      this.unitSize.set('');
+    }
   }
 
   /**
@@ -1685,7 +1765,21 @@ export class EntriesQueuePage implements OnDestroy {
     this.unitSize.set(size);
     this._sizeAsRead.set(size);
     this.categoryIds.set([]);
-    this.defaultUnit.set('');
+    // A row with no size and a weight is a piece (backend plan 0244): sold by
+    // the kilo when the chain sells it by weight, priced as one otherwise.
+    // Any other row proposes no unit, and the server derives it.
+    const weight =
+      raw !== null &&
+      raw.unitSize === null &&
+      typeof raw.approxWeight === 'number' &&
+      raw.approxWeight > 0
+        ? raw.approxWeight
+        : null;
+    const unit: Wire.EnumsUnitOfMeasure | '' =
+      weight === null ? '' : raw?.soldByWeight === true ? 'KILOGRAM' : 'UNIT';
+    this.rowWeight.set(weight);
+    this.defaultUnit.set(unit);
+    this._unitAsRead.set(unit);
     // A new row opens with neither panel, so a product picked for the last
     // row is never one press away from the next.
     this.panel.set(null);
