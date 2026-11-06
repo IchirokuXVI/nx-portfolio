@@ -2205,6 +2205,114 @@ describe('HarvestRunService.startScheduled (plan 0206)', () => {
   });
 });
 
+describe('HarvestRunService.startScheduled with a gate (plan 0247)', () => {
+  const PRESET = '5efa0000-0000-4000-a000-0000000000e1';
+  const SCHEDULE = { id: 'schedule-1', presetId: PRESET };
+  const catalogPreset = {
+    id: PRESET,
+    supermarketId: SUPERMARKET,
+    name: 'Weekly Mercadona',
+    input: {
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      priceScopeIds: [SCOPE],
+    },
+  } as HarvestRunPreset;
+  const skipped = {
+    outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+    note: 'probe p-1 BLOCKED: listing: HTTP 403',
+    runId: null,
+  };
+
+  it('asks the gate with the source and the mode, then inserts the run when it answers null', async () => {
+    const { service, store } = build({ preset: catalogPreset });
+    const gate = jest.fn(async () => null);
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(gate).toHaveBeenCalledTimes(1);
+    expect(gate).toHaveBeenCalledWith({
+      source: expect.objectContaining({ id: 'src-1' }),
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+    });
+    expect(started.outcome).toBe(HarvestScheduleOutcome.STARTED);
+    expect(store.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers what the gate answers and inserts nothing', async () => {
+    const { service, store, executor } = build({ preset: catalogPreset });
+
+    await expect(
+      service.startScheduled(SCHEDULE, async () => skipped)
+    ).resolves.toEqual(skipped);
+    expect(store.create).not.toHaveBeenCalled();
+    expect(executor.start).not.toHaveBeenCalled();
+  });
+
+  it('never asks the gate for a row that is off, a failing source or a refused preset', async () => {
+    const gate = jest.fn(async () => null);
+    for (const options of [
+      { preset: catalogPreset, source: { enabled: false } },
+      { preset: catalogPreset, source: { consecutiveFailures: 3 } },
+      {
+        preset: {
+          ...catalogPreset,
+          input: {
+            mode: HarvestRunMode.CATALOG_DISCOVERY,
+            priceScopeIds: ['5efa0000-0000-4000-a000-0000000000e2'],
+          },
+        } as HarvestRunPreset,
+      },
+    ]) {
+      const { service } = build(options);
+      const started = await service.startScheduled(SCHEDULE, gate);
+      expect(started.runId).toBeNull();
+    }
+    expect(gate).not.toHaveBeenCalled();
+  });
+
+  it('answers a busy chain before the gate, so a busy chain gets no probe', async () => {
+    const { service, store } = build({
+      preset: catalogPreset,
+      activeOfChain: { id: 'run-of-chain' } as HarvestRun,
+    });
+    const gate = jest.fn(async () => null);
+
+    await expect(service.startScheduled(SCHEDULE, gate)).resolves.toEqual({
+      outcome: HarvestScheduleOutcome.SKIPPED_BUSY,
+      note: 'A run of this chain is in progress: run-of-chain.',
+      runId: null,
+    });
+    expect(gate).not.toHaveBeenCalled();
+    expect(store.create).not.toHaveBeenCalled();
+  });
+
+  it('answers a store discovery busy behind another source before the gate', async () => {
+    const { service } = build({
+      preset: {
+        ...catalogPreset,
+        input: { mode: HarvestRunMode.STORE_DISCOVERY },
+      } as HarvestRunPreset,
+      source: { adapterKey: 'lidl-api' },
+      activeDiscovery: { id: 'run-of-the-queue' } as HarvestRun,
+    });
+    const gate = jest.fn(async () => null);
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.SKIPPED_BUSY);
+    expect(gate).not.toHaveBeenCalled();
+  });
+
+  it('reads no run in flight before the insert when no gate is passed', async () => {
+    const { service, store } = build({ preset: catalogPreset });
+
+    await service.startScheduled(SCHEDULE);
+
+    expect(store.findActiveBySupermarket).not.toHaveBeenCalled();
+    expect(store.findActiveStoreDiscovery).not.toHaveBeenCalled();
+  });
+});
+
 describe('HarvestRunService.reapStale', () => {
   it('reaps runs whose heartbeat stopped', async () => {
     const { service, store } = build();

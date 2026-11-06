@@ -7,7 +7,10 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HarvestScheduleOutcome } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestScheduleOutcome,
+  SourceProbeStatus,
+} from '@portfolio/luna-shopper/contracts';
 import { describeError } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestSchedule } from '../entities';
@@ -15,11 +18,27 @@ import {
   slotAlertFor,
   type HarvestAlertDraft,
 } from './alerts/harvest-alert.rules';
-import { HarvestRunService, type ScheduledStart } from './harvest-run.service';
+import {
+  HarvestRunService,
+  type ScheduledStart,
+  type ScheduledStartCheck,
+} from './harvest-run.service';
 import {
   HarvestScheduleStore,
   type ClaimedSlot,
 } from './harvest-schedule.store';
+import { isProbedAdapterKey } from './probes/source-probe.runner';
+import { SourceProbeService } from './probes/source-probe.service';
+import { SourceProbeStore } from './probes/source-probe.store';
+import {
+  PROBE_DID_NOT_FINISH,
+  PROBE_POLL_MS,
+  PROBE_VALID_MS,
+  decideProbeGate,
+  judgeGateProbe,
+  waitIsOver,
+  type GateProbe,
+} from './schedule-probe-gate';
 import { HARVEST_CLOCK, isTooLate, type HarvestClock } from './schedule-slot';
 
 /** How often the worker looks for a due schedule. A constant, not a setting. */
@@ -41,6 +60,13 @@ export const SCHEDULE_TICK_MS = 60_000;
  * The lifecycle is the postal code worker's: a plain timer with `unref`, no
  * scheduler dependency, cleared on destroy, and a flag that stops the loop on
  * the way out. The executor's own shutdown hook aborts the run in flight.
+ *
+ * **A probe gates each start** (plan 0247). After the late, failing and busy
+ * rules and before the run is inserted, a slot whose preset reads the chain
+ * starts only when a probe of the chain passed inside the last 15 minutes. It
+ * otherwise waits for a probe that is running or runs one, inside the tick,
+ * and is skipped as `SKIPPED_PROBE_FAILED` when that probe is not `PASSED`.
+ * The retry of an interrupted run passes the same gate.
  */
 @Injectable()
 export class HarvestScheduleWorker
@@ -55,8 +81,20 @@ export class HarvestScheduleWorker
     private readonly store: HarvestScheduleStore,
     private readonly runs: HarvestRunService,
     private readonly config: ConfigService,
-    @Inject(HARVEST_CLOCK) private readonly clock: HarvestClock
+    @Inject(HARVEST_CLOCK) private readonly clock: HarvestClock,
+    private readonly probes: SourceProbeService,
+    private readonly probeStore: SourceProbeStore
   ) {}
+
+  /**
+   * How the gate waits between two reads of a running probe. A field so a
+   * spec can move its clock instead of waiting.
+   */
+  sleep: (ms: number) => Promise<void> = (ms) =>
+    new Promise((resolve) => {
+      const timer = setTimeout(resolve, ms);
+      timer.unref?.();
+    });
 
   private settings(): HarvesterConfig {
     return this.config.getOrThrow<HarvesterConfig>('harvester');
@@ -217,7 +255,9 @@ export class HarvestScheduleWorker
   /** The start, with anything unexpected written as `REFUSED` (section 5.3). */
   private async start(schedule: HarvestSchedule): Promise<ScheduledStart> {
     try {
-      return await this.runs.startScheduled(schedule);
+      return await this.runs.startScheduled(schedule, (check) =>
+        this.probeGate(schedule, check)
+      );
     } catch (error) {
       return {
         outcome: HarvestScheduleOutcome.REFUSED,
@@ -225,6 +265,90 @@ export class HarvestScheduleWorker
         runId: null,
       };
     }
+  }
+
+  /**
+   * The probe gate of one start (plan 0247, section 2, steps 3 to 7): null
+   * lets the run start, an outcome skips the slot. It runs after the late,
+   * failing and busy rules, which `startScheduled` applied before calling it.
+   */
+  private async probeGate(
+    schedule: HarvestSchedule,
+    { source, mode }: ScheduledStartCheck
+  ): Promise<ScheduledStart | null> {
+    if (!source) {
+      return null;
+    }
+    const now = this.clock();
+    let decision = decideProbeGate({
+      mode,
+      adapterKey: source.adapterKey,
+      probed: isProbedAdapterKey(source.adapterKey),
+      probes: await this.probeStore.gateProbes(
+        source.id,
+        new Date(now.getTime() - PROBE_VALID_MS)
+      ),
+      now,
+    });
+    if (decision.action === 'PROBE') {
+      const ran = await this.probes.runForSchedule(source, schedule.id);
+      if (ran) {
+        decision = judgeGateProbe(gateProbeOf(ran));
+      } else {
+        // Another probe of the source started between the read and the
+        // insert, and is waited for as any running probe is. If it already
+        // finished, its row is the verdict.
+        const running = await this.probeStore.findRunning(source.id);
+        const newest = running ? null : await this.newestFinished(source.id);
+        decision = running
+          ? { action: 'WAIT', probe: gateProbeOf(running) }
+          : newest
+            ? judgeGateProbe(newest)
+            : { action: 'SKIP', note: PROBE_DID_NOT_FINISH };
+      }
+    }
+    if (decision.action === 'WAIT') {
+      decision = judgeGateProbe(await this.waitFor(decision.probe));
+    }
+    if (decision.action === 'START') {
+      return null;
+    }
+    // A skip, and any decision that is not a start: a slot never starts
+    // without a probe that passed.
+    return {
+      outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+      note: decision.action === 'SKIP' ? decision.note : PROBE_DID_NOT_FINISH,
+      runId: null,
+    };
+  }
+
+  /** The newest probe of a source inside the window that is not `RUNNING` or `ABORTED`. */
+  private async newestFinished(sourceId: string): Promise<GateProbe | null> {
+    const probes = await this.probeStore.gateProbes(
+      sourceId,
+      new Date(this.clock().getTime() - PROBE_VALID_MS)
+    );
+    return (
+      probes.find(
+        (probe) =>
+          probe.status !== SourceProbeStatus.RUNNING &&
+          probe.status !== SourceProbeStatus.ABORTED
+      ) ?? null
+    );
+  }
+
+  /**
+   * Read a running probe every {@link PROBE_POLL_MS} until it finishes, or
+   * until six minutes passed since it started (section 2, step 5). Answers
+   * the probe as last read, which is still `RUNNING` when the wait ran out.
+   */
+  private async waitFor(probe: GateProbe): Promise<GateProbe> {
+    let current = probe;
+    while (!this.stopping && !waitIsOver(current, this.clock())) {
+      await this.sleep(PROBE_POLL_MS);
+      current = gateProbeOf(await this.probeStore.load(current.id));
+    }
+    return current;
   }
 
   private log(
@@ -246,6 +370,21 @@ export class HarvestScheduleWorker
       );
     }
   }
+}
+
+/** A probe row as the gate reads it. */
+function gateProbeOf(row: {
+  id: string;
+  status: SourceProbeStatus;
+  startedAt: Date;
+  error: string | null;
+}): GateProbe {
+  return {
+    id: row.id,
+    status: row.status,
+    startedAt: new Date(row.startedAt),
+    error: row.error ?? null,
+  };
 }
 
 /**

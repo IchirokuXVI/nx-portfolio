@@ -155,6 +155,11 @@ export enum HarvestScheduleOutcome {
    * discovery at all, the postal code queue included.
    */
   SKIPPED_BUSY = 'SKIPPED_BUSY',
+  /**
+   * The probe that the slot ran, or waited for, was not `PASSED` (plan 0247).
+   * The note names the probe and its status.
+   */
+  SKIPPED_PROBE_FAILED = 'SKIPPED_PROBE_FAILED',
 }
 
 /**
@@ -171,6 +176,13 @@ export enum HarvestScheduleBlock {
   SOURCE_DISABLED = 'SOURCE_DISABLED',
   /** The source has three or more consecutive failures. */
   SOURCE_FAILING = 'SOURCE_FAILING',
+  /**
+   * The newest finished probe of the chain that is not `ABORTED` is not
+   * `PASSED` (plan 0247). A forecast and not a verdict: the slot runs a fresh
+   * probe and may pass. Answered for a schedule whose preset fetches the chain
+   * only, so a file import never says it.
+   */
+  PROBE_NOT_PASSED = 'PROBE_NOT_PASSED',
 }
 
 /**

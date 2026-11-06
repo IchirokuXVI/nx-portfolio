@@ -8,6 +8,8 @@ import type {
   ScheduleOutcomeWrite,
 } from './harvest-schedule.store';
 import { HarvestScheduleWorker } from './harvest-schedule.worker';
+import type { SourceProbeService } from './probes/source-probe.service';
+import type { SourceProbeStore } from './probes/source-probe.store';
 import { nextSlot, previousSlot } from './schedule-slot';
 
 /**
@@ -118,7 +120,16 @@ function build(
   } as unknown as ConfigService;
 
   let now = new Date('2026-10-14T03:01:00.000Z');
-  const worker = new HarvestScheduleWorker(store, runs, config, () => now);
+  // `startScheduled` is a fake here and never calls the gate, which
+  // `harvest-schedule.worker.gate.spec.ts` covers.
+  const worker = new HarvestScheduleWorker(
+    store,
+    runs,
+    config,
+    () => now,
+    {} as SourceProbeService,
+    {} as SourceProbeStore
+  );
   return {
     worker,
     store,
@@ -137,7 +148,9 @@ describe('HarvestScheduleWorker, a due slot', () => {
     await worker.tick();
 
     expect(runs.startScheduled).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 'schedule-1', presetId: 'preset-1' })
+      expect.objectContaining({ id: 'schedule-1', presetId: 'preset-1' }),
+      // The probe gate of plan 0247.
+      expect.any(Function)
     );
     expect(outcomes).toEqual([
       expect.objectContaining({

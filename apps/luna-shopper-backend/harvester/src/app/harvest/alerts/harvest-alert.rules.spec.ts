@@ -4,15 +4,18 @@ import {
   HarvestRunStatus,
   HarvestRunTrigger,
   HarvestScheduleOutcome,
+  SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import { SOURCE_FAILING_AFTER } from '../harvest-run.service';
 import {
   needsScheduleCount,
   postalCodeAlertFor,
+  probeAlertFor,
   runAlertFor,
   SCHEDULES_STOP_AFTER,
   slotAlertFor,
   testAlertFor,
+  type ProbeAlertProbe,
   type RunAlertRun,
   type SlotAlertSchedule,
 } from './harvest-alert.rules';
@@ -257,6 +260,166 @@ describe('slotAlertFor', () => {
       expect(
         slotAlertFor(input({ result: { outcome, note: 'x' } }))
       ).toBeNull();
+    }
+  });
+
+  describe('a slot the probe gate skipped (plan 0247, section 4.2)', () => {
+    const blocked = {
+      outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+      note: 'probe p-2 BLOCKED: listing: the response was HTTP 403',
+    };
+
+    it('alerts SKIPPED_PROBE_FAILED after STARTED as SLOT_PROBE_FAILED, with the probe read from the note', () => {
+      expect(slotAlertFor(input({ result: blocked }))).toMatchObject({
+        kind: HarvestAlertKind.SLOT_PROBE_FAILED,
+        dedupeKey: `slot:schedule-1:${SLOT.toISOString()}`,
+        scheduleId: 'schedule-1',
+        supermarketId: 'chain-1',
+        runId: null,
+        payload: expect.objectContaining({
+          note: blocked.note,
+          probeId: 'p-2',
+          probeStatus: 'BLOCKED',
+          probeError: 'listing: the response was HTTP 403',
+        }),
+      });
+    });
+
+    it('does not alert after SKIPPED_PROBE_FAILED with the same status word, whatever the probe id', () => {
+      expect(
+        slotAlertFor(
+          input({
+            result: blocked,
+            schedule: schedule({
+              lastOutcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+              lastOutcomeNote: 'probe p-1 BLOCKED: listing: HTTP 429',
+            }),
+          })
+        )
+      ).toBeNull();
+    });
+
+    it('alerts after SKIPPED_PROBE_FAILED with another status word', () => {
+      expect(
+        slotAlertFor(
+          input({
+            result: blocked,
+            schedule: schedule({
+              lastOutcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+              lastOutcomeNote: 'probe p-1 SHAPE_CHANGED: listing: no rows',
+            }),
+          })
+        )?.kind
+      ).toBe(HarvestAlertKind.SLOT_PROBE_FAILED);
+    });
+
+    it('alerts after a REFUSED slot with the same note words', () => {
+      expect(
+        slotAlertFor(
+          input({
+            result: blocked,
+            schedule: schedule({
+              lastOutcome: HarvestScheduleOutcome.REFUSED,
+              lastOutcomeNote: blocked.note,
+            }),
+          })
+        )?.kind
+      ).toBe(HarvestAlertKind.SLOT_PROBE_FAILED);
+    });
+
+    it('alerts a retry it skipped with the :retry key', () => {
+      expect(
+        slotAlertFor(
+          input({
+            result: blocked,
+            retry: true,
+            schedule: schedule({
+              lastOutcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+              lastOutcomeNote: blocked.note,
+            }),
+          })
+        )?.dedupeKey
+      ).toBe(`slot:schedule-1:${SLOT.toISOString()}:retry`);
+    });
+
+    it('leaves the REFUSED rule as it was', () => {
+      expect(
+        slotAlertFor(
+          input({
+            schedule: schedule({
+              lastOutcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+              lastOutcomeNote: refused.note,
+            }),
+          })
+        )?.kind
+      ).toBe(HarvestAlertKind.SLOT_REFUSED);
+    });
+  });
+});
+
+describe('probeAlertFor (plan 0247, section 4.1)', () => {
+  const AT = new Date('2026-11-06T03:00:12.000Z');
+
+  function probe(over: Partial<ProbeAlertProbe> = {}): ProbeAlertProbe {
+    return {
+      id: 'probe-7',
+      sourceId: 'source-1',
+      supermarketId: 'chain-1',
+      adapterKey: 'mercadona-api',
+      trigger: HarvestRunTrigger.SCHEDULED,
+      status: SourceProbeStatus.SHAPE_CHANGED,
+      previousStatus: SourceProbeStatus.PASSED,
+      changed: true,
+      attempt: 1,
+      startedAt: new Date('2026-11-06T03:00:00.000Z'),
+      finishedAt: new Date('2026-11-06T03:00:10.000Z'),
+      error: 'listing: 2 of 40 rows carried a price above zero',
+      requests: 4,
+      steps: [
+        { name: 'warehouse', ok: true },
+        { name: 'listing', ok: false },
+      ],
+      ...over,
+    };
+  }
+
+  it.each([
+    [SourceProbeStatus.SHAPE_CHANGED, { changed: true }],
+    [SourceProbeStatus.BLOCKED, { changed: true }],
+    [SourceProbeStatus.UNREACHABLE, { changed: false, attempt: 3 }],
+  ] as const)('alerts %s as PROBE_FAILED keyed probe:<id>', (status, over) => {
+    expect(
+      probeAlertFor({ probe: probe({ status, ...over }), at: AT })
+    ).toMatchObject({
+      kind: HarvestAlertKind.PROBE_FAILED,
+      dedupeKey: 'probe:probe-7',
+      supermarketId: 'chain-1',
+      runId: null,
+      scheduleId: null,
+      payload: expect.objectContaining({
+        probeId: 'probe-7',
+        status,
+        adapterKey: 'mercadona-api',
+        requests: 4,
+        steps: [
+          { name: 'warehouse', ok: true },
+          { name: 'listing', ok: false },
+        ],
+      }),
+    });
+  });
+
+  it('gives nothing for UNREACHABLE at attempts 1 and 2, ERROR, ABORTED, PASSED and a SHAPE_CHANGED that did not change', () => {
+    for (const over of [
+      { status: SourceProbeStatus.UNREACHABLE, attempt: 1, changed: true },
+      { status: SourceProbeStatus.UNREACHABLE, attempt: 2 },
+      { status: SourceProbeStatus.ERROR, changed: true },
+      { status: SourceProbeStatus.ABORTED, changed: false },
+      { status: SourceProbeStatus.PASSED, changed: true },
+      { status: SourceProbeStatus.SHAPE_CHANGED, changed: false },
+      { status: SourceProbeStatus.BLOCKED, changed: false },
+    ]) {
+      expect(probeAlertFor({ probe: probe(over), at: AT })).toBeNull();
     }
   });
 });

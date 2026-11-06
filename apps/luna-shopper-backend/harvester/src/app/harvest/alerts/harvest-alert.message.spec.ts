@@ -2,13 +2,16 @@ import {
   HarvestAlertKind,
   HarvestRunMode,
   HarvestRunTrigger,
+  SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import {
   alertMail,
   digestMail,
   durationOf,
+  fixturesProjectOf,
   LEAD_SENTENCES,
   madridTime,
+  PROBE_LEAD_SENTENCES,
   schedulesStoppedSentence,
   type AlertForMessage,
   type MessageContext,
@@ -311,6 +314,169 @@ describe('the fixed words', () => {
       ),
     ];
     for (const mail of mails) {
+      expect(mail.subject).not.toMatch(DASH_AS_PUNCTUATION);
+      expect(mail.body).not.toMatch(DASH_AS_PUNCTUATION);
+    }
+  });
+});
+
+describe('the probe alerts (plan 0247, section 4.4)', () => {
+  const NAMES: Record<string, string> = {
+    'chain-mercadona': 'Mercadona',
+    'chain-dia': 'DIA',
+    'chain-lidl': 'LIDL',
+    'chain-deza': 'DEZA',
+  };
+  const named = context({ chainName: (id) => NAMES[id] ?? null });
+
+  const probeAlert = (
+    supermarketId: string,
+    status: SourceProbeStatus,
+    over: Record<string, unknown> = {}
+  ): AlertForMessage => ({
+    kind: HarvestAlertKind.PROBE_FAILED,
+    supermarketId,
+    runId: null,
+    scheduleId: null,
+    createdAt: CREATED,
+    payload: {
+      probeId: 'probe-7',
+      sourceId: 'source-1',
+      adapterKey: 'mercadona-api',
+      trigger: HarvestRunTrigger.SCHEDULED,
+      status,
+      previousStatus: SourceProbeStatus.PASSED,
+      changed: true,
+      attempt: status === SourceProbeStatus.UNREACHABLE ? 3 : 1,
+      startedAt: '2026-11-05T02:00:00.000Z',
+      finishedAt: '2026-11-05T02:00:09.000Z',
+      error: 'listing: 2 of 40 rows carried a price above zero',
+      requests: 4,
+      steps: [
+        { name: 'warehouse', ok: true },
+        { name: 'listing', ok: false },
+      ],
+      at: '2026-11-05T02:00:09.000Z',
+      ...over,
+    },
+  });
+
+  const slotProbeAlert = (retry = false): AlertForMessage => ({
+    kind: HarvestAlertKind.SLOT_PROBE_FAILED,
+    supermarketId: 'chain-deza',
+    runId: null,
+    scheduleId: 'schedule-2',
+    createdAt: CREATED,
+    payload: {
+      presetId: 'preset-2',
+      scheduleId: 'schedule-2',
+      adapterKey: 'deza-web',
+      slot: '2026-11-05T02:00:00.000Z',
+      retry,
+      note: 'probe probe-8 UNREACHABLE: listing: connect ECONNREFUSED',
+      at: '2026-11-05T02:00:30.000Z',
+      probeId: 'probe-8',
+      probeStatus: 'UNREACHABLE',
+      probeError: 'listing: connect ECONNREFUSED',
+    },
+  });
+
+  it('has the four subjects of section 4.4', () => {
+    expect(
+      alertMail(
+        probeAlert('chain-mercadona', SourceProbeStatus.SHAPE_CHANGED),
+        named
+      ).subject
+    ).toBe('[production] Mercadona: the storefront changed shape');
+    expect(
+      alertMail(probeAlert('chain-dia', SourceProbeStatus.BLOCKED), named)
+        .subject
+    ).toBe('[production] DIA: the chain refused the probe');
+    expect(
+      alertMail(probeAlert('chain-lidl', SourceProbeStatus.UNREACHABLE), named)
+        .subject
+    ).toBe('[production] LIDL: the chain was unreachable for an hour');
+    expect(alertMail(slotProbeAlert(), named).subject).toBe(
+      '[production] DEZA: a scheduled run was skipped, its probe did not pass'
+    );
+    expect(alertMail(slotProbeAlert(true), named).subject).toBe(
+      '[production] DEZA: the retry of a scheduled run was skipped, its probe did not pass'
+    );
+  });
+
+  it('holds what to do, the steps, the first problem, the requests and the probe id', () => {
+    const { body } = alertMail(
+      probeAlert('chain-mercadona', SourceProbeStatus.SHAPE_CHANGED),
+      named
+    );
+    expect(body).toContain(
+      PROBE_LEAD_SENTENCES[SourceProbeStatus.SHAPE_CHANGED]
+    );
+    expect(body).toContain('Chain: Mercadona');
+    expect(body).toContain('Status: SHAPE_CHANGED');
+    expect(body).toContain('Trigger: SCHEDULED');
+    expect(body).toContain('Attempt: 1');
+    expect(body).toContain('Steps:\n  warehouse: ok\n  listing: not ok');
+    expect(body).toContain(
+      'First problem: listing: 2 of 40 rows carried a price above zero'
+    );
+    expect(body).toContain('Requests: 4');
+    expect(body).toContain('Probe id: probe-7');
+    expect(body).toContain(
+      'Fixtures: npx nx run luna-shopper/mercadona:capture-fixtures'
+    );
+    expect(body).not.toContain('Run:');
+  });
+
+  it('names no fixtures target for a refusal or an outage', () => {
+    for (const status of [
+      SourceProbeStatus.BLOCKED,
+      SourceProbeStatus.UNREACHABLE,
+    ]) {
+      const { body } = alertMail(probeAlert('chain-dia', status), named);
+      expect(body).toContain(PROBE_LEAD_SENTENCES[status]);
+      expect(body).not.toContain('capture-fixtures');
+    }
+  });
+
+  it('holds the slot, the schedule, the preset and the probe of a skipped slot', () => {
+    const { body } = alertMail(slotProbeAlert(), named);
+    expect(body).toContain(LEAD_SENTENCES[HarvestAlertKind.SLOT_PROBE_FAILED]);
+    expect(body).toContain('Schedule: schedule-2');
+    expect(body).toContain('Preset: preset-2');
+    expect(body).toContain('Slot: 2026-11-05 03:00:00 Madrid time');
+    expect(body).toContain('Probe: probe-8');
+    expect(body).toContain('Probe status: UNREACHABLE');
+    expect(body).toContain('Probe sentence: listing: connect ECONNREFUSED');
+  });
+
+  it('maps each adapter to its library project', () => {
+    expect(fixturesProjectOf('deza-web')).toBe('luna-shopper/deza');
+    expect(fixturesProjectOf('carrefour-web')).toBe('luna-shopper/carrefour');
+    expect(fixturesProjectOf(null)).toBeNull();
+  });
+
+  it('use no dash as punctuation', () => {
+    const DASH_AS_PUNCTUATION = /\s[-–—]\s|[–—]/;
+    for (const sentence of Object.values(PROBE_LEAD_SENTENCES)) {
+      expect(sentence).not.toMatch(DASH_AS_PUNCTUATION);
+    }
+    for (const mail of [
+      alertMail(
+        probeAlert('chain-mercadona', SourceProbeStatus.SHAPE_CHANGED),
+        named
+      ),
+      alertMail(probeAlert('chain-dia', SourceProbeStatus.BLOCKED), named),
+      alertMail(probeAlert('chain-lidl', SourceProbeStatus.UNREACHABLE), named),
+      alertMail(slotProbeAlert(true), named),
+      digestMail(
+        [
+          probeAlert('chain-deza', SourceProbeStatus.SHAPE_CHANGED),
+          slotProbeAlert(),
+        ],
+        named
+      ),
+    ]) {
       expect(mail.subject).not.toMatch(DASH_AS_PUNCTUATION);
       expect(mail.body).not.toMatch(DASH_AS_PUNCTUATION);
     }

@@ -42925,7 +42925,8 @@
           "HARVEST_DISABLED",
           "SCHEDULER_DISABLED",
           "SOURCE_DISABLED",
-          "SOURCE_FAILING"
+          "SOURCE_FAILING",
+          "PROBE_NOT_PASSED"
         ]
       },
       "enums.HarvestScheduleOutcome": {
@@ -42935,7 +42936,8 @@
           "SKIPPED_LATE",
           "SKIPPED_FAILING",
           "REFUSED",
-          "SKIPPED_BUSY"
+          "SKIPPED_BUSY",
+          "SKIPPED_PROBE_FAILED"
         ]
       },
       "enums.HarvestWarningCode": {

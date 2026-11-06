@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import {
+  HarvestAlertKind,
   HarvestRunTrigger,
   SourceProbeStatus,
   type SourceProbeResult,
@@ -380,5 +381,108 @@ describe('SourceProbeService reads', () => {
     const one = await service.get({ ...req, probeId: newest.id });
     expect(one.id).toBe(newest.id);
     expect(one.durationMs).toBe(0);
+  });
+});
+
+describe('SourceProbeService.runForSchedule (plan 0247)', () => {
+  const unreachable: SourceProbeResult = {
+    steps: [{ ...passed.steps[0], ok: false, httpStatus: 503 }],
+    requests: 1,
+  };
+
+  it('runs a SCHEDULED probe with no user, waits for it and answers the finished row', async () => {
+    const context = build({ answers: [passed] });
+
+    const probe = await context.service.runForSchedule(source(), 'schedule-1');
+
+    expect(probe).toEqual(
+      expect.objectContaining({
+        trigger: HarvestRunTrigger.SCHEDULED,
+        requestedByUserId: null,
+        status: SourceProbeStatus.PASSED,
+        attempt: 1,
+      })
+    );
+    expect(context.store.alerts).toEqual([]);
+  });
+
+  it('carries the attempt of the series after an UNREACHABLE probe, with the interval ignored', async () => {
+    const context = build({ answers: [unreachable] });
+    context.store.seed({
+      sourceId: 'source-1',
+      startedAt: new Date(NOW.getTime() - 60_000),
+      status: SourceProbeStatus.UNREACHABLE,
+      attempt: 2,
+    });
+
+    const probe = await context.service.runForSchedule(source(), 'schedule-1');
+
+    expect(probe).toEqual(
+      expect.objectContaining({
+        status: SourceProbeStatus.UNREACHABLE,
+        attempt: 3,
+      })
+    );
+    // The third attempt of the series is the one that alerts (section 4.1).
+    expect(context.store.alerts).toEqual([
+      expect.objectContaining({
+        kind: HarvestAlertKind.PROBE_FAILED,
+        dedupeKey: `probe:${probe?.id}`,
+      }),
+    ]);
+  });
+
+  it('passes the draft to finish for a change to SHAPE_CHANGED, and none for a first attempt UNREACHABLE', async () => {
+    const changed = build({ answers: [changedShape] });
+    changed.store.seed({
+      sourceId: 'source-1',
+      startedAt: new Date(NOW.getTime() - 86_400_000),
+      status: SourceProbeStatus.PASSED,
+    });
+    const red = await changed.service.runForSchedule(source(), 'schedule-1');
+    expect(changed.store.alerts).toEqual([
+      expect.objectContaining({
+        kind: HarvestAlertKind.PROBE_FAILED,
+        dedupeKey: `probe:${red?.id}`,
+        payload: expect.objectContaining({
+          status: SourceProbeStatus.SHAPE_CHANGED,
+          changed: true,
+        }),
+      }),
+    ]);
+
+    const first = build({ answers: [unreachable] });
+    await first.service.runForSchedule(source(), 'schedule-1');
+    expect(first.store.alerts).toEqual([]);
+  });
+
+  it('answers null and runs nothing while a probe of the source is RUNNING', async () => {
+    const context = build();
+    context.store.seed({
+      sourceId: 'source-1',
+      startedAt: NOW,
+      status: SourceProbeStatus.RUNNING,
+      finishedAt: null,
+    });
+
+    await expect(
+      context.service.runForSchedule(source(), 'schedule-1')
+    ).resolves.toBeNull();
+    expect(context.signals).toHaveLength(0);
+  });
+
+  it('writes the alert of a manual probe too', async () => {
+    const context = build({ answers: [changedShape] });
+    context.store.seed({
+      sourceId: 'source-1',
+      startedAt: new Date(NOW.getTime() - 86_400_000),
+      status: SourceProbeStatus.PASSED,
+    });
+
+    await context.service.start(req);
+    await flush();
+    await flush();
+
+    expect(context.store.alerts).toHaveLength(1);
   });
 });

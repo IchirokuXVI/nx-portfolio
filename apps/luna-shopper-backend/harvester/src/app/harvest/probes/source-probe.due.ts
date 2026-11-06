@@ -84,3 +84,21 @@ export function probeDueAttempt(
   }
   return elapsed > hours * 3_600_000 ? 1 : null;
 }
+
+/**
+ * The attempt a probe carries when it runs now whatever the due rule says,
+ * as the probe of a schedule slot does (plan 0247, section 2): the rule of
+ * {@link probeDueAttempt} with the interval and the retry wait ignored. After
+ * an `UNREACHABLE` probe below attempt 3 it is the next attempt of that
+ * series, and otherwise it starts a series at 1.
+ */
+export function probeSeriesAttempt(newest: NewestProbe | null): number {
+  if (
+    newest !== null &&
+    newest.status === SourceProbeStatus.UNREACHABLE &&
+    newest.attempt < PROBE_MAX_ATTEMPTS
+  ) {
+    return newest.attempt + 1;
+  }
+  return 1;
+}

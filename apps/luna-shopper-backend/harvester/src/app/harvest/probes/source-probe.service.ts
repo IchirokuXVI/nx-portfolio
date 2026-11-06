@@ -26,10 +26,12 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../../config/app-config';
 import type { SourceProbe, SupermarketSource } from '../../entities';
+import { probeAlertFor } from '../alerts/harvest-alert.rules';
 import { HarvestRunStore } from '../harvest-run.store';
 import { PlatformAdminService } from '../platform-admin.service';
 import { HARVEST_CLOCK, type HarvestClock } from '../schedule-slot';
 import { SupermarketSourceService } from '../supermarket-source.service';
+import { probeSeriesAttempt } from './source-probe.due';
 import { toSourceProbeView } from './source-probe.mappers';
 import {
   isProbedAdapterKey,
@@ -170,6 +172,48 @@ export class SourceProbeService implements OnApplicationShutdown {
     await this.execute(claimed.probe, claimed.source);
   }
 
+  /**
+   * Run a probe for a schedule slot and wait for it (plan 0247, section 2,
+   * step 6). Answers the finished row, or null when another probe of the
+   * source was already `RUNNING`, which the caller then waits for.
+   *
+   * An ordinary probe row with trigger `SCHEDULED`: the partial unique index
+   * keeps one `RUNNING` probe per source, the deadline and the verdict are
+   * those of every probe, and the attempt is the one the due rule gives the
+   * series, with the interval ignored. It thus moves the chain's next daily
+   * probe as any probe does.
+   *
+   * The caller has checked the switch, the row and the run in flight, so
+   * this checks only that the adapter has a probe.
+   */
+  async runForSchedule(
+    source: SupermarketSource,
+    scheduleId: string
+  ): Promise<SourceProbe | null> {
+    if (!isProbedAdapterKey(source.adapterKey) || this.stopping) {
+      return null;
+    }
+    const attempt = probeSeriesAttempt(
+      await this.store.newestForSeries(source.id)
+    );
+    const probe = await this.store.insertRunning({
+      source,
+      trigger: HarvestRunTrigger.SCHEDULED,
+      startedAt: this.clock(),
+      requestedByUserId: null,
+      attempt,
+    });
+    if (!probe) {
+      return null;
+    }
+    this.logger.log(
+      `Probe ${probe.id} of ${source.adapterKey} (${source.supermarketId}) ` +
+        `started for schedule ${scheduleId}, attempt ${attempt}`
+    );
+    await this.execute(probe, source);
+    return this.store.load(probe.id);
+  }
+
   onApplicationShutdown(): void {
     this.stopping = true;
     for (const controller of this.inFlight.values()) {
@@ -239,7 +283,7 @@ export class SourceProbeService implements OnApplicationShutdown {
       status !== SourceProbeStatus.ABORTED &&
       previousStatus !== null &&
       previousStatus !== status;
-    const written = await this.store.finish(probe.id, {
+    const write = {
       status,
       previousStatus,
       changed,
@@ -250,7 +294,16 @@ export class SourceProbeService implements OnApplicationShutdown {
         status === SourceProbeStatus.ABORTED
           ? 'The harvester stopped during the probe.'
           : verdict.error,
+    };
+    // The probe's alert to the owner, computed after the verdict and written
+    // with it (plan 0247, section 4.1).
+    const alert = probeAlertFor({
+      probe: { ...probe, ...write },
+      at: write.finishedAt,
     });
+    const written = alert
+      ? await this.store.finish(probe.id, write, alert)
+      : await this.store.finish(probe.id, write);
     if (!written) {
       return;
     }

@@ -6,8 +6,11 @@ import {
   type SourceProbeStepView,
 } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { Repository, type EntityManager } from 'typeorm';
 import { SourceProbe, type SupermarketSource } from '../../entities';
+import type { HarvestAlertDraft } from '../alerts/harvest-alert.rules';
+import { insertAlert } from '../alerts/harvest-alert.store';
+import type { GateProbe } from '../schedule-probe-gate';
 import { probeDueAttempt, type NewestProbe } from './source-probe.due';
 
 /** A probe the worker claimed, and the source row it was claimed for. */
@@ -43,9 +46,11 @@ export const RUNNING_PROBE_INDEX = 'uq_source_probe_running';
 /**
  * Every read and write of `source_probes`, in one place (plan 0219, section 4).
  *
- * **This is the only table a probe writes.** Nothing here touches
- * `supermarket_sources`, `harvest_runs` or `harvest_schedules`: the claim locks
- * a source row and reads two others, and writes a probe.
+ * **This is the only table a probe writes**, besides the alert row its
+ * verdict may add to the outbox in the same transaction (plan 0247, section
+ * 4.1). Nothing here touches `supermarket_sources`, `harvest_runs` or
+ * `harvest_schedules`: the claim locks a source row and reads two others, and
+ * writes a probe.
  */
 @Injectable()
 export class SourceProbeStore {
@@ -78,6 +83,12 @@ export class SourceProbeStore {
     trigger: HarvestRunTrigger;
     startedAt: Date;
     requestedByUserId: string | null;
+    /**
+     * The attempt of the series, 1 when absent. A manual probe passes none.
+     * The probe a schedule slot runs passes the attempt of its series (plan
+     * 0247, section 2).
+     */
+    attempt?: number;
   }): Promise<SourceProbe | null> {
     try {
       return await this.probes.save(
@@ -90,7 +101,7 @@ export class SourceProbeStore {
           previousStatus: null,
           changed: false,
           // A manual probe always starts a series (2026-11-06).
-          attempt: 1,
+          attempt: input.attempt ?? 1,
           startedAt: input.startedAt,
           finishedAt: null,
           requests: 0,
@@ -201,9 +212,35 @@ export class SourceProbeStore {
   /**
    * Write what a probe found. Only a row still `RUNNING` is written, so a
    * probe the reaper already marked `ABORTED` stays aborted.
+   *
+   * `alert` is the probe's alert to the owner (plan 0247, section 4.1). With
+   * one, the verdict and the alert row are written in one transaction, so no
+   * alert exists for a verdict that did not commit, and an alert for a row
+   * the reaper already ended is not written.
    */
-  async finish(id: string, write: SourceProbeFinish): Promise<boolean> {
-    const [rows]: [{ id: string }[], number] = await this.probes.query(
+  async finish(
+    id: string,
+    write: SourceProbeFinish,
+    alert?: HarvestAlertDraft
+  ): Promise<boolean> {
+    if (!alert) {
+      return this.writeFinish(this.probes.manager, id, write);
+    }
+    return this.probes.manager.transaction(async (manager) => {
+      const written = await this.writeFinish(manager, id, write);
+      if (written) {
+        await insertAlert(manager, alert);
+      }
+      return written;
+    });
+  }
+
+  private async writeFinish(
+    manager: Pick<EntityManager, 'query'>,
+    id: string,
+    write: SourceProbeFinish
+  ): Promise<boolean> {
+    const [rows]: [{ id: string }[], number] = await manager.query(
       `UPDATE "source_probes"
           SET "status" = $2,
               "previousStatus" = $3,
@@ -249,6 +286,43 @@ export class SourceProbeStore {
       [sourceId, excludeId]
     );
     return rows[0]?.status ?? null;
+  }
+
+  /**
+   * The probes of a source the schedule gate reads (plan 0247, section 2):
+   * every one that is `RUNNING`, and every one that started at or after
+   * `since`, newest first. A probe that started before the window cannot let
+   * a slot start, so the read never grows with the history.
+   */
+  async gateProbes(sourceId: string, since: Date): Promise<GateProbe[]> {
+    const rows: GateProbe[] = await this.probes.query(
+      `SELECT "id", "status", "startedAt", "error"
+         FROM "source_probes"
+        WHERE "sourceId" = $1
+          AND ("status" = 'RUNNING' OR "startedAt" >= $2)
+        ORDER BY "startedAt" DESC, "id" DESC`,
+      [sourceId, since]
+    );
+    return rows.map((row) => ({ ...row, startedAt: new Date(row.startedAt) }));
+  }
+
+  /**
+   * The newest probe of a source that is not `RUNNING`, as the due rule of
+   * the claim reads it, for the attempt of a probe a slot runs (plan 0247,
+   * section 2). Null when the source has none.
+   */
+  async newestForSeries(sourceId: string): Promise<NewestProbe | null> {
+    const rows: NewestProbe[] = await this.probes.query(
+      `SELECT "status", "attempt", "startedAt"
+         FROM "source_probes"
+        WHERE "sourceId" = $1
+          AND "status" <> 'RUNNING'
+        ORDER BY "startedAt" DESC, "id" DESC
+        LIMIT 1`,
+      [sourceId]
+    );
+    const row = rows[0];
+    return row ? { ...row, startedAt: new Date(row.startedAt) } : null;
   }
 
   /** The probes of one source, newest first, keyset paged. */
