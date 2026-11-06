@@ -76,7 +76,7 @@ function shown(
     imageUrl: null,
     favorite: false,
     others: 0,
-    price: '0,92 €',
+    price: { amount: '0,92 €', per: null },
     ...overrides,
   };
 }
@@ -387,6 +387,45 @@ describe('LineRow', () => {
       expect(query(fixture, '.content.own')).toBeNull();
       expect(query(fixture, '.line-2 .product-name')).toBeNull();
       expect(text(fixture, '.line-2 .brand-size')).toBe('Hacendado · 400 g');
+    });
+
+    it('draws the piece price of a kilo piece, and says it in the name (velista 0179)', async () => {
+      const fixture = await render(
+        vm({
+          content: 'Queso',
+          named: false,
+          quantity: 1,
+          product: shown({ price: { amount: '20,94 €', per: null } }),
+        })
+      );
+
+      expect(text(fixture, '.line-1 .price')).toBe('20,94 €');
+      expect(query(fixture, '.line-1 .price .per')).toBeNull();
+      expect(row(fixture).getAttribute('aria-label')).toBe('Queso, 20,94 €, 1');
+    });
+
+    it('draws what a loose product is priced per, small after its number (velista 0179)', async () => {
+      const fixture = await render(
+        vm({
+          content: 'Manzanas',
+          named: false,
+          quantity: 1,
+          product: shown({
+            price: { amount: '2,49 €', per: 'catalog.per.KILOGRAM' },
+          }),
+        })
+      );
+
+      const price = query(fixture, '.line-1 .price');
+      expect(price?.firstElementChild?.textContent).toBe('2,49 €');
+      expect(price?.querySelector('.per')?.textContent).toBe(
+        'catalog.per.KILOGRAM'
+      );
+      // No text between the number and its unit: the unit's margin is the gap.
+      expect(price?.textContent).toBe('2,49 €catalog.per.KILOGRAM');
+      expect(row(fixture).getAttribute('aria-label')).toBe(
+        'Manzanas, 2,49 € catalog.per.KILOGRAM, 1'
+      );
     });
 
     it('says No price for a product with none', async () => {

@@ -1242,6 +1242,7 @@ describe('ListPage', () => {
       chainPrices: [],
       imageUrl: null,
       packCount: null,
+      approxWeight: null,
     };
     const refusal = () =>
       new GatewayError({
@@ -2129,6 +2130,7 @@ describe('ListPage: searching and viewing one category', () => {
       chainPrices: [],
       imageUrl: null,
       packCount: null,
+      approxWeight: null,
     };
   }
 
@@ -3320,6 +3322,7 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
       imageUrl: null,
       packCount: null,
       unitBasis: null,
+      approxWeight: null,
     },
   };
   const MILK: CatalogSuggestion = {

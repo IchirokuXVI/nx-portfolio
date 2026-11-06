@@ -21,6 +21,7 @@ import {
 import {
   APP_BASE_PATH,
   basketRowProduct,
+  priceWordsText,
   productChoices,
   type BasketRow,
   type BasketRowEntry,
@@ -299,7 +300,9 @@ export class ChangeSheet {
           label: [
             view.name,
             view.detail,
-            view.price ?? translate('catalog.row.noPrice'),
+            view.price === null
+              ? translate('catalog.row.noPrice')
+              : priceWordsText(view.price),
             captionText,
           ]
             .filter((part): part is string => part !== null && part !== '')
@@ -518,6 +521,7 @@ export class ChangeSheet {
           unit: 'UNIT',
           offer: null,
           unitBasis: null,
+          approxWeight: null,
         };
   }
 }

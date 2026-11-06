@@ -559,6 +559,7 @@ describe('basketRowName', () => {
     atShop: null,
     categories: [],
     sectionIds: null,
+    approxWeight: null,
   };
   const products = new Map([[milk.id, milk]]);
 

@@ -340,7 +340,8 @@ export function basketRowName(
     product.size,
     product.unit,
     locale,
-    (key, args) => translator.t(key, undefined, locale, args)
+    (key, args) => translator.t(key, undefined, locale, args),
+    product.approxWeight
   );
   return [
     catalogName(product.name, locale),

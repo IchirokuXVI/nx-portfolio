@@ -478,12 +478,12 @@
     "sheet": {
       "close": "Close"
     },
-    "unit": {
-      "KILOGRAM": "{{price}} / kg",
-      "LITER": "{{price}} / L",
-      "UNIT": "{{price}} / unit",
-      "DOZEN": "{{price}} / dozen",
-      "WASH": "{{price}} / wash"
+    "per": {
+      "KILOGRAM": "/ kg",
+      "LITER": "/ L",
+      "UNIT": "/ unit",
+      "DOZEN": "/ dozen",
+      "WASH": "/ wash"
     },
     "empty": {
       "title": "Nothing matches \"{{query}}\"",
@@ -803,12 +803,16 @@
       "groupAdds_one": "Adds its one product",
       "groupAdds_other": "Adds its {{count}} products",
       "size": {
-        "UNIT": "{{size}} units",
-        "GRAM": "{{size}} g",
-        "KILOGRAM": "{{size}} kg",
-        "MILLILITER": "{{size}} ml",
-        "LITER": "{{size}} L",
-        "PACK": "{{size}} packs"
+        "UNIT": "{{size}} units",
+        "GRAM": "{{size}} g",
+        "KILOGRAM": "{{size}} kg",
+        "MILLILITER": "{{size}} ml",
+        "LITER": "{{size}} L",
+        "PACK": "{{size}} packs"
+      },
+      "weight": {
+        "KILOGRAM": "~{{size}} kg",
+        "GRAM": "~{{size}} g"
       },
       "asWritten": "Add “{{text}}” as written",
       "card": {

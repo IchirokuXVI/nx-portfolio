@@ -116,6 +116,12 @@ export interface CatalogProduct {
   readonly imageUrl: string | null;
   readonly size: number | null;
   readonly unit: UnitOfMeasure;
+  /**
+   * The approximate weight of one piece in grams, when the chain says it varies
+   * (backend 0244). Null for a product with a size, and for a product sold by
+   * the kilo with no stated weight.
+   */
+  readonly approxWeight: number | null;
   /** The aisles the catalog files it under, in its order. Empty when none was readable. */
   readonly categories: readonly ProductCategory[];
   /** The cheapest price at the scopes the read was given, or null. */
