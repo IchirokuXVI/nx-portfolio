@@ -221,12 +221,11 @@ a real one.
 nginx writes no access log (k8s plan 0018), so put a small logging proxy in front of it
 to see each request.
 
-**The script specs.** The four scripts have `node --test` specs. CI runs the first two
-on every pull request:
+**The script specs.** The four scripts have `node --test` specs. CI runs all four on
+every pull request:
 
 ```sh
-node --test apps/velista/scripts/ota-bundle.node-test.mjs apps/velista/scripts/ota-keygen.node-test.mjs
-node --test apps/velista/scripts/native-api.node-test.mjs apps/velista/scripts/build-android.node-test.mjs
+node --test apps/velista/scripts/ota-bundle.node-test.mjs apps/velista/scripts/ota-keygen.node-test.mjs apps/velista/scripts/native-api.node-test.mjs apps/velista/scripts/build-android.node-test.mjs
 ```
 
 ### Watch the socket on a device

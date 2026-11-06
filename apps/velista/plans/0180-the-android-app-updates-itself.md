@@ -836,7 +836,8 @@ previous good bundle) and, 20 s later, `Deleting failing bundle` (`autoDeleteFai
 - `getFailedUpdate()` in the next document answers `{ bundle: { id, version, checksum,
   downloaded, status: 'pending' } }` once; a second call answers nothing (cleared on
   read). The value is persisted, so a process restart before the read keeps it. This is
-  the record D7 needs: read it once at boot and store `bundle.version`.
+  the record D7 needs. It persists until it is read, and the app reads it before each
+  decision and stores `bundle.version`.
 - `list()` shows the bundle with `status: 'error'` only between the rollback and the
   deletion about 20 s later; after that it is gone. Do not rely on `list()`.
 - `downloadFailed` carries `{ version }`, plus `error` (`HTTP error: 404`) on an HTTP
@@ -857,6 +858,26 @@ previous good bundle) and, 20 s later, `Deleting failing bundle` (`autoDeleteFai
   so no committed file or manifest changes for it.
 - `VELISTA_OTA_PUBLIC_KEY` names a PEM that replaces the flavor's committed key, so the
   walk of section 5 can use a throwaway pair.
+
+### Target 5: the native half, measured on the emulator
+
+The same emulator and plugin versions as target 1. These are the facts that the code of
+`libs/velista/native` and `apps/velista/src/nginx.conf` cites.
+
+- Android's `CapacitorHttp` parses any body whose `Content-Type` contains
+  `application/json`, whatever `responseType` asks. A parse and a new serialization do
+  not give back the signed bytes.
+- `responseType: 'text'` reads the body line by line and drops the final line break. A
+  365 byte manifest came back as 364 characters.
+- `responseType: 'arraybuffer'` answers base64 of the exact bytes. The app asks for it
+  and decodes the bytes as UTF-8.
+- nginx therefore serves `manifest.json` as `text/plain`.
+- `download()` of a version that the updater already holds answers without a second
+  download.
+- After `set()` the WebView comes back at the bundle root (`/en`), not at the page that
+  was tapped.
+- The new document runs one check right after the reload, because the 10 minute floor
+  is per document.
 
 ## Sources checked on 2026-11-04
 
