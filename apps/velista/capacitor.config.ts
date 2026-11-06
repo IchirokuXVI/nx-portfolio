@@ -17,6 +17,16 @@ function appHostname(): string {
   return new URL(url).hostname;
 }
 
+/**
+ * An OTA test on the emulator reads its files over http from localhost (plan 0180,
+ * section 5), and the updater refuses every URL that is not https unless told otherwise.
+ * build-android.mjs accepts an http VELISTA_OTA_URL for localhost only, and refuses
+ * --bundle with it, so a Play build always keeps the refusal.
+ */
+function otaOverCleartext(): boolean {
+  return (process.env.VELISTA_OTA_URL ?? '').startsWith('http:');
+}
+
 const config: CapacitorConfig = {
   appId: 'app.velista',
   appName: 'Velista',
@@ -58,6 +68,7 @@ const config: CapacitorConfig = {
       autoDeleteFailed: true,
       autoDeletePrevious: true,
       resetWhenUpdate: true,
+      httpsOnly: !otaOverCleartext(),
     },
   },
 };

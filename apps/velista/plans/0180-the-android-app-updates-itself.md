@@ -758,6 +758,106 @@ manifest later without a schema change to anything else, by a `schema: 2`.
   one Play release per native edit.
   **Decision:** `--accept` stays, and the README names the changes that must bump.
 
+## What the build decided
+
+### Target 1: the spike, 2026-11-06
+
+Measured on `Medium_Phone_API_37.0` (Android 17, WebView 145) with
+`@capgo/capacitor-updater` 8.54.2 and `@capawesome/capacitor-app-update` 8.1.1, a staging
+APK built with `VELISTA_NATIVE_DEBUG=1` and `VELISTA_APP_VERSION=0.90.1`, and a zip of a
+second build (`0.90.2`, `index.html` at its root, no `nginx.conf`) served over plain HTTP
+from the machine through `adb reverse tcp:8787`. Each method was called from the WebView
+over the DevTools protocol. The updater logs under the tag `CapgoUpdater`.
+
+1. **No request reaches a Capgo host.** The second session ran with Wi-Fi off and private
+   DNS off, so all traffic went over the emulator's `eth0` and the `-tcpdump` capture is
+   complete: it holds the DNS queries and TLS names of `staging.velista.app` and
+   `api.staging.velista.app`. Over four minutes of install, launch, idle, a refused
+   download, two downloads, `next()`, a rollback, `set()`, resumes and an `adb install -r`,
+   the capture has no DNS query, no TLS server name and no byte string with `capgo` in it.
+   Every name in it belongs to Google or to velista. The first capture was useless and is
+   not evidence: with Wi-Fi on, the emulator routes through Netsim, which `-tcpdump` does
+   not see, and private DNS hid the names.
+2. **`next()` applies at the next move to the background, in the same process, and not at
+   a cold start.** After `next({ id })` and `KEYCODE_HOME` the log reads `App moved to
+   background`, `Checking for pending update`, `Reloading: .../versions/<id>`, `Updated to
+   bundle`, and the resumed page shows `0.90.2`. After `next({ id })` and `am force-stop`
+   the cold start booted `builtin`; `getNextBundle()` still named the bundle, and it applied
+   at the next move to the background. The source agrees: `installNext()` runs only from
+   the background handler. A hidden reload drops whatever the page held, so a queued
+   `next()` must never be left in place while `ReloadBlocker` is held. `next({ id:
+   'builtin' })` does not withdraw a queued bundle (it resolved and the queued bundle still
+   applied at the next background). A process killed without passing through the
+   background keeps the queue for the next one.
+3. **`download({ checksum })` refuses a zip whose SHA-256 differs, before it is listed.** A
+   good zip with 64 zeros as the checksum: the log reads `Checksum mismatch`, `Bundle
+   deleted and confirmed gone`; `download()` rejects with `Failed to download from: <url>`;
+   `list()` stays empty; the `downloadFailed` event carries only `{ version }`. A good
+   checksum resolves with `status: 'pending'` and the bundle is listed.
+4. **`CapacitorHttp.request` reaches the network; a WebView `fetch` of the same URL never
+   does.** `https://staging.velista.app/ota/android/manifest.json` through `CapacitorHttp`
+   answered 404 with `server: nginx/1.31.8` and `X-Android-Response-Source: NETWORK 404`,
+   and the root answered 200 with velista's `<title>`. The WebView `fetch` of the same URL
+   answered 404 with an empty body, no `server` header and `client-via:
+   shouldInterceptRequest`: Capacitor's local server. D3 holds.
+5. **`resetWhenUpdate` keys on the version code.** With an OTA bundle running, `adb install
+   -r` of code 2 with the same `versionName`: `Stored native build version 1 does not match
+   current native build version 2. Triggering reset.`, `Deleting obsolete bundle`, and the
+   app boots `builtin` with an empty `list()`. Code 3 with a new name did the same. The same
+   code with a new name logs no reset and keeps the downloaded bundle in `list()`, but the
+   app still boots `builtin`: Capacitor's own `Bridge.isNewBinary()` compares code and
+   name and clears the server path. Every AAB carries a new code and a new name (D10), so
+   both checks fire.
+6. **`updateUrl: ''` stays empty.** The synced `capacitor.config.json` carries the three
+   empty strings, and Capacitor's `JSONUtils.getString` returns the stored value, falling
+   back to the default only when the key is missing. Proof at runtime: `getLatest()`
+   logged `IllegalArgumentException: Expected URL scheme 'http' or 'https' but no scheme was
+   found for ` (an empty URL) and made no request. Its promise then never settled, so
+   the app must never call `getLatest()`. `statsUrl: ''` skips every stats call in
+   `sendStats` before any request is built.
+7. **`current().bundle.version` is not `builtin` for the APK's own bundle.** For the
+   built-in bundle `current()` answers `{ bundle: { id: 'builtin', version: <versionName>,
+   checksum: '', status: 'success' }, native: <versionName> }`: the version is the APK's
+   `versionName` (it read `0.90.3` from an APK whose bundle was `0.90.1`). The marker is
+   `bundle.id === 'builtin'`. For a downloaded bundle, `bundle.version` is exactly the
+   `version` passed to `download()` (`0.90.2+spike0000003`), and `bundle.id` is a random
+   ten character id the updater chose. So D8 reads `bundle.id === 'builtin'` and then
+   `VelistaNativeInfo.info().builtinBundle`, else `bundle.version`; `set()`, `next()` and
+   `delete()` take the random `id`, never the version.
+
+**A failed boot, as the target 5 builder sees it.** A bundle applied by `set()` or `next()`
+that never calls `notifyAppReady()` waits **30 s, not 20 s**: the updater raises the window
+of a bundle in `pending` to at least 30 000 ms (`PENDING_BUNDLE_APP_READY_MIN_TIMEOUT_MS`);
+`appReadyTimeout` applies to a bundle that has already succeeded once. Then it logs
+`notifyAppReady was not called, roll back current bundle: <id>`, reloads `builtin` (or the
+previous good bundle) and, 20 s later, `Deleting failing bundle` (`autoDeleteFailed`).
+- `updateFailed` is emitted once, with `{ bundle: BundleInfo }`, to the failing document
+  just before the reload and not retained, so the next document never receives it.
+- `getFailedUpdate()` in the next document answers `{ bundle: { id, version, checksum,
+  downloaded, status: 'pending' } }` once; a second call answers nothing (cleared on
+  read). The value is persisted, so a process restart before the read keeps it. This is
+  the record D7 needs: read it once at boot and store `bundle.version`.
+- `list()` shows the bundle with `status: 'error'` only between the rollback and the
+  deletion about 20 s later; after that it is gone. Do not rely on `list()`.
+- `downloadFailed` carries `{ version }`, plus `error` (`HTTP error: 404`) on an HTTP
+  failure. `updateAvailable` is logged when a download completes. `appReady` comes with
+  `{ bundle, status }`.
+- `set({ id })` in the foreground reloads into the bundle at once; a `notifyAppReady()`
+  after the reload turns its status to `success`.
+
+**What the spike changed in the build.**
+- The updater refuses every URL that is not https unless `httpsOnly: false`
+  (`httpsOnly is enabled and <url> is not https`). `capacitor.config.ts` sets `httpsOnly`
+  to false only when `VELISTA_OTA_URL` starts with `http:`, which `build-android.mjs`
+  allows for localhost alone and refuses with `--bundle`.
+- `build-android.mjs` passes the four native facts and the cleartext switch to Gradle as
+  `ORG_GRADLE_PROJECT_*` environment variables, so the PEM keeps its line breaks and the
+  Windows shell quotes nothing. The cleartext configuration for localhost is generated
+  under `android/app/build/` and merged into the release source set only for that build,
+  so no committed file or manifest changes for it.
+- `VELISTA_OTA_PUBLIC_KEY` names a PEM that replaces the flavor's committed key, so the
+  walk of section 5 can use a throwaway pair.
+
 ## Sources checked on 2026-11-04
 
 - `@capgo/capacitor-updater`: npm registry (`/latest`, 8.54.2, MPL-2.0, peer
