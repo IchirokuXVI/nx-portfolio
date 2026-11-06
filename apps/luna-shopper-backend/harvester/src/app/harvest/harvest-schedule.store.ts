@@ -8,6 +8,20 @@ import type { HarvestAlertDraft } from './alerts/harvest-alert.rules';
 import { insertAlert } from './alerts/harvest-alert.store';
 import { nextSlot, previousSlot } from './schedule-slot';
 
+/**
+ * A claimed slot with no decision, over `s` (see `findUndecided`). The same
+ * text in the read and in the conditional claim, so the two cannot disagree.
+ */
+const UNDECIDED = `s."enabled"
+          AND s."lastSlotAttempts" = 0
+          AND s."lastSlotAt" IS NOT NULL
+          AND (s."lastOutcomeAt" IS NULL OR s."lastOutcomeAt" < s."lastSlotAt")
+          AND NOT EXISTS (
+                SELECT 1 FROM "harvest_runs" AS r
+                 WHERE r."scheduleId" = s."id"
+                   AND r."requestedAt" >= s."lastSlotAt"
+              )`;
+
 /** A slot the worker claimed, and the row as the claim left it. */
 export interface ClaimedSlot {
   schedule: HarvestSchedule;
@@ -220,6 +234,48 @@ export class HarvestScheduleStore {
           AND "lastRunId" = $2
        RETURNING "id"`,
       [scheduleId, runId]
+    );
+    return rows.length > 0;
+  }
+
+  /**
+   * The schedules whose current slot was claimed and never decided: a
+   * shutdown came while the probe gate of plan 0247 ran or waited for a
+   * probe, so the worker wrote no outcome (an abort is not a failure of the
+   * chain).
+   *
+   * The claim writes `lastSlotAt` and sets `lastSlotAttempts` to 0, and every
+   * decision writes `lastOutcomeAt` at or after the claim, which is at or
+   * after the slot. A decision of an earlier slot is older than this slot. So
+   * attempts 0 and no outcome at or after `lastSlotAt` is a claim with no
+   * decision, and nothing else. A row whose run of this schedule was requested
+   * at or after the slot is left out: its slot started, whatever its outcome
+   * write did.
+   */
+  async findUndecided(): Promise<HarvestSchedule[]> {
+    return this.schedules.query(
+      `SELECT s.*
+         FROM "harvest_schedules" AS s
+        WHERE ${UNDECIDED}
+        ORDER BY s."lastSlotAt" ASC, s."id" ASC`
+    );
+  }
+
+  /**
+   * Claim the one retry of an undecided slot before it runs, as
+   * {@link claimRetry} does for a stopped run: attempts go to 2, so the retry
+   * is spent whether it then decides the slot or is interrupted again, and a
+   * second process or a second restart cannot retry it a second time.
+   */
+  async claimUndecided(scheduleId: string, slot: Date): Promise<boolean> {
+    const [rows]: [{ id: string }[], number] = await this.schedules.query(
+      `UPDATE "harvest_schedules" AS s
+          SET "lastSlotAttempts" = 2
+        WHERE s."id" = $1
+          AND s."lastSlotAt" = $2
+          AND ${UNDECIDED}
+       RETURNING s."id"`,
+      [scheduleId, slot]
     );
     return rows.length > 0;
   }

@@ -346,9 +346,14 @@ export class SourceProbeStore {
   /**
    * The newest probe that is not `ABORTED` of each source, in one query over
    * the index of section 4, not one query per row (section 8).
+   *
+   * The source list shows a `RUNNING` probe as the newest. `finishedOnly`
+   * reads past it too, for the forecast of the schedule view (plan 0247,
+   * section 3): a red chain keeps its block while a probe of it runs.
    */
   async latestBySources(
-    sourceIds: string[]
+    sourceIds: string[],
+    options: { finishedOnly?: boolean } = {}
   ): Promise<Map<string, LatestProbe>> {
     if (sourceIds.length === 0) {
       return new Map();
@@ -358,7 +363,9 @@ export class SourceProbeStore {
               "id", "sourceId", "status", "startedAt", "finishedAt", "changed"
          FROM "source_probes"
         WHERE "sourceId" = ANY($1)
-          AND "status" <> 'ABORTED'
+          AND "status" <> 'ABORTED'${
+            options.finishedOnly ? `\n          AND "status" <> 'RUNNING'` : ''
+          }
         ORDER BY "sourceId", "startedAt" DESC, "id" DESC`,
       [sourceIds]
     );

@@ -68,6 +68,13 @@ describeIntegration('the probe gate (real Postgres)', () => {
   let probeStore: SourceProbeStore;
   let presets: HarvestRunPresetStore;
   let worker: HarvestScheduleWorker;
+  /** A worker and its probe service on a clock of their own, as after a restart. */
+  let makeWorker: (clock: () => Date) => {
+    worker: HarvestScheduleWorker;
+    probes: SourceProbeService;
+  };
+  /** What happens while a probe reads, if anything: a SIGTERM, say. */
+  let duringProbe: (() => void) | null = null;
   /** What the next probe reads. */
   let answer: SourceProbeResult;
 
@@ -128,25 +135,34 @@ describeIntegration('the probe gate (real Postgres)', () => {
       dataSource.getRepository(HarvestSchedule)
     );
     probeStore = new SourceProbeStore(dataSource.getRepository(SourceProbe));
-    const probes = new SourceProbeService(
-      probeStore,
-      sources,
-      runStore,
-      {
-        probe: async () => answer,
-      } as unknown as SourceProbeDispatcher,
-      { requireAdmin: async () => ADMIN } as unknown as PlatformAdminService,
-      config,
-      () => NOW
-    );
-    worker = new HarvestScheduleWorker(
-      schedules,
-      runs,
-      config,
-      () => NOW,
-      probes,
-      probeStore
-    );
+    makeWorker = (clock) => {
+      const probes = new SourceProbeService(
+        probeStore,
+        sources,
+        runStore,
+        {
+          probe: async () => {
+            duringProbe?.();
+            return answer;
+          },
+        } as unknown as SourceProbeDispatcher,
+        { requireAdmin: async () => ADMIN } as unknown as PlatformAdminService,
+        config,
+        clock
+      );
+      return {
+        worker: new HarvestScheduleWorker(
+          schedules,
+          runs,
+          config,
+          clock,
+          probes,
+          probeStore
+        ),
+        probes,
+      };
+    };
+    worker = makeWorker(() => NOW).worker;
     await clean();
   }, 60_000);
 
@@ -239,6 +255,7 @@ describeIntegration('the probe gate (real Postgres)', () => {
     );
 
   afterEach(async () => {
+    duringProbe = null;
     await clean();
   });
 
@@ -320,6 +337,85 @@ describeIntegration('the probe gate (real Postgres)', () => {
     expect((await scheduleRow(id)).lastOutcome).toBe(
       HarvestScheduleOutcome.STARTED
     );
+  });
+
+  it('leaves a slot a deploy stopped during its gate probe undecided, and the restart decides it one time', async () => {
+    const id = await dueSchedule();
+    await seedGreenYesterday();
+    answer = passed;
+    // The process that claims the slot gets SIGTERM while its probe reads.
+    const before = makeWorker(() => NOW);
+    duringProbe = () => {
+      before.worker.onApplicationShutdown();
+      before.probes.onApplicationShutdown();
+    };
+
+    await before.worker.tick();
+
+    const [aborted] = await probesToday();
+    expect(aborted.status).toBe(SourceProbeStatus.ABORTED);
+    let row = await scheduleRow(id);
+    expect(row.lastOutcome).toBeNull();
+    expect(row.lastOutcomeAt).toBeNull();
+    expect(row.lastSlotAttempts).toBe(0);
+    expect(new Date(row.lastSlotAt as Date)).toEqual(SLOT);
+    expect(await runsOfChain()).toHaveLength(0);
+    expect(await alertsOfChain()).toEqual([]);
+    expect((await schedules.findUndecided()).map((each) => each.id)).toEqual([
+      id,
+    ]);
+
+    // The new process, two minutes later, with no probe of its own in flight.
+    duringProbe = null;
+    const restartedAt = new Date(NOW.getTime() + 2 * 60_000);
+    const after = makeWorker(() => restartedAt);
+    await after.worker.tick();
+
+    row = await scheduleRow(id);
+    expect(row.lastOutcome).toBe(HarvestScheduleOutcome.STARTED);
+    expect(row.lastSlotAttempts).toBe(2);
+    expect(new Date(row.lastOutcomeAt as Date)).toEqual(restartedAt);
+    const runs = await runsOfChain();
+    expect(runs).toHaveLength(1);
+    expect(runs[0].scheduleId).toBe(id);
+    expect(await schedules.findUndecided()).toEqual([]);
+
+    // Not twice: the retry is spent, and a further tick starts nothing.
+    await after.worker.tick();
+    expect(await runsOfChain()).toHaveLength(1);
+    expect(await schedules.claimUndecided(id, SLOT)).toBe(false);
+  });
+
+  it('does not read a decided slot, or a slot whose run started, as undecided', async () => {
+    const id = await dueSchedule();
+    // Claimed, then decided with an outcome that started nothing.
+    await dataSource.query(
+      `UPDATE "harvest_schedules"
+          SET "lastSlotAt" = $2, "lastSlotAttempts" = 0,
+              "lastOutcome" = 'SKIPPED_LATE', "lastOutcomeAt" = $3
+        WHERE "id" = $1`,
+      [id, SLOT, NOW]
+    );
+    expect(await schedules.findUndecided()).toEqual([]);
+
+    // Claimed with no outcome written, but its run was inserted.
+    await dataSource.query(
+      `UPDATE "harvest_schedules"
+          SET "lastOutcome" = NULL, "lastOutcomeAt" = NULL
+        WHERE "id" = $1`,
+      [id]
+    );
+    expect((await schedules.findUndecided()).map((each) => each.id)).toEqual([
+      id,
+    ]);
+    await dataSource.query(
+      `INSERT INTO "harvest_runs"
+         ("mode", "trigger", "supermarketId", "status", "scheduleId",
+          "requestedAt")
+       VALUES ('CATALOG_DISCOVERY', 'SCHEDULED', $1, 'COMPLETED', $2, $3)`,
+      [CHAIN, id, NOW]
+    );
+    expect(await schedules.findUndecided()).toEqual([]);
   });
 
   it('rolls the outcome back when the slot alert insert fails', async () => {

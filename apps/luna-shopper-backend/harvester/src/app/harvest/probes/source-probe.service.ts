@@ -214,6 +214,15 @@ export class SourceProbeService implements OnApplicationShutdown {
     return this.store.load(probe.id);
   }
 
+  /**
+   * Whether the shutdown hook ran, so no probe starts here and a probe in
+   * flight ends `ABORTED`. The schedule worker reads it to tell a stop from a
+   * probe that did not start for another reason (plan 0247).
+   */
+  isStopping(): boolean {
+    return this.stopping;
+  }
+
   onApplicationShutdown(): void {
     this.stopping = true;
     for (const controller of this.inFlight.values()) {

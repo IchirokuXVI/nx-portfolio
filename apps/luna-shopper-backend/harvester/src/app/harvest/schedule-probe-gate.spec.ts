@@ -3,6 +3,10 @@ import {
   SourceProbeStatus,
 } from '@portfolio/luna-shopper/contracts';
 import {
+  PROBE_REAP_AFTER_MS,
+  PROBE_TICK_MS,
+} from './probes/source-probe.worker';
+import {
   PROBE_DID_NOT_FINISH,
   PROBE_VALID_MS,
   PROBE_WAIT_MS,
@@ -159,7 +163,6 @@ describe('judgeGateProbe', () => {
     SourceProbeStatus.BLOCKED,
     SourceProbeStatus.UNREACHABLE,
     SourceProbeStatus.ERROR,
-    SourceProbeStatus.ABORTED,
   ])('skips on %s with the probe and its status in the note', (status) => {
     expect(
       judgeGateProbe(probe({ id: 'p-9', status, error: 'listing: HTTP 403' }))
@@ -167,6 +170,18 @@ describe('judgeGateProbe', () => {
       action: 'SKIP',
       note: `probe p-9 ${status}: listing: HTTP 403`,
     });
+  });
+
+  it('answers INTERRUPTED, not a skip, for an ABORTED probe', () => {
+    expect(
+      judgeGateProbe(
+        probe({
+          id: 'p-9',
+          status: SourceProbeStatus.ABORTED,
+          error: 'The harvester stopped during the probe.',
+        })
+      )
+    ).toEqual({ action: 'INTERRUPTED', note: 'probe p-9 was aborted' });
   });
 
   it('skips a probe still RUNNING after the wait with the note of the plan', () => {
@@ -181,12 +196,24 @@ describe('judgeGateProbe', () => {
 });
 
 describe('waitIsOver', () => {
-  it('ends at six minutes after the probe started, or when it finished', () => {
+  it('outlasts the reaper by one tick of the probe worker', () => {
+    expect(PROBE_WAIT_MS).toBe(PROBE_REAP_AFTER_MS + PROBE_TICK_MS);
+    expect(PROBE_WAIT_MS).toBe(11 * 60_000);
+  });
+
+  it('ends at eleven minutes after the probe started, or when it finished', () => {
     const running = probe({
       status: SourceProbeStatus.RUNNING,
       startedAt: minutesAgo(5),
     });
     expect(waitIsOver(running, NOW)).toBe(false);
+    // Past the reaper's ten minutes and inside its next tick: still waiting.
+    expect(
+      waitIsOver(
+        running,
+        new Date(minutesAgo(5).getTime() + PROBE_REAP_AFTER_MS + 30_000)
+      )
+    ).toBe(false);
     expect(
       waitIsOver(running, new Date(minutesAgo(5).getTime() + PROBE_WAIT_MS))
     ).toBe(true);

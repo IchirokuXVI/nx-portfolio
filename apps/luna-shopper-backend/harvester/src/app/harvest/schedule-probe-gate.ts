@@ -3,6 +3,10 @@ import {
   SourceProbeStatus,
   adapterCapabilities,
 } from '@portfolio/luna-shopper/contracts';
+import {
+  PROBE_REAP_AFTER_MS,
+  PROBE_TICK_MS,
+} from './probes/source-probe.constants';
 
 /**
  * Whether a scheduled run may start, by the newest probe of its chain (plan
@@ -21,9 +25,13 @@ export const PROBE_VALID_MS = 15 * 60_000;
 
 /**
  * How long the gate waits for a probe that is `RUNNING`, from that probe's
- * start: the probe's deadline of five minutes and a minute of margin.
+ * start: the reaper's ten minutes and one tick of the probe worker. A pod
+ * killed during a probe leaves its row `RUNNING`, and the unique index lets
+ * no new probe of the chain start until the reaper marks it. A wait that ran
+ * out first would skip every slot of the chain in between. Derived from the
+ * reaper's constant so the two cannot drift.
  */
-export const PROBE_WAIT_MS = 6 * 60_000;
+export const PROBE_WAIT_MS = PROBE_REAP_AFTER_MS + PROBE_TICK_MS;
 
 /** How often the gate reads a `RUNNING` probe while it waits. */
 export const PROBE_POLL_MS = 5_000;
@@ -39,12 +47,20 @@ export interface GateProbe {
   error: string | null;
 }
 
-/** What the gate decides for a slot. */
+/**
+ * What the gate decides for a slot.
+ *
+ * `INTERRUPTED` is neither a start nor a skip: the probe the slot ran or
+ * waited for ended `ABORTED`, or the harvester is stopping. An abort is not a
+ * failure of the chain, so the worker writes no outcome and no alert, and the
+ * retry after the restart decides the slot one time (plan 0206, section 7).
+ */
 export type ProbeGateDecision =
   | { action: 'START' }
   | { action: 'PROBE' }
   | { action: 'WAIT'; probe: GateProbe }
-  | { action: 'SKIP'; note: string };
+  | { action: 'SKIP'; note: string }
+  | { action: 'INTERRUPTED'; note: string };
 
 /**
  * Whether a run of this mode reads the chain's storefront (section 2, step 3).
@@ -108,12 +124,16 @@ export function decideProbeGate(input: {
 /**
  * The decision after the slot ran a probe or waited for one (section 2,
  * steps 5 and 7). `PASSED` starts the run. A probe still `RUNNING` after the
- * wait is left to the reaper and skips the slot. Every other status skips it
- * with the probe and its sentence in the note.
+ * wait is left to the reaper and skips the slot. An `ABORTED` probe says
+ * nothing about the chain and answers `INTERRUPTED`. Every other status skips
+ * the slot with the probe and its sentence in the note.
  */
 export function judgeGateProbe(probe: GateProbe): ProbeGateDecision {
   if (probe.status === SourceProbeStatus.PASSED) {
     return { action: 'START' };
+  }
+  if (probe.status === SourceProbeStatus.ABORTED) {
+    return { action: 'INTERRUPTED', note: `probe ${probe.id} was aborted` };
   }
   if (probe.status === SourceProbeStatus.RUNNING) {
     return {

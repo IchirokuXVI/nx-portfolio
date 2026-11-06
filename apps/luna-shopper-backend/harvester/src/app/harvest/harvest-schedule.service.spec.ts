@@ -20,6 +20,7 @@ import type {
   LatestProbe,
   SourceProbeStore,
 } from './probes/source-probe.store';
+import { FakeSourceProbeStore } from './probes/source-probe.store.fake';
 
 /**
  * Creating, changing and switching a schedule (plan 0206, sections 4 and 6).
@@ -66,6 +67,8 @@ function build(
     lastProbe?: Partial<LatestProbe>;
     /** The mode of the preset, catalog discovery when absent. */
     presetMode?: HarvestRunMode;
+    /** An in memory `source_probes` instead of `lastProbe`. */
+    probeStore?: SourceProbeStore;
   } = {}
 ) {
   const saved: HarvestSchedule[] = [];
@@ -135,16 +138,18 @@ function build(
     }),
   } as unknown as ConfigService;
 
-  const probes = {
-    latestBySources: jest.fn(
-      async () =>
-        new Map(
-          overrides.lastProbe && source
-            ? [[source.id, { sourceId: source.id, ...overrides.lastProbe }]]
-            : []
-        )
-    ),
-  } as unknown as SourceProbeStore;
+  const probes =
+    overrides.probeStore ??
+    ({
+      latestBySources: jest.fn(
+        async () =>
+          new Map(
+            overrides.lastProbe && source
+              ? [[source.id, { sourceId: source.id, ...overrides.lastProbe }]]
+              : []
+          )
+      ),
+    } as unknown as SourceProbeStore);
 
   const service = new HarvestScheduleService(
     store,
@@ -433,6 +438,29 @@ describe('HarvestScheduleService, PROBE_NOT_PASSED (plan 0247, section 3)', () =
     expect(
       await blockedBy({ lastProbe: red, config: { schedulerEnabled: false } })
     ).toBe(HarvestScheduleBlock.SCHEDULER_DISABLED);
+  });
+
+  it('keeps the block of a red finished probe while a newer probe runs', async () => {
+    const store = new FakeSourceProbeStore();
+    store.seed({
+      sourceId: 'src-1',
+      status: SourceProbeStatus.SHAPE_CHANGED,
+      startedAt: new Date(NOW.getTime() - 60 * 60_000),
+    });
+    store.seed({
+      sourceId: 'src-1',
+      status: SourceProbeStatus.RUNNING,
+      startedAt: NOW,
+      finishedAt: null,
+    });
+
+    expect(await blockedBy({ probeStore: store.asStore() })).toBe(
+      HarvestScheduleBlock.PROBE_NOT_PASSED
+    );
+    // The source list's read still shows the running probe as the newest.
+    expect((await store.latestBySources(['src-1'])).get('src-1')?.status).toBe(
+      SourceProbeStatus.RUNNING
+    );
   });
 
   it('answers nothing for a preset the gate does not apply to', async () => {

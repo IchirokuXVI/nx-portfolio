@@ -195,6 +195,30 @@ function refused(note: string): ScheduledStart {
   return { outcome: HarvestScheduleOutcome.REFUSED, note, runId: null };
 }
 
+/**
+ * What the source row answers for a scheduled start, in the order of
+ * `startScheduled`: a row that is off, then a source that keeps failing. Null
+ * when the row lets the start go on.
+ */
+function sourceStandsInTheWay(
+  source: SupermarketSource | null
+): ScheduledStart | null {
+  if (source && !source.enabled) {
+    return refused(SOURCE_DISABLED);
+  }
+  if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
+    return {
+      outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
+      note:
+        `The source has failed ${source.consecutiveFailures} runs in a row. ` +
+        'The first run a person starts that completes lets the schedule ' +
+        'fire again.',
+      runId: null,
+    };
+  }
+  return null;
+}
+
 /** The ids that are set, each once. */
 function distinct(ids: readonly (string | null | undefined)[]): string[] {
   return [...new Set(ids.filter((id): id is string => Boolean(id)))];
@@ -368,19 +392,10 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       ...preset.input,
       supermarketId: preset.supermarketId,
     };
-    const source = await this.sources.findBySupermarket(preset.supermarketId);
-    if (source && !source.enabled) {
-      return refused(SOURCE_DISABLED);
-    }
-    if (source && source.consecutiveFailures >= SOURCE_FAILING_AFTER) {
-      return {
-        outcome: HarvestScheduleOutcome.SKIPPED_FAILING,
-        note:
-          `The source has failed ${source.consecutiveFailures} runs in a row. ` +
-          'The first run a person starts that completes lets the schedule ' +
-          'fire again.',
-        runId: null,
-      };
+    let source = await this.sources.findBySupermarket(preset.supermarketId);
+    const sourceAnswer = sourceStandsInTheWay(source);
+    if (sourceAnswer) {
+      return sourceAnswer;
     }
 
     let validated: ValidatedRunRequest;
@@ -412,6 +427,18 @@ export class HarvestRunService implements OnModuleInit, OnModuleDestroy {
       const gated = await gate({ source, mode: request.mode });
       if (gated) {
         return gated;
+      }
+      // The gate may have taken minutes, and a person may have turned the
+      // row off or a run may have failed it meanwhile. The row is read again
+      // and asked what it was asked before the gate.
+      const before = source;
+      source = await this.sources.findBySupermarket(preset.supermarketId);
+      if (before && !source) {
+        return refused(SOURCE_DISABLED);
+      }
+      const afterGate = sourceStandsInTheWay(source);
+      if (afterGate) {
+        return afterGate;
       }
     }
 

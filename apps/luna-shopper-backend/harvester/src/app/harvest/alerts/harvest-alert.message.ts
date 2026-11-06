@@ -80,8 +80,26 @@ export const PROBE_LEAD_SENTENCES: Readonly<
   [SourceProbeStatus.BLOCKED]:
     'The chain refused the probe. Wait: the daily probe says when the chain answers again, and a run started now is likely to be refused too.',
   [SourceProbeStatus.UNREACHABLE]:
-    'The chain was down for three probes over an hour. The daily probe keeps looking, and nothing is to be done here until the chain answers.',
+    'The chain was unreachable for three probes in a row. The daily probe keeps looking, and nothing is to be done here until the chain answers.',
 };
+
+/**
+ * The lead of an `UNREACHABLE` alert, with the start of the last probe when
+ * the payload holds it. Three probes in a row is all the attempt proves: a
+ * probe a slot runs joins the series with no wait, so the three can be
+ * minutes apart and not an hour. The payload does not hold the start of the
+ * first probe of the series, so the mail does not name it.
+ */
+function unreachableLead(
+  sentence: string,
+  payload: Record<string, unknown>
+): string {
+  const last = toDate(payload['startedAt']);
+  if (last) {
+    return `${sentence} The last of them started at ${madridTime(last)}.`;
+  }
+  return sentence;
+}
 
 /** The Nx project whose `capture-fixtures` target refreshes a chain's fixtures. */
 export function fixturesProjectOf(adapterKey: unknown): string | null {
@@ -176,7 +194,7 @@ function probeHeadline(status: unknown): string {
     case SourceProbeStatus.BLOCKED:
       return 'the chain refused the probe';
     case SourceProbeStatus.UNREACHABLE:
-      return 'the chain was unreachable for an hour';
+      return 'the chain was unreachable for three probes in a row';
     default:
       return `a probe ended ${text(status)}`;
   }
@@ -257,10 +275,14 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
     }
     case HarvestAlertKind.PROBE_FAILED: {
       const status = p['status'];
-      const probeLead =
+      const statusLead =
         typeof status === 'string'
           ? (PROBE_LEAD_SENTENCES[status as SourceProbeStatus] ?? lead)
           : lead;
+      const probeLead =
+        status === SourceProbeStatus.UNREACHABLE
+          ? unreachableLead(statusLead, p)
+          : statusLead;
       lines.push(`Chain: ${chainOf(alert, context)}`);
       lines.push(`Status: ${text(status)}`);
       if (p['previousStatus']) {

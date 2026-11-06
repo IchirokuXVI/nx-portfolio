@@ -45,6 +45,17 @@ import { HARVEST_CLOCK, isTooLate, type HarvestClock } from './schedule-slot';
 export const SCHEDULE_TICK_MS = 60_000;
 
 /**
+ * Thrown by the probe gate when a slot cannot be decided: the probe ended
+ * `ABORTED`, or the harvester is stopping (plan 0247, review round 1). It
+ * leaves `startScheduled` before the insert, and the worker turns it into no
+ * outcome and no alert.
+ */
+class GateInterrupted extends Error {}
+
+/** What a start answers: an outcome to write, or a slot left undecided. */
+type SlotResult = ScheduledStart | { interrupted: string };
+
+/**
  * Starts the preset of each schedule that is due (plan 0206, section 5).
  *
  * **A poll over a column, not a registry of timers.** A timer that lives in
@@ -67,6 +78,15 @@ export const SCHEDULE_TICK_MS = 60_000;
  * otherwise waits for a probe that is running or runs one, inside the tick,
  * and is skipped as `SKIPPED_PROBE_FAILED` when that probe is not `PASSED`.
  * The retry of an interrupted run passes the same gate.
+ *
+ * **A deploy during the gate decides nothing.** A probe that ended `ABORTED`,
+ * or a gate the shutdown stopped, writes no outcome and no alert. The slot
+ * stays claimed and undecided, and the retry after the restart runs it one
+ * time through the same gate, as it does a run a shutdown stopped.
+ *
+ * Each outcome is stamped with the clock when it is decided, and each slot is
+ * judged late by the clock when it is reached, because a gate can hold a tick
+ * for minutes. The claim keeps the time of the tick.
  */
 @Injectable()
 export class HarvestScheduleWorker
@@ -141,7 +161,8 @@ export class HarvestScheduleWorker
     this.ticking = true;
     try {
       const now = this.clock();
-      await this.retryInterrupted(now);
+      await this.retryInterrupted();
+      await this.retryUndecided();
       await this.fireDue(now);
     } catch (error) {
       // A timer has no caller to return an error to, so it must never take
@@ -165,7 +186,7 @@ export class HarvestScheduleWorker
         return;
       }
       try {
-        await this.decide(claimed, now);
+        await this.decide(claimed);
       } catch (error) {
         // The slot is spent by its claim. Losing its outcome is the cost of
         // never firing it twice, and the next schedule still gets its turn.
@@ -178,23 +199,31 @@ export class HarvestScheduleWorker
   }
 
   /** What becomes of one claimed slot (section 5.3). */
-  private async decide(claimed: ClaimedSlot, now: Date): Promise<void> {
+  private async decide(claimed: ClaimedSlot): Promise<void> {
     const { schedule, slot } = claimed;
-    const result: ScheduledStart = isTooLate(schedule, slot, now)
+    // The clock when this slot is reached, not when the tick began: a gate
+    // before it may have held the tick for minutes.
+    const reached = this.clock();
+    const result: SlotResult = isTooLate(schedule, slot, reached)
       ? {
           outcome: HarvestScheduleOutcome.SKIPPED_LATE,
           note:
             `The slot of ${slot.toISOString()} was reached at ` +
-            `${now.toISOString()}, more than half of the gap to the next ` +
+            `${reached.toISOString()}, more than half of the gap to the next ` +
             'slot late.',
           runId: null,
         }
       : await this.start(schedule);
+    if ('interrupted' in result) {
+      this.logInterrupted(schedule, slot, result.interrupted, false);
+      return;
+    }
+    const at = this.clock();
     await this.store.recordOutcome(
       schedule.id,
       {
         ...result,
-        at: now,
+        at,
         // A started slot is attempt 1. Any other leaves the 0 the claim wrote,
         // so no retry can fire for a slot that started nothing.
         attempts: result.runId ? 1 : null,
@@ -202,7 +231,7 @@ export class HarvestScheduleWorker
       // A refused slot tells the owner, in the same write (plan 0218,
       // section 2.3). `schedule` is the row before the claim, so its last
       // outcome is the one this slot is compared with.
-      ...alertArgument(schedule, slot, false, result, now)
+      ...alertArgument(schedule, slot, false, result, at)
     );
     this.log(schedule, slot, result, false);
   }
@@ -217,7 +246,7 @@ export class HarvestScheduleWorker
    * each tick. A slot that is already too late is left alone, and the next
    * slot starts fresh.
    */
-  private async retryInterrupted(now: Date): Promise<void> {
+  private async retryInterrupted(): Promise<void> {
     const candidates = await this.store.findInterrupted();
     for (const schedule of candidates) {
       if (this.stopping) {
@@ -225,24 +254,14 @@ export class HarvestScheduleWorker
       }
       const slot = schedule.lastSlotAt;
       const stopped = schedule.lastRunId;
-      if (!slot || !stopped || isTooLate(schedule, slot, now)) {
+      if (!slot || !stopped || isTooLate(schedule, slot, this.clock())) {
         continue;
       }
       try {
         if (!(await this.store.claimRetry(schedule.id, stopped))) {
           continue;
         }
-        const result = await this.start(schedule);
-        await this.store.recordOutcome(
-          schedule.id,
-          {
-            ...result,
-            at: now,
-            attempts: null,
-          },
-          ...alertArgument(schedule, slot, true, result, now)
-        );
-        this.log(schedule, slot, result, true);
+        await this.retry(schedule, slot);
       } catch (error) {
         this.logger.error(
           `Schedule ${schedule.id} could not retry run ${stopped}: ` +
@@ -252,13 +271,71 @@ export class HarvestScheduleWorker
     }
   }
 
+  /**
+   * Decide, one time, each slot that was claimed and never decided, because a
+   * shutdown came during its probe gate (plan 0247, review round 1). The same
+   * rules as {@link retryInterrupted}: claimed before it runs and spent
+   * whatever it answers, the same gate, and a slot that is too late is left
+   * alone.
+   */
+  private async retryUndecided(): Promise<void> {
+    const candidates = await this.store.findUndecided();
+    for (const schedule of candidates) {
+      if (this.stopping) {
+        return;
+      }
+      const slot = schedule.lastSlotAt;
+      if (!slot || isTooLate(schedule, slot, this.clock())) {
+        continue;
+      }
+      try {
+        if (!(await this.store.claimUndecided(schedule.id, slot))) {
+          continue;
+        }
+        await this.retry(schedule, slot);
+      } catch (error) {
+        this.logger.error(
+          `Schedule ${schedule.id} could not retry the undecided slot of ` +
+            `${slot.toISOString()}: ${describeError(error).message}`
+        );
+      }
+    }
+  }
+
+  /**
+   * The start of a claimed retry and its outcome. The attempts stay at the 2
+   * the retry's claim wrote, started or not, and a retry the gate leaves
+   * undecided writes nothing and is spent.
+   */
+  private async retry(schedule: HarvestSchedule, slot: Date): Promise<void> {
+    const result = await this.start(schedule);
+    if ('interrupted' in result) {
+      this.logInterrupted(schedule, slot, result.interrupted, true);
+      return;
+    }
+    const at = this.clock();
+    await this.store.recordOutcome(
+      schedule.id,
+      {
+        ...result,
+        at,
+        attempts: null,
+      },
+      ...alertArgument(schedule, slot, true, result, at)
+    );
+    this.log(schedule, slot, result, true);
+  }
+
   /** The start, with anything unexpected written as `REFUSED` (section 5.3). */
-  private async start(schedule: HarvestSchedule): Promise<ScheduledStart> {
+  private async start(schedule: HarvestSchedule): Promise<SlotResult> {
     try {
       return await this.runs.startScheduled(schedule, (check) =>
         this.probeGate(schedule, check)
       );
     } catch (error) {
+      if (error instanceof GateInterrupted) {
+        return { interrupted: error.message };
+      }
       return {
         outcome: HarvestScheduleOutcome.REFUSED,
         note: describeError(error).message,
@@ -294,6 +371,11 @@ export class HarvestScheduleWorker
       const ran = await this.probes.runForSchedule(source, schedule.id);
       if (ran) {
         decision = judgeGateProbe(gateProbeOf(ran));
+      } else if (this.isStopping()) {
+        // The probe service refuses a probe once it is stopping.
+        throw new GateInterrupted(
+          'the harvester is stopping, so no probe of the chain started'
+        );
       } else {
         // Another probe of the source started between the read and the
         // insert, and is waited for as any running probe is. If it already
@@ -308,7 +390,16 @@ export class HarvestScheduleWorker
       }
     }
     if (decision.action === 'WAIT') {
-      decision = judgeGateProbe(await this.waitFor(decision.probe));
+      const waited = await this.waitFor(decision.probe);
+      if (waited.status === SourceProbeStatus.RUNNING && this.isStopping()) {
+        throw new GateInterrupted(
+          `the harvester stopped while it waited for probe ${waited.id}`
+        );
+      }
+      decision = judgeGateProbe(waited);
+    }
+    if (decision.action === 'INTERRUPTED') {
+      throw new GateInterrupted(decision.note);
     }
     if (decision.action === 'START') {
       return null;
@@ -337,18 +428,41 @@ export class HarvestScheduleWorker
     );
   }
 
+  /** Whether this worker or the probe service is on its way out. */
+  private isStopping(): boolean {
+    return this.stopping || this.probes.isStopping();
+  }
+
   /**
    * Read a running probe every {@link PROBE_POLL_MS} until it finishes, or
-   * until six minutes passed since it started (section 2, step 5). Answers
-   * the probe as last read, which is still `RUNNING` when the wait ran out.
+   * until the reaper's ten minutes and one of its ticks passed since it
+   * started (section 2, step 5). Answers the probe as last read, which is
+   * still `RUNNING` when the wait ran out or the harvester began to stop.
    */
   private async waitFor(probe: GateProbe): Promise<GateProbe> {
     let current = probe;
-    while (!this.stopping && !waitIsOver(current, this.clock())) {
+    while (!this.isStopping() && !waitIsOver(current, this.clock())) {
       await this.sleep(PROBE_POLL_MS);
       current = gateProbeOf(await this.probeStore.load(current.id));
     }
     return current;
+  }
+
+  /** The one line of a slot the gate left undecided. */
+  private logInterrupted(
+    schedule: HarvestSchedule,
+    slot: Date,
+    note: string,
+    retry: boolean
+  ): void {
+    const what = retry ? 'retry of the slot' : 'slot';
+    this.logger.log(
+      `Schedule ${schedule.id}: ${what} of ${slot.toISOString()} is not ` +
+        `decided, ${note}. ` +
+        (retry
+          ? 'Its one retry is spent.'
+          : 'A retry on a later tick, after the restart, decides it one time.')
+    );
   }
 
   private log(

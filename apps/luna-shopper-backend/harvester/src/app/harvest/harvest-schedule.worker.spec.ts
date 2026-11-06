@@ -84,6 +84,10 @@ function build(
       };
     }),
     findInterrupted: jest.fn(async () => options.interrupted ?? []),
+    // A claimed slot with no outcome (plan 0247, review round 1), which the
+    // gate spec covers. None here.
+    findUndecided: jest.fn(async () => []),
+    claimUndecided: jest.fn(async () => false),
     claimRetry: jest.fn(async (_id: string, runId: string) => {
       if (row.lastSlotAttempts !== 1 || row.lastRunId !== runId) {
         return false;

@@ -395,7 +395,9 @@ describe('the probe alerts (plan 0247, section 4.4)', () => {
     expect(
       alertMail(probeAlert('chain-lidl', SourceProbeStatus.UNREACHABLE), named)
         .subject
-    ).toBe('[production] LIDL: the chain was unreachable for an hour');
+    ).toBe(
+      '[production] LIDL: the chain was unreachable for three probes in a row'
+    );
     expect(alertMail(slotProbeAlert(), named).subject).toBe(
       '[production] DEZA: a scheduled run was skipped, its probe did not pass'
     );
@@ -437,6 +439,29 @@ describe('the probe alerts (plan 0247, section 4.4)', () => {
       expect(body).toContain(PROBE_LEAD_SENTENCES[status]);
       expect(body).not.toContain('capture-fixtures');
     }
+  });
+
+  it('says three probes in a row for an outage, with the start of the last one, and claims no hour', () => {
+    const { body } = alertMail(
+      probeAlert('chain-lidl', SourceProbeStatus.UNREACHABLE),
+      named
+    );
+    expect(body).toContain(
+      'The chain was unreachable for three probes in a row.'
+    );
+    expect(body).toContain(
+      'The last of them started at 2026-11-05 03:00:00 Madrid time.'
+    );
+    expect(body).not.toContain('hour');
+
+    const bare = alertMail(
+      probeAlert('chain-lidl', SourceProbeStatus.UNREACHABLE, {
+        startedAt: null,
+      }),
+      named
+    ).body;
+    expect(bare).toContain(PROBE_LEAD_SENTENCES[SourceProbeStatus.UNREACHABLE]);
+    expect(bare).not.toContain('The last of them');
   });
 
   it('holds the slot, the schedule, the preset and the probe of a skipped slot', () => {

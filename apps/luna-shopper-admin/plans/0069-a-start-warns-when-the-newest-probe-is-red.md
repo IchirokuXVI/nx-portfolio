@@ -22,8 +22,9 @@
 Before a person starts a run that reads a chain's storefront, show a quiet notice on the same
 form when the newest finished probe of that chain is not `PASSED`. The notice names the chain,
 the status, the age of the probe and its one sentence. The start control stays enabled and
-starts the run as today. Use the `nx-portfolio-angular-developer`, `design-taste-frontend`,
-`antislop`, `antislop-ui`, `antislop-human` and `antislop-copywriting` skills.
+starts the run as today. Follow the "Angular conventions" section of `CLAUDE.md`, and use the
+`design-taste-frontend`, `antislop`, `antislop-ui`, `antislop-human` and `antislop-copywriting`
+skills.
 
 ### Context
 
@@ -59,10 +60,12 @@ starts the run as today. Use the `nx-portfolio-angular-developer`, `design-taste
 - **The schedule page of admin `0067`** (`schedule-view.ts`) translates
   `harvest.schedules.blocked.<block>` and `harvest.schedules.outcome.<outcome>`. Backend `0247`
   added `HarvestScheduleBlock.PROBE_NOT_PASSED` and
-  `HarvestScheduleOutcome.SKIPPED_PROBE_FAILED`, and `ui/assets/i18n/en.json` has no string for
-  either, so the page prints the raw key for both today. Chips for them are the follow up of
-  backend `0219` section 13 and are not this plan. The two strings are (target 6), because they
-  are the words of the same warning on the schedule.
+  `HarvestScheduleOutcome.SKIPPED_PROBE_FAILED`. Chips for them are the follow up of backend
+  `0219` section 13 and are not this plan. The two i18n strings for `PROBE_NOT_PASSED` and
+  `SKIPPED_PROBE_FAILED` belong to this plan (target 6), because they are the words of the same
+  warning on the schedule page. The review round of backend `0247` (PR #934) shipped both
+  strings in `ui/assets/i18n/en.json` with the words of target 6, so this plan only decides the
+  chip of the new block.
 - **Strings** live in `libs/luna-shopper-admin/ui/assets/i18n/en.json` (English only), under
   `harvest.*`, as admin `0067` put its strings under `harvest.schedules`.
 

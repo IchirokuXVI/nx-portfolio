@@ -170,8 +170,10 @@ After the claim, in this order. Each step that answers ends the slot.
    Any trigger counts: a person's probe, the daily probe, a gate probe of another schedule of the
    chain.
 5. **Is a probe running?** A `RUNNING` probe of the source, by any trigger and in any process,
-   is waited for: the worker reads its row every 5 seconds until it finishes or until 6 minutes
-   passed since its `startedAt` (the deadline of plan `0219` plus the reaper's margin). A probe
+   is waited for: the worker reads its row every 5 seconds until it finishes or until 11 minutes
+   passed since its `startedAt`. The wait outlasts the reaper's 10 minutes by one tick of the
+   probe worker, so a row that a killed pod left `RUNNING` is reaped inside the wait, and
+   `PROBE_WAIT_MS` is derived from `PROBE_REAP_AFTER_MS` so the two cannot drift. A probe
    that finished `PASSED` answers start. A probe that is still `RUNNING` after that is left to the
    reaper and the slot is skipped with the note `a probe of the chain did not finish`.
 6. **Probe first.** `SourceProbeService.runForSchedule(source, scheduleId)` inserts a `RUNNING`
@@ -183,6 +185,14 @@ After the claim, in this order. Each step that answers ends the slot.
 
 The same gate runs in `retryInterrupted` before the retry starts. A retry that the gate skips
 writes the same outcome and is spent, as a retry that meets a busy chain is spent today.
+
+**A deploy during the gate decides nothing** (review round 1 of PR #934). A gate probe that ends
+`ABORTED`, a wait that the shutdown ends, or a probe the stopping service refuses to start writes
+no outcome and no alert, because an abort is not a failure of the chain. The worker logs one line.
+The slot stays claimed and undecided: `lastSlotAttempts` is 0 and `lastOutcomeAt` is older than
+`lastSlotAt`, with no run of the schedule requested since the slot. The retry after the restart
+claims such a slot by setting the attempts to 2 and runs it one time through the same gate, so a
+`PASSED` probe inside 15 minutes is reused, and a second interruption spends it.
 
 **A skipped slot is final for that slot.** The next slot tries again, and the daily probe and
 its retries keep looking in between. Owner question 1 asks whether a slot should instead keep
@@ -262,12 +272,15 @@ Subjects, in the form of plan `0218`:
 
 - `[production] Mercadona: the storefront changed shape` (`SHAPE_CHANGED`)
 - `[production] DIA: the chain refused the probe` (`BLOCKED`)
-- `[production] LIDL: the chain was unreachable for an hour` (`UNREACHABLE` at attempt 3)
+- `[production] LIDL: the chain was unreachable for three probes in a row` (`UNREACHABLE` at
+  attempt 3)
 - `[production] DEZA: a scheduled run was skipped, its probe did not pass` (`SLOT_PROBE_FAILED`)
 
 A probe body: one sentence that says what to do (for `SHAPE_CHANGED`: run the library's
 `capture-fixtures` target and read the diff; for `BLOCKED`: wait, the daily probe says when the
-chain answers again; for `UNREACHABLE`: the chain was down for three probes over an hour), the
+chain answers again; for `UNREACHABLE`: the chain was unreachable for three probes in a row,
+and the last of them started at the time the payload names. A gate probe joins the series with no
+30 minute wait, so the three can be minutes apart, and the mail claims no hour), the
 chain, the trigger, the attempt, each step's name and whether it was ok, the first problem, the
 request count and the probe id. No link, because no back office screen shows a probe yet (plan
 `0219`, section 13). A slot body: the slot time, the schedule and the preset, the probe's status
@@ -318,7 +331,7 @@ the chain passed inside the last 15 minutes, else the slot runs one and is skipp
   run and runs no probe; a slot with no probe runs one and starts after `PASSED`; a slot whose
   probe is `BLOCKED` records `SKIPPED_PROBE_FAILED` and starts nothing; the gate runs after the
   busy and failing rules (a busy chain gets no probe); a `RUNNING` probe is waited for and its
-  verdict used; a wait past 6 minutes skips with the note; the deploy retry is gated; the skip
+  verdict used; a wait past 11 minutes skips with the note; the deploy retry is gated; the skip
   passes a draft to `recordOutcome`.
 - **`harvest-alert.rules.spec.ts`**: each row of section 4.1 alerts with key `probe:<id>`;
   `UNREACHABLE` at attempt 1 and 2, `ERROR`, `ABORTED`, `PASSED` and a `SHAPE_CHANGED` with
@@ -393,7 +406,7 @@ Chosen in this plan, and open to the owner's correction:
   insert of the run (section 2).
 - A valid probe is any `PASSED` probe of the chain that started inside the last 15 minutes,
   whatever its trigger (section 2).
-- A `RUNNING` probe is waited for, up to 6 minutes (section 2).
+- A `RUNNING` probe is waited for, up to 11 minutes, one probe worker tick past the reaper (section 2).
 - A skipped slot is final for that slot (section 2).
 - Every status but `PASSED` skips, `ERROR` included (section 2).
 - The new outcome and the new block are the last values of their enums (section 3).

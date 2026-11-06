@@ -266,9 +266,11 @@ export class HarvestScheduleService {
       sources.map((source) => [source.supermarketId, source])
     );
     // The `lastProbe` read of the source list (plan 0219, section 8), for
-    // the forecast of plan 0247, section 3.
+    // the forecast of plan 0247, section 3, with a `RUNNING` probe read past:
+    // the forecast is the newest finished probe that is not `ABORTED`.
     const probeBySource = await this.probes.latestBySources(
-      sources.map((source) => source.id)
+      sources.map((source) => source.id),
+      { finishedOnly: true }
     );
 
     const estimates = await this.runs.estimates(

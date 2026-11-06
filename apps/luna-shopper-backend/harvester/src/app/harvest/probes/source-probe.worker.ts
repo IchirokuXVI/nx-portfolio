@@ -10,14 +10,12 @@ import { ConfigService } from '@nestjs/config';
 import { describeError } from '@portfolio/luna-shopper/platform';
 import type { HarvesterConfig } from '../../config/app-config';
 import { HARVEST_CLOCK, type HarvestClock } from '../schedule-slot';
+import { PROBE_REAP_AFTER_MS, PROBE_TICK_MS } from './source-probe.constants';
 import { PROBED_ADAPTER_KEYS } from './source-probe.runner';
 import { SourceProbeService } from './source-probe.service';
 import { SourceProbeStore } from './source-probe.store';
 
-/** How often the worker looks for a due source. A constant, not a setting. */
-export const PROBE_TICK_MS = 60_000;
-/** A `RUNNING` probe this old belongs to a process that is gone. Twice the deadline. */
-export const PROBE_REAP_AFTER_MS = 10 * 60_000;
+export { PROBE_REAP_AFTER_MS, PROBE_TICK_MS } from './source-probe.constants';
 /** How long a probe is kept, the newest of each source always (section 4.2). */
 export const PROBE_RETENTION_MS = 90 * 24 * 60 * 60_000;
 

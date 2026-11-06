@@ -2311,6 +2311,53 @@ describe('HarvestRunService.startScheduled with a gate (plan 0247)', () => {
     expect(store.findActiveBySupermarket).not.toHaveBeenCalled();
     expect(store.findActiveStoreDiscovery).not.toHaveBeenCalled();
   });
+
+  it('reads the source row once when no gate is passed', async () => {
+    const { service, sources } = build({ preset: catalogPreset });
+
+    await service.startScheduled(SCHEDULE);
+
+    expect(sources.findBySupermarket).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts nothing when the row is turned off while the gate runs', async () => {
+    const { service, store, executor, sources } = build({
+      preset: catalogPreset,
+    });
+    const read = sources.findBySupermarket as jest.Mock;
+    const gate = jest.fn(async () => {
+      // A person turns the row off during the gate's probe.
+      const fresh = { ...(await read.getMockImplementation()?.()) };
+      read.mockResolvedValueOnce({ ...fresh, enabled: false });
+      return null;
+    });
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(started).toEqual({
+      outcome: HarvestScheduleOutcome.REFUSED,
+      note: 'That source is disabled. Enable it with supermarketSource.setEnabled.',
+      runId: null,
+    });
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(store.create).not.toHaveBeenCalled();
+    expect(executor.start).not.toHaveBeenCalled();
+  });
+
+  it('answers SKIPPED_FAILING when the source reached three failures while the gate ran', async () => {
+    const { service, store, sources } = build({ preset: catalogPreset });
+    const read = sources.findBySupermarket as jest.Mock;
+    const gate = jest.fn(async () => {
+      const fresh = { ...(await read.getMockImplementation()?.()) };
+      read.mockResolvedValueOnce({ ...fresh, consecutiveFailures: 3 });
+      return null;
+    });
+
+    const started = await service.startScheduled(SCHEDULE, gate);
+
+    expect(started.outcome).toBe(HarvestScheduleOutcome.SKIPPED_FAILING);
+    expect(store.create).not.toHaveBeenCalled();
+  });
 });
 
 describe('HarvestRunService.reapStale', () => {

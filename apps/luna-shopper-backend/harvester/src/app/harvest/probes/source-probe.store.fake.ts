@@ -228,7 +228,10 @@ export class FakeSourceProbeStore {
       .map((row) => ({ ...row }));
   }
 
-  async latestBySources(ids: string[]): Promise<Map<string, LatestProbe>> {
+  async latestBySources(
+    ids: string[],
+    options: { finishedOnly?: boolean } = {}
+  ): Promise<Map<string, LatestProbe>> {
     const latest = new Map<string, LatestProbe>();
     for (const row of [...this.rows].sort(
       (a, b) => b.startedAt.getTime() - a.startedAt.getTime()
@@ -236,6 +239,7 @@ export class FakeSourceProbeStore {
       if (
         ids.includes(row.sourceId) &&
         row.status !== SourceProbeStatus.ABORTED &&
+        !(options.finishedOnly && row.status === SourceProbeStatus.RUNNING) &&
         !latest.has(row.sourceId)
       ) {
         latest.set(row.sourceId, {

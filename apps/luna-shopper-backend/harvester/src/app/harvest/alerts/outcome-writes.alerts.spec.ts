@@ -73,6 +73,8 @@ describe('HarvestScheduleWorker and the owner alert', () => {
       recordOutcome: jest.fn(async () => undefined),
       findInterrupted: jest.fn(async () => options.interrupted ?? []),
       claimRetry: jest.fn(async () => true),
+      findUndecided: jest.fn(async () => []),
+      claimUndecided: jest.fn(async () => false),
     } as unknown as HarvestScheduleStore & { recordOutcome: jest.Mock };
     const runs = {
       startScheduled: jest.fn(async () => result),

@@ -74,11 +74,18 @@ function build(
     verdicts?: SourceProbeStatus[];
     claimed?: HarvestSchedule;
     interrupted?: HarvestSchedule[];
+    /** The rows `findUndecided` answers while their attempts stay 0. */
+    undecided?: HarvestSchedule[];
   } = {}
 ) {
+  /** The attempts each undecided row has, as `claimUndecided` leaves it. */
+  const undecidedAttempts = new Map(
+    (options.undecided ?? []).map((row) => [row.id, row.lastSlotAttempts])
+  );
   let now = NOW;
   const probes = new FakeSourceProbeStore();
   const outcomes: Array<{
+    id: string;
     write: ScheduleOutcomeWrite;
     alert: unknown;
   }> = [];
@@ -89,12 +96,28 @@ function build(
       return next ? { schedule: next, slot: SLOT } : null;
     }),
     recordOutcome: jest.fn(
-      async (_id: string, write: ScheduleOutcomeWrite, alert?: unknown) => {
-        outcomes.push({ write, alert });
+      async (id: string, write: ScheduleOutcomeWrite, alert?: unknown) => {
+        outcomes.push({ id, write, alert });
       }
     ),
     findInterrupted: jest.fn(async () => options.interrupted ?? []),
     claimRetry: jest.fn(async () => true),
+    // The store's query: attempts 0 and no outcome at or after the slot. A
+    // row leaves it when its retry is claimed or an outcome is written.
+    findUndecided: jest.fn(async () =>
+      (options.undecided ?? []).filter(
+        (row) =>
+          undecidedAttempts.get(row.id) === 0 &&
+          !outcomes.some((each) => each.id === row.id)
+      )
+    ),
+    claimUndecided: jest.fn(async (id: string) => {
+      if (undecidedAttempts.get(id) !== 0) {
+        return false;
+      }
+      undecidedAttempts.set(id, 2);
+      return true;
+    }),
   } as unknown as HarvestScheduleStore;
 
   let runNumber = 0;
@@ -140,8 +163,14 @@ function build(
   } as unknown as HarvestRunService;
 
   const verdicts = [...(options.verdicts ?? [SourceProbeStatus.PASSED])];
+  /** The probe service's shutdown hook, as the real one keeps it. */
+  let probesStopping = false;
   const probeService = {
+    isStopping: () => probesStopping,
     runForSchedule: jest.fn(async (source: SupermarketSource) => {
+      if (probesStopping) {
+        return null;
+      }
       const row = await probes.insertRunning({
         source,
         trigger: HarvestRunTrigger.SCHEDULED,
@@ -199,6 +228,10 @@ function build(
     sleeps,
     onSleep: (fn: () => void) => (onSleep = fn),
     reclaim: (row: HarvestSchedule) => (claimed = [row]),
+    /** What a SIGTERM does to the probe service. */
+    stopProbes: () => (probesStopping = true),
+    /** Move the clock, as a gate that took minutes does. */
+    advance: (ms: number) => (now = new Date(now.getTime() + ms)),
   };
 }
 
@@ -345,7 +378,7 @@ describe('HarvestScheduleWorker, the probe gate (plan 0247)', () => {
     expect(outcomes[0].write.outcome).toBe(HarvestScheduleOutcome.STARTED);
   });
 
-  it('skips with the note when the probe is still RUNNING six minutes after its start', async () => {
+  it('skips with the note when the probe is still RUNNING eleven minutes after its start', async () => {
     const { worker, probes, outcomes, sleeps } = build();
     const running = probes.seed({
       sourceId: SOURCE.id,
@@ -356,13 +389,166 @@ describe('HarvestScheduleWorker, the probe gate (plan 0247)', () => {
 
     await worker.tick();
 
-    // Five minutes left of the wait, in reads five seconds apart.
-    expect(sleeps).toHaveLength(60);
+    // Ten minutes left of the wait (the reaper's ten and one of its ticks,
+    // less the minute already gone), in reads five seconds apart.
+    expect(sleeps).toHaveLength(120);
     expect(outcomes[0].write).toMatchObject({
       outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
       note: `${PROBE_DID_NOT_FINISH} (probe ${running.id})`,
       runId: null,
+      // Stamped when the slot was decided, after the wait, not at the tick.
+      at: new Date(NOW.getTime() + 120 * PROBE_POLL_MS),
     });
+  });
+
+  it('outlasts the reaper: a probe it reaps during the wait leaves the slot to the retry', async () => {
+    const { worker, probes, outcomes, onSleep, runs } = build();
+    const orphan = probes.seed({
+      sourceId: SOURCE.id,
+      status: SourceProbeStatus.RUNNING,
+      startedAt: new Date(NOW.getTime() - 60_000),
+      finishedAt: null,
+    });
+    let reads = 0;
+    onSleep(() => {
+      reads += 1;
+      // The reaper marks the row at its tick after ten minutes.
+      if (reads === 114) {
+        const row = probes.rows.find((each) => each.id === orphan.id);
+        if (row) {
+          row.status = SourceProbeStatus.ABORTED;
+        }
+      }
+    });
+
+    await worker.tick();
+
+    expect(outcomes).toHaveLength(0);
+    expect(runs.startScheduled).toHaveBeenCalledTimes(1);
+  });
+
+  describe('a deploy during the gate (review round 1)', () => {
+    it('writes no outcome and no alert when the gate probe ends ABORTED', async () => {
+      const { worker, outcomes, store } = build({
+        verdicts: [SourceProbeStatus.ABORTED],
+      });
+
+      await worker.tick();
+
+      expect(outcomes).toHaveLength(0);
+      expect(store.recordOutcome).not.toHaveBeenCalled();
+    });
+
+    it('writes no outcome when the worker stops while it waits for a probe', async () => {
+      const { worker, probes, outcomes, onSleep } = build();
+      probes.seed({
+        sourceId: SOURCE.id,
+        status: SourceProbeStatus.RUNNING,
+        startedAt: NOW,
+        finishedAt: null,
+      });
+      onSleep(() => worker.onApplicationShutdown());
+
+      await worker.tick();
+
+      expect(outcomes).toHaveLength(0);
+    });
+
+    it('writes no outcome when the probe service is stopping and runs no probe', async () => {
+      const { worker, probes, outcomes, stopProbes } = build();
+      stopProbes();
+
+      await worker.tick();
+
+      expect(probes.rows).toHaveLength(0);
+      expect(outcomes).toHaveLength(0);
+    });
+
+    it('retries a claimed and undecided slot one time through the gate, and not twice', async () => {
+      const undecided = schedule({
+        lastSlotAt: SLOT,
+        lastSlotAttempts: 0,
+        lastOutcome: HarvestScheduleOutcome.STARTED,
+        lastOutcomeAt: new Date(SLOT.getTime() - 24 * 60 * 60_000),
+      });
+      const { worker, store, probeService, outcomes } = build({
+        undecided: [undecided],
+      });
+      (store.claimDue as jest.Mock).mockResolvedValue(null);
+
+      await worker.tick();
+      await worker.tick();
+
+      expect(store.claimUndecided).toHaveBeenCalledWith('schedule-1', SLOT);
+      expect(probeService.runForSchedule).toHaveBeenCalledTimes(1);
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0].write).toMatchObject({
+        outcome: HarvestScheduleOutcome.STARTED,
+        runId: 'run-1',
+        // The retry's claim wrote 2, and a started retry leaves it.
+        attempts: null,
+      });
+    });
+
+    it('spends the retry of an undecided slot when a second deploy interrupts it too', async () => {
+      const undecided = schedule({ lastSlotAt: SLOT, lastSlotAttempts: 0 });
+      const { worker, store, probeService, outcomes } = build({
+        undecided: [undecided],
+        verdicts: [SourceProbeStatus.ABORTED, SourceProbeStatus.PASSED],
+      });
+      (store.claimDue as jest.Mock).mockResolvedValue(null);
+
+      await worker.tick();
+      await worker.tick();
+
+      expect(probeService.runForSchedule).toHaveBeenCalledTimes(1);
+      expect(outcomes).toHaveLength(0);
+    });
+
+    it('reuses a PASSED probe inside 15 minutes on the retry', async () => {
+      const undecided = schedule({ lastSlotAt: SLOT, lastSlotAttempts: 0 });
+      const { worker, store, probes, probeService, outcomes } = build({
+        undecided: [undecided],
+      });
+      (store.claimDue as jest.Mock).mockResolvedValue(null);
+      probes.seed({
+        sourceId: SOURCE.id,
+        status: SourceProbeStatus.PASSED,
+        startedAt: new Date(NOW.getTime() - 5 * 60_000),
+      });
+
+      await worker.tick();
+
+      expect(probeService.runForSchedule).not.toHaveBeenCalled();
+      expect(outcomes[0].write.outcome).toBe(HarvestScheduleOutcome.STARTED);
+    });
+  });
+
+  it('judges each later slot of a tick late by the clock when it is reached', async () => {
+    const first = schedule({ id: 'schedule-1' });
+    const second = schedule({ id: 'schedule-2' });
+    const { worker, store, outcomes, advance, probeService } = build({
+      claimed: first,
+    });
+    (store.claimDue as jest.Mock)
+      .mockResolvedValueOnce({ schedule: first, slot: SLOT })
+      .mockResolvedValueOnce({ schedule: second, slot: SLOT })
+      .mockResolvedValue(null);
+    // The first slot's probe holds the tick for thirteen hours, past half of
+    // the daily gap of the second slot.
+    (probeService.runForSchedule as jest.Mock).mockImplementationOnce(
+      async () => {
+        advance(13 * 60 * 60_000);
+        return null;
+      }
+    );
+
+    await worker.tick();
+
+    expect(outcomes.map((each) => [each.id, each.write.outcome])).toEqual([
+      ['schedule-1', HarvestScheduleOutcome.SKIPPED_PROBE_FAILED],
+      ['schedule-2', HarvestScheduleOutcome.SKIPPED_LATE],
+    ]);
   });
 
   it('gates the retry of an interrupted run, and the retry is spent', async () => {
