@@ -1517,6 +1517,10 @@ HARVEST_ENABLED=false
 # Whether a due schedule starts its preset by itself (plan 0206). False on every
 # slot, as in staging: production is the one place schedules fire.
 HARVEST_SCHEDULER_ENABLED=false
+# Whether a shopper can make this slot fetch one product's price (plan 0216).
+# False on every slot. Not slot derived, so not in DERIVED_KEYS: turn it on by
+# hand for a refresh you mean to make, and a second run keeps your edit.
+HARVEST_REFRESH_ENABLED=false
 # What a run actually does once the switch above is on. Every one of these is
 # stated in the chart's ConfigMap too, and they are the knobs a local run wants
 # within reach: the pace it fetches at, how much work one run plans, and when a

@@ -28,6 +28,7 @@ import { HarvestAlerts1760000000000 } from './1760000000000-HarvestAlerts';
 import { SourceProbes1760100000000 } from './1760100000000-SourceProbes';
 import { NameWordsSizeMatch1760200000000 } from './1760200000000-NameWordsSizeMatch';
 import { SourceEntryApproxWeight1760244000000 } from './1760244000000-SourceEntryApproxWeight';
+import { PriceRefreshes1760300000000 } from './1760300000000-PriceRefreshes';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -68,4 +69,5 @@ export const HARVESTER_MIGRATIONS = [
   SourceProbes1760100000000,
   NameWordsSizeMatch1760200000000,
   SourceEntryApproxWeight1760244000000,
+  PriceRefreshes1760300000000,
 ];

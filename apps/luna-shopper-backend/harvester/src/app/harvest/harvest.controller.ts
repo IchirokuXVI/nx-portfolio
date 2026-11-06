@@ -9,6 +9,7 @@ import {
   HARVEST_SCHEDULE_PATTERNS,
   POSTAL_CODE_DISCOVERY_PATTERNS,
   POSTAL_CODE_EVENTS,
+  PRICE_REFRESH_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
   SOURCE_PROBE_PATTERNS,
@@ -66,6 +67,10 @@ import {
   type PostalCodeDiscoveryRequestView,
   type PostalCodeDiscoverySummaryView,
   type PostalCodesAddedEvent,
+  type PriceRefreshCheckView,
+  type PriceRefreshIdRequest,
+  type PriceRefreshRequest,
+  type PriceRefreshView,
   type SendHarvestTestAlertRequest,
   type SetHarvestScheduleEnabledRequest,
   type SetSupermarketSourceEnabledRequest,
@@ -97,6 +102,7 @@ import { HarvestRunPresetService } from './harvest-run-preset.service';
 import { HarvestRunService } from './harvest-run.service';
 import { HarvestScheduleService } from './harvest-schedule.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
+import { PriceRefreshService } from './price-refresh.service';
 import { SourceProbeService } from './probes/source-probe.service';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryService } from './source-entry.service';
@@ -107,11 +113,12 @@ import { SupermarketSourceService } from './supermarket-source.service';
  * The harvester's NATS surface (plan 0038, section 7), reached through the
  * gateway under `/v1/admin/harvest/`.
  *
- * **Nothing here is open to ordinary users.** Every subject carries the resolved
- * `userId` and every service checks it against the platform admin allowlist. The
- * only user facing addition that was designed, a public per item refresh, went to
- * backlog 0006 with its cooldown; catalog's existing reads are unchanged and
- * still open.
+ * **Nothing here is open to ordinary users but one refresh of one price.**
+ * Every other subject carries the resolved `userId` and an operator token, and
+ * every service checks the token. The three `priceRefresh.*` subjects at the
+ * end (plan 0216) are the exception that backlog 0006 designed: they take the
+ * shopper's `userId` alone, and their cooldowns bound what a shopper can make
+ * this service fetch.
  *
  * There is no HTTP surface here (the gateway owns REST); the harvester is a pure
  * NATS microservice like auth, core and catalog, with only a small health port.
@@ -130,7 +137,8 @@ export class HarvestController {
     private readonly presets: HarvestRunPresetService,
     private readonly schedules: HarvestScheduleService,
     private readonly alerts: HarvestAlertService,
-    private readonly probes: SourceProbeService
+    private readonly probes: SourceProbeService,
+    private readonly priceRefreshes: PriceRefreshService
   ) {}
 
   // --- The back office dashboard -------------------------------------------
@@ -605,5 +613,32 @@ export class HarvestController {
   @MessagePattern(SOURCE_PROBE_PATTERNS.get)
   getProbe(@Payload() req: SourceProbeIdRequest): Promise<SourceProbeView> {
     return this.probes.get(req);
+  }
+
+  // --- A shopper refreshes one price (plan 0216) ----------------------------
+  //
+  // The only subjects here that are open to a shopper. They take the `userId`
+  // the gateway verified and no operator token, and the service checks
+  // nothing else about the caller.
+
+  @MessagePattern(PRICE_REFRESH_PATTERNS.request)
+  requestPriceRefresh(
+    @Payload() req: PriceRefreshRequest
+  ): Promise<PriceRefreshView> {
+    return this.priceRefreshes.request(req);
+  }
+
+  @MessagePattern(PRICE_REFRESH_PATTERNS.check)
+  checkPriceRefresh(
+    @Payload() req: PriceRefreshRequest
+  ): Promise<PriceRefreshCheckView> {
+    return this.priceRefreshes.check(req);
+  }
+
+  @MessagePattern(PRICE_REFRESH_PATTERNS.get)
+  getPriceRefresh(
+    @Payload() req: PriceRefreshIdRequest
+  ): Promise<PriceRefreshView> {
+    return this.priceRefreshes.get(req);
   }
 }

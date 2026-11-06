@@ -21,7 +21,8 @@
  * threw away the price it had already fetched for all 4,232 of them. Plan 0086
  * (D4) makes the walk write what it saw, which leaves the refresh with nothing
  * to do that the walk did not already do. A per item refresh for a shopper is a
- * different thing and stays in backlog 0006.
+ * different thing, and it is not a run at all: plan 0216 gives it its own
+ * table, its own cooldowns and no `harvest_runs` row.
  */
 export enum HarvestRunMode {
   /** Geocode a postal code, then one Overpass query for the supermarkets near it. */

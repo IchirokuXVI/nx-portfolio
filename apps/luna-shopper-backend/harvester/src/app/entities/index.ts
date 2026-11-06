@@ -4,6 +4,7 @@ import { HarvestRunPreset } from './harvest-run-preset.entity';
 import { HarvestRun } from './harvest-run.entity';
 import { HarvestSchedule } from './harvest-schedule.entity';
 import { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
+import { PriceRefresh } from './price-refresh.entity';
 import { SourceCatalogEntry } from './source-catalog-entry.entity';
 import { SourceEntryAvailability } from './source-entry-availability.entity';
 import { SourceEntryPrice } from './source-entry-price.entity';
@@ -19,6 +20,8 @@ export { HarvestRunPreset } from './harvest-run-preset.entity';
 export { HarvestRun } from './harvest-run.entity';
 export { HarvestSchedule } from './harvest-schedule.entity';
 export { PostalCodeDiscoveryRequest } from './postal-code-discovery-request.entity';
+export { PriceRefresh } from './price-refresh.entity';
+export type { StoredPriceRefreshStatus } from './price-refresh.entity';
 export { SourceCatalogEntry } from './source-catalog-entry.entity';
 export { SourceEntryAvailability } from './source-entry-availability.entity';
 export { SourceEntryPrice } from './source-entry-price.entity';
@@ -52,4 +55,6 @@ export const HARVESTER_ENTITIES = [
   HarvestAlert,
   // One probe of one chain's storefront (plan 0219).
   SourceProbe,
+  // A shopper refreshes the price of one product (plan 0216).
+  PriceRefresh,
 ];

@@ -240,6 +240,39 @@ export interface SourceIngestInput extends SourceIngestSessionInput {
   observations: readonly ReportedObservation[];
 }
 
+/**
+ * What a shopper's refresh hands {@link SourceIngest.writeRefreshedPrices}
+ * (plan 0216): one known row, and what one request read for it.
+ */
+export interface RefreshedPricesInput {
+  /** The row that was fetched. Only an `ACTIVE` one is owed a catalog price. */
+  entry: SourceCatalogEntry;
+  /** The kind a walk of the chain's adapter stamps (`sourceKindOf`). */
+  sourceKind: PriceSourceKind;
+  /**
+   * What the request read, partial on purpose: a refresh writes no identity
+   * field, so its prices and whether the product is sold by weight are all it
+   * carries.
+   */
+  observation: PartialSourceObservation;
+  /** The scope a price's own key names, or null when the chain has none yet. */
+  scopeIdFor: (scopeKey: string) => string | null;
+  /** The copy targets of a scope that the row already has (plan 0118). */
+  copiesOf: (priceScopeId: string) => readonly string[];
+}
+
+/** What a refresh's write did, copies excluded from the counts. */
+export interface RefreshedPricesResult {
+  /** `source_entry_prices` rows written at the scopes the request read. */
+  recorded: number;
+  /** `item_prices` rows catalog inserted. */
+  inserted: number;
+  /** Values catalog already held and only moved the clock on. */
+  confirmed: number;
+  /** The read is sold another way than the row says, so nothing was written. */
+  soldAnotherWay: boolean;
+}
+
 /** Which rung of section 4 answered, and what it answered with. */
 export interface SourceEntryOutcome {
   entry: SourceCatalogEntry;
@@ -722,7 +755,7 @@ export class SourceIngest {
         priceConflicts.push(...conflicts);
       }
       const written = await this.writePrices(
-        context,
+        context.runId,
         batch.priceScopeId,
         input.sourceKind,
         entries,
@@ -1358,6 +1391,85 @@ export class SourceIngest {
   }
 
   /**
+   * The prices one shopper's refresh read for one known row (plan 0216,
+   * section 2), through the same two writes a walk makes and nothing else.
+   *
+   * **It is a narrow door, not a second ingest.** It loads no index, matches
+   * nothing, and writes no row: the observation is partial, so the stored name,
+   * brand, EAN and size stay what the last walk wrote, and the seen fields stay
+   * where the walk left them. What it writes is what step 3 and step 4 of a
+   * walk write for that observation:
+   *
+   * - a `source_entry_prices` row per price that resolves to a scope, and per
+   *   copy target the row already has, through {@link replaceScopePrices};
+   * - when the row is `ACTIVE`, the batch catalog is owed for each of those
+   *   scopes, built by {@link priceEntryFor} and sent by {@link writePrices}.
+   *
+   * Both carry no run: `runId` is null on the price rows and `sourceRunId` is
+   * null at catalog. The `price_refreshes` row is the record of what wrote it.
+   *
+   * **A price that resolves to no scope is dropped, with no write and no
+   * warning.** A refresh creates no scope, and it has no run to warn on.
+   *
+   * **An observation sold another way than its row writes nothing** (plan
+   * 0181). A walk would rewrite the row's flag first, so that the row and its
+   * price agree. A refresh writes no row, so the only way to keep the two in
+   * agreement is to leave both alone; the next walk settles it.
+   */
+  async writeRefreshedPrices(
+    input: RefreshedPricesInput
+  ): Promise<RefreshedPricesResult> {
+    const { entry, observation } = input;
+    if (soldByWeightChanged(entry, observation)) {
+      return { recorded: 0, inserted: 0, confirmed: 0, soldAnotherWay: true };
+    }
+
+    const placed: PlacedPrice[] = [];
+    for (const price of observation.prices) {
+      const priceScopeId =
+        price.scopeKey === null ? null : input.scopeIdFor(price.scopeKey);
+      if (priceScopeId) {
+        placed.push({ price, priceScopeId, copiedFromScopeId: null });
+      }
+    }
+    placed.push(...copiesFor(placed, input.copiesOf));
+
+    await this.replaceScopePrices(
+      null,
+      input.sourceKind,
+      placed.map((place) => ({ ...place, observation, entry }))
+    );
+    const recorded = placed.filter(
+      (place) => place.copiedFromScopeId === null
+    ).length;
+
+    const itemId = activeItemOf(entry);
+    let inserted = 0;
+    let confirmed = 0;
+    if (itemId) {
+      for (const place of placed) {
+        const written = await this.writePrices(
+          null,
+          place.priceScopeId,
+          input.sourceKind,
+          [priceEntryFor(itemId, observation, entry, place.price)],
+          place.copiedFromScopeId
+        );
+        if (place.copiedFromScopeId === null) {
+          inserted += written.inserted;
+          confirmed += written.confirmed;
+        }
+      }
+    }
+
+    this.logger.log(
+      `Refresh of row ${entry.id}: ${recorded} price(s) recorded, ` +
+        `${placed.length - recorded} copied, ${inserted} written to catalog.`
+    );
+    return { recorded, inserted, confirmed, soldAnotherWay: false };
+  }
+
+  /**
    * Step 3: the latest price each scope stated (plan 0086, D3).
    *
    * A chain has several leaflets at once because each is for a region, and two
@@ -1373,7 +1485,7 @@ export class SourceIngest {
    * before the plan that has no kind is left as it is too.
    */
   private async replaceScopePrices(
-    runId: string,
+    runId: string | null,
     sourceKind: PriceSourceKind,
     observed: readonly ObservedPrice[]
   ): Promise<void> {
@@ -1437,7 +1549,7 @@ export class SourceIngest {
    * either side reads it to decide anything (plan 0086, D6).
    */
   private async writePrices(
-    context: RunContext,
+    runId: string | null,
     priceScopeId: string,
     sourceKind: PriceSourceKind,
     entries: readonly ItemPriceBatchEntry[],
@@ -1452,7 +1564,7 @@ export class SourceIngest {
       const result = await this.catalog.addPrices(
         priceScopeId,
         entries.slice(i, i + PRICE_BATCH),
-        context.runId,
+        runId,
         sourceKind,
         copiedFromScopeId
       );

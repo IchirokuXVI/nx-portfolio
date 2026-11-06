@@ -15350,6 +15350,317 @@
         ]
       }
     },
+    "/v1/catalog/items/{id}/refresh": {
+      "get": {
+        "operationId": "ItemRefreshController_check_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priceScopeId",
+            "required": true,
+            "in": "query",
+            "description": "The `priceScopeId` of the offer the client drew: the scope the shopper is looking at.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a refresh of this product at this scope can start, and when. `reason` is null when it can; `FRESH` with the seconds until the product window ends when the price is recent; another reason when nothing can fetch it. `pendingRefreshId` names a refresh in flight, which a request joins.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PriceRefreshCheckView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "ItemRefreshController_request_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemRefreshBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Start a refresh, join the one in flight, or answer `FRESH` when the price is recent, in which case nothing was fetched and `id` is null. The fetch runs after the answer: poll the refresh by its id. A cooldown is a 429 with `retryAfterSeconds`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PriceRefreshView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`price_not_refreshable` — The price of this product cannot be refreshed here right now. `details.reason` is one of `REFRESH_OFF`, `NOT_HARVESTED`, `AMBIGUOUS`, `SOURCE_OFF`, `NO_SINGLE_FETCH`, `CHAIN_REFUSING`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/items/{id}/refreshes/{refreshId}": {
+      "get": {
+        "operationId": "ItemRefreshController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refreshId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A refresh you requested, or joined in the last two minutes. Any other id is a 404, and so is a refresh of another product than the path names.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PriceRefreshView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/v1/catalog/items": {
       "get": {
         "operationId": "CatalogItemsController_search_v1",
@@ -31835,6 +32146,19 @@
           "accuracyMetres"
         ]
       },
+      "ItemRefreshBodyDto": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The `priceScopeId` of the offer the client drew: the scope the shopper is looking at."
+          }
+        },
+        "required": [
+          "priceScopeId"
+        ]
+      },
       "LookupItemsDto": {
         "type": "object",
         "properties": {
@@ -42793,6 +43117,29 @@
           "MANUAL"
         ]
       },
+      "enums.PriceRefreshRefusal": {
+        "type": "string",
+        "enum": [
+          "REFRESH_OFF",
+          "NOT_HARVESTED",
+          "AMBIGUOUS",
+          "SOURCE_OFF",
+          "NO_SINGLE_FETCH",
+          "CHAIN_REFUSING",
+          "FRESH"
+        ]
+      },
+      "enums.PriceRefreshStatus": {
+        "type": "string",
+        "enum": [
+          "FRESH",
+          "PENDING",
+          "DONE",
+          "NOT_STOCKED",
+          "FAILED",
+          "BLOCKED"
+        ]
+      },
       "enums.PriceScopeKind": {
         "type": "string",
         "enum": [
@@ -43272,7 +43619,8 @@
               "max": 200
             },
             "stockIndicator": "per-scope",
-            "provesDelisting": true
+            "provesDelisting": true,
+            "refreshesOneProduct": true
           },
           "deza-web": {
             "writesPrices": false,
@@ -43283,7 +43631,8 @@
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": "per-shop",
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           },
           "carrefour-web": {
             "writesPrices": true,
@@ -43294,7 +43643,8 @@
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           },
           "lidl-api": {
             "writesPrices": true,
@@ -43305,7 +43655,8 @@
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": true
           },
           "eljamon-web": {
             "writesPrices": true,
@@ -43316,7 +43667,8 @@
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": true
+            "provesDelisting": true,
+            "refreshesOneProduct": false
           },
           "dia-api": {
             "writesPrices": true,
@@ -43330,7 +43682,8 @@
               "max": 200
             },
             "stockIndicator": "per-scope",
-            "provesDelisting": true
+            "provesDelisting": true,
+            "refreshesOneProduct": false
           },
           "osm-places": {
             "writesPrices": false,
@@ -43341,7 +43694,8 @@
             "printedLocale": null,
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           },
           "manual": {
             "writesPrices": false,
@@ -43352,7 +43706,8 @@
             "printedLocale": null,
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           }
         }
       },
@@ -45020,6 +45375,98 @@
           "parked",
           "oldestQueuedAt",
           "draining"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PriceRefreshCheckView": {
+        "type": "object",
+        "properties": {
+          "refreshable": {
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceRefreshRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingRefreshId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "refreshable",
+          "reason",
+          "retryAfterSeconds",
+          "pendingRefreshId",
+          "observedAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PriceRefreshView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.PriceRefreshStatus"
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemId",
+          "priceScopeId",
+          "status",
+          "observedAt",
+          "requestedAt",
+          "finishedAt"
         ],
         "additionalProperties": false
       },
@@ -48097,6 +48544,7 @@
               "invalid_google_token",
               "google_sign_in_needs_consent",
               "assistant_allowance_reached",
+              "price_not_refreshable",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

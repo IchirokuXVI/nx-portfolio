@@ -1,5 +1,8 @@
 import { registerAs } from '@nestjs/config';
-import { telemetryValidationSchema } from '@portfolio/luna-shopper/platform';
+import {
+  redisValidationSchema,
+  telemetryValidationSchema,
+} from '@portfolio/luna-shopper/platform';
 import {
   DEFAULT_POSTAL_CODE_DERIVE_MAX_METRES,
   POSTAL_CODE_DERIVE_MAX_METRES_VAR,
@@ -71,6 +74,22 @@ export const harvesterValidationSchema = Joi.object({
    * fetch one chain on one timer.
    */
   HARVEST_SCHEDULER_ENABLED: Joi.boolean().default(false),
+  /**
+   * Whether a shopper can make this pod fetch the price of one product (plan
+   * 0216, section 9). A fourth switch because it is a fourth decision: who can
+   * make this cluster contact a chain. A refresh needs it, `HARVEST_ENABLED`
+   * and the chain's own row. Off by default.
+   */
+  HARVEST_REFRESH_ENABLED: Joi.boolean().default(false),
+  /** One refresh fetch per chain in this many seconds, across every shopper. */
+  HARVEST_REFRESH_CHAIN_SECONDS: Joi.number().integer().min(1).default(30),
+  /**
+   * A price read less than this many minutes ago is `FRESH`, and one product
+   * at one fetch scope is fetched at most once in this window.
+   */
+  HARVEST_REFRESH_PRODUCT_MINUTES: Joi.number().integer().min(1).default(30),
+  /** How long a 403 to a refresh holds every refresh of that chain off. */
+  HARVEST_REFRESH_BLOCKED_MINUTES: Joi.number().integer().min(1).default(30),
   HARVEST_USER_AGENT: Joi.string().default(
     'LunaShopper/0.1 (+https://velista.app; personal price comparison; contact@velista.app)'
   ),
@@ -159,6 +178,10 @@ export const harvesterValidationSchema = Joi.object({
   /** The back office origin a mail links a run to. Empty names the run id only. */
   ADMIN_APP_BASE_URL: Joi.string().allow('').default(''),
 
+  // Required since plan 0216: the refresh cooldowns live in Redis. Nothing
+  // else here uses it, and readiness does not probe it, so an outage refuses
+  // refreshes and nothing else.
+  ...redisValidationSchema,
   ...telemetryValidationSchema,
 })
   .or('AUTH_JWT_PUBLIC_KEY', 'AUTH_JWT_PUBLIC_KEY_FILE')
@@ -176,6 +199,11 @@ export interface HarvesterConfig {
   harvestEnabled: boolean;
   /** Whether due schedules start runs here (plan 0206). */
   schedulerEnabled: boolean;
+  /** Whether a shopper can start a refresh here (plan 0216). */
+  refreshEnabled: boolean;
+  refreshChainSeconds: number;
+  refreshProductMinutes: number;
+  refreshBlockedMinutes: number;
   userAgent: string;
   batchSize: number;
   defaultWorkers: number;
@@ -252,6 +280,16 @@ export const harvesterConfiguration = registerAs(
     schedulerEnabled: parseBoolean(
       process.env.HARVEST_SCHEDULER_ENABLED,
       false
+    ),
+    refreshEnabled: parseBoolean(process.env.HARVEST_REFRESH_ENABLED, false),
+    refreshChainSeconds: Number(
+      process.env.HARVEST_REFRESH_CHAIN_SECONDS ?? 30
+    ),
+    refreshProductMinutes: Number(
+      process.env.HARVEST_REFRESH_PRODUCT_MINUTES ?? 30
+    ),
+    refreshBlockedMinutes: Number(
+      process.env.HARVEST_REFRESH_BLOCKED_MINUTES ?? 30
     ),
     userAgent: process.env.HARVEST_USER_AGENT as string,
     batchSize: Number(process.env.HARVEST_BATCH_SIZE ?? 200),

@@ -367,6 +367,10 @@ export const ERROR_CATALOG: Record<
     en: 'The assistant is not available for now. It will be back later.',
     es: 'El asistente no está disponible por ahora. Volverá a estarlo más tarde.',
   },
+  [ERROR_CODES.PRICE_NOT_REFRESHABLE]: {
+    en: 'The price of this product cannot be refreshed here right now.',
+    es: 'Ahora mismo no se puede actualizar el precio de este producto aquí.',
+  },
   [ERROR_CODES.INTERNAL]: {
     en: 'Something went wrong on our side. Please try again.',
     es: 'Algo salió mal de nuestro lado. Inténtalo de nuevo.',

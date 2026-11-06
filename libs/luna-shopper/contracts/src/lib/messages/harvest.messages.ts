@@ -415,6 +415,18 @@ export interface AdapterCapabilities {
    * change this table.
    */
   provesDelisting: boolean;
+  /**
+   * The source can fetch the price of one product alone, in one plain request
+   * with no session, so a shopper can refresh it (harvester plan 0216, section
+   * 6). True for `mercadona-api` (one JSON request by product and warehouse)
+   * and `lidl-api` (one page by path, the page a walk reads too). False for
+   * `eljamon-web`, whose page price can differ from the listing price a walk
+   * writes, so a refresh and the next walk would overwrite each other; for
+   * `carrefour-web`, whose product page parser reads no price; for `dia-api`,
+   * whose client has no product read; and for every source that writes no
+   * price.
+   */
+  refreshesOneProduct: boolean;
 }
 
 /**
@@ -462,6 +474,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // listing of a warehouse is whole (plan 0220, section 2.1).
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    // One JSON request by product id and warehouse, no session (plan 0216).
+    refreshesOneProduct: true,
   },
   // The site prints no price at all, so a scope would be a required field that
   // does nothing (plan 0085).
@@ -478,6 +492,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // at most 300 rows, so no listing is whole (plan 0085).
     stockIndicator: 'per-shop',
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -494,6 +509,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // `config.delistCountsCrawl` says otherwise (plan 0220, section 15.4).
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   // The one source that states the region of every price it publishes and names
   // its own 730 shops (plan 0089).
@@ -511,6 +527,8 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // `validUntil` (plan 0089).
     stockIndicator: null,
     provesDelisting: false,
+    // One page request by path, no session: the page a walk reads (plan 0216).
+    refreshesOneProduct: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -529,6 +547,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // section 2.3).
     stockIndicator: null,
     provesDelisting: true,
+    refreshesOneProduct: false,
   },
   'dia-api': {
     writesPrices: true,
@@ -554,6 +573,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     // (plan 0220, section 2.2).
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: false,
   },
   // OpenStreetMap carries a place's name and never a language for it, and a
   // shop name is a proper noun in any case, so there is nothing to claim here.
@@ -567,6 +587,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   // Nothing is printed: whatever a manual row holds, an operator typed, and the
   // operator says which language they typed it in.
@@ -580,6 +601,7 @@ export const ADAPTER_CAPABILITIES: Record<AdapterKey, AdapterCapabilities> = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
 };
 
@@ -611,6 +633,7 @@ export function adapterCapabilities(
       walkablePriorities: null,
       stockIndicator: null,
       provesDelisting: false,
+      refreshesOneProduct: false,
     }
   );
 }
