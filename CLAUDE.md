@@ -339,13 +339,20 @@ Import through the `@portfolio/<scope>/<lib>` TS path aliases in `tsconfig.base.
 
 **The actor id is provisioned, not configured.** `provision-release.sh` generates the uuid by which catalog knows the harvester, one time for each cluster. It keeps the uuid in the Secret of the environment. Both `HARVESTER_ACTOR_ID` and the `SERVICE_ACTOR_IDS` of catalog read that one key. It is not a values field, and `--check` fails without it. That is the point: without it `CatalogClient.actor()` throws and an import writes nothing.
 
-The configuration has **three** switches, because they are three different decisions:
+The configuration has **four** switches, because they are four different decisions:
 
 - `lunaShopperBackend.harvester.enabled` (Helm) decides that the service exists in a cluster.
 - `HARVEST_ENABLED` decides that an existing pod can start a run.
 - `HARVEST_SCHEDULER_ENABLED` (Helm `schedulerEnabled`) decides that a due schedule starts its preset with nobody asking. A tick needs it and `HARVEST_ENABLED` both. It is true in `values.production.yaml` only. Staging and every `luna-slot` keep it false, because two clusters that fetch one chain on one timer double what the chain sees.
 
 All three have the default false, also in the `.env` that `luna-slot.sh` writes. To start the service, to let it start runs and to let it start runs by itself are not the same thing. Section 8.1 of plan 0038 and section 10 of plan 0206 explain why they are separate.
+
+**The fourth switch is `HARVEST_REFRESH_ENABLED`** (Helm `refreshEnabled`, plan 0216). It decides that a registered shopper can make the pod fetch the price of one product. A refresh needs it, `HARVEST_ENABLED` and the row of the chain. It is true in `values.staging.yaml` only, until velista has the control; production and every `luna-slot` keep it false. Rules that are easy to break by accident:
+
+- **A refresh is not a run.** It has no `harvest_runs` row and takes no lock that a run takes. A walk never blocks it, and it never blocks a walk or a schedule. Its record is `price_refreshes`.
+- **It writes only through `SourceIngest.writeRefreshedPrices`**, which calls the two writes a walk makes. It creates no row, item, candidate, scope or copy target, and a 404 writes no availability. Only `mercadona-api` and `lidl-api` state `refreshesOneProduct`.
+- **The cooldowns live in Redis, and no claim is released.** The harvester requires `REDIS_URL` since this plan. Redis that cannot answer refuses every refresh with a 429 and changes nothing for a run.
+- **A refresh 403 sets only the blocked key.** It writes nothing to `consecutiveFailures` and nothing to the state of plan 0215.
 
 **A row, not a switch, decides that a chain can be fetched** (plan 0083). The row is `supermarket_sources.enabled`. It is off by default, one for each chain, and the back office writes it through `supermarketSource.setEnabled`. The spawn refuses a run for a source whose row says false, and so does a scheduled start. The rate of a chain is on the same row (`workers` and `maxRequestsPerSecond`). **Do not add an environment variable per chain.** Each one needs changes in four places before a run can start. They are `app-config.ts`, the ConfigMap, `_env.tpl` and both `luna-slot` scripts. The column already exists.
 
