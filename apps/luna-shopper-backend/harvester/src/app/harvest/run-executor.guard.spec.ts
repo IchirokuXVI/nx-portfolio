@@ -86,6 +86,8 @@ function build(adapterKey: string, ending: Ending = 'returns') {
     pricedScopes: [],
     pricesCopied: {},
     availabilityCopied: {},
+    wordOrderProposals: 2,
+    wordOrderRejectedPointers: 1,
   }));
   (RunReportSink as unknown as jest.Mock).mockImplementation(() => ({
     drain,
@@ -178,6 +180,9 @@ describe('RunExecutor and the refusal guard (plan 0215)', () => {
     );
     // The drain's own report is kept beside the block.
     expect(row().report['productsWritten']).toBe(3);
+    // And the two word order counts of plan 0221.
+    expect(row().report['wordOrderProposals']).toBe(2);
+    expect(row().report['wordOrderRejectedPointers']).toBe(1);
   });
 
   it('drains what a runner reported when it throws after the stop', async () => {
