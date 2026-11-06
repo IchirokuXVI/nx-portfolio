@@ -148,7 +148,11 @@ export interface NativeHttpPlugin {
   request(options: {
     url: string;
     method: 'GET';
-    responseType: 'text';
+    /**
+     * `arraybuffer`, which Android answers as the body's exact bytes in base64.
+     * `text` reads the body line by line and drops a final line break.
+     */
+    responseType: 'arraybuffer';
   }): Promise<{ readonly status: number; readonly data: unknown }>;
 }
 

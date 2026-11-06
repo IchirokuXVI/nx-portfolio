@@ -157,13 +157,29 @@ describe('NativeLiveUpdates', () => {
   describe('fetchText()', () => {
     const url = 'https://staging.velista.app/ota/android/manifest.json';
 
-    it('asks native HTTP for text and answers the body as it came', async () => {
-      doubles.httpAnswer = { status: 200, data: '{\n  "schema": 1\n}\n' };
+    it('asks native HTTP for the exact bytes and answers them as text', async () => {
+      const body = '{\n  "schema": 1,\n  "bundle": "0.21.0+é"\n}\n';
+      const bytes = new TextEncoder().encode(body);
+      // As Android sends it: base64 with a line break every 76 characters.
+      const encoded = btoa(String.fromCharCode(...bytes)).replace(
+        /(.{20})/g,
+        '$1\n'
+      );
+      doubles.httpAnswer = { status: 200, data: encoded };
 
-      await expect(live.fetchText(url)).resolves.toBe('{\n  "schema": 1\n}\n');
+      // The final line break survives, which a `text` response loses.
+      await expect(live.fetchText(url)).resolves.toBe(body);
       expect(doubles.httpRequests).toEqual([
-        { url, method: 'GET', responseType: 'text' },
+        { url, method: 'GET', responseType: 'arraybuffer' },
       ]);
+    });
+
+    it('answers null for a body that is not base64 of UTF-8', async () => {
+      doubles.httpAnswer = { status: 200, data: '!!not base64!!' };
+      await expect(live.fetchText(url)).resolves.toBeNull();
+
+      doubles.httpAnswer = { status: 200, data: btoa('\xff\xfe') };
+      await expect(live.fetchText(url)).resolves.toBeNull();
     });
 
     it('answers null on a 404', async () => {

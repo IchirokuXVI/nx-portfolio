@@ -88,11 +88,15 @@ export class NativeLiveUpdates implements LiveUpdatesI {
 
   /**
    * Over `CapacitorHttp`, never the WebView `fetch`, which Capacitor's local server
-   * answers from the bundle for the app's own host (D3). `responseType: 'text'` so the
-   * bytes the signature covers arrive as they were written (D5). A body that arrives
-   * as anything but a string was parsed on the way (Android parses every response
-   * whose `Content-Type` is JSON, whatever the response type asks), and no
-   * re-serialization gives back the signed bytes, so it answers null.
+   * answers from the bundle for the app's own host (D3).
+   *
+   * The signature covers exact bytes (D5), and two Android behaviors measured on the
+   * emulator change them. `responseType: 'text'` reads the body line by line and drops
+   * the manifest's final line break, so the body is asked for as `arraybuffer`, which
+   * Android answers as base64 of the exact bytes, and decoded here as UTF-8. And
+   * Android parses every body whose `Content-Type` names JSON, whatever the response
+   * type asks; no re-serialization gives the signed bytes back, so such a body answers
+   * null. velista's nginx serves the manifest as `text/plain` for that reason.
    */
   async fetchText(url: string): Promise<string | null> {
     try {
@@ -100,12 +104,12 @@ export class NativeLiveUpdates implements LiveUpdatesI {
       const response = await http.request({
         url,
         method: 'GET',
-        responseType: 'text',
+        responseType: 'arraybuffer',
       });
       if (response.status !== 200 || typeof response.data !== 'string') {
         return null;
       }
-      return response.data;
+      return utf8FromBase64(response.data);
     } catch {
       return null;
     }
@@ -242,6 +246,22 @@ function infoFrom(answer: unknown): LiveUpdatesInfo | null {
     return null;
   }
   return { nativeApi, otaBaseUrl, otaPublicKey, builtinBundle };
+}
+
+/**
+ * The text of a body that Android sent as base64 (with a line break every 76
+ * characters), or null when it is not base64 or not UTF-8.
+ */
+function utf8FromBase64(encoded: string): string | null {
+  try {
+    const binary = atob(encoded.replace(/\s+/g, ''));
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+      bytes
+    );
+  } catch {
+    return null;
+  }
 }
 
 function field(value: unknown, name: string): unknown {
