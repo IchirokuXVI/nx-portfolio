@@ -1,3 +1,5 @@
+> **PR:** [#927](https://github.com/IchirokuXVI/nx-portfolio/pull/927)
+
 # 0223: carrefour shops come from its own site
 
 > Carrefour shops reach the catalog today only through OpenStreetMap. Plan `0090` section 2
