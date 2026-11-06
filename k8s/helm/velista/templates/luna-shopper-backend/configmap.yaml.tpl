@@ -201,6 +201,11 @@ part of the render and would trip that very check.
   # Public, and shipped in LIDL's own store search bundle (plan 0089, section
   # 10). Empty means the value the library carries; a 401 means it rotated.
   LIDL_STORES_API_KEY: {{ $harvest.lidlStoresApiKey | default "" | quote }}
+  # The back office origin an alert mail links a run to (plan 0218, section
+  # 6). Empty names the run id only. The recipient is NOT here: it is the app
+  # Secret's HARVEST_ALERT_EMAIL, because an address in a values file is an
+  # address published.
+  ADMIN_APP_BASE_URL: {{ $cfg.adminAppBaseUrl | default "" | quote }}
   # --- The assistant (plan 0039) ---------------------------------------------
   #
   # GATEWAY_INTERNAL_URL is where the assistant calls the app's own API on the

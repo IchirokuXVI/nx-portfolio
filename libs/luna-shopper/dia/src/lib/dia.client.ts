@@ -360,7 +360,8 @@ export class DiaClient {
    * - A 429, a 5xx, a connection error or a timeout is retried with backoff of
    *   30, 60 and 120 seconds, because the one block seen was a refused
    *   connection and not a status.
-   * - A 403 is retried once after 60 seconds, then fails.
+   * - A 403 is retried once after 60 seconds, then fails. With
+   *   `retryForbidden: false`, as a probe passes, it fails at once.
    * - A failed request is a refusal to the guard (plan 0215, section 2), and
    *   the fifth in a row stops the client with `SourceBlockedError`.
    */
@@ -431,7 +432,11 @@ export class DiaClient {
           location: response.headers.get('location'),
         };
       }
-      if (response.status === 403 && !forbiddenRetried) {
+      if (
+        response.status === 403 &&
+        !forbiddenRetried &&
+        this.options.retryForbidden !== false
+      ) {
         forbiddenRetried = true;
         this.guard.inconclusive();
         await this.sleep(this.forbiddenRetryMs);

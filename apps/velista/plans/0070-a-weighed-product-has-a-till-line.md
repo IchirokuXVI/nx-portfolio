@@ -1,4 +1,4 @@
-> **Status: not built, pending re-evaluation.** Later work changed the units, prices and lines this plan builds on. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0087](./0087-plan-status-2026-09-17.md).
+> **Status: replaced on 2026-11-05 by velista `0182` and `0183`.** `formatQuantity`, the reel that steps by the unit, the estimate mark and the delta that names its unit survive in `0182`; the chip survives in `0183` for a line with several products only (backend `0246` W1). The equivalences and the "plain" chip state are gone with backend `0102`.
 
 # 0070: a weighed product has a till line
 
