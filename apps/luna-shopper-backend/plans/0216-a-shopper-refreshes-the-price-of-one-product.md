@@ -682,3 +682,14 @@ Chosen in this plan, and open to the owner's correction:
    and the walk rewrites the flag before it writes the price. The next walk settles it.
 2. **`CHAIN_REFUSING` ignores `FILE_IMPORT` runs**, the mode once called `LEAFLET_IMPORT`. They
    fetch nothing from the storefront, so they can neither block a chain nor clear a block.
+
+**Owner on the builder's choices** (answered 2026-11-06, after the build):
+
+1. **Builder 1 stands.** A refresh whose read disagrees with the row on selling by weight writes
+   nothing and ends `FAILED`. The next walk settles the flag.
+2. **Builder 2 stands as built, and nothing more is ignored.** `CHAIN_REFUSING` ignores
+   `FILE_IMPORT` runs only. A `STORE_DISCOVERY` run over OpenStreetMap is read like any other
+   run: when it is the chain's newest finished run, it is what step 5 of section 7.1 reads. The
+   owner is fine with that.
+3. **El Jamón stays without a refresh** (owner answer 4), and the owner takes on a refresh from
+   its product page later, in a plan of its own. The numbers of section 5 are still unmeasured.
