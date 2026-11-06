@@ -2063,6 +2063,107 @@ describe('contract schemas', () => {
       ).toBe(true);
     });
 
+    it('a weight fill carries grams above zero and answers three counts (plan 0244)', () => {
+      const fill = (approxWeight: unknown) =>
+        validateMessageRequest('item.setApproxWeights', {
+          userId: 'harvester',
+          entries: [{ itemId: 'i', approxWeight }],
+        }).valid;
+      expect(fill(1560)).toBe(true);
+      expect(fill(1560.5)).toBe(true);
+      expect(fill(0)).toBe(false);
+      expect(fill(null)).toBe(false);
+      expect(
+        validateMessageResponse('item.setApproxWeights', {
+          written: 3,
+          skippedHasSize: 1,
+          skippedSetByAdmin: 0,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('item.setApproxWeights', { written: 3 }).valid
+      ).toBe(false);
+    });
+
+    it('a create and an edit state a weight and who wrote it (plan 0244)', () => {
+      const create = (extra: Record<string, unknown>) =>
+        validateMessageRequest('item.create', {
+          userId: 'harvester',
+          name: { es: 'Queso' },
+          categoryIds: ['c'],
+          defaultUnit: 'KILOGRAM',
+          ...extra,
+        }).valid;
+      expect(create({ approxWeight: 1560, approxWeightSetBy: 'SOURCE' })).toBe(
+        true
+      );
+      expect(create({ approxWeight: null })).toBe(true);
+      expect(create({ approxWeightSetBy: 'RUN' })).toBe(false);
+      expect(
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          approxWeight: 1560,
+          expect: { approxWeight: null },
+        }).valid
+      ).toBe(true);
+      // Catalog, not the schema, refuses SOURCE from a person: the schema
+      // cannot tell a service from an operator.
+      expect(
+        validateMessageRequest('item.update', {
+          userId: 'harvester',
+          itemId: 'i',
+          approxWeight: 1560,
+          approxWeightSetBy: 'SOURCE',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.update', {
+          userId: 'harvester',
+          itemId: 'i',
+          approxWeightSetBy: 'RUN',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageRequest('item.updateMany', {
+          userId: 'harvester',
+          items: [{ itemId: 'i', approxWeightSetBy: 'SOURCE' }],
+        }).valid
+      ).toBe(true);
+    });
+
+    it('a create names the row it is for, and the lookup reads it back (plan 0244, section 7.4)', () => {
+      const create = (createdFromEntry: unknown) =>
+        validateMessageRequest('item.create', {
+          userId: 'harvester',
+          name: { es: 'Queso' },
+          categoryIds: ['c'],
+          defaultUnit: 'KILOGRAM',
+          createdFromEntry,
+        }).valid;
+      expect(create('s1:24700')).toBe(true);
+      expect(create('')).toBe(false);
+      expect(create(null)).toBe(false);
+      expect(
+        validateMessageRequest('item.findCreatedFromEntry', {
+          userId: 'harvester',
+          createdFromEntry: 's1:24700',
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.findCreatedFromEntry', {
+          userId: 'harvester',
+        }).valid
+      ).toBe(false);
+      expect(
+        validateMessageResponse('item.findCreatedFromEntry', { item: null })
+          .valid
+      ).toBe(true);
+      expect(
+        validateMessageResponse('item.findCreatedFromEntry', {}).valid
+      ).toBe(false);
+    });
+
     it('an item search with scopes quotes a price on the item (plan 0048)', () => {
       // `bestOffer` is optional and absent everywhere else, which is what let it
       // be added to the one view every catalog read already answers with.

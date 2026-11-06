@@ -177,6 +177,19 @@ export interface CarrefourSession {
   goto(
     url: string
   ): Promise<{ status: number; state: Record<string, unknown> | null }>;
+  /**
+   * Navigate to `url` and answer the status and the response body as text
+   * (plan 0223, section 4). The body is null for any status but 200.
+   *
+   * The store finder's XML and the drive list are documents and not pages, so
+   * they have no page state to read. This is how a store run reads them,
+   * through the same browser and the same cookie rule as the walk.
+   *
+   * **Optional, so a session written before it still type checks.** A wrapper
+   * that forwards `goto` and `close` alone keeps working for the walk, and a
+   * text read through it is refused by the client with a message that says so.
+   */
+  fetchText?(url: string): Promise<{ status: number; body: string | null }>;
   close(): Promise<void>;
 }
 
@@ -240,3 +253,17 @@ export const CARREFOUR_PAGE_SIZE = 24;
  * (plan 0090, section 5).
  */
 export const CARREFOUR_MIN_DELAY_MS = 2000;
+
+/**
+ * The store finder's document: every point of sale in Spain and Andorra, one
+ * `<marker>` each, in one XML answer (plan 0223, section 2.1). The public store
+ * finder page loads it whole, with no query string.
+ */
+export const CARREFOUR_STORE_LOCATOR_PATH =
+  '/tiendas-carrefour/buscador-de-tiendas/locations.aspx';
+
+/**
+ * The online sale points, as JSON grouped by region (plan 0223, section 3.1).
+ * Every storefront page names this service in its page state.
+ */
+export const CARREFOUR_DRIVES_PATH = '/cloud-api/salepoints/v1/drives';

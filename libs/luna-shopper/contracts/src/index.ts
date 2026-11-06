@@ -86,3 +86,7 @@ export * from './lib/messages/harvest-alert.messages';
 export * from './lib/enums/source-probe.enums';
 export * from './lib/messages/source-probe.messages';
 export * from './lib/probes/source-probe-steps';
+// A shopper refreshes the price of one product (plan 0216): the status and
+// the refusal of a refresh, its views and its three subjects.
+export * from './lib/enums/price-refresh.enums';
+export * from './lib/messages/price-refresh.messages';

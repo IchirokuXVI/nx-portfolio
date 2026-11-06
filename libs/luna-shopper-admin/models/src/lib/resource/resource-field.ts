@@ -145,6 +145,59 @@ interface FieldBase<T extends ResourceRow> {
    * A method for the reason {@link read} is one.
    */
   check?(row: T): FieldCheck | null;
+  /**
+   * Whether the field is drawn at all, or absent for the field is drawn
+   * always (admin plan 0068).
+   *
+   * Read from the row as the form holds it, the row with the draft over it,
+   * while the page is a form, and from the row while it reads. A product sold
+   * by the kilo has no size, so its size field is not offered.
+   *
+   * A field that is not shown holds its empty value in the draft, so a value
+   * the operator cannot see is never sent. A field with a message under it is
+   * drawn whatever this says, so a refusal is never hidden.
+   *
+   * A method for the reason {@link read} is one.
+   */
+  shown?(row: Partial<T>): boolean;
+  /**
+   * Another field that this one shuts out (admin plan 0068). While this field
+   * holds a value, the named one is cleared and its control is disabled.
+   *
+   * Two fields may name each other: a product has a size or an approximate
+   * weight, never both, so typing either clears and disables the other.
+   */
+  readonly excludes?: FieldName<T>;
+  /**
+   * A line under the control, and under the value while the page reads, in
+   * the style of {@link help}, or `null` for no line (admin plan 0068).
+   *
+   * `held` is the row {@link shown} reads: the row as the form holds it, or
+   * the row while the page reads. `row` is the row as it was read, the same
+   * row while the page reads, and `null` for a record that does not exist
+   * yet. Unlike `help` the line may change with either: the weight of a
+   * product says who set it, a weight typed over the chain's says a person
+   * holds it from the save on, and the unit says what its prices mean.
+   *
+   * A method for the reason {@link read} is one.
+   */
+  note?(held: Partial<T>, row: T | null): FieldNote | null;
+}
+
+/**
+ * A line under a field, with one optional press (admin plan 0068).
+ *
+ * The press is drawn only while the page is a form, and puts `value` into the
+ * field through the store, as typing would. "Use the chain's weight" is one:
+ * it empties the weight, and an emptied nullable field submits `null`.
+ */
+export interface FieldNote {
+  readonly text: FieldMessage;
+  readonly action?: {
+    /** A translation key. */
+    readonly label: string;
+    readonly value: string | null;
+  };
 }
 
 /** An amber state beside a value. Amber means only this. */

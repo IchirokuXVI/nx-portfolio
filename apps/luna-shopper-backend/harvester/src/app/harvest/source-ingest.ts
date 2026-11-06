@@ -107,6 +107,18 @@ export interface SourceObservation {
    * prints no prices at all, and LIDL, Carrefour and DIA have no field for it.
    */
   soldByWeight?: boolean;
+  /**
+   * The approximate weight of one piece, in grams (plan 0244, section 5.5).
+   *
+   * Independent of {@link soldByWeight}: a cheese sold by the kilo has one,
+   * and so does a tray priced as one piece, which is not sold by weight. The
+   * row holds it only when it holds no size, so a size here clears it.
+   *
+   * Null is a statement that the source prints none, and clears it. Absent is
+   * a source that never reads one (Carrefour, El Jamón, DEZA, a document with
+   * no `approx_weight`), and leaves the stored weight alone.
+   */
+  approxWeight?: number | null;
   sizeFormat: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
@@ -163,6 +175,16 @@ export interface PartialSourceObservation {
    */
   soldByWeight?: boolean;
   /**
+   * The approximate weight of one piece in grams, when the listing states it
+   * (plan 0244, section 5.5). It travels with {@link soldByWeight} for the
+   * same reason: the listing has it, and the piece price is read from it.
+   *
+   * Absent leaves the stored weight alone. Null is a statement that the
+   * listing prints none, and clears it. A weight clears the row's size, as
+   * the full read path holds it.
+   */
+  approxWeight?: number | null;
+  /**
    * The photo address, when the listing prints one (plan 0198, section 2).
    *
    * It is not an identity field, and three listings state it, so a known
@@ -216,6 +238,39 @@ export interface SourceIngestSessionInput {
 
 export interface SourceIngestInput extends SourceIngestSessionInput {
   observations: readonly ReportedObservation[];
+}
+
+/**
+ * What a shopper's refresh hands {@link SourceIngest.writeRefreshedPrices}
+ * (plan 0216): one known row, and what one request read for it.
+ */
+export interface RefreshedPricesInput {
+  /** The row that was fetched. Only an `ACTIVE` one is owed a catalog price. */
+  entry: SourceCatalogEntry;
+  /** The kind a walk of the chain's adapter stamps (`sourceKindOf`). */
+  sourceKind: PriceSourceKind;
+  /**
+   * What the request read, partial on purpose: a refresh writes no identity
+   * field, so its prices and whether the product is sold by weight are all it
+   * carries.
+   */
+  observation: PartialSourceObservation;
+  /** The scope a price's own key names, or null when the chain has none yet. */
+  scopeIdFor: (scopeKey: string) => string | null;
+  /** The copy targets of a scope that the row already has (plan 0118). */
+  copiesOf: (priceScopeId: string) => readonly string[];
+}
+
+/** What a refresh's write did, copies excluded from the counts. */
+export interface RefreshedPricesResult {
+  /** `source_entry_prices` rows written at the scopes the request read. */
+  recorded: number;
+  /** `item_prices` rows catalog inserted. */
+  inserted: number;
+  /** Values catalog already held and only moved the clock on. */
+  confirmed: number;
+  /** The read is sold another way than the row says, so nothing was written. */
+  soldAnotherWay: boolean;
 }
 
 /** Which rung of section 4 answered, and what it answered with. */
@@ -509,6 +564,7 @@ export class SourceIngest {
         // Asked before the write, because the write is what makes it false.
         changed =
           soldByWeightChanged(held, observation) ||
+          approxWeightChanged(held, observation) ||
           imageChanged(held, observation);
         outcome = await this.see(
           held,
@@ -699,7 +755,7 @@ export class SourceIngest {
         priceConflicts.push(...conflicts);
       }
       const written = await this.writePrices(
-        context,
+        context.runId,
         batch.priceScopeId,
         input.sourceKind,
         entries,
@@ -1060,6 +1116,11 @@ export class SourceIngest {
    *
    * `sizeFormat`, `externalId` and the name are not touched in either case.
    *
+   * **The weight of one piece moves with it** (plan 0244), when the listing
+   * states it. A weight clears the size and its unit, because a row holds a
+   * weight only when it holds no size. An observation that does not carry the
+   * field leaves the stored weight alone, and one that carries null clears it.
+   *
    * **The other is the photo address, when the listing prints one** (plan
    * 0198). It is not an identity field. An observation that does not carry
    * the field leaves the stored address alone, and one that carries null
@@ -1076,7 +1137,14 @@ export class SourceIngest {
     if (soldByWeightChanged(row, observation)) {
       row.soldByWeight = observation.soldByWeight === true;
     }
-    if (observation.soldByWeight === true) {
+    if (observation.approxWeight !== undefined) {
+      row.approxWeight = observation.approxWeight;
+    }
+    if (
+      observation.soldByWeight === true ||
+      (observation.approxWeight !== undefined &&
+        observation.approxWeight !== null)
+    ) {
       row.unitSize = null;
       row.sizeUnit = null;
     }
@@ -1179,6 +1247,8 @@ export class SourceIngest {
         name: fields.name,
         brand: fields.brand,
         unitSize: fields.unitSize === null ? null : Number(fields.unitSize),
+        approxWeight:
+          row.approxWeight === null ? null : Number(row.approxWeight),
       });
       // Only the EAN rung promotes. A name match here would be a fuzzy proposal
       // made at the very moment the identifier that makes fuzziness unnecessary
@@ -1251,6 +1321,9 @@ export class SourceIngest {
       // The row's size and not the observation's: a row sold by weight holds
       // none, whatever the source printed beside it (plan 0181).
       unitSize: fields.unitSize,
+      // The weight of one piece stands in for the size it does not have (plan
+      // 0244, section 5.8), so a piece never proposes one of another weight.
+      approxWeight: fields.approxWeight ?? null,
     });
     if (match && isSharedEan(match, observation.ean, eans)) {
       proposeSharedEan(draft, match.itemId);
@@ -1270,7 +1343,8 @@ export class SourceIngest {
       const sibling = siblings.match(
         observation.name,
         observation.sizeFormat,
-        fields.unitSize
+        fields.unitSize,
+        fields.approxWeight ?? null
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -1287,14 +1361,18 @@ export class SourceIngest {
         const reworded = siblings.matchAnyOrder(
           draft.name,
           draft.sizeFormat,
-          draft.unitSize
+          draft.unitSize,
+          null,
+          draft.approxWeight
         );
         const rejected = reworded?.itemId
           ? null
           : siblings.rejectedAnyOrder(
               draft.name,
               draft.sizeFormat,
-              draft.unitSize
+              draft.unitSize,
+              null,
+              draft.approxWeight
             );
         if (reworded?.itemId) {
           proposeReworded(draft, reworded.itemId);
@@ -1313,6 +1391,85 @@ export class SourceIngest {
   }
 
   /**
+   * The prices one shopper's refresh read for one known row (plan 0216,
+   * section 2), through the same two writes a walk makes and nothing else.
+   *
+   * **It is a narrow door, not a second ingest.** It loads no index, matches
+   * nothing, and writes no row: the observation is partial, so the stored name,
+   * brand, EAN and size stay what the last walk wrote, and the seen fields stay
+   * where the walk left them. What it writes is what step 3 and step 4 of a
+   * walk write for that observation:
+   *
+   * - a `source_entry_prices` row per price that resolves to a scope, and per
+   *   copy target the row already has, through {@link replaceScopePrices};
+   * - when the row is `ACTIVE`, the batch catalog is owed for each of those
+   *   scopes, built by {@link priceEntryFor} and sent by {@link writePrices}.
+   *
+   * Both carry no run: `runId` is null on the price rows and `sourceRunId` is
+   * null at catalog. The `price_refreshes` row is the record of what wrote it.
+   *
+   * **A price that resolves to no scope is dropped, with no write and no
+   * warning.** A refresh creates no scope, and it has no run to warn on.
+   *
+   * **An observation sold another way than its row writes nothing** (plan
+   * 0181). A walk would rewrite the row's flag first, so that the row and its
+   * price agree. A refresh writes no row, so the only way to keep the two in
+   * agreement is to leave both alone; the next walk settles it.
+   */
+  async writeRefreshedPrices(
+    input: RefreshedPricesInput
+  ): Promise<RefreshedPricesResult> {
+    const { entry, observation } = input;
+    if (soldByWeightChanged(entry, observation)) {
+      return { recorded: 0, inserted: 0, confirmed: 0, soldAnotherWay: true };
+    }
+
+    const placed: PlacedPrice[] = [];
+    for (const price of observation.prices) {
+      const priceScopeId =
+        price.scopeKey === null ? null : input.scopeIdFor(price.scopeKey);
+      if (priceScopeId) {
+        placed.push({ price, priceScopeId, copiedFromScopeId: null });
+      }
+    }
+    placed.push(...copiesFor(placed, input.copiesOf));
+
+    await this.replaceScopePrices(
+      null,
+      input.sourceKind,
+      placed.map((place) => ({ ...place, observation, entry }))
+    );
+    const recorded = placed.filter(
+      (place) => place.copiedFromScopeId === null
+    ).length;
+
+    const itemId = activeItemOf(entry);
+    let inserted = 0;
+    let confirmed = 0;
+    if (itemId) {
+      for (const place of placed) {
+        const written = await this.writePrices(
+          null,
+          place.priceScopeId,
+          input.sourceKind,
+          [priceEntryFor(itemId, observation, entry, place.price)],
+          place.copiedFromScopeId
+        );
+        if (place.copiedFromScopeId === null) {
+          inserted += written.inserted;
+          confirmed += written.confirmed;
+        }
+      }
+    }
+
+    this.logger.log(
+      `Refresh of row ${entry.id}: ${recorded} price(s) recorded, ` +
+        `${placed.length - recorded} copied, ${inserted} written to catalog.`
+    );
+    return { recorded, inserted, confirmed, soldAnotherWay: false };
+  }
+
+  /**
    * Step 3: the latest price each scope stated (plan 0086, D3).
    *
    * A chain has several leaflets at once because each is for a region, and two
@@ -1328,7 +1485,7 @@ export class SourceIngest {
    * before the plan that has no kind is left as it is too.
    */
   private async replaceScopePrices(
-    runId: string,
+    runId: string | null,
     sourceKind: PriceSourceKind,
     observed: readonly ObservedPrice[]
   ): Promise<void> {
@@ -1392,7 +1549,7 @@ export class SourceIngest {
    * either side reads it to decide anything (plan 0086, D6).
    */
   private async writePrices(
-    context: RunContext,
+    runId: string | null,
     priceScopeId: string,
     sourceKind: PriceSourceKind,
     entries: readonly ItemPriceBatchEntry[],
@@ -1407,7 +1564,7 @@ export class SourceIngest {
       const result = await this.catalog.addPrices(
         priceScopeId,
         entries.slice(i, i + PRICE_BATCH),
-        context.runId,
+        runId,
         sourceKind,
         copiedFromScopeId
       );
@@ -1608,6 +1765,21 @@ function soldByWeightChanged(
 }
 
 /**
+ * Whether a partial observation states another weight than the row holds
+ * (plan 0244). Never when the listing does not say.
+ */
+function approxWeightChanged(
+  row: SourceCatalogEntry,
+  observation: PartialSourceObservation
+): boolean {
+  if (observation.approxWeight === undefined) {
+    return false;
+  }
+  const held = row.approxWeight === null ? null : Number(row.approxWeight);
+  return held !== observation.approxWeight;
+}
+
+/**
  * A row nobody has decided, which is the only kind a new EAN may promote.
  *
  * A `REJECTED` row is the owner saying this is not a product he tracks, and an
@@ -1705,7 +1877,8 @@ function proposeAnyOrder(
     row.name,
     row.sizeFormat,
     row.unitSize,
-    row
+    row,
+    row.approxWeight
   );
   if (reworded?.itemId) {
     proposeReworded(row, reworded.itemId);
@@ -1715,7 +1888,8 @@ function proposeAnyOrder(
     row.name,
     row.sizeFormat,
     row.unitSize,
-    row
+    row,
+    row.approxWeight
   );
   if (rejected !== null) {
     pointAtRejection(row, rejected);
@@ -1790,6 +1964,10 @@ function fieldsOf(
     // number describes nothing, and the column's own doc says it is null then.
     sizeUnit: unitSize === null ? null : observation.sizeUnit,
     soldByWeight,
+    // The weight of one piece (plan 0244), held only beside no size: a size
+    // writes a null weight whatever the observation said. With no size, a
+    // source that never reads a weight leaves the stored one alone.
+    approxWeight: unitSize === null ? observation.approxWeight : null,
     sizeFormat: observation.sizeFormat,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,

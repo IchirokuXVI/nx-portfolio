@@ -643,8 +643,16 @@ describeIntegration('a product merge (real Postgres)', () => {
         ItemMergeFormatDiffersException
       );
       expect(error.details).toEqual({
-        item: { unitSize: 200, defaultUnit: UnitOfMeasure.MILLILITER },
-        into: { unitSize: 1000, defaultUnit: UnitOfMeasure.MILLILITER },
+        item: {
+          unitSize: 200,
+          defaultUnit: UnitOfMeasure.MILLILITER,
+          approxWeight: null,
+        },
+        into: {
+          unitSize: 1000,
+          defaultUnit: UnitOfMeasure.MILLILITER,
+          approxWeight: null,
+        },
       });
       expect((await row(small.id)).mergedIntoId).toBeNull();
 

@@ -2,6 +2,7 @@ import {
   catalogName,
   lineShownProduct,
   listCost,
+  soldAsOf,
   type CatalogItem,
   type Line,
   type LineAction,
@@ -20,6 +21,7 @@ import {
   type ListViewerVm,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { priceWords, type CatalogTranslate } from '@portfolio/velista/ui';
 
 /**
  * What the caller may do on this list, as the server answered it.
@@ -132,6 +134,11 @@ export interface ListStateCatalog {
   readonly brandSizeOf: (item: CatalogItem) => string | null;
   /** A price in the reader's language. */
   readonly formatMoney: (amount: number, currency: string | null) => string;
+  /**
+   * The translator, bound to {@link locale}, for what a price is per ("/ kg")
+   * (velista `0179`).
+   */
+  readonly translate: CatalogTranslate;
 }
 
 /**
@@ -379,10 +386,10 @@ function rowProduct(
     imageUrl: item?.imageUrl ?? null,
     favorite: line.favoriteItemId === shown.itemId,
     others: line.itemIds.length - 1,
-    price:
-      offer === null || offer.price === null
-        ? null
-        : catalog.formatMoney(offer.price, offer.currency),
+    // Priced by the product's kind (velista `0179`): the piece price of a kilo
+    // piece, and no price without one, a price per kilo with its "/ kg", or the
+    // price. A product the catalog has not named is priced by its offer alone.
+    price: priceWords(offer, item, catalog.locale, catalog.translate),
   };
 }
 
@@ -408,9 +415,15 @@ function costOf(
   const cost = listCost(
     lines.map((line) => {
       const shown = line.quantity > 0 ? shownProductOf(line, catalog) : null;
+      const item = shown === null ? null : catalog.itemOf(shown.itemId);
+      const offer = shown?.kind === 'priced' ? shown.offer : null;
       return {
         quantity: line.quantity,
-        offer: shown?.kind === 'priced' ? shown.offer : null,
+        offer,
+        // How the shown product is priced, so a kilo piece adds its piece price
+        // (velista `0179`). A product the catalog has not named is read by its
+        // offer: a set piece price names a kilo piece.
+        soldAs: soldAsOf(offer, item),
       };
     })
   );

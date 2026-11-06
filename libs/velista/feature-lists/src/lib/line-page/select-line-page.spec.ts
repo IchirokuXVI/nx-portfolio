@@ -173,10 +173,105 @@ describe('selectLinePage', () => {
         cheapest: true,
         favorite: false,
       });
-      expect(cards[0].price).toContain('2.15');
-      expect(cards[0].caption).toContain('Mercadona');
-      expect(cards[0].caption).toContain('catalog.unit.LITER');
+      expect(cards[0].price?.amount).toContain('2.15');
+      expect(cards[0].chain).toBe('Mercadona');
+      expect(cards[0].unit?.amount).toContain('5.38');
+      expect(cards[0].unit?.per).toBe('catalog.per.LITER');
       expect(cards[1].cheapest).toBe(false);
+    });
+
+    describe('a kilo piece (velista 0179)', () => {
+      const CHEESE = {
+        ...item('cheese', 'Cured cheese', null),
+        size: null,
+        unit: 'KILOGRAM',
+        approxWeight: 1560,
+        unitBasis: 'KILOGRAM',
+      } as CatalogItem;
+
+      function cheeseCard(
+        piecePrice: number | null,
+        known: CatalogItem | null = CHEESE
+      ) {
+        const offer = {
+          price: 13.42,
+          unitPrice: 13.42,
+          piecePrice,
+          currency: 'EUR',
+          priceScopeId: 'scope',
+        } as ProductShopPrice['offer'];
+        return selectLinePage(
+          input({
+            line: line({ itemIds: ['cheese'] }),
+            itemNameOf: (itemId) => (itemId === 'cheese' ? known : null),
+            priceOf: () => [
+              { ...price(MERCADONA, 13.42, 13.42), offer },
+            ],
+          })
+        )?.cards[0];
+      }
+
+      it('draws the piece price, and the price per kilo in the caption', () => {
+        const card = cheeseCard(20.94);
+        expect(card?.price).toEqual({ amount: '€20.94', per: null });
+        expect(card?.chain).toBe('Mercadona');
+        expect(card?.unit).toEqual({
+          amount: '€13.42',
+          per: 'catalog.per.KILOGRAM',
+        });
+      });
+
+      it('draws no price for a kilo piece with a price and no piece price', () => {
+        const card = cheeseCard(null);
+        expect(card?.priceKind).toBe('noPrice');
+        expect(card?.price).toBeNull();
+      });
+
+      it('never calls a kilo piece with no piece price the cheapest', () => {
+        // A kilo of the cheese costs less than a litre of the shampoo, so the
+        // comparison picks it; with no piece price it is drawn unpriced.
+        const cheapestOf = (piecePrice: number | null) =>
+          selectLinePage(
+            input({
+              line: line({ itemIds: ['cheese', 'normal'] }),
+              itemNameOf: (itemId) =>
+                itemId === 'cheese' ? CHEESE : (CATALOG[itemId] ?? null),
+              priceOf: (itemId) =>
+                itemId === 'cheese'
+                  ? [
+                      {
+                        ...price(MERCADONA, 1, 1),
+                        offer: {
+                          price: 1,
+                          unitPrice: 1,
+                          piecePrice,
+                          currency: 'EUR',
+                          priceScopeId: 'scope',
+                        } as ProductShopPrice['offer'],
+                      },
+                    ]
+                  : PRICES[itemId],
+            })
+          )?.cards.find((card) => card.itemId === 'cheese');
+
+        expect(cheapestOf(1.56)).toMatchObject({
+          priceKind: 'priced',
+          cheapest: true,
+        });
+        expect(cheapestOf(null)).toMatchObject({
+          priceKind: 'noPrice',
+          cheapest: false,
+        });
+      });
+
+      it('draws the piece price while the catalog has not named the product', () => {
+        const card = cheeseCard(20.94, null);
+        expect(card?.price).toEqual({ amount: '€20.94', per: null });
+        expect(card?.unit).toEqual({
+          amount: '€13.42',
+          per: 'catalog.per.KILOGRAM',
+        });
+      });
     });
 
     it('puts the cheapest first on a line with no favourite', () => {
@@ -205,9 +300,9 @@ describe('selectLinePage', () => {
           input({ line: line({ preferredSupermarketId: CARREFOUR }) })
         )?.cards ?? [];
 
-      expect(cards[0].price).toContain('2.60');
-      expect(cards[0].caption).not.toContain('Carrefour');
-      expect(cards[0].caption).toContain('catalog.unit.LITER');
+      expect(cards[0].price?.amount).toContain('2.60');
+      expect(cards[0].chain).toBeNull();
+      expect(cards[0].unit?.per).toBe('catalog.per.LITER');
     });
 
     it('says a product is not sold at the supermarket of the line', () => {
@@ -220,7 +315,8 @@ describe('selectLinePage', () => {
         itemId: 'classic',
         priceKind: 'notSold',
         price: null,
-        caption: null,
+        chain: null,
+        unit: null,
       });
     });
 

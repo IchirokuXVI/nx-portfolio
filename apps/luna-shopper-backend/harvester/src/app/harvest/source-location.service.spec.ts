@@ -7,8 +7,8 @@ import {
   ForbiddenException,
   ValidationException,
 } from '@portfolio/luna-shopper/platform';
-import type { Repository } from 'typeorm';
-import type { SourceLocation } from '../entities';
+import type { FindOperator, Repository } from 'typeorm';
+import type { DiscoveredPlace, SourceLocation } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { PlatformAdminService } from './platform-admin.service';
 import type { SourceEntryAvailabilityWriter } from './source-entry-availability';
@@ -70,14 +70,21 @@ function heldRow(overrides: Partial<SourceLocation> = {}): SourceLocation {
   } as SourceLocation;
 }
 
+/** A discovered place as the code lookup reads it (plan 0222). */
+type PlaceRow = Pick<
+  DiscoveredPlace,
+  'provider' | 'externalRef' | 'supermarketLocationId'
+>;
+
 function build(
   options: {
     held?: SourceLocation[];
     catalogLocations?: SupermarketLocationView[];
     one?: SourceLocation | null;
+    discovered?: PlaceRow[];
   } = {}
 ) {
-  const { held = [], catalogLocations = [], one } = options;
+  const { held = [], catalogLocations = [], one, discovered = [] } = options;
   const saved: SourceLocation[] = [];
 
   const queryBuilder = {
@@ -124,13 +131,39 @@ function build(
     writeForLocation,
   } as unknown as SourceEntryAvailabilityWriter;
 
+  // Reads the `In` and `Not(IsNull())` operators the service sends, so a
+  // provider the service did not ask for is filtered here as Postgres would.
+  const places = {
+    find: jest.fn(
+      async ({
+        where,
+      }: {
+        where: {
+          provider: FindOperator<string[]>;
+          externalRef: FindOperator<string[]>;
+        };
+      }) =>
+        discovered.filter(
+          (place) =>
+            (where.provider.value as unknown as string[]).includes(
+              place.provider
+            ) &&
+            (where.externalRef.value as unknown as string[]).includes(
+              place.externalRef
+            ) &&
+            place.supermarketLocationId !== null
+        )
+    ),
+  } as unknown as Repository<DiscoveredPlace>;
+
   const svc = new SourceLocationService(
     shops,
     catalog,
     makeAdmin(),
-    availability
+    availability,
+    places
   );
-  return { svc, shops, catalog, saved, writeForLocation };
+  return { svc, shops, catalog, saved, writeForLocation, places };
 }
 
 /**
@@ -493,5 +526,177 @@ describe('SourceLocationService, the candidates on the queue', () => {
     expect(view.candidates.map((c) => c.supermarketLocationId)).toEqual([
       'loc-fuerteventura',
     ]);
+  });
+});
+
+/**
+ * The shop of the same code (plan 0222, section 7). The chain's own shop list
+ * keys its places on the code a popup names, so a place a person linked to a
+ * shop proposes that shop for the row of the same code. Still a proposal.
+ */
+describe('SourceLocationService, the shop of the same code', () => {
+  const locations = [
+    {
+      ...catalogLocation(
+        'loc-rescatado',
+        null,
+        'Avenida de Jesús Rescatado 15'
+      ),
+      postalCode: '14010',
+    },
+    {
+      ...catalogLocation('loc-libia', null, 'Avenida de Libia'),
+      postalCode: '14014',
+    },
+    {
+      ...catalogLocation('loc-libia-2', null, 'Calle Libia Norte'),
+      postalCode: '14014',
+    },
+    {
+      ...catalogLocation('loc-libia-3', null, 'Plaza de Libia'),
+      postalCode: '14014',
+    },
+  ];
+  const unmappedT1 = (printedName = 'Jesús Rescatado'): SourceLocation =>
+    heldRow({
+      id: 'sl-T1',
+      externalId: 'T1',
+      printedName,
+      status: SourceLocationStatus.UNMAPPED,
+      supermarketLocationId: null,
+    });
+
+  it('puts the shop a DEZA place of the same code is linked to first', async () => {
+    const { svc, saved } = build({
+      held: [unmappedT1('Avda. de Libia')],
+      catalogLocations: locations,
+      discovered: [
+        {
+          provider: 'DEZA',
+          externalRef: 'T1',
+          supermarketLocationId: 'loc-rescatado',
+        },
+      ],
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(page.items[0].status).toBe(SourceLocationStatus.UNMAPPED);
+    expect(page.items[0].supermarketLocationId).toBeNull();
+    expect(page.items[0].candidates[0]).toEqual({
+      supermarketLocationId: 'loc-rescatado',
+      label: null,
+      address: 'Avenida de Jesús Rescatado 15',
+      postalCode: '14010',
+      score: 1,
+      strong: true,
+      sameCode: true,
+    });
+    // The name candidates follow, and the list keeps its cap of three.
+    expect(page.items[0].candidates).toHaveLength(3);
+    expect(
+      page.items[0].candidates.slice(1).every((c) => c.sameCode === undefined)
+    ).toBe(true);
+    expect(saved).toEqual([]);
+  });
+
+  it('names the shop once when the name match found it too', async () => {
+    const { svc } = build({
+      held: [unmappedT1()],
+      catalogLocations: locations,
+      discovered: [
+        {
+          provider: 'DEZA',
+          externalRef: 'T1',
+          supermarketLocationId: 'loc-rescatado',
+        },
+      ],
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(
+      page.items[0].candidates.map((c) => [c.supermarketLocationId, c.sameCode])
+    ).toEqual([['loc-rescatado', true]]);
+  });
+
+  it('adds nothing for a place linked to a shop of another chain', async () => {
+    const { svc } = build({
+      held: [unmappedT1('Avda. de Libia')],
+      catalogLocations: locations,
+      discovered: [
+        {
+          provider: 'DEZA',
+          externalRef: 'T1',
+          supermarketLocationId: 'loc-of-another-chain',
+        },
+      ],
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(page.items[0].candidates.some((c) => c.sameCode)).toBe(false);
+    expect(
+      page.items[0].candidates.map((c) => c.supermarketLocationId)
+    ).not.toContain('loc-of-another-chain');
+  });
+
+  it('adds nothing for an OSM place whose reference happens to be T1', async () => {
+    const { svc } = build({
+      held: [unmappedT1('Avda. de Libia')],
+      catalogLocations: locations,
+      discovered: [
+        {
+          provider: 'OSM',
+          externalRef: 'T1',
+          supermarketLocationId: 'loc-rescatado',
+        },
+      ],
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(
+      page.items[0].candidates.map((c) => c.supermarketLocationId)
+    ).not.toContain('loc-rescatado');
+  });
+
+  it('gives an ACTIVE row no candidates and does not look for places', async () => {
+    const { svc, places } = build({
+      held: [heldRow({ externalId: 'T1' })],
+      catalogLocations: locations,
+      discovered: [
+        {
+          provider: 'DEZA',
+          externalRef: 'T1',
+          supermarketLocationId: 'loc-rescatado',
+        },
+      ],
+    });
+
+    const page = await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(page.items[0].candidates).toEqual([]);
+    expect(places.find).not.toHaveBeenCalled();
+  });
+
+  it('looks up the codes of a whole page in one query', async () => {
+    const { svc, places } = build({
+      held: [
+        unmappedT1(),
+        heldRow({
+          id: 'sl-T6',
+          externalId: 'T6',
+          printedName: 'Avda. de Libia',
+          status: SourceLocationStatus.UNMAPPED,
+          supermarketLocationId: null,
+        }),
+      ],
+      catalogLocations: locations,
+    });
+
+    await svc.list({ userId: ADMIN, supermarketId: CHAIN });
+
+    expect(places.find).toHaveBeenCalledTimes(1);
   });
 });

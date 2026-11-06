@@ -464,6 +464,9 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
         soldByWeight: true,
         unitSize: null,
         sizeUnit: null,
+        // The tray of the warehouse its detail was read from, the first of
+        // the run's scopes that listed it (plan 0244, section 5.1).
+        approxWeight: 600,
         // The chain's own token, which the row already holds.
         sizeFormat: 'kg',
         prices: [
@@ -496,6 +499,7 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
         soldByWeight: false,
         unitSize: 1,
         sizeUnit: 'LITER',
+        approxWeight: null,
         prices: [expect.objectContaining({ price: 8.75, unitPrice: 8.75 })],
       });
     });
@@ -524,6 +528,7 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
         // The listing's own answer, so the row it lands on stops saying that
         // it is a fixed pack beside a price per kilo.
         soldByWeight: true,
+        approxWeight: 600,
         prices: [expect.objectContaining({ price: 7.3, unitPrice: 7.3 })],
       });
       const bottle = report.partialProducts.find(
@@ -532,7 +537,31 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       expect(bottle).toMatchObject({
         detailFetched: false,
         soldByWeight: false,
+        approxWeight: null,
       });
+    });
+
+    it('reads the weight of a known product from the first warehouse in the order of the scopes', async () => {
+      const { fetchImpl } = weighedWalk();
+      restore = withFetch(fetchImpl);
+      const { runner, context, report } = build();
+
+      await runner.run(
+        context,
+        report,
+        {
+          ...walking('4804', '4661'),
+          details: HarvestDetailFetch.NEW,
+          knownExternalIds: new Set(WALKED),
+        },
+        source()
+      );
+
+      const tray = report.partialProducts.find(
+        (product) => product.externalId === '7012'
+      );
+      // 4804 is the first scope of this run, and its tray weighs 0.65 kg.
+      expect(tray?.approxWeight).toBe(650);
     });
   });
 
@@ -933,6 +962,7 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       // listing states it (plan 0181). Neither is the photo address, which
       // the listing prints too (plan 0198).
       expect(Object.keys(shared ?? {}).sort()).toEqual([
+        'approxWeight',
         'detailFetched',
         'externalId',
         'imageUrl',

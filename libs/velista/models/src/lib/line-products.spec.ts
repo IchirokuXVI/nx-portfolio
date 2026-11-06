@@ -17,10 +17,15 @@ const MERCADONA = 'chain-mercadona';
 const CARREFOUR = 'chain-carrefour';
 const LIDL = 'chain-lidl';
 
-function offer(price: number | null, unitPrice: number | null): ProductOffer {
+function offer(
+  price: number | null,
+  unitPrice: number | null,
+  piecePrice: number | null = null
+): ProductOffer {
   return {
     price,
     unitPrice,
+    piecePrice,
     currency: 'EUR',
     priceScopeId: 'scope',
   } as unknown as ProductOffer;
@@ -389,8 +394,8 @@ describe('listCost (velista 0145, section 6)', () => {
   it('sums the quantity times the price of the lines still wanted', () => {
     expect(
       listCost([
-        { quantity: 2, offer: offer(1.5, null) },
-        { quantity: 1, offer: offer(0.89, null) },
+        { quantity: 2, offer: offer(1.5, null), soldAs: 'PACK' },
+        { quantity: 1, offer: offer(0.89, null), soldAs: 'PACK' },
       ])
     ).toEqual({ amount: 3.89, currency: 'EUR' });
   });
@@ -398,16 +403,42 @@ describe('listCost (velista 0145, section 6)', () => {
   it('leaves out a line at zero and a line with no price', () => {
     expect(
       listCost([
-        { quantity: 0, offer: offer(9, null) },
-        { quantity: 3, offer: null },
-        { quantity: 1, offer: offer(null, null) },
-        { quantity: 1, offer: offer(2, null) },
+        { quantity: 0, offer: offer(9, null), soldAs: 'PACK' },
+        { quantity: 3, offer: null, soldAs: 'PACK' },
+        { quantity: 1, offer: offer(null, null), soldAs: 'PACK' },
+        { quantity: 1, offer: offer(2, null), soldAs: 'PACK' },
       ])
     ).toEqual({ amount: 2, currency: 'EUR' });
   });
 
+  it('adds the piece price of a kilo piece (velista 0179)', () => {
+    expect(
+      listCost([
+        {
+          quantity: 2,
+          offer: offer(13.42, 13.42, 20.94),
+          soldAs: 'KILO_PIECE',
+        },
+      ])
+    ).toEqual({ amount: 41.88, currency: 'EUR' });
+  });
+
+  it('leaves out a kilo piece with a price and no piece price', () => {
+    expect(
+      listCost([
+        { quantity: 2, offer: offer(13.42, 13.42), soldAs: 'KILO_PIECE' },
+      ])
+    ).toBeNull();
+  });
+
+  it('adds the price of a piece priced as one for each unit', () => {
+    expect(
+      listCost([{ quantity: 1, offer: offer(6.5, 6.5), soldAs: 'PACK' }])
+    ).toEqual({ amount: 6.5, currency: 'EUR' });
+  });
+
   it('answers nothing with no priced line', () => {
-    expect(listCost([{ quantity: 2, offer: null }])).toBeNull();
+    expect(listCost([{ quantity: 2, offer: null, soldAs: 'PACK' }])).toBeNull();
     expect(listCost([])).toBeNull();
   });
 });

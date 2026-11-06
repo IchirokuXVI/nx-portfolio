@@ -911,3 +911,246 @@ describe('RecordView', () => {
     });
   });
 });
+
+/**
+ * The three hooks a field can state about the row the form holds (admin plan
+ * 0068): whether it is drawn, which field it shuts out, and the line under
+ * it. A piece has a size or a weight, never both, and a piece sold by the
+ * kilo has no size.
+ */
+interface Piece extends ResourceRow {
+  id: string;
+  unit: string;
+  size: number | null;
+  weight: number | null;
+  weightBy: string | null;
+}
+
+const PIECE: Piece = {
+  id: 'p1',
+  unit: 'GRAM',
+  size: null,
+  weight: 500,
+  weightBy: 'ADMIN',
+};
+
+/** What each `note` of the weight was handed, latest last. */
+const noteArgs: [Partial<Piece>, Piece | null][] = [];
+
+const PIECES = defineResource<Piece>({
+  name: 'pieces',
+  segment: 'pieces',
+  labels: { one: 'pieces.one', many: 'pieces.many' },
+  title: (row) => row.id,
+  fields: [
+    { kind: 'text', name: 'id', label: 'pieces.id', editable: false },
+    {
+      kind: 'enum',
+      name: 'unit',
+      label: 'pieces.unit',
+      options: [
+        { value: 'GRAM', label: 'pieces.gram' },
+        { value: 'KILO', label: 'pieces.kilo' },
+      ],
+    },
+    {
+      kind: 'number',
+      name: 'size',
+      label: 'pieces.size',
+      nullable: true,
+      shown: (row) => row.unit !== 'KILO',
+      excludes: 'weight',
+    },
+    {
+      kind: 'number',
+      name: 'weight',
+      label: 'pieces.weight',
+      nullable: true,
+      excludes: 'size',
+      note: (held, row) => {
+        noteArgs.push([held, row]);
+        return held.weightBy === 'ADMIN'
+          ? {
+              text: { kind: 'key', key: 'pieces.weightByAdmin' },
+              action: { label: 'pieces.useChain', value: '' },
+            }
+          : null;
+      },
+    },
+  ],
+  list: { columns: ['id'], compact: ['id'] },
+  record: {
+    sections: [{ title: 'pieces.section', fields: ['unit', 'size', 'weight'] }],
+  },
+  errorFields: { size_on_kilo: 'size' },
+  actions: { edit: true },
+  gateway: () => {
+    throw new Error('the spec hands the store its own gateway');
+  },
+});
+
+describe('RecordView, the hooks a field states about the row', () => {
+  let fixture: ComponentFixture<RecordView>;
+  let store: RecordStore<ResourceRow>;
+  let sent: ResourceRow[];
+  let refuse: GatewayError | null;
+
+  beforeEach(async () => {
+    sent = [];
+    refuse = null;
+    noteArgs.length = 0;
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [RecordView, RokuTranslatorTestingModule.forTesting()],
+      providers: [
+        ContentLocaleStore,
+        provideRouter([]),
+        provideSections({
+          key: 'stuff',
+          label: '',
+          segment: 'stuff',
+          resources: [PIECES],
+        }),
+        {
+          provide: Viewport,
+          useValue: { compact: signal(false), split: signal(false) },
+        },
+      ],
+    }).compileComponents();
+
+    store = new RecordStore<ResourceRow>(
+      PIECES,
+      {
+        list: async () => ({ items: [], nextCursor: null }),
+        read: async () => PIECE,
+        create: () => Promise.reject(new Error('not used')),
+        update: async (_id, input) => {
+          sent.push(input);
+          if (refuse !== null) {
+            throw refuse;
+          }
+          return { ...PIECE, ...input };
+        },
+        remove: () => Promise.reject(new Error('not used')),
+      },
+      'p1'
+    );
+    await store.load();
+    fixture = TestBed.createComponent(RecordView);
+    fixture.componentRef.setInput('descriptor', PIECES);
+    fixture.componentRef.setInput('store', store);
+    document.body.append(fixture.nativeElement);
+    await settle(fixture);
+  });
+
+  afterEach(() => fixture.nativeElement.remove());
+
+  const element = () => fixture.nativeElement as HTMLElement;
+  const inputOf = (label: string) =>
+    rowOf(element(), label)?.querySelector('input') as HTMLInputElement | null;
+
+  it('clears and disables the field another one shuts out, both ways', async () => {
+    store.edit();
+    await settle(fixture);
+
+    // The weight holds a value, so the size is shut out from the start.
+    expect(inputOf('pieces.size')?.disabled).toBe(true);
+    expect(inputOf('pieces.weight')?.disabled).toBe(false);
+
+    store.set('weight', '');
+    store.set('size', '250');
+    await settle(fixture);
+    expect(store.draft()['weight']).toBe('');
+    expect(inputOf('pieces.weight')?.disabled).toBe(true);
+
+    store.set('size', '');
+    store.set('weight', '400');
+    await settle(fixture);
+    expect(store.draft()['size']).toBe('');
+    expect(inputOf('pieces.size')?.disabled).toBe(true);
+  });
+
+  it('draws no field that the row says is not shown, and empties it', async () => {
+    store.edit();
+    await settle(fixture);
+    store.set('weight', '');
+    store.set('size', '250');
+    store.set('unit', 'KILO');
+    await settle(fixture);
+
+    expect(labels(element())).toEqual(['pieces.unit', 'pieces.weight']);
+    expect(store.draft()['size']).toBe('');
+
+    store.set('unit', 'GRAM');
+    await settle(fixture);
+    expect(labels(element())).toEqual([
+      'pieces.unit',
+      'pieces.size',
+      'pieces.weight',
+    ]);
+  });
+
+  it('draws a hidden field again once a refusal is said under it', async () => {
+    refuse = refusal('size_on_kilo', 422);
+    store.edit();
+    await settle(fixture);
+    store.set('unit', 'KILO');
+    await fixture.componentInstance.save();
+    await settle(fixture);
+
+    expect(labels(element())).toContain('pieces.size');
+    expect(
+      rowOf(element(), 'pieces.size')?.querySelector('[data-error]')
+    ).not.toBeNull();
+  });
+
+  it('draws the note under the control, and its press writes the value through the store', async () => {
+    store.edit();
+    await settle(fixture);
+    const row = rowOf(element(), 'pieces.weight');
+
+    expect(row.querySelector('[data-note]')?.textContent).toContain(
+      'pieces.weightByAdmin'
+    );
+    const press = row.querySelector('[data-note-action]') as HTMLButtonElement;
+    expect(press.type).toBe('button');
+    expect(press.textContent?.trim()).toBe('pieces.useChain');
+    expect(
+      inputOf('pieces.weight')?.getAttribute('aria-describedby')
+    ).toContain('record-field-weight-note');
+
+    press.click();
+    await settle(fixture);
+    expect(store.draft()['weight']).toBe('');
+    expect(store.changed()).toEqual(['weight']);
+    // The press hands the focus to the field it wrote, so a note that leaves
+    // with its value does not drop the focus to the document.
+    expect(document.activeElement).toBe(inputOf('pieces.weight'));
+
+    await fixture.componentInstance.save();
+    expect(sent).toEqual([{ weight: null }]);
+  });
+
+  it('hands the note the row as the form holds it and the row as it was read', async () => {
+    // While the page reads, both are the row.
+    const [readHeld, readRow] = noteArgs[noteArgs.length - 1];
+    expect(readHeld).toBe(readRow);
+    expect(readRow?.weight).toBe(500);
+
+    store.edit();
+    store.set('weight', '400');
+    await settle(fixture);
+    const [held, row] = noteArgs[noteArgs.length - 1];
+    expect(held.weight).toBe('400');
+    expect(row?.weight).toBe(500);
+  });
+
+  it('draws the note under the value while the page reads, with no press', () => {
+    const row = rowOf(element(), 'pieces.weight');
+
+    expect(row.querySelector('[data-note]')?.textContent).toContain(
+      'pieces.weightByAdmin'
+    );
+    expect(row.querySelector('[data-note-action]')).toBeNull();
+  });
+});

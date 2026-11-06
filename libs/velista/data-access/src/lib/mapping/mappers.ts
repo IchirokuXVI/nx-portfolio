@@ -92,6 +92,7 @@ import {
   numOr,
   oneOf,
   oneOfOrNull,
+  positiveNum,
   str,
   strOr,
 } from './primitives';
@@ -665,6 +666,9 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
     currency: nullableStr(raw['currency']),
     unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
     unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    // The server's figure for one piece of a kilo piece (backend `0244`), never
+    // derived here.
+    piecePrice: positiveNum(raw['piecePrice']),
     observedAt: date(raw['observedAt']),
     sourceKind: oneOf(
       raw['sourceKind'],
@@ -717,6 +721,7 @@ export function toCatalogItem(
     brand: nullableStr(raw['brand']),
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
+    approxWeight: positiveNum(raw['approxWeight']),
     productGroupId: nullableStr(raw['productGroupId']),
     // Read since velista `0082`, so the zone list page can show one category at a
     // time, and a list of the tree's rows since `0118`. The rule the basket mapper

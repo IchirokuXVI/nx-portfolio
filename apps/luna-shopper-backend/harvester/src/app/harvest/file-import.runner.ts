@@ -236,6 +236,12 @@ export class FileImportRunner {
       // A tile priced by the kilo (plan 0181). The ingest then writes the row
       // with no size, whatever the tile printed as one.
       soldByWeight: soldByWeightOf(product),
+      // The weight of one piece in grams (plan 0244, section 5.5). The reader
+      // refused it beside a size. Absent stays absent, so a document that
+      // states none leaves the weight a row holds alone.
+      ...(product.approx_weight === undefined
+        ? {}
+        : { approxWeight: product.approx_weight }),
       sizeFormat,
       categoryPath: product.category_path ?? [],
       url: product.url ?? null,

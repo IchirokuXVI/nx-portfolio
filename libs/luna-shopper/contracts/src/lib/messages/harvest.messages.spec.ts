@@ -43,7 +43,24 @@ describe('adapterCapabilities', () => {
       walkablePriorities: null,
       stockIndicator: null,
       provesDelisting: false,
+      refreshesOneProduct: false,
     });
+  });
+
+  it('states which adapters can refresh one product alone (plan 0216, section 6)', () => {
+    const refreshing = ADAPTER_KEYS.filter(
+      (key) => ADAPTER_CAPABILITIES[key].refreshesOneProduct
+    );
+    expect(refreshing.sort()).toEqual(['lidl-api', 'mercadona-api']);
+    for (const key of ADAPTER_KEYS) {
+      expect(typeof ADAPTER_CAPABILITIES[key].refreshesOneProduct).toBe(
+        'boolean'
+      );
+    }
+    expect(adapterCapabilities('eljamon-web').refreshesOneProduct).toBe(false);
+    expect(adapterCapabilities('not-an-adapter').refreshesOneProduct).toBe(
+      false
+    );
   });
 
   it('states how each adapter tells stock and whether it proves a delisting (plan 0220, section 15.3)', () => {
@@ -103,6 +120,12 @@ describe('adapterCapabilities', () => {
     expect(ADAPTER_CAPABILITIES['manual'].printedLocale).toBeNull();
   });
 
+  it('says Carrefour names its own shops (plan 0223)', () => {
+    // The store finder's document names every point of sale, so a store
+    // discovery takes no postal code and the queue asks Carrefour too.
+    expect(ADAPTER_CAPABILITIES['carrefour-web'].listsItsOwnStores).toBe(true);
+  });
+
   it('lets a DIA walk write LOCAL_AREA scopes and nothing else', () => {
     // A fulfilment store is what DIA prices by, as a warehouse is for
     // Mercadona (plan 0174, section 3.1). The chain's NATIONAL scope is the
@@ -116,6 +139,16 @@ describe('adapterCapabilities', () => {
       listsItsOwnStores: true,
       hasProductPages: false,
       skipsKnownDetails: false,
+    });
+  });
+
+  it('lets a DEZA store discovery run with no postal code', () => {
+    // `/centros/` names every shop with its code (plan 0222), so the spawn and
+    // the postal code queue both treat the chain as one that lists its own.
+    expect(ADAPTER_CAPABILITIES['deza-web']).toMatchObject({
+      writesPrices: false,
+      scopesItsOwn: false,
+      listsItsOwnStores: true,
     });
   });
 

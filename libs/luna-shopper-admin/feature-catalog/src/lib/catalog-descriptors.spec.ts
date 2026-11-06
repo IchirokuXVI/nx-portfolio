@@ -1231,7 +1231,7 @@ describe('the record of a product', () => {
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
       [
         'catalog.items.section.sold',
-        ['defaultUnit', 'unitSize', 'imageUrl', 'shownPhoto'],
+        ['defaultUnit', 'unitSize', 'approxWeight', 'imageUrl', 'shownPhoto'],
       ],
     ]);
   });
@@ -1293,11 +1293,13 @@ describe('the record of a product', () => {
     expect(ITEMS.record?.facts).toBeUndefined();
   });
 
-  it('says three refusals under the categories', () => {
+  it('says three refusals under the categories, and one under each of size and weight', () => {
     expect(ITEMS.errorFields).toEqual({
       category_not_a_leaf: 'categoryIds',
       item_needs_a_category: 'categoryIds',
       category_not_found: 'categoryIds',
+      item_kilogram_has_size: 'unitSize',
+      item_approx_weight_beside_size: 'approxWeight',
     });
   });
 });

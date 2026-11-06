@@ -91,6 +91,8 @@ const PROVIDER_ADAPTERS: Readonly<Record<string, string>> = {
   MERCADONA: 'mercadona-api',
   ELJAMON: 'eljamon-web',
   DIA: 'dia-api',
+  DEZA: 'deza-web',
+  CARREFOUR: 'carrefour-web',
 };
 
 function adapterKeyFor(provider: string): string | null {

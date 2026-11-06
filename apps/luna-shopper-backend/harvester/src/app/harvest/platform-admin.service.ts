@@ -11,11 +11,14 @@ import type { HarvesterConfig } from '../config/app-config';
 /**
  * The platform-admin gate (plan 0038, section 7; rewritten by plan 0072).
  *
- * **Every subject on this service is gated**, not just the writes, which is the
- * one way it differs from catalog's identical looking class. Nothing the
- * harvester exposes is open to ordinary users: not the runs, not the discovered
- * places, not the source configuration. The only user facing addition that was
- * designed, a public per item refresh, went to backlog 0006 with its cooldown.
+ * **Every subject on this service is gated but three**, not just the writes,
+ * which is the one way it differs from catalog's identical looking class.
+ * Nothing else the harvester exposes is open to ordinary users: not the runs,
+ * not the discovered places, not the source configuration. The three are
+ * `priceRefresh.request`, `priceRefresh.check` and `priceRefresh.get` (plan
+ * 0216, which promoted backlog 0006): a shopper asks for a fresh price of one
+ * product, they never pass through this class, and the cooldowns in Redis
+ * bound what any shopper can make the harvester fetch.
  *
  * Since 0072 the evidence is a **signature** rather than a uuid drawn from
  * `PLATFORM_ADMIN_USER_IDS`, verified here against `ADMIN_JWT_PUBLIC_KEY`. The

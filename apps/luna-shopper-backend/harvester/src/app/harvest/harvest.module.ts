@@ -11,11 +11,13 @@ import { HarvestAlertStore } from './alerts/harvest-alert.store';
 import { HarvestAlertWorker } from './alerts/harvest-alert.worker';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
+import { CarrefourStoreDiscoveryRunner } from './carrefour-store-discovery.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
 import { DelistingService } from './delisting.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DezaStoreDiscoveryRunner } from './deza-store-discovery.runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
@@ -41,6 +43,14 @@ import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
+import { PriceRefreshCooldown } from './price-refresh.cooldown';
+import {
+  PRICE_REFRESH_FETCHERS,
+  REFRESH_FETCHERS,
+} from './price-refresh.fetchers';
+import { PriceRefreshResolver } from './price-refresh.resolver';
+import { PriceRefreshService } from './price-refresh.service';
+import { PriceRefreshStore } from './price-refresh.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { SourceProbeDispatcher } from './probes/source-probe.runner';
 import { SourceProbeService } from './probes/source-probe.service';
@@ -179,6 +189,17 @@ import { SupermarketSourceService } from './supermarket-source.service';
     SourceProbeDispatcher,
     SourceProbeService,
     SourceProbeWorker,
+    // A shopper refreshes the price of one product (plan 0216): not a run, so
+    // none of the run machinery above is involved but the ingest write.
+    PriceRefreshStore,
+    PriceRefreshResolver,
+    PriceRefreshCooldown,
+    { provide: REFRESH_FETCHERS, useValue: PRICE_REFRESH_FETCHERS },
+    PriceRefreshService,
+    // DEZA's own shop list, the store discovery case of `deza-web` (plan 0222).
+    DezaStoreDiscoveryRunner,
+    // Carrefour's shops from its own store finder (plan 0223).
+    CarrefourStoreDiscoveryRunner,
   ],
 })
 export class HarvestModule {}

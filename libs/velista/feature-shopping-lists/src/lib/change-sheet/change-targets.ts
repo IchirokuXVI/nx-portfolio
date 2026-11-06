@@ -145,6 +145,7 @@ export function basketProductOf(
     productGroupId: item.productGroupId,
     size: item.size,
     unit: item.unit,
+    approxWeight: item.approxWeight,
     offer,
     offers: offer === null ? [] : [offer],
     atShop: atShop

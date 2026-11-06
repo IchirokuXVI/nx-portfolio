@@ -40,6 +40,8 @@ interface CatalogItem {
   brand: string | null;
   ean: string | null;
   unitSize: number | null;
+  /** The weight of one piece in grams (plan 0244). */
+  approxWeight?: number | null;
 }
 
 interface PriceRow {
@@ -2283,6 +2285,171 @@ describe('SourceIngest, rows sold by weight bound to one product (plan 0181)', (
       });
       expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
     });
+
+    describe('the weight of one piece (plan 0244, section 5.5)', () => {
+      it('carries the weight the listing states, and clears the size beside it', async () => {
+        const { ingest, context, saved } = build({ rows: [stale] });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('50946', 9.41), approxWeight: 1540 }],
+        });
+
+        expect(saved[0]).toMatchObject({
+          soldByWeight: true,
+          approxWeight: 1540,
+          unitSize: null,
+          sizeUnit: null,
+          sizeFormat: 'kg',
+        });
+        expect(counters).toMatchObject({ updated: 1, unchanged: 0 });
+      });
+
+      it('carries the weight of a piece priced as one, which is not sold by weight', async () => {
+        const { ingest, context, saved } = build({
+          rows: [{ ...stale, externalId: '60226', unitSize: 0.58 }],
+        });
+
+        await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('60226', 6.5, false), approxWeight: 580 }],
+        });
+
+        expect(saved[0]).toMatchObject({
+          soldByWeight: false,
+          approxWeight: 580,
+          unitSize: null,
+          sizeUnit: null,
+        });
+      });
+
+      it('leaves the stored weight alone when the listing does not carry one', async () => {
+        const { ingest, context, saved } = build({
+          rows: [
+            {
+              ...stale,
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: 1540,
+            },
+          ],
+        });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [seen('50946', 9.41)],
+        });
+
+        expect(saved[0].approxWeight).toBe(1540);
+        expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+      });
+
+      it('clears the stored weight when the listing carries null', async () => {
+        const { ingest, context, saved } = build({
+          rows: [
+            {
+              ...stale,
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: 1540,
+            },
+          ],
+        });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('50946', 9.41), approxWeight: null }],
+        });
+
+        expect(saved[0].approxWeight).toBeNull();
+        expect(counters.updated).toBe(1);
+      });
+
+      it('counts a numeric weight Postgres answers as text as the same weight', async () => {
+        const { ingest, context } = build({
+          rows: [
+            {
+              ...stale,
+              soldByWeight: true,
+              unitSize: null,
+              sizeUnit: null,
+              approxWeight: '1540.0000' as unknown as number,
+            },
+          ],
+        });
+
+        const { counters } = await ingest.ingest(context, {
+          ...session,
+          observations: [{ ...seen('50946', 9.41), approxWeight: 1540 }],
+        });
+
+        expect(counters).toMatchObject({ updated: 0, unchanged: 1 });
+      });
+    });
+  });
+
+  describe('a whole read and the weight of one piece (plan 0244, section 5.5)', () => {
+    it('writes the weight beside no size, on a row sold by weight', async () => {
+      const { ingest, context, saved } = build({});
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          observation({
+            externalId: '50946',
+            name: 'Queso semicurado mezcla Hacendado',
+            sizeFormat: 'kg',
+            unitSize: 1.54,
+            sizeUnit: UnitOfMeasure.KILOGRAM,
+            soldByWeight: true,
+            approxWeight: 1540,
+          }),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({
+        soldByWeight: true,
+        unitSize: null,
+        approxWeight: 1540,
+      });
+    });
+
+    it('writes a null weight beside a size, whatever the observation said', async () => {
+      const { ingest, context, saved } = build({
+        rows: [{ externalId: 'p-1', name: 'Queso', approxWeight: 350 }],
+      });
+
+      await ingest.ingest(context, {
+        ...session,
+        observations: [
+          observation({
+            externalId: 'p-1',
+            name: 'Queso',
+            unitSize: 350,
+            sizeUnit: UnitOfMeasure.GRAM,
+            approxWeight: 350,
+          }),
+        ],
+      });
+
+      expect(saved[0]).toMatchObject({ unitSize: 350, approxWeight: null });
+    });
+
+    it('leaves the weight alone for a source that never reads one', async () => {
+      const { ingest, context, saved } = build({
+        rows: [{ externalId: 'p-2', name: 'Bacalao', approxWeight: 800 }],
+      });
+
+      const { counters } = await ingest.ingest(context, {
+        ...session,
+        observations: [observation({ externalId: 'p-2', name: 'Bacalao' })],
+      });
+
+      expect(saved[0].approxWeight).toBe(800);
+      expect(counters.unchanged).toBe(1);
+    });
   });
 
   it('writes a row sold by weight with no size, and leaves its key alone', async () => {
@@ -2379,6 +2546,97 @@ describe('SourceIngest, rung 4 compares the size (plan 0155)', () => {
       status: SourceEntryStatus.CANDIDATE,
       itemId: 'item-bottle',
     });
+  });
+});
+
+describe('SourceIngest, rungs 3 and 4 compare the weight of one piece (plan 0244, section 5.8)', () => {
+  /** The two UNRESOLVED twins of the evidence: one name, two pieces. */
+  const twin = (externalId: string, approxWeight: number) =>
+    observation({
+      externalId,
+      name: 'Queso curado de oveja',
+      brand: 'Hacendado',
+      sizeFormat: 'kg',
+      soldByWeight: true,
+      approxWeight,
+    });
+  const session = {
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+  };
+
+  it("rung 4: 24700 at its weight does not propose 24701's product", async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          id: 'piece-24701',
+          externalId: '24701',
+          name: 'Queso curado de oveja',
+          sizeFormat: 'kg',
+          soldByWeight: true,
+          // Postgres answers `numeric` as text.
+          approxWeight: '1560.0000' as unknown as number,
+          status: SourceEntryStatus.ACTIVE,
+          matchedBy: ItemSourceMatch.MANUAL,
+          itemId: 'item-24701',
+        },
+      ],
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      ...session,
+      observations: [twin('24700', 820), twin('24702', 1560)],
+    });
+
+    expect(outcomes.map((outcome) => outcome.rung)).toEqual([5, 4]);
+    expect(saved[0]).toMatchObject({
+      externalId: '24700',
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+    });
+    // The same weight is the same piece, and is proposed.
+    expect(saved[1]).toMatchObject({
+      externalId: '24702',
+      status: SourceEntryStatus.CANDIDATE,
+      itemId: 'item-24701',
+    });
+  });
+
+  it('rung 3: a piece proposes no product of another weight, nor one with none', async () => {
+    const product = (id: string, approxWeight: number | null) => ({
+      id,
+      name: { es: 'Queso curado de oveja', en: null },
+      brand: 'Hacendado',
+      ean: null,
+      unitSize: null,
+      approxWeight,
+    });
+    const { ingest, context, saved } = build({
+      items: [product('item-heavy', 1560)],
+    });
+
+    const { outcomes } = await ingest.ingest(context, {
+      ...session,
+      observations: [twin('24700', 820), twin('24702', 1560)],
+    });
+
+    expect(outcomes.map((outcome) => outcome.rung)).toEqual([5, 3]);
+    expect(saved[0]).toMatchObject({ externalId: '24700', itemId: null });
+    expect(saved[1]).toMatchObject({
+      externalId: '24702',
+      status: SourceEntryStatus.CANDIDATE,
+      matchedBy: ItemSourceMatch.NAME_BRAND_SIZE,
+      itemId: 'item-heavy',
+    });
+
+    // Loose cheese, a product with no weight, is not proposed for a piece.
+    const loose = build({ items: [product('item-loose', null)] });
+    const answer = await loose.ingest.ingest(loose.context, {
+      ...session,
+      observations: [twin('24700', 820)],
+    });
+    expect(answer.outcomes[0].rung).toBe(5);
   });
 });
 

@@ -757,7 +757,11 @@ describe('SourceEntryBatchService', () => {
 
         it.each([
           [kilo, UnitOfMeasure.GRAM, 250],
-          [kilo, UnitOfMeasure.KILOGRAM, 0.25],
+          [
+            { unitSize: 2.5, sizeUnit: UnitOfMeasure.GRAM, sizeFormat: 'g' },
+            UnitOfMeasure.GRAM,
+            2.5,
+          ],
           [
             { unitSize: 1.5, sizeUnit: UnitOfMeasure.LITER, sizeFormat: 'l' },
             UnitOfMeasure.MILLILITER,
@@ -838,6 +842,81 @@ describe('SourceEntryBatchService', () => {
             defaultUnit: UnitOfMeasure.LITER,
           }),
         ]);
+      });
+
+      describe('a named KILOGRAM beside a size (plan 0237, section 3.3)', () => {
+        const kilo = {
+          unitSize: 0.25,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          sizeFormat: 'kg',
+        };
+
+        it('refuses the file before any product is created, in the words of the product routes', async () => {
+          const { service, createItems, saved } = build({
+            rows: [entry(kilo)],
+          });
+
+          const result = await service.applyDecisions(
+            request([
+              {
+                op: 'createItem',
+                entryId: 'e-1',
+                ref: 'queso',
+                item: {
+                  name: BOTH,
+                  unitSize: 400,
+                  defaultUnit: UnitOfMeasure.KILOGRAM,
+                },
+                expect: expectFresh,
+              },
+            ])
+          );
+
+          expect(result.applied).toBe(false);
+          expect(result.failedStep).toBe('CREATE_ITEMS');
+          expect(result.error).toContain('sold by the kilo has no size');
+          expect(result.error).toContain('400000 GRAM');
+          expect(createItems).not.toHaveBeenCalled();
+          expect(saved).toEqual([]);
+        });
+
+        it('refuses KILOGRAM named alone over a row that states a size', async () => {
+          const { service, createItems } = build({ rows: [entry(kilo)] });
+
+          const result = await service.applyDecisions(
+            request([
+              {
+                op: 'createItem',
+                entryId: 'e-1',
+                ref: 'queso',
+                item: { name: BOTH, defaultUnit: UnitOfMeasure.KILOGRAM },
+                expect: expectFresh,
+              },
+            ])
+          );
+
+          expect(result.applied).toBe(false);
+          expect(result.failedStep).toBe('CREATE_ITEMS');
+          expect(createItems).not.toHaveBeenCalled();
+        });
+
+        it('passes KILOGRAM with a null size, which is a product sold by weight', async () => {
+          expect(
+            await created(
+              {
+                name: { es: 'Queso', en: 'In English' },
+                unitSize: null,
+                defaultUnit: UnitOfMeasure.KILOGRAM,
+              },
+              kilo
+            )
+          ).toHaveBeenCalledWith([
+            expect.objectContaining({
+              unitSize: null,
+              defaultUnit: UnitOfMeasure.KILOGRAM,
+            }),
+          ]);
+        });
       });
     });
   });

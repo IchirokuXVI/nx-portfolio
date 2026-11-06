@@ -92,6 +92,16 @@ lib-product-picture.picture {
   font-variant-numeric: tabular-nums;
 }
 
+// What a price is per ("/ kg"): smaller than its number, muted, close after it
+// (velista `0179`).
+.per {
+  margin-inline-start: var(--app-space-hair);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 400;
+  word-spacing: calc(var(--app-space-hair) * -1);
+}
+
 // No price, said in words where the price goes, and quiet: nothing is wrong.
 .no-price {
   margin-block-start: var(--app-space-4);

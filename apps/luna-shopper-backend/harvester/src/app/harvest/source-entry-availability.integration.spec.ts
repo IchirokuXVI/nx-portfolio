@@ -12,6 +12,7 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { DataSource, type Repository } from 'typeorm';
 import {
+  DiscoveredPlace,
   HARVESTER_ENTITIES,
   HarvestRun,
   SourceCatalogEntry,
@@ -262,7 +263,8 @@ describeIntegration(
         shops,
         catalog,
         admin,
-        availability
+        availability,
+        dataSource.getRepository(DiscoveredPlace)
       );
       decisions = new SourceEntryService(
         entries,

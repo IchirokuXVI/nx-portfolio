@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  APPROX_WEIGHT_FILL_MAX,
   brandKey,
   BULK_DECISION_MAX_OPERATIONS,
   CONTENT_LOCALES,
@@ -15,6 +16,7 @@ import {
   readGtin,
   toBaseUnit,
   UnitOfMeasure,
+  type ApproxWeightSetBy,
   type CreateItemInput,
   type CreateItemRequest,
   type CreateItemsRequest,
@@ -23,6 +25,8 @@ import {
   type FillPackCountsResult,
   type FindItemByEanRequest,
   type FindItemByEanResult,
+  type FindItemCreatedFromEntryRequest,
+  type FindItemCreatedFromEntryResult,
   type FindItemsByEansRequest,
   type FindItemsByEansResult,
   type GetItemsRequest,
@@ -43,6 +47,8 @@ import {
   type ProductGroupOfferView,
   type SearchItemsRequest,
   type SearchOffersRequest,
+  type SetApproxWeightsRequest,
+  type SetApproxWeightsResult,
   type TeachItemEansRequest,
   type TeachItemEansResult,
   type UpdateItemInput,
@@ -60,6 +66,7 @@ import {
   ForbiddenException,
   getRequestContext,
   isUuid,
+  ITEM_APPROX_WEIGHT_DETAIL,
   ITEM_EAN_DETAIL,
   ITEM_EAN_HOLDER_DETAIL,
   ITEM_EXPECTATION_FAILURES_DETAIL,
@@ -76,6 +83,7 @@ import {
   ITEM_UNIT_BECOMES_DETAIL,
   ITEM_UNIT_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
+  ItemApproxWeightBesideSizeException,
   ItemEanHeldException,
   ItemExpectationFailedException,
   ItemInUseException,
@@ -112,6 +120,7 @@ import {
   decodeCursorForLocale,
   displayName,
   displayNameSql,
+  piecePriceOf,
   toItemOfferView,
   toItemView,
   toProductGroupView,
@@ -508,12 +517,15 @@ export class ItemService {
       // a wrong length or check digit, is refused with `item_ean_invalid`.
       ean: requireProductEan(req.ean),
       unitSize: req.unitSize ?? null,
+      ...approxWeightOf(req, actor),
       packCount: req.packCount ?? null,
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
-    // A base unit, and no size on a kilogram (plan 0237, section 3.3).
+    // A base unit, and no size on a kilogram (plan 0237, section 3.3). Then
+    // a weight only beside no size (plan 0244, section 3.2).
     requireBaseUnit(draft, {});
+    requireWeightBesideNoSize(draft, {});
     // The three brand columns, in the one step every write shares (plan 0115,
     // section 4). An unregistered brand is still accepted: refusing it is the
     // curator's decision, not the catalog's.
@@ -528,7 +540,10 @@ export class ItemService {
         // The categories are recorded beside the columns, as slugs in order
         // (plan 0237, section 3.5), because they are written in the same
         // transaction and are a field of the product to the person who asks.
-        const row = await tx.create(Item, draft, categoryAudit(leaves));
+        const row = await tx.create(Item, draft, {
+          ...categoryAudit(leaves),
+          ...createdFromAudit(req),
+        });
         // In the same transaction as the product, so there is never a product
         // with no category to read.
         await this.categories.setItemCategories(tx.manager, row.id, leaves);
@@ -612,7 +627,11 @@ export class ItemService {
       idLists.map((ids) => ids ?? [])
     );
 
-    const drafts: { draft: Item; leaves: Category[] }[] = [];
+    const drafts: {
+      draft: Item;
+      leaves: Category[];
+      input: CreateItemInput;
+    }[] = [];
     for (const [index, input] of req.items.entries()) {
       const leaves = leavesOf(idLists[index] ?? []);
       const draft = this.items.create({
@@ -621,21 +640,26 @@ export class ItemService {
         sku: input.sku ?? null,
         ean: eans[index],
         unitSize: input.unitSize ?? null,
+        ...approxWeightOf(input, actor),
         packCount: input.packCount ?? null,
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
       });
       requireBaseUnit(draft, { index });
+      requireWeightBesideNoSize(draft, { index });
       this.applyBrand(draft, input.brand, registered);
-      drafts.push({ draft, leaves });
+      drafts.push({ draft, leaves, input });
     }
 
     let saved: { row: Item; leaves: Category[] }[];
     try {
       saved = await this.audit.write(actor, async (tx) => {
         const rows: { row: Item; leaves: Category[] }[] = [];
-        for (const { draft, leaves } of drafts) {
-          const row = await tx.create(Item, draft, categoryAudit(leaves));
+        for (const { draft, leaves, input } of drafts) {
+          const row = await tx.create(Item, draft, {
+            ...categoryAudit(leaves),
+            ...createdFromAudit(input),
+          });
           await this.categories.setItemCategories(tx.manager, row.id, leaves);
           if (row.ean) {
             await this.eans.insert(tx.manager, row.id, row.ean);
@@ -1171,6 +1195,136 @@ export class ItemService {
   }
 
   /**
+   * Write the approximate weight a run read onto each product with no size
+   * (plan 0244, section 3.4).
+   *
+   * **It never writes a product that has a size, whatever its unit, and it
+   * never overwrites a person.** That is the rule, not a detail of it: a
+   * weight a person typed is `ADMIN`, and only {@link update} changes it. It
+   * does not change `defaultUnit`, so a product that is still a sized pack is
+   * skipped and counted, which is how a run shows a product the release task
+   * did not reach. A product that already holds the weight is not written,
+   * and a pair naming a product that is gone writes nothing; neither is
+   * counted.
+   *
+   * The update is the plan's statement, applied to every pair at once as
+   * {@link fillPackCounts} applies its own. The skips are counted from the
+   * same rows, locked first, so the counts and the write agree. A product
+   * named twice is a caller's mistake and refuses the whole call.
+   */
+  async setApproxWeights(
+    req: SetApproxWeightsRequest
+  ): Promise<SetApproxWeightsResult> {
+    const actor = await this.admin.requireAdmin(req);
+    if (req.entries.length > APPROX_WEIGHT_FILL_MAX) {
+      throw new ValidationException(
+        `A weight fill carries at most ${APPROX_WEIGHT_FILL_MAX} products, ` +
+          `and this one carries ${req.entries.length}. Send several calls: ` +
+          'each product is written on its own merit, so nothing is half done.'
+      );
+    }
+    const ids = new Set<string>();
+    for (const entry of req.entries) {
+      if (ids.has(entry.itemId)) {
+        throw new ValidationException(
+          `The product ${entry.itemId} is named twice in one weight fill.`
+        );
+      }
+      if (
+        typeof entry.approxWeight !== 'number' ||
+        !Number.isFinite(entry.approxWeight) ||
+        entry.approxWeight <= 0
+      ) {
+        throw new ValidationException(
+          `The weight ${entry.approxWeight} for ${entry.itemId} is not a ` +
+            'number of grams above zero.'
+        );
+      }
+      ids.add(entry.itemId);
+    }
+    // An id that is not a uuid names no product, and casting it would fail the
+    // whole statement rather than skip one pair. Each weight is cut to the
+    // column's four decimals here, so a weight the column already holds
+    // compares equal and is not written again.
+    const entries = req.entries
+      .filter((entry) => isUuid(entry.itemId))
+      .map((entry) => ({
+        itemId: entry.itemId,
+        approxWeight: Math.round(entry.approxWeight * 10_000) / 10_000,
+      }));
+    const none: SetApproxWeightsResult = {
+      written: 0,
+      skippedHasSize: 0,
+      skippedSetByAdmin: 0,
+    };
+    if (entries.length === 0) {
+      return none;
+    }
+
+    return this.audit.write(actor, async (tx) => {
+      const itemIds = entries.map((entry) => entry.itemId);
+      // Locked in id order, as every edit locks, so a person's edit of the
+      // same product waits for this call or this call for it.
+      const held = (await tx.manager.query(
+        `SELECT "id", "unitSize", "approxWeight", "approxWeightSetBy"
+           FROM "items"
+          WHERE "id" = ANY($1::uuid[])
+          ORDER BY "id"
+            FOR UPDATE`,
+        [itemIds]
+      )) as {
+        id: string;
+        unitSize: string | null;
+        approxWeight: string | null;
+        approxWeightSetBy: string | null;
+      }[];
+      const result = { ...none };
+      for (const row of held) {
+        if (row.unitSize !== null) {
+          result.skippedHasSize += 1;
+        } else if (row.approxWeightSetBy === 'ADMIN') {
+          result.skippedSetByAdmin += 1;
+        }
+      }
+      const before = new Map(held.map((row) => [row.id, row]));
+      // `UPDATE ... RETURNING` answers `[rows, rowCount]` through `query()`.
+      const [rows] = (await tx.manager.query(
+        `UPDATE "items" AS i
+            SET "approxWeight" = v."approxWeight",
+                "approxWeightSetBy" = 'SOURCE',
+                "updatedAt" = now()
+           FROM unnest($1::uuid[], $2::numeric[]) AS v("id", "approxWeight")
+          WHERE i."id" = v."id"
+            AND i."unitSize" IS NULL
+            AND (i."approxWeightSetBy" IS NULL OR i."approxWeightSetBy" = 'SOURCE')
+            AND i."approxWeight" IS DISTINCT FROM v."approxWeight"
+      RETURNING i."id", i."approxWeight"`,
+        [itemIds, entries.map((entry) => entry.approxWeight)]
+      )) as [{ id: string; approxWeight: string }[], number];
+      // Only the two weight columns moved, so the trail records those and
+      // nothing else, as the pack count fill does.
+      for (const row of rows) {
+        const was = before.get(row.id);
+        await tx.recordUpdate(
+          Item,
+          {
+            id: row.id,
+            approxWeight:
+              was?.approxWeight == null ? null : Number(was.approxWeight),
+            approxWeightSetBy: was?.approxWeightSetBy ?? null,
+          },
+          {
+            id: row.id,
+            approxWeight: Number(row.approxWeight),
+            approxWeightSetBy: 'SOURCE',
+          } as Item
+        );
+      }
+      return { ...result, written: rows.length };
+    });
+  }
+
+  /**
    * Several products by id, in one query (plan 0051, section 6.1).
    *
    * A **lookup rather than a search**, in the same sense {@link findByEan} is
@@ -1247,9 +1401,8 @@ export class ItemService {
       // second argument, which `view` reads as the offer.
       return { items: entries.map((entry) => view(entry)) };
     }
-    const itemIds = rows.map((row) => row.id);
     if (req.offers === 'all') {
-      const perItem = await this.allOffersFor(itemIds, scopeIds);
+      const perItem = await this.allOffersFor(rows, scopeIds);
       return {
         items: entries.map((entry) => {
           const offers = perItem.get(entry.shown.id) ?? [];
@@ -1264,13 +1417,54 @@ export class ItemService {
         }),
       };
     }
-    const offers = await this.offersFor(itemIds, scopeIds);
+    const offers = await this.offersFor(rows, scopeIds);
     return {
       items: entries.map((entry) => ({
         ...view(entry),
         bestOffer: offers.get(entry.shown.id) ?? null,
       })),
     };
+  }
+
+  /**
+   * The product created for one queue row (plan 0244, section 7.4): the one
+   * whose `CREATE` audit row names it in `createdFromEntry`, or null.
+   *
+   * Release task 0006 asks before it creates, so a run that stopped between
+   * the create and the bind in the harvester binds the product it already
+   * made. Two such products answer the oldest, by audit time and then by
+   * audit id. The view is {@link getMany}'s, so a product merged since says
+   * `mergedInto` and a deleted one answers null.
+   *
+   * Admin only, as every write is. The statement reads `catalog_audit`
+   * through `ix_catalog_audit_entity` on `entity`, and the json test runs
+   * on the product rows only.
+   */
+  async findCreatedFromEntry(
+    req: FindItemCreatedFromEntryRequest
+  ): Promise<FindItemCreatedFromEntryResult> {
+    await this.admin.requireAdmin(req);
+    const entry = req.createdFromEntry?.trim();
+    if (!entry) {
+      throw new ValidationException('createdFromEntry names no row.', {
+        messageArgs: { field: 'createdFromEntry' },
+      });
+    }
+    const [found] = await this.items.query(
+      `SELECT a."entityId" AS "itemId"
+         FROM "catalog_audit" a
+        WHERE a."entity" = 'items'
+          AND a."action" = 'CREATE'
+          AND a."after" ->> 'createdFromEntry' = $1
+        ORDER BY a."at", a."id"
+        LIMIT 1`,
+      [entry]
+    );
+    if (!found) {
+      return { item: null };
+    }
+    const { items } = await this.getMany({ ids: [String(found.itemId)] });
+    return { item: items[0] ?? null };
   }
 
   /**
@@ -1408,7 +1602,6 @@ export class ItemService {
         ? null
         : this.nextCursor(order, locale, cursor, limit, last, sortKeys);
 
-    const pageIds = page.map((row) => row.id);
     const view = await this.viewer(page);
     const scopeIds = req.priceScopeIds ?? [];
     // Plan 0196, section 1: under `unitPrice` the offer on a row is the one
@@ -1420,7 +1613,7 @@ export class ItemService {
       // second query, so the two cannot disagree. Under `unitPrice` it is
       // still an entry of that array, the one {@link lowestUnitPriceOffer}
       // picks, and the array keeps its order.
-      const perItem = await this.allOffersFor(pageIds, scopeIds);
+      const perItem = await this.allOffersFor(page, scopeIds);
       return {
         items: page.map((row) => {
           const offers = perItem.get(row.id) ?? [];
@@ -1435,11 +1628,7 @@ export class ItemService {
         ...total,
       };
     }
-    const offers = await this.offersFor(
-      pageIds,
-      req.priceScopeIds,
-      byUnitPrice
-    );
+    const offers = await this.offersFor(page, req.priceScopeIds, byUnitPrice);
     return {
       items: page.map((row) => view(row, offers.get(row.id))),
       nextCursor,
@@ -1625,16 +1814,21 @@ export class ItemService {
         ...[...(ranked?.values() ?? [])].flat().map((row) => row.itemId),
       ]),
     ];
-    const [members, offers] = await Promise.all([
+    const members =
       itemIds.length === 0
-        ? Promise.resolve([] as Item[])
-        : this.items.find({ where: { id: In(itemIds) } }),
-      // Plan 0161, section 1: every scope's price for each cheapest member.
-      req.offers === 'all' && scopeIds.length > 0
-        ? this.allOffersFor(cheapestIds, scopeIds)
-        : Promise.resolve(undefined),
-    ]);
+        ? []
+        : await this.items.find({ where: { id: In(itemIds) } });
     const byId = new Map(members.map((item) => [item.id, item]));
+    // Plan 0161, section 1: every scope's price for each cheapest member.
+    // Read after the members, because each offer's piece price is derived
+    // from its product (plan 0244).
+    const offers =
+      req.offers === 'all' && scopeIds.length > 0
+        ? await this.allOffersFor(
+            cheapestIds.flatMap((id) => byId.get(id) ?? []),
+            scopeIds
+          )
+        : undefined;
     const view = await this.viewer(members);
 
     return {
@@ -1838,7 +2032,7 @@ export class ItemService {
     const member = row.offerItemId ? members.get(row.offerItemId) : undefined;
     const offer =
       member && row.offerScopeId
-        ? rawOfferView(member.id, row.offerScopeId, row)
+        ? rawOfferView(member, row.offerScopeId, row)
         : null;
 
     const view: ProductGroupOfferView =
@@ -1886,7 +2080,7 @@ export class ItemService {
           : toView(
               item,
               entry.offerScopeId
-                ? rawOfferView(item.id, entry.offerScopeId, entry)
+                ? rawOfferView(item, entry.offerScopeId, entry)
                 : undefined
             )
       );
@@ -1915,14 +2109,17 @@ export class ItemService {
    * after every row that has one.
    */
   private async offersFor(
-    itemIds: string[],
+    items: readonly Item[],
     priceScopeIds?: string[],
     byUnitPrice = false
   ): Promise<Map<string, ItemOfferView>> {
     const offers = new Map<string, ItemOfferView>();
+    const itemIds = items.map((item) => item.id);
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
+    // Each offer's piece price is derived from its product (plan 0244).
+    const byId = new Map(items.map((item) => [item.id, item]));
     const rows = await (byUnitPrice ? orderOffersByUnitPrice : orderOffers)(
       this.prices
         .createQueryBuilder('si')
@@ -1934,7 +2131,10 @@ export class ItemService {
         .andWhere('si."available"')
     ).getMany();
     for (const row of rows) {
-      offers.set(row.itemId, toItemOfferView(row));
+      offers.set(
+        row.itemId,
+        toItemOfferView(row, byId.get(row.itemId) ?? null)
+      );
     }
     return offers;
   }
@@ -1960,13 +2160,15 @@ export class ItemService {
    * detail the same read already carries.
    */
   private async allOffersFor(
-    itemIds: string[],
+    items: readonly Item[],
     priceScopeIds?: string[]
   ): Promise<Map<string, ItemOfferView[]>> {
     const offers = new Map<string, ItemOfferView[]>();
+    const itemIds = items.map((item) => item.id);
     if (itemIds.length === 0 || !priceScopeIds || priceScopeIds.length === 0) {
       return offers;
     }
+    const byId = new Map(items.map((item) => [item.id, item]));
     const rows = await orderOffers(
       this.prices
         .createQueryBuilder('si')
@@ -1980,11 +2182,12 @@ export class ItemService {
         .andWhere('si."available"')
     ).getMany();
     for (const row of rows) {
+      const offer = toItemOfferView(row, byId.get(row.itemId) ?? null);
       const list = offers.get(row.itemId);
       if (list) {
-        list.push(toItemOfferView(row));
+        list.push(offer);
       } else {
-        offers.set(row.itemId, [toItemOfferView(row)]);
+        offers.set(row.itemId, [offer]);
       }
     }
     return offers;
@@ -2559,21 +2762,36 @@ export class ItemService {
     }
     const size = (row: Item) =>
       row.unitSize === null ? null : Number(row.unitSize);
-    if (size(item) !== size(into) || item.defaultUnit !== into.defaultUnit) {
+    // The weight of a piece is part of its format (plan 0244, section 3.5):
+    // two pieces of one name at different weights are two products. Exact
+    // equality, as for a size.
+    const weight = (row: Item) =>
+      row.approxWeight === null || row.approxWeight === undefined
+        ? null
+        : Number(row.approxWeight);
+    const formatOf = (row: Item) =>
+      `${size(row) ?? 'no size'} ${row.defaultUnit}` +
+      (weight(row) === null ? '' : ` of about ${weight(row)} g`);
+    if (
+      size(item) !== size(into) ||
+      item.defaultUnit !== into.defaultUnit ||
+      weight(item) !== weight(into)
+    ) {
       throw new ItemMergeFormatDiffersException(
-        `Item ${item.id} is ${size(item) ?? 'no size'} ${item.defaultUnit} ` +
-          `and item ${into.id} is ${size(into) ?? 'no size'} ` +
-          `${into.defaultUnit}. Two formats are two products; send ` +
-          '`allowFormatDifference` to merge them anyway.',
+        `Item ${item.id} is ${formatOf(item)} ` +
+          `and item ${into.id} is ${formatOf(into)}. Two formats are two ` +
+          'products; send `allowFormatDifference` to merge them anyway.',
         {
           details: {
             [ITEM_MERGE_FORMAT_DETAIL]: {
               unitSize: size(item),
               defaultUnit: item.defaultUnit,
+              approxWeight: weight(item),
             },
             [ITEM_MERGE_INTO_FORMAT_DETAIL]: {
               unitSize: size(into),
               defaultUnit: into.defaultUnit,
+              approxWeight: weight(into),
             },
           },
         }
@@ -2927,6 +3145,10 @@ export class ItemService {
     eanTaken: string,
     requireRegisteredBrands = false
   ): Promise<ItemView[]> {
+    // Before anything is read: a person never states a run's weight.
+    for (const input of inputs) {
+      requireSourceWeightFromService(input.approxWeightSetBy, actor);
+    }
     const rows = await this.loadInOrder(inputs.map((input) => input.itemId));
     const branded = inputs.filter((input) => input.brand !== undefined);
     const registered =
@@ -2969,6 +3191,7 @@ export class ItemService {
       // for a row the caller may not have read (plan 0237, section 3.2).
       if (input.expect == null) {
         requireBaseUnitOnEdit(row, input);
+        requireNoSourceOverAdmin(input, before);
       }
       const ids = idLists[index];
       const leaves =
@@ -3017,6 +3240,7 @@ export class ItemService {
           this.applyEdits(row, input, registered, groups.get(index));
           refuseMergedEdit(before, row);
           requireBaseUnitOnEdit(row, input);
+          requireNoSourceOverAdmin(input, before);
           edits[index] = { ...edits[index], row, before, groupBefore };
         }
         // The categories each edit replaces, as they stand inside the
@@ -3207,6 +3431,20 @@ export class ItemService {
     }
     if (input.unitSize !== undefined) {
       row.unitSize = input.unitSize;
+    }
+    // A person's weight, which no run overwrites (plan 0244, section 3.1,
+    // D2). A service may state `SOURCE` (section 7), which
+    // {@link applyUpdates} checked against the caller and, beside the unit
+    // rules, against the weight a person wrote. A null hands the weight back
+    // to the source, so it names no writer.
+    if (input.approxWeight !== undefined) {
+      row.approxWeight = input.approxWeight;
+      row.approxWeightSetBy =
+        input.approxWeight === null
+          ? null
+          : input.approxWeightSetBy === 'SOURCE'
+            ? 'SOURCE'
+            : 'ADMIN';
     }
     if (input.packCount !== undefined) {
       row.packCount = input.packCount;
@@ -3617,12 +3855,15 @@ function refuseFailedExpectations(
  *   expects no name in that language.
  * - `brand` is compared by key, against the label the row stores, so a
  *   different case or punctuation of one label agrees.
- * - `unitSize` is compared as a number, because the column is `numeric` and
- *   Postgres answers it as a string.
+ * - `unitSize` and `approxWeight` are compared as numbers, because the
+ *   columns are `numeric` and Postgres answers them as strings.
  * - `categorySlugs` is an ordered list.
  */
 export function expectationMismatches(
-  row: Pick<Item, 'name' | 'brand' | 'unitSize' | 'defaultUnit' | 'packCount'>,
+  row: Pick<
+    Item,
+    'name' | 'brand' | 'unitSize' | 'approxWeight' | 'defaultUnit' | 'packCount'
+  >,
   slugs: readonly string[],
   expect: ItemExpectation
 ): ItemExpectationMismatch[] {
@@ -3655,6 +3896,20 @@ export function expectationMismatches(
     const actual = row.unitSize === null ? null : Number(row.unitSize);
     if (actual !== expect.unitSize) {
       mismatches.push({ field: 'unitSize', expected: expect.unitSize, actual });
+    }
+  }
+  // As a number, for the reason `unitSize` is (plan 0244, section 3.3).
+  if (expect.approxWeight !== undefined) {
+    const actual =
+      row.approxWeight === null || row.approxWeight === undefined
+        ? null
+        : Number(row.approxWeight);
+    if (actual !== expect.approxWeight) {
+      mismatches.push({
+        field: 'approxWeight',
+        expected: expect.approxWeight,
+        actual,
+      });
     }
   }
   if (
@@ -3755,6 +4010,136 @@ function requireBaseUnitOnEdit(row: Item, input: UpdateItemInput): void {
   if (input.defaultUnit !== undefined || input.unitSize !== undefined) {
     requireBaseUnit(row, { itemId: row.id });
   }
+  // After the unit rule, so a `KILOGRAM` with a size still answers
+  // `item_kilogram_has_size`. Only when the edit names the size or the
+  // weight: a change of `defaultUnit` alone on a piece is a correction a
+  // person makes (plan 0244, section 3.2), and it saves.
+  if (input.unitSize !== undefined || input.approxWeight !== undefined) {
+    requireWeightBesideNoSize(row, { itemId: row.id });
+  }
+}
+
+/**
+ * Refuse a product that would hold an approximate weight beside a size, or a
+ * weight that is not above zero (plan 0244, section 3.2), with
+ * `item_approx_weight_beside_size`. A product has a fixed size or a weight,
+ * never both, whatever its unit.
+ *
+ * It reads the row as it will be saved, as {@link requireBaseUnit} does, so an
+ * edit that sets a size on a piece is refused unless the same edit sends
+ * `approxWeight: null`. `where` names the product or the position of the
+ * entry in a batch. The column's check `item_approx_weight_beside_no_size`
+ * restates the rule, and this is what answers a caller before the database
+ * would.
+ */
+export function requireWeightBesideNoSize(
+  row: Pick<Item, 'unitSize' | 'approxWeight' | 'defaultUnit'>,
+  where: { itemId?: string; index?: number }
+): void {
+  const weight =
+    row.approxWeight === null || row.approxWeight === undefined
+      ? null
+      : Number(row.approxWeight);
+  if (weight === null) {
+    return;
+  }
+  const unitSize = row.unitSize === null ? null : Number(row.unitSize);
+  if (unitSize === null && Number.isFinite(weight) && weight > 0) {
+    return;
+  }
+  throw new ItemApproxWeightBesideSizeException(
+    unitSize === null
+      ? `An approximate weight is above zero, and ${weight} is not.`
+      : 'A product has a size or an approximate weight, never both: send ' +
+          'a null size, or a null weight.',
+    {
+      details: {
+        ...where,
+        [ITEM_APPROX_WEIGHT_DETAIL]: weight,
+        [ITEM_UNIT_SIZE_DETAIL]: unitSize,
+        defaultUnit: row.defaultUnit,
+      },
+    }
+  );
+}
+
+/**
+ * The weight columns of a new product (plan 0244, section 3.1). A weight
+ * names its writer, `ADMIN` unless the request states `SOURCE`, and no
+ * weight names none, so the check `item_approx_weight_has_a_writer` always
+ * holds. Only a service may state `SOURCE`.
+ */
+function approxWeightOf(
+  input: Pick<CreateItemInput, 'approxWeight' | 'approxWeightSetBy'>,
+  actor: CatalogActor
+): Pick<Item, 'approxWeight' | 'approxWeightSetBy'> {
+  requireSourceWeightFromService(input.approxWeightSetBy, actor);
+  const approxWeight = input.approxWeight ?? null;
+  return {
+    approxWeight,
+    approxWeightSetBy:
+      approxWeight === null
+        ? null
+        : input.approxWeightSetBy === 'SOURCE'
+          ? 'SOURCE'
+          : 'ADMIN',
+  };
+}
+
+/**
+ * Refuse a weight stated as a run's by a caller that is not a service (plan
+ * 0244, section 7). `SOURCE` is the weight the next run may move, so a
+ * person who could state it could type a weight that does not stick. The
+ * gate is the one every write passes ({@link PlatformAdminService}): a
+ * configured `SERVICE_ACTOR_IDS` id is a service, a verified operator token
+ * is a person. Refused whatever the weight, because the field says who
+ * writes and a person is never a run.
+ */
+function requireSourceWeightFromService(
+  setBy: ApproxWeightSetBy | undefined,
+  actor: CatalogActor
+): void {
+  if (setBy === 'SOURCE' && actor.kind !== 'service') {
+    throw new ForbiddenException(
+      'approxWeightSetBy SOURCE is sent by a service, not by an operator. A ' +
+        "person's weight is written as ADMIN: leave the field out."
+    );
+  }
+}
+
+/**
+ * Refuse a `SOURCE` weight over a product whose weight a person wrote (plan
+ * 0244, D2: a run never overwrites a person). `item.setApproxWeights` skips
+ * such a product and counts it; an update names one product, so it is
+ * refused, as a person who states `SOURCE` is. A person hands the weight back
+ * to the source by sending `approxWeight: null` first. `row` is the product
+ * before the edit.
+ */
+export function requireNoSourceOverAdmin(
+  input: Pick<UpdateItemInput, 'approxWeight' | 'approxWeightSetBy'>,
+  row: Pick<Item, 'id' | 'approxWeightSetBy'>
+): void {
+  if (
+    input.approxWeight !== undefined &&
+    input.approxWeightSetBy === 'SOURCE' &&
+    row.approxWeightSetBy === 'ADMIN'
+  ) {
+    throw new ForbiddenException(
+      `Item ${row.id} holds a weight a person wrote, which a SOURCE write ` +
+        'never replaces. A person sends approxWeight: null to hand it back.'
+    );
+  }
+}
+
+/**
+ * The queue row a product was created for, as the `after` of its `CREATE`
+ * audit row holds it (plan 0244, section 7.4), or nothing.
+ */
+function createdFromAudit(input: Pick<CreateItemInput, 'createdFromEntry'>): {
+  createdFromEntry?: string;
+} {
+  const entry = input.createdFromEntry?.trim();
+  return entry ? { createdFromEntry: entry } : {};
 }
 
 /** A trimmed string, or null for an absent or blank one. */
@@ -3963,16 +4348,20 @@ interface RawOfferColumns {
   offerOutOfStockAt?: string | Date | null;
 }
 
-/** One offer out of a raw query's `offer` columns. */
+/**
+ * One offer out of a raw query's `offer` columns, for `item`, whose unit and
+ * weight give the piece price (plan 0244).
+ */
 function rawOfferView(
-  itemId: string,
+  item: Item,
   priceScopeId: string,
   row: RawOfferColumns
 ): ItemOfferView {
+  const price = row.offerPrice === null ? null : Number(row.offerPrice);
   return {
-    itemId,
+    itemId: item.id,
     priceScopeId,
-    price: row.offerPrice === null ? null : Number(row.offerPrice),
+    price,
     currency: row.offerCurrency,
     unitPrice: row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
     unitPriceLabel: row.offerUnitPriceLabel,
@@ -3986,6 +4375,7 @@ function rawOfferView(
     outOfStockAt: row.offerOutOfStockAt
       ? new Date(row.offerOutOfStockAt).toISOString()
       : null,
+    piecePrice: piecePriceOf(item, price),
   };
 }
 

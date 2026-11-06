@@ -49,6 +49,7 @@ function product(id: string): CatalogItem {
     ],
     imageUrl: null,
     packCount: null,
+    approxWeight: null,
   } as CatalogItem;
 }
 

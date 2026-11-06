@@ -32,12 +32,22 @@ export interface MercadonaProduct {
   /** Detail only. Empty on the handful of novelty products that carry no brand. */
   brand: string | null;
   /**
-   * `approx_size` on a product sized in `kg` (plan 0181): a piece whose
-   * weight is not the same on every pack. Its {@link unitSize} is null and its
-   * {@link price} is the price of a kilo.
+   * `approx_size` on a product sized in `kg` that the chain compares per kilo
+   * (plans 0181 and 0244): a piece whose weight is not the same on every
+   * pack. Its {@link unitSize} is null and its {@link price} is the price of
+   * a kilo. A piece compared per piece is not sold by weight: it is priced as
+   * one, and only its {@link approxWeight} says it varies.
    */
   soldByWeight: boolean;
-  /** Null for a product sold by weight, whose stated weight is an estimate. */
+  /**
+   * The approximate weight of one piece in grams (plan 0244, section 5.1):
+   * `unit_size` times 1000, rounded to four decimals, when `approx_size` is
+   * true and `size_format` is `kg`. Set for a piece sold by the kilo and for
+   * a piece priced as one alike. Null otherwise, and always null beside a
+   * {@link unitSize}.
+   */
+  approxWeight: number | null;
+  /** Null for an approximate piece, whose stated weight is an estimate. */
   unitSize: number | null;
   /** Null for `size_format: 'm'`, which has no `UnitOfMeasure` value. */
   unit: UnitOfMeasure | null;
@@ -104,6 +114,11 @@ export interface MercadonaListProduct {
   published: boolean;
   /** As on {@link MercadonaProduct.soldByWeight}: the listing carries the field. */
   soldByWeight: boolean;
+  /**
+   * As on {@link MercadonaProduct.approxWeight}: the listing carries
+   * `approx_size`, `unit_size` and `reference_format` in the same block.
+   */
+  approxWeight: number | null;
   unitSize: number | null;
   unit: UnitOfMeasure | null;
   sizeFormat: string | null;

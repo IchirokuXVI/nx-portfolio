@@ -11,7 +11,7 @@ import {
   readString,
   type Json,
 } from './json';
-import { packCountIn, parseSize } from './size';
+import { approxWeightOf, packCountIn, parseSize } from './size';
 import {
   LIDL_BASE_URL,
   type LidlListRow,
@@ -128,6 +128,7 @@ export function normalizeProduct(
     readString(readRecord(readRecord(state, 'price'), 'packaging'), 'text') ??
     row.sizeFormat;
   const size = parseSize(sizeFormat);
+  const approxWeight = approxWeightOf(size);
 
   return {
     externalId: row.externalId,
@@ -136,16 +137,21 @@ export function normalizeProduct(
       readString(keyfacts, 'fullTitle') ??
       row.name,
     brand:
-      brandOf(readString(readRecord(readRecord(state, 'info'), 'brand'), 'name')) ??
-      row.brand,
+      brandOf(
+        readString(readRecord(readRecord(state, 'info'), 'brand'), 'name')
+      ) ?? row.brand,
     ean: identifiers.ean,
     shortCode: identifiers.shortCode,
     ian: firstString(readArray(state, 'ians')) ?? row.ian,
     siteCategory: readString(state, 'category') ?? row.siteCategory,
     categoryPath,
     categorySlug: resolveCategory(categoryPath),
-    unitSize: size?.unitSize ?? null,
-    unit: size?.unit ?? null,
+    // A weight the chain does not promise is no size (plan 0244, section
+    // 5.2): it travels as `approxWeight`, and the row has neither a size nor
+    // a unit.
+    unitSize: approxWeight === null ? (size?.unitSize ?? null) : null,
+    unit: approxWeight === null ? (size?.unit ?? null) : null,
+    approxWeight,
     sizeFormat,
     packCount: packCountIn(sizeFormat),
     url: path ? `${baseUrl}${path}` : null,
@@ -195,7 +201,10 @@ export function normalizeRegionPrices(state: Json): LidlRegionPrice[] {
 
   const prices: LidlRegionPrice[] = [];
   for (const [priceId, regions] of byPriceId) {
-    const current = readRecord(readRecord(regionsPrices, priceId), 'currentPrice');
+    const current = readRecord(
+      readRecord(regionsPrices, priceId),
+      'currentPrice'
+    );
     const price = readNumber(current, 'price');
     if (price === null) {
       continue;

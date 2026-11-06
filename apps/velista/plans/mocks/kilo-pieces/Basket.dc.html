@@ -1,0 +1,72 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Marcellus&display=swap">
+  <style>
+    body { margin: 0; }
+    * { box-sizing: border-box; }
+    .kp { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; padding: 24px; display: flex; gap: 32px; align-items: flex-start; background: #e9ebf3; }
+    .col { display: flex; flex-direction: column; gap: 10px; width: 380px; }
+    .cap { font-size: 14px; color: #525a78; line-height: 1.45; }
+    .cap b { color: #11141f; }
+    .phone { width: 380px; border-radius: 22px; overflow: hidden; position: relative; background: var(--d-ground); color: var(--d-text); border: 1px solid #c9cedd; }
+    .day { --d-ground: #f7f8fc; --d-raised: #ffffff; --d-sunken: #eef0f7; --d-text: #11141f; --d-text-2: #525a78; --d-text-3: #616a8a; --d-border: #dde1ed; --d-border-strong: #6f7899; --d-action: #ffb454; }
+    .night { --d-ground: #0a0c14; --d-raised: #161a28; --d-sunken: #11141f; --d-text: #f7f8fc; --d-text-2: #c2c8db; --d-text-3: #98a0bb; --d-border: rgba(255, 255, 255, 0.08); --d-border-strong: rgba(255, 255, 255, 0.35); --d-action: #ffb454; border-color: #2a2f40; }
+    .ph-head { display: flex; align-items: center; gap: 14px; height: 56px; padding: 0 16px; border-bottom: 1px solid var(--d-border); }
+    .ph-head svg { width: 22px; height: 22px; color: var(--d-text-2); flex: none; }
+    .ph-title { font-family: Marcellus, Georgia, serif; font-size: 23px; letter-spacing: 0.01em; }
+    .ph-progress { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; color: var(--d-text-2); }
+    .ph-progress b { color: var(--d-text); font-weight: 650; font-variant-numeric: tabular-nums; }
+    .bar { height: 6px; border-radius: 999px; background: var(--d-sunken); }
+    .brow { display: grid; grid-template-columns: 28px 44px minmax(0, 1fr) 56px; gap: 10px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--d-border); }
+    .brow.last { border-bottom: 0; }
+    .thumb { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    .thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .thumb.none { background: var(--d-sunken); color: var(--d-text-3); }
+    .thumb.none svg { width: 20px; height: 20px; }
+    .circle { width: 24px; height: 24px; border-radius: 999px; border: 2px solid var(--d-border-strong); }
+    .brow-body { min-width: 0; display: grid; gap: 1px; }
+    .brow-name { font-size: 16px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brow-sub { font-size: 13px; color: var(--d-text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; }
+    .brow-sub > span { flex: none; }
+    .brow-sub > .lists { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    .brow-sub > span + span::before { content: '\00B7'; padding: 0 4px; }
+    .qty { width: 52px; height: 40px; border-radius: 12px; border: 1px solid var(--d-border); background: var(--d-raised); display: flex; align-items: center; justify-content: center; font-size: 18px; font-variant-numeric: tabular-nums; }
+    .per { font-size: 0.82em; font-weight: 400; color: var(--d-text-3); margin-left: 0.22em; word-spacing: -0.18em; }
+  </style>
+</helmet>
+<div class="kp">
+
+<div class="col">
+<div class="cap"><b>Shopping list, Day, Spanish.</b> The row's name is the product, the brand and the size, as today, so the weight follows the brand. The caption keeps its order: the price, then the lists. A kilo piece is the one row that puts its price per kilo after the price. Every "/ kg" is drawn smaller than its number. Two cheese pieces add 41,88 € to the total, not 26,84 €.</div>
+<div class="phone day">
+  <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg><span class="ph-title">5 nov 2026</span></div>
+  <div class="ph-progress"><span>0 de 4 comprados · <b>~57,52 €</b></span><span class="bar"></span></div>
+  <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/olive-oil.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Aceite de oliva virgen extra Hacendado 750 ml</div><div class="brow-sub"><span>6,34 €</span><span class="lists">Compra semanal</span></div></div><span class="qty">1</span></div>
+  <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Plátano de Canarias IGP</div><div class="brow-sub"><span>2,80 €<span class="per">/ kg</span></span><span class="lists">Compra semanal</span></div></div><span class="qty">1</span></div>
+  <div class="brow"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Queso viejo tostado mezcla Hacendado ~1,56 kg</div><div class="brow-sub"><span>20,94 €</span><span>13,42 €<span class="per">/ kg</span></span><span class="lists">Compra semanal, Cumple de Lucía</span></div></div><span class="qty">2</span></div>
+  <div class="brow last"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Ensalada completa Hacendado ~580 g</div><div class="brow-sub"><span>6,50 €</span><span class="lists">Compra semanal</span></div></div><span class="qty">1</span></div>
+</div>
+</div>
+
+<div class="col">
+<div class="cap"><b>Night, English.</b> The lists still give way first when the line is long: the price and the price per kilo are never the part that is cut.</div>
+<div class="phone night">
+  <div class="ph-head"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5.84 11 9.36 4"/><path d="M18.16 11 14.64 4"/><path d="M3.2 11h17.6"/><path d="M4.52 11l1.41 7.4a2 2 0 0 0 1.76 1.6h8.62a2 2 0 0 0 1.76-1.6l1.41-7.4"/><path d="M5.4 15.5h13.2"/><path d="m9.36 11 .88 9"/><path d="m14.64 11-.88 9"/></svg><span class="ph-title">Nov 5, 2026</span></div>
+  <div class="ph-progress"><span>0 of 4 got · <b>~€57.52</b></span><span class="bar"></span></div>
+  <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/olive-oil.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Extra virgin olive oil Hacendado 750 ml</div><div class="brow-sub"><span>€6.34</span><span class="lists">Weekly shop</span></div></div><span class="qty">1</span></div>
+  <div class="brow"><span class="circle"></span><div class="thumb"><img src="photos/bananas.jpg" alt=""></div><div class="brow-body"><div class="brow-name">Canary Islands PGI banana</div><div class="brow-sub"><span>€2.80<span class="per">/ kg</span></span><span class="lists">Weekly shop</span></div></div><span class="qty">1</span></div>
+  <div class="brow"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Aged toasted mixed cheese Hacendado ~1.56 kg</div><div class="brow-sub"><span>€20.94</span><span>€13.42<span class="per">/ kg</span></span><span class="lists">Weekly shop, Lucía's birthday</span></div></div><span class="qty">2</span></div>
+  <div class="brow last"><span class="circle"></span><div class="thumb none"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="7" width="12" height="13" rx="2"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg></div><div class="brow-body"><div class="brow-name">Complete salad Hacendado ~580 g</div><div class="brow-sub"><span>€6.50</span><span class="lists">Weekly shop</span></div></div><span class="qty">1</span></div>
+</div>
+</div>
+
+</div>
+</x-dc>
+</body>
+</html>

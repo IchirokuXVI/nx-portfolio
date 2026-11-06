@@ -198,6 +198,7 @@ function offer(priceScopeId: string, price: number | null): ProductOffer {
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId,
+    piecePrice: null,
   };
 }
 

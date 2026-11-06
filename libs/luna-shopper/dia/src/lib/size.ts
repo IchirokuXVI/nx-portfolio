@@ -1,6 +1,7 @@
 import {
   measuresContent,
   sourceSizeOf,
+  UnitOfMeasure,
   type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 
@@ -45,6 +46,16 @@ export interface DiaSize {
   packCount: number | null;
   /** `aprox.`: the pack has no fixed weight and the price is per kilogram. */
   approximate: boolean;
+  /**
+   * The approximate weight of one piece in grams (plan 0244, section 5.3):
+   * {@link unitSize} in grams when {@link approximate} is true and the format
+   * is a weight. `800 g aprox.` is 800 and `1.3 Kg aprox.` is 1300. Null for
+   * a size the chain promises and for an approximate volume or count.
+   *
+   * {@link unitSize} still states the printed number, as it always has. What
+   * a row writes as its size is {@link weightOf}'s answer.
+   */
+  approxWeight: number | null;
 }
 
 /** The units a format may be printed in, lower cased. A closed list. */
@@ -91,12 +102,15 @@ export function splitSize(printed: string): DiaSize {
   }
   const count = match[2] ? Number(match[2]) : null;
   const amount = Number(match[3].replace(',', '.'));
+  const size = sourceSizeOf(round(count ? count * amount : amount), match[4]);
+  const approximate = match[5] !== undefined;
   return {
     name,
     sizeFormat: match[1],
-    ...sourceSizeOf(round(count ? count * amount : amount), match[4]),
+    ...size,
     packCount: measuresContent(match[4]) ? count : null,
-    approximate: match[5] !== undefined,
+    approximate,
+    approxWeight: approximate ? gramsOf(size.unitSize, size.sizeUnit) : null,
   };
 }
 
@@ -108,7 +122,26 @@ function unsized(text: string): DiaSize {
     sizeUnit: null,
     packCount: null,
     approximate: false,
+    approxWeight: null,
   };
+}
+
+/** What one of a weight unit is worth in grams. */
+const GRAMS_IN: Partial<Record<SourceSizeUnit, number>> = {
+  [UnitOfMeasure.GRAM]: 1,
+  [UnitOfMeasure.KILOGRAM]: 1000,
+};
+
+/** A weight in grams, four decimals, or null when the size is not a weight. */
+function gramsOf(
+  unitSize: number | null,
+  sizeUnit: SourceSizeUnit | null
+): number | null {
+  const grams = sizeUnit === null ? undefined : GRAMS_IN[sizeUnit];
+  if (unitSize === null || grams === undefined) {
+    return null;
+  }
+  return Math.round(unitSize * grams * 10_000) / 10_000;
 }
 
 /** Three decimals, so `3 x 0,33` is 0.99 and not 0.9900000000000001. */

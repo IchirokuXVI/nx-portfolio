@@ -601,6 +601,9 @@ const sourceCatalogEntryProperties = {
   sizeUnit: sizeUnitOrNull(),
   // Whether the source sells the product by weight (plan 0181).
   soldByWeight: boolean(),
+  // Plan 0244: the approximate weight of one piece in grams, null beside a
+  // size. Stated but not required, so a reader built before it validates.
+  approxWeight: numberOrNull(),
   sizeFormat: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
@@ -1023,6 +1026,9 @@ const sourceLocationCandidate = object(
     postalCode: nullableString(),
     score: { type: 'number', minimum: 0, maximum: 1 },
     strong: boolean(),
+    // Present and true only on the candidate the chain's own shop list names
+    // with the same code (plan 0222). Still a proposal.
+    sameCode: boolean(),
   },
   ['supermarketLocationId', 'label', 'address', 'postalCode', 'score', 'strong']
 );

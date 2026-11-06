@@ -113,3 +113,53 @@ export interface DezaClientOptions {
   guard?: SourceGuard;
   signal?: AbortSignal;
 }
+
+/** One pin of the map on `/centros/`, as the page states it (plan 0222). */
+export interface DezaDirectoryEntry {
+  /** The WordPress post id of the pin, e.g. `32`. Stable, and never shown. */
+  postId: string;
+  /** The title of the pin, e.g. `Tienda 1` or `SuperCash (Sector Sur)`. */
+  title: string;
+  latitude: number;
+  longitude: number;
+  /** The `Dir:` line of the pin, verbatim. */
+  mapAddress: string | null;
+  /** The `Teléfono:` line of the pin, verbatim. */
+  phone: string | null;
+  /** The first link whose text begins `Ver Tienda`, or null. */
+  shopPageUrl: string | null;
+  /** The text of the first `ver-tienda` link, e.g. `Ver Almacen`. */
+  linkText: string | null;
+  /** A category slug of the form `t1`, `c1` or `z1`, upper cased, or null. */
+  categoryCode: string | null;
+}
+
+/** The map of `/centros/` and its menu (plan 0222, section 2.1). */
+export interface DezaDirectory {
+  entries: DezaDirectoryEntry[];
+  /** The title of each pin skipped because it lacks a number in a coordinate. */
+  withoutCoordinates: string[];
+  /** The link text of each page under the `Centros` menu, by URL. */
+  menuTitles: Map<string, string>;
+}
+
+/** What one `/centros/<slug>/` page states about its shop (plan 0222, section 2.2). */
+export interface DezaShopPage {
+  /** The `<title>` with the site suffix removed. */
+  title: string;
+  /** The address lines above the postal code line, joined with a space. */
+  street: string | null;
+  postalCode: string | null;
+  city: string | null;
+  phone: string | null;
+  /** The code at the start of the main photo's file name, e.g. `C2`. */
+  photoCode: string | null;
+}
+
+/**
+ * The code of a shop, and which signal gave it (plan 0222, section 2.3). Two
+ * signals that disagree give no code.
+ */
+export type DezaCodeOutcome =
+  | { code: string; basis: 'BOTH' | 'MAP' | 'PHOTO' }
+  | { code: null; reason: 'NO_CODE' | 'CODES_DISAGREE' };

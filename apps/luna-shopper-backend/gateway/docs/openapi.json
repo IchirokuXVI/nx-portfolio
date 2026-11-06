@@ -15350,6 +15350,317 @@
         ]
       }
     },
+    "/v1/catalog/items/{id}/refresh": {
+      "get": {
+        "operationId": "ItemRefreshController_check_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "priceScopeId",
+            "required": true,
+            "in": "query",
+            "description": "The `priceScopeId` of the offer the client drew: the scope the shopper is looking at.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Whether a refresh of this product at this scope can start, and when. `reason` is null when it can; `FRESH` with the seconds until the product window ends when the price is recent; another reason when nothing can fetch it. `pendingRefreshId` names a refresh in flight, which a request joins.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PriceRefreshCheckView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      },
+      "post": {
+        "operationId": "ItemRefreshController_request_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemRefreshBodyDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Start a refresh, join the one in flight, or answer `FRESH` when the price is recent, in which case nothing was fetched and `id` is null. The fetch runs after the answer: poll the refresh by its id. A cooldown is a 429 with `retryAfterSeconds`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PriceRefreshView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`validation_failed` — Some of the submitted values are invalid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`price_not_refreshable` — The price of this product cannot be refreshed here right now. `details.reason` is one of `REFRESH_OFF`, `NOT_HARVESTED`, `AMBIGUOUS`, `SOURCE_OFF`, `NO_SINGLE_FETCH`, `CHAIN_REFUSING`.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
+    "/v1/catalog/items/{id}/refreshes/{refreshId}": {
+      "get": {
+        "operationId": "ItemRefreshController_get_v1",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "refreshId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A refresh you requested, or joined in the last two minutes. Any other id is a 404, and so is a refresh of another product than the path names.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/harvest.PriceRefreshView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized` — You need to sign in to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` — You do not have permission to do that.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "`internal` — Something went wrong on our side. Please try again.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "access-token": []
+          }
+        ],
+        "tags": [
+          "catalog"
+        ]
+      }
+    },
     "/v1/catalog/items": {
       "get": {
         "operationId": "CatalogItemsController_search_v1",
@@ -17903,7 +18214,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18148,7 +18459,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18252,7 +18563,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18546,7 +18857,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18879,7 +19190,7 @@
             }
           },
           "409": {
-            "description": "`item_merged` — This product was merged into another one. Work on the product it was merged into.\n\n`item_merge_two_articles_one_chain` — Both products are sold by the same chain, so the merged product would hold two articles of that chain. Allow a second article to merge them anyway.\n\n`item_merge_format_differs` — The two products have a different size or unit, so they are two products. Allow the format difference to merge them anyway.",
+            "description": "`item_merged` — This product was merged into another one. Work on the product it was merged into.\n\n`item_merge_two_articles_one_chain` — Both products are sold by the same chain, so the merged product would hold two articles of that chain. Allow a second article to merge them anyway.\n\n`item_merge_format_differs` — The two products have a different size, unit or approximate weight, so they are two products. Allow the format difference to merge them anyway.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28493,7 +28804,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31835,6 +32146,19 @@
           "accuracyMetres"
         ]
       },
+      "ItemRefreshBodyDto": {
+        "type": "object",
+        "properties": {
+          "priceScopeId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The `priceScopeId` of the offer the client drew: the scope the shopper is looking at."
+          }
+        },
+        "required": [
+          "priceScopeId"
+        ]
+      },
       "LookupItemsDto": {
         "type": "object",
         "properties": {
@@ -32135,6 +32459,11 @@
             "minimum": 0,
             "description": "Without it `defaultUnit` says nothing: \"LITER\" is not a size."
           },
+          "approxWeight": {
+            "type": "number",
+            "nullable": true,
+            "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
           "packCount": {
             "type": "integer",
             "nullable": true,
@@ -32171,7 +32500,7 @@
               "LITER",
               "PACK"
             ],
-            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. A piece with an approximate weight sends `approxWeight` instead. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
@@ -32226,6 +32555,11 @@
           "unitSize": {
             "type": "number",
             "nullable": true
+          },
+          "approxWeight": {
+            "type": "number",
+            "nullable": true,
+            "description": "Compared as a number of grams, as `unitSize` is (plan 0244)."
           },
           "defaultUnit": {
             "type": "string",
@@ -32283,6 +32617,11 @@
             "minimum": 0,
             "description": "Without it `defaultUnit` says nothing: \"LITER\" is not a size."
           },
+          "approxWeight": {
+            "type": "number",
+            "nullable": true,
+            "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
           "packCount": {
             "type": "integer",
             "nullable": true,
@@ -32319,7 +32658,7 @@
               "LITER",
               "PACK"
             ],
-            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. A piece with an approximate weight sends `approxWeight` instead. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
@@ -32412,6 +32751,11 @@
             "minimum": 0,
             "description": "Without it `defaultUnit` says nothing: \"LITER\" is not a size."
           },
+          "approxWeight": {
+            "type": "number",
+            "nullable": true,
+            "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
           "packCount": {
             "type": "integer",
             "nullable": true,
@@ -32448,7 +32792,7 @@
               "LITER",
               "PACK"
             ],
-            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. An edit is checked as the product will be saved, and only when it names the unit or the size."
+            "description": "A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. A piece with an approximate weight sends `approxWeight` instead. An edit is checked as the product will be saved, and only when it names the unit or the size."
           },
           "productGroupId": {
             "type": "string",
@@ -37371,6 +37715,26 @@
               "null"
             ]
           },
+          "approxWeight": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "approxWeightSetBy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SOURCE",
+                  "ADMIN"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "packCount": {
             "type": [
               "integer",
@@ -38404,6 +38768,12 @@
               "null"
             ]
           },
+          "piecePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "itemName": {
             "anyOf": [
               {
@@ -39106,6 +39476,12 @@
               "string",
               "null"
             ]
+          },
+          "piecePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
         "required": [
@@ -39697,6 +40073,12 @@
           },
           "defaultUnit": {
             "$ref": "#/components/schemas/enums.UnitOfMeasure"
+          },
+          "approxWeight": {
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
         "required": [
@@ -39781,6 +40163,26 @@
             "type": [
               "number",
               "null"
+            ]
+          },
+          "approxWeight": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "approxWeightSetBy": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SOURCE",
+                  "ADMIN"
+                ]
+              },
+              {
+                "type": "null"
+              }
             ]
           },
           "packCount": {
@@ -41816,6 +42218,12 @@
               "string",
               "null"
             ]
+          },
+          "piecePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
           }
         },
         "required": [
@@ -42547,7 +42955,8 @@
           "DETAIL_SKIPPED_UNKNOWN",
           "PRICE_SOLD_ANOTHER_WAY",
           "SOURCE_PAUSED",
-          "SOURCE_RESUMED"
+          "SOURCE_RESUMED",
+          "APPROX_WEIGHT_ROWS_DISAGREE"
         ]
       },
       "enums.ItemImageSource": {
@@ -42706,6 +43115,29 @@
           "SOURCE",
           "DERIVED",
           "MANUAL"
+        ]
+      },
+      "enums.PriceRefreshRefusal": {
+        "type": "string",
+        "enum": [
+          "REFRESH_OFF",
+          "NOT_HARVESTED",
+          "AMBIGUOUS",
+          "SOURCE_OFF",
+          "NO_SINGLE_FETCH",
+          "CHAIN_REFUSING",
+          "FRESH"
+        ]
+      },
+      "enums.PriceRefreshStatus": {
+        "type": "string",
+        "enum": [
+          "FRESH",
+          "PENDING",
+          "DONE",
+          "NOT_STOCKED",
+          "FAILED",
+          "BLOCKED"
         ]
       },
       "enums.PriceScopeKind": {
@@ -43187,29 +43619,32 @@
               "max": 200
             },
             "stockIndicator": "per-scope",
-            "provesDelisting": true
+            "provesDelisting": true,
+            "refreshesOneProduct": true
           },
           "deza-web": {
             "writesPrices": false,
             "scopesItsOwn": false,
-            "listsItsOwnStores": false,
+            "listsItsOwnStores": true,
             "hasProductPages": false,
             "skipsKnownDetails": false,
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": "per-shop",
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           },
           "carrefour-web": {
             "writesPrices": true,
             "scopesItsOwn": false,
-            "listsItsOwnStores": false,
+            "listsItsOwnStores": true,
             "hasProductPages": true,
             "skipsKnownDetails": false,
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           },
           "lidl-api": {
             "writesPrices": true,
@@ -43220,7 +43655,8 @@
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": true
           },
           "eljamon-web": {
             "writesPrices": true,
@@ -43231,7 +43667,8 @@
             "printedLocale": "es",
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": true
+            "provesDelisting": true,
+            "refreshesOneProduct": false
           },
           "dia-api": {
             "writesPrices": true,
@@ -43245,7 +43682,8 @@
               "max": 200
             },
             "stockIndicator": "per-scope",
-            "provesDelisting": true
+            "provesDelisting": true,
+            "refreshesOneProduct": false
           },
           "osm-places": {
             "writesPrices": false,
@@ -43256,7 +43694,8 @@
             "printedLocale": null,
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           },
           "manual": {
             "writesPrices": false,
@@ -43267,7 +43706,8 @@
             "printedLocale": null,
             "walkablePriorities": null,
             "stockIndicator": null,
-            "provesDelisting": false
+            "provesDelisting": false,
+            "refreshesOneProduct": false
           }
         }
       },
@@ -44396,6 +44836,12 @@
           "soldByWeight": {
             "type": "boolean"
           },
+          "approxWeight": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -44932,6 +45378,98 @@
         ],
         "additionalProperties": false
       },
+      "harvest.PriceRefreshCheckView": {
+        "type": "object",
+        "properties": {
+          "refreshable": {
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.PriceRefreshRefusal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pendingRefreshId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "refreshable",
+          "reason",
+          "retryAfterSeconds",
+          "pendingRefreshId",
+          "observedAt"
+        ],
+        "additionalProperties": false
+      },
+      "harvest.PriceRefreshView": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "itemId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "priceScopeId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "$ref": "#/components/schemas/enums.PriceRefreshStatus"
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "finishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "itemId",
+          "priceScopeId",
+          "status",
+          "observedAt",
+          "requestedAt",
+          "finishedAt"
+        ],
+        "additionalProperties": false
+      },
       "harvest.QueuedSourceEntryPage": {
         "type": "object",
         "description": "A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.",
@@ -45014,6 +45552,12 @@
           },
           "soldByWeight": {
             "type": "boolean"
+          },
+          "approxWeight": {
+            "type": [
+              "number",
+              "null"
+            ]
           },
           "sizeFormat": {
             "type": [
@@ -45483,6 +46027,12 @@
           "soldByWeight": {
             "type": "boolean"
           },
+          "approxWeight": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
           "sizeFormat": {
             "type": [
               "string",
@@ -45927,6 +46477,9 @@
             "maximum": 1
           },
           "strong": {
+            "type": "boolean"
+          },
+          "sameCode": {
             "type": "boolean"
           }
         },
@@ -47963,6 +48516,7 @@
               "item_expectation_failed",
               "item_unit_not_base",
               "item_kilogram_has_size",
+              "item_approx_weight_beside_size",
               "item_merged",
               "item_merge_two_articles_one_chain",
               "item_merge_format_differs",
@@ -47993,6 +48547,7 @@
               "invalid_google_token",
               "google_sign_in_needs_consent",
               "assistant_allowance_reached",
+              "price_not_refreshable",
               "internal"
             ],
             "description": "The stable machine code the client branches on."

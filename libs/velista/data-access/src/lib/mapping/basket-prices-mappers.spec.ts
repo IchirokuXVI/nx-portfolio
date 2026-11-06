@@ -92,6 +92,7 @@ describe('toBasket: prices and places (velista 0062)', () => {
       currency: 'EUR',
       unitPrice: 0.95,
       unitPriceLabel: 'EUR/L',
+      piecePrice: null,
       observedAt: new Date('2026-09-01T06:00:00.000Z'),
       sourceKind: 'OFFICIAL_WEB',
       priceScopeId: 'scope-a',

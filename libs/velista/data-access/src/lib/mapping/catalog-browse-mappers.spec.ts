@@ -1,4 +1,39 @@
-import { toProductPriceHistory } from './catalog-browse-mappers';
+import {
+  toCatalogProduct,
+  toProductPriceHistory,
+} from './catalog-browse-mappers';
+
+describe('toCatalogProduct: the weight of a piece (velista 0179)', () => {
+  const cheese = {
+    id: 'item-cheese',
+    name: { es: 'Queso', en: 'Cheese' },
+    defaultUnit: 'KILOGRAM',
+    unitSize: null,
+    approxWeight: 1560,
+    bestOffer: { price: 13.42, piecePrice: 20.94, priceScopeId: 's-1' },
+  };
+
+  it('reads the approximate weight and the piece price', () => {
+    const read = toCatalogProduct(cheese);
+    expect(read?.approxWeight).toBe(1560);
+    expect(read?.offer?.piecePrice).toBe(20.94);
+  });
+
+  it.each([
+    ['a string', '1560'],
+    ['a negative number', -1],
+    ['zero', 0],
+    ['an absent field', undefined],
+  ])('reads %s as null', (_, value) => {
+    const read = toCatalogProduct({
+      ...cheese,
+      approxWeight: value,
+      bestOffer: { ...cheese.bestOffer, piecePrice: value },
+    });
+    expect(read?.approxWeight).toBeNull();
+    expect(read?.offer?.piecePrice).toBeNull();
+  });
+});
 
 /** `GET /v1/catalog/items/:id/price-history` (backend `0196`, section 2). */
 describe('toProductPriceHistory', () => {
