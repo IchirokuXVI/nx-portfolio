@@ -221,14 +221,27 @@ afterEach(() => {
   TestBed.resetTestingModule();
 });
 
-describe('a chain, on the record page', () => {
-  it('opens on its shops', async () => {
-    const fixture = await boot('/chains/sm_mercadona');
+/**
+ * The first boot of the file compiles every component of the section, which
+ * the later tests find compiled. It takes about four times as long as any other
+ * test here, and on a loaded CI runner that went past Jest's five second
+ * default (2026-11-06). The limit is stated for that one test, so a slow test
+ * anywhere else still fails at five seconds.
+ */
+const COLD_BOOT_TIMEOUT = 20_000;
 
-    expect(url()).toBe('/chains/sm_mercadona/shops');
-    expect(page(fixture).descriptor.name).toBe('supermarkets');
-    expect(page(fixture).store().mode()).toBe('read');
-  });
+describe('a chain, on the record page', () => {
+  it(
+    'opens on its shops',
+    async () => {
+      const fixture = await boot('/chains/sm_mercadona');
+
+      expect(url()).toBe('/chains/sm_mercadona/shops');
+      expect(page(fixture).descriptor.name).toBe('supermarkets');
+      expect(page(fixture).store().mode()).toBe('read');
+    },
+    COLD_BOOT_TIMEOUT
+  );
 
   it('is titled with the name of the chain', async () => {
     const fixture = await boot('/chains/sm_mercadona/shops');
