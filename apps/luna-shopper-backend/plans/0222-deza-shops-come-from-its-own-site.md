@@ -1,3 +1,5 @@
+> **PR:** [#928](https://github.com/IchirokuXVI/nx-portfolio/pull/928)
+
 # 0222: deza shops come from its own site
 
 > DEZA shops reach the catalog today only through OpenStreetMap. The chain publishes its own
