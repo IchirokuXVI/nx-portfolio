@@ -236,7 +236,9 @@ jobs:
             echo "::error::OTA_PROJECTS is \"$OTA_PROJECTS\" and VELISTA_OTA_SIGNING_KEY of the environment is empty"
             exit 1
           fi
-          # The commit the tag checked out, which the bundles were built from.
+          # A guard and not a fix: on a release event GITHUB_SHA already is the tag
+          # commit. Pinned to the checked out commit, which the bundles were built
+          # from, so the signed files name it even if that ever differs.
           GITHUB_SHA="$(git rev-parse HEAD)"
           export GITHUB_SHA
           for project in $OTA_PROJECTS; do

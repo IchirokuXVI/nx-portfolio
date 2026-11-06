@@ -97,5 +97,31 @@ describe('ReloadBlocker', () => {
       expect(first).not.toHaveBeenCalled();
       expect(second).toHaveBeenCalledTimes(1);
     });
+
+    it('keeps a waiting action over a later plain reload', () => {
+      // Velista `0180` D6: inside the native shell a reload loads the running bundle
+      // again, so it must not replace the apply of a new one.
+      const apply = jest.fn();
+      const release = blocker.block();
+
+      blocker.whenIdle(apply);
+      blocker.reloadWhenIdle();
+      release();
+
+      expect(apply).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
+
+    it('lets an action replace a reload that is still waiting', () => {
+      const apply = jest.fn();
+      const release = blocker.block();
+
+      blocker.reloadWhenIdle();
+      blocker.whenIdle(apply);
+      release();
+
+      expect(apply).toHaveBeenCalledTimes(1);
+      expect(reload).not.toHaveBeenCalled();
+    });
   });
 });

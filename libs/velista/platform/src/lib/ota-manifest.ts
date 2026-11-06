@@ -17,7 +17,10 @@ export interface OtaManifest {
   readonly critical: boolean;
   /** Relative to the manifest, always under `bundles/`. */
   readonly url: string;
-  /** The zip's SHA-256, 64 lowercase hex characters. */
+  /**
+   * The zip's SHA-256, 64 hex characters. The parser accepts either case and
+   * lowercases it.
+   */
   readonly sha256: string;
   readonly size: number;
   readonly builtAt: string;
