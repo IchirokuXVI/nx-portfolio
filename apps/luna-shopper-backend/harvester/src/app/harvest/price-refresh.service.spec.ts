@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import {
+  HarvestRunMode,
   HarvestRunStatus,
   HarvestRunStopReason,
   PriceRefreshRefusal,
@@ -14,7 +15,7 @@ import {
   PriceNotRefreshableException,
   RateLimitedException,
 } from '@portfolio/luna-shopper/platform';
-import type { Repository } from 'typeorm';
+import type { FindOperator, Repository } from 'typeorm';
 import type {
   HarvestRun,
   PriceRefresh,
@@ -296,12 +297,18 @@ function build(w: World) {
     },
   } as unknown as SourceIngest;
   const runs = {
-    findOne: async () =>
+    // The status filter is the fake's own; the mode filter is read from the
+    // query, so a spec proves which mode the service excludes.
+    findOne: async (query: { where: { mode?: FindOperator<unknown> } }) =>
       [...w.runs]
         .filter(
           (run) =>
             run.status !== HarvestRunStatus.PENDING &&
-            run.status !== HarvestRunStatus.RUNNING
+            run.status !== HarvestRunStatus.RUNNING &&
+            !(
+              query.where.mode?.type === 'not' &&
+              run.mode === query.where.mode.value
+            )
         )
         .sort(
           (a, b) =>
@@ -485,6 +492,27 @@ describe('PriceRefreshService (plan 0216, section 7)', () => {
     expect(view.status).toBe(PriceRefreshStatus.PENDING);
   });
 
+  it('keeps refusing when a FILE_IMPORT finished after the blocked walk', async () => {
+    const w = world();
+    w.runs.push(
+      {
+        mode: HarvestRunMode.CATALOG_DISCOVERY,
+        status: HarvestRunStatus.ABORTED,
+        stopReason: HarvestRunStopReason.SOURCE_BLOCKED,
+        finishedAt: new Date(NOW.getTime() - 20 * 60_000),
+      } as HarvestRun,
+      {
+        mode: HarvestRunMode.FILE_IMPORT,
+        status: HarvestRunStatus.COMPLETED,
+        stopReason: null,
+        finishedAt: new Date(NOW.getTime() - 5 * 60_000),
+      } as HarvestRun
+    );
+    expect(await reasonOf(build(w).service.request(ask))).toBe(
+      PriceRefreshRefusal.CHAIN_REFUSING
+    );
+  });
+
   it('answers FRESH within the product window, with no claim and no row', async () => {
     const w = world();
     w.prices = [
@@ -532,6 +560,34 @@ describe('PriceRefreshService (plan 0216, section 7)', () => {
       finishedAt: NOW,
     });
     expect(w.runs).toEqual([]);
+  });
+
+  it('reports the observation of the walk kind, not a newer row of another kind', async () => {
+    const w = world();
+    const walked = new Date(NOW.getTime() - 3 * 60_000);
+    w.refreshes.push({
+      id: 'refresh-9',
+      supermarketId: CHAIN,
+      entryId: 'entry-1',
+      itemId: ITEM,
+      priceScopeId: WAREHOUSE,
+      fetchScopeId: WAREHOUSE,
+      requestedByUserId: SHOPPER,
+      status: PriceRefreshStatus.DONE,
+      requestedAt: new Date(NOW.getTime() - 4 * 60_000),
+      finishedAt: walked,
+    } as PriceRefresh);
+    w.prices = [
+      priceRow('entry-1', WAREHOUSE, walked),
+      priceRow('entry-1', WAREHOUSE, NOW, {
+        sourceKind: PriceSourceKind.OFFICIAL_LEAFLET,
+      }),
+    ];
+    const view = await build(w).service.get({
+      userId: SHOPPER,
+      refreshId: 'refresh-9',
+    });
+    expect(view.observedAt).toBe(walked.toISOString());
   });
 
   it('fetches a copy at its origin and rewrites the copies it has', async () => {

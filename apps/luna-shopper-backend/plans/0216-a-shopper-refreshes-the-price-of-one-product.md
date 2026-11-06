@@ -674,3 +674,11 @@ Chosen in this plan, and open to the owner's correction:
    with `stopReason: SOURCE_BLOCKED`, and its `finishedAt` is less than
    `HARVEST_REFRESH_BLOCKED_MINUTES` ago.** Then the refresh is refused with `CHAIN_REFUSING`.
    A run in flight is not read. This is the plan's own example reading, which the owner accepted.
+
+**Builder** (2026-11-06):
+
+1. **A refresh whose read disagrees with the row on selling by weight writes nothing.** It ends
+   `FAILED` with an explanation. Section 13 says "as the walk does", but a refresh writes no row,
+   and the walk rewrites the flag before it writes the price. The next walk settles it.
+2. **`CHAIN_REFUSING` ignores `FILE_IMPORT` runs**, the mode once called `LEAFLET_IMPORT`. They
+   fetch nothing from the storefront, so they can neither block a chain nor clear a block.

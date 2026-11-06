@@ -344,8 +344,9 @@ The configuration has **four** switches, because they are four different decisio
 - `lunaShopperBackend.harvester.enabled` (Helm) decides that the service exists in a cluster.
 - `HARVEST_ENABLED` decides that an existing pod can start a run.
 - `HARVEST_SCHEDULER_ENABLED` (Helm `schedulerEnabled`) decides that a due schedule starts its preset with nobody asking. A tick needs it and `HARVEST_ENABLED` both. It is true in `values.production.yaml` only. Staging and every `luna-slot` keep it false, because two clusters that fetch one chain on one timer double what the chain sees.
+- `HARVEST_REFRESH_ENABLED` (Helm `refreshEnabled`) decides that a pod can refresh the price of one product at a shopper's request. It is true in `values.staging.yaml` only, until velista ships the control. It is false everywhere else.
 
-All three have the default false, also in the `.env` that `luna-slot.sh` writes. To start the service, to let it start runs and to let it start runs by itself are not the same thing. Section 8.1 of plan 0038 and section 10 of plan 0206 explain why they are separate.
+The first three have the default false everywhere, also in the `.env` that `luna-slot.sh` writes. The fourth is on in staging only. To start the service, to let it start runs and to let it start runs by itself are not the same thing. Section 8.1 of plan 0038 and section 10 of plan 0206 explain why they are separate.
 
 **The fourth switch is `HARVEST_REFRESH_ENABLED`** (Helm `refreshEnabled`, plan 0216). It decides that a registered shopper can make the pod fetch the price of one product. A refresh needs it, `HARVEST_ENABLED` and the row of the chain. It is true in `values.staging.yaml` only, until velista has the control; production and every `luna-slot` keep it false. Rules that are easy to break by accident:
 

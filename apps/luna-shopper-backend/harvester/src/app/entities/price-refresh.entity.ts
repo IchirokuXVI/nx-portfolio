@@ -64,9 +64,18 @@ export class PriceRefresh {
   @Column({ type: 'uuid' })
   fetchScopeId!: string;
 
+  // The stored values only, in the migration's order. FRESH is a status of the
+  // view and never stored, so a schema diff or a baseline read from the
+  // entities must not add it to the database type.
   @Column({
     type: 'enum',
-    enum: PriceRefreshStatus,
+    enum: [
+      PriceRefreshStatus.PENDING,
+      PriceRefreshStatus.DONE,
+      PriceRefreshStatus.NOT_STOCKED,
+      PriceRefreshStatus.FAILED,
+      PriceRefreshStatus.BLOCKED,
+    ] satisfies StoredPriceRefreshStatus[],
     enumName: 'price_refresh_status',
   })
   status!: StoredPriceRefreshStatus;

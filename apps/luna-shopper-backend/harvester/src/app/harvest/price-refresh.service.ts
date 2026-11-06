@@ -9,6 +9,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   adapterCapabilities,
+  HarvestRunMode,
   HarvestRunStatus,
   HarvestRunStopReason,
   PriceRefreshRefusal,
@@ -321,7 +322,9 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
     }
     // Section 3, step 3: the fetch scope's own key. A scope catalog holds no
     // key for is one nothing can fetch at, which is a price this harvester
-    // cannot repeat.
+    // cannot repeat. It is refused NOT_HARVESTED after the switch, the row and
+    // the chain checks, on purpose: a disabled chain whose scope has no key
+    // answers SOURCE_OFF first, which names what the owner can change.
     const scopes = await this.resolver.scopes(
       source.supermarketId,
       resolved.fetchScopeId
@@ -349,6 +352,11 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
    * Step 5, with the owner's reading of 2026-11-06: the chain's newest
    * finished run ended with `stopReason: SOURCE_BLOCKED`, and it finished less
    * than `HARVEST_REFRESH_BLOCKED_MINUTES` ago. A run in flight is not read.
+   *
+   * A `FILE_IMPORT` run is not read either. It fetches nothing from the
+   * storefront, so it cannot show that the chain refuses us, and it cannot show
+   * that the chain answers again. Every other mode is read, `STORE_DISCOVERY`
+   * included.
    */
   private async chainRefusing(
     supermarketId: string,
@@ -357,6 +365,7 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
     const newest = await this.runs.findOne({
       where: {
         supermarketId,
+        mode: Not(HarvestRunMode.FILE_IMPORT),
         status: Not(In([HarvestRunStatus.PENDING, HarvestRunStatus.RUNNING])),
       },
       order: { finishedAt: { direction: 'DESC', nulls: 'LAST' } },
@@ -503,14 +512,21 @@ export class PriceRefreshService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  /** The newest stored observation of the row at its fetch scope. */
+  /**
+   * The stored observation of the row at its fetch scope, of the kind the walk
+   * writes, as the resolver picks it. A newer row of another kind, such as a
+   * leaflet price, is not the observation a refresh repeated.
+   */
   private async observedAt(row: PriceRefresh): Promise<Date | null> {
+    const source = await this.sources.findBySupermarket(row.supermarketId);
+    const kind = source ? sourceKindOf(source.adapterKey) : null;
     const held = await this.prices.find({
       where: { entryId: row.entryId, priceScopeId: row.fetchScopeId },
       order: { observedAt: 'DESC' },
-      take: 1,
     });
-    return held[0]?.observedAt ?? null;
+    const picked =
+      held.find((each) => kind !== null && each.sourceKind === kind) ?? held[0];
+    return picked?.observedAt ?? null;
   }
 
   private settings(): HarvesterConfig {
