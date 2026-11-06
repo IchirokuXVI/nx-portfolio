@@ -24,6 +24,8 @@ import { HarvestSchedules1759400000000 } from './1759400000000-HarvestSchedules'
 import { RunStopReason1759500000000 } from './1759500000000-RunStopReason';
 import { HarvestRunCounters1759600000000 } from './1759600000000-HarvestRunCounters';
 import { SourceEntryScopePresence1759900000000 } from './1759900000000-SourceEntryScopePresence';
+import { HarvestAlerts1760000000000 } from './1760000000000-HarvestAlerts';
+import { SourceProbes1760100000000 } from './1760100000000-SourceProbes';
 import { NameWordsSizeMatch1760200000000 } from './1760200000000-NameWordsSizeMatch';
 
 /**
@@ -61,5 +63,7 @@ export const HARVESTER_MIGRATIONS = [
   RunStopReason1759500000000,
   HarvestRunCounters1759600000000,
   SourceEntryScopePresence1759900000000,
+  HarvestAlerts1760000000000,
+  SourceProbes1760100000000,
   NameWordsSizeMatch1760200000000,
 ];

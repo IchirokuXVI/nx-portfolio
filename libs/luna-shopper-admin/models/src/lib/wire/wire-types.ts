@@ -4305,6 +4305,18 @@ export type EnumsSourceEntryStatus =
 export type EnumsSourceLocationStatus = 'ACTIVE' | 'UNMAPPED' | 'IGNORED';
 
 /**
+ * `enums.SourceProbeStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsSourceProbeStatus =
+  | 'RUNNING'
+  | 'PASSED'
+  | 'SHAPE_CHANGED'
+  | 'BLOCKED'
+  | 'UNREACHABLE'
+  | 'ERROR'
+  | 'ABORTED';
+
+/**
  * `enums.TripKind` in the gateway's OpenAPI document.
  */
 export type EnumsTripKind = 'BASKET' | 'SESSION';
@@ -4806,6 +4818,16 @@ export type HarvestHarvestScheduleView = {
 };
 
 /**
+ * `harvest.HarvestTestAlertView` in the gateway's OpenAPI document.
+ */
+export type HarvestHarvestTestAlertView = {
+  id: string;
+  queuedAt: string;
+  recipientConfigured: boolean;
+  smtpConfigured: boolean;
+};
+
+/**
  * `harvest.ItemSourceEntryPage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -5204,6 +5226,65 @@ export type HarvestSourceLocationView = {
 };
 
 /**
+ * `harvest.SourceProbePage` in the gateway's OpenAPI document.
+ *
+ * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
+ */
+export type HarvestSourceProbePage = {
+  items: HarvestSourceProbeView[];
+  nextCursor: string | null;
+};
+
+/**
+ * `harvest.SourceProbeStepView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeStepView = {
+  name: string;
+  url: string | null;
+  ok: boolean;
+  httpStatus: number | null;
+  error: string | null;
+  problems: string[];
+  sample: {
+    [key: string]: string | number | boolean | null;
+  };
+  durationMs: number;
+};
+
+/**
+ * `harvest.SourceProbeSummary` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeSummary = {
+  id: string;
+  status: EnumsSourceProbeStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  changed: boolean;
+};
+
+/**
+ * `harvest.SourceProbeView` in the gateway's OpenAPI document.
+ */
+export type HarvestSourceProbeView = {
+  id: string;
+  sourceId: string;
+  supermarketId: string;
+  adapterKey: EnumsAdapterKey;
+  trigger: EnumsHarvestRunTrigger;
+  status: EnumsSourceProbeStatus;
+  previousStatus: EnumsSourceProbeStatus | null;
+  changed: boolean;
+  attempt: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  requests: number;
+  steps: HarvestSourceProbeStepView[];
+  error: string | null;
+  requestedByUserId: string | null;
+};
+
+/**
  * `harvest.SupermarketSourcePage` in the gateway's OpenAPI document.
  *
  * A cursor paginated page. `nextCursor` is null on the last page; otherwise pass it back as the `cursor` query parameter to fetch the next one.
@@ -5230,6 +5311,7 @@ export type HarvestSupermarketSourceView = {
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   consecutiveFailures: number;
+  lastProbe?: HarvestSourceProbeSummary | null;
 };
 
 /**

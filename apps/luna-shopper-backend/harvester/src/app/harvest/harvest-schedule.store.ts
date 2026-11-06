@@ -4,6 +4,8 @@ import type { HarvestScheduleOutcome } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { HarvestSchedule } from '../entities';
+import type { HarvestAlertDraft } from './alerts/harvest-alert.rules';
+import { insertAlert } from './alerts/harvest-alert.store';
 import { nextSlot, previousSlot } from './schedule-slot';
 
 /** A slot the worker claimed, and the row as the claim left it. */
@@ -132,28 +134,41 @@ export class HarvestScheduleStore {
     });
   }
 
-  /** Write what became of a slot, or of its retry. */
+  /**
+   * Write what became of a slot, or of its retry.
+   *
+   * `alert` is the slot's alert to the owner (plan 0218, section 4.1). With
+   * one, the outcome and the alert row are written in one transaction, so no
+   * alert exists for an outcome that did not commit.
+   */
   async recordOutcome(
     scheduleId: string,
-    write: ScheduleOutcomeWrite
+    write: ScheduleOutcomeWrite,
+    alert?: HarvestAlertDraft
   ): Promise<void> {
-    await this.schedules.query(
-      `UPDATE "harvest_schedules"
+    const sql = `UPDATE "harvest_schedules"
           SET "lastOutcome" = $2,
               "lastOutcomeAt" = $3,
               "lastOutcomeNote" = $4,
               "lastRunId" = COALESCE($5, "lastRunId"),
               "lastSlotAttempts" = COALESCE($6, "lastSlotAttempts")
-        WHERE "id" = $1`,
-      [
-        scheduleId,
-        write.outcome,
-        write.at,
-        write.note,
-        write.runId,
-        write.attempts,
-      ]
-    );
+        WHERE "id" = $1`;
+    const parameters = [
+      scheduleId,
+      write.outcome,
+      write.at,
+      write.note,
+      write.runId,
+      write.attempts,
+    ];
+    if (!alert) {
+      await this.schedules.query(sql, parameters);
+      return;
+    }
+    await this.schedules.manager.transaction(async (manager) => {
+      await manager.query(sql, parameters);
+      await insertAlert(manager, alert);
+    });
   }
 
   /**

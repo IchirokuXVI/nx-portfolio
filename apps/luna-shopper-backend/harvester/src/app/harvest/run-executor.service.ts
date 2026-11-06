@@ -23,6 +23,11 @@ import {
   type SupermarketSource,
 } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
+import {
+  needsScheduleCount,
+  runAlertFor,
+  type HarvestAlertDraft,
+} from './alerts/harvest-alert.rules';
 import { CatalogClient } from './catalog-client.service';
 import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import {
@@ -624,17 +629,22 @@ export class RunExecutor implements OnApplicationShutdown {
           delisting,
         });
       }
-      await this.store.finish(
-        runId,
-        status,
+      const error =
         this.shutdownSentence(runId, status) ??
-          stopSentenceOf(guard, finished) ??
-          (status === HarvestRunStatus.FAILED
-            ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
-              `which is over the ${settings.failureRatio} threshold.`
-            : undefined),
-        ...stopReasonOf(guard)
-      );
+        stopSentenceOf(guard, finished) ??
+        (status === HarvestRunStatus.FAILED
+          ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
+            `which is over the ${settings.failureRatio} threshold.`
+          : undefined);
+      // The owner's alert, written in the same transaction as the status
+      // (plan 0218, section 4.1). Decided before the verdict, from the
+      // counter the source had when this run started (section 2.2).
+      const [stopReason] = stopReasonOf(guard);
+      const alert = await this.alertOf(run, finished, source, status, {
+        error: error ?? null,
+        refusal: stopReason === HarvestRunStopReason.SOURCE_BLOCKED,
+      });
+      await this.finishWith(runId, status, error, stopReason, alert);
       await this.recordVerdict(source, status);
       return status;
     } catch (error) {
@@ -648,14 +658,16 @@ export class RunExecutor implements OnApplicationShutdown {
       const finished = guard?.stop
         ? await this.store.load(runId).catch(() => null)
         : null;
-      await this.store.finish(
-        runId,
-        status,
+      const sentence =
         this.shutdownSentence(runId, status) ??
-          stopSentenceOf(guard, finished) ??
-          describeError(error).message,
-        ...stopReasonOf(guard)
-      );
+        stopSentenceOf(guard, finished) ??
+        describeError(error).message;
+      const [stopReason] = stopReasonOf(guard);
+      const alert = await this.alertOf(run, finished, source, status, {
+        error: sentence,
+        refusal: stopReason === HarvestRunStopReason.SOURCE_BLOCKED,
+      });
+      await this.finishWith(runId, status, sentence, stopReason, alert);
       await this.recordVerdict(source, status);
       this.logger.error(
         `Harvest run ${runId} ended as ${status}: ${describeError(error).message}`
@@ -726,6 +738,90 @@ export class RunExecutor implements OnApplicationShutdown {
         notCountedBecause: null,
         error: message,
       };
+    }
+  }
+
+  /**
+   * The final write of a run (plan 0218, section 4.1): the stop reason and
+   * the alert for a run that alerts, in one transaction, and exactly what
+   * plan 0215 passed for any other, so a finish with no alert is called as
+   * it always was. The caller passes the stop reason it read its alert's
+   * refusal from, so the reason written and the alert cannot disagree.
+   */
+  private async finishWith(
+    runId: string,
+    status: HarvestRunStatus,
+    error: string | undefined,
+    stopReason: HarvestRunStopReason | undefined,
+    alert: HarvestAlertDraft | null
+  ): Promise<void> {
+    if (alert) {
+      await this.store.finish(runId, status, error, stopReason, alert);
+      return;
+    }
+    if (stopReason) {
+      await this.store.finish(runId, status, error, stopReason);
+      return;
+    }
+    await this.store.finish(runId, status, error);
+  }
+
+  /**
+   * The alert to the owner for a run that ends `FAILED`, or null (plan 0218,
+   * sections 2 and 3). Every other status answers null here without a read:
+   * an abort of any kind tells nobody, and the reaper decides `STALE` itself.
+   *
+   * The chain's schedules are counted only for the failure that takes the
+   * counter to three, so no other run pays for the read. **An alert is never
+   * a reason a run does not finish**: an error here is logged and the run
+   * finishes with no alert.
+   */
+  private async alertOf(
+    run: HarvestRun,
+    latest: HarvestRun | null,
+    source: SupermarketSource | null | undefined,
+    status: HarvestRunStatus,
+    outcome: { error: string | null; refusal: boolean }
+  ): Promise<HarvestAlertDraft | null> {
+    if (status !== HarvestRunStatus.FAILED) {
+      return null;
+    }
+    try {
+      const row = latest ?? (await this.store.load(run.id).catch(() => run));
+      const failuresBefore = source
+        ? Number(source.consecutiveFailures ?? 0)
+        : null;
+      const enabledSchedules =
+        run.supermarketId && needsScheduleCount(status, failuresBefore)
+          ? await this.store.countEnabledSchedules(run.supermarketId)
+          : 0;
+      return runAlertFor({
+        run: {
+          id: run.id,
+          mode: run.mode,
+          trigger: run.trigger,
+          supermarketId: run.supermarketId,
+          presetId: run.presetId,
+          scheduleId: run.scheduleId,
+          requestedAt: run.requestedAt,
+          startedAt: row.startedAt ?? run.startedAt,
+          failed: row.failed,
+          totalPlanned: row.totalPlanned,
+        },
+        status,
+        error: outcome.error,
+        refusal: outcome.refusal,
+        adapterKey: source?.adapterKey ?? null,
+        failuresBefore,
+        enabledSchedules,
+        finishedAt: new Date(),
+      });
+    } catch (error) {
+      this.logger.error(
+        `Harvest run ${run.id}: its alert could not be decided: ` +
+          describeError(error).message
+      );
+      return null;
     }
   }
 
