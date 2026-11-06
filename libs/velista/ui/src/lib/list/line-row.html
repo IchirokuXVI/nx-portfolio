@@ -140,8 +140,13 @@
       </span>
 
       @if (shown(); as product) {
-        @if (product.price !== null) {
-          <span class="price">{{ product.price }}</span>
+        @if (product.price; as price) {
+          <span class="price"
+            ><span>{{ price.amount }}</span>
+            @if (price.per; as per) {
+              <span class="per">{{ per }}</span>
+            }
+          </span>
         } @else {
           <span class="price none">{{ 'list.row.noPrice' | rokuT }}</span>
         }

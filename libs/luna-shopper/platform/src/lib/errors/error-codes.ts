@@ -363,6 +363,13 @@ export const ERROR_CODES = {
    */
   ITEM_KILOGRAM_HAS_SIZE: 'item_kilogram_has_size',
   /**
+   * A product write would store an approximate weight beside a size, or a
+   * weight that is not above zero (plan 0244, section 3.2). A product has a
+   * size or a weight, never both. The weight, the size and the unit travel in
+   * `details`.
+   */
+  ITEM_APPROX_WEIGHT_BESIDE_SIZE: 'item_approx_weight_beside_size',
+  /**
    * The product was merged into another one (plan 0239). A merge names it
    * as the product to merge or as the survivor, or a delete names it. A
    * merged row is the record of the merge and is never merged again or
@@ -377,8 +384,9 @@ export const ERROR_CODES = {
    */
   ITEM_MERGE_TWO_ARTICLES_ONE_CHAIN: 'item_merge_two_articles_one_chain',
   /**
-   * The two products of a merge differ in `unitSize` or `defaultUnit` (plan
-   * 0239, section 1.1). A different format is a different product by the
+   * The two products of a merge differ in `unitSize`, `defaultUnit` or
+   * `approxWeight` (plan 0239, section 1.1, and plan 0244, section 3.5). A
+   * different format is a different product by the
    * curation rules. The same request with `allowFormatDifference` merges
    * them. Both formats travel in `details`.
    */
@@ -585,6 +593,14 @@ export const ERROR_CODES = {
    * `period`, `limit` and `resetsAt`.
    */
   ASSISTANT_ALLOWANCE_REACHED: 'assistant_allowance_reached',
+  /**
+   * A shopper asked for a fresh price of one product, and nothing can fetch it
+   * (harvester plan 0216, section 7.1): refreshes are off on this cluster, the
+   * harvester never priced the product at that scope, the chain is off or
+   * cannot fetch one product alone, or the chain keeps refusing. Nothing was
+   * fetched. `details.reason` names which, and the client decides the words.
+   */
+  PRICE_NOT_REFRESHABLE: 'price_not_refreshable',
   INTERNAL: 'internal',
 } as const;
 
@@ -723,6 +739,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // does not store (plan 0237, section 3.3).
   [ERROR_CODES.ITEM_UNIT_NOT_BASE]: HttpStatus.BAD_REQUEST,
   [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: HttpStatus.BAD_REQUEST,
+  // 400 as well: the weight and the size are values of one body (plan 0244).
+  [ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE]: HttpStatus.BAD_REQUEST,
   // All four 409: the request is well formed and the caller may make it, and
   // what refuses it is the state of the products (plan 0239).
   [ERROR_CODES.ITEM_MERGED]: HttpStatus.CONFLICT,
@@ -784,5 +802,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 429 beside `rate_limited` and apart from it by code: both say "not now",
   // and only that one says how many seconds (plan 0234, section 8.1).
   [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: HttpStatus.TOO_MANY_REQUESTS,
+  // 409: the request is well formed, and what refuses it is the state of the
+  // chain or of the product (plan 0216, section 7.1). A cooldown is a 429
+  // `rate_limited` instead, with the wait.
+  [ERROR_CODES.PRICE_NOT_REFRESHABLE]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

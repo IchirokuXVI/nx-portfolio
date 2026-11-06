@@ -26,6 +26,7 @@ function offer(priceScopeId: string, price: number): ProductOffer {
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
     priceScopeId,
+    piecePrice: null,
   };
 }
 
@@ -51,6 +52,7 @@ function product(
         name: { en: 'Milk', es: 'Leche' },
       },
     ],
+    approxWeight: null,
   };
 }
 

@@ -223,6 +223,13 @@ export class MercadonaCatalogRunner implements CatalogRunner {
         detailFetched: false,
         observedAt,
         soldByWeight: product.listing.soldByWeight,
+        // The weight of one piece (plan 0244, section 5.1), read from the
+        // listing of the first warehouse that listed the product, in the
+        // order of the run's price scopes: the walks run in that order, and
+        // the union keeps the first listing it meets. A tray weighs a little
+        // differently in each warehouse, so the first one of that order is the
+        // answer, and a reader of the scopes can predict it.
+        approxWeight: product.listing.approxWeight,
         // The listing prints the photo address too (plan 0198), so a known
         // product keeps it current with no request.
         imageUrl: photoOf(
@@ -280,16 +287,23 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           // The detail's. Null for a product sold by approximate weight (plan
           // 0181): `unit_size` is then the typical weight of the tray, which
           // differs between warehouses while the euros per kilo does not (plan
-          // 0108, section 5.1), so it is an estimate and not a size.
+          // 0108, section 5.1), so it is an estimate and not a size. The
+          // weight is kept on the product as `approxWeight` (plan 0244), and
+          // every read derives the piece price from it.
           unitSize: detail.unitSize,
           // The detail's own `size_format` as a catalog unit (plan 0177), read
           // from the same payload as the number so the two cannot disagree.
           // Null for `m`, which the catalog has no unit for.
           sizeUnit:
             detail.unitSize === null ? null : sourceSizeUnitOf(detail.unit),
-          // `approx_size` on a product sized in `kg` (plan 0181). The row
-          // then has no size, and every price below is the price of a kilo.
+          // `approx_size` on a product sized and compared in `kg` (plans 0181
+          // and 0244). The row then has no size, and every price below is the
+          // price of a kilo.
           soldByWeight: detail.soldByWeight,
+          // The weight of one piece in grams, from the detail (plan 0244,
+          // section 5.1). Set for a piece sold by the kilo and for one priced
+          // as one piece, null for a fixed pack.
+          approxWeight: detail.approxWeight,
           sizeFormat: product.listing.sizeFormat,
           // Read from the detail's own `price_instructions` (plan 0162).
           packCount: detail.packCount,
@@ -436,6 +450,8 @@ interface Detailable {
  * such a row `listing.price` is already `bulk_price`: the price and the unit
  * price are the same number, and the estimated piece price is not written at
  * all. It used to be, which put 14.49 on a cheese that costs 9.41 a kilo.
+ * The weight is kept on the product as `approxWeight` (plan 0244), and every
+ * read derives the piece price from it.
  */
 function pricesOf(
   externalId: string,

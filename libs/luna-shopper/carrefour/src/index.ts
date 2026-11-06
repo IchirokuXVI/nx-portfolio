@@ -60,6 +60,9 @@ export type {
   CarrefourProduct,
   CarrefourStateLoader,
 } from './lib/types';
+// A probe per chain checks the storefront shape (plan 0219).
+export { probeCarrefour } from './lib/probe';
+export type { CarrefourProbeOptions } from './lib/probe';
 // The chain's own shops: the store finder and the drive list (plan 0223).
 export {
   parseDrives,

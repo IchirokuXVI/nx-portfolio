@@ -140,6 +140,16 @@
   color: var(--app-text-primary);
 }
 
+// What a price is per ("/ kg"), smaller and muted close after its number
+// (velista `0179`).
+.per {
+  margin-inline-start: var(--app-space-hair);
+  color: var(--app-text-muted);
+  font-size: var(--app-text-2xs);
+  font-weight: 400;
+  word-spacing: calc(var(--app-space-hair) * -1);
+}
+
 .price.none {
   font-size: var(--app-text-xs);
   font-weight: 400;

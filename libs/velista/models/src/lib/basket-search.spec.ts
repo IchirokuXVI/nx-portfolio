@@ -57,6 +57,7 @@ function product(
         name: { en: 'Not yet categorised', es: 'Sin categoría' },
       },
     ],
+    approxWeight: null,
   };
 }
 

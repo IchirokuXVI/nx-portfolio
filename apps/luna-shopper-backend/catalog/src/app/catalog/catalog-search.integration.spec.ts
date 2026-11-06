@@ -64,6 +64,7 @@ describeIntegration('catalog search (real Postgres)', () => {
   /** Ids the assertions name, filled by the seed below. */
   const ids = {
     milkGroup: '',
+    breadGroup: '',
     pascualMilk: '',
     hacendadoMilk: '',
     bread: '',
@@ -183,6 +184,7 @@ describeIntegration('catalog search (real Postgres)', () => {
       referenceUnit: UnitOfMeasure.UNIT,
       synonyms: { en: ['loaf'], es: ['barra'] },
     });
+    ids.breadGroup = breadGroup.id;
 
     // Neither milk has "milk" or "leche" in its own name. That is the point: they
     // are findable by the group's words or not at all.
@@ -770,6 +772,33 @@ describeIntegration('catalog search (real Postgres)', () => {
         query: PASCUAL_EAN,
       });
       expect(page.items).toHaveLength(0);
+    });
+
+    it('lists every group when no query is given, the priced ones first', async () => {
+      // With no term the exact name key has nothing to compare, and a bare
+      // `false` in its place is a constant Postgres refuses in `ORDER BY`. The
+      // route answered 500 for exactly this call.
+      const page = await items.searchOffers({
+        userId: SHOPPER,
+        priceScopeIds: [ids.scopeA],
+      });
+
+      const groupIds = page.items.map((g) => g.group.id);
+      expect(groupIds).toEqual(
+        expect.arrayContaining([ids.milkGroup, ids.breadGroup])
+      );
+      // Milk is the one group priced in scope A, so it leads.
+      expect(groupIds[0]).toBe(ids.milkGroup);
+      expect(page.items[0].offer?.unitPrice).toBe(0.89);
+    });
+
+    it('lists every group with neither a query nor a scope', async () => {
+      const page = await items.searchOffers({ userId: SHOPPER });
+
+      expect(page.items.map((g) => g.group.id)).toEqual(
+        expect.arrayContaining([ids.milkGroup, ids.breadGroup])
+      );
+      expect(page.items.every((g) => g.offer === null)).toBe(true);
     });
   });
 

@@ -51,7 +51,14 @@ import { ProductPicture } from './product-picture';
 
             @switch (card.priceKind) {
               @case ('priced') {
-                <span class="price">{{ card.price }}</span>
+                @if (card.price; as price) {
+                  <span class="price"
+                    ><span>{{ price.amount }}</span>
+                    @if (price.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
+                }
               }
               @case ('loading') {
                 <span aria-hidden="true" class="price bone"></span>
@@ -69,8 +76,23 @@ import { ProductPicture } from './product-picture';
               }
             }
 
-            @if (card.caption; as caption) {
-              <span class="caption">{{ caption }}</span>
+            @if (card.chain !== null || card.unit !== null) {
+              <span class="caption">
+                @if (card.chain; as chain) {
+                  <span>{{ chain }}</span>
+                }
+                @if (card.chain !== null && card.unit !== null) {
+                  <span class="dot"> · </span>
+                }
+                @if (card.unit; as unit) {
+                  <span
+                    ><span>{{ unit.amount }}</span>
+                    @if (unit.per; as per) {
+                      <span class="per">{{ per }}</span>
+                    }
+                  </span>
+                }
+              </span>
             }
 
             @if (card.cheapest) {

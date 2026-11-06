@@ -1,4 +1,4 @@
-import { inject } from '@angular/core';
+import { inject, provideEnvironmentInitializer } from '@angular/core';
 import { type Route } from '@angular/router';
 import {
   localeGuard,
@@ -33,6 +33,7 @@ import {
   guestOnlyGuard,
 } from './auth-guards';
 import { catalogPickLeaveGuard } from './catalog-pick-guards';
+import { leavePageWhenSessionRefused } from './session-refused';
 import { setupGuard } from './setup-guard';
 import {
   shopMapRecordGuard,
@@ -685,6 +686,11 @@ export const AppShellRoutes: Route[] = [
     // way, since both enter through `app-providers.ts`. Only the injector changed, and
     // it moved in the direction that has more above it rather than less.
     canActivate: [localeGuard],
+    // A session the server refuses in the middle of a page leaves that page at once,
+    // through the page's own `authenticatedGuard`, instead of on the next tap. Here
+    // because this route's injector exists for as long as any page of the app does,
+    // and `feature-shell` is the library that owns the guard.
+    providers: [provideEnvironmentInitializer(leavePageWhenSessionRefused)],
     // The locale is the `:locale` child's param, so a history move from `/en` to
     // `/es` changes nothing on this route and the default would not re-run the guard
     // (rokutranslator plan 0006). This re-runs it when the locale segment changes and

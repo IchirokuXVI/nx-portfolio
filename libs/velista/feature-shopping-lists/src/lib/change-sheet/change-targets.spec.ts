@@ -179,12 +179,14 @@ describe('basketProductOf', () => {
     imageUrl: null,
     packCount: null,
     unitBasis: null,
+    approxWeight: null,
   } as CatalogItem;
   const offer = {
     price: 1.1,
     currency: 'EUR',
     unitPrice: 1.1,
     unitPriceLabel: null,
+    piecePrice: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB' as const,
     stale: false,
@@ -199,7 +201,18 @@ describe('basketProductOf', () => {
       offers: [offer],
       atShop: null,
       sectionIds: null,
+      approxWeight: null,
     });
+  });
+
+  it('copies the approximate weight of a piece (velista 0179)', () => {
+    expect(
+      basketProductOf(
+        { ...item, unit: 'KILOGRAM', size: null, approxWeight: 1560 },
+        offer,
+        false
+      ).approxWeight
+    ).toBe(1560);
   });
 
   it('draws it as the price of the shop when the basket is read at one', () => {

@@ -4,6 +4,7 @@ import type {
   ListPermission,
   ZoneRole,
 } from './enums';
+import type { PriceWords } from './sold-as';
 
 /**
  * What the list page draws, as plain data (plan 0012).
@@ -147,8 +148,12 @@ export interface LineRowShownProduct {
   readonly favorite: boolean;
   /** How many other products of the line will do, for "+2". */
   readonly others: number;
-  /** The price of one, formatted, or null for "No price". */
-  readonly price: string | null;
+  /**
+   * The price of one as two words (velista `0179`): the piece price of a kilo
+   * piece, a price per kilo with its "/ kg", or the price. Null for "No price",
+   * also for a kilo piece with no piece price.
+   */
+  readonly price: PriceWords | null;
 }
 
 /** One line, ready to draw. */

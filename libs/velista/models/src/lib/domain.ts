@@ -445,6 +445,13 @@ export interface ProductOffer {
   readonly unitPrice: number | null;
   /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
   readonly unitPriceLabel: string | null;
+  /**
+   * The price of one piece of a product sold by the kilo with an approximate
+   * weight (backend 0244). The server derives it from the weight and the price
+   * per kilo; it is never computed here. Null for every other product, also for
+   * a piece priced as one, whose `price` is already the piece.
+   */
+  readonly piecePrice: number | null;
   /** Without it a price has no age. */
   readonly observedAt: Date | null;
   readonly sourceKind: PriceSourceKind;
@@ -517,6 +524,12 @@ export interface CatalogItem {
   readonly size: number | null;
   /** What {@link CatalogItem.size} is counted in. Never null; see the fallback. */
   readonly unit: UnitOfMeasure;
+  /**
+   * The approximate weight of one piece in grams, when the chain says it varies
+   * (backend 0244). Null for a product with a size, and for a product sold by
+   * the kilo with no stated weight.
+   */
+  readonly approxWeight: number | null;
   readonly productGroupId: string | null;
   /**
    * The aisles the catalog files it under, in the catalog's order (velista `0082`,

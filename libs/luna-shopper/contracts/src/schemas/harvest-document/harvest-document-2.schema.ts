@@ -140,6 +140,12 @@ const product: JsonSchema = {
         unit: { type: ['string', 'null'] },
       },
     },
+    approx_weight: {
+      type: ['number', 'null'],
+      exclusiveMinimum: 0,
+      description:
+        'The approximate weight of one piece in grams (plan 0244): a cheese sold by the kilo, a tray priced as one piece. Refused beside size.quantity.',
+    },
     prices: {
       type: ['array', 'null'],
       description:

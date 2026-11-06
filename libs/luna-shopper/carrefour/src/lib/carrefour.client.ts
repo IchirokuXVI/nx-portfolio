@@ -485,7 +485,7 @@ function readsText(
 }
 
 /** Any listing page can seed the walk: every one names the first level. */
-const DEFAULT_SEED_PATH = '/supermercado/la-despensa/cat20001/c';
+export const DEFAULT_SEED_PATH = '/supermercado/la-despensa/cat20001/c';
 
 /**
  * The Chromium half, and the only place in this library that launches one.
@@ -493,7 +493,7 @@ const DEFAULT_SEED_PATH = '/supermercado/la-despensa/cat20001/c';
  * It is a class of its own so that everything above it is testable with a fake
  * loader: nothing in CI reaches this file's `start`.
  */
-class PlaywrightSession {
+export class PlaywrightSession {
   private constructor(
     private readonly browser: {
       close(): Promise<void>;

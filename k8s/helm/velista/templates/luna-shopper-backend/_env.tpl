@@ -56,16 +56,21 @@ them.
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
-{{- if or (eq $svc.role "gateway") (eq $svc.role "realtime") }}
-# Redis (plan 0028). Only these two roles receive it, and both **require** it:
+{{- if or (eq $svc.role "gateway") (eq $svc.role "realtime") (eq $svc.role "harvester") }}
+# Redis (plan 0028). Only these three roles receive it, and each **requires** it:
 # realtime is incorrect at more than one replica without the backplane, and a
 # gateway that starts with no working rate limiter is the outcome section 5
-# refuses. auth, core and catalog hold no shared state and are not given it.
+# refuses. The harvester counts the cooldowns of a shopper's price refresh in it
+# (plan 0216), because a refresh with no working cooldown is an open proxy to a
+# chain; its runs do not touch Redis and its readiness does not probe it. auth,
+# core and catalog hold no shared state and are not given it.
 - name: REDIS_URL
   valueFrom:
     configMapKeyRef:
       name: {{ $cfg }}
       key: REDIS_URL
+{{- end }}
+{{- if or (eq $svc.role "gateway") (eq $svc.role "realtime") }}
 - name: CORS_ORIGINS
   valueFrom:
     configMapKeyRef:
@@ -251,7 +256,30 @@ deployment's answer.
     secretKeyRef:
       name: {{ $sec }}
       key: HARVESTER_ACTOR_ID
-{{- range $key := (list "HARVEST_ENABLED" "HARVEST_SCHEDULER_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "OVERPASS_URL" "NOMINATIM_URL" "LIDL_STORES_API_KEY") }}
+{{- range $key := (list "HARVEST_ENABLED" "HARVEST_SCHEDULER_ENABLED" "HARVEST_USER_AGENT" "HARVEST_BATCH_SIZE" "HARVEST_DEFAULT_WORKERS" "HARVEST_DEFAULT_MAX_RPS" "HARVEST_STALE_AFTER" "HARVEST_FAILURE_RATIO" "HARVEST_DISCOVERY_RADIUS" "HARVEST_DISCOVERY_COOLDOWN_DAYS" "HARVEST_DISCOVERY_MAX_ATTEMPTS" "HARVEST_DISCOVERY_POLL_SECONDS" "OVERPASS_URL" "NOMINATIM_URL" "LIDL_STORES_API_KEY" "HARVEST_REFRESH_ENABLED") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
+# The owner's alerts (plan 0218, section 8). The recipient is the app Secret's
+# HARVEST_ALERT_EMAIL: `provision-release.sh` prompts for it with --env
+# production only and writes it empty elsewhere, so staging is quiet by
+# default. The relay is auth's, from the same ConfigMap keys and the same
+# Secret key, so the harvester holds one more copy of a password the cluster
+# already distributes from one place.
+- name: HARVEST_ALERT_EMAIL
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: HARVEST_ALERT_EMAIL
+- name: SMTP_PASS
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: SMTP_PASS
+{{- range $key := (list "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "ENVIRONMENT_NAME" "ADMIN_APP_BASE_URL") }}
 - name: {{ $key }}
   valueFrom:
     configMapKeyRef:

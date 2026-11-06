@@ -8,6 +8,7 @@ import {
   type ProductOffer,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { formatMoney } from '@portfolio/velista/platform';
 import {
   actionsFor,
   editScopeFor,
@@ -275,8 +276,12 @@ describe('selectListState', () => {
         sourceKind: 'CATALOG',
         stale: false,
         priceScopeId: 'scope-1',
+        piecePrice: null,
       } as unknown as ProductOffer;
     }
+
+    /** A price as the row draws it: the reader's money, with its own spaces. */
+    const money = (amount: number): string => formatMoney(amount, 'EUR', 'es');
 
     function item(
       id: string,
@@ -310,6 +315,30 @@ describe('selectListState', () => {
         'battery',
         item('battery', 'Pilas alcalinas AA', null, { chainPrices: [] }),
       ],
+      // A kilo piece (velista 0179): priced per kilo, 20,94 € a piece.
+      [
+        'cheese',
+        item('cheese', 'Queso curado', 13.42, {
+          size: null,
+          unit: 'KILOGRAM',
+          approxWeight: 1560,
+          chainPrices: [
+            {
+              chain: MERCADONA,
+              offer: { ...offer(13.42), piecePrice: 20.94 },
+            },
+          ],
+        }),
+      ],
+      // Sold by the kilo, with no weight: loose apples.
+      [
+        'apples',
+        item('apples', 'Manzana golden', 2.49, {
+          size: null,
+          unit: 'KILOGRAM',
+          approxWeight: null,
+        }),
+      ],
     ]);
 
     function catalog(
@@ -338,6 +367,7 @@ describe('selectListState', () => {
         locale: 'es',
         brandSizeOf: (known) => `${known.brand} · 1 L`,
         formatMoney: (amount) => `${amount.toFixed(2).replace('.', ',')} €`,
+        translate: (key) => key,
         ...overrides,
       };
     }
@@ -371,7 +401,70 @@ describe('selectListState', () => {
         imageUrl: null,
         favorite: false,
         others: 0,
-        price: '0,92 €',
+        price: { amount: money(0.92), per: null },
+      });
+    });
+
+    describe('a product sold by the kilo (velista 0179)', () => {
+      it('draws the piece price of a kilo piece, and says it in the row', () => {
+        const row = rowOf({ content: 'Queso', itemIds: ['cheese'] });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            itemId: 'cheese',
+            price: { amount: money(20.94), per: null },
+          })
+        );
+      });
+
+      it('draws a kilo piece with no piece price as no price', () => {
+        const row = rowOf(
+          { content: 'Queso', itemIds: ['cheese'] },
+          {
+            catalog: catalog({
+              pricesOf: () => [
+                {
+                  supermarketId: MERCADONA.id,
+                  chain: MERCADONA.name,
+                  logoUrl: null,
+                  kind: 'priced' as const,
+                  offer: offer(13.42),
+                  cheapest: false,
+                },
+              ],
+            }),
+          }
+        );
+
+        expect(row.product).toEqual(
+          expect.objectContaining({ itemId: 'cheese', price: null })
+        );
+      });
+
+      it('draws the price of a loose product with what it is per', () => {
+        const row = rowOf({ content: 'Manzanas', itemIds: ['apples'] });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            itemId: 'apples',
+            price: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
+          })
+        );
+      });
+
+      it('draws the piece price of a kilo piece the catalog has not named', () => {
+        const row = rowOf(
+          { content: 'Queso', itemIds: ['cheese'] },
+          { catalog: catalog({ itemOf: () => null }) }
+        );
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            itemId: 'cheese',
+            name: null,
+            price: { amount: money(20.94), per: null },
+          })
+        );
       });
     });
 
@@ -382,7 +475,11 @@ describe('selectListState', () => {
       });
 
       expect(row.product).toEqual(
-        expect.objectContaining({ itemId: 'milk', others: 2, price: '0,92 €' })
+        expect.objectContaining({
+          itemId: 'milk',
+          others: 2,
+          price: { amount: money(0.92), per: null },
+        })
       );
     });
 
@@ -398,7 +495,7 @@ describe('selectListState', () => {
           itemId: 'oat',
           favorite: true,
           others: 1,
-          price: '2,15 €',
+          price: { amount: money(2.15), per: null },
         })
       );
     });
@@ -546,6 +643,20 @@ describe('selectListState', () => {
 
         // 6 x 0,92 + 1 x 2,15.
         expect(loaded(state).header.cost).toBe('7,67 €');
+      });
+
+      it('adds the piece price of a kilo piece (velista 0179)', () => {
+        const lines = [line({ itemIds: ['cheese'], quantity: 2 })];
+
+        // 2 x 20,94, and never 2 x 13,42.
+        expect(loaded(select({ catalog: catalog(), lines })).header.cost).toBe(
+          '41,88 €'
+        );
+        // Also while the catalog has not named it: the piece price says what it is.
+        expect(
+          loaded(select({ catalog: catalog({ itemOf: () => null }), lines }))
+            .header.cost
+        ).toBe('41,88 €');
       });
 
       it('draws nothing with no priced line, and nothing without a catalog', () => {

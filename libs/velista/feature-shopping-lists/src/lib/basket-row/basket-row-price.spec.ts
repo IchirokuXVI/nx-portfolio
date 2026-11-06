@@ -83,6 +83,7 @@ const offer = (price: number | null): ProductOffer => ({
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
   priceScopeId: 'scope-a',
+  piecePrice: null,
 });
 
 const product = (
@@ -115,7 +116,8 @@ const LISTS = new Map<string, BasketListRef>(
 async function render(
   row: BasketRow,
   products: ReadonlyMap<string, BasketProduct>,
-  lists: ReadonlyMap<string, BasketListRef> = new Map()
+  lists: ReadonlyMap<string, BasketListRef> = new Map(),
+  locale = 'en'
 ) {
   TestBed.resetTestingModule();
 
@@ -123,7 +125,7 @@ async function render(
     imports: [BasketRowComponent, RokuTranslatorTestingModule.forTesting()],
     providers: [
       provideVelistaTesting({ basePath: '/velista' }),
-      { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      { provide: RokuLocaleStore, useValue: { locale: signal(locale) } },
     ],
   }).compileComponents();
 
@@ -282,6 +284,86 @@ describe('BasketRowComponent: the caption (velista 0139, section 1)', () => {
     const fixture = await render(line({ entries: [] }), new Map());
 
     expect(caption(fixture)).toBeNull();
+  });
+});
+
+describe('BasketRowComponent: a piece sold by the kilo (velista 0179)', () => {
+  const sold = (
+    unit: string,
+    approxWeight: number | null,
+    offerOf: ProductOffer
+  ): [string, BasketProduct] => {
+    const [id, held] = product('i-cheese', offerOf);
+    return [
+      id,
+      { ...held, size: null, unit, approxWeight, offers: [] } as BasketProduct,
+    ];
+  };
+  const CHEESE_OFFER: ProductOffer = {
+    ...offer(13.42),
+    unitPriceLabel: 'EUR/kg',
+    piecePrice: 20.94,
+  };
+
+  it('draws the piece price, then the price per kilo, then the lists', async () => {
+    const fixture = await render(
+      line({ productId: 'i-cheese', entries: [entry('zl-1', 'l-weekly')] }),
+      new Map([sold('KILOGRAM', 1560, CHEESE_OFFER)]),
+      LISTS,
+      'es'
+    );
+
+    expect(caption(fixture)).toEqual([
+      '20,94\u00a0€',
+      '13,42\u00a0€catalog.per.KILOGRAM',
+      'Weekly shop',
+    ]);
+    expect(text(fixture, '.caption-unit .per')).toBe('catalog.per.KILOGRAM');
+    const label = host(fixture)
+      .querySelector('.body')
+      ?.getAttribute('aria-label');
+    expect(label).toContain('20,94\u00a0€');
+    expect(label).toContain('13,42\u00a0€ catalog.per.KILOGRAM');
+  });
+
+  it('draws a product sold by the kilo with its "/ kg" after the price', async () => {
+    const fixture = await render(
+      line({ productId: 'i-cheese', entries: [entry('zl-1', 'l-weekly')] }),
+      new Map([sold('KILOGRAM', null, { ...CHEESE_OFFER, piecePrice: null })]),
+      LISTS,
+      'es'
+    );
+
+    expect(caption(fixture)).toEqual([
+      '13,42\u00a0€catalog.per.KILOGRAM',
+      'Weekly shop',
+    ]);
+    expect(text(fixture, '.caption-price .per')).toBe('catalog.per.KILOGRAM');
+    expect(host(fixture).querySelector('.caption-unit')).toBeNull();
+    expect(
+      host(fixture).querySelector('.body')?.getAttribute('aria-label')
+    ).toContain('13,42\u00a0€ catalog.per.KILOGRAM');
+  });
+
+  it('draws no price for a kilo piece with a price and no piece price', async () => {
+    const fixture = await render(
+      line({ productId: 'i-cheese', entries: [entry('zl-1', 'l-weekly')] }),
+      new Map([sold('KILOGRAM', 1560, { ...CHEESE_OFFER, piecePrice: null })]),
+      LISTS
+    );
+
+    expect(caption(fixture)).toEqual(['Weekly shop']);
+  });
+
+  it('draws a piece priced as one as a pack', async () => {
+    const fixture = await render(
+      line({ productId: 'i-cheese', entries: [entry('zl-1', 'l-weekly')] }),
+      new Map([sold('UNIT', 580, { ...offer(6.5), unitPriceLabel: 'EUR/ud' })]),
+      LISTS,
+      'es'
+    );
+
+    expect(caption(fixture)).toEqual(['6,50\u00a0€', 'Weekly shop']);
   });
 });
 

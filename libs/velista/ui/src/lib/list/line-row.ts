@@ -15,6 +15,7 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   lineStatuses,
+  priceWordsText,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   type LineRowShownProduct,
   type LineRowVm,
@@ -360,7 +361,7 @@ export class LineRow {
       if (line.named === true) {
         parts.push(shown.name, shown.brandSize);
       }
-      parts.push(shown.price);
+      parts.push(shown.price === null ? null : priceWordsText(shown.price));
       if (shown.others > 0) {
         parts.push(
           this._translator.t('list.row.more', undefined, undefined, {

@@ -46,6 +46,7 @@ function product(id: string, slug: string): CatalogItem {
     chainPrices: [],
     imageUrl: null,
     packCount: null,
+    approxWeight: null,
   };
 }
 

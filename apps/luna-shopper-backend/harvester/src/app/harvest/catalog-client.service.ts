@@ -14,6 +14,7 @@ import {
   SUPERMARKET_LOCATION_PATTERNS,
   SUPERMARKET_PATTERNS,
   type AddItemPriceBatchResult,
+  type ApproxWeightFill,
   type CategoryTreeView,
   type CreateItemInput,
   type CreateItemRequest,
@@ -40,6 +41,7 @@ import {
   type PriceScopeKind,
   type PriceScopePage,
   type PriceScopeView,
+  type SetApproxWeightsResult,
   type SetSupermarketItemAvailabilityResult,
   type SetSupermarketLocationItemAvailabilityResult,
   type StatedItemPrice,
@@ -399,6 +401,21 @@ export class CatalogClient {
    */
   fillPackCounts(entries: PackCountFill[]): Promise<FillPackCountsResult> {
     return this.send(ITEM_PATTERNS.fillPackCounts, {
+      userId: this.actor(),
+      entries,
+    });
+  }
+
+  /**
+   * Write the weight of one piece a run read onto products with no size (plan
+   * 0244, section 5.7). Catalog skips a product with a size and one whose
+   * weight a person wrote, and answers each count. At most
+   * `APPROX_WEIGHT_FILL_MAX` pairs per call.
+   */
+  setApproxWeights(
+    entries: ApproxWeightFill[]
+  ): Promise<SetApproxWeightsResult> {
+    return this.send(ITEM_PATTERNS.setApproxWeights, {
       userId: this.actor(),
       entries,
     });

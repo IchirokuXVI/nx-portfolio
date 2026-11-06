@@ -19,8 +19,10 @@ import {
   basketMatchRange,
   basketRowProduct,
   isCrossedOutRow,
+  priceWordsText,
   QUANTITY_REEL_CLICK_SHIELD_MS,
   shownOffer,
+  soldAs,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceMark,
@@ -29,6 +31,7 @@ import {
   type BasketRow as BasketRowModel,
   type BasketRowState,
   type BasketShelfMark,
+  type PriceWords,
 } from '@portfolio/velista/models';
 import { formatMoney } from '@portfolio/velista/platform';
 import {
@@ -36,6 +39,7 @@ import {
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
+  priceWords,
   ProductPicture,
   QuantityReel,
   SlashCircleIcon,
@@ -972,15 +976,70 @@ export class BasketRow {
    * none when that shop has no price for it (velista `0153`), and the cheapest at
    * the run's scopes otherwise. A row with no product has no price and
    * adds nothing to the total (velista `0139`, section 2).
+   *
+   * Priced by the product's kind (velista `0179`, section 2): a kilo piece draws
+   * the server's piece price and nothing without one, a product sold by the
+   * kilo draws its price with "/ kg", and every other product its price.
    */
-  protected readonly productPrice = computed<string | null>(() => {
+  protected readonly productPrice = computed<PriceWords | null>(() => {
     // The same lookup a settle reads its scope from (velista `0095`, section 6).
-    const offer = shownOffer(this._product(), this.atShop());
-    if (offer === null || offer.price === null) {
+    const product = this._product();
+    const offer = shownOffer(product, this.atShop());
+    if (product === null || offer === null) {
       return null;
     }
-    return formatMoney(offer.price, offer.currency, this._locale());
+    const locale = this._locale();
+    return priceWords(offer, product, locale, (key) =>
+      this._translator.t(key, undefined, locale)
+    );
   });
+
+  /**
+   * The price per kilo of a kilo piece, after its piece price on the caption
+   * line (velista `0179`, section 2), or null for every other product and for a
+   * kilo piece the row draws no piece price for.
+   */
+  protected readonly unitPriceCaption = computed<PriceWords | null>(() => {
+    const product = this._product();
+    const offer = shownOffer(product, this.atShop());
+    if (
+      product === null ||
+      offer === null ||
+      offer.piecePrice === null ||
+      soldAs(product.unit, product.size, product.approxWeight) !== 'KILO_PIECE'
+    ) {
+      return null;
+    }
+    return {
+      amount: formatMoney(offer.price, offer.currency, this._locale()),
+      per: this._perKilo(),
+    };
+  });
+
+  private _perKilo(): string {
+    return this._translator.t(
+      'catalog.per.KILOGRAM',
+      undefined,
+      this._locale()
+    );
+  }
+
+  /**
+   * A price the cheaper mark names, as the words of its sentence. The mark
+   * compares `price`, which is a price per kilo for both kinds sold by the kilo
+   * (velista `0179`, section 2), so for those it says "/ kg" after the number.
+   */
+  private _markPrice(amount: number, currency: string | null): string {
+    const product = this._product();
+    const money = formatMoney(amount, currency, this._locale());
+    const kind =
+      product === null
+        ? 'PACK'
+        : soldAs(product.unit, product.size, product.approxWeight);
+    return kind === 'BY_THE_KILO' || kind === 'KILO_PIECE'
+      ? priceWordsText({ amount: money, per: this._perKilo() })
+      : money;
+  }
 
   /**
    * The price mark's own sentence, composed, or null when the row carries none.
@@ -1000,7 +1059,7 @@ export class BasketRow {
     const locale = this._locale();
     if (mark.kind === 'cheaper') {
       return this._translator.t('basket.price.cheaperAt', undefined, locale, {
-        price: formatMoney(mark.price, mark.currency, locale),
+        price: this._markPrice(mark.price, mark.currency),
         chain: mark.chain,
       });
     }
@@ -1018,7 +1077,7 @@ export class BasketRow {
     }
 
     const at = this._translator.t('basket.price.cheaperAt', undefined, locale, {
-      price: formatMoney(elsewhere.price, elsewhere.currency, locale),
+      price: this._markPrice(elsewhere.price, elsewhere.currency),
       chain: elsewhere.chain,
     });
     return `${missing} · ${at}`;
@@ -1120,7 +1179,8 @@ export class BasketRow {
       // sentence of its own, in the order the caption draws them: a mark is words
       // beside a number and a reader who hears the row hears it (velista `0078`,
       // section 7).
-      this.productPrice() ?? '',
+      priceText(this.productPrice()),
+      priceText(this.unitPriceCaption()),
       this.listsText() ?? '',
       this.markCaption() ?? '',
       // A cheaper product of the same group, said as it is drawn.
@@ -1170,4 +1230,9 @@ export class BasketRow {
       { name: this.name() }
     );
   }
+}
+
+/** A price as a sentence, or nothing for none. */
+function priceText(words: PriceWords | null): string {
+  return words === null ? '' : priceWordsText(words);
 }

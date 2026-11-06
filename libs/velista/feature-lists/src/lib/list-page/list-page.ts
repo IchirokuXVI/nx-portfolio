@@ -559,6 +559,7 @@ export class ListPage {
       locale,
       brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
       formatMoney: (amount, currency) => formatMoney(amount, currency, locale),
+      translate,
     };
   });
 

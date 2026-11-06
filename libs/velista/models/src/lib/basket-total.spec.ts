@@ -10,12 +10,17 @@ import type {
 } from './basket-view';
 import type { ProductOffer } from './domain';
 
-function offer(price: number | null, currency = 'EUR'): ProductOffer {
+function offer(
+  price: number | null,
+  currency = 'EUR',
+  piecePrice: number | null = null
+): ProductOffer {
   return {
     price,
     currency,
     unitPrice: null,
     unitPriceLabel: null,
+    piecePrice,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
@@ -49,12 +54,24 @@ function product(
     productGroupId: null,
     size: null,
     unit: null,
+    approxWeight: null,
     offer: cheapest,
     offers: cheapest === null ? [] : [cheapest],
     atShop,
     categories: [],
     sectionIds: null,
   };
+}
+
+/** A piece of the given weight, by the kilo or priced as one (velista `0179`). */
+function piece(
+  id: string,
+  unit: 'KILOGRAM' | 'UNIT',
+  approxWeight: number,
+  cheapest: ProductOffer | null,
+  atShop: BasketProductAtShop | null = null
+): BasketProduct {
+  return { ...product(id, cheapest, atShop), unit, approxWeight };
 }
 
 /**
@@ -333,6 +350,60 @@ describe('basketTotal', () => {
       leftCents: 135,
       totalCents: 135,
       currency: 'EUR',
+    });
+  });
+
+  describe('a piece whose weight varies (velista 0179)', () => {
+    it('adds the piece price of two kilo pieces of cheese', () => {
+      const cheese = piece(
+        'p-cheese',
+        'KILOGRAM',
+        1560,
+        offer(13.42, 'EUR', 20.94)
+      );
+      expect(
+        basketTotal([row(['p-cheese'], { left: 2 })], context([cheese]))
+      ).toEqual({
+        lines: 1,
+        withProduct: 1,
+        withPrice: 1,
+        boughtCents: 0,
+        leftCents: 4188,
+        totalCents: 4188,
+        currency: 'EUR',
+      });
+    });
+
+    it('counts a kilo piece with a price and no piece price as unpriced', () => {
+      const cheese = piece('p-cheese', 'KILOGRAM', 1560, offer(13.42));
+      expect(
+        basketTotal([row(['p-cheese'], { left: 2 })], context([cheese]))
+      ).toEqual({ ...EMPTY_BASKET_TOTAL, lines: 1, withProduct: 1 });
+    });
+
+    it('adds the price of a piece priced as one for each unit', () => {
+      const salad = piece('p-salad', 'UNIT', 580, offer(6.5));
+      const total = basketTotal(
+        [row(['p-salad'], { left: 3 })],
+        context([salad])
+      );
+      expect(total.totalCents).toBe(1950);
+      expect(total.withPrice).toBe(1);
+    });
+
+    it('reads the piece price at a shop from the offer of the scope it names', () => {
+      const atStore = {
+        ...offer(13.9, 'EUR', 21.68),
+        priceScopeId: 's-merca-store',
+      };
+      const cheese: BasketProduct = {
+        ...piece('p-cheese', 'KILOGRAM', 1560, offer(13.42, 'EUR', 20.94)),
+        offers: [offer(13.42, 'EUR', 20.94), atStore],
+        atShop: here(13.9),
+      };
+      expect(
+        basketTotal([row(['p-cheese'])], context([cheese], true)).totalCents
+      ).toBe(2168);
     });
   });
 

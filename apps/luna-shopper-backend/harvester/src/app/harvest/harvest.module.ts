@@ -5,6 +5,10 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
+import { ALERT_CHANNEL, SmtpAlertChannel } from './alerts/alert-mailer';
+import { HarvestAlertService } from './alerts/harvest-alert.service';
+import { HarvestAlertStore } from './alerts/harvest-alert.store';
+import { HarvestAlertWorker } from './alerts/harvest-alert.worker';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CarrefourStoreDiscoveryRunner } from './carrefour-store-discovery.runner';
@@ -13,6 +17,7 @@ import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
 import { DelistingService } from './delisting.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DezaStoreDiscoveryRunner } from './deza-store-discovery.runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
@@ -38,7 +43,19 @@ import { PlatformAdminService } from './platform-admin.service';
 import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
+import { PriceRefreshCooldown } from './price-refresh.cooldown';
+import {
+  PRICE_REFRESH_FETCHERS,
+  REFRESH_FETCHERS,
+} from './price-refresh.fetchers';
+import { PriceRefreshResolver } from './price-refresh.resolver';
+import { PriceRefreshService } from './price-refresh.service';
+import { PriceRefreshStore } from './price-refresh.store';
 import { PriceScopeResolver } from './price-scope-resolver';
+import { SourceProbeDispatcher } from './probes/source-probe.runner';
+import { SourceProbeService } from './probes/source-probe.service';
+import { SourceProbeStore } from './probes/source-probe.store';
+import { SourceProbeWorker } from './probes/source-probe.worker';
 import { RunExecutor } from './run-executor.service';
 import { HARVEST_CLOCK } from './schedule-slot';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
@@ -151,6 +168,36 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PostalCodeDiscoveryWorker,
     // The dashboard's harvest block (plan 0088), behind the same gate.
     HarvestDashboardService,
+    // The alerts to the owner (plan 0218): the outbox, the test alert, the
+    // SMTP channel built from the cluster's mail keys, and the worker that
+    // sends what the outcomes wrote.
+    HarvestAlertStore,
+    HarvestAlertService,
+    {
+      provide: ALERT_CHANNEL,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new SmtpAlertChannel(
+          config.getOrThrow<HarvesterConfig>('harvester').alerts
+        ),
+    },
+    HarvestAlertWorker,
+    // A probe per chain checks the storefront shape (plan 0219): the one
+    // table it writes, the dispatcher on the adapter, the service the routes
+    // reach, and the daily worker with its reaper.
+    SourceProbeStore,
+    SourceProbeDispatcher,
+    SourceProbeService,
+    SourceProbeWorker,
+    // A shopper refreshes the price of one product (plan 0216): not a run, so
+    // none of the run machinery above is involved but the ingest write.
+    PriceRefreshStore,
+    PriceRefreshResolver,
+    PriceRefreshCooldown,
+    { provide: REFRESH_FETCHERS, useValue: PRICE_REFRESH_FETCHERS },
+    PriceRefreshService,
+    // DEZA's own shop list, the store discovery case of `deza-web` (plan 0222).
+    DezaStoreDiscoveryRunner,
     // Carrefour's shops from its own store finder (plan 0223).
     CarrefourStoreDiscoveryRunner,
   ],
