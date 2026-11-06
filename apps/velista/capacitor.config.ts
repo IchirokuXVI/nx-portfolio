@@ -43,6 +43,22 @@ const config: CapacitorConfig = {
       insetsHandling: 'native',
       style: 'DARK',
     },
+    // Over the air web bundles from the app's own cluster (plan 0180). Manual mode: the
+    // app reads its own signed manifest and calls download, set and next itself. The
+    // three URLs are empty so the plugin never talks to Capgo's cloud (D11); the build
+    // spike proved that an empty string stays empty. A bundle that does not call
+    // notifyAppReady within 20 s rolls back (D7), and a new APK from Play drops every
+    // downloaded bundle and boots its own (D1).
+    CapacitorUpdater: {
+      autoUpdate: 'off',
+      updateUrl: '',
+      statsUrl: '',
+      channelUrl: '',
+      appReadyTimeout: 20000,
+      autoDeleteFailed: true,
+      autoDeletePrevious: true,
+      resetWhenUpdate: true,
+    },
   },
 };
 
