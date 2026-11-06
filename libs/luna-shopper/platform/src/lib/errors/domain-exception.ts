@@ -196,6 +196,23 @@ export class AllowanceReachedException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The `details` key a {@link PriceNotRefreshableException} names its reason under. */
+export const PRICE_REFRESH_REASON_DETAIL = 'reason';
+
+/**
+ * Nothing can fetch a fresh price of this product at this scope (harvester
+ * plan 0216, section 7.1, steps 1 to 5). Renders as 409.
+ *
+ * It publishes its details, which are exactly `reason`, one value of
+ * `PriceRefreshRefusal`, because the client draws a sentence for each and has
+ * nothing else to tell them apart by. A cooldown is not this exception: it is
+ * a {@link RateLimitedException} with the wait.
+ */
+export class PriceNotRefreshableException extends DomainException {
+  readonly code = ERROR_CODES.PRICE_NOT_REFRESHABLE;
+  override readonly exposesDetails = true;
+}
+
 /**
  * The account has failed too many times in a row and is refusing attempts (plan
  * 0071, section 7).

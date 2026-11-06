@@ -585,6 +585,14 @@ export const ERROR_CODES = {
    * `period`, `limit` and `resetsAt`.
    */
   ASSISTANT_ALLOWANCE_REACHED: 'assistant_allowance_reached',
+  /**
+   * A shopper asked for a fresh price of one product, and nothing can fetch it
+   * (harvester plan 0216, section 7.1): refreshes are off on this cluster, the
+   * harvester never priced the product at that scope, the chain is off or
+   * cannot fetch one product alone, or the chain keeps refusing. Nothing was
+   * fetched. `details.reason` names which, and the client decides the words.
+   */
+  PRICE_NOT_REFRESHABLE: 'price_not_refreshable',
   INTERNAL: 'internal',
 } as const;
 
@@ -784,5 +792,9 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   // 429 beside `rate_limited` and apart from it by code: both say "not now",
   // and only that one says how many seconds (plan 0234, section 8.1).
   [ERROR_CODES.ASSISTANT_ALLOWANCE_REACHED]: HttpStatus.TOO_MANY_REQUESTS,
+  // 409: the request is well formed, and what refuses it is the state of the
+  // chain or of the product (plan 0216, section 7.1). A cooldown is a 429
+  // `rate_limited` instead, with the wait.
+  [ERROR_CODES.PRICE_NOT_REFRESHABLE]: HttpStatus.CONFLICT,
   [ERROR_CODES.INTERNAL]: HttpStatus.INTERNAL_SERVER_ERROR,
 };

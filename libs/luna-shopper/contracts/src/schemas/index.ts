@@ -56,3 +56,5 @@ export {
   validateSchema,
 } from './validator';
 export type { ValidationResult } from './validator';
+// A shopper refreshes the price of one product (plan 0216).
+export { PRICE_REFRESH_SCHEMA_IDS } from './messages/price-refresh.schemas';

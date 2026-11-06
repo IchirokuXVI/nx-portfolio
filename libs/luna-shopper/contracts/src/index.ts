@@ -75,3 +75,8 @@ export * from './lib/events/realtime.events';
 // contract. Every NATS message and event payload has a schema here, validated in
 // tests, so a future .NET/Spring service can hold the same contract.
 export * from './schemas';
+
+// A shopper refreshes the price of one product (plan 0216): the status and
+// the refusal of a refresh, its views and its three subjects.
+export * from './lib/enums/price-refresh.enums';
+export * from './lib/messages/price-refresh.messages';

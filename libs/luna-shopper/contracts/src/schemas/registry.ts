@@ -80,6 +80,10 @@ import { legalSchemas } from './messages/legal.schemas';
 import { listMessageContracts, listSchemas } from './messages/list.schemas';
 import { mergeMessageContracts, mergeSchemas } from './messages/merge.schemas';
 import {
+  priceRefreshMessageContracts,
+  priceRefreshSchemas,
+} from './messages/price-refresh.schemas';
+import {
   profileMessageContracts,
   profileSchemas,
 } from './messages/profile.schemas';
@@ -128,6 +132,8 @@ export const messageContracts: Record<string, MessageContract> = {
   ...basketSharingMessageContracts,
   ...basketChangeMessageContracts,
   ...purchaseMessageContracts,
+  // A shopper refreshes the price of one product (plan 0216).
+  ...priceRefreshMessageContracts,
 };
 
 /** event name -> payload schema id for every published event. */
@@ -180,6 +186,8 @@ export const allSchemas: JsonSchema[] = [
   // harvester exports, validated by the gateway before it crosses the broker and
   // by the harvester again at the spawn, found by its own `$id`.
   ...harvestDocumentSchemas,
+  // A shopper refreshes the price of one product (plan 0216).
+  ...priceRefreshSchemas,
 ];
 
 export const messageSubjects = Object.keys(messageContracts);
