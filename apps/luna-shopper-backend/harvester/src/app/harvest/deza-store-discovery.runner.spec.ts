@@ -16,9 +16,12 @@ import { RecordingRunReport } from './run-report';
  *
  * **Nothing here reaches a network.** The directory and three shop pages are
  * the library's captured fixtures. The other seven shop pages are built here
- * from the T1 page, with the street, the postal code and the photo code each
- * shop page states (plan 0222, section 9), so the run reads ten pages as it
- * does against the site.
+ * from the T1 page, so the run reads ten pages as it does against the site.
+ * Their streets are copied from the pin `Dir:` lines of `centros.html`. Only
+ * T4's `21`, the postal codes and the photo codes come from plan 0222,
+ * section 9. So the assertion that `addressDisagreements` names T4 alone
+ * proves `addressesDisagree` against the pin data, not against seven real
+ * pages. The live check of the plan is the real proof.
  */
 
 const FIXTURES = join(
@@ -57,6 +60,10 @@ function shopPage(
     .join(`${photoCode}_1-`);
 }
 
+/**
+ * The ten shop pages by path. A built page repeats the street of its pin,
+ * except T4, whose `21` is the page street that plan 0222, section 9 quotes.
+ */
 const PAGES: Record<string, string> = {
   '/centros/': CENTROS,
   '/centros/avda-de-jesus-rescatado/': SHOP_T1,
@@ -70,7 +77,8 @@ const PAGES: Record<string, string> = {
     '14007',
     'T3'
   ),
-  // The one street on which the pin and the page disagree (section 9).
+  // The one street on which the pin and the page disagree: the pin says
+  // `48`, and section 9 quotes `21` from the page.
   '/centros/avda-isla-fuerteventura/': shopPage(
     'Avda. Isla Fuerteventura, 21',
     '14011',
@@ -318,8 +326,20 @@ describe('DezaStoreDiscoveryRunner', () => {
     } as SupermarketSource);
 
     expect(report.places.map((place) => place.externalRef)).toEqual(['C2']);
-    expect(runner.sent).not.toContain(`${SITE}/centros/pol-ind-las-quemadas/`);
-    expect(runner.sent.length - 1).toBeLessThan(10);
+    // Every shop page but C1's, the one shop past 3,500 m.
+    expect(runner.sent.slice(1).sort()).toEqual(
+      [
+        '/centros/avda-de-jesus-rescatado/',
+        '/centros/avda-de-libia/',
+        '/centros/avda-isla-fuerteventura/',
+        '/centros/avda-ronda-del-marrubial/',
+        '/centros/avda-virgen-de-las-angustias/',
+        '/centros/camino-de-la-barca/',
+        '/centros/centro-comercial-zoco-calle-jose-maria-martorell/',
+        '/centros/ctra-de-castro-esq-pio-xii/',
+        '/centros/supercash-sector-sur/',
+      ].map((path) => `${SITE}${path}`)
+    );
   });
 
   it('reads no shop page for a code far from Córdoba', async () => {
@@ -418,6 +438,13 @@ describe('DezaStoreDiscoveryRunner', () => {
       title: 'Tienda 6',
       reason: 'OFF_SITE',
     });
+    // Planned and refused, so every one of the ten candidates is counted.
+    expect(run.setTotalPlanned).toHaveBeenCalledWith(10);
+    const counted = run.report.mock.calls.map(([counters]) => counters);
+    expect(counted.filter((counters) => counters.processed === 1)).toHaveLength(
+      9
+    );
+    expect(counted.filter((counters) => counters.failed === 1)).toHaveLength(1);
   });
 
   it('warns when the list names far fewer shops than were measured', async () => {

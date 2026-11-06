@@ -124,11 +124,13 @@ export class DezaStoreDiscoveryRunner implements StoreDiscoveryRunner {
         page = await client.fetchShopPage(url);
       } catch (error) {
         if (error instanceof DezaShopPageRefusedError) {
-          // Named by third party markup and never fetched (section 3).
+          // Named by third party markup and never fetched (section 3). It was
+          // planned, so it is counted, or the run would end one page short.
           outcome.droppedEntries.push({
             title: entry.title,
             reason: 'OFF_SITE',
           });
+          await context.report({ failed: 1 });
           continue;
         }
         if (error instanceof SourceBlockedError || context.signal.aborted) {
@@ -324,6 +326,9 @@ class ShopRun {
  * {@link normalizeName} agrees. Otherwise the house number decides alone, so
  * `Avenida de Jesús Rescatado, 15` and `Avda. Jesús Rescatado, 15` agree and
  * `48` against `21` does not.
+ *
+ * Only the first house number of each street is compared, and two streets
+ * that both lack a number read as agreeing.
  */
 export function addressesDisagree(
   mapAddress: string,

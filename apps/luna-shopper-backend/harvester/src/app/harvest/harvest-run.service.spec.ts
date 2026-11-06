@@ -801,6 +801,24 @@ describe('HarvestRunService.spawn', () => {
     );
   });
 
+  it('starts a DEZA store discovery with no postal code', async () => {
+    // `/centros/` names every shop with its code (plan 0222).
+    const { service, store } = build({ source: { adapterKey: 'deza-web' } });
+
+    await service.spawn({
+      userId: ADMIN,
+      mode: HarvestRunMode.STORE_DISCOVERY,
+      supermarketId: SUPERMARKET,
+    });
+
+    expect(store.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: HarvestRunMode.STORE_DISCOVERY,
+        supermarketId: SUPERMARKET,
+      })
+    );
+  });
+
   it('refuses a store discovery for a chain whose shops it cannot read', async () => {
     // A chain that publishes no store list is still a radius over
     // OpenStreetMap and still needs a centre. Mercadona was this case until

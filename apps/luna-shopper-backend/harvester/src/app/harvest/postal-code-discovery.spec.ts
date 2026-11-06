@@ -349,6 +349,17 @@ describe('PostalCodeDiscoveryService place sources (plan 0107)', () => {
     ]);
   });
 
+  it('asks DEZA, whose own site lists its shops (plan 0222)', async () => {
+    const service = build({
+      rows: [source({ id: 'src-deza', adapterKey: 'deza-web' })],
+    });
+
+    expect(labels(await service.placeSourcesFor('es'))).toEqual([
+      'OpenStreetMap',
+      'deza-web',
+    ]);
+  });
+
   it('leaves out a chain that publishes no shop list at all', async () => {
     // A `manual` row publishes no store list, so asking it where the shops
     // are would be asking the wrong question.
