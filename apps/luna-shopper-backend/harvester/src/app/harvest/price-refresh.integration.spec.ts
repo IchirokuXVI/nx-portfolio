@@ -92,6 +92,9 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
   let redis: RedisService;
   let fetches = 0;
   let sent: unknown[][] = [];
+  // A fetch waits on this gate. A test that must hold the fetch open while a
+  // second request arrives replaces it with a promise it resolves later.
+  let gate: Promise<void> = Promise.resolve();
 
   const silent = {
     log: () => undefined,
@@ -101,6 +104,7 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
 
   const fetcher: RefreshFetcher = async () => {
     fetches += 1;
+    await gate;
     return {
       found: true,
       observation: {
@@ -242,6 +246,7 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
   beforeEach(async () => {
     fetches = 0;
     sent = [];
+    gate = Promise.resolve();
     await clean();
   });
 
@@ -276,6 +281,13 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
   it('starts one fetch for two requests at one instant, and writes the price with no run', async () => {
     const entry = await seed();
     const refreshes = service();
+    // Hold the first fetch open until both requests answered. A fetch that
+    // returned at once could write the price before the second request reads
+    // it, and the second would answer FRESH with no row.
+    let release: () => void = () => undefined;
+    gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const answers = await Promise.allSettled([
       refreshes.request({
         userId: SHOPPER,
@@ -288,13 +300,12 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
         priceScopeId: WAREHOUSE,
       }),
     ]);
+    release();
     await refreshes.settled();
 
     // Both pass the product read at once, and the chain claim lets one
-    // through. The other is refused with the chain's time left; when it reads
-    // after the first row is written, it joins that row; and when it reads
-    // after the first fetch finished, the price is FRESH and it starts
-    // nothing (an id of null). Whichever, one fetch ran.
+    // through. The other is refused with the chain's time left, or, when it
+    // reads after the first row is written, joins that row.
     const refused = answers.filter((answer) => answer.status === 'rejected');
     for (const answer of refused) {
       const reason = (answer as PromiseRejectedResult).reason;
@@ -308,9 +319,8 @@ describeIntegration('price refresh (real Postgres and Redis)', () => {
         .filter((answer) => answer.status === 'fulfilled')
         .map(
           (answer) =>
-            (answer as PromiseFulfilledResult<{ id: string | null }>).value.id
+            (answer as PromiseFulfilledResult<{ id: string }>).value.id
         )
-        .filter((id) => id !== null)
     );
     expect(ids.size).toBe(1);
     expect(fetches).toBe(1);
