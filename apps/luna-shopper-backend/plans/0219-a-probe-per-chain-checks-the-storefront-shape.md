@@ -700,8 +700,8 @@ Chosen in this plan, and open to the owner's correction:
 - The checks run the real parsers and assert counts and required fields. No JSON schema
   (section 2).
 - The checks live in each adapter library and the live specs call them (section 2).
-- The request set follows each walk: five for Mercadona, DIA and El Jamón, three for LIDL, two
-  for DEZA, two pages for Carrefour (section 3.2). About 22 requests a day for all six chains,
+- The request set follows each walk: six for Mercadona, five for DIA and El Jamón, three for
+  LIDL, two for DEZA, two pages for Carrefour (section 3.2). About 23 requests a day for all six chains,
   against 4,383 for one Mercadona walk.
 - The 80 per cent rule and floors well under today's counts (section 3.3).
 - Mercadona's warehouse is read for postal code `14013`, the code its live spec uses, so the probe
