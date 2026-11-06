@@ -40,3 +40,17 @@ export type {
   DezaSection,
   DezaShop,
 } from './lib/types';
+// The chain's own shop list (plan 0222).
+export { DEZA_SHOPS_PATH, DezaShopPageRefusedError } from './lib/deza.client';
+export {
+  DEZA_SHOP_LINK_TEXT,
+  parseShopDirectory,
+  parseShopPage,
+  readShopCode,
+} from './lib/shops';
+export type {
+  DezaCodeOutcome,
+  DezaDirectory,
+  DezaDirectoryEntry,
+  DezaShopPage,
+} from './lib/types';
