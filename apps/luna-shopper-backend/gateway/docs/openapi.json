@@ -43625,7 +43625,7 @@
           "deza-web": {
             "writesPrices": false,
             "scopesItsOwn": false,
-            "listsItsOwnStores": false,
+            "listsItsOwnStores": true,
             "hasProductPages": false,
             "skipsKnownDetails": false,
             "printedLocale": "es",
@@ -46477,6 +46477,9 @@
             "maximum": 1
           },
           "strong": {
+            "type": "boolean"
+          },
+          "sameCode": {
             "type": "boolean"
           }
         },

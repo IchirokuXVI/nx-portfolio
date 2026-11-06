@@ -16,6 +16,7 @@ import { CatalogDiscoveryRunner } from './catalog-discovery.runner';
 import { HarvestDashboardService } from './dashboard.service';
 import { DelistingService } from './delisting.service';
 import { DezaCatalogRunner } from './deza-catalog.runner';
+import { DezaStoreDiscoveryRunner } from './deza-store-discovery.runner';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import { DiscoveredPlaceService } from './discovered-place.service';
@@ -194,6 +195,8 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PriceRefreshCooldown,
     { provide: REFRESH_FETCHERS, useValue: PRICE_REFRESH_FETCHERS },
     PriceRefreshService,
+    // DEZA's own shop list, the store discovery case of `deza-web` (plan 0222).
+    DezaStoreDiscoveryRunner,
   ],
 })
 export class HarvestModule {}

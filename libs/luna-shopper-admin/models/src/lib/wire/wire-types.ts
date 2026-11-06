@@ -4490,7 +4490,7 @@ export const HarvestAdapterCapabilityTable = {
   'deza-web': {
     writesPrices: false,
     scopesItsOwn: false,
-    listsItsOwnStores: false,
+    listsItsOwnStores: true,
     hasProductPages: false,
     skipsKnownDetails: false,
     printedLocale: 'es',
@@ -5275,6 +5275,7 @@ export type HarvestSourceLocationCandidate = {
   postalCode: string | null;
   score: number;
   strong: boolean;
+  sameCode?: boolean;
 };
 
 /**

@@ -20,7 +20,8 @@
       "//": "Refreshes the checked in fixtures from the live site (plan 0085, section 11). Never run by CI: it makes real requests, and the fixtures are what keeps every other test off the network.",
       "executor": "nx:run-commands",
       "options": {
-        "command": "npx tsx libs/luna-shopper/deza/tools/capture-fixtures.ts"
+        "//tsconfig": "The workspace has no root tsconfig.json, so tsx is pointed at the base one or the `@portfolio/luna-shopper/source-guard` import of the client does not resolve.",
+        "command": "npx tsx --tsconfig tsconfig.base.json libs/luna-shopper/deza/tools/capture-fixtures.ts"
       }
     }
   }

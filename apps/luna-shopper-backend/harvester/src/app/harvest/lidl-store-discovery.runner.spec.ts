@@ -2,6 +2,7 @@ import type { ConfigService } from '@nestjs/config';
 import { PriceScopeKind } from '@portfolio/luna-shopper/contracts';
 import { LidlClient } from '@portfolio/luna-shopper/lidl';
 import type { SupermarketSource } from '../entities';
+import type { DezaStoreDiscoveryRunner } from './deza-store-discovery.runner';
 import type { DiaStoreDiscoveryRunner } from './dia-store-discovery.runner';
 import type { ElJamonStoreDiscoveryRunner } from './eljamon-store-discovery.runner';
 import { LidlStoreDiscoveryRunner } from './lidl-store-discovery.runner';
@@ -354,12 +355,14 @@ describe('StoreDiscoveryRunner', () => {
   const mercadona = { run: jest.fn(async () => undefined) };
   const elJamon = { run: jest.fn(async () => undefined) };
   const dia = { run: jest.fn(async () => undefined) };
+  const deza = { run: jest.fn(async () => undefined) };
   const dispatcher = new StoreDiscoveryRunner(
     osm as unknown as OsmStoreDiscoveryRunner,
     lidl as unknown as LidlStoreDiscoveryRunner,
     mercadona as unknown as MercadonaStoreDiscoveryRunner,
     elJamon as unknown as ElJamonStoreDiscoveryRunner,
-    dia as unknown as DiaStoreDiscoveryRunner
+    dia as unknown as DiaStoreDiscoveryRunner,
+    deza as unknown as DezaStoreDiscoveryRunner
   );
   const input = { postalCode: '14013', country: 'es', radiusMetres: 3000 };
 
@@ -369,6 +372,18 @@ describe('StoreDiscoveryRunner', () => {
     mercadona.run.mockClear();
     elJamon.run.mockClear();
     dia.run.mockClear();
+    deza.run.mockClear();
+  });
+
+  it('reads DEZA from its own shop list (plan 0222)', async () => {
+    await dispatcher.run(
+      context(),
+      new RecordingRunReport(),
+      input,
+      source('deza-web')
+    );
+    expect(deza.run).toHaveBeenCalledTimes(1);
+    expect(osm.run).not.toHaveBeenCalled();
   });
 
   it('reads DIA from its own shop file (plan 0174)', async () => {
@@ -424,13 +439,13 @@ describe('StoreDiscoveryRunner', () => {
     await dispatcher.run(context(), new RecordingRunReport(), input, null);
     expect(osm.run).toHaveBeenCalledTimes(1);
 
-    // An adapter that publishes an assortment and no store list, and one this
-    // build has never heard of, both answer the same way.
+    // An adapter that publishes no store list, and one this build has never
+    // heard of, both answer the same way.
     await dispatcher.run(
       context(),
       new RecordingRunReport(),
       input,
-      source('deza-web')
+      source('manual')
     );
     await dispatcher.run(
       context(),
@@ -441,5 +456,6 @@ describe('StoreDiscoveryRunner', () => {
     expect(osm.run).toHaveBeenCalledTimes(3);
     expect(lidl.run).not.toHaveBeenCalled();
     expect(mercadona.run).not.toHaveBeenCalled();
+    expect(deza.run).not.toHaveBeenCalled();
   });
 });

@@ -136,6 +136,16 @@ describe('adapterCapabilities', () => {
     });
   });
 
+  it('lets a DEZA store discovery run with no postal code', () => {
+    // `/centros/` names every shop with its code (plan 0222), so the spawn and
+    // the postal code queue both treat the chain as one that lists its own.
+    expect(ADAPTER_CAPABILITIES['deza-web']).toMatchObject({
+      writesPrices: false,
+      scopesItsOwn: false,
+      listsItsOwnStores: true,
+    });
+  });
+
   it('lets a Mercadona walk write LOCAL_AREA scopes and nothing else', () => {
     // The switch an operator asked for, and it lives on the adapter rather than
     // in the runner (plan 0108, D5). A NATIONAL row for this chain is an

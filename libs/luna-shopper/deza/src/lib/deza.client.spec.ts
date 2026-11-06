@@ -1,7 +1,12 @@
 import { SourceGuard } from '@portfolio/luna-shopper/source-guard';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DEZA_REFUSAL_POLICY, DezaClient, DezaHttpError } from './deza.client';
+import {
+  DEZA_REFUSAL_POLICY,
+  DezaClient,
+  DezaHttpError,
+  DezaShopPageRefusedError,
+} from './deza.client';
 import { parseProductPage } from './rows';
 
 const fixture = (name: string): string =>
@@ -292,6 +297,89 @@ describe('DezaClient and the refusal guard', () => {
 
     expect((await tripping).rows.length).toBeGreaterThan(0);
     expect(calls).toHaveLength(7);
+  });
+
+  describe('the shop list (plan 0222)', () => {
+    const CENTROS = fixture('centros.html');
+    const SHOP_T1 = fixture('shop-t1.html');
+    const T1_URL =
+      'https://www.dezacalidad.es/centros/avda-de-jesus-rescatado/';
+
+    it('reads the directory and a shop page through the shared gate', async () => {
+      let acquired = 0;
+      const { fetchImpl, calls } = stubFetch([
+        { body: CENTROS },
+        { body: SHOP_T1 },
+      ]);
+      const client = new DezaClient({
+        userAgent: 'test',
+        fetchImpl,
+        acquire: async () => {
+          acquired += 1;
+        },
+      });
+
+      const directory = await client.fetchShopDirectory();
+      const page = await client.fetchShopPage(T1_URL);
+
+      expect(directory.entries).toHaveLength(13);
+      expect(page.postalCode).toBe('14010');
+      expect(calls.map((call) => [call.method, call.url])).toEqual([
+        ['GET', 'https://www.dezacalidad.es/centros/'],
+        ['GET', T1_URL],
+      ]);
+      expect(acquired).toBe(2);
+      expect(client.requests).toBe(2);
+    });
+
+    it('retries a 503 on both methods', async () => {
+      const slept: number[] = [];
+      const { fetchImpl, calls } = stubFetch([
+        { status: 503 },
+        { body: CENTROS },
+        { status: 503 },
+        { body: SHOP_T1 },
+      ]);
+      const client = new DezaClient({
+        userAgent: 'test',
+        fetchImpl,
+        sleepImpl: async (ms) => {
+          slept.push(ms);
+        },
+      });
+
+      await expect(client.fetchShopDirectory()).resolves.toBeDefined();
+      await expect(client.fetchShopPage(T1_URL)).resolves.toMatchObject({
+        photoCode: 'T1',
+      });
+      expect(slept).toHaveLength(2);
+      expect(calls).toHaveLength(4);
+      expect(client.requests).toBe(4);
+    });
+
+    it.each([
+      ['another host', 'https://evil.example/centros/avda-de-jesus-rescatado/'],
+      ['another scheme', 'http://www.dezacalidad.es/centros/avda-de-libia/'],
+      ['a path outside /centros/', 'https://www.dezacalidad.es/productos/'],
+      ['the directory itself', 'https://www.dezacalidad.es/centros/'],
+      ['no URL at all', 'centros/avda-de-libia/'],
+    ])('refuses %s without a request', async (_, url) => {
+      let acquired = 0;
+      const { fetchImpl, calls } = stubFetch([{ body: SHOP_T1 }]);
+      const client = new DezaClient({
+        userAgent: 'test',
+        fetchImpl,
+        acquire: async () => {
+          acquired += 1;
+        },
+      });
+
+      await expect(client.fetchShopPage(url)).rejects.toBeInstanceOf(
+        DezaShopPageRefusedError
+      );
+      expect(calls).toHaveLength(0);
+      expect(acquired).toBe(0);
+    });
   });
 
   it('throws DezaHttpError on a 403 with no guard, as before', async () => {

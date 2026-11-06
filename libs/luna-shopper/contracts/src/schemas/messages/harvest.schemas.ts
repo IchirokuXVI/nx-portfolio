@@ -1026,6 +1026,9 @@ const sourceLocationCandidate = object(
     postalCode: nullableString(),
     score: { type: 'number', minimum: 0, maximum: 1 },
     strong: boolean(),
+    // Present and true only on the candidate the chain's own shop list names
+    // with the same code (plan 0222). Still a proposal.
+    sameCode: boolean(),
   },
   ['supermarketLocationId', 'label', 'address', 'postalCode', 'score', 'strong']
 );
