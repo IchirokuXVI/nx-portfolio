@@ -89,9 +89,13 @@ admin wire types are regenerated for the two new enum values.
   - `apps/luna-shopper-backend/harvester/src/app/harvest/`: `harvest-schedule.worker.ts`, a new
     `schedule-probe-gate.ts` beside it (the pure decision), `harvest-run.service.ts` (the schedule
     block only), `probes/source-probe.service.ts` (one new method), `probes/source-probe.store.ts`
-    (the optional alert draft on the finishing write and one read), `alerts/harvest-alert.rules.ts`,
-    `alerts/harvest-alert.message.ts`, a migration if section 3 needs one, and their specs.
-  - `libs/luna-shopper/contracts`: the two enum values, the alert kinds, their schemas.
+    (the alert draft on the finishing write, one read, `scheduleId` on `insertRunning`),
+    `alerts/harvest-alert.rules.ts`, `alerts/harvest-alert.message.ts`, the migration of section 3,
+    and their specs.
+  - `apps/luna-shopper-backend/harvester/src/app/entities/source-probe.entity.ts`: the `scheduleId`
+    column (owner, 2026-11-06).
+  - `libs/luna-shopper/contracts`: the two enum values, the alert kinds, their schemas, and
+    `scheduleId` on `SourceProbeView` and its schema.
   - The harvester paragraph of `CLAUDE.md` that plan `0219` added: two sentences.
   - The generated files, through their generators.
 - Do NOT touch: the probe functions of the six libraries, the probe worker's claim, the probe
@@ -107,8 +111,9 @@ admin wire types are regenerated for the two new enum values.
   clock. It decides one of three things: start now, probe first, skip. The worker does the
   reading and the probing around it.
 - A gate probe is an ordinary probe row with `trigger: SCHEDULED` and `scheduleId` set to the
-  schedule it gates (section 2, step 6). It obeys every rule of plan `0219`: one `RUNNING` probe per source, the 5 minute deadline, the verdict, `attempt` from
-  `probeDueAttempt` with the interval ignored, and it moves the chain's next daily probe.
+  schedule it gates (section 2, step 6). It obeys every rule of plan `0219`: one `RUNNING` probe
+  per source, the 5 minute deadline, the verdict, `attempt` from `probeDueAttempt` with the
+  interval ignored, and it moves the chain's next daily probe.
 - The gate never starts a probe while a run of the chain is in flight. `startScheduled` answers
   `SKIPPED_BUSY` for that case before the gate runs, so the order is: late, failing, busy, then
   the gate, then the start.
@@ -326,7 +331,9 @@ and sentence, and that the next slot tries again.
 ## 6. What this plan does not do
 
 - **No gate on a manual run.** The person sees `lastProbe` on the source (plan `0219`) and the
-  block on the schedule (section 3), and decides.
+  block on the schedule (section 3), and decides. The warning before such a start is admin plan
+  `0069`, which also records that the schedules list keeps its "Will not run" chip for the new
+  block.
 - **No gate on the postal code queue.** Its runs read OpenStreetMap, which has no probe.
 - **No change to the daily probe, its interval or its retry.** The gate probe is one more probe
   in the same series.
