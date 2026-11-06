@@ -37,7 +37,7 @@ npx nx run luna-shopper/deza:capture-fixtures
 
 which makes eight requests, one at a time, half a second apart, and commit the
 diff. The run of 2026-11-06 refreshed the product pages too; their diff was not
-committed, so those three still date from 2026-09-05. The assortment moves, so the product names in `landing-page.html` will
-change between captures; the tests assert the shapes and the counts the plan
+committed, so those three still date from 2026-09-05. The assortment moves, so
+the product names in `landing-page.html` will change between captures; the tests assert the shapes and the counts the plan
 measured, and keep the size split table of real descriptions in
 `size.spec.ts`, where a recapture cannot silently rewrite it.

@@ -194,7 +194,7 @@ describe('readShopCode', () => {
     });
   });
 
-  it('reads every shop of the fixtures with both signals agreeing', () => {
+  it('reads T1 and Z1 of the fixtures with both signals agreeing', () => {
     for (const [title, file, code] of [
       ['Tienda 1', 'shop-t1.html', 'T1'],
       ['Zoco', 'shop-z1.html', 'Z1'],
@@ -203,6 +203,9 @@ describe('readShopCode', () => {
         readShopCode(byTitle(title), parseShopPage(fixture(file)))
       ).toEqual({ code, basis: 'BOTH' });
     }
+  });
+
+  it('reads C2 of the fixtures from its photo alone', () => {
     expect(
       readShopCode(
         byTitle('SuperCash (Sector Sur)'),

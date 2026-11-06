@@ -188,7 +188,15 @@ function readJsonArray(html: string, from: number, page: string): unknown[] {
     } else if (char === ']' || char === '}') {
       depth -= 1;
       if (depth === 0) {
-        const parsed: unknown = JSON.parse(html.slice(from, index + 1));
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(html.slice(from, index + 1));
+        } catch (error) {
+          throw new Error(
+            `The DEZA page ${page} has a map array that is not JSON: ` +
+              (error instanceof Error ? error.message : String(error))
+          );
+        }
         if (!Array.isArray(parsed)) {
           break;
         }

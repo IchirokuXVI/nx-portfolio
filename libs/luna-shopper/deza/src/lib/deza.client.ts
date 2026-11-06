@@ -30,6 +30,11 @@ import type {
  * and the only thing shared between workers is the token bucket passed as
  * `acquire` (section 2). The shop pages need no session, so one client reads
  * the whole shop list of a store discovery (plan 0222).
+ *
+ * A shop page must be on this client's origin under `/centros/`, read
+ * literally. So with a `baseUrl` that is not the DEZA origin (a local
+ * recording), the absolute links of the directory are refused as `OFF_SITE`,
+ * and a relative href is refused too.
  */
 export const DEZA_BASE_URL = 'https://www.dezacalidad.es';
 
