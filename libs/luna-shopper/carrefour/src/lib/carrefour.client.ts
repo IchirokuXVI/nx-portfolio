@@ -60,13 +60,17 @@ import {
   walkFrontier,
   type CarrefourFrontier,
 } from './categories';
+import { parseDrives, type CarrefourDrive } from './drives';
 import { CarrefourBrowserError, CarrefourHttpError } from './errors';
 import { readCards } from './listing';
 import { readDetail, readListing } from './state';
+import { parseStoreLocator, type CarrefourStoreList } from './stores';
 import {
+  CARREFOUR_DRIVES_PATH,
   CARREFOUR_MIN_DELAY_MS,
   CARREFOUR_ORIGIN,
   CARREFOUR_PAGE_SIZE,
+  CARREFOUR_STORE_LOCATOR_PATH,
   type CarrefourCategory,
   type CarrefourClientOptions,
   type CarrefourDetail,
@@ -203,7 +207,11 @@ export class CarrefourClient {
       CARREFOUR_MIN_DELAY_MS
     );
     this.sleep = options.sleepImpl ?? sleep;
-    this.loader = (path) => this.load(path);
+    this.loader = (path) =>
+      this.load(path, async (session, url) => {
+        const { status, state } = await session.goto(url);
+        return { status, value: state };
+      });
     this.guard =
       options.guard ??
       new SourceGuard(CARREFOUR_REFUSAL_POLICY, { sleep: this.sleep });
@@ -240,6 +248,58 @@ export class CarrefourClient {
    */
   captureState(path: string): Promise<Record<string, unknown> | null> {
     return this.loader(path);
+  }
+
+  /**
+   * The store finder's XML, parsed (plan 0223, section 2). One load.
+   *
+   * A 200 that holds no `<marker` is an error that names the path, and so is
+   * any answer that is not a 200: a run that reports no shop because the
+   * document moved would read exactly like a chain with no shops.
+   */
+  async readStoreLocator(): Promise<CarrefourStoreList> {
+    const body = await this.text(CARREFOUR_STORE_LOCATOR_PATH);
+    if (body === null) {
+      throw new Error(
+        `Carrefour answered no document for ${CARREFOUR_STORE_LOCATOR_PATH}`
+      );
+    }
+    if (!body.includes('<marker')) {
+      throw new Error(
+        `Carrefour answered ${CARREFOUR_STORE_LOCATOR_PATH} with no <marker> ` +
+          'element, so the store finder changed'
+      );
+    }
+    return parseStoreLocator(body);
+  }
+
+  /** The drive list, parsed (plan 0223, section 3). One load. */
+  async readDrives(): Promise<CarrefourDrive[]> {
+    const body = await this.text(CARREFOUR_DRIVES_PATH);
+    if (body === null) {
+      throw new Error(
+        `Carrefour answered no document for ${CARREFOUR_DRIVES_PATH}`
+      );
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(body);
+    } catch {
+      throw new Error(
+        `Carrefour answered ${CARREFOUR_DRIVES_PATH} with a body that is not JSON`
+      );
+    }
+    return parseDrives(json);
+  }
+
+  /**
+   * The raw body of one path.
+   *
+   * Public for the fixture capture tool only, as {@link captureState} is, and
+   * for the same reason: a fixture is what the source sent, verbatim.
+   */
+  captureText(path: string): Promise<string | null> {
+    return this.text(path);
   }
 
   /** One product page, read for its EAN (plan 0090, section 12.1). */
@@ -299,14 +359,35 @@ export class CarrefourClient {
     }
   }
 
+  /** One path read as text through {@link load}, so it obeys every rule a page does. */
+  private text(path: string): Promise<string | null> {
+    return this.load(path, async (session, url) => {
+      if (!session.fetchText) {
+        throw new Error(
+          'This browser session cannot read a document as text, so the store ' +
+            'finder and the drive list are out of its reach'
+        );
+      }
+      const { status, body } = await session.fetchText(url);
+      return { status, value: body };
+    });
+  }
+
   /**
-   * Load one page and hand back its state, paced and abortable.
+   * Load one path and hand back what `read` took from it, paced and abortable.
    *
-   * Everything a run does goes through here, and it is sequential by
-   * construction: **do not add concurrency to a source that blocks on burst**
-   * (plan 0090, section 13).
+   * Everything a run does goes through here, the page state of the walk and
+   * the text of a store run alike (plan 0223, section 4), and it is sequential
+   * by construction: **do not add concurrency to a source that blocks on
+   * burst** (plan 0090, section 13).
    */
-  private async load(path: string): Promise<Record<string, unknown> | null> {
+  private async load<T>(
+    path: string,
+    read: (
+      session: CarrefourSession,
+      url: string
+    ) => Promise<{ status: number; value: T | null }>
+  ): Promise<T | null> {
     this.options.signal?.throwIfAborted();
     await this.pace();
     const session = await this.open();
@@ -314,9 +395,9 @@ export class CarrefourClient {
     const url = path.startsWith('http') ? path : this.baseUrl + path;
 
     let status: number;
-    let state: Record<string, unknown> | null;
+    let value: T | null;
     try {
-      ({ status, state } = await session.goto(url));
+      ({ status, value } = await read(session, url));
     } catch (error) {
       // A browser that hangs or dies costs this page and not the run. The
       // session is dropped **without being awaited**, because the thing that
@@ -329,7 +410,7 @@ export class CarrefourClient {
 
     if (status === 200) {
       this.guard.answered();
-      return state;
+      return value;
     }
     if (status === 403 || status === 429) {
       // Never retried, whichever branch this takes: a retry is what turns a
@@ -410,7 +491,7 @@ class PlaywrightSession {
       goto(
         url: string,
         options: Record<string, unknown>
-      ): Promise<{ status(): number } | null>;
+      ): Promise<{ status(): number; text(): Promise<string> } | null>;
       evaluate<T>(fn: () => T): Promise<T>;
     }
   ) {}
@@ -487,6 +568,35 @@ class PlaywrightSession {
       status,
       state: (state as Record<string, unknown> | null) ?? null,
     };
+  }
+
+  /**
+   * One navigation read as text, with the same cookie rule, deadline and
+   * options as {@link goto} (plan 0223, section 4).
+   *
+   * The body is read under a deadline of its own, because a response that
+   * never finishes is the same stall as a navigation that never returns.
+   */
+  async fetchText(
+    url: string
+  ): Promise<{ status: number; body: string | null }> {
+    await withDeadline(
+      'reading the cookies',
+      dropCloudflareCookies(this.context)
+    );
+    const response = await withDeadline(
+      `loading ${url}`,
+      this.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+    );
+    const status = response?.status() ?? 0;
+    if (status !== 200 || !response) {
+      return { status, body: null };
+    }
+    const body = await withDeadline(
+      'reading the response body',
+      response.text()
+    );
+    return { status, body };
   }
 
   close(): Promise<void> {

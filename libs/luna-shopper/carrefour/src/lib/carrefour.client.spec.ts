@@ -2,6 +2,8 @@ import {
   SourceBlockedError,
   SourceGuard,
 } from '@portfolio/luna-shopper/source-guard';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import listingPage from './__fixtures__/listing-page.json';
 import productPage from './__fixtures__/product-page.json';
 import {
@@ -17,7 +19,10 @@ import {
   isSkippable,
 } from './errors';
 import {
+  CARREFOUR_DRIVES_PATH,
   CARREFOUR_MIN_DELAY_MS,
+  CARREFOUR_ORIGIN,
+  CARREFOUR_STORE_LOCATOR_PATH,
   type CarrefourCategory,
   type CarrefourSession,
 } from './types';
@@ -365,5 +370,131 @@ describe('CarrefourClient', () => {
     await client.readListing('/1');
     await client.close();
     expect(browser.closed).toBe(1);
+  });
+});
+
+describe('CarrefourClient, the store finder and the drive list (plan 0223)', () => {
+  const XML = readFileSync(
+    join(__dirname, '__fixtures__', 'store-locator.xml'),
+    'utf8'
+  );
+  const DRIVES = readFileSync(
+    join(__dirname, '__fixtures__', 'drives.json'),
+    'utf8'
+  );
+
+  /** A session that serves documents as text, and records every wait. */
+  function documents(
+    answer: (url: string) => { status: number; body?: string }
+  ) {
+    const asked: string[] = [];
+    const waits: number[] = [];
+    let opened = 0;
+    const client = new CarrefourClient({
+      userAgent: 'LunaShopperBot/1.0 (+https://velista.app)',
+      openSession: async () => {
+        opened += 1;
+        return {
+          goto: async () => {
+            throw new Error('a store run reads no page state');
+          },
+          fetchText: async (url: string) => {
+            asked.push(url);
+            const { status, body } = answer(url);
+            return { status, body: status === 200 ? (body ?? '') : null };
+          },
+          close: async () => undefined,
+        };
+      },
+      sleepImpl: async (ms) => {
+        waits.push(ms);
+      },
+    });
+    return { client, asked, waits, opened: () => opened };
+  }
+
+  const serve = (url: string) =>
+    url.endsWith(CARREFOUR_STORE_LOCATOR_PATH)
+      ? { status: 200, body: XML }
+      : { status: 200, body: DRIVES };
+
+  it('reads both documents through one session, paced at the floor', async () => {
+    const { client, asked, waits, opened } = documents(serve);
+
+    const list = await client.readStoreLocator();
+    const drives = await client.readDrives();
+
+    expect(list.recordsRead).toBe(1976);
+    expect(drives).toHaveLength(179);
+    expect(asked).toEqual([
+      CARREFOUR_ORIGIN + CARREFOUR_STORE_LOCATOR_PATH,
+      CARREFOUR_ORIGIN + CARREFOUR_DRIVES_PATH,
+    ]);
+    expect(client.loads).toBe(2);
+    expect(opened()).toBe(1);
+    // The second load waited for the floor, as every page of the walk does.
+    expect(waits).toHaveLength(1);
+    expect(waits[0]).toBeGreaterThan(CARREFOUR_MIN_DELAY_MS - 500);
+    expect(waits[0]).toBeLessThanOrEqual(CARREFOUR_MIN_DELAY_MS);
+  });
+
+  it('counts a 403 toward the refusal limit, as a page does', async () => {
+    const { client, asked } = documents(() => ({ status: 403 }));
+
+    await expect(client.readStoreLocator()).rejects.toBeInstanceOf(
+      CarrefourHttpError
+    );
+    await expect(client.readDrives()).rejects.toBeInstanceOf(
+      CarrefourHttpError
+    );
+    await expect(client.readStoreLocator()).rejects.toBeInstanceOf(
+      SourceBlockedError
+    );
+    // Never retried, and nothing loaded after the stop.
+    await expect(client.readDrives()).rejects.toBeInstanceOf(
+      SourceBlockedError
+    );
+    expect(asked).toHaveLength(3);
+  });
+
+  it('refuses a 200 whose document holds no marker, naming the path', async () => {
+    const { client } = documents(() => ({
+      status: 200,
+      body: '<html><body>Mantenimiento</body></html>',
+    }));
+    await expect(client.readStoreLocator()).rejects.toThrow(
+      CARREFOUR_STORE_LOCATOR_PATH
+    );
+  });
+
+  it('refuses a drive list that is not JSON, naming the path', async () => {
+    const { client } = documents(() => ({ status: 200, body: '<html>' }));
+    await expect(client.readDrives()).rejects.toThrow(CARREFOUR_DRIVES_PATH);
+  });
+
+  it('refuses a document that did not answer 200, naming the path', async () => {
+    const { client } = documents(() => ({ status: 404 }));
+    await expect(client.readStoreLocator()).rejects.toThrow(
+      CARREFOUR_STORE_LOCATOR_PATH
+    );
+  });
+
+  it('hands the capture tool the body verbatim', async () => {
+    const { client } = documents(serve);
+    await expect(
+      client.captureText(CARREFOUR_STORE_LOCATOR_PATH)
+    ).resolves.toBe(XML);
+  });
+
+  it('refuses a text read on a session that cannot read text', async () => {
+    const client = new CarrefourClient({
+      userAgent: 'x',
+      openSession: async () => ({
+        goto: async () => ({ status: 200, state: null }),
+        close: async () => undefined,
+      }),
+      sleepImpl: async () => undefined,
+    });
+    await expect(client.readDrives()).rejects.toThrow(/cannot read a document/);
   });
 });

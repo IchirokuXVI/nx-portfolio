@@ -60,3 +60,21 @@ export type {
   CarrefourProduct,
   CarrefourStateLoader,
 } from './lib/types';
+// The chain's own shops: the store finder and the drive list (plan 0223).
+export {
+  parseDrives,
+  salePointsByShop,
+  type CarrefourDrive,
+} from './lib/drives';
+export {
+  CARREFOUR_FORMATS,
+  parseStoreLocator,
+  type CarrefourDroppedRecord,
+  type CarrefourFormat,
+  type CarrefourStore,
+  type CarrefourStoreList,
+} from './lib/stores';
+export {
+  CARREFOUR_DRIVES_PATH,
+  CARREFOUR_STORE_LOCATOR_PATH,
+} from './lib/types';
