@@ -681,7 +681,7 @@ get one run. This needs the Play Console and stays an owner step.
 | Signature wrong or missing | Manifest ignored. | D5. |
 | Zip SHA-256 wrong | Download refused by the updater. | D5, proved in target 1. |
 | Download stops halfway | Bundle not listed as ready. Next check tries again. | Updater keeps partial data out. |
-| New bundle crashes at boot | Rollback after 20 s. Id recorded, never retried. | D7. |
+| New bundle crashes at boot | Rollback after 30 s. Id recorded, never retried. | D7. |
 | New bundle boots but is broken later | Not detected. Fix by a new release or a cluster redeploy, which the app follows. | D8. |
 | Bundle needs newer native layer | Not applied. Flexible update once per code; the running bundle goes on. Immediate only on a refusal. | D4, D9. |
 | Branch APK pointed at a cluster | Built with `--no-ota`, or the cluster's bundle replaces the branch's at the first check. | Target state item 3. |
