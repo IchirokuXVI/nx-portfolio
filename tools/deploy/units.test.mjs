@@ -219,6 +219,28 @@ test('an empty host list fails, and an empty SECRETS passes', () => {
   );
 });
 
+test('OTA_PROJECTS is optional, and names only projects of its own unit', () => {
+  // Absent in the fixture: the complete workspace above already passes without it.
+  assert.deepEqual(
+    checkUnits(
+      workspace({ units: { web: { ...UNIT_ENV.web, OTA_PROJECTS: 'home' } } })
+    ),
+    []
+  );
+  assert.deepEqual(
+    checkUnits(
+      workspace({ units: { web: { ...UNIT_ENV.web, OTA_PROJECTS: '' } } })
+    ),
+    []
+  );
+  expectProblem(
+    workspace({
+      units: { web: { ...UNIT_ENV.web, OTA_PROJECTS: 'server-main' } },
+    }),
+    /web\/unit\.env: OTA_PROJECTS names server-main, and no project of the unit/
+  );
+});
+
 test('a line that is not NAME="value" fails', () => {
   expectProblem(
     workspace({ raw: { web: envText(UNIT_ENV.web) + 'echo hello\n' } }),

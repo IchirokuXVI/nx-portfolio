@@ -1,5 +1,6 @@
 import { isPlatformBrowser } from '@angular/common';
 import {
+  afterNextRender,
   type EnvironmentProviders,
   inject,
   makeEnvironmentProviders,
@@ -8,20 +9,26 @@ import {
 } from '@angular/core';
 import {
   APP_RUNTIME,
+  APP_STORE_UPDATES,
   APP_STORE_URL,
   BrowserFacade,
   BrowserGeolocationReader,
   detectNativeShell,
   GEOLOCATION_READER,
   GOOGLE_CREDENTIAL,
+  LIVE_UPDATES,
   SHARE_TARGET,
   SYSTEM_BARS,
+  UNAVAILABLE_LIVE_UPDATES,
+  unavailableAppStoreUpdates,
   WebShareTarget,
   WebSystemBars,
 } from '@portfolio/velista/platform';
+import { NativeAppStoreUpdates } from './native-app-store-updates';
 import { NativeBrowserFacade } from './native-browser-facade';
 import { NativeGeolocationReader } from './native-geolocation-reader';
 import { NativeGoogleCredential } from './native-google-credential';
+import { NativeLiveUpdates } from './native-live-updates';
 import { NativeShareTarget } from './native-share-target';
 import { NativeShell, storeUrlFor } from './native-shell';
 import { NativeSystemBars } from './native-system-bars';
@@ -84,6 +91,20 @@ export function provideNativeShell(): EnvironmentProviders {
       useFactory: () =>
         isNative() ? storeUrlFor(inject(NativeShell).appId) : null,
     },
+    {
+      // The web keeps the root default, which answers unavailable and is never
+      // asked: `AppUpdates` reaches the updater only inside the native shell.
+      provide: LIVE_UPDATES,
+      useFactory: () =>
+        isNative() ? inject(NativeLiveUpdates) : UNAVAILABLE_LIVE_UPDATES,
+    },
+    {
+      provide: APP_STORE_UPDATES,
+      useFactory: () =>
+        isNative()
+          ? inject(NativeAppStoreUpdates)
+          : unavailableAppStoreUpdates(),
+    },
     provideEnvironmentInitializer(() => {
       if (!inject(BrowserFacade).isBrowser || !isNative()) {
         return;
@@ -91,6 +112,12 @@ export function provideNativeShell(): EnvironmentProviders {
       void inject(NativeShell)
         .start()
         .catch(() => undefined);
+
+      // The bundle confirms its boot at the first render of the application (velista
+      // `0180`, D7): parsed, bootstrapped, the root painted. Not after a navigation,
+      // which can wait on the network, and an offline boot is a good boot.
+      const live = inject(LIVE_UPDATES);
+      afterNextRender(() => void live.confirmBoot());
     }),
   ]);
 }
