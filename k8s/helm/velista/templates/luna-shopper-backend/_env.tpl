@@ -258,6 +258,29 @@ deployment's answer.
       name: {{ $cfg }}
       key: {{ $key }}
 {{- end }}
+# The owner's alerts (plan 0218, section 8). The recipient is the app Secret's
+# HARVEST_ALERT_EMAIL: `provision-release.sh` prompts for it with --env
+# production only and writes it empty elsewhere, so staging is quiet by
+# default. The relay is auth's, from the same ConfigMap keys and the same
+# Secret key, so the harvester holds one more copy of a password the cluster
+# already distributes from one place.
+- name: HARVEST_ALERT_EMAIL
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: HARVEST_ALERT_EMAIL
+- name: SMTP_PASS
+  valueFrom:
+    secretKeyRef:
+      name: {{ $sec }}
+      key: SMTP_PASS
+{{- range $key := (list "SMTP_HOST" "SMTP_PORT" "SMTP_USER" "MAIL_FROM" "ENVIRONMENT_NAME" "ADMIN_APP_BASE_URL") }}
+- name: {{ $key }}
+  valueFrom:
+    configMapKeyRef:
+      name: {{ $cfg }}
+      key: {{ $key }}
+{{- end }}
 {{- end }}
 {{- if eq $svc.role "assistant" }}
 # The assistant (plan 0039). The shortest block here, and the shape of it is the

@@ -5,6 +5,10 @@ import { ClientsModule, Transport } from '@nestjs/microservices';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import type { HarvesterConfig } from '../config/app-config';
 import { HARVESTER_ENTITIES } from '../entities';
+import { ALERT_CHANNEL, SmtpAlertChannel } from './alerts/alert-mailer';
+import { HarvestAlertService } from './alerts/harvest-alert.service';
+import { HarvestAlertStore } from './alerts/harvest-alert.store';
+import { HarvestAlertWorker } from './alerts/harvest-alert.worker';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
 import { CarrefourDetailRunner } from './carrefour-detail.runner';
 import { CATALOG_NATS_CLIENT, CatalogClient } from './catalog-client.service';
@@ -150,6 +154,20 @@ import { SupermarketSourceService } from './supermarket-source.service';
     PostalCodeDiscoveryWorker,
     // The dashboard's harvest block (plan 0088), behind the same gate.
     HarvestDashboardService,
+    // The alerts to the owner (plan 0218): the outbox, the test alert, the
+    // SMTP channel built from the cluster's mail keys, and the worker that
+    // sends what the outcomes wrote.
+    HarvestAlertStore,
+    HarvestAlertService,
+    {
+      provide: ALERT_CHANNEL,
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) =>
+        new SmtpAlertChannel(
+          config.getOrThrow<HarvesterConfig>('harvester').alerts
+        ),
+    },
+    HarvestAlertWorker,
   ],
 })
 export class HarvestModule {}

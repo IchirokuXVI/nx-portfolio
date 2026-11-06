@@ -1706,11 +1706,14 @@ export class ItemService {
              ) * ${TRIGRAM_WEIGHT}
            )`
         : '0';
-    const exact =
-      raw === null
-        ? 'false'
-        : `(lower(g."name" ->> 'es') = lower(${raw})
-            OR lower(g."name" ->> 'en') = lower(${raw}))`;
+    // An exact name match comes next. Like the whole word key below, it is
+    // written only when there is a term: with none it would be a bare `false`,
+    // and Postgres refuses a constant in `ORDER BY`.
+    const exact = raw
+      ? `(lower(g."name" ->> 'es') = lower(${raw})
+            OR lower(g."name" ->> 'en') = lower(${raw})) DESC,
+               `
+      : '';
     const where =
       term && query && raw
         ? `WHERE (
@@ -1775,8 +1778,7 @@ export class ItemService {
       FROM "product_groups" g${offerJoin}
       ${where}
       ORDER BY ${wholeWords}"relevance" DESC,
-               ${exact} DESC,
-               ${priced} ASC NULLS LAST,
+               ${exact}${priced} ASC NULLS LAST,
                g."name" ->> 'en' ASC,
                g."id" ASC
       LIMIT ${p.bind(limit + 1)} OFFSET ${p.bind(offset)}

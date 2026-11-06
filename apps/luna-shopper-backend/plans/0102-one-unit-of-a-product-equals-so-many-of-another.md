@@ -1,4 +1,4 @@
-> **Status: not built, pending re-evaluation.** Much of the catalog, pricing and line model changed after this plan was written. It will not be built as written: a later session re-evaluates it and writes a new plan if the need remains. The state as of 2026-09-17 is in [plan 0121](./0121-plan-status-2026-09-17.md).
+> **Status: closed on 2026-11-05.** The owner decided that a product has one unit and no conversion table (plan `0246` W4). The two bridges this table was for exist without it: the size of a pack in its base unit (plan `0183`) and the weight of a piece (plan `0244`). Section 4, the derived comparison, is plan `0245`. Nothing here is built.
 
 # 0102 One unit of a product equals so many of another
 
