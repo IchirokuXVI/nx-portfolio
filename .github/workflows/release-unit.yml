@@ -157,6 +157,10 @@ jobs:
   build:
     needs: setup
     runs-on: ubuntu-latest
+    # Named so the job sees VELISTA_OTA_SIGNING_KEY of the unit's environment
+    # (velista plan 0180, D5 and owner decision Q4). The portfolio's environment
+    # holds no such secret, and its unit lists no OTA_PROJECTS.
+    environment: ${{ inputs.unit }}-production
     permissions:
       contents: read
       packages: write
@@ -212,6 +216,38 @@ jobs:
             "${build_env[@]}" \
             "$BUILD_IMAGE" \
             npx nx run-many -t build prune --configuration production --projects "$IMAGES"
+
+      # The OTA files of the Android app (velista plan 0180, target 6), written into
+      # dist/apps/<project>/ota/android/ on the runner, where the bundle step left
+      # the build, so the image build below copies them in. Signed with the private
+      # key of the unit's environment; an unsigned manifest never ships, so a unit
+      # that lists OTA projects and has no key fails here. No `set -x`: the key is
+      # in the environment of this step.
+      - name: Write and sign the OTA files
+        env:
+          VELISTA_OTA_SIGNING_KEY: ${{ secrets.VELISTA_OTA_SIGNING_KEY }}
+        run: |
+          . <(tr -d '\r' < "k8s/units/$UNIT/unit.env")
+          if [ -z "${OTA_PROJECTS:-}" ]; then
+            echo "The unit lists no OTA_PROJECTS."
+            exit 0
+          fi
+          if [ -z "$VELISTA_OTA_SIGNING_KEY" ]; then
+            echo "::error::OTA_PROJECTS is \"$OTA_PROJECTS\" and VELISTA_OTA_SIGNING_KEY of the environment is empty"
+            exit 1
+          fi
+          # The commit the tag checked out, which the bundles were built from.
+          GITHUB_SHA="$(git rev-parse HEAD)"
+          export GITHUB_SHA
+          for project in $OTA_PROJECTS; do
+            case ",$IMAGES," in
+              *",$project,"*)
+                VELISTA_APP_VERSION="$VERSION" \
+                  node "apps/$project/scripts/ota-bundle.mjs" --dist "dist/apps/$project"
+                ;;
+              *) echo "$project is not built in this run, so it gets no OTA files." ;;
+            esac
+          done
 
       - name: Every bundle can resolve what it requires
         if: needs.setup.outputs.luna != ''
