@@ -26,6 +26,7 @@ import {
 import {
   HarvestScheduleStore,
   type ClaimedSlot,
+  type SlotHold,
 } from './harvest-schedule.store';
 import { isProbedAdapterKey } from './probes/source-probe.runner';
 import { SourceProbeService } from './probes/source-probe.service';
@@ -51,6 +52,13 @@ export const SCHEDULE_TICK_MS = 60_000;
  * outcome and no alert.
  */
 class GateInterrupted extends Error {}
+
+/**
+ * The note of an undecided slot that is too late by the time its retry comes
+ * (plan 0247, review round 2).
+ */
+export const UNDECIDED_LATE_NOTE =
+  'not decided in time, a stop interrupted its gate';
 
 /** What a start answers: an outcome to write, or a slot left undecided. */
 type SlotResult = ScheduledStart | { interrupted: string };
@@ -188,8 +196,9 @@ export class HarvestScheduleWorker
       try {
         await this.decideHeld(claimed);
       } catch (error) {
-        // The slot is spent by its claim. Losing its outcome is the cost of
-        // never firing it twice, and the next schedule still gets its turn.
+        // The slot is spent by its claim. When it started no run, it has no
+        // outcome, and the retry of an undecided slot takes it one time on a
+        // later tick. The next schedule still gets its turn.
         this.logger.error(
           `Schedule ${claimed.schedule.id} could not record its slot: ` +
             describeError(error).message
@@ -210,7 +219,7 @@ export class HarvestScheduleWorker
     if (!hold) {
       this.logger.log(
         `Schedule ${schedule.id}: the slot of ${slot.toISOString()} is held ` +
-          'by another process, which decides it.'
+          'elsewhere, so this process leaves it.'
       );
       return;
     }
@@ -219,7 +228,23 @@ export class HarvestScheduleWorker
         await this.decide(claimed);
       }
     } finally {
+      await this.letGo(hold, schedule.id);
+    }
+  }
+
+  /**
+   * Release a hold and never throw, so a failed release cannot hide the
+   * error of the decision it held, nor turn a decided slot into a failure.
+   * The store destroys a connection whose unlock failed, which frees the lock.
+   */
+  private async letGo(hold: SlotHold, scheduleId: string): Promise<void> {
+    try {
       await hold.release();
+    } catch (error) {
+      this.logger.error(
+        `Schedule ${scheduleId} could not release the hold of its slot: ` +
+          describeError(error).message
+      );
     }
   }
 
@@ -240,7 +265,7 @@ export class HarvestScheduleWorker
         }
       : await this.start(schedule);
     if ('interrupted' in result) {
-      this.logInterrupted(schedule, slot, result.interrupted, false);
+      this.logInterrupted(schedule, slot, result.interrupted, false, false);
       return;
     }
     const at = this.clock();
@@ -300,8 +325,16 @@ export class HarvestScheduleWorker
    * Decide, one time, each slot that was claimed and never decided, because a
    * shutdown came during its probe gate (plan 0247, review round 1). The same
    * rules as {@link retryInterrupted}: claimed before it runs and spent
-   * whatever it answers, the same gate, and a slot that is too late is left
-   * alone.
+   * whatever it answers, and the same gate.
+   *
+   * **This is the slot's first decision, not a retry of one.** The row's last
+   * outcome is the previous slot's, so the alert rules compare with it as they
+   * do for any slot, and the key is the slot's own (review round 2).
+   *
+   * **A slot that is too late is recorded, not left.** It is written as
+   * `SKIPPED_LATE`, which alerts no one, so the schedule view stops showing
+   * the previous slot's outcome as the last one and the row is not found
+   * again on every tick.
    */
   private async retryUndecided(): Promise<void> {
     const candidates = await this.store.findUndecided();
@@ -310,7 +343,7 @@ export class HarvestScheduleWorker
         return;
       }
       const slot = schedule.lastSlotAt;
-      if (!slot || isTooLate(schedule, slot, this.clock())) {
+      if (!slot) {
         continue;
       }
       try {
@@ -324,9 +357,13 @@ export class HarvestScheduleWorker
           if (!(await this.store.claimUndecided(schedule.id, slot))) {
             continue;
           }
-          await this.retry(schedule, slot);
+          if (isTooLate(schedule, slot, this.clock())) {
+            await this.recordUndecidedLate(schedule, slot);
+          } else {
+            await this.retry(schedule, slot, { firstDecision: true });
+          }
         } finally {
-          await hold.release();
+          await this.letGo(hold, schedule.id);
         }
       } catch (error) {
         this.logger.error(
@@ -341,11 +378,20 @@ export class HarvestScheduleWorker
    * The start of a claimed retry and its outcome. The attempts stay at the 2
    * the retry's claim wrote, started or not, and a retry the gate leaves
    * undecided writes nothing and is spent.
+   *
+   * `firstDecision` marks an undecided slot: its attempts are 2 like any
+   * retry's, which bounds it to this one chance, and the alert and the log
+   * treat it as the slot itself.
    */
-  private async retry(schedule: HarvestSchedule, slot: Date): Promise<void> {
+  private async retry(
+    schedule: HarvestSchedule,
+    slot: Date,
+    { firstDecision }: { firstDecision: boolean } = { firstDecision: false }
+  ): Promise<void> {
+    const retry = !firstDecision;
     const result = await this.start(schedule);
     if ('interrupted' in result) {
-      this.logInterrupted(schedule, slot, result.interrupted, true);
+      this.logInterrupted(schedule, slot, result.interrupted, retry, true);
       return;
     }
     const at = this.clock();
@@ -356,9 +402,31 @@ export class HarvestScheduleWorker
         at,
         attempts: null,
       },
-      ...alertArgument(schedule, slot, true, result, at)
+      ...alertArgument(schedule, slot, retry, result, at)
     );
-    this.log(schedule, slot, result, true);
+    this.log(schedule, slot, result, retry);
+  }
+
+  /**
+   * An undecided slot that is too late when its retry comes, written as
+   * `SKIPPED_LATE`. The 2 the claim wrote stays, so the row is not found
+   * again. The late rule has no alert, so neither has this.
+   */
+  private async recordUndecidedLate(
+    schedule: HarvestSchedule,
+    slot: Date
+  ): Promise<void> {
+    const result: ScheduledStart = {
+      outcome: HarvestScheduleOutcome.SKIPPED_LATE,
+      note: UNDECIDED_LATE_NOTE,
+      runId: null,
+    };
+    await this.store.recordOutcome(schedule.id, {
+      ...result,
+      at: this.clock(),
+      attempts: null,
+    });
+    this.log(schedule, slot, result, false);
   }
 
   /** The start, with anything unexpected written as `REFUSED` (section 5.3). */
@@ -488,15 +556,16 @@ export class HarvestScheduleWorker
     schedule: HarvestSchedule,
     slot: Date,
     note: string,
-    retry: boolean
+    retry: boolean,
+    spent: boolean
   ): void {
     const what = retry ? 'retry of the slot' : 'slot';
     this.logger.log(
       `Schedule ${schedule.id}: ${what} of ${slot.toISOString()} is not ` +
         `decided, ${note}. ` +
-        (retry
+        (spent
           ? 'Its one retry is spent.'
-          : 'A retry on a later tick, after the restart, decides it one time.')
+          : 'A retry on a later tick decides it one time.')
     );
   }
 

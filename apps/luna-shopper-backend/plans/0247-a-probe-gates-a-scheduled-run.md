@@ -172,7 +172,9 @@ After the claim, in this order. Each step that answers ends the slot.
 5. **Is a probe running?** A `RUNNING` probe of the source, by any trigger and in any process,
    is waited for: the worker reads its row every 5 seconds until it finishes or until 11 minutes
    passed since its `startedAt`. The wait outlasts the reaper's 10 minutes by one tick of the
-   probe worker, so a row that a killed pod left `RUNNING` is reaped inside the wait, and
+   probe worker, so the reaper usually reaps a row that a killed pod left `RUNNING` inside the
+   wait. A reaper tick that is busy with a five minute probe can come after the wait ends, and
+   then the slot is skipped with the note `a probe of the chain did not finish`.
    `PROBE_WAIT_MS` is derived from `PROBE_REAP_AFTER_MS` so the two cannot drift. A probe
    that finished `PASSED` answers start. A probe that is still `RUNNING` after that is left to the
    reaper and the slot is skipped with the note `a probe of the chain did not finish`.

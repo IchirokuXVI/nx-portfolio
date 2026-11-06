@@ -210,7 +210,8 @@ models with a spec that holds it equal to the contracts.
 - [ ] The start control is enabled with the notice shown and starts the run unchanged.
 - [ ] No notice for a green probe, no probe, a file import or a store discovery over
       OpenStreetMap.
-- [ ] The schedule page shows words, not keys, for `PROBE_NOT_PASSED` and `SKIPPED_PROBE_FAILED`.
+- [x] The schedule page shows words, not keys, for `PROBE_NOT_PASSED` and `SKIPPED_PROBE_FAILED`.
+      Backend PR #934 shipped the two strings, so this needs no work here.
 - [ ] `npx nx affected -t lint test` is green, and `npx nx build luna-shopper-admin` builds.
 
 ## Verification

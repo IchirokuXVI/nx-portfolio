@@ -17,7 +17,10 @@ import type {
   HarvestScheduleStore,
   ScheduleOutcomeWrite,
 } from './harvest-schedule.store';
-import { HarvestScheduleWorker } from './harvest-schedule.worker';
+import {
+  HarvestScheduleWorker,
+  UNDECIDED_LATE_NOTE,
+} from './harvest-schedule.worker';
 import type { SourceProbeService } from './probes/source-probe.service';
 import { FakeSourceProbeStore } from './probes/source-probe.store.fake';
 import { PROBE_DID_NOT_FINISH, PROBE_POLL_MS } from './schedule-probe-gate';
@@ -548,6 +551,137 @@ describe('HarvestScheduleWorker, the probe gate (plan 0247)', () => {
 
       expect(probeService.runForSchedule).not.toHaveBeenCalled();
       expect(outcomes[0].write.outcome).toBe(HarvestScheduleOutcome.STARTED);
+    });
+  });
+
+  describe('an undecided slot is its first decision (review round 2)', () => {
+    /** Yesterday's slot, skipped for a BLOCKED probe, as the row keeps it. */
+    function afterBlockedSlot(): HarvestSchedule {
+      return schedule({
+        lastSlotAt: SLOT,
+        lastSlotAttempts: 0,
+        lastOutcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+        lastOutcomeAt: new Date(SLOT.getTime() - 24 * 60 * 60_000),
+        lastOutcomeNote:
+          'probe probe-yesterday BLOCKED: listing: the response was HTTP 403',
+      });
+    }
+
+    it('sends no alert when it skips with the status the previous slot skipped with', async () => {
+      const { worker, store, outcomes } = build({
+        undecided: [afterBlockedSlot()],
+        verdicts: [SourceProbeStatus.BLOCKED],
+      });
+      (store.claimDue as jest.Mock).mockResolvedValue(null);
+
+      await worker.tick();
+
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0].write).toMatchObject({
+        outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+        attempts: null,
+      });
+      expect(outcomes[0].alert).toBeUndefined();
+    });
+
+    it('alerts with the plain key of the slot when the status changed', async () => {
+      const { worker, store, outcomes } = build({
+        undecided: [afterBlockedSlot()],
+        verdicts: [SourceProbeStatus.SHAPE_CHANGED],
+      });
+      (store.claimDue as jest.Mock).mockResolvedValue(null);
+
+      await worker.tick();
+
+      expect(outcomes[0].alert).toMatchObject({
+        kind: HarvestAlertKind.SLOT_PROBE_FAILED,
+        dedupeKey: `slot:schedule-1:${SLOT.toISOString()}`,
+        payload: { retry: false, probeStatus: 'SHAPE_CHANGED' },
+      });
+    });
+
+    it('records SKIPPED_LATE with no alert for a slot found past the late window, one time', async () => {
+      const { worker, store, runs, outcomes, advance } = build({
+        undecided: [afterBlockedSlot()],
+      });
+      (store.claimDue as jest.Mock).mockResolvedValue(null);
+      // Thirteen hours on, past half of the daily gap.
+      advance(13 * 60 * 60_000);
+
+      await worker.tick();
+      await worker.tick();
+
+      expect(runs.startScheduled).not.toHaveBeenCalled();
+      expect(store.claimUndecided).toHaveBeenCalledTimes(1);
+      expect(outcomes).toHaveLength(1);
+      expect(outcomes[0].write).toMatchObject({
+        outcome: HarvestScheduleOutcome.SKIPPED_LATE,
+        note: UNDECIDED_LATE_NOTE,
+        runId: null,
+        // The 2 the claim wrote stays, so the row is not found again.
+        attempts: null,
+      });
+      expect(outcomes[0].alert).toBeUndefined();
+    });
+  });
+
+  describe('a failed release of the hold (review round 2)', () => {
+    it('keeps the error of the decision, and logs the release failure', async () => {
+      const { worker, store } = build();
+      (store.holdSlot as jest.Mock).mockResolvedValue({
+        release: async () => {
+          throw new Error('unlock failed');
+        },
+      });
+      (store.recordOutcome as jest.Mock).mockRejectedValueOnce(
+        new Error('outcome write failed')
+      );
+      const errors: string[] = [];
+      jest
+        .spyOn(
+          (worker as unknown as { logger: { error: (m: string) => void } })
+            .logger,
+          'error'
+        )
+        .mockImplementation((message: string) => {
+          errors.push(message);
+        });
+
+      await worker.tick();
+
+      expect(errors).toEqual([
+        expect.stringContaining(
+          'could not release the hold of its slot: unlock failed'
+        ),
+        expect.stringContaining(
+          'could not record its slot: outcome write failed'
+        ),
+      ]);
+    });
+
+    it('does not turn a decided slot into a failure', async () => {
+      const { worker, store, outcomes } = build();
+      (store.holdSlot as jest.Mock).mockResolvedValue({
+        release: async () => {
+          throw new Error('unlock failed');
+        },
+      });
+      const errors: string[] = [];
+      jest
+        .spyOn(
+          (worker as unknown as { logger: { error: (m: string) => void } })
+            .logger,
+          'error'
+        )
+        .mockImplementation((message: string) => {
+          errors.push(message);
+        });
+
+      await worker.tick();
+
+      expect(outcomes[0].write.outcome).toBe(HarvestScheduleOutcome.STARTED);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).not.toContain('could not record');
     });
   });
 

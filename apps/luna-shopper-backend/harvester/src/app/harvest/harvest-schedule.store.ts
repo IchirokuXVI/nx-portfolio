@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import type { HarvestScheduleOutcome } from '@portfolio/luna-shopper/contracts';
 import { NotFoundException } from '@portfolio/luna-shopper/platform';
-import { Repository } from 'typeorm';
+import { Repository, type QueryRunner } from 'typeorm';
 import { HarvestSchedule } from '../entities';
 import type { HarvestAlertDraft } from './alerts/harvest-alert.rules';
 import { insertAlert } from './alerts/harvest-alert.store';
@@ -334,7 +334,8 @@ export class HarvestScheduleStore {
         return null;
       }
     } catch (error) {
-      await runner.release();
+      // The lock may have been taken before the answer was lost.
+      await discardRunner(runner, error);
       throw error;
     }
     return {
@@ -344,9 +345,15 @@ export class HarvestScheduleStore {
             `SELECT pg_advisory_unlock(${SLOT_LOCK_CLASS}, hashtext($1))`,
             [scheduleId]
           );
-        } finally {
-          await runner.release();
+        } catch (error) {
+          // The session may still hold the lock. Back in the pool, the
+          // connection would keep it for whoever borrows it next, and every
+          // other process would read the slot as in progress until that
+          // connection closes. Destroyed, it frees the lock with it.
+          await discardRunner(runner, error);
+          throw error;
         }
+        await runner.release();
       },
     };
   }
@@ -354,4 +361,28 @@ export class HarvestScheduleStore {
   repository(): Repository<HarvestSchedule> {
     return this.schedules;
   }
+}
+
+/**
+ * Give up a runner's connection without returning it to the pool. A pg-pool
+ * client released with an error is removed and closed, and Postgres frees
+ * every session lock of a connection that closes. TypeORM's postgres runner
+ * passes that error on through `releasePostgresConnection`, which `release`
+ * calls with none; the method is private in the typings only. A runner of
+ * another driver has no such method and is released as before.
+ */
+async function discardRunner(
+  runner: QueryRunner,
+  error: unknown
+): Promise<void> {
+  const postgres = runner as unknown as {
+    releasePostgresConnection?: (err: Error) => Promise<void>;
+  };
+  if (typeof postgres.releasePostgresConnection !== 'function') {
+    await runner.release();
+    return;
+  }
+  await postgres.releasePostgresConnection(
+    error instanceof Error ? error : new Error(String(error))
+  );
 }
