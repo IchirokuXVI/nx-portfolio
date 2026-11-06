@@ -527,6 +527,13 @@ export type ItemExpectationDto = {
 };
 
 /**
+ * `ItemRefreshBodyDto` in the gateway's OpenAPI document.
+ */
+export type ItemRefreshBodyDto = {
+  priceScopeId: string;
+};
+
+/**
  * `JoinBasketDto` in the gateway's OpenAPI document.
  */
 export type JoinBasketDto = {
@@ -740,6 +747,7 @@ export type ProblemDetails = {
     | 'invalid_google_token'
     | 'google_sign_in_needs_consent'
     | 'assistant_allowance_reached'
+    | 'price_not_refreshable'
     | 'internal';
   detail?: string;
   message: string;
@@ -4188,6 +4196,29 @@ export type EnumsPostalCodeDiscoveryStatus =
 export type EnumsPostalCodeSource = 'SOURCE' | 'DERIVED' | 'MANUAL';
 
 /**
+ * `enums.PriceRefreshRefusal` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceRefreshRefusal =
+  | 'REFRESH_OFF'
+  | 'NOT_HARVESTED'
+  | 'AMBIGUOUS'
+  | 'SOURCE_OFF'
+  | 'NO_SINGLE_FETCH'
+  | 'CHAIN_REFUSING'
+  | 'FRESH';
+
+/**
+ * `enums.PriceRefreshStatus` in the gateway's OpenAPI document.
+ */
+export type EnumsPriceRefreshStatus =
+  | 'FRESH'
+  | 'PENDING'
+  | 'DONE'
+  | 'NOT_STOCKED'
+  | 'FAILED'
+  | 'BLOCKED';
+
+/**
  * `enums.PriceScopeKind` in the gateway's OpenAPI document.
  */
 export type EnumsPriceScopeKind =
@@ -4427,6 +4458,7 @@ export const HarvestAdapterCapabilityTable = {
     },
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: true,
   },
   'deza-web': {
     writesPrices: false,
@@ -4438,6 +4470,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: 'per-shop',
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   'carrefour-web': {
     writesPrices: true,
@@ -4449,6 +4482,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   'lidl-api': {
     writesPrices: true,
@@ -4460,6 +4494,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: true,
   },
   'eljamon-web': {
     writesPrices: true,
@@ -4471,6 +4506,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: true,
+    refreshesOneProduct: false,
   },
   'dia-api': {
     writesPrices: true,
@@ -4485,6 +4521,7 @@ export const HarvestAdapterCapabilityTable = {
     },
     stockIndicator: 'per-scope',
     provesDelisting: true,
+    refreshesOneProduct: false,
   },
   'osm-places': {
     writesPrices: false,
@@ -4496,6 +4533,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
   manual: {
     writesPrices: false,
@@ -4507,6 +4545,7 @@ export const HarvestAdapterCapabilityTable = {
     walkablePriorities: null,
     stockIndicator: null,
     provesDelisting: false,
+    refreshesOneProduct: false,
   },
 } as const;
 
@@ -4958,6 +4997,30 @@ export type HarvestPostalCodeDiscoverySummaryView = {
   parked: number;
   oldestQueuedAt: string | null;
   draining: boolean;
+};
+
+/**
+ * `harvest.PriceRefreshCheckView` in the gateway's OpenAPI document.
+ */
+export type HarvestPriceRefreshCheckView = {
+  refreshable: boolean;
+  reason: EnumsPriceRefreshRefusal | null;
+  retryAfterSeconds: number;
+  pendingRefreshId: string | null;
+  observedAt: string | null;
+};
+
+/**
+ * `harvest.PriceRefreshView` in the gateway's OpenAPI document.
+ */
+export type HarvestPriceRefreshView = {
+  id: string | null;
+  itemId: string;
+  priceScopeId: string;
+  status: EnumsPriceRefreshStatus;
+  observedAt: string | null;
+  requestedAt: string | null;
+  finishedAt: string | null;
 };
 
 /**
