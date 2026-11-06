@@ -15,6 +15,7 @@ import type {
   SourceEntryPriceView,
   SourceLocationCandidate,
   SourceLocationView,
+  SourceProbeSummary,
   SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -47,8 +48,14 @@ function iso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
 }
 
+/**
+ * A source row on the wire. `lastProbe` is the newest probe that is not
+ * `ABORTED` (plan 0219, section 8), or null when it has none. A caller that
+ * did not read the probes passes nothing and the field is left out.
+ */
 export function toSupermarketSourceView(
-  row: SupermarketSource
+  row: SupermarketSource,
+  lastProbe?: SourceProbeSummary | null
 ): SupermarketSourceView {
   return {
     id: row.id,
@@ -62,6 +69,7 @@ export function toSupermarketSourceView(
     lastRunAt: iso(row.lastRunAt),
     lastSuccessAt: iso(row.lastSuccessAt),
     consecutiveFailures: row.consecutiveFailures,
+    ...(lastProbe !== undefined ? { lastProbe } : {}),
   };
 }
 

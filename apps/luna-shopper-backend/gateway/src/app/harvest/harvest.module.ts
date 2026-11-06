@@ -8,6 +8,7 @@ import {
   AdminHarvestPlacesController,
   AdminHarvestPostalCodesController,
   AdminHarvestPresetsController,
+  AdminHarvestProbesController,
   AdminHarvestRunsController,
   AdminHarvestSchedulesController,
   AdminHarvestShopsController,
@@ -41,6 +42,8 @@ import {
     AdminHarvestSourcesController,
     // The test alert to the owner (plan 0218).
     AdminHarvestAlertsController,
+    // A probe per chain checks the storefront shape (plan 0219).
+    AdminHarvestProbesController,
   ],
 })
 export class GatewayHarvestModule {}

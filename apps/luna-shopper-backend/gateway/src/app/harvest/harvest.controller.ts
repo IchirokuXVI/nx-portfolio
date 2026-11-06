@@ -27,6 +27,7 @@ import {
   POSTAL_CODE_DISCOVERY_PATTERNS,
   SOURCE_ENTRY_PATTERNS,
   SOURCE_LOCATION_PATTERNS,
+  SOURCE_PROBE_PATTERNS,
   SUPERMARKET_SOURCE_PATTERNS,
   validateHarvestDocument,
   type ApplySourceEntryDecisionsResult,
@@ -56,6 +57,8 @@ import {
   type SourceEntryAcceptResult,
   type SourceLocationPage,
   type SourceLocationView,
+  type SourceProbePage,
+  type SourceProbeView,
   type SupermarketSourcePage,
   type SupermarketSourceView,
 } from '@portfolio/luna-shopper/contracts';
@@ -99,6 +102,7 @@ import {
   UpdateHarvestScheduleDto,
   UpsertSupermarketSourceDto,
 } from './harvest.dto';
+import { SourceProbeListQueryDto } from './source-probe.dto';
 
 /**
  * The harvester's REST surface (plan 0038, section 7), under
@@ -1477,5 +1481,67 @@ export class AdminHarvestAlertsController {
       HARVEST_ALERT_PATTERNS.sendTest,
       adminCredential(admin)
     );
+  }
+}
+
+/**
+ * A probe per chain checks the storefront shape (plan 0219, section 8).
+ *
+ * **The start answers before the probe ends.** A Carrefour probe can take
+ * about fifteen seconds with the browser launch, which is Envoy's default
+ * route timeout, so the start answers the `RUNNING` probe with 201 and the
+ * client reads `GET probes/:id` until `status` is not `RUNNING`.
+ *
+ * A probe runs only for a chain whose row is on, as a run does, and not while
+ * a run or another probe of the chain is in flight (section 6).
+ */
+@ApiTags('admin-harvest')
+@ApiBearerAuth('access-token')
+@UseGuards(AdminJwtGuard)
+@ApiProblemResponses({ auth: true, membership: true })
+@Controller({ path: 'admin/harvest', version: '1' })
+export class AdminHarvestProbesController {
+  constructor(private readonly nats: NatsClient) {}
+
+  @Post('sources/:supermarketId/probes')
+  @ApiContractResponse(SOURCE_PROBE_PATTERNS.start, {
+    status: HttpStatus.CREATED,
+  })
+  @ApiProblemResponses({ body: true, conflict: true, notConfigured: true })
+  start(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('supermarketId') supermarketId: string
+  ): Promise<SourceProbeView> {
+    return this.nats.send<SourceProbeView>(SOURCE_PROBE_PATTERNS.start, {
+      ...adminCredential(admin),
+      supermarketId,
+    });
+  }
+
+  @Get('sources/:supermarketId/probes')
+  @ApiContractResponse(SOURCE_PROBE_PATTERNS.list)
+  list(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('supermarketId') supermarketId: string,
+    @Query() query: SourceProbeListQueryDto
+  ): Promise<SourceProbePage> {
+    return this.nats.send<SourceProbePage>(SOURCE_PROBE_PATTERNS.list, {
+      ...adminCredential(admin),
+      supermarketId,
+      cursor: query.cursor,
+      limit: query.limit,
+    });
+  }
+
+  @Get('probes/:id')
+  @ApiContractResponse(SOURCE_PROBE_PATTERNS.get)
+  get(
+    @ActingAdmin() admin: CurrentAdmin,
+    @UuidParam('id') id: string
+  ): Promise<SourceProbeView> {
+    return this.nats.send<SourceProbeView>(SOURCE_PROBE_PATTERNS.get, {
+      ...adminCredential(admin),
+      probeId: id,
+    });
   }
 }

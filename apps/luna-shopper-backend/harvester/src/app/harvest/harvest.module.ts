@@ -42,6 +42,10 @@ import { PostalCodeDiscoveryService } from './postal-code-discovery.service';
 import { PostalCodeDiscoveryStore } from './postal-code-discovery.store';
 import { PostalCodeDiscoveryWorker } from './postal-code-discovery.worker';
 import { PriceScopeResolver } from './price-scope-resolver';
+import { SourceProbeDispatcher } from './probes/source-probe.runner';
+import { SourceProbeService } from './probes/source-probe.service';
+import { SourceProbeStore } from './probes/source-probe.store';
+import { SourceProbeWorker } from './probes/source-probe.worker';
 import { RunExecutor } from './run-executor.service';
 import { HARVEST_CLOCK } from './schedule-slot';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
@@ -168,6 +172,13 @@ import { SupermarketSourceService } from './supermarket-source.service';
         ),
     },
     HarvestAlertWorker,
+    // A probe per chain checks the storefront shape (plan 0219): the one
+    // table it writes, the dispatcher on the adapter, the service the routes
+    // reach, and the daily worker with its reaper.
+    SourceProbeStore,
+    SourceProbeDispatcher,
+    SourceProbeService,
+    SourceProbeWorker,
   ],
 })
 export class HarvestModule {}

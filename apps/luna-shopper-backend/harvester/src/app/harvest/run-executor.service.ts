@@ -591,6 +591,9 @@ export class RunExecutor implements OnApplicationShutdown {
         await this.store.setReport(runId, {
           ...(await this.store.load(runId)).report,
           ...describePrices(imported),
+          // Plan 0221: rows proposed by the words of their name in any order.
+          wordOrderProposals: imported.wordOrderProposals,
+          wordOrderRejectedPointers: imported.wordOrderRejectedPointers,
         });
       }
       if (thrownAfterAbort) {
@@ -966,6 +969,12 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // Plan 0191: the pairs behind `pricesConflicted`, named. Two rows of the
     // chain are bound to one product and state two amounts at one scope.
     priceConflicts: written.priceConflicts,
+    // Plan 0221: rows proposed as a product by the words of their name in
+    // any order, most often a reworded DEZA name. Each waits for a person.
+    wordOrderProposals: written.wordOrderProposals,
+    // And the rows queued pointing at the one rejected row their words meet,
+    // which the owner asked the queue to show (2026-11-05).
+    wordOrderRejectedPointers: written.wordOrderRejectedPointers,
     // Plan 0198: the photo links this run sent to catalog for its bound rows.
     // A link is saved whatever the switch of the chain says.
     imagesLinked: written.imagesLinked,
