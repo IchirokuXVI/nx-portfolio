@@ -1,3 +1,5 @@
+> **PR:** [#933](https://github.com/IchirokuXVI/nx-portfolio/pull/933)
+
 # 0180: the Android app updates itself
 
 > Asked for by the owner on 2026-11-04. Release `0.19.0` (version code `19000`) went to the
