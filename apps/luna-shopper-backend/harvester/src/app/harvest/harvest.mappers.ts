@@ -13,6 +13,7 @@ import type {
   RunEstimate,
   SourceCatalogEntryView,
   SourceEntryPriceView,
+  SourceEntrySizeDoubtView,
   SourceLocationCandidate,
   SourceLocationView,
   SourceProbeSummary,
@@ -20,7 +21,9 @@ import type {
 } from '@portfolio/luna-shopper/contracts';
 import {
   HarvestRunStatus,
+  toBaseUnit,
   unitBasisOf,
+  UnitOfMeasure,
 } from '@portfolio/luna-shopper/contracts';
 import type {
   DiscoveredPlace,
@@ -34,6 +37,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { declaredScopeKey } from './place-matching';
+import { labelAmount } from './size-check';
 
 /**
  * Postgres `numeric` comes back as a **string** through node-postgres, so every
@@ -281,6 +285,39 @@ export function toSourceCatalogEntryView(
     decidedAt: iso(row.decidedAt),
     delistedAt: iso(row.delistedAt ?? null),
     prices: (row.prices ?? []).map(toSourceEntryPriceView),
+    sizeDoubt: toSizeDoubtView(row),
+  };
+}
+
+/**
+ * A row's size doubt (plan 0249), or null. The label is read from the row's
+ * prices when the caller loaded them: the first one the check knows.
+ */
+function toSizeDoubtView(
+  row: SourceCatalogEntry
+): SourceEntrySizeDoubtView | null {
+  if (
+    row.sizeDoubtImplied === null ||
+    row.sizeDoubtImplied === undefined ||
+    row.sizeDoubtRatio === null ||
+    row.sizeDoubtRatio === undefined ||
+    !row.sizeDoubtRunId
+  ) {
+    return null;
+  }
+  const label =
+    (row.prices ?? []).find(
+      (price) => labelAmount(price.unitPriceLabel) !== null
+    )?.unitPriceLabel ?? null;
+  return {
+    implied: Number(row.sizeDoubtImplied),
+    unit:
+      row.sizeUnit === null
+        ? UnitOfMeasure.UNIT
+        : toBaseUnit(1, row.sizeUnit).unit,
+    ratio: Number(row.sizeDoubtRatio),
+    label,
+    runId: row.sizeDoubtRunId,
   };
 }
 

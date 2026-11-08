@@ -3,9 +3,14 @@ import {
   ITEM_GRAMS_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
   ItemKilogramHasSizeException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { SourceCatalogEntry } from '../entities';
-import { createdSize, createdWeight } from './source-entry-size';
+import {
+  createdSize,
+  createdWeight,
+  sizeDoubtRefusal,
+} from './source-entry-size';
 
 /**
  * The size a product created from a row is written with (plan 0183), the
@@ -279,5 +284,53 @@ describe('createdSize', () => {
       });
       expect(createdWeight(size)).toEqual({});
     });
+  });
+});
+
+describe('createdSize, a row whose size is in doubt (plan 0249)', () => {
+  /** Mercadona 18382: stated 1.6 kg, priced as 0.16 kg. */
+  const DOUBTED = {
+    ...QUARTER_KILO,
+    unitSize: 1.6,
+    sizeDoubtImplied: 159.9247,
+  };
+
+  it('refuses to take the size from the row, naming both sizes', () => {
+    expect(() => createdSize(DOUBTED, {})).toThrow(ValidationException);
+    expect(() => createdSize(DOUBTED, {})).toThrow(
+      /states 1600 GRAM.*imply 159\.9247 GRAM/
+    );
+  });
+
+  it('refuses a unit named alone, which would still take the row size', () => {
+    expect(() =>
+      createdSize(DOUBTED, { defaultUnit: UnitOfMeasure.GRAM })
+    ).toThrow(ValidationException);
+  });
+
+  it('refuses a size named as null, which names no size', () => {
+    expect(() => createdSize(DOUBTED, { unitSize: null })).toThrow(
+      ValidationException
+    );
+  });
+
+  it('creates with the size the person names', () => {
+    expect(
+      createdSize(DOUBTED, { unitSize: 160, defaultUnit: UnitOfMeasure.GRAM })
+    ).toEqual({ unitSize: 160, unit: UnitOfMeasure.GRAM, approxWeight: null });
+    expect(createdSize(DOUBTED, { unitSize: 0.16 })).toEqual({
+      unitSize: 160,
+      unit: UnitOfMeasure.GRAM,
+      approxWeight: null,
+    });
+  });
+
+  it('answers the refusal as text the batch route names on its operation', () => {
+    expect(sizeDoubtRefusal(DOUBTED, {})).toMatch(/Name the product's/);
+    expect(sizeDoubtRefusal(DOUBTED, { unitSize: 160 })).toBeNull();
+    expect(sizeDoubtRefusal(QUARTER_KILO, {})).toBeNull();
+    expect(
+      sizeDoubtRefusal({ ...QUARTER_KILO, sizeDoubtImplied: null }, {})
+    ).toBeNull();
   });
 });

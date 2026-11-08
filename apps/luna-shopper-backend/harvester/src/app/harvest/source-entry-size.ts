@@ -8,6 +8,7 @@ import {
   ITEM_GRAMS_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
   ItemKilogramHasSizeException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { SourceCatalogEntry } from '../entities';
 
@@ -87,9 +88,14 @@ export function createdSize(
   entry: Pick<
     SourceCatalogEntry,
     'unitSize' | 'sizeUnit' | 'sizeFormat' | 'soldByWeight' | 'approxWeight'
-  >,
+  > &
+    Partial<Pick<SourceCatalogEntry, 'sizeDoubtImplied'>>,
   named: NamedSize
 ): CreatedSize {
+  const doubt = sizeDoubtRefusal(entry, named);
+  if (doubt !== null) {
+    throw new ValidationException(doubt);
+  }
   const namesNothing =
     (named.unitSize === undefined || named.unitSize === null) &&
     named.defaultUnit === undefined;
@@ -115,6 +121,45 @@ export function createdSize(
     return { unitSize: null, unit: UnitOfMeasure.UNIT, approxWeight: weight };
   }
   return { ...sizeOf(entry, named), approxWeight: null };
+}
+
+/**
+ * Why a product cannot take its size from this row, or null when it can
+ * (plan 0249, section 3).
+ *
+ * **A row whose own price and comparison price disprove its size gives no
+ * size.** The ingest recorded a doubt (`sizeDoubtImplied`), and nothing can
+ * tell which of the two figures is wrong: the chain prints wrong comparison
+ * prices too. So the operation must name `unitSize`, and the refusal names
+ * both sizes for the person who decides. A unit named alone still takes the
+ * row's size, so it is refused as well, and so is a size named as null.
+ *
+ * An accept onto an existing product writes no size and never asks this.
+ */
+export function sizeDoubtRefusal(
+  entry: Pick<SourceCatalogEntry, 'unitSize' | 'sizeUnit'> &
+    Partial<Pick<SourceCatalogEntry, 'sizeDoubtImplied'>>,
+  named: NamedSize
+): string | null {
+  if (
+    entry.sizeDoubtImplied === null ||
+    entry.sizeDoubtImplied === undefined ||
+    (named.unitSize !== undefined && named.unitSize !== null)
+  ) {
+    return null;
+  }
+  const stated =
+    entry.unitSize === null || entry.sizeUnit === null
+      ? null
+      : toBaseUnit(Number(entry.unitSize), entry.sizeUnit);
+  const unit = stated?.unit ?? '';
+  return (
+    'The size of this row is in doubt: it states ' +
+    `${stated?.unitSize ?? Number(entry.unitSize)} ${unit}, and its own ` +
+    'price and comparison price imply ' +
+    `${Number(entry.sizeDoubtImplied)} ${unit}. Name the product's ` +
+    '`unitSize`: the size is not taken from this row.'
+  );
 }
 
 /**

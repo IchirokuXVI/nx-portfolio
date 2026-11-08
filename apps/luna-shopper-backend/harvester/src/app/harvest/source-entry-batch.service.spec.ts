@@ -1342,6 +1342,68 @@ describe('SourceEntryBatchService', () => {
     expect(result.orphanedItemIds).toEqual(['item-new-1']);
   });
 
+  describe('a row whose size is in doubt (plan 0249)', () => {
+    const doubted = () =>
+      entry({
+        unitSize: 1,
+        sizeUnit: UnitOfMeasure.LITER,
+        sizeDoubtImplied: 100,
+        sizeDoubtRatio: 0.1,
+        sizeDoubtRunId: 'run-monday',
+      });
+    const named = { name: { es: 'Leche entera', en: 'Whole milk' } };
+
+    it('refuses a create that names no size on its own operation, with both sizes', async () => {
+      const { service, createItems, saved } = build({ rows: [doubted()] });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: named,
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(false);
+      expect(result.failedStep).toBe('VALIDATE');
+      expect(result.results[0].error).toEqual({
+        code: BulkOperationErrorCode.MALFORMED_OPERATION,
+        detail: expect.stringMatching(
+          /"milk".*states 1000 MILLILITER.*imply 100 MILLILITER/
+        ),
+      });
+      expect(createItems).not.toHaveBeenCalled();
+      expect(saved).toHaveLength(0);
+    });
+
+    it('creates with the size the operation names', async () => {
+      const { service, createItems } = build({ rows: [doubted()] });
+
+      const result = await service.applyDecisions(
+        request([
+          {
+            op: 'createItem',
+            entryId: 'e-1',
+            ref: 'milk',
+            item: {
+              ...named,
+              unitSize: 100,
+              defaultUnit: UnitOfMeasure.MILLILITER,
+            },
+            expect: expectFresh,
+          },
+        ])
+      );
+
+      expect(result.applied).toBe(true);
+      expect(createItems).toHaveBeenCalled();
+    });
+  });
+
   describe('the photo a bound row states (plan 0198)', () => {
     const PHOTO = 'https://prod-mercadona.imgix.net/images/4241.jpg';
     const decide = [
