@@ -57,6 +57,13 @@ export interface ProductRowOptions {
    * builds it from the one chain of {@link ProductRowSource.offer}.
    */
   readonly chains?: ProductRowChains | null;
+  /**
+   * Which figure the unit price line prints. `chain`, the default, is the chain's
+   * own figure under velista `0101` rule 5. `comparable` is the catalog's derived
+   * pair (backend `0245`), for the catalog tab's `unitPrice` order, where that pair
+   * is the number that placed the row (backend `0196`).
+   */
+  readonly unitPriceFigure?: 'chain' | 'comparable';
 }
 
 /** How many chain marks the chain line draws before it says `+N`. */
@@ -101,7 +108,9 @@ export function productRowView(
   const stale = priced !== null && offer?.stale === true;
   const unitPrice = stale
     ? null
-    : unitPriceWords(offer, product, locale, translate);
+    : options.unitPriceFigure === 'comparable'
+      ? comparablePriceWords(offer, priced, locale, translate)
+      : unitPriceWords(offer, product, locale, translate);
   // A kilo piece is named with what a kilo costs too, so a screen reader hears
   // the two numbers the card draws (velista `0179`).
   const perKilo =
@@ -308,6 +317,39 @@ export function unitPriceWords(
       };
     }
   }
+}
+
+/**
+ * The catalog's comparable figure with its basis ("13,42 € / kg"), or null when
+ * the offer carries no pair or no price (backend `0245`). Printed as the server
+ * sent it, never derived here.
+ *
+ * Left out only when it repeats the headline word for word, as a product sold
+ * by the kilo does: its headline already is the price of a kilo.
+ */
+export function comparablePriceWords(
+  offer: ProductOffer | null,
+  headline: PriceWords | null,
+  locale: string,
+  translate: CatalogTranslate
+): PriceWords | null {
+  if (
+    offer === null ||
+    offer.price === null ||
+    offer.comparablePrice === null ||
+    offer.comparableBasis === null
+  ) {
+    return null;
+  }
+  const words: PriceWords = {
+    amount: formatMoney(offer.comparablePrice, offer.currency, locale),
+    per: translate(`catalog.per.${offer.comparableBasis}`),
+  };
+  return headline !== null &&
+    headline.amount === words.amount &&
+    headline.per === words.per
+    ? null
+    : words;
 }
 
 /**

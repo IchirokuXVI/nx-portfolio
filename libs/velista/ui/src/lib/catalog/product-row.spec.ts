@@ -31,6 +31,8 @@ const OFFER: ProductOffer = {
   currency: 'EUR',
   unitPrice: 8.45,
   unitPriceLabel: 'EUR/L',
+  comparablePrice: null,
+  comparableBasis: null,
   observedAt: new Date('2026-09-20T10:00:00.000Z'),
   sourceKind: 'OFFICIAL_API',
   stale: false,
@@ -121,6 +123,85 @@ describe('productRowView', () => {
     });
   });
 
+  describe('under the unit price order, the figure that placed the row (velista 0181)', () => {
+    const comparable = options({ unitPriceFigure: 'comparable' });
+    const LIDL: CatalogProduct = {
+      ...OIL,
+      size: 0.5,
+      unit: 'KILOGRAM',
+      unitBasis: null,
+      offer: {
+        ...OFFER,
+        price: 0.99,
+        unitPrice: null,
+        unitPriceLabel: null,
+        comparablePrice: 1.98,
+        comparableBasis: 'KILOGRAM',
+      },
+    };
+
+    it('prints the pair of a LIDL offer, whose chain printed no unit price', () => {
+      expect(productRowView(LIDL, comparable).unitPrice).toEqual({
+        amount: '€1.98',
+        per: 'catalog.per.KILOGRAM',
+      });
+    });
+
+    it('prints no unit price line for the same offer under another order', () => {
+      expect(productRowView(LIDL, options()).unitPrice).toBeNull();
+    });
+
+    it('prints the pair of a Mercadona offer and not the chain figure', () => {
+      const view = productRowView(
+        {
+          ...OIL,
+          size: 0.75,
+          offer: {
+            ...OFFER,
+            price: 6.34,
+            unitPrice: 8.4,
+            comparablePrice: 8.45,
+            comparableBasis: 'LITER',
+          },
+        },
+        comparable
+      );
+
+      expect(view.unitPrice).toEqual({
+        amount: '€8.45',
+        per: 'catalog.per.LITER',
+      });
+    });
+
+    it('prints nothing for an offer with no pair', () => {
+      expect(
+        productRowView({ ...OIL, size: 0.75 }, comparable).unitPrice
+      ).toBeNull();
+    });
+
+    it('prints nothing that repeats the headline of a product sold by the kilo', () => {
+      const view = productRowView(
+        {
+          ...OIL,
+          size: null,
+          unit: 'KILOGRAM',
+          unitBasis: 'KILOGRAM',
+          offer: {
+            ...OFFER,
+            price: 2.49,
+            unitPrice: 2.49,
+            comparablePrice: 2.49,
+            comparableBasis: 'KILOGRAM',
+          },
+        },
+        comparable
+      );
+
+      expect(view.price?.per).toBe('catalog.per.KILOGRAM');
+      expect(view.unitPrice).toBeNull();
+    });
+  });
+
   it('says no price in words, and draws neither a price nor a chain', () => {
     const view = productRowView(
       { ...OIL, offer: null, unitBasis: null },
@@ -164,6 +245,8 @@ describe('productRowView', () => {
       price: 13.42,
       unitPrice: 13.42,
       unitPriceLabel: 'EUR/kg',
+      comparablePrice: null,
+      comparableBasis: null,
       piecePrice: 20.94,
     };
 

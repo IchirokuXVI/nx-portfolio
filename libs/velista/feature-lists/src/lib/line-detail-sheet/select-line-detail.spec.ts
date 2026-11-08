@@ -97,6 +97,8 @@ function offer(price: number, priceScopeId: string): ProductOffer {
     currency: 'EUR',
     unitPrice: price,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,

@@ -20,6 +20,8 @@ function offer(
     currency,
     unitPrice: null,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     piecePrice,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
