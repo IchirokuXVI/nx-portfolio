@@ -1,3 +1,5 @@
+> **PR:** [#946](https://github.com/IchirokuXVI/nx-portfolio/pull/946)
+
 # 0257: a DEZA section narrows the query that is still capped
 
 > Found on 2026-11-08 by the walk that verified plan `0251` on Luna slot 9 (run `a8a48505`,
