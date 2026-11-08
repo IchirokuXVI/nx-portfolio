@@ -200,6 +200,12 @@ describeIntegration(
           price,
           unitPrice,
           unitPriceLabel: unitPrice === null ? null : 'L',
+          // Since plan 0245 the orders read the catalog's own figure. It is seeded
+          // as the chain's figure on the basis of its label, which keeps each case
+          // below about what it tested; the derivation has its own spec.
+          comparablePrice: price === null ? null : unitPrice,
+          comparableBasis:
+            price === null || unitPrice === null ? null : 'LITER',
           currency: 'EUR',
           priceObservedAt: OBSERVED,
           priceSourceKind: PriceSourceKind.OFFICIAL_WEB,

@@ -17,6 +17,9 @@ export * from './lib/units/source-size';
 // What a verbatim unit price label means (plan 0157), read by catalog and by
 // the harvester (plan 0189). Browser reachable too.
 export * from './lib/units/unit-basis';
+// The catalog's own comparison figure and its basis (plan 0245), derived from
+// the till price and the item's size. Browser reachable too.
+export * from './lib/units/comparable-price';
 
 // The one barcode reader, shared by catalog, the harvester and the gateway
 // (plan 0184). Browser reachable, as the brand key is.

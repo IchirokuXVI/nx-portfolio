@@ -38716,6 +38716,27 @@
               }
             ]
           },
+          "comparablePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "comparableBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "observedAt": {
             "type": [
               "string",
@@ -39439,6 +39460,27 @@
                   "UNIT",
                   "DOZEN",
                   "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparablePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "comparableBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT"
                 ]
               },
               {
@@ -42160,6 +42202,27 @@
                   "UNIT",
                   "DOZEN",
                   "WASH"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparablePrice": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "comparableBasis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "KILOGRAM",
+                  "LITER",
+                  "UNIT"
                 ]
               },
               {

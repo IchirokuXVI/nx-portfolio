@@ -165,7 +165,7 @@ describe('ItemService.getMany with scopes (plan 0066)', () => {
       'si."itemId"',
       'si."price" IS NULL',
       'si."price"',
-      'si."unitPrice"',
+      'si."comparablePrice"',
       'si."priceScopeId"',
     ]);
   });
@@ -246,7 +246,7 @@ describe("ItemService.getMany with offers: 'all' (plan 0109)", () => {
       'si."itemId"',
       'si."price" IS NULL',
       'si."price"',
-      'si."unitPrice"',
+      'si."comparablePrice"',
       'si."priceScopeId"',
     ]);
   });
@@ -358,7 +358,7 @@ describe('ItemService.getMany and the scope stack (plan 0105, D4)', () => {
       'si."itemId"',
       'si."price" IS NULL',
       'si."price"',
-      'si."unitPrice"',
+      'si."comparablePrice"',
       'si."priceScopeId"',
     ]);
     expect(calls.order.join(' ')).not.toContain('priority');
