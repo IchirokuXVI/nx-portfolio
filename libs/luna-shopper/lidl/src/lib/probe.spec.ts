@@ -1,7 +1,7 @@
 import productTwoRegions from './__fixtures__/product-two-region-prices.json';
 import searchPage from './__fixtures__/search-page.json';
 import storePage from './__fixtures__/store-page.json';
-import { probeLidl } from './probe';
+import { LIDL_PROBE_NO_GROCERY_NOTE, probeLidl } from './probe';
 
 /**
  * The LIDL probe against the committed fixtures and a fake fetch (plan 0219,
@@ -136,6 +136,31 @@ describe('probeLidl', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('reads a page whose rows all lost their category as a change of shape', async () => {
+    const uncategorized = index((items) => {
+      for (const item of items) {
+        delete item.gridbox.data['category'];
+      }
+    });
+    const { fetchImpl, calls } = fakeFetch({ search: json(uncategorized) });
+
+    const result = await run(fetchImpl);
+
+    // Problems with no status and no exception: the harvester's verdict
+    // reads this as SHAPE_CHANGED, as it reads a lost path.
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        name: 'listing',
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: ['0 of 5 rows carried siteCategory'],
+      }),
+    ]);
+    expect(result.failure).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
   it('stops at a 403 on the first step with no second request', async () => {
     const { fetchImpl, calls } = fakeFetch({
       search: () => new Response('denied', { status: 403 }),
@@ -240,7 +265,7 @@ describe('probeLidl', () => {
       ['listing page 2', true],
       ['shops', true],
     ]);
-    expect(result.steps[1].sample['note']).toBe('no grocery product was read');
+    expect(result.steps[1].sample['note']).toBe(LIDL_PROBE_NO_GROCERY_NOTE);
     expect(calls).toHaveLength(3);
     expect(calls.some((url) => url.includes('/p/'))).toBe(false);
   });
@@ -256,8 +281,41 @@ describe('probeLidl', () => {
       ['listing', true],
       ['shops', true],
     ]);
-    expect(result.steps[0].sample['note']).toBe('no grocery product was read');
+    expect(result.steps[0].sample['note']).toBe(LIDL_PROBE_NO_GROCERY_NOTE);
     expect(calls).toHaveLength(2);
+  });
+
+  it('asks for no second page at a total of exactly one page', async () => {
+    const whole = bazarOnly() as { numFound: number };
+    whole.numFound = 100;
+    const { fetchImpl, calls } = fakeFetch({ search: json(whole) });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => step.name)).toEqual(['listing', 'shops']);
+    expect(calls.filter((url) => url.includes('/q/api/search'))).toHaveLength(
+      1
+    );
+  });
+
+  it('asks for a second page at a total of one row more than a page', async () => {
+    const first = bazarOnly() as { numFound: number };
+    first.numFound = 101;
+    const { fetchImpl, calls } = fakeFetch({
+      search: byOffset({ '0': first, '100': index() }),
+    });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => step.name)).toEqual([
+      'listing',
+      'listing page 2',
+      'product',
+      'shops',
+    ]);
+    expect(calls.filter((url) => url.includes('/q/api/search'))).toHaveLength(
+      2
+    );
   });
 
   it('stops at a 403 on the second page with no later request', async () => {

@@ -27,13 +27,12 @@ live('LIDL, live', () => {
     console.log(JSON.stringify(result, null, 2));
 
     expect(result.steps.filter((step) => !step.ok)).toEqual([]);
-    // A second listing page only when the first held no grocery row, and a
-    // product step only when one of the two did (plan 0252).
+    // A second listing page only when the first held no grocery row. A run
+    // that read no grocery product is red, so that someone looks (plan 0252).
     const names = result.steps.map((step) => step.name);
     expect([
       ['listing', 'product', 'shops'],
       ['listing', 'listing page 2', 'product', 'shops'],
-      ['listing', 'listing page 2', 'shops'],
     ]).toContainEqual(names);
   });
 });

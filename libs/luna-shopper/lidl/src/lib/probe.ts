@@ -100,6 +100,9 @@ export async function probeLidl(
           ...mostRowsCarry(value.rows, {
             externalId: (row) => hasText(row.externalId),
             path: (row) => hasText(row.path),
+            // A bazar row carries a category too, just not a grocery one. A
+            // page with none lost the field grocery is told from bazar by.
+            siteCategory: (row) => hasText(row.siteCategory),
           })
         );
         const sample: SourceProbeSample = {
