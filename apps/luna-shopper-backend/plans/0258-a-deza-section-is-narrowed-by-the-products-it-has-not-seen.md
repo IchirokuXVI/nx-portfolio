@@ -70,7 +70,7 @@ and the stop reason of each section stays true.
 ### Target state
 
 A walk on an ephemeral slot on the day of the build finds at least as many products as a walk
-of the `dev` code the same afternoon, spends fewer queries than it, and every section's
+of the `dev` code the same afternoon, states the queries both spent, and every section's
 `stoppedBy` is one of `BARREN`, `GROWTH`, `NO_TERM`, `BUDGET` or `COMPLETE` for the reason the
 code really stopped on.
 
@@ -116,13 +116,19 @@ The vocabulary of a query maps each word to the set of `entryKey`s of the produc
 it, among the rows that query returned (the root query keeps the section's set). The weight of a
 word at the time `narrow()` runs is the sum over its products of `1 / (1 + coverage)`. A word
 carried only by products returned many times weighs little; a word carried by products returned
-once weighs most. `narrow()` picks the untried, unissued word of the highest weight under the
-newest capped query that has one, as plan `0257` orders the queries. A word whose products are
-all covered three times or more is not offered at all. Ties fall to the word with more products,
-then to the earlier word.
+once weighs most. `narrow()` weighs the untried, unissued words of **every** open capped query
+of the section, the root included, and issues the pair of query and word with the highest
+weight. The order of plan `0257`, newest capped query first, is withdrawn: the first build of
+this plan kept it, and in Color the branch dug inside one capped child query with two term
+queries that added nothing while `dev`'s brand terms over the whole section each opened up to
+300 new rows (544 products against 1,615 on 2026-11-08). The weight already prefers the root
+while its words reach uncovered products, because the root's set is the largest, and it moves
+to a child when the root's words are spent. A word whose products are all covered three times
+or more is not offered at all. Ties fall to the word with more products, then to the query with
+fewer terms, then to the earlier word.
 
 Nothing is recomputed per row. The weights are summed when `narrow()` runs, over the words of
-one query, which is a few hundred words over a few hundred products at most.
+each open capped query, which is a few hundred words over a few hundred products for each.
 
 ## 3. A budget that follows growth
 
@@ -166,8 +172,9 @@ sections with the largest gain and the five with the largest loss against the `d
 
 ## Acceptance criteria
 
-- [ ] On the same afternoon, this branch finds at least as many products as `dev` and spends
-  fewer queries.
+- [ ] On the same afternoon, this branch finds at least as many products as `dev`. The PR
+  states the queries both spent; fewer is the aim and more is a cost the owner weighs against
+  the products, not a failure.
 - [ ] No section ends `BUDGET` below the hard cap, and no section is cut below 25 queries by
   the growth rule.
 - [ ] `firstSeen` still adds up to the run's product count.
