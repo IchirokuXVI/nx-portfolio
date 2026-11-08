@@ -45,6 +45,27 @@ function bazarOnly(): unknown {
   return page;
 }
 
+/**
+ * A first page of 60 bazar items, as the live site caps a page asked for 100
+ * (plan 0256), each a captured bazar row under its own id, stating `total`.
+ */
+function cappedBazar(total: number): unknown {
+  const page = bazarOnly() as {
+    items: Item[];
+    numFound: number;
+    fetchsize: number;
+  };
+  const [first] = page.items;
+  page.items = Array.from({ length: 60 }, (_, index) => {
+    const item = clone(first);
+    item.gridbox.data['productId'] = 9_000_000 + index;
+    return item;
+  });
+  page.numFound = total;
+  page.fetchsize = 60;
+  return page;
+}
+
 /** The index answered by offset, for the probe's second page. */
 const byOffset =
   (pages: Record<string, unknown>) =>
@@ -115,6 +136,9 @@ describe('probeLidl', () => {
     expect(result.requests).toBe(3);
     expect(calls).toHaveLength(3);
     expect(result.steps[0].sample['total']).toBe(494);
+    // The echo, beside the rows (plan 0256, decision D2).
+    expect(result.steps[0].sample['items']).toBe(5);
+    expect(result.steps[0].sample['fetchsize']).toBe(5);
     expect(result.steps[1].sample['prices']).toBe(2);
     expect(new URL(calls[2]).searchParams.get('limit')).toBe('5');
   });
@@ -234,7 +258,7 @@ describe('probeLidl', () => {
 
   it('asks for the next page once when the first holds no grocery row', async () => {
     const { fetchImpl, calls } = fakeFetch({
-      search: byOffset({ '0': bazarOnly(), '100': index() }),
+      search: byOffset({ '0': bazarOnly(), '2': index() }),
     });
 
     const result = await run(fetchImpl);
@@ -247,7 +271,8 @@ describe('probeLidl', () => {
     ]);
     expect(result.requests).toBe(4);
     expect(calls).toHaveLength(4);
-    expect(new URL(calls[1]).searchParams.get('offset')).toBe('100');
+    // Where the first page's two items ended, not where 100 asked would.
+    expect(new URL(calls[1]).searchParams.get('offset')).toBe('2');
     expect(new URL(calls[2]).pathname).toBe(`/p/producto/p${PRODUCT_ID}`);
     expect(result.steps[0].sample['groceryRows']).toBe(0);
     expect(result.steps[0].sample['note']).toBeUndefined();
@@ -255,7 +280,7 @@ describe('probeLidl', () => {
 
   it('passes with no product step when neither page holds a grocery row', async () => {
     const { fetchImpl, calls } = fakeFetch({
-      search: byOffset({ '0': bazarOnly(), '100': bazarOnly() }),
+      search: byOffset({ '0': bazarOnly(), '2': bazarOnly() }),
     });
 
     const result = await run(fetchImpl);
@@ -285,37 +310,42 @@ describe('probeLidl', () => {
     expect(calls).toHaveLength(2);
   });
 
-  it('asks for no second page at a total of exactly one page', async () => {
-    const whole = bazarOnly() as { numFound: number };
-    whole.numFound = 100;
-    const { fetchImpl, calls } = fakeFetch({ search: json(whole) });
+  it('asks for no second page when the total equals the items the page served', async () => {
+    const { fetchImpl, calls } = fakeFetch({ search: json(cappedBazar(60)) });
 
     const result = await run(fetchImpl);
 
     expect(result.steps.map((step) => step.name)).toEqual(['listing', 'shops']);
+    expect(result.steps[0].sample['items']).toBe(60);
+    expect(result.steps[0].sample['fetchsize']).toBe(60);
     expect(calls.filter((url) => url.includes('/q/api/search'))).toHaveLength(
       1
     );
   });
 
-  it('asks for a second page at a total of one row more than a page', async () => {
-    const first = bazarOnly() as { numFound: number };
-    first.numFound = 101;
+  it('asks the second page where a capped first page ended', async () => {
+    // 100 asked, 60 served: page 2 starts at 60, never at 100 (plan 0256).
     const { fetchImpl, calls } = fakeFetch({
-      search: byOffset({ '0': first, '100': index() }),
+      search: byOffset({ '0': cappedBazar(61), '60': index() }),
     });
 
     const result = await run(fetchImpl);
 
-    expect(result.steps.map((step) => step.name)).toEqual([
-      'listing',
-      'listing page 2',
-      'product',
-      'shops',
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['listing page 2', true],
+      ['product', true],
+      ['shops', true],
     ]);
-    expect(calls.filter((url) => url.includes('/q/api/search'))).toHaveLength(
-      2
-    );
+    const search = calls.filter((url) => url.includes('/q/api/search'));
+    expect(
+      search.map((url) => new URL(url).searchParams.get('offset'))
+    ).toEqual(['0', '60']);
+    expect(
+      search.every(
+        (url) => new URL(url).searchParams.get('fetchsize') === '100'
+      )
+    ).toBe(true);
   });
 
   it('stops at a 403 on the second page with no later request', async () => {

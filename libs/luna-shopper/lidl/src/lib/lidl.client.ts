@@ -3,6 +3,7 @@ import type {
   SourceGuard,
 } from '@portfolio/luna-shopper/source-guard';
 import {
+  nextListOffset,
   normalizeListPage,
   normalizeProduct,
   normalizeStorePage,
@@ -45,8 +46,9 @@ import {
  *   underscored, and `es`, `es-ES` and `ES` are each rejected by name.
  * - An empty `q` with `store=1` returns the in-store assortment, which is the
  *   walk. There is no browse endpoint and no category listing.
- * - `fetchsize` and `offset` page it, up to the `maxfetchsize` of 1,000 the
- *   response reports for itself.
+ * - `fetchsize` and `offset` page it. The response reports a `maxfetchsize`
+ *   of 1,000 but serves at most 60 items a page, and echoes that 60 as its
+ *   `fetchsize` (plan 0256).
  */
 
 /**
@@ -83,7 +85,11 @@ const SEARCH_PARAMS: ReadonlyArray<readonly [string, string]> = [
   ['version', '2.0.0'],
 ];
 
-/** 100 keeps a failed page cheap to retry; the endpoint would allow 1,000. */
+/**
+ * What one index request asks for (plan 0256, decision D1). The site serves
+ * fewer, and the walk steps by what it served, so a cap that rises later is
+ * read with no change here.
+ */
 const DEFAULT_PAGE_SIZE = 100;
 
 /** What one store request asks for. Three requests cover the whole country. */
@@ -142,6 +148,10 @@ export class LidlClient {
    *
    * Rows are deduplicated by product id as they are yielded: paging a listing
    * that changes under the walk can otherwise repeat one.
+   *
+   * **It steps by what a page carried, not by what it asked for** (plan
+   * 0256). The index answers at most 60 items to a `fetchsize` of 100, so a
+   * step of 100 read about 60 per cent of the window.
    */
   async *walkInStore(): AsyncIterable<LidlListRow> {
     const seen = new Set<string>();
@@ -151,7 +161,7 @@ export class LidlClient {
         await this.getJson(this.searchUrl(offset))
       );
       total ??= page.total;
-      if (page.rows.length === 0) {
+      if (page.itemCount === 0) {
         // The page reported rows and answered none, so paging further would
         // loop against a total the source no longer stands behind.
         break;
@@ -162,7 +172,7 @@ export class LidlClient {
           yield row;
         }
       }
-      offset += this.pageSize;
+      offset = nextListOffset(page, offset, this.pageSize);
     }
   }
 

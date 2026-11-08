@@ -37,13 +37,23 @@ export interface LidlListPage {
   /** `numFound`: how many rows the whole query holds. Null when unstated. */
   total: number | null;
   offset: number | null;
+  /**
+   * The page size the index says it served, which is not what was asked: it
+   * answers at most 60 rows to a `fetchsize` of 100 (plan 0256).
+   */
   fetchsize: number | null;
+  /**
+   * How many items the page carried, before the tiles that are not products
+   * were dropped. This, and not {@link rows}, is how far the page reached.
+   */
+  itemCount: number;
 }
 
 /** One page of `/q/api/search`. */
 export function normalizeListPage(payload: Json): LidlListPage {
   const rows: LidlListRow[] = [];
-  for (const item of readArray(payload, 'items')) {
+  const items = readArray(payload, 'items');
+  for (const item of items) {
     // Every row is wrapped in the component the storefront renders it with, so
     // a row of any other kind carries no `gridbox` and is skipped rather than
     // read as an empty product.
@@ -58,7 +68,31 @@ export function normalizeListPage(payload: Json): LidlListPage {
     total: readNumber(payload, 'numFound'),
     offset: readNumber(payload, 'offset'),
     fetchsize: readNumber(payload, 'fetchsize'),
+    itemCount: items.length,
   };
+}
+
+/**
+ * Where the page after this one starts (plan 0256, section 1): past the items
+ * it carried, else past the size it echoed, else past the size asked for.
+ *
+ * **Never the size asked for when the page says otherwise.** The index caps a
+ * page below what a request asks, so a step of the asked size skips the rows
+ * between the cap and the ask. The two fallbacks are for a payload that lost
+ * its shape, and each keeps a walk moving rather than stopping it.
+ */
+export function nextListOffset(
+  page: LidlListPage,
+  offset: number,
+  pageSize: number
+): number {
+  if (page.itemCount > 0) {
+    return offset + page.itemCount;
+  }
+  if (page.fetchsize !== null && page.fetchsize > 0) {
+    return offset + page.fetchsize;
+  }
+  return offset + pageSize;
 }
 
 /** One row of the index, or null when it carries no id to join on. */
