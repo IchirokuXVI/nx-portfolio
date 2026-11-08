@@ -133,7 +133,11 @@ queries, the number the owner set, `config.sectionQueryBudget` still overrides i
 floor it goes on only while the last five queries together added at least one percent of its
 `firstSeen` so far, and never past the hard cap of D1. A section that the growth rule ends has
 `stoppedBy: GROWTH`. The barren rule ends it before that when three passes in a row add
-nothing. `BUDGET` is then only a section that reached the hard cap.
+nothing, but only once the section has spent its floor: under the floor a section ends only on
+`NO_TERM` or `COMPLETE`, and barren passes under it still count toward the three (fix round of
+PR #948: under a capped child query three term queries in a row added nothing and the rule
+ended Color after 11 queries with over a thousand of its rows unread). `BUDGET` is then only a
+section that reached the hard cap.
 
 ## 4. What the report says
 

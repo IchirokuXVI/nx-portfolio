@@ -208,8 +208,17 @@ export class DezaCatalogRunner implements CatalogRunner {
 
   /**
    * One section, crawled and then narrowed until it is complete, exhausted,
-   * barren, no longer growing past its floor, or at the hard cap (plan 0085,
-   * section 3; plan 0258).
+   * barren past its floor, no longer growing past its floor, or at the hard cap
+   * (plan 0085, section 3; plan 0258).
+   *
+   * **Under the floor only `COMPLETE` and `NO_TERM` end a section.** The floor
+   * is what the owner said a section may always spend, and the barren rule is
+   * no exception to it. Under a capped child query the next terms are words of
+   * that query's own rows, and each returns a subset of rows mostly read
+   * already: three of them in a row can add nothing while rows behind the
+   * ceiling are still unread. Before this rule, Color ended `BARREN` after 11
+   * queries with over a thousand of its rows unread, and KIOSCO after 15 with
+   * two hundred.
    *
    * Each query gets **its own client**, because the chain holds the selected
    * section in a PHP session cookie and two queries sharing a jar would move
@@ -282,11 +291,15 @@ export class DezaCatalogRunner implements CatalogRunner {
       // stopped growing was reset to zero barren passes by its neighbours and
       // spent its whole budget, ending `BUDGET` with nothing left to find.
       //
-      // It is tested here, after the query, so three barren passes end the
-      // section before the growth rule at the top of the loop is consulted.
+      // **Only from the floor on.** Under it the barren passes still count, so
+      // a section whose last three queries under the floor added nothing ends
+      // `BARREN` on the query that reaches the floor, and one whose floor query
+      // added something goes on under the growth rule. It is tested here,
+      // after the query, so it ends a section before the growth rule at the
+      // top of the loop is consulted.
       if (added === 0) {
         state.barren += 1;
-        if (state.barren >= BARREN_QUERIES) {
+        if (state.barren >= BARREN_QUERIES && state.queries >= crawl.floor) {
           stoppedBy = 'BARREN';
           break;
         }
@@ -347,7 +360,9 @@ export class DezaCatalogRunner implements CatalogRunner {
 
 /**
  * How many queries a capped section may always spend, **the owner's number**:
- * the floor no growth rule cuts below (plan 0258, section 3).
+ * the floor neither the growth rule nor the barren rule cuts below (plan 0258,
+ * section 3). Under it a section ends only when it is complete or has no term
+ * left.
  * `config.sectionQueryBudget` on the source row overrides it.
  *
  * It was the whole budget before plan 0258, and bounded a run at roughly
@@ -362,7 +377,12 @@ const DEFAULT_SECTION_BUDGET = 25;
  */
 const SECTION_QUERY_CAP = 100;
 
-/** Consecutive queries adding nothing new before a section gives up. */
+/**
+ * Consecutive queries adding nothing new before a section gives up, **once it
+ * has spent its floor**. Under a capped child query three term queries in a
+ * row can add nothing with rows still unread behind the ceiling, so the count
+ * is kept under the floor and acted on only from it.
+ */
 const BARREN_QUERIES = 3;
 
 /**
@@ -411,8 +431,9 @@ interface CrawledProduct {
  *
  * - `BUDGET`: it reached the hard cap, {@link SECTION_QUERY_CAP} queries
  *   (plan 0258), with a capped query still open.
- * - `BARREN`: three passes in a row added nothing new. That is the stop rule
- *   of plan 0085 working, and the section is not reported as unfinished.
+ * - `BARREN`: at or past the floor, three passes in a row added nothing new.
+ *   That is the stop rule of plan 0085 working, and the section is not
+ *   reported as unfinished.
  * - `GROWTH`: past the floor, its last five queries added under one percent
  *   of its `firstSeen` (plan 0258, section 3). The source has shown it as far
  *   as this method reaches, and it is not reported as unfinished either.

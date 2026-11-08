@@ -481,6 +481,81 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     expect(context.warn).not.toHaveBeenCalled();
   });
 
+  it('goes on past three barren passes under the floor, and ends BARREN at the floor when the last three still added nothing (plan 0258)', async () => {
+    // Queries two to four are three words whose rows the section's own query
+    // already showed. The fifth reaches 200 hidden rows. The sixth to eighth
+    // add nothing again, and the eighth is the floor.
+    listing = await startFakeListing(
+      SECTIONS,
+      wordSection([
+        { words: 3, visible: 20, hidden: 0 },
+        { words: 1, visible: 10, hidden: 200 },
+        { words: 3, visible: 5, hidden: 0 },
+      ])
+    );
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 8 })
+    );
+
+    // Before the fix round the fourth query ended the section, and the 200
+    // rows behind `word(3)` were never read.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      ...Array.from({ length: 7 }, (_, index) => `W011|${word(index)}`),
+    ]);
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        firstSeen: 500,
+        queries: 8,
+        stoppedBy: 'BARREN',
+      }),
+      expect.objectContaining({ code: 'W051' }),
+    ]);
+    expect(runReport['incompleteSections']).toEqual([]);
+  });
+
+  it('goes on under the growth rule when the floor query added something, after three barren passes under it (plan 0258)', async () => {
+    // Queries two to four add nothing and the fifth adds 200, as above. From
+    // the sixth on each query adds one product, so the barren count never
+    // reaches three at or past the floor of six.
+    listing = await startFakeListing(
+      SECTIONS,
+      wordSection([
+        { words: 3, visible: 20, hidden: 0 },
+        { words: 1, visible: 10, hidden: 200 },
+        { words: 8, visible: 4, hidden: 1 },
+      ])
+    );
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 6 })
+    );
+
+    // Before the eleventh, the last five added five products, under one
+    // percent of 505.
+    expect(carniceria(listing)).toHaveLength(10);
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        firstSeen: 505,
+        queries: 10,
+        stoppedBy: 'GROWTH',
+        growthAtStop: 5,
+      }),
+      expect.objectContaining({ code: 'W051' }),
+    ]);
+  });
+
   it('never cuts a section below its floor, however little it adds (plan 0258)', async () => {
     // After the three fast words every query adds one product, far under one
     // percent, but the floor of 25 is always spent.
@@ -739,20 +814,20 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     expect(runReport['incompleteSections']).toEqual([]);
     expect(context.warn).not.toHaveBeenCalled();
     // A finished section is still named in `sections`, with what it took and
-    // why it ended (plan 0257): the whole section, `producto`, the seven
-    // brands under `producto`, then three barren brands under the whole
-    // section. The variants under `producto` are never offered: each one's
-    // product was already returned three times (plan 0258).
+    // why it ended (plan 0257). Every row is read by the tenth query, but the
+    // barren rule may end a section only once it has spent its floor, so the
+    // passes that add nothing go on to the 25th and end it there (plan 0258,
+    // fix round). By then every product was returned more than once.
     expect(runReport['sections']).toEqual([
       {
         code: 'W011',
         name: 'Carniceria',
         products: 400,
         firstSeen: 400,
-        queries: 12,
+        queries: 25,
         stoppedBy: 'BARREN',
-        coverageOnce: 56,
-        growthAtStop: 29,
+        coverageOnce: 0,
+        growthAtStop: 0,
       },
       {
         code: 'W051',
@@ -787,8 +862,15 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       'W011|leche',
       'W011|leche entera',
     ]);
+    // Its barren passes come before the floor, so they do not end it: it ends
+    // when no capped query has a term left, with 50 rows of `[leche entera]`
+    // still behind the ceiling (plan 0258, fix round).
     expect(runReport['sections']).toEqual([
-      expect.objectContaining({ code: 'W011', stoppedBy: 'BARREN' }),
+      expect.objectContaining({
+        code: 'W011',
+        firstSeen: 620,
+        stoppedBy: 'NO_TERM',
+      }),
       expect.objectContaining({ code: 'W051' }),
     ]);
   });
@@ -811,6 +893,9 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // `queso`'s 150 were too (plan 0258). `[entera]` shows the 300 rows
     // `[leche entera]` showed, and `[queso]` the 150 the section showed, so
     // `[leche fresca]`, `[entera]` and `[queso]` are three barren passes.
+    // They are under the floor, so they do not end the section (plan 0258,
+    // fix round): `[fresca]` is issued too, and then no capped query has a
+    // term left.
     expect(carniceria(listing)).toEqual([
       'W011|',
       'W011|leche',
@@ -818,16 +903,16 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       'W011|leche fresca',
       'W011|entera',
       'W011|queso',
+      'W011|fresca',
     ]);
     expect(runReport['sections']).toEqual([
       expect.objectContaining({
         code: 'W011',
-        queries: 6,
-        stoppedBy: 'BARREN',
+        queries: 7,
+        stoppedBy: 'NO_TERM',
       }),
       expect.objectContaining({ code: 'W051' }),
     ]);
-    expect(runReport['incompleteSections']).toEqual([]);
   });
 
   it('tries a term spent under one query again under another (plan 0257)', async () => {
@@ -912,6 +997,9 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // same time, adds 85 products with each of its twenty narrowings. A test of
     // the run's product count saw Bolleria's products land during Carniceria's
     // queries and never counted a barren pass.
+    //
+    // The floor is four, so the third barren pass reaches it: the barren rule
+    // acts only from the floor on (plan 0258, fix round).
     const words = [
       'alfa',
       'beta',
@@ -951,7 +1039,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       context,
       report,
       { supermarketId: CHAIN },
-      source({ baseUrl: listing.url }, 2)
+      source({ baseUrl: listing.url, sectionQueryBudget: 4 }, 2)
     );
 
     // The section's own query, then three narrowings that added nothing.
