@@ -344,6 +344,19 @@ interface IncompleteSection {
   stoppedBy: Exclude<SectionStop, 'BARREN'> | null;
   /** The capped queries that were never narrowed. */
   openQueries: string[];
+  /**
+   * The capped query the last narrowing was taken from: where the section
+   * was still digging when it stopped. `openQueries` cannot say it, because a
+   * query leaves it at its first narrowing, so a section that spent its
+   * budget while every pass still added products names no open query at all.
+   * Null when nothing was narrowed, and for a section that threw.
+   */
+  narrowing: string | null;
+  /**
+   * The terms spent narrowing {@link narrowing}. Zero when nothing was
+   * narrowed, null for a section that threw.
+   */
+  termsTried: number | null;
 }
 
 interface SectionState {
@@ -379,8 +392,10 @@ class Crawl {
     const vocabulary = new Map<string, number>();
     this.vocabularies.set(section.code, vocabulary);
     const used = new Set<string>();
-    /** The capped queries a narrowing was taken from. */
-    const narrowed = new Set<string[]>();
+    /** The capped queries a narrowing was taken from, and how many terms each. */
+    const narrowed = new Map<string[], number>();
+    /** The capped query the last narrowing was taken from. */
+    let lastNarrowed: string[] | null = null;
     const state: SectionState = {
       queries: 0,
       barren: 0,
@@ -392,7 +407,8 @@ class Crawl {
           const term = mostFrequentUnused(vocabulary, used, terms);
           if (term) {
             used.add(term);
-            narrowed.add(terms);
+            narrowed.set(terms, (narrowed.get(terms) ?? 0) + 1);
+            lastNarrowed = terms;
             return [...terms, term];
           }
         }
@@ -411,7 +427,9 @@ class Crawl {
         // ceiling when the section stopped. This is the honest artifact:
         // completeness cannot be proven against this source, there is no
         // total to check against, and a number would be a guess. The
-        // section's own query is here only when it was never narrowed.
+        // section's own query is here only when it was never narrowed. Where
+        // the section was still digging is named beside them.
+        const digging: string[] | null = lastNarrowed;
         this.incomplete.push({
           code: section.code,
           name: section.name,
@@ -420,6 +438,8 @@ class Crawl {
           openQueries: state.capped
             .filter((terms) => !narrowed.has(terms))
             .map(describeQuery),
+          narrowing: digging === null ? null : describeQuery(digging),
+          termsTried: digging === null ? 0 : (narrowed.get(digging) ?? 0),
         });
       },
     };
@@ -434,6 +454,8 @@ class Crawl {
       queries: null,
       stoppedBy: null,
       openQueries,
+      narrowing: null,
+      termsTried: null,
     });
   }
 
@@ -512,7 +534,11 @@ function unfinishedWarning(section: IncompleteSection) {
     section.stoppedBy === null
       ? `${label} failed: ${section.openQueries.join('; ')}`
       : `${label} stopped by ${section.stoppedBy} after ` +
-        `${section.queries} query(ies)` +
+        plural(section.queries ?? 0, 'query', 'queries') +
+        (section.narrowing !== null
+          ? ` while narrowing ${section.narrowing}, ` +
+            `${plural(section.termsTried ?? 0, 'term', 'terms')} tried`
+          : '') +
         (section.openQueries.length > 0
           ? `, still capped: ${section.openQueries.join(', ')}`
           : '') +
@@ -522,6 +548,11 @@ function unfinishedWarning(section: IncompleteSection) {
     section.name,
     message
   );
+}
+
+/** "1 query", "25 queries". */
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 function mostFrequentUnused(

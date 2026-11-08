@@ -267,10 +267,27 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * **This is not the retry plan 0090 section 13 forbids.** That retry asks
    * the refused page again at once, inside the paging loop, which is how a
    * refusal deepens into a block. This is one request per refused category,
-   * minutes later, through the same guard and pacing as every other page: a
-   * refusal here counts toward the block exactly as one in the walk does, and
-   * the block still stops the crawl. A category is paged from the page that
-   * failed, and the products it gives are added to the run's map.
+   * minutes later, through the same guard and pacing as every other page. A
+   * category is paged from the page that failed, and the products it gives
+   * are added to the run's map.
+   *
+   * **A retry must never deepen a block** (plan 0090, section 13), and the
+   * pass keeps two rules so that it cannot:
+   *
+   * - **It does not start while the guard counts a refusal in a row.** A walk
+   *   that ended on a refusal hands the pass a guard one or two refusals from
+   *   its stop, and the pass would ask the refused categories back to back.
+   * - **It stops at its first refusal.** A category refused again says the
+   *   refusal was not isolated after all, and the next ask is the request
+   *   that reaches the stop.
+   *
+   * So the guard never stops the run inside the pass. A stop there would turn
+   * a completed walk into a `FAILED` run, send the refusal mail of plan 0218,
+   * count toward the three failures that stop the chain's schedules, and lose
+   * the `LISTING_UNREAD` warnings, which only a run that was not stopped
+   * writes. A category the pass did not ask keeps the warning the walk gave
+   * it, and the one refused again keeps its warning with the offset of the
+   * second refusal.
    *
    * Only a refusal is asked again. A browser that stopped answering is a
    * different failure, and a node the frontier walk could not open was never
@@ -287,6 +304,14 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       (entry) => entry.error instanceof CarrefourHttpError
     );
     if (refused.length === 0) {
+      return null;
+    }
+    const inARow = context.guard?.consecutiveRefusals ?? 0;
+    if (inARow > 0) {
+      this.logger.warn(
+        `Run ${context.runId}: the walk ended on ${inARow} refusal(s) in a ` +
+          `row, so ${refused.length} refused category(ies) are not asked again`
+      );
       return null;
     }
     await context.setStage(
@@ -314,6 +339,11 @@ export class CarrefourCatalogRunner implements CatalogRunner {
             `(${entry.category.name}) failed again: ${String(error)}`
         );
         entry.error = error;
+        if (error instanceof CarrefourHttpError) {
+          // Refused again: the pass ends here, and every category after this
+          // one keeps the warning the walk gave it.
+          return null;
+        }
         continue;
       }
       // Read this time: it is no longer unread. Its first failure stays

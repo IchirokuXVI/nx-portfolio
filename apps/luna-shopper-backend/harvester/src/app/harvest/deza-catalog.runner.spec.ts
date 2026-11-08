@@ -160,7 +160,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // it spent, why it stopped, and every capped query no narrowing was taken
     // from (plan 0251). `producto` appears in all 400 descriptions, so
     // narrowing by it narrows nothing and it is open. The section's own query
-    // was narrowed twice, so it is not.
+    // was narrowed twice, so it is not: it is where the section was still
+    // digging when the budget ran out, with the two terms it spent.
     expect(runReport['incompleteSections']).toEqual([
       {
         code: 'W011',
@@ -168,6 +169,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         queries: 3,
         stoppedBy: 'BUDGET',
         openQueries: ['producto'],
+        narrowing: '(the whole section)',
+        termsTried: 2,
       },
     ]);
     // And the run row says so, before the run ends.
@@ -178,8 +181,9 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       offerId: null,
       page: null,
       message:
-        'Section W011 Carniceria stopped by BUDGET after 3 query(ies), ' +
-        'still capped: producto.',
+        'Section W011 Carniceria stopped by BUDGET after 3 queries while ' +
+        'narrowing (the whole section), 2 terms tried, still capped: ' +
+        'producto.',
     });
     // Before the last flush, which is what writes it onto the row.
     expect(
@@ -217,14 +221,101 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         queries: 1,
         stoppedBy: 'NO_TERM',
         openQueries: ['(the whole section)'],
+        narrowing: null,
+        termsTried: 0,
+      },
+    ]);
+    expect(context.warn).toHaveBeenCalledWith({
+      code: HarvestWarningCode.LISTING_UNREAD,
+      name: 'Carniceria',
+      offerId: null,
+      page: null,
+      message:
+        'Section W011 Carniceria stopped by NO_TERM after 1 query, still ' +
+        'capped: (the whole section).',
+    });
+  });
+
+  it('names where a section was still digging when it ran out of terms (plan 0251)', async () => {
+    // The section's own query is capped and narrows by `producto`, which
+    // every row carries, so that query is capped too. `producto` is the only
+    // word long enough to narrow by, so after it no term is left for either.
+    listing = await startFakeListing(
+      SECTIONS,
+      Array.from({ length: 400 }, (_, index) => ({
+        description: `Producto ${index} g`,
+        section: 'W011',
+        shops: ['T1'],
+      }))
+    );
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(runReport['incompleteSections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        queries: 2,
+        stoppedBy: 'NO_TERM',
+        openQueries: ['producto'],
+        narrowing: '(the whole section)',
+        termsTried: 1,
       },
     ]);
     expect(context.warn).toHaveBeenCalledWith(
       expect.objectContaining({
-        code: HarvestWarningCode.LISTING_UNREAD,
-        name: 'Carniceria',
+        message:
+          'Section W011 Carniceria stopped by NO_TERM after 2 queries while ' +
+          'narrowing (the whole section), 1 term tried, still capped: ' +
+          'producto.',
       })
     );
+  });
+
+  it('names a section that threw, with no count and no stop (plan 0251)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Pan de molde ALTEZA 400 g',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+    // The first heartbeat, on Carniceria's first row, fails the section.
+    (context.heartbeat as jest.Mock).mockRejectedValueOnce(new Error('boom'));
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(runReport['incompleteSections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        queries: null,
+        stoppedBy: null,
+        openQueries: ['Error: boom'],
+        narrowing: null,
+        termsTried: null,
+      },
+    ]);
+    expect(context.warn).toHaveBeenCalledTimes(1);
+    expect(context.warn).toHaveBeenCalledWith({
+      code: HarvestWarningCode.LISTING_UNREAD,
+      name: 'Carniceria',
+      offerId: null,
+      page: null,
+      message: 'Section W011 Carniceria failed: Error: boom',
+    });
   });
 
   it('writes nothing for a section whose split ended barren (plan 0251)', async () => {

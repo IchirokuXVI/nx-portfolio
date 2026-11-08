@@ -339,8 +339,10 @@ function declareListing(
  *
  * The run still ends `COMPLETED`, and these are what say it is partial. Why a
  * category comes back short is plan 0253's; this only names it, with both
- * numbers. A category that printed no count is a category whose first page
- * never answered, which is a part not read at all rather than a short one.
+ * numbers. A category that printed no count and gave no row is a category
+ * whose first page never answered, which is a part not read at all rather
+ * than a short one. One that printed no count and gave rows answered without
+ * the count, and is short: what it read is named, against nothing.
  * An aborted walk writes none: it does not end `COMPLETED`, and every
  * category after the abort would read as short.
  */
@@ -349,13 +351,24 @@ function warnShortCategories(context: RunContext, walk: Walk): void {
     return;
   }
   for (const category of walk.categories) {
-    if (category.printedCount === null) {
+    if (category.printedCount === null && category.rowsRead === 0) {
       context.warn(
         listingWarning(
           HarvestWarningCode.LISTING_UNREAD,
           category.name,
           `Category ${category.code} ${category.name} printed no count: its ` +
-            `first page did not answer, and ${category.rowsRead} row(s) were read.`
+            `first page did not answer, and 0 row(s) were read.`
+        )
+      );
+    } else if (category.printedCount === null) {
+      // The first page answered and printed no count, so there is nothing to
+      // read the rows against: a part read, not a part never reached.
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_SHORT,
+          category.name,
+          `Category ${category.code} ${category.name}: ` +
+            `${category.rowsRead} row(s) read, no count printed.`
         )
       );
     } else if (category.rowsRead < category.printedCount) {

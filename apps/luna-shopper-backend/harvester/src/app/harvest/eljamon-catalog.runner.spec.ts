@@ -391,6 +391,61 @@ describe('ElJamonCatalogRunner', () => {
       expect(runContext.warn).not.toHaveBeenCalled();
     });
 
+    it('writes LISTING_SHORT for a category whose first page printed no count and gave rows (plan 0251)', async () => {
+      const runContext = context();
+      const noCount = (url: URL): Response =>
+        url.pathname === '/categorias/bebidas/06'
+          ? new Response(
+              listing(BEBIDAS_PAGE_1, 20, '06').replace(
+                '<p>20 Artículos</p>',
+                ''
+              )
+            )
+          : storefront(url);
+      await new TestRunner(noCount).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_SHORT,
+        name: expect.any(String),
+        offerId: null,
+        page: null,
+        message: expect.stringMatching(
+          /^Category 06 .*: 20 row\(s\) read, no count printed\.$/
+        ),
+      });
+    });
+
+    it('writes LISTING_UNREAD for a category whose first page did not answer (plan 0251)', async () => {
+      const runContext = context();
+      const refused = (url: URL): Response =>
+        url.pathname === '/categorias/bebidas/06'
+          ? new Response('', { status: 403 })
+          : storefront(url);
+      await new TestRunner(refused).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: expect.any(String),
+        offerId: null,
+        page: null,
+        message: expect.stringMatching(
+          /^Category 06 .* printed no count: its first page did not answer, and 0 row\(s\) were read\.$/
+        ),
+      });
+    });
+
     it('declares nothing when the run is aborted', async () => {
       const controller = new AbortController();
       controller.abort();
