@@ -61,7 +61,8 @@ export interface ProductRowOptions {
    * Which figure the unit price line prints. `chain`, the default, is the chain's
    * own figure under velista `0101` rule 5. `comparable` is the catalog's derived
    * pair (backend `0245`), for the catalog tab's `unitPrice` order, where that pair
-   * is the number that placed the row (backend `0196`).
+   * is the number that placed the row (backend `0196`). It prints on a stale
+   * price as well, with the age drawn under it rather than in its place.
    */
   readonly unitPriceFigure?: 'chain' | 'comparable';
 }
@@ -106,11 +107,15 @@ export function productRowView(
   const priced = priceWords(offer, product, locale, translate);
   const price = priced === null ? null : priceWordsText(priced);
   const stale = priced !== null && offer?.stale === true;
-  const unitPrice = stale
-    ? null
-    : options.unitPriceFigure === 'comparable'
+  // Under the `unitPrice` order the pair is the number that placed the row, so
+  // it prints on a stale price too, with the age under it. Elsewhere a stale
+  // price says its age in place of the chain's figure.
+  const unitPrice =
+    options.unitPriceFigure === 'comparable'
       ? comparablePriceWords(offer, priced, locale, translate)
-      : unitPriceWords(offer, product, locale, translate);
+      : stale
+        ? null
+        : unitPriceWords(offer, product, locale, translate);
   // A kilo piece is named with what a kilo costs too, so a screen reader hears
   // the two numbers the card draws (velista `0179`).
   const perKilo =

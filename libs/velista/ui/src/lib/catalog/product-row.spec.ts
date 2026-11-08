@@ -173,6 +173,34 @@ describe('productRowView', () => {
       });
     });
 
+    it('prints the pair of a stale offer too, and keeps its age', () => {
+      const stale: CatalogProduct = {
+        ...LIDL,
+        offer: { ...LIDL.offer!, stale: true },
+      };
+      const view = productRowView(stale, {
+        ...comparable,
+        now: new Date('2026-10-08T10:00:00.000Z'),
+      });
+
+      expect(view.stale).toBe(true);
+      expect(view.unitPrice).toEqual({
+        amount: '€1.98',
+        per: 'catalog.per.KILOGRAM',
+      });
+      expect(view.seen).toBe('18 days ago');
+    });
+
+    it('still says only the age of a stale offer under another order', () => {
+      const view = productRowView(
+        { ...LIDL, offer: { ...LIDL.offer!, stale: true } },
+        options({ now: new Date('2026-10-08T10:00:00.000Z') })
+      );
+
+      expect(view.unitPrice).toBeNull();
+      expect(view.seen).toBe('18 days ago');
+    });
+
     it('prints nothing for an offer with no pair', () => {
       expect(
         productRowView({ ...OIL, size: 0.75 }, comparable).unitPrice
@@ -594,6 +622,35 @@ describe('ProductRow', () => {
     expect(seen?.textContent).toContain('18 days ago');
     expect(seen?.querySelector('lib-clock-icon')).not.toBeNull();
     expect(price?.children).toHaveLength(2);
+  });
+
+  it('draws the comparable figure of a stale price, with its age under it', async () => {
+    const fixture = await render(
+      productRowView(
+        {
+          ...OIL,
+          size: 0.75,
+          offer: {
+            ...OFFER,
+            stale: true,
+            price: 6.34,
+            comparablePrice: 8.45,
+            comparableBasis: 'LITER',
+          },
+        },
+        options({
+          now: new Date('2026-10-08T10:00:00.000Z'),
+          unitPriceFigure: 'comparable',
+        })
+      )
+    );
+
+    const price = host(fixture).querySelector('.price');
+    const lines = Array.from(price?.querySelectorAll('.unit') ?? []);
+    expect(lines).toHaveLength(2);
+    expect(lines[0].textContent).toContain('€8.45');
+    expect(lines[1].classList.contains('seen')).toBe(true);
+    expect(lines[1].textContent).toContain('18 days ago');
   });
 
   it('draws the carton when there is no picture, and the picture when there is', async () => {
