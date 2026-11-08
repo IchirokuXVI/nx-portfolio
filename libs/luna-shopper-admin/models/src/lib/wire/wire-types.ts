@@ -4928,6 +4928,13 @@ export type HarvestItemSourceEntryView = {
   decidedAt: string | null;
   delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
+  sizeDoubt?: {
+    implied: number;
+    unit: EnumsUnitOfMeasure;
+    ratio: number;
+    label: string | null;
+    runId: string;
+  } | null;
   eanSharedBy: number | null;
   scopeSharedWith: string[];
 };
@@ -5109,6 +5116,13 @@ export type HarvestQueuedSourceEntryView = {
   decidedAt: string | null;
   delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
+  sizeDoubt?: {
+    implied: number;
+    unit: EnumsUnitOfMeasure;
+    ratio: number;
+    label: string | null;
+    runId: string;
+  } | null;
   brandMatches: CatalogBrandMatchView[];
 };
 
@@ -5201,6 +5215,13 @@ export type HarvestSourceCatalogEntryView = {
   decidedAt: string | null;
   delistedAt?: string | null;
   prices: HarvestSourceEntryPriceView[];
+  sizeDoubt?: {
+    implied: number;
+    unit: EnumsUnitOfMeasure;
+    ratio: number;
+    label: string | null;
+    runId: string;
+  } | null;
 };
 
 /**

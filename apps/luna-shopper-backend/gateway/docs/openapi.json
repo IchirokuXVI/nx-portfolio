@@ -44956,6 +44956,48 @@
               "$ref": "#/components/schemas/harvest.SourceEntryPriceView"
             }
           },
+          "sizeDoubt": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "implied": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "unit": {
+                    "$ref": "#/components/schemas/enums.UnitOfMeasure"
+                  },
+                  "ratio": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "implied",
+                  "unit",
+                  "ratio",
+                  "label",
+                  "runId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The size the row’s own price and comparison price imply, in base units, when it disagrees with the stated size beyond about 15%, and null otherwise. Evidence for a person, never a correction: the stated size stays what the source sent. While it is set, creating a product from the row requires a named `unitSize`."
+          },
           "eanSharedBy": {
             "type": [
               "integer",
@@ -45673,6 +45715,48 @@
               "$ref": "#/components/schemas/harvest.SourceEntryPriceView"
             }
           },
+          "sizeDoubt": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "implied": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "unit": {
+                    "$ref": "#/components/schemas/enums.UnitOfMeasure"
+                  },
+                  "ratio": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "implied",
+                  "unit",
+                  "ratio",
+                  "label",
+                  "runId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The size the row’s own price and comparison price imply, in base units, when it disagrees with the stated size beyond about 15%, and null otherwise. Evidence for a person, never a correction: the stated size stays what the source sent. While it is set, creating a product from the row requires a named `unitSize`."
+          },
           "brandMatches": {
             "type": "array",
             "items": {
@@ -46146,6 +46230,48 @@
             "items": {
               "$ref": "#/components/schemas/harvest.SourceEntryPriceView"
             }
+          },
+          "sizeDoubt": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "implied": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "unit": {
+                    "$ref": "#/components/schemas/enums.UnitOfMeasure"
+                  },
+                  "ratio": {
+                    "type": "number",
+                    "minimum": 0
+                  },
+                  "label": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "runId": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "implied",
+                  "unit",
+                  "ratio",
+                  "label",
+                  "runId"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The size the row’s own price and comparison price imply, in base units, when it disagrees with the stated size beyond about 15%, and null otherwise. Evidence for a person, never a correction: the stated size stays what the source sent. While it is set, creating a product from the row requires a named `unitSize`."
           }
         },
         "required": [
