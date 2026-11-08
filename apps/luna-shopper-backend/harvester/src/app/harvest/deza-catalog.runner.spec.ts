@@ -5,7 +5,12 @@ import {
   SourceGuard,
 } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
-import { DezaCatalogRunner, entryKey } from './deza-catalog.runner';
+import {
+  DezaCatalogRunner,
+  entryKey,
+  heaviestUntried,
+  type CappedQuery,
+} from './deza-catalog.runner';
 import { startFakeListing, type FakeListing } from './deza-listing.fake';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
@@ -49,7 +54,7 @@ function rows(description: string, from: number, count: number) {
  * capped with rows that carry `entera` (130) and `fresca` (20). `[leche
  * entera]` is capped too and carries no other word.
  *
- * The section's most frequent untried word after `[leche]` is `queso`, so a
+ * The section's heaviest untried word after `[leche]` is `queso`, so a
  * narrowing that drew from the section would issue `[queso]` third.
  */
 function lecheSection() {
@@ -59,6 +64,57 @@ function lecheSection() {
     ...rows('Leche fresca', 300, 20),
     ...rows('Leche entera', 320, 350),
   ];
+}
+
+/**
+ * A word of six letters that no other word of the set contains: `termaa`,
+ * `termab`, ... The fake matches a term as a substring.
+ */
+function word(index: number): string {
+  const letters = 'abcdefghijklmnopqrstuvwxyz';
+  return `term${letters[Math.floor(index / 26)]}${letters[index % 26]}`;
+}
+
+/**
+ * A capped Carniceria built from groups of words: each word of a group has
+ * `visible` rows among the 300 the section's own query shows and `hidden`
+ * rows behind the ceiling. Words of one row each, hiding nothing, fill the
+ * rest of the 300. Every row carries one word, so a term reaches exactly the
+ * rows of its word.
+ */
+function wordSection(
+  groups: Array<{ words: number; visible: number; hidden: number }>
+) {
+  const shown: ReturnType<typeof rows> = [];
+  const hidden: ReturnType<typeof rows> = [];
+  let next = 0;
+  let id = 0;
+  for (const group of groups) {
+    for (let index = 0; index < group.words; index += 1) {
+      const term = word(next++);
+      shown.push(...rows(term, id, group.visible));
+      id += group.visible;
+      hidden.push(...rows(term, id, group.hidden));
+      id += group.hidden;
+    }
+  }
+  while (shown.length < 300) {
+    shown.push(...rows(word(next++), id++, 1));
+  }
+  return [...shown, ...hidden];
+}
+
+/**
+ * A section that grows fast for three narrowings, by 250 products each, and
+ * then by one product a query: `slow` words of three visible rows and one
+ * hidden, then `flat` words of two visible rows that hide nothing.
+ */
+function slowingSection(slow: number, flat: number) {
+  return wordSection([
+    { words: 3, visible: 10, hidden: 250 },
+    { words: slow, visible: 3, hidden: 1 },
+    { words: flat, visible: 2, hidden: 0 },
+  ]);
 }
 
 /** The queries the fake was asked for Carniceria, in order. */
@@ -117,6 +173,109 @@ const source = (
     config,
   }) as unknown as SupermarketSource;
 
+describe('heaviestUntried (plan 0258)', () => {
+  const query = (vocabulary: Record<string, string[]>): CappedQuery => ({
+    terms: [],
+    vocabulary: new Map(
+      Object.entries(vocabulary).map(([term, keys]) => [term, new Set(keys)])
+    ),
+    tried: new Set(),
+    closed: false,
+  });
+
+  it('weighs a word by the products it reaches that were returned least', () => {
+    const capped = query({
+      // Three products, each returned four times: frequent, and spent.
+      tres: ['p3', 'p4', 'p5'],
+      // Two products returned once: 1/2 + 1/2.
+      dos: ['p1', 'p2'],
+      // One returned once, one twice: 1/2 + 1/3.
+      otra: ['p6', 'p7'],
+    });
+    const coverage = new Map([
+      ['p1', 1],
+      ['p2', 1],
+      ['p3', 4],
+      ['p4', 4],
+      ['p5', 4],
+      ['p6', 1],
+      ['p7', 2],
+    ]);
+
+    expect(heaviestUntried(capped, new Set(), coverage)).toBe('dos');
+
+    // A query returned both of `dos`'s products: 1/3 + 1/3 now weighs less
+    // than `otra`.
+    coverage.set('p1', 2);
+    coverage.set('p2', 2);
+    expect(heaviestUntried(capped, new Set(), coverage)).toBe('otra');
+  });
+
+  it('offers no word whose every product was returned three times or more', () => {
+    const capped = query({ tres: ['p1', 'p2', 'p3'] });
+    const coverage = new Map([
+      ['p1', 3],
+      ['p2', 5],
+      ['p3', 3],
+    ]);
+
+    expect(heaviestUntried(capped, new Set(), coverage)).toBeNull();
+    coverage.set('p2', 2);
+    expect(heaviestUntried(capped, new Set(), coverage)).toBe('tres');
+  });
+
+  it('breaks a tie by the word with more products, then the word seen first', () => {
+    const coverage = new Map([
+      ['p1', 1],
+      ['p2', 1],
+      ['p3', 2],
+      ['p4', 2],
+      ['p5', 2],
+      ['p6', 1],
+      ['p7', 1],
+    ]);
+    // `dos` and `tres` both weigh 1; `tres` reaches more products.
+    expect(
+      heaviestUntried(
+        query({ dos: ['p1', 'p2'], tres: ['p3', 'p4', 'p5'] }),
+        new Set(),
+        coverage
+      )
+    ).toBe('tres');
+    // `uno` and `otro` are equal in both: the first seen wins.
+    expect(
+      heaviestUntried(
+        query({ uno: ['p1', 'p2'], otro: ['p6', 'p7'] }),
+        new Set(),
+        coverage
+      )
+    ).toBe('uno');
+  });
+
+  it('skips a word already tried, its own term, and a query already issued', () => {
+    const capped: CappedQuery = {
+      ...query({
+        leche: ['p1'],
+        fresca: ['p2'],
+        entera: ['p3'],
+        light: ['p4'],
+      }),
+      terms: ['leche'],
+      tried: new Set(['fresca']),
+    };
+    const coverage = new Map([
+      ['p1', 1],
+      ['p2', 1],
+      ['p3', 1],
+      ['p4', 1],
+    ]);
+
+    expect(heaviestUntried(capped, new Set(['entera leche']), coverage)).toBe(
+      'light'
+    );
+  });
+});
+
 describe('DezaCatalogRunner (plan 0085)', () => {
   let listing: FakeListing;
 
@@ -151,7 +310,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     expect(report.products).toHaveLength(2);
   });
 
-  it('splits a capped section by the most frequent unused term', async () => {
+  it('splits a capped section by the heaviest unused term (plan 0258)', async () => {
     listing = await startFakeListing(SECTIONS, cappedSection());
     const { runner, context, report } = build(listing);
 
@@ -159,54 +318,56 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       context,
       report,
       { supermarketId: CHAIN },
-      source({ baseUrl: listing.url, sectionQueryBudget: 4 })
+      source({ baseUrl: listing.url })
     );
 
-    const carniceria = listing.queries.filter((query) =>
-      query.startsWith('W011|')
-    );
-    expect(carniceria[0]).toBe('W011|');
+    const queries = carniceria(listing);
     // Every query after the first carries a term drawn from the descriptions the
     // section had already shown, which is the split section 3 describes.
-    expect(carniceria.slice(1).every((query) => query !== 'W011|')).toBe(true);
-    expect(carniceria).toHaveLength(4);
+    // `producto` is carried by all 300 rows the section's own query showed, so
+    // it weighs most; `[producto]` is capped, and its own rows are split next.
+    expect(queries.slice(0, 3)).toEqual([
+      'W011|',
+      'W011|producto',
+      'W011|producto marca0',
+    ]);
+    expect(queries.slice(1).every((query) => query !== 'W011|')).toBe(true);
   });
 
-  it('stops at the budget and names the section with its open queries', async () => {
-    // `producto` is capped and its rows carry no other word, so it closes
-    // unnarrowed and the section's own query is narrowed again, by `pollo`.
-    listing = await startFakeListing(SECTIONS, [
-      ...rows('Producto', 0, 280),
-      ...rows('Pollo', 280, 20),
-      ...rows('Producto', 300, 120),
-    ]);
+  it('stops at the hard cap and names the section, whatever it still adds (plan 0258)', async () => {
+    // 150 words, each with two rows shown and two hidden: every narrowing adds
+    // two products, so the section never stops growing and only the cap of
+    // 100 queries ends it, far past the floor of 25.
+    listing = await startFakeListing(
+      SECTIONS,
+      wordSection([{ words: 150, visible: 2, hidden: 2 }])
+    );
     const { runner, context, report, runReport } = build(listing);
 
     await runner.run(
       context,
       report,
       { supermarketId: CHAIN },
-      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+      source({ baseUrl: listing.url })
     );
 
-    expect(
-      listing.queries.filter((query) => query.startsWith('W011|'))
-    ).toHaveLength(3);
+    // Every word weighs the same, so they are taken in the order they were
+    // seen, and none twice.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      ...Array.from({ length: 99 }, (_, index) => `W011|${word(index)}`),
+    ]);
     // Nothing pretends the catalog is whole: the section is named, with what
-    // it spent, why it stopped, and every capped query no narrowing was taken
-    // from (plan 0251). `producto` was never narrowed, so it is open. The
-    // section's own query was narrowed twice, so it is not: it is where the
-    // section was still digging when the budget ran out, with the two terms it
-    // spent.
+    // it spent, why it stopped, and where it was still digging (plan 0251).
     expect(runReport['incompleteSections']).toEqual([
       {
         code: 'W011',
         name: 'Carniceria',
-        queries: 3,
+        queries: 100,
         stoppedBy: 'BUDGET',
-        openQueries: ['producto'],
+        openQueries: [],
         narrowing: '(the whole section)',
-        termsTried: 2,
+        termsTried: 99,
       },
     ]);
     // And the run row says so, before the run ends.
@@ -217,18 +378,21 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       offerId: null,
       page: null,
       message:
-        'Section W011 Carniceria stopped by BUDGET after 3 queries while ' +
-        'narrowing (the whole section), 2 terms tried, still capped: ' +
-        'producto.',
+        'Section W011 Carniceria stopped by BUDGET after 100 queries while ' +
+        'narrowing (the whole section), 99 terms tried.',
     });
     expect(runReport['sections']).toEqual([
       {
         code: 'W011',
         name: 'Carniceria',
-        products: 320,
-        firstSeen: 320,
-        queries: 3,
+        products: 498,
+        firstSeen: 498,
+        queries: 100,
         stoppedBy: 'BUDGET',
+        // The hidden rows of the 99 words tried, and the shown rows of the 51
+        // words never tried: each returned by one query only.
+        coverageOnce: 300,
+        growthAtStop: 10,
       },
       {
         code: 'W051',
@@ -237,6 +401,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         firstSeen: 0,
         queries: 1,
         stoppedBy: 'COMPLETE',
+        coverageOnce: 0,
+        growthAtStop: 0,
       },
     ]);
     // Before the last flush, which is what writes it onto the row.
@@ -245,6 +411,161 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     ).toBeLessThan(
       Math.max(...(context.flush as jest.Mock).mock.invocationCallOrder)
     );
+  });
+
+  it('goes on past the floor while it grows, and ends GROWTH with no warning when it stops (plan 0258)', async () => {
+    listing = await startFakeListing(SECTIONS, slowingSection(10, 0));
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 5 })
+    );
+
+    // The floor is five. The sixth to ninth queries are spent because the five
+    // before each still added more than one percent of what the section had
+    // seen. Before the tenth, the last five had added five products, under
+    // one percent of 1,055.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      ...Array.from({ length: 8 }, (_, index) => `W011|${word(index)}`),
+    ]);
+    expect(runReport['sections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        products: 1055,
+        firstSeen: 1055,
+        queries: 9,
+        stoppedBy: 'GROWTH',
+        // The 240 filler rows, the shown rows of the five slow words never
+        // tried, and every hidden row found: each returned once.
+        coverageOnce: 1010,
+        growthAtStop: 5,
+      },
+      expect.objectContaining({ code: 'W051', stoppedBy: 'COMPLETE' }),
+    ]);
+    // A section that stopped growing is not a section the run failed to
+    // finish (plan 0258, section 4).
+    expect(runReport['incompleteSections']).toEqual([]);
+    expect(context.warn).not.toHaveBeenCalled();
+  });
+
+  it('ends a section BARREN before the growth rule is consulted (plan 0258)', async () => {
+    // Two slow words, then flat words that add nothing. With the floor at
+    // nine, the ninth query is the third barren pass, and the last five then
+    // added two products: the growth rule would say GROWTH, but the barren
+    // rule ends the section first.
+    listing = await startFakeListing(SECTIONS, slowingSection(2, 3));
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 9 })
+    );
+
+    expect(carniceria(listing)).toHaveLength(9);
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        queries: 9,
+        stoppedBy: 'BARREN',
+        growthAtStop: 2,
+      }),
+      expect.objectContaining({ code: 'W051' }),
+    ]);
+    expect(context.warn).not.toHaveBeenCalled();
+  });
+
+  it('never cuts a section below its floor, however little it adds (plan 0258)', async () => {
+    // After the three fast words every query adds one product, far under one
+    // percent, but the floor of 25 is always spent.
+    listing = await startFakeListing(SECTIONS, slowingSection(30, 0));
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        queries: 25,
+        stoppedBy: 'GROWTH',
+      }),
+      expect.objectContaining({ code: 'W051' }),
+    ]);
+  });
+
+  it('narrows by the word that reaches products the section has seen least, not the most frequent (plan 0258)', async () => {
+    // `[leche]` returns all 200 leche rows the section's own query showed.
+    // After it, `entera` is still the most frequent word the section saw,
+    // 240 sightings, but every product it reaches was returned twice. `queso`
+    // reaches 100 products returned once, and the 50 behind the ceiling.
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Leche entera', 0, 120),
+      ...rows('Leche desnatada', 120, 80),
+      ...rows('Queso curado', 200, 100),
+      ...rows('Queso tierno', 300, 50),
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(carniceria(listing).slice(0, 3)).toEqual([
+      'W011|',
+      'W011|leche',
+      'W011|queso',
+    ]);
+    expect(report.products).toHaveLength(350);
+  });
+
+  it('counts a product once per query that returned it, also when the result set repeats the row (plan 0258)', async () => {
+    const pan = {
+      description: 'Pan de molde ALTEZA 400 g',
+      section: 'W051',
+      shops: ['T1'],
+    };
+    listing = await startFakeListing(SECTIONS, [
+      pan,
+      pan,
+      {
+        description: 'Croissants ALTEZA 360 g',
+        section: 'W051',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    // Two products, each returned by the one query: a count per row would
+    // have covered the bread twice.
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({ code: 'W011' }),
+      expect.objectContaining({
+        code: 'W051',
+        products: 2,
+        coverageOnce: 2,
+      }),
+    ]);
   });
 
   it('names a capped section with no term left to narrow it by (plan 0251)', async () => {
@@ -376,6 +697,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         firstSeen: 1,
         queries: null,
         stoppedBy: null,
+        coverageOnce: null,
+        growthAtStop: null,
       },
       {
         code: 'W051',
@@ -384,6 +707,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         firstSeen: 0,
         queries: 1,
         stoppedBy: 'COMPLETE',
+        coverageOnce: 0,
+        growthAtStop: 0,
       },
     ]);
     expect(context.warn).toHaveBeenCalledTimes(1);
@@ -415,7 +740,9 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     expect(context.warn).not.toHaveBeenCalled();
     // A finished section is still named in `sections`, with what it took and
     // why it ended (plan 0257): the whole section, `producto`, the seven
-    // brands under `producto`, then three barren variants.
+    // brands under `producto`, then three barren brands under the whole
+    // section. The variants under `producto` are never offered: each one's
+    // product was already returned three times (plan 0258).
     expect(runReport['sections']).toEqual([
       {
         code: 'W011',
@@ -424,6 +751,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         firstSeen: 400,
         queries: 12,
         stoppedBy: 'BARREN',
+        coverageOnce: 56,
+        growthAtStop: 29,
       },
       {
         code: 'W051',
@@ -432,6 +761,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         firstSeen: 0,
         queries: 1,
         stoppedBy: 'COMPLETE',
+        coverageOnce: 0,
+        growthAtStop: 0,
       },
     ]);
   });
@@ -444,28 +775,21 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       context,
       report,
       { supermarketId: CHAIN },
-      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+      source({ baseUrl: listing.url })
     );
 
-    // `[leche]` returned 300 rows, so it is split by the most frequent word of
-    // those rows, `entera`. The section's own most frequent untried word is
+    // `[leche]` returned 300 rows, so it is split by the heaviest word of
+    // those rows, `entera`. The section's own heaviest untried word is
     // `queso`, which the old narrowing would have issued as a second single
     // term over rows the section had already shown.
-    expect(carniceria(listing)).toEqual([
+    expect(carniceria(listing).slice(0, 3)).toEqual([
       'W011|',
       'W011|leche',
       'W011|leche entera',
     ]);
-    expect(runReport['incompleteSections']).toEqual([
-      {
-        code: 'W011',
-        name: 'Carniceria',
-        queries: 3,
-        stoppedBy: 'BUDGET',
-        openQueries: ['leche entera'],
-        narrowing: 'leche',
-        termsTried: 1,
-      },
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({ code: 'W011', stoppedBy: 'BARREN' }),
+      expect.objectContaining({ code: 'W051' }),
     ]);
   });
 
@@ -477,30 +801,33 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       context,
       report,
       { supermarketId: CHAIN },
-      source({ baseUrl: listing.url, sectionQueryBudget: 4 })
+      source({ baseUrl: listing.url })
     );
 
     // `[leche entera]` is capped, but its rows carry no word it does not
     // already have. It is closed, and the next newest capped query, `[leche]`,
-    // gives its next word. The closed query stays open in the report, because
-    // it is still at the ceiling and was never narrowed.
+    // gives its next word. Then the section's own query is narrowed:
+    // `entera` first, because 170 of its products were returned once and
+    // `queso`'s 150 were too (plan 0258). `[entera]` shows the 300 rows
+    // `[leche entera]` showed, and `[queso]` the 150 the section showed, so
+    // `[leche fresca]`, `[entera]` and `[queso]` are three barren passes.
     expect(carniceria(listing)).toEqual([
       'W011|',
       'W011|leche',
       'W011|leche entera',
       'W011|leche fresca',
+      'W011|entera',
+      'W011|queso',
     ]);
-    expect(runReport['incompleteSections']).toEqual([
-      {
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
         code: 'W011',
-        name: 'Carniceria',
-        queries: 4,
-        stoppedBy: 'BUDGET',
-        openQueries: ['leche entera'],
-        narrowing: 'leche',
-        termsTried: 2,
-      },
+        queries: 6,
+        stoppedBy: 'BARREN',
+      }),
+      expect.objectContaining({ code: 'W051' }),
     ]);
+    expect(runReport['incompleteSections']).toEqual([]);
   });
 
   it('tries a term spent under one query again under another (plan 0257)', async () => {
@@ -546,8 +873,13 @@ describe('DezaCatalogRunner (plan 0085)', () => {
   });
 
   it('never issues one query twice, whatever the order of its terms (plan 0257)', async () => {
-    // `[oferta]` is capped and its rows carry `leche`, but `[leche oferta]`
-    // was already issued. The site reads both orders as one query.
+    // `[oferta]` is capped and its rows carry `leche` and `queso`, but
+    // `[leche oferta]` and `[queso oferta]` were already issued. The site
+    // reads both orders as one query, so `[oferta]` closes unnarrowed.
+    //
+    // `[queso]` comes before `[oferta]` since plan 0258: after `[leche]` and
+    // `[leche oferta]`, 140 of `oferta`'s 160 products were returned twice,
+    // and every one of `queso`'s 140 only once.
     listing = await startFakeListing(SECTIONS, [
       ...rows('Leche', 0, 160),
       ...rows('Queso', 160, 140),
@@ -567,15 +899,16 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       'W011|',
       'W011|leche',
       'W011|leche oferta',
-      'W011|oferta',
-      'W011|oferta queso',
       'W011|queso',
+      'W011|queso oferta',
+      'W011|oferta',
     ]);
   });
 
   it('ends a section barren on what its own queries add, whatever another section adds meanwhile (plan 0257)', async () => {
-    // Carniceria shows 300 rows of `pollo asado`, and every narrowing of it
-    // returns the same 300 rows. Bolleria, crawled by the second worker at the
+    // Carniceria shows exactly 300 rows, at the ceiling with nothing behind
+    // it, in four words of 75 rows each, so every narrowing of it returns rows
+    // the section already showed. Bolleria, crawled by the second worker at the
     // same time, adds 85 products with each of its twenty narrowings. A test of
     // the run's product count saw Bolleria's products land during Carniceria's
     // queries and never counted a barren pass.
@@ -602,7 +935,10 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       'mango',
     ];
     listing = await startFakeListing(SECTIONS, [
-      ...rows('Pollo asado', 0, 301),
+      ...rows('Pollo', 0, 75),
+      ...rows('Asado', 75, 75),
+      ...rows('Pavo', 150, 75),
+      ...rows('Conejo', 225, 75),
       ...Array.from({ length: 2000 }, (_, index) => ({
         description: `${words[index % words.length]} ${index} g`,
         section: 'W051',
@@ -622,8 +958,8 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     expect(carniceria(listing)).toEqual([
       'W011|',
       'W011|pollo',
-      'W011|pollo asado',
       'W011|asado',
+      'W011|pavo',
     ]);
     expect(runReport['sections']).toEqual([
       expect.objectContaining({
@@ -642,7 +978,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     // Bolleria really was adding while Carniceria spent its barren passes.
     const during = listing.queries.slice(
       listing.queries.indexOf('W011|pollo'),
-      listing.queries.indexOf('W011|asado')
+      listing.queries.indexOf('W011|pavo')
     );
     expect(during.some((query) => query.startsWith('W051|'))).toBe(true);
   });
