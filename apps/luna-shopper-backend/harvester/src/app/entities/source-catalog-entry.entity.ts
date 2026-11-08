@@ -169,7 +169,7 @@ export class SourceCatalogEntry extends BaseEntity {
    * rung 4's sibling key, so a brik never proposes a bottle (D2), and never
    * the row identity.
    */
-  @Column({ type: 'varchar', length: 40, nullable: true })
+  @Column({ type: 'text', nullable: true })
   packaging!: string | null;
 
   /**

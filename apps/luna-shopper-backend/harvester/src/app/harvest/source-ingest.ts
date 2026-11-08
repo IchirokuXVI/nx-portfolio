@@ -1454,7 +1454,8 @@ export class SourceIngest {
           draft.sizeFormat,
           draft.unitSize,
           null,
-          draft.approxWeight
+          draft.approxWeight,
+          draft.packCount ?? null
         );
         const rejected = reworded?.itemId
           ? null
@@ -1463,7 +1464,8 @@ export class SourceIngest {
               draft.sizeFormat,
               draft.unitSize,
               null,
-              draft.approxWeight
+              draft.approxWeight,
+              draft.packCount ?? null
             );
         if (reworded?.itemId) {
           proposeReworded(draft, reworded.itemId);
@@ -1971,7 +1973,8 @@ function proposeAnyOrder(
     row.sizeFormat,
     row.unitSize,
     row,
-    row.approxWeight
+    row.approxWeight,
+    row.packCount ?? null
   );
   if (reworded?.itemId) {
     proposeReworded(row, reworded.itemId);
@@ -1982,7 +1985,8 @@ function proposeAnyOrder(
     row.sizeFormat,
     row.unitSize,
     row,
-    row.approxWeight
+    row.approxWeight,
+    row.packCount ?? null
   );
   if (rejected !== null) {
     pointAtRejection(row, rejected);
