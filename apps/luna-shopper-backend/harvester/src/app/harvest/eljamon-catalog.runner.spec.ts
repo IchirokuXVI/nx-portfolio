@@ -3,7 +3,10 @@ import {
   HarvestDetailFetch,
   HarvestWarningCode,
 } from '@portfolio/luna-shopper/contracts';
-import { ElJamonClient } from '@portfolio/luna-shopper/eljamon';
+import {
+  ElJamonClient,
+  ElJamonTimeoutError,
+} from '@portfolio/luna-shopper/eljamon';
 import {
   SourceBlockedError,
   SourceGuard,
@@ -197,8 +200,17 @@ function context(
     heartbeat: jest.fn(async () => undefined),
     flush: jest.fn(async () => undefined),
     warn: jest.fn(),
+    countProgressItself: jest.fn(),
   } as unknown as RunContext & { setReport: jest.Mock; report: jest.Mock };
 }
+
+/** Every `processed` the runner reported, summed. */
+const processedOf = (ctx: { report: jest.Mock }): number =>
+  ctx.report.mock.calls.reduce(
+    (sum, [counters]) =>
+      sum + ((counters as { processed?: number }).processed ?? 0),
+    0
+  );
 
 const source = {
   adapterKey: 'eljamon-web',
@@ -536,11 +548,27 @@ describe('ElJamonCatalogRunner', () => {
       priceDisagreements: [{ code: '101', listing: 3.49, productPage: 3.59 }],
     });
     expect(written['categories']).toEqual([
-      { code: '04', name: 'FRESCOS', printedCount: 2, rowsRead: 2 },
-      { code: '06', name: 'BEBIDAS', printedCount: 25, rowsRead: 20 },
+      {
+        code: '04',
+        name: 'FRESCOS',
+        printedCount: 2,
+        rowsRead: 2,
+        rowsRepeated: 0,
+      },
+      {
+        code: '06',
+        name: 'BEBIDAS',
+        printedCount: 25,
+        rowsRead: 20,
+        rowsRepeated: 0,
+      },
     ]);
+    expect(written['detail']).toEqual({ pages: 22, failed: 1, timeouts: 0 });
     // One failed page and one failed product, both counted.
-    expect(ctx.report).toHaveBeenCalledTimes(2);
+    const failures = ctx.report.mock.calls
+      .map(([counters]) => (counters as { failed?: number }).failed ?? 0)
+      .filter((failed) => failed > 0);
+    expect(failures).toEqual([1, 1]);
 
     // A product whose page failed is still reported, with its top level category.
     const bacon = report.products.find(
@@ -798,6 +826,146 @@ describe('ElJamonCatalogRunner', () => {
 
       // FRESCOS was listed before BEBIDAS was refused.
       expect([...read(report).keys()].sort()).toEqual(['101', '102']);
+    });
+  });
+
+  describe('the detail stage (plan 0253)', () => {
+    const BEBIDAS_PAGE_2: Row[] = Array.from({ length: 20 }, (_, index) => ({
+      code: String(220 + index),
+      description: `agua ${index}, 1l`,
+      brand: 'SOLAN',
+      price: '0,40',
+      unit: '0,40 €/Litro',
+    }));
+
+    /**
+     * A whole listing of 42 products, two of FRESCOS and 40 of BEBIDAS, and
+     * product pages that `timesOut` makes as silent as the transport's idle
+     * timeout.
+     */
+    function site(timesOut: (code: string) => boolean) {
+      return (url: URL): Response => {
+        if (url.pathname === '/categorias/bebidas/06') {
+          return new Response(
+            url.search === ''
+              ? listing(BEBIDAS_PAGE_1, 40, '06')
+              : listing(BEBIDAS_PAGE_2, 40, '06')
+          );
+        }
+        const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
+        if (code && timesOut(code)) {
+          throw new ElJamonTimeoutError(url.toString(), 30_000);
+        }
+        return storefront(url);
+      };
+    }
+
+    const written = (ctx: { setReport: jest.Mock }) =>
+      ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
+
+    it('moves processed as each product page is read, and ends at totalPlanned once', async () => {
+      const ctx = context();
+      await new TestRunner(site(() => false)).run(
+        ctx,
+        new RecordingRunReport(),
+        // 101 is known, so it counts when the stage starts.
+        { ...input, externalIdsWithoutEan: new Set(['101']) },
+        source
+      );
+
+      expect(ctx.countProgressItself).toHaveBeenCalled();
+      expect(ctx.setTotalPlanned).toHaveBeenCalledWith(42);
+      expect(processedOf(ctx)).toBe(42);
+      // The pages count during DETAIL, before INGEST starts.
+      const ingest = (ctx.setStage as jest.Mock).mock.calls.findIndex(
+        ([stage]) => stage === 'INGEST'
+      );
+      const ingestAt = (ctx.setStage as jest.Mock).mock.invocationCallOrder[
+        ingest
+      ];
+      const perPage = ctx.report.mock.calls
+        .map(([counters], index) => ({
+          counters: counters as { processed?: number },
+          at: ctx.report.mock.invocationCallOrder[index],
+        }))
+        .filter(({ counters }) => counters.processed === 1);
+      // 101 when the stage starts, then 41 pages: 40 read, and 102's, which
+      // carries no product and fails.
+      expect(perPage).toHaveLength(42);
+      expect(perPage.every(({ at }) => at < ingestAt)).toBe(true);
+    });
+
+    it('stops asking for pages after 20 timeouts in a row, and still records every listed row', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(site((code) => code !== '101'));
+
+      // One worker, so the order is the listing's and the count exact.
+      await runner.run(ctx, report, input, {
+        ...source,
+        workers: 1,
+      } as SupermarketSource);
+
+      const asked = runner.sent.filter((request) =>
+        request.url.includes('/detalle/')
+      ).length;
+      // 101 answered, then 20 timed out in a row, and nothing after them was
+      // asked.
+      expect(asked).toBe(21);
+      const detail = written(ctx)['detail'] as Record<string, number>;
+      expect(detail).toEqual({
+        pages: asked,
+        failed: asked - 1,
+        timeouts: asked - 1,
+      });
+
+      // Every listed row reaches the ingest; every new product whose page was
+      // not read is marked for the next walk.
+      expect(report.products).toHaveLength(42);
+      const unmarked = report.products.filter(
+        (product) => product.extra?.[DETAIL_FAILED_KEY] !== true
+      );
+      expect(unmarked.map((product) => product.externalId)).toEqual(['101']);
+      expect(processedOf(ctx)).toBe(42);
+
+      expect(ctx.warn).toHaveBeenCalledTimes(1);
+      expect(ctx.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.DETAIL_UNREAD,
+        name: null,
+        offerId: null,
+        page: null,
+        message:
+          'Product pages stopped after 20 timeouts in a row: ' +
+          `${asked} of 42 page(s) asked, ${asked - 1} failed, ` +
+          `${asked - 1} timed out. 41 product(s) were recorded from the ` +
+          'listing without a page, and the next walk asks for them again.',
+      });
+      // The listing was whole, so the stop costs no listing declaration.
+      expect(report.wholeListings).toHaveLength(1);
+    });
+
+    it('reads every page when the timeouts never reach 20 in a row', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      // Every other page times out, 20 in all, with an answer between each.
+      const runner = new TestRunner(
+        site((code) => Number(code) % 2 === 0 && code !== '102')
+      );
+
+      await runner.run(ctx, report, input, {
+        ...source,
+        workers: 1,
+      } as SupermarketSource);
+
+      const asked = runner.sent.filter((request) =>
+        request.url.includes('/detalle/')
+      ).length;
+      expect(asked).toBe(42);
+      const detail = written(ctx)['detail'] as Record<string, number>;
+      expect(detail.pages).toBe(42);
+      expect(detail.timeouts).toBe(20);
+      expect(ctx.warn).not.toHaveBeenCalled();
+      expect(processedOf(ctx)).toBe(42);
     });
   });
 });

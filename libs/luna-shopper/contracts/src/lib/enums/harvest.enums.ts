@@ -405,6 +405,14 @@ export enum HarvestWarningCode {
    * rows read and the count it printed in the message.
    */
   LISTING_SHORT = 'LISTING_SHORT',
+  /**
+   * A detail stage stopped because the chain stopped answering product pages,
+   * and the run went on with what its listing read and still ended
+   * `COMPLETED` (plan 0253). One per stage, with the counts in the message:
+   * pages asked, failed and timed out, and the products left without a page,
+   * which the next walk asks for again.
+   */
+  DETAIL_UNREAD = 'DETAIL_UNREAD',
 }
 
 /**

@@ -4076,7 +4076,8 @@ export type EnumsHarvestWarningCode =
   | 'SOURCE_RESUMED'
   | 'APPROX_WEIGHT_ROWS_DISAGREE'
   | 'LISTING_UNREAD'
-  | 'LISTING_SHORT';
+  | 'LISTING_SHORT'
+  | 'DETAIL_UNREAD';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.
