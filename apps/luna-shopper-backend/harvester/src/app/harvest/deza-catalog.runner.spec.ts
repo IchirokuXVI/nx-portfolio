@@ -398,6 +398,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         // words never tried: each returned by one query only.
         coverageOnce: 300,
         growthAtStop: 10,
+        openQueries: [],
       },
       {
         code: 'W051',
@@ -408,6 +409,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         stoppedBy: 'COMPLETE',
         coverageOnce: 0,
         growthAtStop: 0,
+        openQueries: [],
       },
     ]);
     // Before the last flush, which is what writes it onto the row.
@@ -416,6 +418,37 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     ).toBeLessThan(
       Math.max(...(context.flush as jest.Mock).mock.invocationCallOrder)
     );
+  });
+
+  it('ends NO_TERM, not BUDGET, when the query that reaches the cap leaves no term (plan 0258)', async () => {
+    // 99 words over the 300 rows the section shows, each hiding one row: the
+    // section's own query and its 99 narrowings are exactly the cap, and the
+    // last of them leaves no word to offer.
+    listing = await startFakeListing(
+      SECTIONS,
+      wordSection([
+        { words: 1, visible: 6, hidden: 1 },
+        { words: 98, visible: 3, hidden: 1 },
+      ])
+    );
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(carniceria(listing)).toHaveLength(100);
+    expect(runReport['incompleteSections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        queries: 100,
+        stoppedBy: 'NO_TERM',
+        termsTried: 99,
+      }),
+    ]);
   });
 
   it('goes on past the floor while it grows, and ends GROWTH with no warning when it stops (plan 0258)', async () => {
@@ -449,11 +482,48 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         // tried, and every hidden row found: each returned once.
         coverageOnce: 1010,
         growthAtStop: 5,
+        openQueries: [],
       },
       expect.objectContaining({ code: 'W051', stoppedBy: 'COMPLETE' }),
     ]);
     // A section that stopped growing is not a section the run failed to
     // finish (plan 0258, section 4).
+    expect(runReport['incompleteSections']).toEqual([]);
+    expect(context.warn).not.toHaveBeenCalled();
+  });
+
+  it('names the capped queries a GROWTH section left open in sections, and nowhere else (plan 0258)', async () => {
+    // `word(0)` has 310 rows, so `[word(0)]` is capped, and its rows carry no
+    // word but its own: it is never narrowed. Two fast words then add 250
+    // each, and five slow words one each, until the last five added five
+    // products, under one percent of 1,095.
+    listing = await startFakeListing(
+      SECTIONS,
+      wordSection([
+        { words: 1, visible: 10, hidden: 300 },
+        { words: 2, visible: 10, hidden: 250 },
+        { words: 10, visible: 3, hidden: 1 },
+      ])
+    );
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 5 })
+    );
+
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        queries: 9,
+        stoppedBy: 'GROWTH',
+        openQueries: [word(0)],
+      }),
+      expect.objectContaining({ code: 'W051', openQueries: [] }),
+    ]);
+    // Still not a section the run failed to finish.
     expect(runReport['incompleteSections']).toEqual([]);
     expect(context.warn).not.toHaveBeenCalled();
   });
@@ -779,6 +849,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         stoppedBy: null,
         coverageOnce: null,
         growthAtStop: null,
+        openQueries: [],
       },
       {
         code: 'W051',
@@ -789,6 +860,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         stoppedBy: 'COMPLETE',
         coverageOnce: 0,
         growthAtStop: 0,
+        openQueries: [],
       },
     ]);
     expect(context.warn).toHaveBeenCalledTimes(1);
@@ -838,6 +910,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         stoppedBy: 'BARREN',
         coverageOnce: 84,
         growthAtStop: 0,
+        openQueries: [],
       },
       {
         code: 'W051',
@@ -848,6 +921,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         stoppedBy: 'COMPLETE',
         coverageOnce: 0,
         growthAtStop: 0,
+        openQueries: [],
       },
     ]);
   });
@@ -1096,6 +1170,42 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     ]);
   });
 
+  it('keeps the section open while it has nothing, and narrows it by a word a capped child brought in (plan 0258)', async () => {
+    // The section shows 150 `alfa` and 150 `beta` rows. `[alfa]` and `[beta]`
+    // are capped, each with 50 `alfa beta` rows, and after them the section
+    // has no word left. `[alfa]` gives `[alfa beta]`, which is capped and
+    // returns the first `gamma` rows anyone has seen. `gamma` weighs the same
+    // under the section and under `[alfa beta]`, and the section, with fewer
+    // terms, gives it. Before this fix round the section was closed when it
+    // had nothing, so the fifth query was `[alfa beta gamma]` and the section
+    // never offered `gamma` at all.
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Alfa', 0, 150),
+      ...rows('Beta', 150, 150),
+      ...rows('Alfa', 300, 100),
+      ...rows('Beta', 400, 100),
+      ...rows('Alfa beta', 500, 100),
+      ...rows('Alfa beta gamma', 600, 50),
+      ...rows('Alfa beta', 650, 250),
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(carniceria(listing).slice(0, 5)).toEqual([
+      'W011|',
+      'W011|alfa',
+      'W011|beta',
+      'W011|alfa beta',
+      'W011|gamma',
+    ]);
+  });
+
   it('ends a section barren on what its own queries add, whatever another section adds meanwhile (plan 0257)', async () => {
     // Carniceria shows exactly 300 rows, at the ceiling with nothing behind
     // it, in four words of 75 rows each, so every narrowing of it returns rows
@@ -1106,6 +1216,11 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     //
     // The floor is four, so the third barren pass reaches it: the barren rule
     // acts only from the floor on (plan 0258, fix round).
+    //
+    // The section was 301 `Pollo asado` rows before plan 0258. Under the
+    // weight both words saturate after the third query, so the section would
+    // end `NO_TERM` and no longer prove the barren point; four words of 75
+    // rows each give the three barren passes the case needs.
     const words = [
       'alfa',
       'beta',

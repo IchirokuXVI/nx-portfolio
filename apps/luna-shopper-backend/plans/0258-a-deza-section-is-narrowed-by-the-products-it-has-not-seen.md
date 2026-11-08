@@ -31,7 +31,7 @@
 Choose the term that narrows a capped query by how many products it would reach that no query
 of the section has returned yet, instead of by how often it was seen, and let a section that is
 still growing spend queries past the floor while a section that has stopped growing ends. A walk
-then finds at least what the walks before plan `0257` found, with fewer queries than they spent,
+then finds at least what the walks before plan `0257` found and states the queries both spent,
 and the stop reason of each section stays true.
 
 ### Context
@@ -66,8 +66,8 @@ and the stop reason of each section stays true.
 - `firstSeen` adds up to the run's product count; `products` does not, because a product filed
   under two sections is counted in both.
 - Completeness still cannot be proven against this source (CLAUDE.md). This plan adds no
-  number that claims it. Its measure of success is a product count that is not below what the
-  brute force found, for fewer queries.
+  number that claims it. Its measure of success is a walk whose product count is not below what
+  the brute force found and that states the queries both spent.
 
 ### Target state
 
@@ -88,7 +88,7 @@ ceiling. The contracts are not touched unless the DEZA report has become typed t
 - A section never issues the same query twice. A term is still a word of at least
   `MIN_TERM_LENGTH` letters that is not a number.
 - The barren rule of PR #946 stays: three passes in a row that add nothing to the run end the
-  section, whatever the growth rule says.
+  section, from the floor on (section 3).
 - The floor of 25 queries a section is kept: no section is cut below it by the growth rule, so
   a walk never finds less than the code before this plan would have found with the same terms.
 - The hard cap of D1 bounds every section whatever it adds.
@@ -148,7 +148,11 @@ section that reached the hard cap.
 ## 4. What the report says
 
 `sections[]` gains `coverageOnce` (products the section returned by exactly one query, the ones
-the next term would be drawn from) and `growthAtStop` (what the last five queries added). The
+the next term would be drawn from), `growthAtStop` (what the last five queries added) and
+`openQueries`, which a `GROWTH` section fills with the capped queries it never narrowed, in the
+rendering of `incompleteSections` (`(the whole section)` for the root), and every other section
+leaves empty: a `GROWTH` section is not in `incompleteSections`, so this is where its open
+queries are named. The
 `LISTING_UNREAD` warning of plan `0251` is written for `BUDGET` and `NO_TERM` as before, and not
 for `GROWTH`: a section whose last five queries added under one percent is a section the
 source has shown as far as this method reaches, and that is the honest end of plan `0085`.
@@ -172,6 +176,13 @@ sections with the largest gain and the five with the largest loss against the `d
 - The growth rule: a section past the floor whose last five queries added under one percent
   ends `GROWTH`; one whose last five added more goes on; a section at the hard cap ends `BUDGET`;
   a section with three barren passes ends `BARREN` before the growth rule is consulted.
+- The floor and the barren rule: three barren passes under the floor do not end a section; it
+  ends `BARREN` at the floor when its last three queries still added nothing, and goes on under
+  the growth rule when the floor query added something.
+- The root and the children: the root is narrowed while its word outweighs every word of a
+  capped child, and a capped child is narrowed once the root's words are spent. The root is
+  never closed: when it has nothing at one narrowing and a child's rows then bring in a new
+  word, the next narrowing issues that word at the root.
 - No section issues the same query twice, and the plan `0257` and `0251` cases keep their
   answers where their fixtures do not depend on the frequency order (state in the PR which
   cases changed their expected term and why the new term is the right one).

@@ -243,19 +243,16 @@ export class DezaCatalogRunner implements CatalogRunner {
     section: DezaSection
   ): Promise<void> {
     const state = crawl.begin(section);
-    let next: string[] | null = [];
     let stoppedBy: SectionStop;
 
     for (;;) {
-      // The hard cap bounds every section, whatever it still adds (plan 0258,
-      // D1). It is the only thing `BUDGET` means now.
-      if (state.queries >= crawl.cap) {
-        stoppedBy = 'BUDGET';
-        break;
-      }
-      if (!next) {
-        next = state.narrow();
-        if (!next) {
+      // The section's own query first, then the narrowings. A narrowing is
+      // drawn before any stop is asked, so a section with no term left says
+      // `NO_TERM` whether or not it also reached the cap or stopped growing.
+      let narrowing: Narrowing | null = null;
+      if (state.queries > 0) {
+        narrowing = state.narrow();
+        if (!narrowing) {
           // A section whose own query fit under the ceiling was read whole and
           // had nothing to narrow. One with a capped query left every capped
           // query with no term of its own untried.
@@ -263,16 +260,21 @@ export class DezaCatalogRunner implements CatalogRunner {
           break;
         }
       }
+      // The hard cap bounds every section, whatever it still adds (plan 0258,
+      // D1). `BUDGET` means a term was found and the cap left no query for it.
+      if (state.queries >= crawl.cap) {
+        stoppedBy = 'BUDGET';
+        break;
+      }
       // Past the floor a section goes on only while it grows (plan 0258,
-      // section 3). It is asked after a term was found, so a section with no
-      // term left still says `NO_TERM`; the term drawn here is then never
-      // issued, and nothing the report says reads it.
+      // section 3).
       if (state.queries >= crawl.floor && !state.growing()) {
         stoppedBy = 'GROWTH';
         break;
       }
-      const terms = next;
-      next = null;
+      // Only a narrowing that is issued counts as tried, so a term drawn for a
+      // query a stop above refused leaves the report as it was.
+      const terms = narrowing ? state.take(narrowing) : [];
       state.queries += 1;
 
       const { capped, added, returned, vocabulary } = await this.crawlQuery(
@@ -441,7 +443,8 @@ interface CrawledProduct {
  * Why a section's enumeration stopped (plan 0251, section 2).
  *
  * - `BUDGET`: it reached the hard cap, {@link SECTION_QUERY_CAP} queries
- *   (plan 0258), with a capped query still open.
+ *   (plan 0258), with a term still found to narrow a capped query by. A
+ *   section whose last query left no term at the cap ends `NO_TERM`.
  * - `BARREN`: at or past the floor, three passes in a row added nothing new.
  *   That is the stop rule of plan 0085 working, and the section is not
  *   reported as unfinished.
@@ -516,6 +519,14 @@ interface SectionSummary {
    * the number the growth rule read. Null for a section that threw.
    */
   growthAtStop: number | null;
+  /**
+   * For a `GROWTH` section, the capped queries never narrowed, rendered as
+   * `incompleteSections` renders them. Such a section is not reported as
+   * unfinished, so this is the one place that names what was still at the
+   * ceiling when it stopped (plan 0258, section 4). Empty for every other
+   * section.
+   */
+  openQueries: string[];
 }
 
 /**
@@ -533,8 +544,17 @@ export interface CappedQuery {
   vocabulary: Vocabulary;
   /** The terms a narrowing of this query added, in the order it added them. */
   tried: Set<string>;
-  /** No term of its own is left untried. It stays for the report. */
+  /**
+   * No term of its own is left untried. It stays for the report. Only a query
+   * with terms is ever closed: see {@link SectionState.narrow}.
+   */
   closed: boolean;
+}
+
+/** A term drawn to narrow a capped query by, not yet issued. */
+interface Narrowing {
+  query: CappedQuery;
+  term: string;
 }
 
 interface SectionState {
@@ -553,10 +573,12 @@ interface SectionState {
   growing(): boolean;
   /**
    * The next narrowing: the heaviest untried word of any open capped query,
-   * root or child, appended to that query's terms. Null when every capped
-   * query is closed.
+   * root or child. Null when no capped query has a word to offer. It is only
+   * drawn: nothing counts as tried until {@link take} issues it.
    */
-  narrow(): string[] | null;
+  narrow(): Narrowing | null;
+  /** Issue a narrowing: its word is tried, and its terms are answered. */
+  take(narrowing: Narrowing): string[];
   finish(stoppedBy: SectionStop): void;
 }
 
@@ -657,9 +679,15 @@ class Crawl {
           }
           const weighed = weighUntried(query, issued, coverage);
           if (!weighed) {
-            // Coverage only grows and a tried word stays tried, so a query
-            // with nothing to offer now never has anything again.
-            query.closed = true;
+            // A child's vocabulary is fixed once captured, coverage only grows
+            // and a tried word stays tried, so a child with nothing to offer
+            // now never has anything again. **The root is never closed**: its
+            // vocabulary is the section's, which every later query's rows
+            // feed, so a word a child's rows bring in is a word the root can
+            // offer next time. It is only skipped while it has nothing.
+            if (query.terms.length > 0) {
+              query.closed = true;
+            }
             continue;
           }
           if (
@@ -671,13 +699,14 @@ class Crawl {
             best = { query, weighed };
           }
         }
-        if (best === null) {
-          return null;
-        }
-        const { query, weighed } = best;
-        query.tried.add(weighed.term);
+        return best === null
+          ? null
+          : { query: best.query, term: best.weighed.term };
+      },
+      take: ({ query, term }) => {
+        query.tried.add(term);
         lastNarrowed = query;
-        const terms = [...query.terms, weighed.term];
+        const terms = [...query.terms, term];
         issued.add(queryKey(terms));
         return terms;
       },
@@ -685,6 +714,18 @@ class Crawl {
         summary.queries = state.queries;
         summary.stoppedBy = stoppedBy;
         summary.growthAtStop = window();
+        // The section's rows are all read: its vocabulary is not needed
+        // again, and held for the whole run it is the largest thing a run
+        // keeps per section. Coverage stays, `coverageOnce` reads it.
+        this.vocabularies.delete(section.code);
+        // The capped queries no narrowing was taken from, still at the
+        // ceiling when the section stopped.
+        const open = state.capped
+          .filter((query) => query.tried.size === 0)
+          .map((query) => describeQuery(query.terms));
+        // A section that stopped growing is not unfinished (below), so
+        // `sections` is where its open queries are named.
+        summary.openQueries = stoppedBy === 'GROWTH' ? open : [];
         // A section never capped was read whole by its own query. One that
         // stopped barren was narrowed until three passes added nothing, which
         // is where plan 0085 says a term cover has done what it can: it is
@@ -699,21 +740,18 @@ class Crawl {
         ) {
           return;
         }
-        // The capped queries no narrowing was taken from, still at the
-        // ceiling when the section stopped. This is the honest artifact:
-        // completeness cannot be proven against this source, there is no
-        // total to check against, and a number would be a guess. The
-        // section's own query is here only when it was never narrowed. Where
-        // the section was still digging is named beside them.
+        // The open queries are the honest artifact: completeness cannot be
+        // proven against this source, there is no total to check against,
+        // and a number would be a guess. The section's own query is here
+        // only when it was never narrowed. Where the section was still
+        // digging is named beside them.
         const digging: CappedQuery | null = lastNarrowed;
         this.incomplete.push({
           code: section.code,
           name: section.name,
           queries: state.queries,
           stoppedBy,
-          openQueries: state.capped
-            .filter((query) => query.tried.size === 0)
-            .map((query) => describeQuery(query.terms)),
+          openQueries: open,
           narrowing: digging === null ? null : describeQuery(digging.terms),
           termsTried: digging === null ? 0 : digging.tried.size,
         });
@@ -728,6 +766,8 @@ class Crawl {
     summary.queries = null;
     summary.stoppedBy = null;
     summary.growthAtStop = null;
+    summary.openQueries = [];
+    this.vocabularies.delete(section.code);
     const held = this.summaries.get(section.code);
     if (held) {
       held.coverage = null;
@@ -825,6 +865,7 @@ class Crawl {
               ? null
               : [...coverage.values()].filter((count) => count === 1).length,
           growthAtStop: summary.growthAtStop,
+          openQueries: summary.openQueries,
         })
       ),
     };
@@ -844,6 +885,7 @@ class Crawl {
           queries: 0,
           stoppedBy: null,
           growthAtStop: null,
+          openQueries: [],
         },
         products: new Set(),
         coverage: null,
