@@ -1,3 +1,5 @@
+> **PR:** [#948](https://github.com/IchirokuXVI/nx-portfolio/pull/948)
+
 # 0258: a DEZA section is narrowed by the products it has not seen
 
 > Found on 2026-11-08 by the build of plan `0257` (PR #946, kept as a draft). That plan made the
