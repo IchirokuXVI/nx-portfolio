@@ -17,7 +17,8 @@ import { SourceEntryPackaging1760500000000 } from './migrations/1760500000000-So
  *
  * - **Every row that exists holds no container**, because no run stored one
  *   before the plan, and nothing else on the row moves.
- * - **The column holds the chain's text verbatim, up to forty characters.**
+ * - **The column holds the chain's text verbatim, at any length.** A long
+ *   container is stored whole, and it does not fail the write of the row.
  * - **`down` drops the column, and `up` adds it again.**
  *
  * It runs against a probe database of its own, for the reason the
@@ -145,26 +146,21 @@ describeIntegration('SourceEntryPackaging1760500000000 (real Postgres)', () => {
     }
   }, 180_000);
 
-  it('holds the text verbatim, up to forty characters', async () => {
+  it('holds the text verbatim, at any length', async () => {
     await probe.query(
       `UPDATE "source_catalog_entries" SET "packaging" = 'Pack-4'
           WHERE "externalId" = '28113'`
     );
     expect((await byId()).get('28113')?.packaging).toBe('Pack-4');
 
-    const longest = 'B'.repeat(40);
+    // Longer than the forty characters a bounded column once allowed.
+    const long = `Botella de vidrio retornable ${'B'.repeat(200)}`;
     await probe.query(
       `UPDATE "source_catalog_entries" SET "packaging" = $1
           WHERE "externalId" = '27342'`,
-      [longest]
+      [long]
     );
-    await expect(
-      probe.query(
-        `UPDATE "source_catalog_entries" SET "packaging" = $1
-            WHERE "externalId" = '27342'`,
-        [`${longest}B`]
-      )
-    ).rejects.toThrow(/too long/);
+    expect((await byId()).get('27342')?.packaging).toBe(long);
     await probe.query(
       `UPDATE "source_catalog_entries" SET "packaging" = NULL
           WHERE "externalId" IN ('28113', '27342')`

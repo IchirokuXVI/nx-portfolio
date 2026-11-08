@@ -209,10 +209,16 @@ export interface SiblingProposal {
  *
  * **The count and the container follow, each only when the row states one**
  * (plan 0248): `name|l|2|x4` for a pack of four, `name|l|2|botella` for a
- * bottle. A pack of four never proposes the single bottle of the same total
- * size (D3), and a brik never proposes a bottle (D2). A row that states
- * neither keeps the key it had before the plan, which is every row of a chain
- * that prints no container and sells no packs.
+ * bottle. A row that states neither keeps the key it had before the plan,
+ * which is every row of a chain that prints no container and sells no packs.
+ *
+ * **The count is strict and the container is not.** A stated count and no
+ * count never meet, so a pack of four never proposes the single bottle of the
+ * same total size (D3). A container separates two rows only when both state
+ * one: a brik never proposes a bottle (D2), but a leaflet, which never prints
+ * a container, still meets the walk row of the same product (plan 0086,
+ * section 4). {@link SiblingEntryIndex} holds that rule, by indexing each row
+ * under this key and under the same key without the container.
  *
  * It is not {@link entryNameKey}, and that one must not change: hashed, it is
  * also the row identity of a source with no id of its own, and a weight that
@@ -268,24 +274,28 @@ const WORD_ORDER_STOP_WORDS = new Set(['de', 'en']);
  * The size half is taken from {@link siblingKey} itself, so this key is never
  * looser on size than the exact one. That includes the weight of one piece
  * (plan 0244, section 5.8): two reworded pieces at different weights are two
- * products here too.
+ * products here too. So is the count of a pack (plan 0248, D3): a pack of
+ * four never meets the single unit under reworded words either. The container
+ * is left out, because a name keyed row states none.
  */
 export function wordOrderKey(
   name: string,
   sizeFormat: string | null,
   unitSize: number | string | null | undefined,
-  approxWeight?: number | string | null
+  approxWeight?: number | string | null,
+  packCount?: number | string | null
 ): string {
   const words = normalizeName(name)
     .split(' ')
     .filter((word) => word !== '' && !WORD_ORDER_STOP_WORDS.has(word))
     .sort();
-  // `siblingKey` of an empty name is `|<size text>|<unit size>`.
+  // `siblingKey` of an empty name is `|<size text>|<unit size>[|x<count>]`.
   return `${words.join(' ')}${siblingKey(
     '',
     sizeFormat,
     unitSize,
-    approxWeight
+    approxWeight,
+    { packCount }
   )}`;
 }
 
@@ -317,9 +327,25 @@ export function isNameKeyed(
  * A `REJECTED` sibling proposes nothing: the owner said that string is not a
  * product he tracks, and proposing it back through a neighbour reopens a
  * decision a run does not get to reopen.
+ *
+ * **A container separates two rows only when both state one** (plan 0248).
+ * Each row is held under its full {@link siblingKey} and under the same key
+ * without the container. A lookup that states a container reads the bucket of
+ * its own container, plus the rows of the second bucket that state none. A
+ * lookup that states none reads the second bucket whole: every row of that
+ * name, size and count, whatever container it states. So a leaflet meets the
+ * walk row Mercadona printed `Botella` on, and a leaflet that meets a brik and
+ * a bottle of two products proposes nothing, on the ambiguity rule of
+ * {@link match}. The count stays strict in both directions.
  */
 export class SiblingEntryIndex {
+  /** Under the full {@link siblingKey}, with the count and the container. */
   private readonly byNameKey = new Map<string, SourceCatalogEntry[]>();
+  /** Under {@link siblingKey} with the count and no container. */
+  private readonly byNameKeyAnyContainer = new Map<
+    string,
+    SourceCatalogEntry[]
+  >();
   /**
    * The name keyed rows only, under {@link wordOrderKey} (plan 0221). A row
    * keyed by a chain id or an article code is never in it: El Jamón prints no
@@ -343,10 +369,23 @@ export class SiblingEntryIndex {
       }),
       row
     );
+    push(
+      this.byNameKeyAnyContainer,
+      siblingKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight, {
+        packCount: row.packCount,
+      }),
+      row
+    );
     if (isNameKeyed(row)) {
       push(
         this.byWordOrderKey,
-        wordOrderKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight),
+        wordOrderKey(
+          row.name,
+          row.sizeFormat,
+          row.unitSize,
+          row.approxWeight,
+          row.packCount
+        ),
         row
       );
     }
@@ -361,6 +400,8 @@ export class SiblingEntryIndex {
    * create the item from whichever of the two rows carries the EAN and let both
    * resolve. Two siblings disagreeing about the item propose nothing, on the
    * same rule rung 3 uses: the ambiguous case is exactly where guessing harms.
+   *
+   * Which rows are siblings follows the container rule of the class doc.
    */
   match(
     name: string,
@@ -369,11 +410,23 @@ export class SiblingEntryIndex {
     approxWeight: number | string | null = null,
     pack: SiblingPack = {}
   ): SiblingProposal | null {
-    const siblings = (
-      this.byNameKey.get(
-        siblingKey(name, sizeFormat, unitSize, approxWeight, pack)
-      ) ?? []
-    ).filter((row) => row.status !== SourceEntryStatus.REJECTED);
+    const anyContainer =
+      this.byNameKeyAnyContainer.get(
+        siblingKey(name, sizeFormat, unitSize, approxWeight, {
+          packCount: pack.packCount,
+        })
+      ) ?? [];
+    const candidates = statesContainer(pack.packaging)
+      ? [
+          ...(this.byNameKey.get(
+            siblingKey(name, sizeFormat, unitSize, approxWeight, pack)
+          ) ?? []),
+          ...anyContainer.filter((row) => !statesContainer(row.packaging)),
+        ]
+      : anyContainer;
+    const siblings = candidates.filter(
+      (row) => row.status !== SourceEntryStatus.REJECTED
+    );
     if (siblings.length === 0) {
       return null;
     }
@@ -412,12 +465,13 @@ export class SiblingEntryIndex {
     sizeFormat: string | null,
     unitSize: number | string | null,
     self: SourceCatalogEntry | null = null,
-    approxWeight: number | string | null = null
+    approxWeight: number | string | null = null,
+    packCount: number | string | null = null
   ): SiblingProposal | null {
     const itemIds = new Set(
       (
         this.byWordOrderKey.get(
-          wordOrderKey(name, sizeFormat, unitSize, approxWeight)
+          wordOrderKey(name, sizeFormat, unitSize, approxWeight, packCount)
         ) ?? []
       )
         .filter(
@@ -448,11 +502,12 @@ export class SiblingEntryIndex {
     sizeFormat: string | null,
     unitSize: number | string | null,
     self: SourceCatalogEntry | null = null,
-    approxWeight: number | string | null = null
+    approxWeight: number | string | null = null,
+    packCount: number | string | null = null
   ): string | null {
     const bucket = (
       this.byWordOrderKey.get(
-        wordOrderKey(name, sizeFormat, unitSize, approxWeight)
+        wordOrderKey(name, sizeFormat, unitSize, approxWeight, packCount)
       ) ?? []
     ).filter((row) => row !== self && (self === null || row.id !== self.id));
     if (bucket.some((row) => row.status === SourceEntryStatus.ACTIVE)) {
@@ -463,6 +518,11 @@ export class SiblingEntryIndex {
     );
     return rejected.length === 1 ? rejected[0].id : null;
   }
+}
+
+/** Whether a row or a lookup states a container, as {@link packToken} reads it. */
+function statesContainer(packaging: string | null | undefined): boolean {
+  return normalizeName(packaging ?? '') !== '';
 }
 
 function push<T>(map: Map<string, T[]>, key: string, value: T): void {
