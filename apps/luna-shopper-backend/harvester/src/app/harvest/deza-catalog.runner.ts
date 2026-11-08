@@ -241,8 +241,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       next = null;
       state.queries += 1;
 
-      const before = crawl.products.size;
-      const { capped, vocabulary } = await this.crawlQuery(
+      const { capped, added, vocabulary } = await this.crawlQuery(
         context,
         crawl,
         client(),
@@ -260,7 +259,14 @@ export class DezaCatalogRunner implements CatalogRunner {
       // A pass that adds nothing new is where a term based cover stops paying:
       // the remaining vocabulary is describing products already seen, and the
       // budget is better left unspent than spent proving it again.
-      if (crawl.products.size === before) {
+      //
+      // **What this query added, not what the run grew by.** The pool crawls
+      // `source.workers` sections at once, and they share `crawl.products`. A
+      // test of the run's product count before and after this query counted
+      // every product another section recorded meanwhile, so a section that had
+      // stopped growing was reset to zero barren passes by its neighbours and
+      // spent its whole budget, ending `BUDGET` with nothing left to find.
+      if (added === 0) {
         state.barren += 1;
         if (state.barren >= BARREN_QUERIES) {
           stoppedBy = 'BARREN';
@@ -276,8 +282,9 @@ export class DezaCatalogRunner implements CatalogRunner {
 
   /**
    * One query, every page of it, recorded. Answers whether it hit the ceiling,
-   * and the vocabulary of the rows it returned: the only terms that can reach
-   * the rows hidden behind its ceiling are terms those rows carry (plan 0257).
+   * how many of its rows were new to the run, and the vocabulary of the rows it
+   * returned: the only terms that can reach the rows hidden behind its ceiling
+   * are terms those rows carry (plan 0257).
    */
   private async crawlQuery(
     context: RunContext,
@@ -285,18 +292,25 @@ export class DezaCatalogRunner implements CatalogRunner {
     client: DezaClient,
     section: DezaSection,
     terms: string[]
-  ): Promise<{ capped: boolean; vocabulary: Map<string, number> }> {
+  ): Promise<{
+    capped: boolean;
+    added: number;
+    vocabulary: Map<string, number>;
+  }> {
     const query: DezaQuery = { section: section.code, terms };
     const vocabulary = new Map<string, number>();
     let lastPage = 0;
+    let added = 0;
     for await (const row of client.walkQuery(query, (page) => {
       lastPage = Math.max(lastPage, page.lastPage);
     })) {
-      crawl.record(section, row);
+      if (crawl.record(section, row)) {
+        added += 1;
+      }
       learn(vocabulary, row.name);
       await context.heartbeat();
     }
-    return { capped: lastPage >= DEZA_CEILING_PAGES, vocabulary };
+    return { capped: lastPage >= DEZA_CEILING_PAGES, added, vocabulary };
   }
 }
 
@@ -377,8 +391,18 @@ interface IncompleteSection {
 interface SectionSummary {
   code: string;
   name: string;
-  /** Distinct products recorded under this section, repeats of another included. */
+  /**
+   * Distinct products recorded under this section, repeats of another
+   * included. A product filed under two sections counts in both, so this does
+   * **not** add up to the run's product count. {@link firstSeen} does.
+   */
   products: number;
+  /**
+   * The products that were new to the run when this section recorded them.
+   * Each product is first seen by exactly one section, so the sum over
+   * `sections` is the run's product count.
+   */
+  firstSeen: number;
   /** Null for a section that threw, as in `incompleteSections`. */
   queries: number | null;
   stoppedBy: SectionStop | null;
@@ -553,8 +577,11 @@ class Crawl {
    * set. The key is what deduplicates it. The section path of the **first**
    * sighting is kept, because a product genuinely filed in two places has no one
    * true section and the first is as good an answer as the last.
+   *
+   * Answers whether the row was new to the run, which is what a section's
+   * barren rule and its `firstSeen` count read.
    */
-  record(section: DezaSection, row: DezaProductRow): void {
+  record(section: DezaSection, row: DezaProductRow): boolean {
     for (const shop of row.shops) {
       this.shops.set(shop.code, shop.printedName);
     }
@@ -564,13 +591,17 @@ class Crawl {
     }
 
     const key = entryKey(row.name, row.sizeFormat);
-    this.summaries.get(section.code)?.products.add(key);
+    const summarized = this.summaries.get(section.code);
+    summarized?.products.add(key);
     const held = this.products.get(key);
     if (held) {
       for (const shop of row.shops) {
         held.shops.add(shop.code);
       }
-      return;
+      return false;
+    }
+    if (summarized) {
+      summarized.summary.firstSeen += 1;
     }
     this.products.set(key, {
       name: row.name,
@@ -584,6 +615,7 @@ class Crawl {
       categoryPath: [...section.path, ...row.attributes],
       shops: new Set(row.shops.map((shop) => shop.code)),
     });
+    return true;
   }
 
   toReport(): Record<string, unknown> {
@@ -603,6 +635,7 @@ class Crawl {
           code: summary.code,
           name: summary.name,
           products: products.size,
+          firstSeen: summary.firstSeen,
           queries: summary.queries,
           stoppedBy: summary.stoppedBy,
         })
@@ -618,6 +651,7 @@ class Crawl {
         summary: {
           code: section.code,
           name: section.name,
+          firstSeen: 0,
           queries: 0,
           stoppedBy: null,
         },

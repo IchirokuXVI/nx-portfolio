@@ -226,6 +226,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         code: 'W011',
         name: 'Carniceria',
         products: 320,
+        firstSeen: 320,
         queries: 3,
         stoppedBy: 'BUDGET',
       },
@@ -233,6 +234,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         code: 'W051',
         name: 'Bolleria',
         products: 0,
+        firstSeen: 0,
         queries: 1,
         stoppedBy: 'COMPLETE',
       },
@@ -371,6 +373,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         code: 'W011',
         name: 'Carniceria',
         products: 1,
+        firstSeen: 1,
         queries: null,
         stoppedBy: null,
       },
@@ -378,6 +381,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         code: 'W051',
         name: 'Bolleria',
         products: 0,
+        firstSeen: 0,
         queries: 1,
         stoppedBy: 'COMPLETE',
       },
@@ -417,6 +421,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         code: 'W011',
         name: 'Carniceria',
         products: 400,
+        firstSeen: 400,
         queries: 12,
         stoppedBy: 'BARREN',
       },
@@ -424,6 +429,7 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         code: 'W051',
         name: 'Bolleria',
         products: 0,
+        firstSeen: 0,
         queries: 1,
         stoppedBy: 'COMPLETE',
       },
@@ -565,6 +571,112 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       'W011|oferta queso',
       'W011|queso',
     ]);
+  });
+
+  it('ends a section barren on what its own queries add, whatever another section adds meanwhile (plan 0257)', async () => {
+    // Carniceria shows 300 rows of `pollo asado`, and every narrowing of it
+    // returns the same 300 rows. Bolleria, crawled by the second worker at the
+    // same time, adds 85 products with each of its twenty narrowings. A test of
+    // the run's product count saw Bolleria's products land during Carniceria's
+    // queries and never counted a barren pass.
+    const words = [
+      'alfa',
+      'beta',
+      'gamma',
+      'delta',
+      'epsilon',
+      'zeta',
+      'theta',
+      'iota',
+      'kappa',
+      'lambda',
+      'sigma',
+      'omega',
+      'tango',
+      'fresa',
+      'limon',
+      'melon',
+      'nuez',
+      'pera',
+      'kiwi',
+      'mango',
+    ];
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Pollo asado', 0, 301),
+      ...Array.from({ length: 2000 }, (_, index) => ({
+        description: `${words[index % words.length]} ${index} g`,
+        section: 'W051',
+        shops: ['T1'],
+      })),
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url }, 2)
+    );
+
+    // The section's own query, then three narrowings that added nothing.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      'W011|pollo',
+      'W011|pollo asado',
+      'W011|asado',
+    ]);
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        firstSeen: 300,
+        queries: 4,
+        stoppedBy: 'BARREN',
+      }),
+      expect.objectContaining({
+        code: 'W051',
+        firstSeen: 2000,
+        queries: 21,
+        stoppedBy: 'NO_TERM',
+      }),
+    ]);
+    // Bolleria really was adding while Carniceria spent its barren passes.
+    const during = listing.queries.slice(
+      listing.queries.indexOf('W011|pollo'),
+      listing.queries.indexOf('W011|asado')
+    );
+    expect(during.some((query) => query.startsWith('W051|'))).toBe(true);
+  });
+
+  it('counts a product under the section that saw it first, so firstSeen adds up (plan 0257)', async () => {
+    const repeated = {
+      description: 'Perlas de perfume LENOR classic 195 g',
+      shops: ['T1'],
+    };
+    listing = await startFakeListing(SECTIONS, [
+      { ...repeated, section: 'W011' },
+      { ...repeated, section: 'W051' },
+      {
+        description: 'Croissants ALTEZA 360 g',
+        section: 'W051',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    // `products` counts the repeat under both sections; `firstSeen` under
+    // the first only, so its sum is the run's product count.
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({ code: 'W011', products: 1, firstSeen: 1 }),
+      expect.objectContaining({ code: 'W051', products: 2, firstSeen: 1 }),
+    ]);
+    expect(runReport['products']).toBe(2);
   });
 
   it('writes one entry for a description the listing repeats', async () => {
