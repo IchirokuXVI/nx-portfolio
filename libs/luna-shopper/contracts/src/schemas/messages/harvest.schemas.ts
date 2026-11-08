@@ -605,6 +605,9 @@ const sourceCatalogEntryProperties = {
   // size. Stated but not required, so a reader built before it validates.
   approxWeight: numberOrNull(),
   sizeFormat: nullableString(),
+  // Plan 0248: the container the chain prints, verbatim. Stated but not
+  // required, so a reader built before it keeps validating what it holds.
+  packaging: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
   url: nullableString(),

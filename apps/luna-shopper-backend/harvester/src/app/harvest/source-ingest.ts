@@ -121,6 +121,13 @@ export interface SourceObservation {
   approxWeight?: number | null;
   sizeFormat: string | null;
   /**
+   * The container the source prints (`Brik`, `Botella`, `Pack-4`), verbatim
+   * (plan 0248). Null is a statement that it prints none. Absent is a source
+   * that reads no containers at all, every adapter but Mercadona's, and leaves
+   * the stored text alone.
+   */
+  packaging?: string | null;
+  /**
    * How many units the pack holds, as the source's own adapter read it (plan
    * 0162). Null is a statement that the product is not a pack. Absent is a
    * source that reads no counts at all, the leaflet import, and leaves the
@@ -1344,7 +1351,12 @@ export class SourceIngest {
         observation.name,
         observation.sizeFormat,
         fields.unitSize,
-        fields.approxWeight ?? null
+        fields.approxWeight ?? null,
+        // The count and the container join the key (plan 0248, D2 and D3).
+        {
+          packCount: fields.packCount ?? null,
+          packaging: fields.packaging ?? null,
+        }
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -1969,6 +1981,7 @@ function fieldsOf(
     // source that never reads a weight leaves the stored one alone.
     approxWeight: unitSize === null ? observation.approxWeight : null,
     sizeFormat: observation.sizeFormat,
+    packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
     url: observation.url,

@@ -1013,6 +1013,14 @@ export interface SourceCatalogEntryView {
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
   /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim, as
+   * the last full read stated it (plan 0248). Null for a row whose source
+   * prints none, which is every chain but Mercadona, and for a Mercadona row no
+   * run has read whole since that plan. It tells two containers of one product
+   * apart, and they are never proposed as each other.
+   */
+  packaging: string | null;
+  /**
    * How many units the pack holds, as the last run that saw the row read it
    * (plan 0162). Null when the source stated no count. It is the source's, so
    * every run rewrites it exactly as it rewrites `sizeFormat`.

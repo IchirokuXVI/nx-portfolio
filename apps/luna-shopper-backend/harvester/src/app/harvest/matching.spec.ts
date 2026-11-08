@@ -410,6 +410,116 @@ describe('the sibling key with size (plan 0155)', () => {
       expect(loose.match('Queso curado de oveja', 'kg', null, 1560)).toBeNull();
     });
   });
+
+  describe('the count and the container (plan 0248, D2 and D3)', () => {
+    /** Product 27342, the single two litre bottle, as a walk stores it. */
+    const bottle = (over: Partial<SourceCatalogEntry> = {}) =>
+      row({
+        id: 'row-27342',
+        name: 'Refresco Coca-Cola',
+        sizeFormat: 'l',
+        unitSize: '2.0000' as unknown as number,
+        packCount: null,
+        packaging: 'Botella',
+        status: SourceEntryStatus.UNRESOLVED,
+        itemId: null,
+        ...over,
+      });
+
+    it('keeps the key of a row that states neither', () => {
+      // Every row of a chain that prints no container and sells no packs.
+      expect(siblingKey('Refresco cola', 'l', 1, null, {})).toBe(
+        'refresco cola|l|1'
+      );
+      expect(
+        siblingKey('Refresco cola', 'l', 1, null, {
+          packCount: null,
+          packaging: null,
+        })
+      ).toBe('refresco cola|l|1');
+      expect(
+        siblingKey('Refresco cola', 'l', 2, null, {
+          packCount: 4,
+          packaging: 'Pack-4',
+        })
+      ).toBe('refresco cola|l|2|x4|pack 4');
+    });
+
+    it('gives two rows that differ only by the count two keys', () => {
+      expect(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 })
+      ).not.toBe(siblingKey('Refresco Coca-Cola', 'l', 2, null, {}));
+      expect(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 })
+      ).not.toBe(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 6 })
+      );
+      // A smallint answers a number, and a count read as text is the same.
+      expect(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: '4' })
+      ).toBe(siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 }));
+    });
+
+    it('gives two rows that differ only by the container two keys', () => {
+      expect(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).not.toBe(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Botella' })
+      );
+      expect(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).not.toBe(siblingKey('Leche entera', 'l', 1, null, {}));
+    });
+
+    it('gives two rows with the same container one key, as the chain cases it or not', () => {
+      expect(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).toBe(siblingKey('LECHE ENTERA', 'l', 1, null, { packaging: 'brik' }));
+    });
+
+    it('never proposes the pack of four 28113 as the single bottle 27342', () => {
+      const index = new SiblingEntryIndex([bottle()]);
+
+      expect(
+        index.match('Refresco Coca-Cola', 'l', 2, null, {
+          packCount: 4,
+          packaging: 'Pack-4',
+        })
+      ).toBeNull();
+      // The count alone separates them, whatever the container says.
+      expect(
+        index.match('Refresco Coca-Cola', 'l', 2, null, {
+          packCount: 4,
+          packaging: 'Botella',
+        })
+      ).toBeNull();
+      // And the same bottle still finds itself.
+      expect(
+        index.match('Refresco Coca-Cola', 'l', 2, null, {
+          packCount: null,
+          packaging: 'Botella',
+        })
+      ).toEqual({ itemId: null, entryId: 'row-27342' });
+    });
+
+    it('never proposes a brik as the bottle of the same milk', () => {
+      const index = new SiblingEntryIndex([
+        bottle({
+          id: 'row-brik',
+          name: 'Leche entera',
+          unitSize: 1,
+          packaging: 'Brik',
+        }),
+      ]);
+
+      expect(
+        index.match('Leche entera', 'l', 1, null, { packaging: 'Botella' })
+      ).toBeNull();
+      expect(
+        index.match('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).toEqual({ itemId: null, entryId: 'row-brik' });
+    });
+  });
 });
 
 describe('rung 3 and the weight of one piece (plan 0244, section 5.8)', () => {

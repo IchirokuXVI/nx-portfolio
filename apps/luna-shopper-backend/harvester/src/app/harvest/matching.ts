@@ -207,6 +207,13 @@ export interface SiblingProposal {
  * 2026-11-03), so they never share a key, and a piece never proposes a row
  * with no weight.
  *
+ * **The count and the container follow, each only when the row states one**
+ * (plan 0248): `name|l|2|x4` for a pack of four, `name|l|2|botella` for a
+ * bottle. A pack of four never proposes the single bottle of the same total
+ * size (D3), and a brik never proposes a bottle (D2). A row that states
+ * neither keeps the key it had before the plan, which is every row of a chain
+ * that prints no container and sells no packs.
+ *
  * It is not {@link entryNameKey}, and that one must not change: hashed, it is
  * also the row identity of a source with no id of its own, and a weight that
  * moves between weeks must not move a row's identity.
@@ -215,11 +222,31 @@ export function siblingKey(
   name: string,
   sizeFormat: string | null,
   unitSize: number | string | null | undefined,
-  approxWeight?: number | string | null
+  approxWeight?: number | string | null,
+  pack: SiblingPack = {}
 ): string {
   const size = sizeToken(unitSize, approxWeight);
   return `${entryNameKey(name, sizeFormat)}|${
     Number.isFinite(size) ? String(size) : ''
+  }${packToken(pack)}`;
+}
+
+/**
+ * What a row states about its pack, for {@link siblingKey} (plan 0248). Absent
+ * and null are the same here: neither adds anything to the key.
+ */
+export interface SiblingPack {
+  packCount?: number | string | null;
+  packaging?: string | null;
+}
+
+/** The pack half of {@link siblingKey}: empty for a row that states neither. */
+function packToken({ packCount, packaging }: SiblingPack): string {
+  const count =
+    packCount === null || packCount === undefined ? NaN : Number(packCount);
+  const container = normalizeName(packaging ?? '');
+  return `${Number.isFinite(count) ? `|x${count}` : ''}${
+    container === '' ? '' : `|${container}`
   }`;
 }
 
@@ -310,7 +337,10 @@ export class SiblingEntryIndex {
   add(row: SourceCatalogEntry): void {
     push(
       this.byNameKey,
-      siblingKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight),
+      siblingKey(row.name, row.sizeFormat, row.unitSize, row.approxWeight, {
+        packCount: row.packCount,
+        packaging: row.packaging,
+      }),
       row
     );
     if (isNameKeyed(row)) {
@@ -336,11 +366,12 @@ export class SiblingEntryIndex {
     name: string,
     sizeFormat: string | null,
     unitSize: number | string | null,
-    approxWeight: number | string | null = null
+    approxWeight: number | string | null = null,
+    pack: SiblingPack = {}
   ): SiblingProposal | null {
     const siblings = (
       this.byNameKey.get(
-        siblingKey(name, sizeFormat, unitSize, approxWeight)
+        siblingKey(name, sizeFormat, unitSize, approxWeight, pack)
       ) ?? []
     ).filter((row) => row.status !== SourceEntryStatus.REJECTED);
     if (siblings.length === 0) {
