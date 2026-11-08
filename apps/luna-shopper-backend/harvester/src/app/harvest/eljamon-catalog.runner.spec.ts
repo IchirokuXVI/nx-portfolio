@@ -16,7 +16,10 @@ import {
   DETAIL_FAILED_KEY,
   type CatalogDiscoveryInput,
 } from './catalog-runner';
-import { ElJamonCatalogRunner } from './eljamon-catalog.runner';
+import {
+  ElJamonCatalogRunner,
+  type SilentAttempts,
+} from './eljamon-catalog.runner';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
 
@@ -124,27 +127,36 @@ const BEBIDAS_PAGE_1: Row[] = Array.from({ length: 20 }, (_, index) => ({
 class TestRunner extends ElJamonCatalogRunner {
   readonly sent: Array<{ url: string; method: string }> = [];
 
-  constructor(private readonly site: (url: URL, method: string) => Response) {
+  constructor(
+    private readonly site: (url: URL, method: string) => Response,
+    private readonly retries = 0
+  ) {
     super({
       getOrThrow: () => ({ userAgent: 'LunaShopperBot/1.0' }),
     } as unknown as ConfigService);
   }
 
-  protected override createClient(context: RunContext): ElJamonClient {
+  protected override createClient(
+    context: RunContext,
+    _source: SupermarketSource,
+    _postalCode: string,
+    silence: SilentAttempts
+  ): ElJamonClient {
     return new ElJamonClient({
       userAgent: 'LunaShopperBot/1.0',
       baseUrl: BASE,
       sleepImpl: async () => undefined,
-      retries: 0,
+      retries: this.retries,
       // The run's gate, guard and signal, as the runtime passes them.
       acquire: context.acquire,
       guard: context.guard,
       signal: context.signal,
-      fetchImpl: (async (url: string, init?: RequestInit) => {
+      // Counted as the runtime's transport is, so the stop reads the fake.
+      fetchImpl: silence.watch((async (url: string, init?: RequestInit) => {
         const method = init?.method ?? 'GET';
         this.sent.push({ url: String(url), method });
         return this.site(new URL(String(url)), method);
-      }) as unknown as typeof fetch,
+      }) as unknown as typeof fetch),
     });
   }
 }
@@ -563,7 +575,12 @@ describe('ElJamonCatalogRunner', () => {
         rowsRepeated: 0,
       },
     ]);
-    expect(written['detail']).toEqual({ pages: 22, failed: 1, timeouts: 0 });
+    expect(written['detail']).toEqual({
+      pages: 22,
+      failed: 1,
+      timeouts: 0,
+      silentAttempts: 0,
+    });
     // One failed page and one failed product, both counted.
     const failures = ctx.report.mock.calls
       .map(([counters]) => (counters as { failed?: number }).failed ?? 0)
@@ -844,6 +861,16 @@ describe('ElJamonCatalogRunner', () => {
      * timeout.
      */
     function site(timesOut: (code: string) => boolean) {
+      return siteAnswering((code) => (timesOut(code) ? 'silent' : undefined));
+    }
+
+    /**
+     * The same listing, and product pages `onPage` makes silent, reset, or a
+     * 404. It is asked once per attempt, so it can answer each retry apart.
+     */
+    function siteAnswering(
+      onPage: (code: string) => 'silent' | 'reset' | 'missing' | undefined
+    ) {
       return (url: URL): Response => {
         if (url.pathname === '/categorias/bebidas/06') {
           return new Response(
@@ -853,12 +880,26 @@ describe('ElJamonCatalogRunner', () => {
           );
         }
         const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
-        if (code && timesOut(code)) {
+        const answer = code ? onPage(code) : undefined;
+        if (answer === 'silent') {
           throw new ElJamonTimeoutError(url.toString(), 30_000);
+        }
+        if (answer === 'reset') {
+          throw Object.assign(new Error('socket hang up'), {
+            code: 'ECONNRESET',
+          });
+        }
+        if (answer === 'missing') {
+          return new Response('', { status: 404 });
         }
         return storefront(url);
       };
     }
+
+    const detailAsked = (runner: TestRunner) =>
+      runner.sent.filter((request) => request.url.includes('/detalle/')).length;
+
+    const oneWorker = { ...source, workers: 1 } as SupermarketSource;
 
     const written = (ctx: { setReport: jest.Mock }) =>
       ctx.setReport.mock.calls[0][0] as Record<string, unknown>;
@@ -895,7 +936,7 @@ describe('ElJamonCatalogRunner', () => {
       expect(perPage.every(({ at }) => at < ingestAt)).toBe(true);
     });
 
-    it('stops asking for pages after 20 timeouts in a row, and still records every listed row', async () => {
+    it('stops asking for pages after 20 silent attempts in a row, and still records every listed row', async () => {
       const ctx = context();
       const report = new RecordingRunReport();
       const runner = new TestRunner(site((code) => code !== '101'));
@@ -917,6 +958,7 @@ describe('ElJamonCatalogRunner', () => {
         pages: asked,
         failed: asked - 1,
         timeouts: asked - 1,
+        silentAttempts: 20,
       });
 
       // Every listed row reaches the ingest; every new product whose page was
@@ -935,10 +977,10 @@ describe('ElJamonCatalogRunner', () => {
         offerId: null,
         page: null,
         message:
-          'Product pages stopped after 20 timeouts in a row: ' +
+          'Product pages stopped after 20 attempts in a row got no answer: ' +
           `${asked} of 42 page(s) asked, ${asked - 1} failed, ` +
-          `${asked - 1} timed out. 41 product(s) were recorded from the ` +
-          'listing without a page, and the next walk asks for them again.',
+          `${asked - 1} timed out. 41 product(s) had no page; the next ` +
+          'walk asks for them again.',
       });
       // The listing was whole, so the stop costs no listing declaration.
       expect(report.wholeListings).toHaveLength(1);
@@ -966,6 +1008,119 @@ describe('ElJamonCatalogRunner', () => {
       expect(detail.timeouts).toBe(20);
       expect(ctx.warn).not.toHaveBeenCalled();
       expect(processedOf(ctx)).toBe(42);
+    });
+
+    it('counts every silent retry, so a client that retries three times stops after 20 attempts and not 20 pages', async () => {
+      const ctx = context();
+      const runner = new TestRunner(
+        site((code) => code !== '101'),
+        3
+      );
+
+      await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+      // 101 answered once, then five pages were silent four times each.
+      expect(detailAsked(runner)).toBe(1 + 20);
+      expect(written(ctx)['detail']).toEqual({
+        pages: 6,
+        failed: 5,
+        timeouts: 5,
+        silentAttempts: 20,
+      });
+      expect(ctx.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
+      );
+    });
+
+    it('never resets the count on a connection reset, which is no answer', async () => {
+      const ctx = context();
+      let attempts = 0;
+      // Silent, reset, silent, reset: each page ends in a reset, which is
+      // not a timed out page, and still adds two silent attempts.
+      const runner = new TestRunner(
+        siteAnswering(() => (attempts++ % 2 === 0 ? 'silent' : 'reset')),
+        3
+      );
+
+      await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+      expect(detailAsked(runner)).toBe(10 * 4);
+      expect(written(ctx)['detail']).toEqual({
+        pages: 10,
+        failed: 10,
+        timeouts: 0,
+        silentAttempts: 20,
+      });
+      expect(ctx.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ code: HarvestWarningCode.DETAIL_UNREAD })
+      );
+    });
+
+    it('resets the count on a 404, which is an answer', async () => {
+      const ctx = context();
+      // 12 silent pages, a 404, 19 silent, a 404, 9 silent: never 20 in a row.
+      const runner = new TestRunner(
+        siteAnswering((code) =>
+          code === '210' || code === '230' ? 'missing' : 'silent'
+        )
+      );
+
+      await runner.run(ctx, new RecordingRunReport(), input, oneWorker);
+
+      expect(detailAsked(runner)).toBe(42);
+      expect(written(ctx)['detail']).toEqual({
+        pages: 42,
+        failed: 42,
+        timeouts: 40,
+        silentAttempts: 40,
+      });
+      expect(ctx.warn).not.toHaveBeenCalled();
+    });
+
+    it('completes an ALL walk whose stage stops, and creates no row for a product whose page was never asked', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const runner = new TestRunner(site((code) => code !== '101'));
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, details: HarvestDetailFetch.ALL },
+        oneWorker
+      );
+
+      expect(ctx.signal.aborted).toBe(false);
+      expect(ctx.setReport).toHaveBeenCalled();
+      expect(processedOf(ctx)).toBe(42);
+      expect(ctx.warn).toHaveBeenCalledTimes(1);
+      expect(ctx.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          code: HarvestWarningCode.DETAIL_UNREAD,
+          message: expect.stringContaining(
+            '41 product(s) had no page; the next walk asks for them again.'
+          ),
+        })
+      );
+      // A full observation for the page that was read, and for each of the
+      // 20 that timed out, marked for the next walk. The 21 pages never asked
+      // for are reported from the listing alone, because an `ALL` walk was
+      // handed no ids: they name no product, and the ingest creates no row
+      // from them for a product the chain does not hold (`skipUnknownPartial`).
+      expect(report.products).toHaveLength(21);
+      expect(
+        report.products.filter(
+          (product) => product.extra?.[DETAIL_FAILED_KEY] !== true
+        )
+      ).toEqual([expect.objectContaining({ externalId: '101' })]);
+      const full = new Set(
+        report.products.map((product) => product.externalId)
+      );
+      expect(report.partialProducts).toHaveLength(21);
+      for (const product of report.partialProducts) {
+        expect(full.has(product.externalId)).toBe(false);
+        expect(product).not.toHaveProperty('name');
+        expect(product.prices).toHaveLength(1);
+      }
     });
   });
 });

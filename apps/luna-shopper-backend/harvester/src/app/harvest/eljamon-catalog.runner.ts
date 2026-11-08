@@ -8,6 +8,7 @@ import {
   ELJAMON_DEFAULT_POSTAL_CODE,
   ElJamonClient,
   ElJamonTimeoutError,
+  createElJamonFetch,
   photoAddressRead,
   splitSize,
   type ElJamonCategory,
@@ -31,13 +32,56 @@ import type {
 } from './source-ingest';
 
 /**
- * How many product pages in a row may time out, across every worker of the
- * pool, before the detail stage stops (plan 0253, D1). With six workers and
- * a 30 second timeout that is minutes of a chain that answers nothing, and
- * a few timeouts spread over a stage never reach it: any page that answers,
- * a 404 included, starts the count again.
+ * How many silent attempts in a row, across every worker of the pool, stop the
+ * detail stage (plan 0253, D1). An attempt is one request the transport sent,
+ * a retry included, and it is silent when it timed out. With six workers and a
+ * 30 second idle timeout, 20 is about 100 seconds of a chain that answers
+ * nothing. Any attempt that gets an answer, a 404 included, starts the count
+ * again. A reset connection, a socket hang up or a DNS failure is no answer
+ * and no silence, so it leaves the count as it is.
  */
 export const DETAIL_TIMEOUTS_IN_A_ROW = 20;
+
+/**
+ * The silent attempts in a row of one run, counted at the transport, below the
+ * client's retries, so a page that timed out on every retry counts each one.
+ */
+export class SilentAttempts {
+  /** Silent attempts since the last answer. */
+  inARow = 0;
+  /** Every silent attempt since the count was armed. On the report. */
+  total = 0;
+
+  /** Starts counting from nothing, at the start of the detail stage. */
+  reset(): void {
+    this.inARow = 0;
+    this.total = 0;
+  }
+
+  /** Whether the chain has been silent long enough to stop asking. */
+  get exhausted(): boolean {
+    return this.inARow >= DETAIL_TIMEOUTS_IN_A_ROW;
+  }
+
+  /** `fetchImpl`, counted: a `Response` resets, a timeout counts. */
+  watch(fetchImpl: typeof fetch): typeof fetch {
+    return (async (input: string | URL | Request, init?: RequestInit) => {
+      try {
+        const response = await fetchImpl(input, init);
+        // The transport resolves only once the whole body arrived, so any
+        // status is an answer.
+        this.inARow = 0;
+        return response;
+      } catch (error) {
+        if (isTimeout(error)) {
+          this.inARow += 1;
+          this.total += 1;
+        }
+        throw error;
+      }
+    }) as typeof fetch;
+  }
+}
 
 /**
  * `CATALOG_DISCOVERY` against the `eljamon-web` adapter (plan 0169, section 5).
@@ -71,10 +115,15 @@ export const DETAIL_TIMEOUTS_IN_A_ROW = 20;
  * end, and it ends at `totalPlanned` once.
  *
  * **The detail stage stops when the chain stops answering** (plan 0253,
- * section 3, D1 (b)): {@link DETAIL_TIMEOUTS_IN_A_ROW} timeouts in a row and
- * no new page is asked. The run still records every listed row, a new product
- * whose page was not read with {@link DETAIL_FAILED_KEY}, so the next walk asks
- * for it, and ends `COMPLETED` with one `DETAIL_UNREAD` warning.
+ * section 3, D1 (b)): {@link DETAIL_TIMEOUTS_IN_A_ROW} silent attempts in a
+ * row across the pool, retries included, about 100 seconds of six workers with
+ * nothing answered, and no new page is asked. The run still records every
+ * listed row and ends `COMPLETED` with one `DETAIL_UNREAD` warning. On a `NEW`
+ * walk a new product whose page was not read is written with
+ * {@link DETAIL_FAILED_KEY}, so the next walk asks for it. An `ALL` walk was
+ * handed no ids, so it reports every product whose page it never asked for
+ * from the listing alone, and the ingest creates no row from that for a
+ * product the chain does not hold yet.
  *
  * **No number here claims the catalog is complete.** The sum of the counts
  * the categories printed is what the site said, and the report says it in those
@@ -94,7 +143,8 @@ export class ElJamonCatalogRunner implements CatalogRunner {
   ): Promise<void> {
     const postalCode =
       readString(source.config, 'postalCode') ?? ELJAMON_DEFAULT_POSTAL_CODE;
-    const client = this.createClient(context, source, postalCode);
+    const silence = new SilentAttempts();
+    const client = this.createClient(context, source, postalCode, silence);
     const walk = new Walk();
     context.countProgressItself();
 
@@ -127,7 +177,14 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     );
     // A known product needs no page, so its share of the plan is done now.
     await context.report({ processed: walk.rows.size - fresh.length });
-    const detail = await this.readDetails(context, client, walk, fresh, source);
+    const detail = await this.readDetails(
+      context,
+      client,
+      walk,
+      fresh,
+      source,
+      silence
+    );
     for (const disagreement of walk.priceDisagreements) {
       // The listing wins: it is what a shopper sees with the session's postal
       // code (section 5.2). The disagreement is named on the report.
@@ -196,25 +253,30 @@ export class ElJamonCatalogRunner implements CatalogRunner {
    *
    * Each page read or failed is one product of `processed`. The pool runs on
    * a signal of its own, which the run's abort reaches too, so this stage can
-   * stop alone: {@link DETAIL_TIMEOUTS_IN_A_ROW} timeouts in a row, across
-   * every worker, and no new page is asked. A page already in flight finishes
-   * or fails as it would have. What stopping costs is on the report, and in
-   * the `DETAIL_UNREAD` warning the run writes.
+   * stop alone: {@link DETAIL_TIMEOUTS_IN_A_ROW} silent attempts in a row,
+   * across every worker and every retry, and no new page is asked. `silence`
+   * counts them at the transport; the pool reads it as each page fails. A
+   * page already in flight finishes or fails as it would have, its retries
+   * included. What stopping costs is on the report, and in the
+   * `DETAIL_UNREAD` warning the run writes.
    */
   private async readDetails(
     context: RunContext,
     client: ElJamonClient,
     walk: Walk,
     fresh: readonly ListedRow[],
-    source: SupermarketSource
+    source: SupermarketSource,
+    silence: SilentAttempts
   ): Promise<DetailStage> {
     const stage: DetailStage = {
       pages: 0,
       failed: 0,
       timeouts: 0,
+      silentAttempts: 0,
       stopped: false,
     };
-    let timeoutsInARow = 0;
+    // A listing that ended in silence is not this stage's to count.
+    silence.reset();
     const pool = new AbortController();
     const stopPool = (): void => pool.abort();
     if (context.signal.aborted) {
@@ -230,8 +292,6 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         handle: async (listed) => {
           stage.pages += 1;
           const product = await client.getProduct(listed.row.url);
-          // The chain answered, so a run of timeouts is over.
-          timeoutsInARow = 0;
           if (!product) {
             throw new Error('The page carried no product JSON-LD.');
           }
@@ -264,18 +324,14 @@ export class ElJamonCatalogRunner implements CatalogRunner {
           stage.failed += 1;
           if (isTimeout(error)) {
             stage.timeouts += 1;
-            timeoutsInARow += 1;
-            if (timeoutsInARow >= DETAIL_TIMEOUTS_IN_A_ROW && !stage.stopped) {
-              stage.stopped = true;
-              this.logger.warn(
-                `Run ${context.runId}: ${timeoutsInARow} product pages in a ` +
-                  'row timed out; no new page is asked, and the listing is ' +
-                  'recorded'
-              );
-              pool.abort();
-            }
-          } else {
-            timeoutsInARow = 0;
+          }
+          if (silence.exhausted && !stage.stopped) {
+            stage.stopped = true;
+            this.logger.warn(
+              `Run ${context.runId}: ${silence.inARow} attempts in a row got ` +
+                'no answer; no new page is asked, and the listing is recorded'
+            );
+            pool.abort();
           }
           await context.report({ failed: 1, processed: 1 });
         },
@@ -283,6 +339,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     } finally {
       context.signal.removeEventListener('abort', stopPool);
     }
+    stage.silentAttempts = silence.total;
     return stage;
   }
 
@@ -362,18 +419,22 @@ export class ElJamonCatalogRunner implements CatalogRunner {
 
   /**
    * The client this run drives. **A seam and not a knob**: a test hands back a
-   * client built on a fake fetch, and nothing in the runtime overrides it.
+   * client built on a fake fetch, and nothing in the runtime overrides it. The
+   * fetch goes through `silence`, which is how the detail stage knows the
+   * chain stopped answering, so an override wraps its fake the same way.
    */
   protected createClient(
     context: RunContext,
     source: SupermarketSource,
-    postalCode: string
+    postalCode: string,
+    silence: SilentAttempts
   ): ElJamonClient {
     const settings = this.config.getOrThrow<HarvesterConfig>('harvester');
     return new ElJamonClient({
       userAgent: settings.userAgent,
       baseUrl: readString(source.config, 'baseUrl'),
       postalCode,
+      fetchImpl: silence.watch(createElJamonFetch()),
       // The run's own bucket, so the rate the owner set on this row is the rate
       // the source sees, whatever the number of workers.
       acquire: context.acquire,
@@ -489,10 +550,16 @@ function warnShortCategories(context: RunContext, walk: Walk): void {
 }
 
 /**
- * The one warning of a detail stage that stopped on timeouts (plan 0253, D1
+ * The one warning of a detail stage that stopped on silence (plan 0253, D1
  * (b)). The run ends `COMPLETED`, so this is what says the products listed in
  * it have no page yet. An aborted walk writes none: it does not end
  * `COMPLETED`, and its own reason says why.
+ *
+ * The words hold on both kinds of walk. A page that failed is written from the
+ * listing, marked for the next walk, on either. A page never asked for is
+ * written the same way on a `NEW` walk; an `ALL` walk reports it from the
+ * listing alone, and the ingest creates no row from that for a product the
+ * chain does not hold. Either way the next walk asks for its page.
  */
 function warnDetailUnread(
   context: RunContext,
@@ -510,11 +577,11 @@ function warnDetailUnread(
     page: null,
     name: null,
     message:
-      `Product pages stopped after ${DETAIL_TIMEOUTS_IN_A_ROW} timeouts in a ` +
-      `row: ${detail.pages} of ${planned} page(s) asked, ${detail.failed} ` +
-      `failed, ${detail.timeouts} timed out. ${withoutPage} product(s) were ` +
-      'recorded from the listing without a page, and the next walk asks for ' +
-      'them again.',
+      `Product pages stopped after ${DETAIL_TIMEOUTS_IN_A_ROW} attempts in a ` +
+      `row got no answer: ${detail.pages} of ${planned} page(s) asked, ` +
+      `${detail.failed} failed, ${detail.timeouts} timed out. ` +
+      `${withoutPage} product(s) had no page; the next walk asks for them ` +
+      'again.',
   });
 }
 
@@ -665,7 +732,9 @@ interface DetailStage {
   failed: number;
   /** Failed pages whose last attempt timed out. */
   timeouts: number;
-  /** Whether the timeouts in a row stopped the stage. Not on the report. */
+  /** Attempts that timed out, retries included: what the stop counts. */
+  silentAttempts: number;
+  /** Whether the silent attempts in a row stopped the stage. Not on the report. */
   stopped: boolean;
 }
 
@@ -742,6 +811,7 @@ class Walk {
         pages: detail.pages,
         failed: detail.failed,
         timeouts: detail.timeouts,
+        silentAttempts: detail.silentAttempts,
       },
       /** Named, never only counted. */
       failedPages: this.failedPages,
