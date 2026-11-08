@@ -172,6 +172,23 @@ export const StorageKeys = {
    * everything else, which is the case the automatic sign in is for.
    */
   googleAutoSignInOff: `google-auto-sign-in-off:${APP_KEY}`,
+  /**
+   * The OTA bundles that never confirmed their boot on this device, as a JSON array
+   * of manifest `bundle` ids (velista `0180`, D7).
+   *
+   * In `localStorage`, because the record must outlive the rollback that wrote it and
+   * every later cold start: a recorded id is never downloaded again. It clears when
+   * the manifest names another bundle, which is the next release.
+   */
+  failedBundles: `failed-bundles:${APP_KEY}`,
+  /**
+   * The Google Play version code this device was last asked to update to with a
+   * flexible in-app update (velista `0180`, D9 and Q6).
+   *
+   * In `localStorage`, so a person who declined is not asked again for that code, on
+   * any later start. A higher code asks once more.
+   */
+  flexibleUpdateAsked: `flexible-update-asked:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
