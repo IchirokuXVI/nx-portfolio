@@ -58,6 +58,17 @@ export { entryKey } from './matching';
  *
  * Step 3 is what makes an aborted run cheap to resume, exactly as plan 0038
  * section 6.3 describes: the snapshot is already the answer.
+ *
+ * **A capped section is narrowed where the weight is highest, root or child**
+ * (plan 0258, section 2). Every query of the section that came back at the
+ * ceiling stays open, the section's own query included, and each narrowing
+ * weighs the untried words of all of them and issues the heaviest pair of
+ * query and word. Plan 0257 narrowed the newest capped query first, and in
+ * Color that dug inside one capped child with term queries that added nothing
+ * while single brand terms over the whole section each opened up to 300 new
+ * rows. The root's vocabulary holds every row the section showed, so its words
+ * weigh most while they still reach products few queries returned, and the
+ * narrowing moves into a child once they are spent.
  */
 @Injectable()
 export class DezaCatalogRunner implements CatalogRunner {
@@ -540,7 +551,11 @@ interface SectionState {
   observe(returned: Set<string>, added: number): void;
   /** Whether the last five queries added enough to go on past the floor. */
   growing(): boolean;
-  /** The next narrowing of an already capped query, or null when there is none. */
+  /**
+   * The next narrowing: the heaviest untried word of any open capped query,
+   * root or child, appended to that query's terms. Null when every capped
+   * query is closed.
+   */
   narrow(): string[] | null;
   finish(stoppedBy: SectionStop): void;
 }
@@ -625,27 +640,46 @@ class Crawl {
       },
       growing: () => window() >= Math.max(1, summary.firstSeen * GROWTH_SHARE),
       narrow: () => {
-        // Newest capped query first (plan 0257). A capped query is a ceiling
-        // with rows behind it, and the newest is the narrowest one still
-        // capped: splitting it by a word of its own rows reaches rows that a
-        // second single term drawn from the whole section would show again.
-        for (let index = state.capped.length - 1; index >= 0; index -= 1) {
-          const query = state.capped[index];
+        // **Every open capped query is weighed, the root included** (plan
+        // 0258, section 2). The newest first order of plan 0257 is withdrawn:
+        // in Color it spent the section's terms inside one capped child, where
+        // two term queries added nothing, while `dev`'s single brand terms
+        // over the whole section each opened up to 300 new rows. A word of the
+        // root reaches at least the products the same word reaches under a
+        // child, so the root wins while its words still lead to products few
+        // queries returned, and a child is narrowed once they are spent or
+        // saturated. Ties fall to more products, then to the query with fewer
+        // terms, then to the older query, whose word is the earlier one.
+        let best: { query: CappedQuery; weighed: WeighedTerm } | null = null;
+        for (const query of state.capped) {
           if (query.closed) {
             continue;
           }
-          const term = heaviestUntried(query, issued, coverage);
-          if (!term) {
+          const weighed = weighUntried(query, issued, coverage);
+          if (!weighed) {
+            // Coverage only grows and a tried word stays tried, so a query
+            // with nothing to offer now never has anything again.
             query.closed = true;
             continue;
           }
-          query.tried.add(term);
-          lastNarrowed = query;
-          const terms = [...query.terms, term];
-          issued.add(queryKey(terms));
-          return terms;
+          if (
+            best === null ||
+            outweighs(weighed, best.weighed) ||
+            (ties(weighed, best.weighed) &&
+              query.terms.length < best.query.terms.length)
+          ) {
+            best = { query, weighed };
+          }
         }
-        return null;
+        if (best === null) {
+          return null;
+        }
+        const { query, weighed } = best;
+        query.tried.add(weighed.term);
+        lastNarrowed = query;
+        const terms = [...query.terms, weighed.term];
+        issued.add(queryKey(terms));
+        return terms;
       },
       finish: (stoppedBy) => {
         summary.queries = state.queries;
@@ -886,9 +920,36 @@ export function heaviestUntried(
   issued: ReadonlySet<string>,
   coverage: ReadonlyMap<string, number>
 ): string | null {
-  let best: string | null = null;
-  let bestWeight = 0;
-  let bestProducts = 0;
+  return weighUntried(query, issued, coverage)?.term ?? null;
+}
+
+/** A word offered to narrow a query by, with what decided it. */
+interface WeighedTerm {
+  term: string;
+  weight: number;
+  products: number;
+}
+
+/** Whether `a` is the heavier word: by weight, then by products. */
+function outweighs(a: WeighedTerm, b: WeighedTerm): boolean {
+  if (a.weight > b.weight + WEIGHT_EPSILON) {
+    return true;
+  }
+  return a.weight >= b.weight - WEIGHT_EPSILON && a.products > b.products;
+}
+
+/** Whether neither word outweighs the other. */
+function ties(a: WeighedTerm, b: WeighedTerm): boolean {
+  return !outweighs(a, b) && !outweighs(b, a);
+}
+
+/** {@link heaviestUntried}, with its weight and product count. */
+function weighUntried(
+  query: CappedQuery,
+  issued: ReadonlySet<string>,
+  coverage: ReadonlyMap<string, number>
+): WeighedTerm | null {
+  let best: WeighedTerm | null = null;
   for (const [term, products] of query.vocabulary) {
     if (
       query.tried.has(term) ||
@@ -907,14 +968,9 @@ export function heaviestUntried(
     if (!open) {
       continue;
     }
-    const heavier =
-      best === null ||
-      weight > bestWeight + WEIGHT_EPSILON ||
-      (weight >= bestWeight - WEIGHT_EPSILON && products.size > bestProducts);
-    if (heavier) {
-      best = term;
-      bestWeight = weight;
-      bestProducts = products.size;
+    const weighed = { term, weight, products: products.size };
+    if (best === null || outweighs(weighed, best)) {
+      best = weighed;
     }
   }
   return best;
