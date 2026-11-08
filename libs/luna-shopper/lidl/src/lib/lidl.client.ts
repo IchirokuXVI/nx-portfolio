@@ -166,11 +166,18 @@ export class LidlClient {
         // loop against a total the source no longer stands behind.
         break;
       }
+      let fresh = 0;
       for (const row of page.rows) {
         if (!seen.has(row.externalId)) {
           seen.add(row.externalId);
+          fresh += 1;
           yield row;
         }
+      }
+      if (page.rows.length > 0 && fresh === 0) {
+        // A page of rows already seen means the site ignores the offset; with
+        // no total to stop the walk, it would repeat that page for ever.
+        break;
       }
       offset = nextListOffset(page, offset, this.pageSize);
     }

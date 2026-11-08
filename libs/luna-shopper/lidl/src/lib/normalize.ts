@@ -79,7 +79,9 @@ export function normalizeListPage(payload: Json): LidlListPage {
  * **Never the size asked for when the page says otherwise.** The index caps a
  * page below what a request asks, so a step of the asked size skips the rows
  * between the cap and the ask. The two fallbacks are for a payload that lost
- * its shape, and each keeps a walk moving rather than stopping it.
+ * its shape, and each keeps a walk moving rather than stopping it. They
+ * guard direct callers: the walk and the probe stop on a page with no items
+ * before they reach them.
  */
 export function nextListOffset(
   page: LidlListPage,

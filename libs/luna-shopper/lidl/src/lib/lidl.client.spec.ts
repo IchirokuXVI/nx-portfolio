@@ -235,6 +235,21 @@ describe('LidlClient.walkInStore', () => {
     expect(await collect(client.walkInStore())).toHaveLength(1);
   });
 
+  it('stops on a page that repeats what it saw when no total is stated', async () => {
+    const page = {
+      items: [1, 2].map((id) => ({
+        gridbox: { data: { productId: String(id), category: 'Food' } },
+      })),
+    };
+    const { fetchImpl, offsets } = serve(() => json(page)());
+    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl });
+
+    const rows = await collect(client.walkInStore());
+
+    expect(offsets).toEqual(['0', '2']);
+    expect(rows.map((row) => row.externalId)).toEqual(['1', '2']);
+  });
+
   it('stops when a page answers nothing rather than paging to the total', async () => {
     const { fetchImpl, calls } = fakeFetch([
       json({ numFound: 500, items: [] }),
