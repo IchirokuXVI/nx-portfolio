@@ -136,7 +136,7 @@ describe('splitCardName', () => {
     });
   });
 
-  it('leaves a weight and a count in the unit the card measures in', () => {
+  it('states a weight in kilograms and a count in units, whatever the card measures in', () => {
     expect(splitCardName('Café molido 250 g', 'kg')).toMatchObject({
       unitSize: 0.25,
       sizeUnit: 'KILOGRAM',
@@ -335,6 +335,28 @@ describe('the sizes the chain prints (plan 0250)', () => {
       unitSize: 9,
       sizeUnit: 'LITER',
       packCount: 9,
+    });
+  });
+
+  it('keeps the size of a name that opens with a pack phrase', () => {
+    // The phrase cannot move across: the name would be empty. The shape with
+    // no `de` is not read at the start, so the name keeps it and the trailing
+    // size is one can.
+    expect(splitCardName('Pack 6 latas 33 cl.', 'l')).toEqual({
+      name: 'Pack 6 latas',
+      sizeFormat: '33 cl.',
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+      packCount: null,
+    });
+    // The shape with `de` is read anywhere, so it takes the whole name and the
+    // guard keeps the name unsized: `Pack de 6 latas de` is no name either.
+    expect(splitCardName('Pack de 6 latas de 33 cl.', 'l')).toEqual({
+      name: 'Pack de 6 latas de 33 cl.',
+      sizeFormat: null,
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
     });
   });
 

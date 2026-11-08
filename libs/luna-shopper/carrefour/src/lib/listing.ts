@@ -130,10 +130,16 @@ const CONTAINER = String.raw`(?:caja|cajas|lata|latas|bote|botes|botella|botella
  * name and read one can. Without the `de` the noun is what ends the phrase, so
  * it has to be one of {@link CONTAINER}, as in the second shape.
  *
+ * **The third shape never opens a name.** It matches only after a word, the
+ * `(?<=\S\s)` in front of it. `Pack 6 latas 33 cl.` would otherwise move the
+ * whole name across, leave it empty, and lose the size with it. Read without
+ * the shape, it keeps what it read before plan 0250: name `Pack 6 latas`, one
+ * can of 330 ml.
+ *
  * The three counts are named groups because only one of them is set: `pack`
  * counts the first shape, `box` the second and `bare` the third.
  */
-const PACK = String.raw`(?:(?:pack\s+(?:de\s+)?(?<pack>\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?|(?<box>\d+)?\s*${CONTAINER})\s+de\s+|pack\s+(?<bare>\d+)\s+${CONTAINER}\s+)?`;
+const PACK = String.raw`(?:(?:pack\s+(?:de\s+)?(?<pack>\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?|(?<box>\d+)?\s*${CONTAINER})\s+de\s+|(?<=\S\s)pack\s+(?<bare>\d+)\s+${CONTAINER}\s+)?`;
 
 /**
  * An optional pack phrase, a quantity, one word, and an optional `aprox`.
@@ -192,11 +198,12 @@ export interface SplitCardName {
    */
   unitSize: number | null;
   /**
-   * The catalog unit {@link unitSize} is in (plan 0177). A weight is in
-   * `KILOGRAM` and a count in `UNIT`, the unit the card measures in. A volume
-   * is in the unit the name printed: `LITER` for litres, and `MILLILITER` for
-   * `ml`, `cc`, `cl` and `dl`, because the catalog holds no centilitre. Null
-   * when there is no size.
+   * The catalog unit {@link unitSize} is in (plan 0177). It is the family of
+   * the trailing word, whatever the card measures in: a weight is in
+   * `KILOGRAM` and a count in `UNIT`, so `500 g` on a card priced per unit is
+   * 0.5 `KILOGRAM`. A volume is in the unit the name printed: `LITER` for litres, and
+   * `MILLILITER` for `ml`, `cc`, `cl` and `dl`, because the catalog holds
+   * no centilitre. Null when there is no size.
    */
   sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds, or null (plan 0162). See {@link packCountIn}. */
@@ -398,10 +405,10 @@ function packCountIn(
  * A plain quantity is read, and a pack multiplies its count by it, when the
  * count is within the bounds of {@link packCountOf} (plan 0250, section 2.1):
  * a number outside them is not a count, and the size it would multiply into
- * is not stated. A quantity
- * joined by `x` or `+` is **not**: `3x187` is three of something and `28+16`
- * is a bonus pack, the chain prints both for the same field, and guessing which
- * arithmetic it meant writes a number nobody checked.
+ * is not stated. A quantity joined by `x` or `+` is **not**: `3x187` is
+ * three of something and `28+16` is a bonus pack, the chain prints both for
+ * the same field, and guessing which arithmetic it meant writes a number
+ * nobody checked.
  */
 function quantityOf(
   packCount: string | undefined,
