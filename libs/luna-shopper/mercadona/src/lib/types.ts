@@ -107,6 +107,12 @@ export interface MercadonaCategory {
 export interface MercadonaListProduct {
   externalId: string;
   displayName: string;
+  /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim, or
+   * null (plan 0248, section 2). It is not a count: the count of a pack is
+   * {@link packCount}. Two containers of one product share a name and a size,
+   * and this is what tells them apart.
+   */
   packaging: string | null;
   shareUrl: string | null;
   /** As on {@link MercadonaProduct.thumbnail}: the listing carries the field. */
