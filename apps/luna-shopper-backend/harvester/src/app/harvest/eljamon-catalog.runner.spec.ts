@@ -1,5 +1,8 @@
 import type { ConfigService } from '@nestjs/config';
-import { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestDetailFetch,
+  HarvestWarningCode,
+} from '@portfolio/luna-shopper/contracts';
 import { ElJamonClient } from '@portfolio/luna-shopper/eljamon';
 import {
   SourceBlockedError,
@@ -346,6 +349,46 @@ describe('ElJamonCatalogRunner', () => {
           listed: expect.any(Array),
         },
       ]);
+    });
+
+    it('writes LISTING_SHORT on the run row for a short category, with both numbers (plan 0251)', async () => {
+      const runContext = context();
+      await new TestRunner(site(41)).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      // One, for BEBIDAS: FRESCOS printed 2 and read 2.
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_SHORT,
+        name: expect.any(String),
+        offerId: null,
+        page: null,
+        message: expect.stringMatching(
+          /^Category 06 .*: 20 of 41 row\(s\) read\.$/
+        ),
+      });
+      // Before the last flush, which is what writes it onto the row.
+      expect(
+        (runContext.warn as jest.Mock).mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        Math.max(...(runContext.flush as jest.Mock).mock.invocationCallOrder)
+      );
+    });
+
+    it('writes no listing warning for a walk that read what every category printed', async () => {
+      const runContext = context();
+      await new TestRunner(site(20)).run(
+        runContext,
+        new RecordingRunReport(),
+        input,
+        source
+      );
+
+      expect(runContext.warn).not.toHaveBeenCalled();
     });
 
     it('declares nothing when the run is aborted', async () => {

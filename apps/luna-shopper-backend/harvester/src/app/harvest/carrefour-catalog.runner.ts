@@ -1,19 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  CARREFOUR_PAGE_SIZE,
   CarrefourClient,
+  CarrefourHttpError,
+  listingPath,
+  pagesFor,
   photoAddressRead,
+  readCards,
   type CarrefourCappedCategory,
   type CarrefourCategory,
   type CarrefourProduct,
 } from '@portfolio/luna-shopper/carrefour';
+import { HarvestWarningCode } from '@portfolio/luna-shopper/contracts';
 import { SourceBlockedError } from '@portfolio/luna-shopper/source-guard';
 import type { HarvesterConfig } from '../config/app-config';
 import type { SupermarketSource } from '../entities';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { readDelistCountsCrawl } from './delisting';
 import { photoOf } from './photo-address';
-import type { RunContext } from './run-context';
+import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
 
 /**
@@ -86,6 +92,12 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       );
       const products = new Map<string, CarrefourProduct>();
       const unreadable = [...frontier.unreadable];
+      /**
+       * Every frontier category that failed, by its url, in the order they
+       * failed, and what cost it (plan 0251). One the end pass read stays
+       * here with no error and leaves `unreadable`.
+       */
+      const lost = new Map<string, LostCategory>();
       let blocked: unknown = null;
       for (const category of frontier.categories) {
         // An abort, a person's or the refusal guard's (plan 0215), ends the
@@ -93,8 +105,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         if (context.signal.aborted) {
           break;
         }
+        const cursor = { page: 0 };
         try {
-          await this.pageCategory(context, client, category, products);
+          await this.pageCategory(context, client, category, products, cursor);
         } catch (error) {
           // **The block is the one failure a category may not swallow** (plan
           // 0090, section 13). Refusals that have stopped being isolated say
@@ -122,13 +135,33 @@ export class CarrefourCatalogRunner implements CatalogRunner {
               `failed: ${String(error)}`
           );
           unreadable.push(category.url);
+          lost.set(category.url, {
+            category,
+            page: cursor.page,
+            error,
+            askedAgain: false,
+          });
           await context.report({ failed: 1 });
         }
+      }
+
+      // --- 2b. Once more, at the end, for a category refused once ----------
+      if (blocked === null && !context.signal.aborted) {
+        blocked = await this.askAgain(
+          context,
+          client,
+          products,
+          unreadable,
+          lost
+        );
       }
 
       // --- 3. Report what was read -----------------------------------------
       await context.setStage('INGEST', `Recording ${products.size} product(s)`);
       this.reportProducts(report, products);
+      if (!context.signal.aborted) {
+        warnUnread(context, unreadable, lost);
+      }
       declareListing(report, products, {
         switchOn: readDelistCountsCrawl(source.config),
         seedPath: readSeedPath(source.config) !== undefined,
@@ -144,6 +177,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
           frontier.categories,
           frontier.capped,
           unreadable,
+          [...lost.values()].filter((entry) => entry.askedAgain),
           products.size,
           client.loads,
           blocked
@@ -198,21 +232,134 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     context: RunContext,
     client: CarrefourClient,
     category: CarrefourCategory,
-    products: Map<string, CarrefourProduct>
+    products: Map<string, CarrefourProduct>,
+    cursor: { page: number }
   ): Promise<void> {
     let seen = 0;
-    for await (const product of client.walkCategory(category)) {
-      seen += 1;
-      if (!products.has(product.externalId)) {
-        products.set(product.externalId, product);
+    // The page after the last one that answered is the page that failed, and
+    // the one the end pass starts from (plan 0251).
+    const walk = client.walkCategory(category, (_listing, page) => {
+      cursor.page = page + 1;
+    });
+    try {
+      for await (const product of walk) {
+        seen += 1;
+        if (!products.has(product.externalId)) {
+          products.set(product.externalId, product);
+        }
       }
+    } finally {
+      // **Progress, and a heartbeat with it.** The first crawl reported
+      // nothing between the frontier and the snapshot, so an hour of paging
+      // looked identical to a run that had stopped, and it was a stopped run
+      // that showed it. A category is the smallest unit worth a row: 86 of
+      // them over an hour is a number that moves, without a write per page.
+      // A category that failed part way counts the listings it did page.
+      await context.report({ processed: seen });
     }
-    // **Progress, and a heartbeat with it.** The first crawl reported nothing
-    // between the frontier and the snapshot, so an hour of paging looked
-    // identical to a run that had stopped, and it was a stopped run that showed
-    // it. A category is the smallest unit worth a row: 86 of them over an hour
-    // is a number that moves, without a write per page.
-    await context.report({ processed: seen });
+  }
+
+  /**
+   * The end pass of plan 0251 (D1 a): every category one isolated refusal
+   * cost, asked for once more, after every other category, in the order they
+   * failed.
+   *
+   * **This is not the retry plan 0090 section 13 forbids.** That retry asks
+   * the refused page again at once, inside the paging loop, which is how a
+   * refusal deepens into a block. This is one request per refused category,
+   * minutes later, through the same guard and pacing as every other page: a
+   * refusal here counts toward the block exactly as one in the walk does, and
+   * the block still stops the crawl. A category is paged from the page that
+   * failed, and the products it gives are added to the run's map.
+   *
+   * Only a refusal is asked again. A browser that stopped answering is a
+   * different failure, and a node the frontier walk could not open was never
+   * paged at all. Answers the block, when one stopped the pass.
+   */
+  private async askAgain(
+    context: RunContext,
+    client: CarrefourClient,
+    products: Map<string, CarrefourProduct>,
+    unreadable: string[],
+    lost: ReadonlyMap<string, LostCategory>
+  ): Promise<unknown> {
+    const refused = [...lost.values()].filter(
+      (entry) => entry.error instanceof CarrefourHttpError
+    );
+    if (refused.length === 0) {
+      return null;
+    }
+    await context.setStage(
+      'ENUMERATE',
+      `Asking once more for ${refused.length} refused category(ies)`
+    );
+    for (const entry of refused) {
+      if (context.signal.aborted) {
+        return null;
+      }
+      entry.askedAgain = true;
+      try {
+        await this.pageFrom(context, client, entry, products);
+      } catch (error) {
+        if (error instanceof SourceBlockedError) {
+          this.logger.warn(`Run ${context.runId}: ${String(error)}`);
+          return error;
+        }
+        if (context.signal.aborted) {
+          return null;
+        }
+        // It stays unread, with what cost it the second time.
+        this.logger.warn(
+          `Run ${context.runId}: category ${entry.category.id} ` +
+            `(${entry.category.name}) failed again: ${String(error)}`
+        );
+        entry.error = error;
+        continue;
+      }
+      // Read this time: it is no longer unread. Its first failure stays
+      // counted in `failed`, because that page did fail.
+      entry.error = null;
+      unreadable.splice(unreadable.indexOf(entry.category.url), 1);
+    }
+    return null;
+  }
+
+  /**
+   * One category, from the page that failed to its last.
+   *
+   * The library's walk always starts at the first page, and a category of
+   * 40 pages refused on its 30th need not ask for 29 again. The page reads go
+   * through {@link CarrefourClient.readListing}, so the pacing, the session
+   * handling and the guard are the walk's own.
+   */
+  private async pageFrom(
+    context: RunContext,
+    client: CarrefourClient,
+    entry: LostCategory,
+    products: Map<string, CarrefourProduct>
+  ): Promise<void> {
+    const { category } = entry;
+    const pages = pagesFor(category.totalResults);
+    let seen = 0;
+    try {
+      for (; entry.page < pages; entry.page += 1) {
+        context.signal.throwIfAborted();
+        const listing = await client.readListing(
+          listingPath(category.id, entry.page * CARREFOUR_PAGE_SIZE)
+        );
+        if (!listing || listing.cards.length === 0) {
+          return;
+        }
+        for (const product of readCards(listing.cards, category.path)) {
+          seen += 1;
+          if (!products.has(product.externalId)) {
+            products.set(product.externalId, product);
+          }
+        }
+      }
+    } finally {
+      await context.report({ processed: seen });
+    }
   }
 
   /**
@@ -281,6 +428,63 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   }
 }
 
+/** A frontier category the crawl did not finish, and what cost it. */
+interface LostCategory {
+  category: CarrefourCategory;
+  /** The page that failed, from 0. The end pass starts there. */
+  page: number;
+  /** What it failed with, or null once the end pass read it. */
+  error: unknown;
+  /** Whether the end pass asked for it once more. */
+  askedAgain: boolean;
+}
+
+/**
+ * One `LISTING_UNREAD` per category the crawl did not read (plan 0251).
+ *
+ * The run still ends `COMPLETED`, and these are what say it is partial. A
+ * category that failed part way names the offset it failed at: the listings
+ * before it were read and are kept. A node the frontier walk could not open
+ * is named by its address, since its name and everything under it were never
+ * seen.
+ */
+function warnUnread(
+  context: RunContext,
+  unreadable: readonly string[],
+  lost: ReadonlyMap<string, LostCategory>
+): void {
+  for (const url of unreadable) {
+    const entry = lost.get(url);
+    if (!entry) {
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_UNREAD,
+          url,
+          `The category page ${url} did not answer while the tree was ` +
+            `walked, so nothing filed under it was read.`
+        )
+      );
+      continue;
+    }
+    const { category } = entry;
+    const offset = entry.page * CARREFOUR_PAGE_SIZE;
+    const cost =
+      entry.error instanceof CarrefourHttpError
+        ? `Carrefour answered ${entry.error.status}`
+        : String(entry.error);
+    const again = entry.askedAgain ? ', once more at the end of the run' : '';
+    context.warn(
+      listingWarning(
+        HarvestWarningCode.LISTING_UNREAD,
+        category.name,
+        `Category ${category.id} ${category.name}: ${cost} at offset ` +
+          `${offset}${again}. The listings from there on, of ` +
+          `${category.totalResults}, were not read.`
+      )
+    );
+  }
+}
+
 /**
  * The crawl as a whole listing of the default scope, or why it is not one
  * (plan 0220, section 15.4).
@@ -330,6 +534,7 @@ function describeRun(
   frontier: readonly CarrefourCategory[],
   capped: readonly CarrefourCappedCategory[],
   unreadable: readonly string[],
+  askedAgain: readonly LostCategory[],
   products: number,
   loads: number,
   blocked: unknown
@@ -353,6 +558,16 @@ function describeRun(
       path: category.path,
     })),
     unreadableCategories: [...unreadable],
+    /**
+     * The categories one refusal cost, asked for once more at the end (plan
+     * 0251), and whether that read them. A category read the second time is
+     * no longer in `unreadableCategories`.
+     */
+    askedAgain: askedAgain.map((entry) => ({
+      id: entry.category.id,
+      name: entry.category.name,
+      read: entry.error === null,
+    })),
     /**
      * Set when the run stopped because the refusals stopped being isolated. It
      * is the difference between a crawl that read the whole frontier and one

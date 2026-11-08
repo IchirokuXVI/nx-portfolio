@@ -3,6 +3,7 @@ import {
   CARREFOUR_REFUSAL_POLICY,
   CarrefourClient,
 } from '@portfolio/luna-shopper/carrefour';
+import { HarvestWarningCode } from '@portfolio/luna-shopper/contracts';
 import {
   SourceBlockedError,
   SourceGuard,
@@ -141,6 +142,43 @@ class BlockingRunner extends TestRunner {
           this.asked.push(path);
           const state = this.states[path];
           return state ? { status: 200, state } : { status: 403, state: null };
+        },
+        close: async () => undefined,
+      }),
+    });
+  }
+}
+
+/**
+ * The same runner, over a session that refuses a path as many times as a test
+ * says and answers it after that. An isolated refusal, as the storefront gave
+ * seven of on 2026-11-06 (plan 0251).
+ */
+class RefusingRunner extends TestRunner {
+  constructor(
+    states: Record<string, Record<string, unknown>>,
+    private readonly refusals: Record<string, number>
+  ) {
+    super(states);
+  }
+
+  protected override createClient(context: RunContext): CarrefourClient {
+    return new CarrefourClient({
+      userAgent: 'LunaShopperBot/1.0',
+      sleepImpl: async () => undefined,
+      acquire: context.acquire,
+      guard: context.guard,
+      signal: context.signal,
+      openSession: async () => ({
+        goto: async (url: string) => {
+          const path = url.replace('https://www.carrefour.es', '');
+          this.asked.push(path);
+          if ((this.refusals[path] ?? 0) > 0) {
+            this.refusals[path] -= 1;
+            return { status: 403, state: null };
+          }
+          const state = this.states[path];
+          return state ? { status: 200, state } : { status: 404, state: null };
         },
         close: async () => undefined,
       }),
@@ -624,6 +662,135 @@ describe('CarrefourCatalogRunner', () => {
     expect(
       runner.asked.filter((path) => path.includes('?offset=0'))
     ).toHaveLength(4);
+  });
+
+  describe('a category refused once (plan 0251)', () => {
+    const good = link('cat1', 'Bebidas');
+    const pastas = link('cat2', 'Pastas');
+    const between = link('cat4', 'Lácteos');
+    const caldos = link('cat3', 'Caldos');
+    const states = (): Record<string, Record<string, unknown>> => ({
+      '/seed': page({ firstLevel: [good, pastas, between, caldos] }),
+      [good.url]: page({ totalResults: 1 }),
+      [pastas.url]: page({ totalResults: 30 }),
+      [between.url]: page({ totalResults: 1 }),
+      [caldos.url]: page({ totalResults: 1 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €')],
+      }),
+      // Two pages: the first answers, the second is refused once.
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 30,
+        cards: [card('p2', 'Macarrones CARREFOUR 500 g', '0,79 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=24': page({
+        totalResults: 30,
+        cards: [card('p3', 'Espaguetis CARREFOUR 500 g', '0,79 €')],
+      }),
+      '/supermercado/x/cat4/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p4', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+      '/supermercado/x/cat3/c?offset=0': page({
+        totalResults: 1,
+        cards: [card('p5', 'Caldo CARREFOUR 1 l.', '1,09 €')],
+      }),
+    });
+
+    async function crawl() {
+      // Pastas is refused once on its second page, Caldos on both asks. Good
+      // pages answer between them, so the guard never sees three in a row.
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=24': 1,
+        '/supermercado/x/cat3/c?offset=0': 2,
+      });
+      const runContext = guardedContext();
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ seedPath: '/seed' })
+      );
+      return { runner, runContext };
+    }
+
+    it('asks once more at the end, from the page that failed, and keeps what it reads', async () => {
+      const { runner, runContext } = await crawl();
+
+      expect(runContext.signal.aborted).toBe(false);
+      expect(
+        report.products.map((product) => product.externalId).sort()
+      ).toEqual(['p1', 'p2', 'p3', 'p4']);
+      // After every other category, in the order they failed, and never
+      // inside the paging loop: each refused page is asked exactly twice,
+      // the second time after the last category's first ask.
+      const offsets = runner.asked.filter((path) => path.includes('?offset='));
+      expect(offsets).toEqual([
+        '/supermercado/x/cat1/c?offset=0',
+        '/supermercado/x/cat2/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+        '/supermercado/x/cat4/c?offset=0',
+        '/supermercado/x/cat3/c?offset=0',
+        '/supermercado/x/cat2/c?offset=24',
+        '/supermercado/x/cat3/c?offset=0',
+      ]);
+      expect(runContext.setReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          unreadableCategories: [caldos.url],
+          askedAgain: [
+            { id: 'cat2', name: 'Pastas', read: true },
+            { id: 'cat3', name: 'Caldos', read: false },
+          ],
+        })
+      );
+    });
+
+    it('leaves one LISTING_UNREAD for the category refused twice, and none for the one read', async () => {
+      const { runContext } = await crawl();
+
+      expect(runContext.warn).toHaveBeenCalledTimes(1);
+      expect(runContext.warn).toHaveBeenCalledWith({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Caldos',
+        offerId: null,
+        page: null,
+        message:
+          'Category cat3 Caldos: Carrefour answered 403 at offset 0, once ' +
+          'more at the end of the run. The listings from there on, of 1, ' +
+          'were not read.',
+      });
+      // Before the last flush, which is what writes it onto the row.
+      expect(
+        (runContext.warn as jest.Mock).mock.invocationCallOrder[0]
+      ).toBeLessThan(
+        Math.max(...(runContext.flush as jest.Mock).mock.invocationCallOrder)
+      );
+      // The run is not stopped, so it ends COMPLETED with the warning.
+      expect(runContext.guard?.stop).toBeNull();
+    });
+  });
+
+  it('names a node the tree walk could not open with LISTING_UNREAD', async () => {
+    const runContext = context();
+    await new TestRunner({
+      '/seed': page({
+        firstLevel: [link('cat1', 'Bebidas'), link('cat3', 'Gone')],
+      }),
+      [link('cat1', 'Bebidas').url]: page({ totalResults: 0 }),
+    }).run(
+      runContext,
+      report,
+      { supermarketId: CHAIN, priceScopeId: SCOPE },
+      source({ seedPath: '/seed' })
+    );
+
+    expect(runContext.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: link('cat3', 'Gone').url,
+      })
+    );
   });
 
   it('keeps what it read when a person aborts the crawl', async () => {
