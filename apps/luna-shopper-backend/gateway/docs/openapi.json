@@ -44969,7 +44969,7 @@
                 "properties": {
                   "implied": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "minimum": 0
                   },
                   "unit": {
                     "$ref": "#/components/schemas/enums.UnitOfMeasure"
@@ -45734,7 +45734,7 @@
                 "properties": {
                   "implied": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "minimum": 0
                   },
                   "unit": {
                     "$ref": "#/components/schemas/enums.UnitOfMeasure"
@@ -46256,7 +46256,7 @@
                 "properties": {
                   "implied": {
                     "type": "number",
-                    "exclusiveMinimum": 0
+                    "minimum": 0
                   },
                   "unit": {
                     "$ref": "#/components/schemas/enums.UnitOfMeasure"

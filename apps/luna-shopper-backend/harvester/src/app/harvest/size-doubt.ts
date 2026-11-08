@@ -195,9 +195,11 @@ export function sizeDoubtExample(
  * Rung 4's key holds the size, so a row whose size its own price disproves
  * proposes nothing and is proposed by nothing. `matching.ts` stays as it is:
  * this holds every row the session knows and answers from an inner index of
- * the undoubted ones, rebuilt only after a row's doubt changed
- * ({@link refresh}). A walk changes a few dozen doubts at most, and only on
- * the first walk after the doubt appears.
+ * the undoubted ones. The inner index is rebuilt only on the first query
+ * after a {@link refresh}, which the ingest calls when a row's doubt changed.
+ * The first walk after the check lands changes a few hundred doubts (the
+ * plan's table predicts 294 to 478 Carrefour rows), so a few hundred
+ * rebuilds one time; a walk in steady state changes none and rebuilds none.
  *
  * **Every query method of {@link SiblingEntryIndex} must be delegated here.**
  * The base class is constructed empty, so a method this class does not

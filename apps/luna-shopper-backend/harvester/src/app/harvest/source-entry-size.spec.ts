@@ -295,11 +295,36 @@ describe('createdSize, a row whose size is in doubt (plan 0249)', () => {
     sizeDoubtImplied: 159.9247,
   };
 
-  it('refuses to take the size from the row, naming both sizes', () => {
+  it('refuses to take the size from the row, naming both sizes in its unit', () => {
     expect(() => createdSize(DOUBTED, {})).toThrow(ValidationException);
     expect(() => createdSize(DOUBTED, {})).toThrow(
-      /states 1600 GRAM.*imply 159\.9247 GRAM/
+      /states 1\.6 KILOGRAM.*imply 0\.1599247 KILOGRAM.*`unitSize` in KILOGRAM/
     );
+  });
+
+  it('shows a number that, sent back as the size, creates the implied size', () => {
+    /** A litre the row states, priced as 100 ml. */
+    const litre = {
+      ...QUARTER_KILO,
+      unitSize: 1,
+      sizeUnit: UnitOfMeasure.LITER,
+      sizeFormat: 'l',
+      sizeDoubtImplied: 100,
+    };
+    const shown = (row: typeof litre | typeof DOUBTED): number =>
+      Number(/imply ([\d.]+) /.exec(sizeDoubtRefusal(row, {}) ?? '')?.[1]);
+
+    expect(shown(litre)).toBe(0.1);
+    expect(createdSize(litre, { unitSize: shown(litre) })).toEqual({
+      unitSize: 100,
+      unit: UnitOfMeasure.MILLILITER,
+      approxWeight: null,
+    });
+    expect(createdSize(DOUBTED, { unitSize: shown(DOUBTED) })).toEqual({
+      unitSize: 159.9247,
+      unit: UnitOfMeasure.GRAM,
+      approxWeight: null,
+    });
   });
 
   it('refuses a unit named alone, which would still take the row size', () => {
@@ -308,10 +333,12 @@ describe('createdSize, a row whose size is in doubt (plan 0249)', () => {
     ).toThrow(ValidationException);
   });
 
-  it('refuses a size named as null, which names no size', () => {
-    expect(() => createdSize(DOUBTED, { unitSize: null })).toThrow(
-      ValidationException
-    );
+  it('creates with no size when the size is named as null', () => {
+    expect(sizeDoubtRefusal(DOUBTED, { unitSize: null })).toBeNull();
+    expect(createdSize(DOUBTED, { unitSize: null })).toMatchObject({
+      unitSize: null,
+      approxWeight: null,
+    });
   });
 
   it('creates with the size the person names', () => {

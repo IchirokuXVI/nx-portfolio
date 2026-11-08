@@ -209,7 +209,11 @@ function packCountNear(ratio: number): number | null {
   return Math.abs(ratio - whole) <= whole * PACK_COUNT_ROOM ? whole : null;
 }
 
-function dimensionOf(unit: UnitOfMeasure): SizeDimension | null {
+/**
+ * The dimension a base unit measures, or null for a unit the check does not
+ * compare (`KILOGRAM` with no size, `PACK` before `toBaseUnit`).
+ */
+export function dimensionOf(unit: UnitOfMeasure): SizeDimension | null {
   switch (unit) {
     case UnitOfMeasure.GRAM:
       return 'mass';

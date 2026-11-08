@@ -2223,7 +2223,7 @@ describe('SourceEntryService, a row whose size is in doubt (plan 0249)', () => {
 
     await expect(
       service.createItem({ userId: ADMIN, entryId: 'e-1' })
-    ).rejects.toThrow(/states 1000 MILLILITER.*imply 100 MILLILITER/);
+    ).rejects.toThrow(/states 1 LITER.*imply 0\.1 LITER/);
     expect(createItem).not.toHaveBeenCalled();
     expect(saved).toHaveLength(0);
   });

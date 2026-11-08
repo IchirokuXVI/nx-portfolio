@@ -1373,7 +1373,7 @@ describe('SourceEntryBatchService', () => {
       expect(result.results[0].error).toEqual({
         code: BulkOperationErrorCode.MALFORMED_OPERATION,
         detail: expect.stringMatching(
-          /"milk".*states 1000 MILLILITER.*imply 100 MILLILITER/
+          /"milk".*states 1 LITER.*imply 0\.1 LITER/
         ),
       });
       expect(createItems).not.toHaveBeenCalled();

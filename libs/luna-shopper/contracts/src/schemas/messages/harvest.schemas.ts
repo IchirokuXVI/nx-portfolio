@@ -645,7 +645,7 @@ const sourceCatalogEntryProperties = {
       {
         type: 'object',
         properties: {
-          implied: { type: 'number', exclusiveMinimum: 0 },
+          implied: { type: 'number', minimum: 0 },
           unit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
           ratio: { type: 'number', minimum: 0 },
           label: nullableString(),

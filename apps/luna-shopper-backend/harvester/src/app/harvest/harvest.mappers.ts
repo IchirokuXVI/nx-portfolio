@@ -37,7 +37,7 @@ import type {
   SupermarketSource,
 } from '../entities';
 import { declaredScopeKey } from './place-matching';
-import { labelAmount } from './size-check';
+import { dimensionOf, labelAmount } from './size-check';
 
 /**
  * Postgres `numeric` comes back as a **string** through node-postgres, so every
@@ -292,9 +292,12 @@ export function toSourceCatalogEntryView(
 
 /**
  * A row's size doubt (plan 0249), or null. The label is read from the row's
- * prices when the caller loaded them: the first one the check knows.
+ * prices when the caller loaded them: the first one the check knows whose
+ * dimension is the size's, the same rule `checkSize` compares by. A mass row
+ * with a `ud` price beside a `kg` one shows `kg`, and a row with no such
+ * price shows no label.
  */
-function toSizeDoubtView(
+export function toSizeDoubtView(
   row: SourceCatalogEntry
 ): SourceEntrySizeDoubtView | null {
   if (
@@ -306,10 +309,16 @@ function toSizeDoubtView(
   ) {
     return null;
   }
+  const dimension =
+    row.sizeUnit === null
+      ? null
+      : dimensionOf(toBaseUnit(1, row.sizeUnit).unit);
   const label =
-    (row.prices ?? []).find(
-      (price) => labelAmount(price.unitPriceLabel) !== null
-    )?.unitPriceLabel ?? null;
+    dimension === null
+      ? null
+      : ((row.prices ?? []).find(
+          (price) => labelAmount(price.unitPriceLabel)?.dimension === dimension
+        )?.unitPriceLabel ?? null);
   return {
     implied: Number(row.sizeDoubtImplied),
     unit:
