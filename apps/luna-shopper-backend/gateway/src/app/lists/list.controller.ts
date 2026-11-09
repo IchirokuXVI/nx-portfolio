@@ -431,6 +431,7 @@ export class ListsController {
   @ApiProblemResponses({
     body: true,
     lineAddChoice: true,
+    lineUnitDiffers: true,
     lineUnitNotOffered: true,
   })
   async addLine(

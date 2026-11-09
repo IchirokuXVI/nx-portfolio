@@ -95,6 +95,9 @@
       "@portfolio/luna-shopper/contracts/brand-key": [
         "./libs/luna-shopper/contracts/src/lib/brands/brand-key.ts"
       ],
+      "@portfolio/luna-shopper/contracts/line-units": [
+        "./libs/luna-shopper/contracts/src/lib/units/line-units.ts"
+      ],
       "@portfolio/luna-shopper/carrefour": [
         "./libs/luna-shopper/carrefour/src/index.ts"
       ],

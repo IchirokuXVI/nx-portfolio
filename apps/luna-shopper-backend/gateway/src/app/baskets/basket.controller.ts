@@ -792,6 +792,7 @@ export class BasketController {
     notFound: true,
     finishedBasket: true,
     lineAddChoice: true,
+    lineUnitDiffers: true,
     lineUnitNotOffered: true,
   })
   async addLine(

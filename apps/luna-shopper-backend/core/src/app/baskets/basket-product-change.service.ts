@@ -7,6 +7,7 @@ import {
   type BasketScopePrice,
   type BasketTripBuys,
   type ChangeBasketLinesProductRequest,
+  type LineUnit,
   type ListPermission,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -149,10 +150,15 @@ export class BasketProductChangeService {
 
     await this.dataSource.transaction(async (manager) => {
       const locked = await lockEntries(manager, row);
+      const unit = rowUnitOf(row);
 
       for (const settlement of await this.standingBuys(manager, opened, row)) {
         const line = locked.get(settlement.lineId);
-        if (!line || settlement.itemId === req.itemId) {
+        if (
+          !line ||
+          settlement.itemId === req.itemId ||
+          !rewritesAt(settlement, unit)
+        ) {
           // A line deleted since, or a buy that already names the product: a
           // second press of the same change writes nothing.
           continue;
@@ -232,9 +238,8 @@ export class BasketProductChangeService {
     }
     // What those buys count in, so the gateway prices one of that unit (plan
     // 0246 M7). A row is one unit, so its buys share it but for a buy made
-    // before a line changed its unit, which is priced as the row is.
-    const unit = row.entries[0]?.unit ?? buys[0]?.unit ?? 'UNIT';
-    return { priceScopeIds: [...scopes], unscoped, unit };
+    // before a line changed its unit, which {@link change} leaves as it is.
+    return { priceScopeIds: [...scopes], unscoped, unit: rowUnitOf(row) };
   }
 
   /**
@@ -311,6 +316,30 @@ export class BasketProductChangeService {
       })
     );
   }
+}
+
+/**
+ * The unit a row counts in, which is the unit the gateway prices a rewrite in
+ * (plan 0246 M6 and M7). A row is one unit, so its first entry says it.
+ */
+export function rowUnitOf(row: Pick<BasketRow, 'entries'>): LineUnit {
+  return row.entries[0]?.unit ?? 'UNIT';
+}
+
+/**
+ * Whether a change of product rewrites this buy at the prices the gateway
+ * read for the row's unit (plan 0246 M7).
+ *
+ * A buy in another unit was made before its line changed unit. The prices are
+ * of one of the row's unit, so they are not this buy's: it keeps its product
+ * and its price, and the row does not count it anyway (plan 0246, section
+ * 3.5).
+ */
+export function rewritesAt(
+  buy: Pick<LineSettlement, 'unit'>,
+  rowUnit: LineUnit
+): boolean {
+  return (buy.unit ?? 'UNIT') === rowUnit;
 }
 
 /** What {@link BasketProductChangeService.tripBuysOf} needs of an open write. */

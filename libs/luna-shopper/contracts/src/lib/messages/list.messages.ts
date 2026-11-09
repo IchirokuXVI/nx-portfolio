@@ -734,6 +734,9 @@ export interface AddLineRequest {
    *
    * Read on a free text add only, as are {@link intoLineId} and
    * {@link newLine}: an add that carries products or a group is unchanged.
+   * The one exception is a line of another unit (plan 0246 M5): any add that
+   * meets one is refused with `line_add_needs_choice` naming that line, and
+   * `newLine: true` then creates a line on a product add too.
    */
   askIfAmbiguous?: boolean;
   /**

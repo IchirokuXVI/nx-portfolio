@@ -5,9 +5,10 @@ describe('lineAmountText (backend plan 0246, section 6)', () => {
     expect(lineAmountText(2, 'UNIT', 'en')).toBe('2');
   });
 
-  it('draws grams below a thousand and kilos from one, with at most one decimal', () => {
+  it('draws grams below a thousand and kilos from one, with at most two decimals', () => {
     expect(lineAmountText(750, 'GRAM', 'en')).toBe('750 g');
     expect(lineAmountText(1000, 'GRAM', 'en')).toBe('1 kg');
+    expect(lineAmountText(1250, 'GRAM', 'en')).toBe('1.25 kg');
     expect(lineAmountText(1500, 'GRAM', 'en')).toBe('1.5 kg');
     expect(lineAmountText(12500, 'GRAM', 'en')).toBe('12.5 kg');
   });

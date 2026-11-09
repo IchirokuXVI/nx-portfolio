@@ -663,8 +663,9 @@ describe('what a settle records in the unit of its line (plan 0246 M7, section 4
     ).toMatchObject({ pricePaidCents: 1342, estimated: true });
   });
 
-  it('records a GRAM settle of a pack sized in grams at its price over its size, exactly', async () => {
-    // 2,00 for 500 g is 4,00 the kilo, and a printed size is no estimate.
+  it('records a GRAM settle of a pack sized in grams at its price over its size, as an estimate', async () => {
+    // 2,00 for 500 g is 4,00 the kilo. Every weight settlement is an
+    // estimate (M7): the till charged whole packs, not that kilo.
     const w = build({
       items: [
         sized({ defaultUnit: UnitOfMeasure.GRAM, unitSize: 500 }, [
@@ -675,7 +676,47 @@ describe('what a settle records in the unit of its line (plan 0246 M7, section 4
 
     expect(
       (await w.service.choose(input({ unit: 'GRAM' }))).paid
-    ).toMatchObject({ pricePaidCents: 400, estimated: false });
+    ).toMatchObject({ pricePaidCents: 400, estimated: true });
+  });
+
+  it('records a GRAM settle of a 700 g piece priced as one at its kilo, as an estimate', async () => {
+    // 1,39 for about 700 g is 1,99 the kilo (M7).
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.UNIT, approxWeight: 700 }, [
+          offer(SCOPE, 1.39),
+        ]),
+      ],
+    });
+
+    expect(
+      (await w.service.choose(input({ unit: 'GRAM' }))).paid
+    ).toMatchObject({ pricePaidCents: 199, estimated: true });
+  });
+
+  it('records a MILLILITER settle of a pack sized in millilitres, as an estimate', async () => {
+    // 1,20 for 1500 ml is 0,80 the litre.
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.MILLILITER, unitSize: 1500 }, [
+          offer(SCOPE, 1.2),
+        ]),
+      ],
+    });
+
+    expect(
+      (await w.service.choose(input({ unit: 'MILLILITER' }))).paid
+    ).toMatchObject({ pricePaidCents: 80, estimated: true });
+  });
+
+  it('records a MILLILITER settle of a product sold by the litre at its litre, as an estimate', async () => {
+    const w = build({
+      items: [sized({ defaultUnit: UnitOfMeasure.LITER }, [offer(SCOPE, 2.4)])],
+    });
+
+    expect(
+      (await w.service.choose(input({ unit: 'MILLILITER' }))).paid
+    ).toMatchObject({ pricePaidCents: 240, estimated: true });
   });
 
   it('records a UNIT settle of a pack as exact', async () => {
