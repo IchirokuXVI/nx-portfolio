@@ -148,14 +148,15 @@ interface UpsertItem {
  * for both tools, so `upsert_lines` and `settle_lines` cannot disagree.
  *
  * The last sentence is W1 over section 5: a new line from this tool names no
- * product, a free text line counts pieces, so {@link freshLine} writes the
- * amount into the name rather than sending a unit the gateway refuses.
+ * product, a free text line counts pieces, so {@link freshLine} and
+ * {@link lineEdit} write the amount into the name rather than sending a unit
+ * the gateway refuses.
  */
 const UNIT_PARAMETER = {
   type: 'string',
   enum: [...LINE_UNITS],
   description:
-    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs. A thing not yet on the list becomes a new line that counts pieces, so its weight or volume is written into its name ("queso 300 g") and you still send it here the same way.',
+    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs. A line that names no product counts pieces, a new line included, so its weight or volume is written into its name ("queso 300 g") and you still send it here the same way.',
 };
 
 /**
@@ -345,14 +346,12 @@ const upsertLines: AssistantTool = {
         // named one thing twice in one sentence, and either way "one more of
         // those" is the true report and "added" would not be.
         //
-        // A line of another unit is answered and never raised (plan 0246 M5),
-        // so a merged answer in another unit than the add's pieces wrote
-        // nothing and is reported as unchanged, never as one more.
+        // A batch raises only a line of the item's unit and creates one beside
+        // a line of another unit (plan 0246 M5), so a merge is always a raise.
         added.forEach((result, position) => {
           runtime.link.list(list);
-          const raised = (result.line.unit ?? 'UNIT') === 'UNIT';
           results[fresh[position].index] = describeLine(
-            result.merged ? (raised ? 'increased' : 'unchanged') : 'added',
+            result.merged ? 'increased' : 'added',
             result.line
           );
         });
@@ -398,15 +397,7 @@ const upsertLines: AssistantTool = {
             : await runtime.api.updateLine(
                 runtime.context.caller,
                 existing.id,
-                {
-                  content: product,
-                  quantity,
-                  // A unit is sent beside its quantity alone: the gateway
-                  // refuses a unit change with no amount to start from.
-                  ...(unit !== undefined && quantity !== undefined
-                    ? { unit }
-                    : {}),
-                }
+                lineEdit(existing, entry.item)
               );
         wrote = true;
         runtime.link.list(list);
@@ -1214,6 +1205,47 @@ function freshLine(item: UpsertItem): { content: string; quantity?: number } {
   };
 }
 
+/**
+ * The edit a `set` sends to a line already on the list (plan 0246, W1 and
+ * section 5).
+ *
+ * A line with products counts in a unit they offer, so the unit is sent beside
+ * its quantity, and only beside one: the gateway refuses a unit change with no
+ * amount to start from. A free text line counts pieces and refuses any other
+ * unit with `line_unit_not_offered`, so a weight or a volume said of it is
+ * written into its name the way {@link freshLine} writes a new one: "pon 300 g
+ * de queso" over "queso" is "queso 300 g" at one, and no unit is sent.
+ */
+function lineEdit(
+  line: LineView,
+  item: UpsertItem
+): { content: string; quantity?: number; unit?: LineUnit } {
+  if (isFreeText(line) && item.unit !== undefined && item.unit !== 'UNIT') {
+    return item.quantity !== undefined
+      ? { ...freshLine(item), quantity: 1 }
+      : { content: item.product };
+  }
+  return {
+    content: item.product,
+    quantity: item.quantity,
+    ...(item.unit !== undefined && item.quantity !== undefined
+      ? { unit: item.unit }
+      : {}),
+  };
+}
+
+/** A line that names no product and follows no group: it counts pieces (W1). */
+function isFreeText(line: LineView): boolean {
+  return line.itemIds.length === 0 && line.productGroupId === null;
+}
+
+/**
+ * The amount {@link freshLine} writes at the end of a name, exactly: a space,
+ * an integer, a space and `g` or `ml`. Nothing looser, so "pack 6" or "vitamin
+ * b 12" keep their whole names.
+ */
+const FOLDED_AMOUNT = / \d+ (?:g|ml)$/;
+
 /** A unit the model named, or undefined (plan 0246, section 5). */
 function readUnit(value: unknown): LineUnit | undefined {
   return isLineUnit(value) && value !== 'UNIT' ? value : undefined;
@@ -1465,13 +1497,28 @@ function selectLists(
   return byName.length > 0 ? byName : scoped;
 }
 
-/** The same product already on the list, matched the way a person would. */
+/**
+ * The same product already on the list, matched the way a person would.
+ *
+ * A whole name first. Then a free text line under the name with the amount
+ * {@link freshLine} folded into it taken off, so "make the cheese 500 g" finds
+ * "queso 300 g" and renames it rather than adding "queso 500 g" beside it
+ * (plan 0246, W1).
+ */
 function findSameProduct(
   lines: LineView[],
   product: string
 ): LineView | undefined {
   const wanted = normalize(product);
-  return lines.find((line) => normalize(line.content) === wanted);
+  return (
+    lines.find((line) => normalize(line.content) === wanted) ??
+    lines.find(
+      (line) =>
+        isFreeText(line) &&
+        FOLDED_AMOUNT.test(line.content) &&
+        normalize(line.content.replace(FOLDED_AMOUNT, '')) === wanted
+    )
+  );
 }
 
 function mentionsProduct(line: LineView, item: string): boolean {

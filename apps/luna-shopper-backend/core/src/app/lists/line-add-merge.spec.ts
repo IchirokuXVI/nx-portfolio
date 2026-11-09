@@ -388,6 +388,7 @@ describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)',
           content: 'bananas',
           named: true,
           quantity: 500,
+          unit: 'GRAM',
           itemIds: [],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.APPROVED,
@@ -561,7 +562,61 @@ describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)',
     expect(w.events).toHaveLength(0);
   });
 
-  it('answers a held line of another unit in a batch, and sums nothing', async () => {
+  it('raises the line of the add unit a newLine answer created, and creates nothing', async () => {
+    // A (GRAM) sits first and B (UNIT) is the line the newLine answer made.
+    // Asked of the earliest line alone, every later UNIT add met A, asked
+    // again, and each answer made another line.
+    const w = build({
+      holds: [
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+        { id: OAT_LINE, content: 'Bananas', quantity: 1, unit: 'UNIT' },
+      ],
+      products: [
+        { lineId: WHOLE_LINE, itemId: WHOLE, position: 0 },
+        { lineId: OAT_LINE, itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const result = await add(w, 'Bananas', { itemIds: [WHOLE], quantity: 2 });
+
+    expect(result.merged).toBe(true);
+    expect(result.line).toMatchObject({
+      id: OAT_LINE,
+      unit: 'UNIT',
+      quantity: 3,
+    });
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0]).toMatchObject({ id: OAT_LINE, quantity: 3 });
+    expect(w.events.map((entry) => entry.event)).toEqual([
+      RealtimeEvent.LineUpdated,
+    ]);
+  });
+
+  it('raises the GRAM line beside an earlier UNIT line of the same products', async () => {
+    const w = build({
+      holds: [
+        { id: OAT_LINE, content: 'Bananas', quantity: 1, unit: 'UNIT' },
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+      ],
+      products: [
+        { lineId: OAT_LINE, itemId: WHOLE, position: 0 },
+        { lineId: WHOLE_LINE, itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const result = await add(w, 'Bananas', {
+      itemIds: [WHOLE],
+      unit: 'GRAM',
+      quantity: 250,
+    });
+
+    expect(result.line).toMatchObject({ id: WHOLE_LINE, quantity: 1000 });
+    expect(w.saved).toHaveLength(1);
+  });
+
+  it('creates a batch item in its unit beside a line of another unit, and writes it', async () => {
+    // A batch has no place for the question a single add asks, and nothing
+    // may be summed, so the item gets its own line (plan 0246 M5).
     const w = build({
       holds: [{ id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' }],
     });
@@ -572,9 +627,38 @@ describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)',
       items: [{ content: 'Bananas', quantity: 3 }],
     });
 
+    expect(result.merged).toBe(false);
+    expect(result.line).toMatchObject({ unit: 'UNIT', quantity: 3 });
+    expect(result.line.id).not.toBe('li1');
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0]).toMatchObject({
+      content: 'Bananas',
+      unit: 'UNIT',
+      quantity: 3,
+    });
+    expect(w.events.map((entry) => entry.event)).toEqual([
+      RealtimeEvent.LineAdded,
+    ]);
+  });
+
+  it('raises the line of the batch item unit beside an earlier line of another unit', async () => {
+    const w = build({
+      holds: [
+        { id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' },
+        { id: 'li2', content: 'Bananas', quantity: 2, unit: 'UNIT' },
+      ],
+    });
+
+    const [result] = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Bananas', quantity: 3 }],
+    });
+
     expect(result.merged).toBe(true);
-    expect(result.line).toMatchObject({ id: 'li1', quantity: 500 });
-    expect(w.saved).toHaveLength(0);
+    expect(result.line).toMatchObject({ id: 'li2', quantity: 5 });
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0]).toMatchObject({ id: 'li2', quantity: 5 });
   });
 });
 
@@ -1313,6 +1397,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           content: 'Leche entera',
           named: true,
           quantity: 2,
+          unit: 'UNIT',
           itemIds: [WHOLE],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.APPROVED,
@@ -1322,6 +1407,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           content: 'Leche entera',
           named: false,
           quantity: 1,
+          unit: 'UNIT',
           itemIds: [OAT],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.PENDING,
@@ -1331,6 +1417,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           content: 'LECHE ENTERA',
           named: true,
           quantity: 0,
+          unit: 'UNIT',
           itemIds: [],
           productGroupId: GROUP,
           approvalStatus: LineApprovalStatus.APPROVED,
