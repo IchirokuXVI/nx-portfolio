@@ -163,9 +163,21 @@ export class SourceCatalogEntry extends BaseEntity {
   sizeFormat!: string | null;
 
   /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim,
+   * or null (plan 0248, section 2). Only Mercadona states one. The source's,
+   * like `sizeFormat`: every full read that states it rewrites it. It joins
+   * rung 4's sibling key, so a brik never proposes a bottle (D2), and never
+   * the row identity.
+   */
+  @Column({ type: 'text', nullable: true })
+  packaging!: string | null;
+
+  /**
    * How many units the pack holds, as the last run that saw the row read it
    * (plan 0162), or null. The source's, like `sizeFormat`: every run rewrites
-   * it, and it is never part of a matching key.
+   * it. It joins rung 4's sibling key (plan 0248, D3), so a pack of four never
+   * proposes the single bottle of the same total size, and never the row
+   * identity.
    */
   @Column({ type: 'smallint', nullable: true })
   packCount!: number | null;

@@ -263,6 +263,7 @@ export function toSourceCatalogEntryView(
     soldByWeight: row.soldByWeight ?? false,
     approxWeight: toNumber(row.approxWeight ?? null),
     sizeFormat: row.sizeFormat,
+    packaging: row.packaging ?? null,
     packCount: row.packCount ?? null,
     categoryPath: row.categoryPath ?? [],
     url: row.url,

@@ -44850,6 +44850,12 @@
               "null"
             ]
           },
+          "packaging": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "packCount": {
             "type": [
               "integer",
@@ -45567,6 +45573,12 @@
               "null"
             ]
           },
+          "packaging": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "packCount": {
             "type": [
               "integer",
@@ -46036,6 +46048,12 @@
             ]
           },
           "sizeFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "packaging": {
             "type": [
               "string",
               "null"

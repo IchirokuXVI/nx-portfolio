@@ -4908,6 +4908,7 @@ export type HarvestItemSourceEntryView = {
   soldByWeight: boolean;
   approxWeight?: number | null;
   sizeFormat: string | null;
+  packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
@@ -5089,6 +5090,7 @@ export type HarvestQueuedSourceEntryView = {
   soldByWeight: boolean;
   approxWeight?: number | null;
   sizeFormat: string | null;
+  packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
@@ -5181,6 +5183,7 @@ export type HarvestSourceCatalogEntryView = {
   soldByWeight: boolean;
   approxWeight?: number | null;
   sizeFormat: string | null;
+  packaging?: string | null;
   packCount: number | null;
   categoryPath: string[];
   url: string | null;
