@@ -297,7 +297,8 @@ jobs:
   gate:
     needs: [setup, build]
     if: needs.setup.outputs.gates != '[]' && needs.setup.outputs.gates != ''
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright 1.59 installs no Chromium.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
       contents: read
