@@ -219,10 +219,7 @@ export class BasketProductChangeService {
    * a price for each scope before the write, and a buy made in between keeps
    * its scope and gets no price, which is an ordinary answer.
    */
-  async tripBuysOf(
-    opened: BuysScope,
-    row: BasketRow
-  ): Promise<BasketTripBuys> {
+  async tripBuysOf(opened: BuysScope, row: BasketRow): Promise<BasketTripBuys> {
     const buys = await this.standingBuys(this.dataSource.manager, opened, row);
     const scopes = new Set<string>();
     let unscoped = false;
@@ -233,7 +230,11 @@ export class BasketProductChangeService {
         unscoped = true;
       }
     }
-    return { priceScopeIds: [...scopes], unscoped };
+    // What those buys count in, so the gateway prices one of that unit (plan
+    // 0246 M7). A row is one unit, so its buys share it but for a buy made
+    // before a line changed its unit, which is priced as the row is.
+    const unit = row.entries[0]?.unit ?? buys[0]?.unit ?? 'UNIT';
+    return { priceScopeIds: [...scopes], unscoped, unit };
   }
 
   /**
@@ -296,6 +297,8 @@ export class BasketProductChangeService {
         // purchase did not change. `settledAt` is copied and not restamped,
         // as a revert that splits a row copies it (plan 0104, section 3.2).
         quantity: old.quantity,
+        // The unit is the purchase's too (plan 0246, section 3.5).
+        unit: old.unit ?? 'UNIT',
         settledByUserId: old.settledByUserId,
         settledByParticipantId: old.settledByParticipantId,
         settledAt: old.settledAt,
@@ -372,5 +375,7 @@ function priceOf(
     supermarketId: old.supermarketId,
     pricePaidCents: price?.pricePaidCents ?? null,
     pricePaidCurrency: price?.pricePaidCurrency ?? null,
+    // Kept only beside a price (plan 0246 M7).
+    estimated: price !== undefined && price.estimated === true,
   };
 }

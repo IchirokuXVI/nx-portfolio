@@ -1,11 +1,14 @@
 import {
+  isLineUnit,
   LINE_BATCH_MAX_ITEMS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   ListResolutionBranch,
   SettlementOutcome,
   UsernamePropagation,
+  type LineUnit,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import type { ModelToolDeclaration } from '../provider/model-provider';
@@ -133,7 +136,23 @@ interface UpsertItem {
    * write nothing at all (section 7.2).
    */
   quantity: number | undefined;
+  /**
+   * What {@link quantity} counts, when they named a weight or a volume (plan
+   * 0246, section 5). Absent is pieces or packs.
+   */
+  unit: LineUnit | undefined;
 }
+
+/**
+ * What a weight or a volume is sent as (plan 0246, section 5). One sentence
+ * for both tools, so `upsert_lines` and `settle_lines` cannot disagree.
+ */
+const UNIT_PARAMETER = {
+  type: 'string',
+  enum: [...LINE_UNITS],
+  description:
+    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs.',
+};
 
 /**
  * What to put on the list, which is the same question in both scopes (plan 0046,
@@ -164,6 +183,7 @@ const upsertItemsParameter = {
         description:
           'How many. Omit when they did not say. With mode "add" it is how many to add, and omitting it means one more.',
       },
+      unit: UNIT_PARAMETER,
       mode: {
         type: 'string',
         enum: ['set', 'add'],
@@ -313,6 +333,8 @@ const upsertLines: AssistantTool = {
             ...(entry.item.quantity !== undefined
               ? { quantity: entry.item.quantity }
               : {}),
+            // The unit the person said a weight or a volume in (plan 0246).
+            ...(entry.item.unit !== undefined ? { unit: entry.item.unit } : {}),
           }))
         );
         wrote = true;
@@ -344,7 +366,7 @@ const upsertLines: AssistantTool = {
       if (!existing) {
         continue;
       }
-      const { product, mode, quantity } = entry.item;
+      const { product, mode, quantity, unit } = entry.item;
 
       // Naming something already on the list with no number asks for nothing, so
       // nothing is written (section 7.2). The edit this used to send was not
@@ -364,12 +386,24 @@ const upsertLines: AssistantTool = {
             ? await runtime.api.addLineQuantity(
                 runtime.context.caller,
                 existing.id,
-                quantity ?? 1
+                quantity ?? 1,
+                // The unit the delta was said in, pieces when none was (plan
+                // 0246 M8). A line of another unit refuses it, and the tool
+                // says so rather than retrying in the line's unit.
+                unit ?? 'UNIT'
               )
             : await runtime.api.updateLine(
                 runtime.context.caller,
                 existing.id,
-                { content: product, quantity }
+                {
+                  content: product,
+                  quantity,
+                  // A unit is sent beside its quantity alone: the gateway
+                  // refuses a unit change with no amount to start from.
+                  ...(unit !== undefined && quantity !== undefined
+                    ? { unit }
+                    : {}),
+                }
               );
         wrote = true;
         runtime.link.list(list);
@@ -379,7 +413,7 @@ const upsertLines: AssistantTool = {
         );
       } catch (error) {
         firstFailure ??= error;
-        results[entry.index] = itemRefused(product, error);
+        results[entry.index] = itemRefused(product, error, existing.unit);
       }
     }
 
@@ -860,8 +894,9 @@ const settleLines: AssistantTool = {
           type: 'integer',
           minimum: 1,
           description:
-            'How many were bought, when they said a number: "I got two of the milk". Leave it out for "we got the milk", which is one. It has no meaning when the shop did not have it, so do not send it then.',
+            'How many were bought, when they said a number: "I got two of the milk". Leave it out for "we got the milk", which is one, or all of it on a line counted by weight. It has no meaning when the shop did not have it, so do not send it then.',
         },
+        unit: UNIT_PARAMETER,
       },
       required: ['lineIds', 'outcome'],
     },
@@ -876,6 +911,7 @@ const settleLines: AssistantTool = {
       };
     }
     const quantity = readQuantity(args['quantity']);
+    const unit = readUnit(args['unit']);
     if (quantity !== undefined && outcome === SettlementOutcome.NOT_AVAILABLE) {
       // Refused here rather than passed on, because core refuses it too and the
       // model has plainly misread the two fields for each other.
@@ -926,12 +962,24 @@ const settleLines: AssistantTool = {
     let firstFailure: unknown;
 
     for (const known of resolved) {
+      // The unit the person said, or the line's when they said none (plan
+      // 0246, section 5). A line counted by weight with no amount said is
+      // all of it: "we got the cheese" is the cheese the line asks for.
+      const lineUnit = known.line.unit ?? 'UNIT';
+      const settledQuantity =
+        quantity === undefined &&
+        unit === undefined &&
+        lineUnit !== 'UNIT' &&
+        outcome === SettlementOutcome.BOUGHT
+          ? Math.max(known.line.quantity, 1)
+          : quantity;
       try {
         const { line, settlement } = await runtime.api.settleLine(
           runtime.context.caller,
           known.line.id,
           outcome,
-          quantity
+          unit ?? lineUnit,
+          settledQuantity
         );
         touched.add(known.list.listId);
         runtime.link.list(known.list);
@@ -942,11 +990,12 @@ const settleLines: AssistantTool = {
           // wanted afterwards, which is what makes a partial settle sayable.
           settled: settlement.quantity,
           stillWanted: line.quantity,
+          ...(line.unit && line.unit !== 'UNIT' ? { unit: line.unit } : {}),
           list: known.list.listName,
         });
       } catch (error) {
         firstFailure ??= error;
-        const { reason } = refused(error, 'that');
+        const { reason } = refused(error, 'that', lineUnit);
         results.push({ product: known.line.content, refused: true, reason });
       }
     }
@@ -1082,6 +1131,8 @@ interface ItemResult {
   product: string;
   action?: 'added' | 'updated' | 'increased' | 'unchanged';
   quantity?: number;
+  /** What `quantity` counts, when it is not pieces (plan 0246). */
+  unit?: LineUnit;
   awaitingApproval?: boolean;
   refused?: true;
   reason?: string;
@@ -1102,6 +1153,9 @@ function describeLine(
     product: line.content,
     action,
     quantity: line.quantity,
+    // Grams or millilitres, so the model says "750 g" and not "750" (plan
+    // 0246, section 5). Absent for pieces, as every line before that plan.
+    ...(line.unit && line.unit !== 'UNIT' ? { unit: line.unit } : {}),
     // Plan 0037: a list may hold new lines pending somebody's approval, and the
     // person who asked deserves to be told their milk is waiting rather than to
     // find out in the shop.
@@ -1109,10 +1163,26 @@ function describeLine(
   };
 }
 
-function itemRefused(product: string, error: unknown): ItemResult {
-  const { reason } = refused(error, 'that');
+function itemRefused(
+  product: string,
+  error: unknown,
+  lineUnit?: LineUnit
+): ItemResult {
+  const { reason } = refused(error, 'that', lineUnit);
   return { product, refused: true, reason };
 }
+
+/** A unit the model named, or undefined (plan 0246, section 5). */
+function readUnit(value: unknown): LineUnit | undefined {
+  return isLineUnit(value) && value !== 'UNIT' ? value : undefined;
+}
+
+/** How a unit is said in a tool result, for the sentence of a refusal. */
+const UNIT_WORDS: Record<LineUnit, string> = {
+  UNIT: 'pieces',
+  GRAM: 'grams',
+  MILLILITER: 'millilitres',
+};
 
 /** The items of a call, dropping anything that does not name a product. */
 function readItems(value: unknown): UpsertItem[] {
@@ -1134,6 +1204,7 @@ function readItems(value: unknown): UpsertItem[] {
       product,
       mode,
       quantity: mode === 'add' ? (quantity ?? 1) : quantity,
+      unit: readUnit(bag['unit']),
     });
   }
   return items;
@@ -1156,7 +1227,9 @@ function foldDuplicates(items: UpsertItem[]): UpsertItem[] {
   const at = new Map<string, number>();
 
   for (const item of items) {
-    const key = normalize(item.product);
+    // Two amounts in two units are not summed (plan 0246): "a kilo of
+    // apples and two apples" stays two items, and the list decides.
+    const key = `${normalize(item.product)}\u0000${item.unit ?? 'UNIT'}`;
     const index = at.get(key);
     if (index === undefined) {
       at.set(key, folded.length);
@@ -1180,6 +1253,7 @@ function foldDuplicates(items: UpsertItem[]): UpsertItem[] {
       mode: 'add',
       quantity:
         (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
+      unit: held.unit,
     };
   }
 
@@ -1208,6 +1282,8 @@ interface SettleResult {
   settled?: number;
   /** What the line still asks for afterwards, which a partial settle leaves. */
   stillWanted?: number;
+  /** What both numbers count, when it is not pieces (plan 0246). */
+  unit?: LineUnit;
   list?: string;
   refused?: true;
   reason?: string;
@@ -1394,8 +1470,24 @@ function readQuantity(value: unknown): number | undefined {
  */
 function refused(
   error: unknown,
-  attempted: string
+  attempted: string,
+  lineUnit?: LineUnit
 ): { ok: false; refused: true; attempted: string; reason: string } {
+  // A delta or a settle in another unit than the line's (plan 0246, section
+  // 5): said as what to do next, and never retried in the line's unit.
+  if (
+    error instanceof GatewayApiError &&
+    error.code === 'line_unit_mismatch' &&
+    lineUnit !== undefined
+  ) {
+    const words = UNIT_WORDS[lineUnit];
+    return {
+      ok: false,
+      refused: true,
+      attempted,
+      reason: `that line counts in ${words}; say the amount in ${words} or change the line`,
+    };
+  }
   if (error instanceof GatewayApiError) {
     return {
       ok: false,

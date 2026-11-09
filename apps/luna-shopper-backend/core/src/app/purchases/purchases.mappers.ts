@@ -1,6 +1,8 @@
 import {
   SettlementOutcome,
   TripKind,
+  isLineUnit,
+  type LineUnit,
   type PurchaseEntryView,
   type PurchaseRowView,
 } from '@portfolio/luna-shopper/contracts';
@@ -43,7 +45,29 @@ export function toPurchaseEntryView(row: PurchaseEntryRow): PurchaseEntryView {
         ? null
         : { cents, currency: row.currency },
     unpricedCount: Number(row.unpricedCount),
+    bought: boughtOf(row),
+    estimated: row.estimated === true,
   };
+}
+
+/**
+ * What an entry bought, per unit, with a unit that bought nothing omitted
+ * (plan 0246, section 3.5).
+ */
+function boughtOf(row: PurchaseEntryRow): Partial<Record<LineUnit, number>> {
+  const bought: Partial<Record<LineUnit, number>> = {};
+  const sums: [LineUnit, string | number | null | undefined][] = [
+    ['UNIT', row.boughtUnit],
+    ['GRAM', row.boughtGram],
+    ['MILLILITER', row.boughtMilliliter],
+  ];
+  for (const [unit, sum] of sums) {
+    const value = Number(sum ?? 0);
+    if (value > 0) {
+      bought[unit] = value;
+    }
+  }
+  return bought;
 }
 
 /**
@@ -63,6 +87,8 @@ export function toPurchaseRowView(row: PurchaseLineRow): PurchaseRowView {
         ? SettlementOutcome.BOUGHT
         : SettlementOutcome.NOT_AVAILABLE,
     quantity: Number(row.quantity),
+    unit: isLineUnit(row.unit) ? row.unit : 'UNIT',
+    estimated: row.estimated === true,
     // The amount and its currency travel together or neither is served: an
     // amount with no currency is a number (plan 0143, section 2).
     pricePaid:

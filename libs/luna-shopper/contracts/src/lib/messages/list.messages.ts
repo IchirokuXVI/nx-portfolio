@@ -69,6 +69,12 @@ export const LINE_PATTERNS = {
    * gateway asks before it reads a price, so it prices what core will write.
    */
   settlePick: 'line.settlePick',
+  /**
+   * What a line counts in and the products it holds (plan 0246, section 4.2).
+   * The gateway asks before an edit that names a unit or a product set, to
+   * check that the products offer the unit. `READ`.
+   */
+  unitBasis: 'line.unitBasis',
   /** One line's own settlements, newest first (plan 0047, section 6.1). */
   settlements: 'line.settlements',
   /**
@@ -1043,9 +1049,10 @@ export interface SettlementPaid {
    */
   supermarketId?: string | null;
   /**
-   * What **one unit** cost at {@link priceScopeId}, in the minor unit of
-   * {@link pricePaidCurrency}. Never the row's total, and never catalog's
-   * `unitPrice`, which is a per kilogram number.
+   * What **one** of the settlement's unit cost at {@link priceScopeId}, in
+   * the minor unit of {@link pricePaidCurrency} (plan 0246 M7): one piece or
+   * pack for `UNIT`, one kilo or one litre for `GRAM` and `MILLILITER`. Never
+   * the row's total, and never catalog's `unitPrice`.
    */
   pricePaidCents: number | null;
   /**
@@ -1053,6 +1060,14 @@ export interface SettlementPaid {
    * the price was not known.
    */
   pricePaidCurrency: string | null;
+  /**
+   * Whether {@link pricePaidCents} makes what was spent an estimate (plan 0246
+   * M7): false only for a count of pieces or packs at a piece or pack price,
+   * as `lineAmountOf` decides for the product settled. Written by the gateway
+   * beside the price. Absent reads as false, and core keeps it only beside a
+   * price.
+   */
+  estimated?: boolean;
 }
 
 /**
@@ -1081,6 +1096,23 @@ export interface SettlePick {
 export interface LineSettlePickRequest {
   userId: string;
   lineId: string;
+}
+
+/** What a line counts in and holds, for the gateway's unit check (plan 0246). */
+export interface LineUnitBasisRequest {
+  userId: string;
+  lineId: string;
+}
+
+/**
+ * What a line counts in and the products it holds (plan 0246, section 4.2).
+ * Core holds both and no catalog; the gateway holds the catalog, so it asks
+ * here and reads the products' size fields there.
+ */
+export interface LineUnitBasis {
+  unit: LineUnit;
+  /** The line's products, in attachment order. Empty for a free text line. */
+  itemIds: string[];
 }
 
 /**

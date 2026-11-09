@@ -9,6 +9,7 @@ import type {
   ZoneStatus,
 } from '../enums/zone.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { LineUnit } from '../units/line-unit';
 import type { AdminCredential } from './admin-auth.messages';
 import type { MembershipView } from './zone.messages';
 
@@ -550,6 +551,11 @@ export interface UpdateAdminListLineRequest extends AdminCredential {
   lineId: string;
   content?: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts from now on (plan 0246, section 6). A unit
+   * change names the quantity it starts from, as a member's edit does.
+   */
+  unit?: LineUnit;
   /** The whole product set. An empty array returns the line to free text. */
   itemIds?: string[];
 }

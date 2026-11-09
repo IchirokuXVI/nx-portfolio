@@ -34,13 +34,8 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { Repository } from 'typeorm';
 import { BasketReadService } from '../baskets/basket-read.service';
-import {
-  BasketSource,
-  Basket,
-  ListLine,
-  ShoppingList,
-} from '../entities';
 import { BasketService } from '../baskets/basket.service';
+import { Basket, BasketSource, ListLine, ShoppingList } from '../entities';
 import { LineService } from '../lists/line.service';
 import { ListService } from '../lists/list.service';
 import { CorePlatformAdminService } from './platform-admin.service';
@@ -363,6 +358,8 @@ export class AdminListService {
       {
         content: req.content,
         quantity: req.quantity,
+        // What the quantity counts (plan 0246, section 6).
+        unit: req.unit,
         itemIds: req.itemIds,
       },
       actorId

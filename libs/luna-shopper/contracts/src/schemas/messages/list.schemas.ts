@@ -64,6 +64,8 @@ export const LIST_SCHEMA_IDS = {
   setApprovalRequest: schemaId('msg/line.setApproval/request'),
   settleLineRequest: schemaId('msg/line.settle/request'),
   settlePickRequest: schemaId('msg/line.settlePick/request'),
+  unitBasisRequest: schemaId('msg/line.unitBasis/request'),
+  unitBasis: schemaId('list/LineUnitBasis'),
   lineSettlementsRequest: schemaId('msg/line.settlements/request'),
   itemSettlementsRequest: schemaId('msg/line.itemSettlements/request'),
   listHoldingItemView: schemaId('list/ListHoldingItemView'),
@@ -276,6 +278,9 @@ const settlementPaid = object(
     supermarketId: nullableString(),
     pricePaidCents: { type: ['integer', 'null'], minimum: 0 },
     pricePaidCurrency: { type: ['string', 'null'], maxLength: 3 },
+    // Whether the price makes the cost an estimate (plan 0246 M7). Optional,
+    // so a message from a gateway older than that plan reads as exact.
+    estimated: { type: 'boolean' },
   },
   [
     'priceScopeId',
@@ -715,6 +720,24 @@ const settlePickRequest = object(
   },
   ['userId', 'lineId']
 );
+// What a line counts in and holds, for the gateway's unit check (plan 0246,
+// section 4.2).
+const unitBasisRequest = object(
+  LIST_SCHEMA_IDS.unitBasisRequest,
+  {
+    userId: nonEmptyString(),
+    lineId: nonEmptyString(),
+  },
+  ['userId', 'lineId']
+);
+const unitBasis = object(
+  LIST_SCHEMA_IDS.unitBasis,
+  {
+    unit: ref(ENUM_IDS.lineUnit),
+    itemIds: array(nonEmptyString()),
+  },
+  ['unit', 'itemIds']
+);
 const lineSettlementsRequest = object(
   LIST_SCHEMA_IDS.lineSettlementsRequest,
   {
@@ -1078,6 +1101,8 @@ export const listSchemas: JsonSchema[] = [
   setApprovalRequest,
   settleLineRequest,
   settlePickRequest,
+  unitBasisRequest,
+  unitBasis,
   lineSettlementsRequest,
   itemSettlementsRequest,
   listHoldingItemView,
@@ -1182,6 +1207,10 @@ export const listMessageContracts: Record<
   [LINE_PATTERNS.settlePick]: {
     request: LIST_SCHEMA_IDS.settlePickRequest,
     response: LIST_SCHEMA_IDS.settlePick,
+  },
+  [LINE_PATTERNS.unitBasis]: {
+    request: LIST_SCHEMA_IDS.unitBasisRequest,
+    response: LIST_SCHEMA_IDS.unitBasis,
   },
   [LINE_PATTERNS.settlements]: {
     request: LIST_SCHEMA_IDS.lineSettlementsRequest,

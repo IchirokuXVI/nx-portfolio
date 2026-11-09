@@ -359,6 +359,7 @@ export class BasketController {
     notFound: true,
     finishedBasket: true,
     shopLocked: true,
+    lineUnitMismatch: true,
   })
   async settle(
     @Participant() participant: BasketParticipantContext,
@@ -390,6 +391,7 @@ export class BasketController {
       lineIds: dto.lineIds,
       outcome: dto.outcome,
       quantity: dto.quantity,
+      unit: dto.unit,
       from: dto.from,
       itemId: dto.itemId,
       allocations: dto.allocations,
@@ -461,6 +463,8 @@ export class BasketController {
       itemId: pricedItemId(dto.itemId, scope.pick),
       supermarketLocationId: own ?? dto.supermarketLocationId,
       servedLocations: scope.servesLocations,
+      // The price of one of the row's unit (plan 0246 M7).
+      unit: dto.unit,
     });
   }
 
@@ -564,6 +568,8 @@ export class BasketController {
       servedLocations: scope.servesLocations,
       priceScopeIds: scope.tripBuys?.priceScopeIds ?? [],
       unscoped: scope.tripBuys?.unscoped ?? false,
+      // The buys' unit, as core answered it (plan 0246 M7).
+      unit: scope.tripBuys?.unit ?? 'UNIT',
     });
   }
 
@@ -631,6 +637,7 @@ export class BasketController {
     membership: true,
     notFound: true,
     finishedBasket: true,
+    lineUnitMismatch: true,
   })
   demand(
     @Participant() participant: BasketParticipantContext,
@@ -644,6 +651,7 @@ export class BasketController {
       rowKey,
       lineId: dto.lineId,
       quantity: dto.quantity,
+      unit: dto.unit,
       from: dto.from,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowDemand, req);
@@ -666,6 +674,7 @@ export class BasketController {
     membership: true,
     finishedBasket: true,
     lineMerge: true,
+    lineUnitDiffers: true,
   })
   rename(
     @Participant() participant: BasketParticipantContext,

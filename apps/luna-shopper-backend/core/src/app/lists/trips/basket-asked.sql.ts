@@ -1,8 +1,8 @@
+import { WRITABLE_LIST } from '../../baskets/basket.sql';
 import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
-import { WRITABLE_LIST } from '../../baskets/basket.sql';
 
 /**
  * One definition of what a basket asks, or asked, of the lines of one list
@@ -64,6 +64,8 @@ export function basketAskedCte(basketParam: string | null): string {
     JOIN "zone_memberships" m ON m."zoneId" = sl."zoneId"
     JOIN "baskets" gl ON gl."ownerUserId" = m."userId"
     JOIN "list_lines" ll ON ll."listId" = sl.id
+    -- Within one line, and in the line's unit (plan 0246, section 3.5): a buy
+    -- made before the line changed its unit is not added to what it asks.
     LEFT JOIN LATERAL (
       SELECT COALESCE(
                SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
@@ -71,6 +73,7 @@ export function basketAskedCte(basketParam: string | null): string {
       FROM "line_settlements" s
       WHERE s."basketId" = gl.id
         AND s."lineId" = ll.id
+        AND s."unit" = ll."unit"
         AND s."revertedAt" IS NULL
     ) b ON TRUE
     WHERE sl.id = $1::uuid

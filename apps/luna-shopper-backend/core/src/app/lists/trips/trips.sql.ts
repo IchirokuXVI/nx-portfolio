@@ -1,8 +1,8 @@
+import { WRITABLE_LIST } from '../../baskets/basket.sql';
 import {
   GENERATED_BASKET,
   OPEN_GENERATED_BASKET,
 } from '../../baskets/open-basket.sql';
-import { WRITABLE_LIST } from '../../baskets/basket.sql';
 import { basketAskedCte } from './basket-asked.sql';
 
 /**
@@ -93,16 +93,20 @@ function basketRowsCte(basketParam: string | null): string {
            a."asked" AS "asked"
     FROM "basket_asked" a
   ),
+  -- Within one line, and its sum in the line's unit (plan 0246, section 3.5),
+  -- which is the unit of its trip row too: a unit change rewrites the row.
   "bought" AS (
     SELECT s."basketId" AS "tripId",
            s."lineId" AS "lineId",
            COALESCE(
-             SUM(s."quantity") FILTER (WHERE s."outcome" = 'BOUGHT'), 0
+             SUM(s."quantity")
+               FILTER (WHERE s."outcome" = 'BOUGHT' AND s."unit" = bl."unit"), 0
            )::int AS "bought",
            (ARRAY_AGG(s."outcome"::text ORDER BY s."settledAt" DESC, s.id DESC))[1]
              AS "lastOutcome"
     FROM "line_settlements" s
     JOIN "baskets" gl ON gl.id = s."basketId" AND ${GENERATED_BASKET}
+    JOIN "list_lines" bl ON bl.id = s."lineId"
     WHERE s."listId" = $1::uuid
       AND s."revertedAt" IS NULL ${boughtFilter}
     GROUP BY s."basketId", s."lineId"
@@ -165,7 +169,10 @@ const LOOSE_ROWS_CTE = `
            ll."position" AS "position",
            s."settledAt" AS "settledAt",
            s."outcome"::text AS "outcome",
-           s."quantity" AS "quantity",
+           -- In the line's unit alone (plan 0246, section 3.5): the sum below is
+           -- within one line, and a buy made before a unit change counts none.
+           (CASE WHEN s."unit" = ll."unit" THEN s."quantity" ELSE 0 END)
+             AS "quantity",
            COALESCE(s."settledByUserId", p."userId") AS "buyerUserId"
     FROM "line_settlements" s
     JOIN "list_lines" ll

@@ -53,8 +53,13 @@ export function removedRows(
 
   return removed.map((group) => {
     const rows = group.lineIds.flatMap((lineId) => byLine.get(lineId) ?? []);
+    // In the row's unit (plan 0246, section 3.5): never grams added to pieces.
     const bought = rows
-      .filter((row) => row.outcome === SettlementOutcome.BOUGHT)
+      .filter(
+        (row) =>
+          row.outcome === SettlementOutcome.BOUGHT &&
+          (row.unit ?? group.unit) === group.unit
+      )
       .reduce((sum, row) => sum + row.quantity, 0);
     // The newest act on the row, which is the same answer an ordinary row gives
     // to the same question (plan 0137, section 4): a removed row that was bought
@@ -74,6 +79,7 @@ export function removedRows(
       // A removed row holds no entries, so it counts as no product (plan
       // 0201). It is drawn under the name it had.
       productId: null,
+      unit: group.unit,
       left: 0,
       bought,
       asked: bought,

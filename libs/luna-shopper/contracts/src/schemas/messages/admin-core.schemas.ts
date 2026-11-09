@@ -526,6 +526,9 @@ const updateLineRequest = object(
     lineId: nonEmptyString(),
     content: nonEmptyString(),
     quantity: integer({ minimum: 0 }),
+    // What the quantity counts (plan 0246, section 6). Core refuses it
+    // without a quantity beside it, as on a member's edit.
+    unit: ref(ENUM_IDS.lineUnit),
     itemIds: array(nonEmptyString()),
   },
   ['userId', 'listId', 'lineId']

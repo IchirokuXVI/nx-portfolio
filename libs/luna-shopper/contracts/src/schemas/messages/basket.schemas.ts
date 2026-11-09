@@ -548,10 +548,17 @@ const linePick = object(
   ['lineId', 'itemId']
 );
 
+// The line's unit and amount ride beside its products, because the pick is
+// the cost of that amount with each of them (plan 0246, section 4.3).
 const priceChoice = object(
   BASKET_SCHEMA_IDS.priceChoice,
-  { lineId: nonEmptyString(), itemIds: array(nonEmptyString()) },
-  ['lineId', 'itemIds']
+  {
+    lineId: nonEmptyString(),
+    itemIds: array(nonEmptyString()),
+    unit: ref(ENUM_IDS.lineUnit),
+    quantity: integer({ minimum: 0 }),
+  },
+  ['lineId', 'itemIds', 'unit', 'quantity']
 );
 
 const priceChoicesView = object(
@@ -635,6 +642,8 @@ const tripBuys = object(
   {
     priceScopeIds: array(nonEmptyString()),
     unscoped: boolean(),
+    // The row's unit, so the price read is one of it (plan 0246 M7).
+    unit: ref(ENUM_IDS.lineUnit),
   },
   ['priceScopeIds', 'unscoped']
 );
@@ -646,6 +655,8 @@ const scopePrice = object(
     priceScopeId: nonEmptyString(),
     pricePaidCents: integer({ minimum: 0 }),
     pricePaidCurrency: nonEmptyString({ maxLength: 3 }),
+    // Optional (plan 0246 M7), so a gateway older than that plan reads exact.
+    estimated: { type: 'boolean' },
   },
   ['priceScopeId', 'pricePaidCents', 'pricePaidCurrency']
 );

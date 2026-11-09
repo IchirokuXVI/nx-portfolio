@@ -17,6 +17,7 @@ import {
   type BasketProgress,
   type BasketRowEntryView,
   type BasketRowView,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { productOf, rowKeyOf, type BasketPicks } from './line-dedup';
 
@@ -36,6 +37,11 @@ export interface BasketSettlementFact {
   id: string;
   outcome: SettlementOutcome;
   quantity: number;
+  /**
+   * What `quantity` counts (plan 0246, section 3.5). Absent is the entry's
+   * unit, which is what every purchase is unless the line changed its unit.
+   */
+  unit?: LineUnit;
   settledAt: Date;
   settledByParticipantId: string | null;
   /** The product the buy named, or null (plan 0201, section 1). */
@@ -105,6 +111,11 @@ export interface BasketEntry {
   content: string;
   /** `list_lines.quantity`: what this household still asks for. */
   quantity: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.4), and part of the
+   * row key: a row is one unit (M6).
+   */
+  unit: LineUnit;
   /** `list_lines.version`, which a patch is ordered by (plan 0204). */
   version: number;
   itemSetHash: string | null;
@@ -175,6 +186,9 @@ export function tripItemIdOf(
  * **The input must already be ordered by `(createdAt, id)`**, which
  * `COVERED_LINES_SQL` does, because the anchor is the group's first entry and
  * the oldest ask for a thing names the row.
+ *
+ * Two lines of one product in two units are two groups (plan 0246 M6): the
+ * key carries the unit.
  */
 export function groupEntries(
   entries: readonly BasketEntry[],
@@ -183,7 +197,7 @@ export function groupEntries(
   const groups = new Map<string, BasketGroup>();
   for (const entry of entries) {
     const productId = productOf(entry, picks);
-    const key = rowKeyOf(entry.content, productId);
+    const key = rowKeyOf(entry.content, productId, entry.unit);
     const held = groups.get(key);
     if (held) {
       held.entries.push(entry);
@@ -194,10 +208,18 @@ export function groupEntries(
   return [...groups.values()];
 }
 
-/** What one entry's purchases add up to. */
+/**
+ * What one entry's purchases add up to, in the entry's unit (plan 0246,
+ * section 3.5). A purchase made before the line changed its unit is not a
+ * count of what it asks now, so it is not added.
+ */
 export function boughtOf(entry: BasketEntry): number {
   return entry.settlements
-    .filter((row) => row.outcome === SettlementOutcome.BOUGHT)
+    .filter(
+      (row) =>
+        row.outcome === SettlementOutcome.BOUGHT &&
+        (row.unit ?? entry.unit) === entry.unit
+    )
     .reduce((sum, row) => sum + row.quantity, 0);
 }
 
@@ -501,6 +523,8 @@ export function toEntryPatch(
   return {
     lineId: entry.lineId,
     version: entry.version,
+    // What `left` and `bought` count after the write (plan 0246, section 3.6).
+    unit: entry.unit,
     left: rule.left,
     bought: rule.bought,
     // Somebody else's units, beside this basket's own and never added to them
@@ -569,6 +593,8 @@ export function toRowView(
     // and this is what a client draws when the catalog cannot name it.
     content: group.anchor.content,
     productId: group.productId,
+    // A row is one unit (plan 0246 M6): every entry of the group shares it.
+    unit: group.anchor.unit,
     left: numbers.left,
     bought: numbers.bought,
     // Computed here and stored nowhere, which is the whole of plan 0136.

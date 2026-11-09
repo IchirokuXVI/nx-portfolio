@@ -7,6 +7,7 @@ import {
   BasketStatus,
   LINE_QUANTITY_MAX,
   SettlementOutcome,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -27,7 +28,11 @@ import {
   MinLength,
   ValidateNested,
 } from 'class-validator';
-import { ADD_CHOICE_DOCS, NotBesideNewLine } from '../lists/list.dto';
+import {
+  ADD_CHOICE_DOCS,
+  NotBesideNewLine,
+  RequiredLineUnit,
+} from '../lists/list.dto';
 
 /**
  * Request bodies for the basket (plan 0136).
@@ -102,6 +107,9 @@ export class SettleBasketRowDto {
   @Min(1)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 
   @ApiProperty({
     minimum: 0,
@@ -215,6 +223,9 @@ export class SetBasketRowDemandDto {
   @Min(0)
   @Max(LINE_QUANTITY_MAX)
   quantity!: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 
   @ApiProperty({ minimum: 0, maximum: LINE_QUANTITY_MAX })
   @IsInt()
