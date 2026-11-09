@@ -90,6 +90,8 @@ export interface HoldingRow {
   readonly lineId: string;
   readonly name: string;
   readonly quantity: number;
+  /** What {@link quantity} counts, which its stepper steps and draws by (velista `0182`). */
+  readonly unit: LineUnit;
   /** Whether the person may move its quantity. */
   readonly editable: boolean;
   readonly pending: boolean;
@@ -114,6 +116,7 @@ export function holdingRows(
       lineId: line.lineId,
       name: line.name,
       quantity: line.quantity,
+      unit: line.unit,
       editable:
         !isUnsavedLine(line.lineId) && canStepLine(permissions, line.pending),
       pending: line.pending,

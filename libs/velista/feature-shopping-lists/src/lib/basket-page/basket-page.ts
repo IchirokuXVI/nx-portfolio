@@ -2439,6 +2439,7 @@ export class BasketPage {
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
             quantity: entry.left,
+            unit: entry.unit,
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
           }))

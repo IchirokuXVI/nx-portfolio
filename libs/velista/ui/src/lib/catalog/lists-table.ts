@@ -82,6 +82,7 @@ export interface ListsTableStep {
                     'catalog.inLists.stepper' | rokuT: { list: list.name }
                   "
                   [min]="floorOf(list)"
+                  [unit]="list.main?.unit ?? 'UNIT'"
                   [value]="quantityOf(list)"
                 />
               }
@@ -113,6 +114,7 @@ export interface ListsTableStep {
                     'catalog.held.stepper'
                       | rokuT: { line: line.name, list: list.name }
                   "
+                  [unit]="line.unit"
                   [value]="line.quantity"
                 />
               </div>

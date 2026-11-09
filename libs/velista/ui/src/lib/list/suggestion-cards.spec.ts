@@ -681,6 +681,27 @@ describe('SuggestionList, the cards', () => {
       expect(changed).toEqual([{ holding: holdings[0], from: 2, to: 1 }]);
     });
 
+    it('steps and draws a weight line by its unit: 1 kg up to 1,25 kg, down to 975 g (velista 0182)', async () => {
+      const weighed = [
+        { ...holdings[0], quantity: 1000, unit: 'GRAM' as const },
+      ];
+      const { fixture, changed } = await render([item('held')], {
+        holdings: weighed,
+      });
+      const line = root(fixture).querySelectorAll('.held-line')[0];
+      const steps = line?.querySelectorAll('.step');
+
+      expect(line?.querySelector('.value')?.textContent?.trim()).toBe('1 kg');
+
+      await press(fixture, steps?.[1] ?? null);
+      await press(fixture, steps?.[0] ?? null);
+
+      expect(changed).toEqual([
+        { holding: weighed[0], from: 1000, to: 1250 },
+        { holding: weighed[0], from: 1000, to: 975 },
+      ]);
+    });
+
     it('disables the stepper on a line the reader may not change', async () => {
       const { fixture } = await render([item('held')], { holdings });
       const steps = root(fixture)

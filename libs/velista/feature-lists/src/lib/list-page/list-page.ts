@@ -2241,6 +2241,7 @@ export class ListPage {
           text: line.content,
           listName: null,
           quantity: line.quantity,
+          unit: line.unit,
           editable,
         }));
   });

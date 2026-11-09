@@ -5,6 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import type { LineUnit } from '@portfolio/velista/models';
 import { ProductRow, type ProductRowView } from './product-row';
 
 /** One line the visit added to, as its row draws it. */
@@ -18,6 +19,8 @@ export interface VisitAddedRow {
   readonly imageUrl: string | null;
   /** How many the list holds now. */
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). Absent is a count. */
+  readonly unit?: LineUnit;
   /** The lowest count the stepper shows. A minus pressed there takes it back. */
   readonly floor: number;
   /** The line waits for approval, which the row says under the name. */
@@ -91,6 +94,7 @@ export interface VisitAddedStep {
                 [row]="viewOf(row, 'catalog.added.pending' | rokuT)"
                 [stepper]="{
                   value: row.quantity,
+                  unit: row.unit,
                   label: 'catalog.added.stepper' | rokuT: { name: row.name },
                   min: row.floor - 1,
                 }"

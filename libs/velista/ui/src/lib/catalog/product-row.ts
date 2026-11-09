@@ -88,6 +88,8 @@ export interface ProductRowHeldLine {
   /** The line's own words, so a renamed line says what it was renamed to. */
   readonly name: string;
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). Absent is a count. */
+  readonly unit?: LineUnit;
   /** Whether the person may move its quantity. */
   readonly editable: boolean;
   /** The line waits for an owner's approval. */
@@ -136,6 +138,8 @@ export interface ProductRowChoice {
 /** A stepper in the control slot, for a compact card in a sheet (velista `0163`). */
 export interface ProductRowStepper {
   readonly value: number;
+  /** What {@link value} counts (velista `0182`). Absent is a count. */
+  readonly unit?: LineUnit;
   /** Its accessible name, naming the product. */
   readonly label: string;
   /** The lowest it goes. Absent is the stepper's own floor. */
@@ -557,6 +561,7 @@ export type ProductRowExpanded = 'shops' | 'members';
             [disabled]="stepping.disabled === true"
             [label]="stepping.label"
             [min]="stepping.min ?? 0"
+            [unit]="stepping.unit ?? 'UNIT'"
             [value]="stepping.value"
             class="control stepper"
           />
@@ -600,6 +605,7 @@ export type ProductRowExpanded = 'shops' | 'members';
                       ('catalog.held.stepper'
                         | rokuT: { line: line.name, list: add()?.list })
                     "
+                    [unit]="line.unit ?? 'UNIT'"
                     [value]="line.quantity"
                   />
                 </li>
