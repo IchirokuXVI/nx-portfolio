@@ -114,6 +114,19 @@ describe('SourceGuard (plan 0215)', () => {
     expect(guard.summary().isolated).toBe(8);
   });
 
+  it('counts the refusals in a row until a clearing answer or a trip ends them', () => {
+    const { guard, trip } = harness();
+
+    expect(guard.consecutiveRefusals).toBe(0);
+    guard.refused(403, url(1));
+    guard.refused(403, url(2));
+    expect(guard.consecutiveRefusals).toBe(2);
+    guard.answered();
+    expect(guard.consecutiveRefusals).toBe(0);
+    trip();
+    expect(guard.consecutiveRefusals).toBe(0);
+  });
+
   it('trips on the fifth refusal in a row, which is to be sent again', () => {
     const { trip, trips } = harness();
 

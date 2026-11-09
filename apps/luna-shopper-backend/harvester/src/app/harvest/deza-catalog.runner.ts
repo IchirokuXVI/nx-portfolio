@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { SourceSizeUnit } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestWarningCode,
+  type SourceSizeUnit,
+} from '@portfolio/luna-shopper/contracts';
 import {
   DEZA_CEILING_PAGES,
   DezaClient,
@@ -14,7 +17,7 @@ import type { SupermarketSource } from '../entities';
 import { runWorkerPool } from '../runner/worker-pool';
 import type { CatalogDiscoveryInput, CatalogRunner } from './catalog-runner';
 import { entryKey, normalizeName } from './matching';
-import type { RunContext } from './run-context';
+import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
 
 /**
@@ -113,6 +116,15 @@ export class DezaCatalogRunner implements CatalogRunner {
         await context.report({ failed: 1 });
       },
     });
+    // A section the run could not finish is a part of the listing it cannot
+    // speak for, and the run row says so (plan 0251). An aborted crawl writes
+    // none: it does not end `COMPLETED`, and every section the abort cut
+    // short would read as unfinished.
+    if (!context.signal.aborted) {
+      for (const section of crawl.incompleteSections) {
+        context.warn(unfinishedWarning(section));
+      }
+    }
     await context.setTotalPlanned(crawl.products.size);
 
     // --- 3 and 4. The products this crawl saw ------------------------------
@@ -211,11 +223,14 @@ export class DezaCatalogRunner implements CatalogRunner {
   ): Promise<void> {
     const state = crawl.begin(section);
     let next: string[] | null = [];
+    // The budget, unless a narrowing ran out or three passes added nothing.
+    let stoppedBy: SectionStop = 'BUDGET';
 
     while (state.queries < crawl.budget) {
       if (!next) {
         next = state.narrow();
         if (!next) {
+          stoppedBy = 'NO_TERM';
           break;
         }
       }
@@ -245,6 +260,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       if (crawl.products.size === before) {
         state.barren += 1;
         if (state.barren >= BARREN_QUERIES) {
+          stoppedBy = 'BARREN';
           break;
         }
       } else {
@@ -252,7 +268,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       }
     }
 
-    state.finish();
+    state.finish(stoppedBy);
   }
 
   /** One query, every page of it, recorded. Answers whether it hit the ceiling. */
@@ -304,6 +320,45 @@ interface CrawledProduct {
   shops: Set<string>;
 }
 
+/**
+ * Why a section's enumeration stopped (plan 0251, section 2).
+ *
+ * - `BUDGET`: it spent its query budget with a capped query still open.
+ * - `BARREN`: three passes in a row added nothing new. That is the stop rule
+ *   of plan 0085 working, and the section is not reported as unfinished.
+ * - `NO_TERM`: a query is capped and its own vocabulary has no term left to
+ *   narrow it by.
+ */
+type SectionStop = 'BUDGET' | 'BARREN' | 'NO_TERM';
+
+/** A section the run could not finish, as `incompleteSections` names it. */
+interface IncompleteSection {
+  code: string;
+  name: string;
+  /**
+   * Queries spent on it, the section's own first. Null for a section that
+   * threw, where the count is not known.
+   */
+  queries: number | null;
+  /** Null for a section that threw: `openQueries` then holds the error. */
+  stoppedBy: Exclude<SectionStop, 'BARREN'> | null;
+  /** The capped queries that were never narrowed. */
+  openQueries: string[];
+  /**
+   * The capped query the last narrowing was taken from: where the section
+   * was still digging when it stopped. `openQueries` cannot say it, because a
+   * query leaves it at its first narrowing, so a section that spent its
+   * budget while every pass still added products names no open query at all.
+   * Null when nothing was narrowed, and for a section that threw.
+   */
+  narrowing: string | null;
+  /**
+   * The terms spent narrowing {@link narrowing}. Zero when nothing was
+   * narrowed, null for a section that threw.
+   */
+  termsTried: number | null;
+}
+
 interface SectionState {
   queries: number;
   barren: number;
@@ -311,7 +366,7 @@ interface SectionState {
   capped: string[][];
   /** The next narrowing of an already capped query, or null when there is none. */
   narrow(): string[] | null;
-  finish(): void;
+  finish(stoppedBy: SectionStop): void;
 }
 
 /**
@@ -328,11 +383,7 @@ class Crawl {
   /** Shop code -> the name the source printed for it, most recently. */
   readonly shops = new Map<string, string>();
 
-  private readonly incomplete: Array<{
-    code: string;
-    name: string;
-    openQueries: string[];
-  }> = [];
+  private readonly incomplete: IncompleteSection[] = [];
   private readonly vocabularies = new Map<string, Map<string, number>>();
 
   constructor(readonly budget: number = DEFAULT_SECTION_BUDGET) {}
@@ -341,6 +392,10 @@ class Crawl {
     const vocabulary = new Map<string, number>();
     this.vocabularies.set(section.code, vocabulary);
     const used = new Set<string>();
+    /** The capped queries a narrowing was taken from, and how many terms each. */
+    const narrowed = new Map<string[], number>();
+    /** The capped query the last narrowing was taken from. */
+    let lastNarrowed: string[] | null = null;
     const state: SectionState = {
       queries: 0,
       barren: 0,
@@ -352,22 +407,39 @@ class Crawl {
           const term = mostFrequentUnused(vocabulary, used, terms);
           if (term) {
             used.add(term);
+            narrowed.set(terms, (narrowed.get(terms) ?? 0) + 1);
+            lastNarrowed = terms;
             return [...terms, term];
           }
         }
         return null;
       },
-      finish: () => {
-        if (state.capped.length === 0) {
+      finish: (stoppedBy) => {
+        // A section never capped was read whole by its own query. One that
+        // stopped barren was narrowed until three passes added nothing, which
+        // is where plan 0085 says a term cover has done what it can: it is
+        // not unfinished, and naming it would put the one section that
+        // finished beside the ones that did not.
+        if (state.capped.length === 0 || stoppedBy === 'BARREN') {
           return;
         }
-        // Every query still at the ceiling when the section stopped. This is the
-        // honest artifact: completeness cannot be proven against this source,
-        // there is no total to check against, and a number would be a guess.
+        // The capped queries no narrowing was taken from, still at the
+        // ceiling when the section stopped. This is the honest artifact:
+        // completeness cannot be proven against this source, there is no
+        // total to check against, and a number would be a guess. The
+        // section's own query is here only when it was never narrowed. Where
+        // the section was still digging is named beside them.
+        const digging: string[] | null = lastNarrowed;
         this.incomplete.push({
           code: section.code,
           name: section.name,
-          openQueries: state.capped.map(describeQuery),
+          queries: state.queries,
+          stoppedBy,
+          openQueries: state.capped
+            .filter((terms) => !narrowed.has(terms))
+            .map(describeQuery),
+          narrowing: digging === null ? null : describeQuery(digging),
+          termsTried: digging === null ? 0 : (narrowed.get(digging) ?? 0),
         });
       },
     };
@@ -379,8 +451,17 @@ class Crawl {
     this.incomplete.push({
       code: section.code,
       name: section.name,
+      queries: null,
+      stoppedBy: null,
       openQueries,
+      narrowing: null,
+      termsTried: null,
     });
+  }
+
+  /** The sections named unfinished so far. */
+  get incompleteSections(): readonly IncompleteSection[] {
+    return this.incomplete;
   }
 
   /**
@@ -444,6 +525,34 @@ class Crawl {
       vocabulary.set(word, (vocabulary.get(word) ?? 0) + 1);
     }
   }
+}
+
+/** One `LISTING_UNREAD` for a section the run could not finish (plan 0251). */
+function unfinishedWarning(section: IncompleteSection) {
+  const label = `Section ${section.code} ${section.name}`;
+  const message =
+    section.stoppedBy === null
+      ? `${label} failed: ${section.openQueries.join('; ')}`
+      : `${label} stopped by ${section.stoppedBy} after ` +
+        plural(section.queries ?? 0, 'query', 'queries') +
+        (section.narrowing !== null
+          ? ` while narrowing ${section.narrowing}, ` +
+            `${plural(section.termsTried ?? 0, 'term', 'terms')} tried`
+          : '') +
+        (section.openQueries.length > 0
+          ? `, still capped: ${section.openQueries.join(', ')}`
+          : '') +
+        '.';
+  return listingWarning(
+    HarvestWarningCode.LISTING_UNREAD,
+    section.name,
+    message
+  );
+}
+
+/** "1 query", "25 queries". */
+function plural(count: number, one: string, many: string): string {
+  return `${count} ${count === 1 ? one : many}`;
 }
 
 function mostFrequentUnused(

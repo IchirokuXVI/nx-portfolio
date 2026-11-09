@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { HarvestDetailFetch } from '@portfolio/luna-shopper/contracts';
+import {
+  HarvestDetailFetch,
+  HarvestWarningCode,
+} from '@portfolio/luna-shopper/contracts';
 import {
   ELJAMON_DEFAULT_POSTAL_CODE,
   ElJamonClient,
@@ -19,7 +22,7 @@ import {
   type CatalogRunner,
 } from './catalog-runner';
 import { photoOf } from './photo-address';
-import type { RunContext } from './run-context';
+import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
 import type {
   SourceObservation,
@@ -180,6 +183,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     }
 
     declareListing(report, walk, context.signal);
+    warnShortCategories(context, walk);
 
     await context.flush();
     await context.setReport(
@@ -328,6 +332,56 @@ function declareListing(
     return;
   }
   report.listingWhole(null, listed);
+}
+
+/**
+ * One warning per category that read fewer rows than it printed (plan 0251).
+ *
+ * The run still ends `COMPLETED`, and these are what say it is partial. Why a
+ * category comes back short is plan 0253's; this only names it, with both
+ * numbers. A category that printed no count and gave no row is a category
+ * whose first page never answered, which is a part not read at all rather
+ * than a short one. One that printed no count and gave rows answered without
+ * the count, and is short: what it read is named, against nothing.
+ * An aborted walk writes none: it does not end `COMPLETED`, and every
+ * category after the abort would read as short.
+ */
+function warnShortCategories(context: RunContext, walk: Walk): void {
+  if (context.signal.aborted) {
+    return;
+  }
+  for (const category of walk.categories) {
+    if (category.printedCount === null && category.rowsRead === 0) {
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_UNREAD,
+          category.name,
+          `Category ${category.code} ${category.name} printed no count: its ` +
+            `first page did not answer, and 0 row(s) were read.`
+        )
+      );
+    } else if (category.printedCount === null) {
+      // The first page answered and printed no count, so there is nothing to
+      // read the rows against: a part read, not a part never reached.
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_SHORT,
+          category.name,
+          `Category ${category.code} ${category.name}: ` +
+            `${category.rowsRead} row(s) read, no count printed.`
+        )
+      );
+    } else if (category.rowsRead < category.printedCount) {
+      context.warn(
+        listingWarning(
+          HarvestWarningCode.LISTING_SHORT,
+          category.name,
+          `Category ${category.code} ${category.name}: ${category.rowsRead} ` +
+            `of ${category.printedCount} row(s) read.`
+        )
+      );
+    }
+  }
 }
 
 /**
