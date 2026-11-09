@@ -56,7 +56,6 @@ function OptionalLineUnit(description: string): PropertyDecorator {
   return (target, key) => {
     ApiPropertyOptional({
       enum: LINE_UNITS,
-      enumName: 'LineUnit',
       description,
     })(target, key);
     IsOptional()(target, key);
@@ -69,7 +68,6 @@ export function RequiredLineUnit(): PropertyDecorator {
   return (target, key) => {
     ApiProperty({
       enum: LINE_UNITS,
-      enumName: 'LineUnit',
       description: LINE_UNIT_DOCS.required,
     })(target, key);
     IsIn([...LINE_UNITS])(target, key);

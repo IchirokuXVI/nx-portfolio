@@ -8205,6 +8205,16 @@
               }
             }
           },
+          "422": {
+            "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -8302,6 +8312,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8521,7 +8541,17 @@
             }
           },
           "409": {
-            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
+            "description": "`stale_quantity` — Somebody else changed this while you were looking at it. It is {current} now.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.\n\n`line_unit_differs` — These two lines count in different units, so they cannot be merged.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8710,6 +8740,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -8920,6 +8960,16 @@
           },
           "404": {
             "description": "`not_found` — The requested resource was not found.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -10720,7 +10770,7 @@
             }
           },
           "409": {
-            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`basket_shop_locked` — This basket was started at a shop, and that shop cannot be changed.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11056,7 +11106,7 @@
             }
           },
           "409": {
-            "description": "`basket_finished` — This basket is finished, so it cannot be changed.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_unit_mismatch` — This line counts in another unit now. Look at it again and change the amount there.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -11174,7 +11224,7 @@
             }
           },
           "409": {
-            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.",
+            "description": "`basket_finished` — This basket is finished, so it cannot be changed.\n\n`line_merge_required` — This list already has a line called \"{content}\". Confirm to merge the two lines into one.\n\n`line_merge_needs_approval` — That name belongs to an approved line. Only somebody who can approve lines can merge a pending line into it.\n\n`line_merge_too_many_products` — Together these two lines would hold more than {max} products, so they cannot be merged.\n\n`line_unit_differs` — These two lines count in different units, so they cannot be merged.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31159,6 +31209,15 @@
             "minimum": 0,
             "maximum": 100000
           },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "Change what `quantity` counts: UNIT, GRAM or MILLILITER, in base units (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone."
+          },
           "itemIds": {
             "maxItems": 500,
             "description": "Replace the line’s product set; an empty array clears it back to free text. The real bound is max(100, what the line currently holds) and is applied in core, which is the only layer that can see the second half of it.",
@@ -31354,6 +31413,15 @@
             "minimum": 0,
             "maximum": 100000
           },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit, and a free text line counts pieces."
+          },
           "itemIds": {
             "maxItems": 100,
             "description": "The catalog products this line stands for (plan 0048, section 1.1). Picking a group in the composer sends that group’s members here. Absent or empty is a free text line, which stays first class.",
@@ -31402,6 +31470,15 @@
             "type": "number",
             "minimum": 0,
             "maximum": 100000
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit, and a free text line counts pieces."
           },
           "itemIds": {
             "maxItems": 100,
@@ -31465,6 +31542,15 @@
             "minimum": 0,
             "maximum": 100000
           },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "Change what `quantity` counts (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, and so does an edit of the products that leaves the line with products that do not offer its unit: name the new unit and quantity in the same request."
+          },
           "from": {
             "type": "number",
             "minimum": 0,
@@ -31519,10 +31605,20 @@
             "minimum": -100000,
             "maximum": 100000,
             "description": "How many to add, or a negative number to take off. Never zero. The resulting quantity has to stay within the line quantity bounds."
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
           }
         },
         "required": [
-          "delta"
+          "delta",
+          "unit"
         ]
       },
       "SetApprovalDto": {
@@ -31557,6 +31653,15 @@
             "maximum": 100000,
             "description": "How many were bought. Defaults to one, and may exceed what the line asks for: the extra unit is real and belongs in the consumption history. Not allowed when the shop did not have it."
           },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
           "itemId": {
             "type": "string",
             "format": "uuid",
@@ -31575,7 +31680,8 @@
           }
         },
         "required": [
-          "outcome"
+          "outcome",
+          "unit"
         ]
       },
       "AddCommentDto": {
@@ -31723,6 +31829,15 @@
             "maximum": 100000,
             "description": "Units bought. Absent means everything the row still asks for. Ignored for NOT_AVAILABLE, which is an outcome rather than a quantity. It is not capped at what the row asks for: buying three of a row that says two records three."
           },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
           "from": {
             "type": "number",
             "minimum": 0,
@@ -31756,6 +31871,7 @@
         "required": [
           "lineIds",
           "outcome",
+          "unit",
           "from"
         ]
       },
@@ -31842,6 +31958,15 @@
             "maximum": 100000,
             "description": "What that list asks for from now on. Zero is allowed."
           },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again."
+          },
           "from": {
             "type": "number",
             "minimum": 0,
@@ -31851,6 +31976,7 @@
         "required": [
           "lineId",
           "quantity",
+          "unit",
           "from"
         ]
       },
@@ -34859,6 +34985,9 @@
           "content": {
             "type": "string"
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
           "left": {
             "type": "integer",
             "minimum": 0
@@ -34881,6 +35010,7 @@
         "required": [
           "rowKey",
           "content",
+          "unit",
           "left",
           "bought",
           "asked",
@@ -34911,6 +35041,9 @@
           "quantity": {
             "type": "integer",
             "minimum": 0
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
           },
           "pricePaidCents": {
             "type": [
@@ -34966,6 +35099,7 @@
           "itemId",
           "outcome",
           "quantity",
+          "unit",
           "pricePaidCents",
           "pricePaidCurrency",
           "priceScopeId",
@@ -35145,6 +35279,9 @@
           "quantity": {
             "type": "integer"
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
           "approvalStatus": {
             "$ref": "#/components/schemas/enums.LineApprovalStatus"
           },
@@ -35167,6 +35304,7 @@
           "listName",
           "content",
           "quantity",
+          "unit",
           "approvalStatus",
           "createdByUserId",
           "createdAt",
@@ -38124,6 +38262,9 @@
               "null"
             ]
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
           "left": {
             "type": "integer",
             "minimum": 0
@@ -38205,6 +38346,7 @@
           "rowKey",
           "content",
           "productId",
+          "unit",
           "left",
           "bought",
           "asked",
@@ -43014,6 +43156,14 @@
           "STAPLE"
         ]
       },
+      "enums.LineUnit": {
+        "type": "string",
+        "enum": [
+          "UNIT",
+          "GRAM",
+          "MILLILITER"
+        ]
+      },
       "enums.ListPermission": {
         "type": "string",
         "enum": [
@@ -47307,6 +47457,12 @@
             "type": "integer",
             "minimum": 0
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "estimated": {
+            "type": "boolean"
+          },
           "settledByUserId": {
             "type": "string",
             "minLength": 1
@@ -47371,6 +47527,8 @@
           "itemId",
           "outcome",
           "quantity",
+          "unit",
+          "estimated",
           "settledByUserId",
           "settledByParticipantId",
           "settledAt",
@@ -47450,6 +47608,12 @@
             "type": "integer",
             "minimum": 0
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "estimated": {
+            "type": "boolean"
+          },
           "settledByUserId": {
             "type": "string",
             "minLength": 1
@@ -47504,6 +47668,8 @@
           "itemId",
           "outcome",
           "quantity",
+          "unit",
+          "estimated",
           "settledByUserId",
           "settledByParticipantId",
           "settledAt",
@@ -47596,6 +47762,9 @@
           },
           "quantity": {
             "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
           },
           "itemIds": {
             "type": "array",
@@ -47701,6 +47870,7 @@
           "listId",
           "content",
           "quantity",
+          "unit",
           "itemIds",
           "itemSetHash",
           "productGroupId",
@@ -48100,6 +48270,9 @@
           "quantity": {
             "type": "integer"
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
           "itemIds": {
             "type": "array",
             "items": {
@@ -48208,6 +48381,7 @@
           "listId",
           "content",
           "quantity",
+          "unit",
           "itemIds",
           "itemSetHash",
           "productGroupId",
@@ -48648,6 +48822,9 @@
               "line_merge_needs_approval",
               "line_merge_too_many_products",
               "line_add_needs_choice",
+              "line_unit_mismatch",
+              "line_unit_differs",
+              "line_unit_not_offered",
               "brand_label_empty",
               "brand_key_taken",
               "brand_link_to_self",
@@ -49058,6 +49235,27 @@
             "deprecated": true,
             "description": "The same value as `anyBoughtLineCount`. Read that."
           },
+          "bought": {
+            "type": "object",
+            "properties": {
+              "UNIT": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "GRAM": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "MILLILITER": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "estimated": {
+            "type": "boolean"
+          },
           "spent": {
             "anyOf": [
               {
@@ -49084,6 +49282,8 @@
           "anyBoughtLineCount",
           "lineCount",
           "boughtLineCount",
+          "bought",
+          "estimated",
           "spent",
           "unpricedCount"
         ],
@@ -49141,6 +49341,12 @@
           "quantity": {
             "type": "integer",
             "minimum": 0
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "estimated": {
+            "type": "boolean"
           },
           "pricePaid": {
             "anyOf": [
@@ -49205,6 +49411,8 @@
           "itemSnapshot",
           "outcome",
           "quantity",
+          "unit",
+          "estimated",
           "pricePaid",
           "priceScopeId",
           "supermarketLocationId",

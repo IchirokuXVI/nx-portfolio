@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../../audit/core-audit.service';
 import { fakeBasketAnnouncer } from '../../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../../baskets/line-claims.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -27,7 +28,6 @@ import {
   Zone,
   ZoneMembership,
 } from '../../entities';
-import { fakeLineClaims } from '../../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../../zones/zone-authz.service';
 import { LineMergeService } from '../line-merge.service';
 import { LineService } from '../line.service';
@@ -289,6 +289,7 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         delta: -1,
+        unit: 'UNIT',
       });
 
       const [written] = await changesOf(listId);
@@ -346,6 +347,7 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         delta: 1,
+        unit: 'UNIT',
         via: { participantId, basketId, userId: null },
       });
 

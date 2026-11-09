@@ -983,12 +983,13 @@ describe('the list line descriptor', () => {
     }
   });
 
-  it('changes what a line says and how many, and nothing else', () => {
+  it('changes what a line says, how many and in what unit, and nothing else', () => {
+    // The unit rides beside the quantity (backend plan 0246, section 6).
     const editable = LIST_LINES.fields
       .filter((field) => field.editable !== false)
       .map((field) => field.name);
 
-    expect(editable).toEqual(['content', 'quantity']);
+    expect(editable).toEqual(['content', 'quantity', 'unit']);
   });
 
   it('addresses a row by the pair of list and line', () => {
@@ -1208,7 +1209,10 @@ describe('the record pages of a list, a line and a shopping list', () => {
 
   it('draws a line as one section, with no field left over', () => {
     expect(drawn(LIST_LINES, 'read')).toEqual([
-      ['people.lines.section.line', ['content', 'quantity', 'approvalStatus']],
+      [
+        'people.lines.section.line',
+        ['content', 'quantity', 'unit', 'approvalStatus'],
+      ],
     ]);
   });
 

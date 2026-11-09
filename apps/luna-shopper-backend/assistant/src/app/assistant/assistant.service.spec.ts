@@ -125,9 +125,10 @@ class RecordingApi {
   async addLineQuantity(
     caller: ApiCaller,
     lineId: string,
-    delta: number
+    delta: number,
+    unit: string
   ): Promise<LineView> {
-    this.record('addLineQuantity', caller, { lineId, delta });
+    this.record('addLineQuantity', caller, { lineId, delta, unit });
     this.throwIfArmed();
     // The server's answer, which is the whole point of the route: the count the
     // bot reports is the one the row holds, not one it worked out (plan 0040,
@@ -162,9 +163,10 @@ class RecordingApi {
     caller: ApiCaller,
     lineId: string,
     outcome: SettlementOutcome,
+    unit: string,
     quantity?: number
   ): Promise<LineSettlementResult> {
-    this.record('settleLine', caller, { lineId, outcome, quantity });
+    this.record('settleLine', caller, { lineId, outcome, unit, quantity });
     this.throwIfArmed();
     const existing = this.findLine(lineId);
     const wanted = existing?.quantity ?? 1;
@@ -923,6 +925,54 @@ describe('AssistantService', () => {
       });
     });
 
+    it('sends a weight in grams with its unit (plan 0246, section 5)', async () => {
+      const api = new RecordingApi();
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 300, unit: 'GRAM' }],
+        }),
+        FakeModelProvider.says('Añadido.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade 300 gramos de queso'));
+
+      expect(api.of('addLines')[0].detail['items']).toEqual([
+        { content: 'queso', quantity: 300, unit: 'GRAM' },
+      ]);
+    });
+
+    it('reports a delta on a line of another unit rather than retrying (plan 0246, section 5)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        { ...line('line-existing', 'list-flat', 'queso', 500), unit: 'GRAM' },
+      ]);
+      api.failNextWriteWith = new GatewayApiError(
+        409,
+        'This line counts in another unit now.',
+        'line_unit_mismatch'
+      );
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 2, mode: 'add' }],
+        }),
+        FakeModelProvider.says('Esa línea cuenta en gramos.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade dos quesos más'));
+
+      // One try, in pieces as the person said it, and no second one in grams.
+      expect(api.of('addLineQuantity')).toHaveLength(1);
+      expect(api.of('addLineQuantity')[0].detail['unit']).toBe('UNIT');
+      const toolTurn = provider.requests[1].turns.at(-1);
+      expect(JSON.stringify(toolTurn?.toolResults)).toContain(
+        'that line counts in grams; say the amount in grams or change the line'
+      );
+    });
+
     it("mode 'add' calls the quantity route and never reads then writes", async () => {
       const api = new RecordingApi();
       api.linesByList.set('list-flat', [
@@ -942,6 +992,8 @@ describe('AssistantService', () => {
       expect(api.of('addLineQuantity')[0].detail).toEqual({
         lineId: 'line-existing',
         delta: 2,
+        // Pieces, because nobody said a weight (plan 0246 M8).
+        unit: 'UNIT',
       });
       // Never the read-compute-write it replaces: no absolute quantity is sent,
       // so there is nothing between a read and a write for a second writer to

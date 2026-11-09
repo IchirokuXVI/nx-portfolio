@@ -744,6 +744,7 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         delta: 1,
+        unit: 'UNIT',
       });
 
       expect(await row(milk.id)).toMatchObject({ named: false, quantity: 4 });

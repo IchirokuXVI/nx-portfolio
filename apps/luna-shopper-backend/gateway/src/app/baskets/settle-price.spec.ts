@@ -237,6 +237,7 @@ describe('what a settle with no shop records (plan 0202, section 2)', () => {
         // minor unit.
         pricePaidCents: 89,
         pricePaidCurrency: 'EUR',
+        estimated: false,
       },
       itemSnapshot: SNAPSHOT,
     });
@@ -356,6 +357,7 @@ describe('what a settle at a shop records (plan 0202, section 2)', () => {
         supermarketId: CHAIN,
         pricePaidCents: 110,
         pricePaidCurrency: 'EUR',
+        estimated: false,
       },
       itemSnapshot: SNAPSHOT,
     });
@@ -532,6 +534,7 @@ describe('what a settle of a kilo piece records (plan 0244, section 4)', () => {
         supermarketId: null,
         pricePaidCents: 2094,
         pricePaidCurrency: 'EUR',
+        estimated: true,
       },
       itemSnapshot: CHEESE_SNAPSHOT,
     });
@@ -561,7 +564,12 @@ describe('what a settle of a kilo piece records (plan 0244, section 4)', () => {
       unscoped: false,
     });
     expect(rewrite.prices).toEqual([
-      { priceScopeId: SCOPE, pricePaidCents: 2094, pricePaidCurrency: 'EUR' },
+      {
+        priceScopeId: SCOPE,
+        pricePaidCents: 2094,
+        pricePaidCurrency: 'EUR',
+        estimated: true,
+      },
     ]);
     expect(rewrite.itemSnapshot).toEqual(CHEESE_SNAPSHOT);
   });
@@ -595,6 +603,121 @@ describe('what a settle of a kilo piece records (plan 0244, section 4)', () => {
     expect((await salad.service.choose(input())).paid?.pricePaidCents).toBe(
       650
     );
+  });
+});
+
+describe('what a settle records in the unit of its line (plan 0246 M7, section 4.4)', () => {
+  const sized = (over: Partial<ItemView>, offers: ItemOfferView[]): ItemView =>
+    ({
+      ...product(offers),
+      unitSize: null,
+      packCount: null,
+      approxWeight: null,
+      ...over,
+    }) as ItemView;
+
+  it('records a GRAM settle of a product sold by the kilo at the price of a kilo, as an estimate', async () => {
+    // 750 g of loose cheese at 9,95 the kilo: 995 cents, the price of one
+    // kilo, and the spend of 746 is what the purchases read works out.
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.KILOGRAM }, [offer(SCOPE, 9.95)]),
+      ],
+    });
+
+    expect((await w.service.choose(input({ unit: 'GRAM' }))).paid).toEqual({
+      priceScopeId: SCOPE,
+      supermarketLocationId: null,
+      supermarketId: null,
+      pricePaidCents: 995,
+      pricePaidCurrency: 'EUR',
+      estimated: true,
+    });
+  });
+
+  it('records a UNIT settle of a kilo piece at its piece price, as before, and as an estimate', async () => {
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.KILOGRAM, approxWeight: 1560 }, [
+          offer(SCOPE, 13.42, { piecePrice: 20.94 }),
+        ]),
+      ],
+    });
+
+    expect(
+      (await w.service.choose(input({ unit: 'UNIT' }))).paid
+    ).toMatchObject({ pricePaidCents: 2094, estimated: true });
+  });
+
+  it('records a GRAM settle of a kilo piece at the price of its kilo', async () => {
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.KILOGRAM, approxWeight: 1560 }, [
+          offer(SCOPE, 13.42, { piecePrice: 20.94 }),
+        ]),
+      ],
+    });
+
+    expect(
+      (await w.service.choose(input({ unit: 'GRAM' }))).paid
+    ).toMatchObject({ pricePaidCents: 1342, estimated: true });
+  });
+
+  it('records a GRAM settle of a pack sized in grams at its price over its size, exactly', async () => {
+    // 2,00 for 500 g is 4,00 the kilo, and a printed size is no estimate.
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.GRAM, unitSize: 500 }, [
+          offer(SCOPE, 2),
+        ]),
+      ],
+    });
+
+    expect(
+      (await w.service.choose(input({ unit: 'GRAM' }))).paid
+    ).toMatchObject({ pricePaidCents: 400, estimated: false });
+  });
+
+  it('records a UNIT settle of a pack as exact', async () => {
+    const w = build({ items: [product([offer(SCOPE, 0.95)])] });
+
+    expect(
+      (await w.service.choose(input({ unit: 'UNIT' }))).paid
+    ).toMatchObject({ pricePaidCents: 95, estimated: false });
+  });
+
+  it('records no price for a product that cannot serve the unit, and still the name', async () => {
+    // Six cartons have no weight the catalog knows.
+    const w = build({ items: [product([offer(SCOPE, 0.95)])] });
+
+    const chosen = await w.service.choose(input({ unit: 'GRAM' }));
+
+    expect(chosen.paid).toBeNull();
+    expect(chosen.itemSnapshot).not.toBeNull();
+  });
+
+  it('prices a rewritten buy in the unit of the row', async () => {
+    const w = build({
+      items: [
+        sized({ defaultUnit: UnitOfMeasure.KILOGRAM }, [offer(SCOPE, 9.95)]),
+      ],
+    });
+
+    const rewrite = await w.service.chooseForRewrite({
+      ...input({ unit: 'GRAM' }),
+      itemId: ITEM,
+      priceScopeIds: [SCOPE],
+      unscoped: false,
+    });
+
+    expect(rewrite.prices).toEqual([
+      {
+        priceScopeId: SCOPE,
+        pricePaidCents: 995,
+        pricePaidCurrency: 'EUR',
+        estimated: true,
+      },
+    ]);
   });
 });
 
@@ -760,12 +883,18 @@ describe('what a change of product records (plan 0202, section 3)', () => {
       )
     ).toEqual({
       prices: [
-        { priceScopeId: SCOPE, pricePaidCents: 95, pricePaidCurrency: 'EUR' },
+        {
+          priceScopeId: SCOPE,
+          pricePaidCents: 95,
+          pricePaidCurrency: 'EUR',
+          estimated: false,
+        },
         {
           priceScopeId: FAR_SCOPE,
           // Rounded to the cent, as a settle is.
           pricePaidCents: 111,
           pricePaidCurrency: 'EUR',
+          estimated: false,
         },
       ],
       // Every buy recorded a scope, so nothing is chosen the way a settle
@@ -812,6 +941,7 @@ describe('what a change of product records (plan 0202, section 3)', () => {
         priceScopeId: FAR_SCOPE,
         pricePaidCents: 110,
         pricePaidCurrency: 'EUR',
+        estimated: false,
       },
     ]);
   });
@@ -832,6 +962,7 @@ describe('what a change of product records (plan 0202, section 3)', () => {
             priceScopeId: FAR_SCOPE,
             pricePaidCents: 110,
             pricePaidCurrency: 'EUR',
+            estimated: false,
           },
         ],
         paid: {
@@ -840,6 +971,7 @@ describe('what a change of product records (plan 0202, section 3)', () => {
           supermarketId: null,
           pricePaidCents: 89,
           pricePaidCurrency: 'EUR',
+          estimated: false,
         },
         itemSnapshot: SNAPSHOT,
       });
@@ -872,6 +1004,7 @@ describe('what a change of product records (plan 0202, section 3)', () => {
         supermarketId: CHAIN,
         pricePaidCents: 110,
         pricePaidCurrency: 'EUR',
+        estimated: false,
       });
       expect(w.describe).not.toHaveBeenCalled();
     });
@@ -890,6 +1023,7 @@ describe('what a change of product records (plan 0202, section 3)', () => {
           supermarketId: null,
           pricePaidCents: 95,
           pricePaidCurrency: 'EUR',
+          estimated: false,
         },
         itemSnapshot: SNAPSHOT,
       });

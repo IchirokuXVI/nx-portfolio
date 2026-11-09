@@ -1018,7 +1018,15 @@ describe('contract schemas', () => {
       const choices = {
         basketId: 'b-1',
         participantId: 'p-1',
-        lines: [{ lineId: 'l-1', itemIds: ['i-1', 'i-2'] }],
+        // The unit and the amount the pick orders by (plan 0246, section 4.3).
+        lines: [
+          {
+            lineId: 'l-1',
+            itemIds: ['i-1', 'i-2'],
+            unit: 'GRAM',
+            quantity: 500,
+          },
+        ],
       };
       for (const pattern of [
         'basket.priceChoices',

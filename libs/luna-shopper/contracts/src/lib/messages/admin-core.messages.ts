@@ -469,6 +469,8 @@ export interface AdminListLineView {
   listName: string;
   content: string;
   quantity: number;
+  /** What {@link quantity} counts (plan 0246, section 6). */
+  unit: LineUnit;
   approvalStatus: LineApprovalStatus;
   createdByUserId: string;
   /** ISO 8601 UTC. */
@@ -625,6 +627,8 @@ export interface AdminBasketRowView {
   /** The anchor's list line id, as `BasketRowView.rowKey` is. */
   rowKey: string;
   content: string;
+  /** What the three numbers count (plan 0246 M6): a row is one unit. */
+  unit: LineUnit;
   left: number;
   bought: number;
   /** `bought + left`, computed, never stored. */
@@ -650,9 +654,14 @@ export interface AdminBasketSettlementView {
   /** The exact product bought. Null for free text, or when nobody said which. */
   itemId: string | null;
   outcome: SettlementOutcome;
-  /** Units bought, and `0` for `NOT_AVAILABLE`. */
+  /** What was bought in {@link unit}, and `0` for `NOT_AVAILABLE`. */
   quantity: number;
-  /** What one unit cost, in the minor unit of `pricePaidCurrency`. Null when nobody knew. */
+  /** What `quantity` counts (plan 0246, section 3.5). */
+  unit: LineUnit;
+  /**
+   * What one of {@link unit} cost, in the minor unit of `pricePaidCurrency`:
+   * a piece or pack, or a kilo or litre (plan 0246 M7). Null when nobody knew.
+   */
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   /** The price scope the shopper was looking at. A catalog id. */

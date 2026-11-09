@@ -216,7 +216,6 @@ export class UpdateAdminLineDto {
 
   @ApiPropertyOptional({
     enum: LINE_UNITS,
-    enumName: 'LineUnit',
     description:
       'Change what `quantity` counts: UNIT, GRAM or MILLILITER, in base units (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone.',
   })

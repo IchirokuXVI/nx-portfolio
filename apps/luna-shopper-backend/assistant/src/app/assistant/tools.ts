@@ -320,6 +320,7 @@ const upsertLines: AssistantTool = {
     // grouped: the new ones go in one request and the rest one at a time.
     const results: (ItemResult | undefined)[] = new Array(planned.length);
     let firstFailure: unknown;
+    let firstFailureUnit: LineUnit | undefined;
     let wrote = false;
 
     const fresh = planned.filter((entry) => !entry.existing);
@@ -412,7 +413,11 @@ const upsertLines: AssistantTool = {
           line
         );
       } catch (error) {
-        firstFailure ??= error;
+        if (firstFailure === undefined) {
+          firstFailure = error;
+          // What the refused line counts in, so the sentence can name it.
+          firstFailureUnit = existing.unit;
+        }
         results[entry.index] = itemRefused(product, error, existing.unit);
       }
     }
@@ -426,7 +431,7 @@ const upsertLines: AssistantTool = {
       // Nothing was written and something was refused, so the call refused: the
       // API's own localized sentence is the answer, not a per item envelope
       // describing a partial success that did not happen.
-      return refused(firstFailure, 'add that to the list');
+      return refused(firstFailure, 'add that to the list', firstFailureUnit);
     }
 
     return {
@@ -960,6 +965,7 @@ const settleLines: AssistantTool = {
     const results: SettleResult[] = [];
     const touched = new Set<string>();
     let firstFailure: unknown;
+    let firstFailureUnit: LineUnit | undefined;
 
     for (const known of resolved) {
       // The unit the person said, or the line's when they said none (plan
@@ -994,7 +1000,10 @@ const settleLines: AssistantTool = {
           list: known.list.listName,
         });
       } catch (error) {
-        firstFailure ??= error;
+        if (firstFailure === undefined) {
+          firstFailure = error;
+          firstFailureUnit = lineUnit;
+        }
         const { reason } = refused(error, 'that', lineUnit);
         results.push({ product: known.line.content, refused: true, reason });
       }
@@ -1008,7 +1017,7 @@ const settleLines: AssistantTool = {
       // Nothing was written and something was refused, so the call refused: the
       // API's own localized sentence is the answer rather than an envelope
       // describing a partial success that did not happen.
-      return refused(firstFailure, 'change that');
+      return refused(firstFailure, 'change that', firstFailureUnit);
     }
 
     if (touched.size > 0) {

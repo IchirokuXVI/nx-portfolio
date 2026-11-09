@@ -1,3 +1,4 @@
+import { UnitOfMeasure } from '@portfolio/luna-shopper/contracts';
 import {
   BASKET_RULE_ACT_SKIPPED,
   BASKET_RULE_STATES,
@@ -492,60 +493,152 @@ describe('needsPriceChoice, the lines the gateway prices', () => {
   });
 });
 
-describe('cheapestOf, the one comparison of prices (plan 0201, section 1)', () => {
-  const price = (
+describe('cheapestOf, the cost of the amount of the line (plan 0246, section 4.3; W3)', () => {
+  // The four kinds of product of plan 0244, with their figures in euros.
+  const pack = (
     itemId: string,
-    value: number | null,
-    unitPrice: number | null = null
-  ): BasketRulePrice => ({ itemId, price: value, unitPrice });
+    price: number | null,
+    size: { unitSize?: number | null; defaultUnit?: UnitOfMeasure } = {}
+  ): BasketRulePrice => ({
+    itemId,
+    kind: 'PACK',
+    defaultUnit: size.defaultUnit ?? UnitOfMeasure.UNIT,
+    unitSize: size.unitSize ?? null,
+    approxWeight: null,
+    price,
+    piecePrice: null,
+  });
+  const loose = (itemId: string, perKilo: number | null): BasketRulePrice => ({
+    itemId,
+    kind: 'BY_THE_KILO',
+    defaultUnit: UnitOfMeasure.KILOGRAM,
+    unitSize: null,
+    approxWeight: null,
+    price: perKilo,
+    piecePrice: null,
+  });
+  const kiloPiece = (
+    itemId: string,
+    weight: number,
+    perKilo: number,
+    piecePrice: number | null
+  ): BasketRulePrice => ({
+    itemId,
+    kind: 'KILO_PIECE',
+    defaultUnit: UnitOfMeasure.KILOGRAM,
+    unitSize: null,
+    approxWeight: weight,
+    price: perKilo,
+    piecePrice,
+  });
+  // A counted product with a weight: a piece priced as one (plan 0244).
+  const pieceAsOne = (
+    itemId: string,
+    weight: number,
+    price: number
+  ): BasketRulePrice => ({
+    itemId,
+    kind: 'PACK',
+    defaultUnit: UnitOfMeasure.UNIT,
+    unitSize: null,
+    approxWeight: weight,
+    price,
+    piecePrice: null,
+  });
+  const grams = (quantity: number) => ({ unit: 'GRAM' as const, quantity });
+  const pieces = (quantity: number) => ({ unit: 'UNIT' as const, quantity });
 
-  it('compares the price for each kilo or litre before the price', () => {
-    // The big carton costs more and is cheaper for each litre.
-    expect(cheapestOf([price('small', 1.2, 1.2), price('big', 2, 1)])).toBe(
-      'big'
+  it('drops a loose product from a line that counts pieces', () => {
+    // A kilo of loose bananas cannot be one of two pieces, however cheap.
+    expect(
+      cheapestOf([loose('loose', 0.5), pack('bunch', 2.78)], pieces(2))
+    ).toBe('bunch');
+    expect(cheapestOf([loose('loose', 0.5)], pieces(2))).toBeNull();
+  });
+
+  it('drops a counted pack from a line that counts grams', () => {
+    // Six eggs weigh nothing the catalog knows, so they cannot serve 500 g.
+    expect(
+      cheapestOf([pack('eggs', 1.1), loose('loose', 9.95)], grams(500))
+    ).toBe('loose');
+    expect(cheapestOf([pack('eggs', 1.1)], grams(500))).toBeNull();
+  });
+
+  it('orders loose at 1,99 the kilo before two 700 g pieces at 1,39 on a 1000 g line', () => {
+    const banana = kiloPiece('bunch', 700, 1.99, 1.39);
+    // 1,99 for the kilo against 2,78 for the two pieces a kilo needs.
+    expect(cheapestOf([banana, loose('loose', 1.99)], grams(1000))).toBe(
+      'loose'
     );
   });
 
-  it('compares the price when the unit prices are equal', () => {
-    expect(cheapestOf([price('a', 3, 2), price('b', 2.5, 2)])).toBe('b');
+  it('still orders the loose product first on a 500 g line', () => {
+    // 1,00 for half a kilo against 1,39 for the one piece 500 g needs.
+    const banana = kiloPiece('bunch', 700, 1.99, 1.39);
+    expect(cheapestOf([banana, loose('loose', 1.99)], grams(500))).toBe(
+      'loose'
+    );
   });
 
-  it('compares the price when no product has a unit price', () => {
-    expect(cheapestOf([price('a', 3), price('b', 2.5), price('c', 4)])).toBe(
-      'b'
+  it('orders a 1,8 kg piece priced as one at 2,50 before loose at 1,49 the kilo on an 1800 g line', () => {
+    // 2,50 for the whole melon against 2,68 for 1,8 kg loose.
+    expect(
+      cheapestOf(
+        [loose('loose', 1.49), pieceAsOne('melon', 1800, 2.5)],
+        grams(1800)
+      )
+    ).toBe('melon');
+  });
+
+  it('orders a pack sized in grams by the whole packs the amount needs', () => {
+    // 750 g of 500 g packs is two packs: 4,00 against 3,75 loose.
+    expect(
+      cheapestOf(
+        [
+          pack('bag', 2, { unitSize: 500, defaultUnit: UnitOfMeasure.GRAM }),
+          loose('loose', 5),
+        ],
+        grams(750)
+      )
+    ).toBe('loose');
+  });
+
+  it('orders by the price of one when the line asks for nothing', () => {
+    // At zero, one kilo of loose at 1,99 against one piece at 1,39.
+    const banana = kiloPiece('bunch', 700, 1.99, 1.39);
+    expect(cheapestOf([loose('loose', 1.99), banana], grams(0))).toBe('bunch');
+    // A product that cannot serve the unit is still left out at zero.
+    expect(cheapestOf([loose('loose', 0.1), pack('bunch', 2)], pieces(0))).toBe(
+      'bunch'
     );
+  });
+
+  it('no longer reads unitPrice', () => {
+    // A unit price that says the other product is cheaper per kilo changes
+    // nothing: the cost of two pieces decides.
+    const cheapPerKilo = { ...pack('big', 3), unitPrice: 0.5 };
+    const dearPerKilo = { ...pack('small', 2), unitPrice: 9 };
+    expect(cheapestOf([cheapPerKilo, dearPerKilo], pieces(2))).toBe('small');
   });
 
   it('keeps the order of the input on a tie', () => {
-    expect(cheapestOf([price('a', 2, 1), price('b', 2, 1)])).toBe('a');
-    expect(cheapestOf([price('b', 2, 1), price('a', 2, 1)])).toBe('b');
-    expect(cheapestOf([price('a', 2), price('b', 2)])).toBe('a');
+    expect(cheapestOf([pack('a', 2), pack('b', 2)], pieces(1))).toBe('a');
+    expect(cheapestOf([pack('b', 2), pack('a', 2)], pieces(1))).toBe('b');
   });
 
-  it('puts a product with no unit price after one that has it', () => {
-    // Also when the product with no unit price costs less.
-    expect(cheapestOf([price('plain', 1), price('measured', 5, 9)])).toBe(
-      'measured'
-    );
-    expect(cheapestOf([price('measured', 5, 9), price('plain', 1)])).toBe(
-      'measured'
-    );
+  it('leaves out a product with no price, and a kilo piece with no piece price', () => {
+    // With a shop, only the prices of that shop count.
+    expect(cheapestOf([pack('a', null), pack('b', 9)], pieces(1))).toBe('b');
+    // A missing figure is a missing amount, never zero (plan 0246, section 2).
+    expect(
+      cheapestOf([kiloPiece('piece', 700, 1, null), pack('b', 9)], pieces(1))
+    ).toBe('b');
   });
 
-  it('leaves out a product with no price', () => {
-    // With a shop, only the prices of that shop count, so a product the shop
-    // does not sell arrives here with no price and is not a candidate.
-    expect(cheapestOf([price('a', null), price('b', 9, 9)])).toBe('b');
-    // A unit price with no price is still no price.
-    expect(cheapestOf([price('a', null, 0.1), price('b', 9, 9)])).toBe('b');
-  });
-
-  it('answers null when no product has a price', () => {
-    expect(cheapestOf([price('a', null), price('b', null)])).toBeNull();
-    expect(cheapestOf([])).toBeNull();
-  });
-
-  it('answers the only product that has a price', () => {
-    expect(cheapestOf([price('a', null), price('b', 4)])).toBe('b');
+  it('answers null when no product can serve the line', () => {
+    expect(
+      cheapestOf([pack('a', null), pack('b', null)], pieces(1))
+    ).toBeNull();
+    expect(cheapestOf([], pieces(1))).toBeNull();
   });
 });
