@@ -130,6 +130,30 @@ const PRODUCTS: Array<{
     lang: 'es',
     why: 'a detergent whose reference_format reads `lv`, a wash (plan 0189)',
   },
+  {
+    file: 'product-pack-of-bottles.json',
+    id: '28113',
+    lang: 'es',
+    why: 'a pack of four bottles whose pack_size is the content of one and total_units the count (plan 0248)',
+  },
+  {
+    file: 'product-pack-size-is-content.json',
+    id: '21698',
+    lang: 'es',
+    why: 'a pack of six cans with no packaging, pack_size the content of one (plan 0248)',
+  },
+  {
+    file: 'product-pack-contradicts-size.json',
+    id: '18382',
+    lang: 'es',
+    why: 'a pack of two whose unit_size disagrees with pack_size times total_units, and whose reference_price agrees with it (plan 0248)',
+  },
+  {
+    file: 'product-single-bottle.json',
+    id: '27342',
+    lang: 'es',
+    why: 'the single two litre bottle the pack of four was proposed as (plan 0248)',
+  },
 ];
 
 /**

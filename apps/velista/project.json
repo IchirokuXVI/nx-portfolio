@@ -11,7 +11,7 @@
       "!{projectRoot}/android/**/*",
       "!{projectRoot}/capacitor.config.ts",
       "!{projectRoot}/assets-src/**/*",
-      "!{projectRoot}/scripts/build-android.mjs",
+      "!{projectRoot}/scripts/*.mjs",
       "sharedGlobals"
     ],
     "production": [
@@ -123,6 +123,14 @@
       },
       "defaultConfiguration": "development"
     },
+    "ota-bundle": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build"],
+      "cache": false,
+      "options": {
+        "command": "node apps/velista/scripts/ota-bundle.mjs"
+      }
+    },
     "serve": {
       "continuous": true,
       "executor": "@nx/angular:dev-server",
@@ -151,10 +159,27 @@
     },
     "test": {
       "executor": "@nx/jest:jest",
+      "dependsOn": ["native-api"],
       "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
       "options": {
         "jestConfig": "apps/velista/jest.config.cts",
         "tsConfig": "apps/velista/tsconfig.spec.json"
+      }
+    },
+    "native-api": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/android/**/*",
+        "{projectRoot}/capacitor.config.ts",
+        "{projectRoot}/native-api.json",
+        "{projectRoot}/scripts/native-api.mjs",
+        "{workspaceRoot}/package-lock.json",
+        "{workspaceRoot}/libs/velista/native/src/lib/native-plugins.ts"
+      ],
+      "outputs": [],
+      "options": {
+        "command": "node apps/velista/scripts/native-api.mjs --check"
       }
     },
     "serve-static": {

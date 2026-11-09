@@ -131,6 +131,11 @@ import {
   type CategoryOnItem,
 } from './category.service';
 import {
+  comparableBlockSql,
+  comparableSortSql,
+  recomputeComparablePrices,
+} from './comparable-price.sql';
+import {
   affectedPriceKeys,
   recomputeEffectivePrices,
 } from './effective-price.service';
@@ -233,15 +238,19 @@ const FIRST_CATEGORY_RANK_SQL = `coalesce((
  * The same test as `cheapest` in the ranked branch: a row of
  * `supermarket_items` at one of the scopes that is `available` and has a till
  * price (plan 0157). The price order takes the lowest `price` of those rows
- * and the unit price order the lowest `unitPrice`. NULL when no row passes,
- * and under `unitPrice` when no row that passes states one.
+ * and the unit price order the lowest `comparablePrice` (plan 0245, section
+ * 4): among the kilo and litre figures when the product has one, else among
+ * its counted figures in a block after them, which {@link comparableSortSql}
+ * folds into one number the cursor carries. NULL when no row passes, and
+ * under `unitPrice` when no row that passes has a figure.
  *
  * One lookup on `uq_supermarket_item_scope` for each product the filters
  * keep. No index serves the sort itself, and plan 0196 adds none.
  */
-function lowestAtScopesSql(column: 'price' | 'unitPrice'): string {
+function lowestAtScopesSql(order: 'price' | 'unitPrice'): string {
+  const value = order === 'price' ? 'sk."price"' : comparableSortSql('sk');
   return `(
-        SELECT min(sk."${column}")
+        SELECT min(${value})
         FROM "supermarket_items" sk
         WHERE sk."itemId" = i."id"
           AND sk."priceScopeId" = ANY(:sortScopeIds::uuid[])
@@ -1190,6 +1199,12 @@ export class ItemService {
           packCount: row.packCount,
         } as Item);
       }
+      // A counted product divides its price by the pack count it now has
+      // (plan 0245, section 3).
+      await recomputeComparablePrices(
+        tx.manager,
+        rows.map((row) => row.id)
+      );
       return { written: rows.length };
     });
   }
@@ -1320,6 +1335,13 @@ export class ItemService {
           } as Item
         );
       }
+      // The weight derives no figure today (plan 0245, decision C4), and the
+      // rows are rewritten anyway, so a later plan that reads it needs no
+      // second call site.
+      await recomputeComparablePrices(
+        tx.manager,
+        rows.map((row) => row.id)
+      );
       return { ...result, written: rows.length };
     });
   }
@@ -1670,9 +1692,10 @@ export class ItemService {
     // answers with null prices.
     //
     // A member with a till price comes before any other key (plan 0157). The
-    // members are different products, so unit price is still how they are
-    // compared, but only among offers somebody can pay: a leaflet row with no
-    // price and a unit price of 2 is not the cheapest beer in the group.
+    // members are different products, so the comparable figure is how they
+    // are compared (plan 0245, section 4), a kilo or litre block before a
+    // counted one, and only among offers somebody can pay: a leaflet row with
+    // no price is not the cheapest beer in the group.
     const offerJoin =
       scopeIds.length === 0
         ? ''
@@ -1681,7 +1704,7 @@ export class ItemService {
         SELECT si."itemId", si."priceScopeId", si."price", si."currency",
                si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
                si."priceSourceKind", si."priceCopiedFromScopeId", si."stale",
-               si."outOfStockAt"
+               si."outOfStockAt", si."comparablePrice", si."comparableBasis"
         FROM "supermarket_items" si
         JOIN "items" mi ON mi."id" = si."itemId"
         WHERE mi."productGroupId" = g."id"
@@ -1689,7 +1712,8 @@ export class ItemService {
           AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
           AND si."available"
         ORDER BY si."price" IS NULL ASC,
-                 si."unitPrice" ASC NULLS LAST,
+                 ${comparableBlockSql('si')} ASC,
+                 si."comparablePrice" ASC NULLS LAST,
                  si."price" ASC NULLS LAST,
                  si."itemId" ASC
         LIMIT 1
@@ -1743,14 +1767,15 @@ export class ItemService {
       ? `(${wholeWordMatchSql(GROUP_SEARCH_TEXT, term.words, p.bind)}) DESC,
                `
       : '';
-    // The offer's unit price only when the offer has a till price, the rule the
+    // The offer's comparable figure in its basis block (plan 0245), only when
+    // the offer has a till price, the rule the
     // items' `cheapest` key follows (plan 0157). The lateral already prefers a
     // priced member, so this is null only for a group none of whose members has
     // a price here, which then ranks with the unpriced ones.
     const priced =
       scopeIds.length === 0
         ? 'NULL::numeric'
-        : 'CASE WHEN o."price" IS NULL THEN NULL ELSE o."unitPrice" END';
+        : `CASE WHEN o."price" IS NULL THEN NULL ELSE ${comparableSortSql('o')} END`;
 
     const rows: RankedGroupRow[] = await this.groups.query(
       `
@@ -1764,7 +1789,9 @@ export class ItemService {
                     NULL::"price_source_kind" AS "offerSourceKind",
                     NULL::uuid AS "offerCopiedFromScopeId",
                     NULL::boolean AS "offerStale",
-                    NULL::timestamptz AS "offerOutOfStockAt"`
+                    NULL::timestamptz AS "offerOutOfStockAt",
+                    NULL::numeric AS "offerComparablePrice",
+                    NULL::"comparable_basis" AS "offerComparableBasis"`
                  : `o."itemId" AS "offerItemId", o."priceScopeId" AS "offerScopeId",
                     o."price" AS "offerPrice", o."currency" AS "offerCurrency",
                     o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
@@ -1772,7 +1799,9 @@ export class ItemService {
                     o."priceSourceKind" AS "offerSourceKind",
                     o."priceCopiedFromScopeId" AS "offerCopiedFromScopeId",
                     o."stale" AS "offerStale",
-                    o."outOfStockAt" AS "offerOutOfStockAt"`
+                    o."outOfStockAt" AS "offerOutOfStockAt",
+                    o."comparablePrice" AS "offerComparablePrice",
+                    o."comparableBasis" AS "offerComparableBasis"`
              },
              round(${relevance}::numeric, 4) AS "relevance"
       FROM "product_groups" g${offerJoin}
@@ -1935,13 +1964,14 @@ export class ItemService {
             SELECT si."priceScopeId", si."price", si."currency",
                    si."unitPrice", si."unitPriceLabel", si."priceObservedAt",
                    si."priceSourceKind", si."priceCopiedFromScopeId", si."stale",
-               si."outOfStockAt"
+                   si."outOfStockAt", si."comparablePrice", si."comparableBasis"
             FROM "supermarket_items" si
             WHERE si."itemId" = i."id"
               AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
               AND si."available"
             ORDER BY si."price" IS NULL ASC,
-                     si."unitPrice" ASC NULLS LAST,
+                     ${comparableBlockSql('si')} ASC,
+                     si."comparablePrice" ASC NULLS LAST,
                      si."price" ASC NULLS LAST,
                      si."priceScopeId" ASC
             LIMIT 1
@@ -1955,7 +1985,9 @@ export class ItemService {
            NULL::"price_source_kind" AS "offerSourceKind",
            NULL::uuid AS "offerCopiedFromScopeId",
            NULL::boolean AS "offerStale",
-           NULL::timestamptz AS "offerOutOfStockAt"`
+           NULL::timestamptz AS "offerOutOfStockAt",
+           NULL::numeric AS "offerComparablePrice",
+           NULL::"comparable_basis" AS "offerComparableBasis"`
         : `o."priceScopeId" AS "offerScopeId",
            o."price" AS "offerPrice", o."currency" AS "offerCurrency",
            o."unitPrice" AS "offerUnitPrice", o."unitPriceLabel" AS "offerUnitPriceLabel",
@@ -1963,12 +1995,15 @@ export class ItemService {
            o."priceSourceKind" AS "offerSourceKind",
            o."priceCopiedFromScopeId" AS "offerCopiedFromScopeId",
            o."stale" AS "offerStale",
-           o."outOfStockAt" AS "offerOutOfStockAt"`;
+           o."outOfStockAt" AS "offerOutOfStockAt",
+           o."comparablePrice" AS "offerComparablePrice",
+           o."comparableBasis" AS "offerComparableBasis"`;
     const rank =
       scopeIds.length === 0
         ? `i."name" ->> 'en' ASC, i."id" ASC`
         : `o."price" IS NULL ASC,
-           o."unitPrice" ASC NULLS LAST,
+           ${comparableBlockSql('o')} ASC,
+           o."comparablePrice" ASC NULLS LAST,
            o."price" ASC NULLS LAST,
            o."priceScopeId" IS NULL ASC,
            CASE WHEN o."priceScopeId" IS NULL THEN i."name" ->> 'en' END ASC,
@@ -2218,7 +2253,8 @@ export class ItemService {
     // since a key every row ties on decides nothing.
     const barcodeKey =
       term.ean === null ? '' : `(${barcode}) DESC NULLS LAST,\n               `;
-    // Unit price is the last ranking key, so it is joined even when the caller
+    // The comparable figure in its basis block (plan 0245) is the last
+    // ranking key, so it is joined even when the caller
     // asked for no prices in the answer: with no scopes there is nothing to join
     // and every row sorts as unpriced, which is the same order.
     //
@@ -2230,7 +2266,7 @@ export class ItemService {
       scopeIds.length === 0
         ? 'NULL::numeric'
         : `(
-            SELECT min(si."unitPrice")
+            SELECT min(${comparableSortSql('si')})
             FROM "supermarket_items" si
             WHERE si."itemId" = i."id"
               AND si."priceScopeId" = ANY(${p.bind(scopeIds)})
@@ -3278,6 +3314,14 @@ export class ItemService {
             );
           }
         }
+        // Plan 0245, section 3: an edit of the size, the unit, the pack count
+        // or the weight leaves every price alone and moves the comparison
+        // pair, so the rows of those products are rewritten in this
+        // transaction.
+        const resized = edits
+          .filter((edit) => sizeMoved(edit.before, edit.row))
+          .map((edit) => edit.row.id);
+        await recomputeComparablePrices(tx.manager, resized);
         return written;
       });
     } catch (error) {
@@ -4266,13 +4310,30 @@ function asEanConflict(error: unknown, message: string): unknown {
 }
 
 /**
+ * Whether an edit moved a field the comparison pair is derived from (plan
+ * 0245, section 3). Numerics are compared as numbers, because a row read back
+ * holds them as text.
+ */
+function sizeMoved(before: Item, after: Item): boolean {
+  const num = (value: number | string | null | undefined) =>
+    value === null || value === undefined ? null : Number(value);
+  return (
+    num(before.unitSize) !== num(after.unitSize) ||
+    before.defaultUnit !== after.defaultUnit ||
+    num(before.packCount) !== num(after.packCount) ||
+    num(before.approxWeight) !== num(after.approxWeight)
+  );
+}
+
+/**
  * The one definition of "the best offer" for one product (plan 0157), applied
  * to a query over `supermarket_items` aliased `si`.
  *
  * **A row with a till price first, before any other key.** A leaflet row can
  * carry a unit price and no price, on purpose (plan 0081): a per kilo tile or
  * a conditional promotion is information, and it is not an offer anybody can
- * pay. Then the price, then the unit price for two rows at one price, then the
+ * pay. Then the price, then the comparable figure (plan 0245) for two rows at
+ * one price, then the
  * scope id, so that two equal rows cannot swap places between the search read
  * and the basket read of the same product.
  */
@@ -4283,19 +4344,21 @@ function orderOffers(
     .orderBy('si."itemId"', 'ASC')
     .addOrderBy('si."price" IS NULL', 'ASC')
     .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
-    .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
+    .addOrderBy('si."comparablePrice"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."priceScopeId"', 'ASC');
 }
 
 /**
- * {@link orderOffers} with the unit price before the price, for the listing
- * ordered by unit price and for nothing else (plan 0196, section 1).
+ * {@link orderOffers} with the comparable figure before the price, for the
+ * listing ordered by unit price and for nothing else (plan 0196, section 1;
+ * plan 0245, section 4). The rows of one product share its basis, so no
+ * block is needed.
  *
  * A row with a till price still comes first, so the first row of a product
- * is the one whose unit price is the `min` that placed the product in the
- * page: both read the rows that are available and have a price. A product
- * whose priced rows state no unit price gets its cheapest row, as under every
- * other order.
+ * is the one whose comparable figure is the `min` that placed the product in
+ * the page: both read the rows that are available and have a price. A
+ * product whose priced rows have no figure gets its cheapest row, as under
+ * every other order.
  */
 function orderOffersByUnitPrice(
   query: SelectQueryBuilder<SupermarketItem>
@@ -4303,7 +4366,7 @@ function orderOffersByUnitPrice(
   return query
     .orderBy('si."itemId"', 'ASC')
     .addOrderBy('si."price" IS NULL', 'ASC')
-    .addOrderBy('si."unitPrice"', 'ASC', 'NULLS LAST')
+    .addOrderBy('si."comparablePrice"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."price"', 'ASC', 'NULLS LAST')
     .addOrderBy('si."priceScopeId"', 'ASC');
 }
@@ -4321,7 +4384,7 @@ function lowestUnitPriceOffer(
   return [...offers].sort(
     (a, b) =>
       Number(a.price === null) - Number(b.price === null) ||
-      nullsLast(a.unitPrice, b.unitPrice) ||
+      nullsLast(a.comparablePrice, b.comparablePrice) ||
       nullsLast(a.price, b.price) ||
       (a.priceScopeId < b.priceScopeId
         ? -1
@@ -4346,6 +4409,9 @@ interface RawOfferColumns {
   offerStale: boolean | null;
   /** Plan 0220, section 15.2. Absent on a query that does not select it. */
   offerOutOfStockAt?: string | Date | null;
+  /** Plan 0245. Absent on a query that does not select it. */
+  offerComparablePrice?: string | null;
+  offerComparableBasis?: SupermarketItem['comparableBasis'];
 }
 
 /**
@@ -4366,6 +4432,7 @@ function rawOfferView(
     unitPrice: row.offerUnitPrice === null ? null : Number(row.offerUnitPrice),
     unitPriceLabel: row.offerUnitPriceLabel,
     unitBasis: unitBasisOf(row.offerUnitPriceLabel),
+    ...rawComparablePair(row),
     observedAt: row.offerObservedAt
       ? new Date(row.offerObservedAt).toISOString()
       : null,
@@ -4377,6 +4444,18 @@ function rawOfferView(
       : null,
     piecePrice: piecePriceOf(item, price),
   };
+}
+
+/** The comparison pair of a raw offer (plan 0245), both halves or neither. */
+function rawComparablePair(row: RawOfferColumns): {
+  comparablePrice: number | null;
+  comparableBasis: SupermarketItem['comparableBasis'];
+} {
+  const value = row.offerComparablePrice ?? null;
+  const basis = row.offerComparableBasis ?? null;
+  return value === null || basis === null
+    ? { comparablePrice: null, comparableBasis: null }
+    : { comparablePrice: Number(value), comparableBasis: basis };
 }
 
 /** One member of a group, ranked for the card's reveal (plan 0161). */
@@ -4403,4 +4482,6 @@ interface RankedGroupRow {
   offerSourceKind: SupermarketItem['priceSourceKind'];
   offerCopiedFromScopeId: string | null;
   offerStale: boolean | null;
+  offerComparablePrice?: string | null;
+  offerComparableBasis?: SupermarketItem['comparableBasis'];
 }

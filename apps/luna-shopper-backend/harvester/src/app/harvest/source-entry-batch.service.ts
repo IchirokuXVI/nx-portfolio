@@ -26,7 +26,11 @@ import { CategorySlugIndex, categorySlugsFor } from './category-resolution';
 import { PlatformAdminService } from './platform-admin.service';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { acceptedName, lacksEnglish } from './source-entry-name';
-import { createdSize, createdWeight } from './source-entry-size';
+import {
+  createdSize,
+  createdWeight,
+  sizeDoubtRefusal,
+} from './source-entry-size';
 import {
   barcodesOf,
   bindFields,
@@ -184,6 +188,12 @@ export class SourceEntryBatchService {
     const unnamed = checkNames(operations, byId, adapterKeys);
     if (unnamed.some((outcome) => outcome.error !== null)) {
       return refusedAt('VALIDATE', runId, unnamed, null);
+    }
+    // A row whose size its own prices disprove gives no size (plan 0249):
+    // refused on its own operation, before anything crosses to catalog.
+    const doubted = checkSizeDoubts(operations, byId);
+    if (doubted.some((outcome) => outcome.error !== null)) {
+      return refusedAt('VALIDATE', runId, doubted, null);
     }
     const taken = await this.checkEans(operations, byId);
     if (taken.some((outcome) => outcome.error !== null)) {
@@ -934,6 +944,37 @@ function checkNames(
           'name. This route translates nothing: state `item.name.en` beside ' +
           '`item.name.es`. A brand name, a range word and a foreign product ' +
           'name are written the same in both.'
+      );
+    }
+  }
+  return outcomes;
+}
+
+/**
+ * Every `createItem` over a row whose size is in doubt that names no
+ * `item.unitSize`, refused on its own operation (plan 0249, section 3). The
+ * reason names the stated and the implied size, as the one at a time route
+ * does.
+ */
+function checkSizeDoubts(
+  operations: readonly SourceEntryDecisionOperation[],
+  rows: ReadonlyMap<string, SourceCatalogEntry>
+): SourceEntryDecisionOutcome[] {
+  const outcomes = blank(operations);
+  for (const [index, operation] of operations.entries()) {
+    if (!isCreate(operation)) {
+      continue;
+    }
+    const entry = rows.get(operation.entryId);
+    if (!entry) {
+      continue;
+    }
+    const refusal = sizeDoubtRefusal(entry, operation.item);
+    if (refusal !== null) {
+      fail(
+        outcomes[index],
+        BulkOperationErrorCode.MALFORMED_OPERATION,
+        `The product "${operation.ref}": ${refusal}`
       );
     }
   }

@@ -605,6 +605,9 @@ const sourceCatalogEntryProperties = {
   // size. Stated but not required, so a reader built before it validates.
   approxWeight: numberOrNull(),
   sizeFormat: nullableString(),
+  // Plan 0248: the container the chain prints, verbatim. Stated but not
+  // required, so a reader built before it keeps validating what it holds.
+  packaging: nullableString(),
   packCount: packCountOrNull(),
   categoryPath: array(string()),
   url: nullableString(),
@@ -635,6 +638,27 @@ const sourceCatalogEntryProperties = {
   // Inline, because there is one per scope and a chain has a handful of
   // scopes, and the queue cannot decide a row without seeing what it holds.
   prices: array(ref(HARVEST_SCHEMA_IDS.sourceEntryPriceView)),
+  // Plan 0249. Stated but not required, so a reader built before it keeps
+  // validating what it holds.
+  sizeDoubt: {
+    anyOf: [
+      {
+        type: 'object',
+        properties: {
+          implied: { type: 'number', minimum: 0 },
+          unit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
+          ratio: { type: 'number', minimum: 0 },
+          label: nullableString(),
+          runId: nonEmptyString(),
+        },
+        required: ['implied', 'unit', 'ratio', 'label', 'runId'],
+        additionalProperties: false,
+      },
+      { type: 'null' },
+    ],
+    description:
+      'The size the row’s own price and comparison price imply, in base units, when it disagrees with the stated size beyond about 15%, and null otherwise. Evidence for a person, never a correction: the stated size stays what the source sent. While it is set, creating a product from the row requires a named `unitSize`.',
+  },
 };
 const sourceCatalogEntryRequired = [
   'id',

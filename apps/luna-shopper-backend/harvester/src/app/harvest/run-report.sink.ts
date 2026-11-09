@@ -26,6 +26,7 @@ import type {
   RunReport,
   ScopeDeclaration,
 } from './run-report';
+import type { SizeDoubtExample } from './size-doubt';
 import type {
   SourceEntryAvailabilityWriter,
   StoredClaim,
@@ -178,6 +179,23 @@ export interface RunReportResult {
    * {@link wordOrderProposals}.
    */
   wordOrderRejectedPointers: number;
+  /**
+   * Observations whose stated size their own price and comparison price
+   * disprove (plan 0249). Each row keeps its size and carries a doubt; a
+   * product is created from it only with a size a person names.
+   */
+  sizesDisproved: number;
+  /**
+   * The first twenty of them, each with its name, the stated and the implied
+   * size and the label. {@link sizesDisproved} is the whole number.
+   */
+  sizesDisprovedExamples: SizeDoubtExample[];
+  /**
+   * Of {@link sizesDisproved}, the rows whose ratio is within 2% of a whole
+   * number from 2 to 48 and that state no pack count: a probable pack
+   * stated at the size of one of its units.
+   */
+  probablePackCounts: number;
   /**
    * Photo links this run sent for its bound rows (plan 0198): rows that had
    * no link or state a new address. Saved whatever the chain's switch says.
@@ -337,6 +355,9 @@ export class RunReportSink implements RunReport {
     priceConflicts: [],
     wordOrderProposals: 0,
     wordOrderRejectedPointers: 0,
+    sizesDisproved: 0,
+    sizesDisprovedExamples: [],
+    probablePackCounts: 0,
     imagesLinked: 0,
     imagesMoved: 0,
     imagesUnchanged: 0,
@@ -503,7 +524,7 @@ export class RunReportSink implements RunReport {
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { outcomes, counters, copies, priceConflicts, images } =
+      const { outcomes, counters, copies, priceConflicts, images, sizeDoubts } =
         await this.session.close();
       this.result.imagesLinked = images.linked;
       this.result.imagesMoved = images.moved;
@@ -518,6 +539,9 @@ export class RunReportSink implements RunReport {
       this.result.wordOrderProposals += counters.wordOrderProposals;
       this.result.wordOrderRejectedPointers +=
         counters.wordOrderRejectedPointers;
+      this.result.sizesDisproved += counters.sizesDisproved;
+      this.result.probablePackCounts += counters.probablePackCounts;
+      this.result.sizesDisprovedExamples = sizeDoubts;
       this.result.priceConflicts = priceConflicts.slice(
         0,
         PRICE_CONFLICTS_NAMED

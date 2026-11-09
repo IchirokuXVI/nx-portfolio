@@ -12,10 +12,11 @@
  * format in two fields, so a crawl that left them joined could never meet one.
  *
  * **The split is checked and not guessed.** The card states `measure_unit`, so
- * the unit read out of the name has to belong to the same family as the unit
- * the chain says the comparison price is per. A name whose trailing word fails
- * that check states no size and keeps its whole name, which is the honest
- * answer: a missing size is a weaker key, an invented one is a wrong key.
+ * the unit read out of the name has to be one the chain could have meant for
+ * the unit the comparison price is per. A name whose trailing word fails that
+ * check states no size and keeps its whole name, which is the honest answer: a
+ * missing size is a weaker key, an invented one is a wrong key. See
+ * {@link ACCEPTED_FAMILIES} for which pairs pass (plan 0250, section 2.3).
  */
 
 import {
@@ -123,8 +124,22 @@ const CONTAINER = String.raw`(?:caja|cajas|lata|latas|bote|botes|botella|botella
  * 6 unidades de`, `pack 6 de`, `caja de` and `4 sobres de`, so there are two
  * shapes here: after the word `pack` the counted noun can be anything, and
  * without it the noun has to be one the chain packs things in.
+ *
+ * **A third shape has no `de` at all** (plan 0250, section 2.2): `pack 28 latas
+ * 33 cl.`. 193 names of the crawl of 2026-11-06 kept `pack 28 latas` in the
+ * name and read one can. Without the `de` the noun is what ends the phrase, so
+ * it has to be one of {@link CONTAINER}, as in the second shape.
+ *
+ * **The third shape never opens a name.** It matches only after a word, the
+ * `(?<=\S\s)` in front of it. `Pack 6 latas 33 cl.` would otherwise move the
+ * whole name across, leave it empty, and lose the size with it. Read without
+ * the shape, it keeps what it read before plan 0250: name `Pack 6 latas`, one
+ * can of 330 ml.
+ *
+ * The three counts are named groups because only one of them is set: `pack`
+ * counts the first shape, `box` the second and `bare` the third.
  */
-const PACK = String.raw`(?:(?:pack\s+(?:de\s+)?(\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?|(\d+)?\s*${CONTAINER})\s+de\s+)?`;
+const PACK = String.raw`(?:(?:pack\s+(?:de\s+)?(?<pack>\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?|(?<box>\d+)?\s*${CONTAINER})\s+de\s+|(?<=\S\s)pack\s+(?<bare>\d+)\s+${CONTAINER}\s+)?`;
 
 /**
  * An optional pack phrase, a quantity, one word, and an optional `aprox`.
@@ -133,7 +148,7 @@ const PACK = String.raw`(?:(?:pack\s+(?:de\s+)?(\d+)(?:\s+[A-Za-zÀ-ÿ]{2,12})?|
  * with the size it qualifies rather than left on the end of a product name.
  */
 const TRAILING_SIZE = new RegExp(
-  String.raw`(^|\s)(${PACK}(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10})\.?(?:\s+aprox)?)\.*\s*$`,
+  String.raw`(?<lead>^|\s)(?<size>${PACK}(?<quantity>${QUANTITY})\s*(?<word>[A-Za-zÀ-ſ]{1,10})\.?(?:\s+aprox)?)\.*\s*$`,
   'i'
 );
 
@@ -143,6 +158,33 @@ const MEASURE_BASE: Readonly<Record<string, string>> = {
   kg: 'kg',
   ud: 'ud',
   m: 'm',
+};
+
+/**
+ * The families of a trailing word a card is read with, by the family of its
+ * `measure_unit` (plan 0250, section 2.3).
+ *
+ * Its own family always passes. Two more pairs do, each a decision of the
+ * owner on the crawl of 2026-11-06:
+ *
+ * - **A weight or a volume on a card priced per unit** (D2). `Vino tinto 75
+ *   cl.` priced in `€/ud` is one bottle of 75 cl, and 901 rows of that crawl
+ *   were bottles, jars and tins priced per piece that lost their size to the
+ *   check. The misread the check was written for, a weight that is not the
+ *   content of the unit, is what plan 0249 catches by comparing the size with
+ *   the price per unit.
+ * - **A volume on a card priced per kilogram** (D1). 82 rows, mostly ice
+ *   cream, print the `ml` the tub holds and compare per kilogram. The volume
+ *   is what the tub holds, and the comparison price stays verbatim beside it.
+ *
+ * Every other pair is still refused: a weight on a card priced per litre, a
+ * count on a card priced per kilogram, anything on a card priced per metre.
+ */
+const ACCEPTED_FAMILIES: Readonly<Record<string, readonly string[]>> = {
+  l: ['l'],
+  kg: ['kg', 'l'],
+  ud: ['ud', 'kg', 'l'],
+  m: ['m'],
 };
 
 export interface SplitCardName {
@@ -156,11 +198,12 @@ export interface SplitCardName {
    */
   unitSize: number | null;
   /**
-   * The catalog unit {@link unitSize} is in (plan 0177). A weight is in
-   * `KILOGRAM` and a count in `UNIT`, the unit the card measures in. A volume
-   * is in the unit the name printed: `LITER` for litres, and `MILLILITER` for
-   * `ml`, `cc`, `cl` and `dl`, because the catalog holds no centilitre. Null
-   * when there is no size.
+   * The catalog unit {@link unitSize} is in (plan 0177). It is the family of
+   * the trailing word, whatever the card measures in: a weight is in
+   * `KILOGRAM` and a count in `UNIT`, so `500 g` on a card priced per unit is
+   * 0.5 `KILOGRAM`. A volume is in the unit the name printed: `LITER` for litres, and
+   * `MILLILITER` for `ml`, `cc`, `cl` and `dl`, because the catalog holds
+   * no centilitre. Null when there is no size.
    */
   sizeUnit: SourceSizeUnit | null;
   /** How many units the pack holds, or null (plan 0162). See {@link packCountIn}. */
@@ -189,16 +232,29 @@ export function splitCardName(
     return unsized(trimmed);
   }
 
-  const unit = UNITS[match[6].toLowerCase()];
+  const groups = match.groups as unknown as TrailingSizeGroups;
+  const unit = UNITS[groups.word.toLowerCase()];
   const expected = MEASURE_BASE[(measureUnit ?? '').trim().toLowerCase()];
-  // The check the plan asks for. An unknown word is not a unit, and a unit from
-  // another family is a coincidence: `Café molido 500 g` is a size when the
-  // card measures in `kg` and a misread when it measures in `ud`.
-  if (!unit || (expected && unit.base !== expected)) {
+  // The check plan 0090 asks for. An unknown word is not a unit, and a unit
+  // from a family the card cannot mean is a coincidence: `500 g` is a misread
+  // on a card priced per litre (plan 0250, section 2.3).
+  if (!unit || (expected && !ACCEPTED_FAMILIES[expected].includes(unit.base))) {
     return unsized(trimmed);
   }
 
-  const start = match.index + match[1].length;
+  let start = match.index + groups.lead.length;
+  // A number before a container is a count only within the bounds of a count
+  // (plan 0250, section 2.1). `Polvorones de almendra artesanos 1880 estuche
+  // de 310 g.` printed its brand there, and multiplying by it wrote 582.8 kg.
+  // A number that is no count stays in the name, and the container phrase
+  // moves across whole, so the name never ends in a dangling `de`.
+  let box = groups.box;
+  if (box !== undefined && !isCount(box)) {
+    start += /^\d+\s*/.exec(trimmed.slice(start))?.[0].length ?? 0;
+    box = undefined;
+  }
+  // At most one of the three shapes matched, so this is the count it stated.
+  const phraseCount = groups.pack ?? box ?? groups.bare;
   const name = trimmed.slice(0, start).trim();
   // A name that is nothing but a size keeps the whole name: an empty name is
   // not a product, and the key it would build joins nothing.
@@ -206,16 +262,13 @@ export function splitCardName(
     return unsized(trimmed);
   }
 
-  // Either shape of the pack phrase states the count, and only one of them
-  // matched, so the first that is set is the one this name used.
-  //
   // A length is a dimension and not a size (plan 0183): `30 m.` is how long
   // the roll is, and the catalog has no unit to hold it in. The printed text
   // still moves across, because it is half of the row's key.
   const size = statedSize(
     unit,
-    match[6],
-    quantityOf(match[3] ?? match[4], match[5])
+    groups.word,
+    quantityOf(phraseCount, groups.quantity)
   );
   return {
     name,
@@ -224,8 +277,28 @@ export function splitCardName(
     sizeFormat: trimmed.slice(start).trim(),
     unitSize: size.unitSize,
     sizeUnit: size.sizeUnit,
-    packCount: packCountIn(match[3] ?? match[4], match[5], match[6]),
+    packCount: packCountIn(phraseCount, groups.quantity, groups.word),
   };
+}
+
+/** The named groups of {@link TRAILING_SIZE}. */
+interface TrailingSizeGroups {
+  lead: string;
+  size: string;
+  pack?: string;
+  box?: string;
+  bare?: string;
+  quantity: string;
+  word: string;
+}
+
+/**
+ * Whether a number printed as a count may be multiplied into a size (plan
+ * 0250, section 2.1): any count {@link packCountOf} accepts, and 1, which
+ * multiplies to the same size and is printed as `pack de 1 unidades de`.
+ */
+function isCount(printed: string): boolean {
+  return printed.trim() === '1' || packCountOf(printed) !== null;
 }
 
 /**
@@ -237,14 +310,14 @@ export function splitCardName(
  * centilitre. It used to be 0.33 `LITER`, the same bottle in a unit no other
  * source writes it in.
  *
- * A weight and a count stay in the unit the card measures in: `500 g` is 0.5
- * `KILOGRAM`.
+ * A weight is in `KILOGRAM` and a count in `UNIT`, whatever the card measures
+ * in: `500 g` is 0.5 `KILOGRAM`, also on a card priced per unit.
  *
  * **The check against `measure_unit` is about the family and not the number**,
- * so it does not move: {@link splitCardName} has already refused a word from
- * another family before this runs. Comparing a volume with the card's price
- * per litre is still one step, because `sizeUnit` says which of the two units
- * the number is in.
+ * so it does not move: {@link splitCardName} has already refused a word from a
+ * family the card cannot mean before this runs. `sizeUnit` says which unit the
+ * number is in, so a size and a comparison price of different families stay
+ * two readable facts rather than one wrong one.
  */
 function statedSize(
   unit: CardUnit,
@@ -329,10 +402,13 @@ function packCountIn(
  * The quantity as a number in the unit the name printed, or null when it
  * cannot be stated without inventing.
  *
- * A plain quantity is read, and a pack multiplies its count by it. A quantity
- * joined by `x` or `+` is **not**: `3x187` is three of something and `28+16`
- * is a bonus pack, the chain prints both for the same field, and guessing which
- * arithmetic it meant writes a number nobody checked.
+ * A plain quantity is read, and a pack multiplies its count by it, when the
+ * count is within the bounds of {@link packCountOf} (plan 0250, section 2.1):
+ * a number outside them is not a count, and the size it would multiply into
+ * is not stated. A quantity joined by `x` or `+` is **not**: `3x187` is
+ * three of something and `28+16` is a bonus pack, the chain prints both for
+ * the same field, and guessing which arithmetic it meant writes a number
+ * nobody checked.
  */
 function quantityOf(
   packCount: string | undefined,
@@ -345,10 +421,10 @@ function quantityOf(
   if (!Number.isFinite(value) || value <= 0) {
     return null;
   }
-  const pack = packCount ? Number(packCount) : 1;
-  if (!Number.isFinite(pack) || pack <= 0) {
+  if (packCount !== undefined && !isCount(packCount)) {
     return null;
   }
+  const pack = packCount ? Number(packCount) : 1;
   return pack * value;
 }
 

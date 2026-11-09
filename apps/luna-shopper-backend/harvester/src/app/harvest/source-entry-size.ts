@@ -8,6 +8,7 @@ import {
   ITEM_GRAMS_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
   ItemKilogramHasSizeException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import type { SourceCatalogEntry } from '../entities';
 
@@ -87,9 +88,14 @@ export function createdSize(
   entry: Pick<
     SourceCatalogEntry,
     'unitSize' | 'sizeUnit' | 'sizeFormat' | 'soldByWeight' | 'approxWeight'
-  >,
+  > &
+    Partial<Pick<SourceCatalogEntry, 'sizeDoubtImplied'>>,
   named: NamedSize
 ): CreatedSize {
+  const doubt = sizeDoubtRefusal(entry, named);
+  if (doubt !== null) {
+    throw new ValidationException(doubt);
+  }
   const namesNothing =
     (named.unitSize === undefined || named.unitSize === null) &&
     named.defaultUnit === undefined;
@@ -115,6 +121,55 @@ export function createdSize(
     return { unitSize: null, unit: UnitOfMeasure.UNIT, approxWeight: weight };
   }
   return { ...sizeOf(entry, named), approxWeight: null };
+}
+
+/**
+ * Why a product cannot take its size from this row, or null when it can
+ * (plan 0249, section 3).
+ *
+ * **A row whose own price and comparison price disprove its size gives no
+ * size.** The ingest recorded a doubt (`sizeDoubtImplied`), and nothing can
+ * tell which of the two figures is wrong: the chain prints wrong comparison
+ * prices too. So the operation must name `unitSize`, and the refusal names
+ * both sizes for the person who decides. A unit named alone still takes the
+ * row's size, so it is refused as well.
+ *
+ * **Both sizes are named in the row's own unit.** The doubt is stored in a
+ * base unit, but a `unitSize` sent with no `defaultUnit` is read in the row's
+ * unit ({@link sizeOf}). Printed in base units, the 100 a person reads off a
+ * `LITER` row and types back would make 100 litres. So the implied size is
+ * divided by what one of the row's unit is worth in base units, and the
+ * message names that unit: the number it shows, sent back as `unitSize`,
+ * creates the implied size.
+ *
+ * **A size named as null is a choice, not an omission.** It creates a
+ * product with no size and reads nothing of the doubted number, so it passes.
+ *
+ * An accept onto an existing product writes no size and never asks this.
+ */
+export function sizeDoubtRefusal(
+  entry: Pick<SourceCatalogEntry, 'unitSize' | 'sizeUnit'> &
+    Partial<Pick<SourceCatalogEntry, 'sizeFormat' | 'sizeDoubtImplied'>>,
+  named: NamedSize
+): string | null {
+  if (
+    entry.sizeDoubtImplied === null ||
+    entry.sizeDoubtImplied === undefined ||
+    named.unitSize !== undefined
+  ) {
+    return null;
+  }
+  const unit = rowUnit(entry);
+  const perUnit = toBaseUnit(1, unit).unitSize ?? 1;
+  const implied =
+    Math.round((Number(entry.sizeDoubtImplied) / perUnit) * 10_000_000) /
+    10_000_000;
+  return (
+    'The size of this row is in doubt: it states ' +
+    `${Number(entry.unitSize)} ${unit}, and its own price and comparison ` +
+    `price imply ${implied} ${unit}. Name the product's \`unitSize\` in ` +
+    `${unit}: the size is not taken from this row.`
+  );
 }
 
 /**
@@ -153,9 +208,21 @@ function sizeOf(
       unit,
     });
   }
-  return toBaseUnit(
-    unitSize,
-    entry.sizeUnit ?? mapSizeFormat(entry.sizeFormat) ?? UnitOfMeasure.UNIT
+  return toBaseUnit(unitSize, rowUnit(entry));
+}
+
+/**
+ * The unit a row's own size is in: the one it states, the guess from its
+ * printed text, then `UNIT`. A `unitSize` named with no unit is read in it.
+ */
+function rowUnit(
+  entry: Pick<SourceCatalogEntry, 'sizeUnit'> &
+    Partial<Pick<SourceCatalogEntry, 'sizeFormat'>>
+): UnitOfMeasure {
+  return (
+    entry.sizeUnit ??
+    mapSizeFormat(entry.sizeFormat ?? null) ??
+    UnitOfMeasure.UNIT
   );
 }
 

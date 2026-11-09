@@ -171,3 +171,42 @@ describe('the pack count in the source group (plan 0162)', () => {
     expect(stored.packCount).toBe(6);
   });
 });
+
+describe('the container in the source group (plan 0248)', () => {
+  const holding = (packaging: string | null): SourceCatalogEntry =>
+    ({ ...row(null), packaging }) as SourceCatalogEntry;
+
+  it('writes the text a run read, verbatim, and a new text is a change', () => {
+    const stored = holding(null);
+    expect(sourceGroupChanged(stored, fields({ packaging: 'Brik' }))).toBe(
+      true
+    );
+    applySourceGroup(stored, fields({ packaging: 'Brik' }));
+    expect(stored.packaging).toBe('Brik');
+    expect(sourceGroupChanged(stored, fields({ packaging: 'Brik' }))).toBe(
+      false
+    );
+    expect(sourceGroupChanged(stored, fields({ packaging: 'Botella' }))).toBe(
+      true
+    );
+  });
+
+  it('writes a null a run states, because null is a statement', () => {
+    const stored = holding('Brik');
+    expect(sourceGroupChanged(stored, fields({ packaging: null }))).toBe(true);
+    applySourceGroup(stored, fields({ packaging: null }));
+    expect(stored.packaging).toBeNull();
+  });
+
+  it('leaves the stored text alone when the source reads no containers', () => {
+    const stored = holding('Brik');
+    expect(sourceGroupChanged(stored, fields())).toBe(false);
+    applySourceGroup(stored, fields());
+    expect(stored.packaging).toBe('Brik');
+  });
+
+  it('reads a row written before the column as holding none', () => {
+    const stored = row(null);
+    expect(sourceGroupChanged(stored, fields({ packaging: null }))).toBe(false);
+  });
+});

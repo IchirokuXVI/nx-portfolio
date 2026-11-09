@@ -1,0 +1,117 @@
+{
+  "id": "21698",
+  "ean": "8402001047794",
+  "slug": "bebida-energetica-energy-drink-hacendado",
+  "brand": "Hacendado",
+  "limit": 999,
+  "badges": {
+    "is_water": false,
+    "requires_age_check": false
+  },
+  "origin": null,
+  "photos": [
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/b95452e321137c3cd0bf5934d2cad848.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/b95452e321137c3cd0bf5934d2cad848.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/b95452e321137c3cd0bf5934d2cad848.jpg?fit=crop&h=300&w=300",
+      "perspective": 1
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/3e8a6f37d88e65e5929cce5e860ff506.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/3e8a6f37d88e65e5929cce5e860ff506.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/3e8a6f37d88e65e5929cce5e860ff506.jpg?fit=crop&h=300&w=300",
+      "perspective": 9
+    },
+    {
+      "zoom": "https://prod-mercadona.imgix.net/images/becc86e7febc9914473d9a7b4dbbf2c6.jpg?fit=crop&h=3600&w=3600",
+      "regular": "https://prod-mercadona.imgix.net/images/becc86e7febc9914473d9a7b4dbbf2c6.jpg?fit=crop&h=600&w=600",
+      "thumbnail": "https://prod-mercadona.imgix.net/images/becc86e7febc9914473d9a7b4dbbf2c6.jpg?fit=crop&h=300&w=300",
+      "perspective": 2
+    }
+  ],
+  "status": null,
+  "details": {
+    "brand": "Hacendado",
+    "origin": null,
+    "suppliers": [
+      {
+        "name": "Refresco Iberia S.A.U."
+      }
+    ],
+    "legal_name": "Bebida energética carbonatada. Con taurina, cafeína y vitaminas.",
+    "description": "Bebida energética Energy Drink Hacendado",
+    "counter_info": null,
+    "danger_mentions": "",
+    "alcohol_by_volume": null,
+    "mandatory_mentions": "Contenido elevado de cafeína. No recomendado para niños ni mujeres embarazadas o en período de lactancia (32 mg/100). Se recomienda un consumo moderado.",
+    "production_variant": "Se añaden un registro de empresa en función de donde se produce el producto: planta Marcilla.",
+    "usage_instructions": "",
+    "storage_instructions": "Proteger de la luz solar y de olores agresivos. Conservar en lugar limpio, fresco y seco."
+  },
+  "is_bulk": false,
+  "packaging": null,
+  "published": true,
+  "share_url": "https://tienda.mercadona.es/product/21698/bebida-energetica-energy-drink-hacendado",
+  "thumbnail": "https://prod-mercadona.imgix.net/images/b95452e321137c3cd0bf5934d2cad848.jpg?fit=crop&h=300&w=300",
+  "categories": [
+    {
+      "id": 18,
+      "name": "Agua y refrescos",
+      "level": 0,
+      "order": 8,
+      "categories": [
+        {
+          "id": 163,
+          "name": "Isotónico y energético",
+          "level": 1,
+          "order": 8,
+          "categories": [
+            {
+              "id": 540,
+              "name": "Energético",
+              "level": 2,
+              "order": 8
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "extra_info": [
+    ""
+  ],
+  "display_name": "Bebida energética Energy Drink Hacendado",
+  "unavailable_from": null,
+  "is_variable_weight": false,
+  "price_instructions": {
+    "iva": null,
+    "is_new": false,
+    "is_pack": true,
+    "pack_size": 0.25,
+    "unit_name": "latas",
+    "unit_size": 1.5,
+    "bulk_price": "1.60",
+    "unit_price": "2.40",
+    "approx_size": false,
+    "size_format": "l",
+    "total_units": 6,
+    "unit_selector": true,
+    "bunch_selector": false,
+    "drained_weight": null,
+    "selling_method": 0,
+    "tax_percentage": "21.000",
+    "price_decreased": false,
+    "reference_price": "1.600",
+    "min_bunch_amount": 1,
+    "reference_format": "L",
+    "previous_unit_price": null,
+    "increment_bunch_amount": 1
+  },
+  "unavailable_weekdays": [],
+  "nutrition_information": {
+    "allergens": " <strong>x99</strong>.",
+    "ingredients": "<p>Agua carbonatada, azúcar, dextrosa, acidulante: ácido cítrico, taurina (0,4%), correctores de acidez: citratos de sodio, carbonatos de magnesio, colorantes: E-150a, E101, cafeína (0,03%), aroma, vitaminas: niacina, ácido pantoténico, B6, B12."
+  },
+  "is_new_arrival": false,
+  "color_variants": null
+}

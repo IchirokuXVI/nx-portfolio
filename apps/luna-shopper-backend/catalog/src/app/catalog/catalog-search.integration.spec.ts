@@ -261,6 +261,9 @@ describeIntegration('catalog search (real Postgres)', () => {
         currency: 'EUR',
         unitPrice: 1.35,
         unitPriceLabel: 'L',
+        // Plan 0245: the pair as the chain's figure on its label's basis.
+        comparablePrice: 1.35,
+        comparableBasis: 'LITER',
         priceObservedAt: new Date('2026-08-30T10:00:00.000Z'),
         priceSourceKind: PriceSourceKind.OFFICIAL_API,
         available: true,
@@ -272,6 +275,9 @@ describeIntegration('catalog search (real Postgres)', () => {
         currency: 'EUR',
         unitPrice: 0.89,
         unitPriceLabel: 'L',
+        // Plan 0245: the pair as the chain's figure on its label's basis.
+        comparablePrice: 0.89,
+        comparableBasis: 'LITER',
         priceObservedAt: new Date('2026-08-30T10:00:00.000Z'),
         priceSourceKind: PriceSourceKind.OFFICIAL_API,
         available: true,
@@ -285,6 +291,9 @@ describeIntegration('catalog search (real Postgres)', () => {
         currency: 'EUR',
         unitPrice: 1.6,
         unitPriceLabel: 'ud',
+        // Plan 0245: the pair as the chain's figure on its label's basis.
+        comparablePrice: 1.6,
+        comparableBasis: 'UNIT',
         priceObservedAt: new Date('2026-08-30T10:00:00.000Z'),
         priceSourceKind: PriceSourceKind.ADMIN,
         available: true,
@@ -374,6 +383,9 @@ describeIntegration('catalog search (real Postgres)', () => {
         currency: price === null ? null : 'EUR',
         unitPrice: price,
         unitPriceLabel: price === null ? null : 'ud',
+        // Plan 0245: the pair as the chain's figure on its label's basis.
+        comparablePrice: price,
+        comparableBasis: price === null ? null : 'UNIT',
         priceObservedAt:
           price === null ? null : new Date('2026-09-01T10:00:00.000Z'),
         priceSourceKind: price === null ? null : PriceSourceKind.OFFICIAL_API,

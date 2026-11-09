@@ -27,6 +27,16 @@ import {
   type MatchResult,
 } from './matching';
 import type { RunContext } from './run-context';
+import {
+  applySizeDoubt,
+  hasSizeDoubt,
+  sizeDoubtExample,
+  sizeDoubtOfFields,
+  sizeDoubtOfPartial,
+  UndoubtedSiblingIndex,
+  type SizeDoubtDecision,
+  type SizeDoubtExample,
+} from './size-doubt';
 import { decideArticles, type Article } from './source-entry-write';
 import {
   applySourceGroup,
@@ -41,6 +51,9 @@ const PRICE_BATCH = 200;
 
 /** How many `source_entry_prices` rows are written in one statement. */
 const PRICE_ROW_CHUNK = 200;
+
+/** How many doubted rows a run names on its report (plan 0249, section 3). */
+export const SIZE_DOUBTS_NAMED = 20;
 
 /**
  * One price of one product, for the group of shops that pays it (plan 0103,
@@ -120,6 +133,13 @@ export interface SourceObservation {
    */
   approxWeight?: number | null;
   sizeFormat: string | null;
+  /**
+   * The container the source prints (`Brik`, `Botella`, `Pack-4`), verbatim
+   * (plan 0248). Null is a statement that it prints none. Absent is a source
+   * that reads no containers at all, every adapter but Mercadona's, and leaves
+   * the stored text alone.
+   */
+  packaging?: string | null;
   /**
    * How many units the pack holds, as the source's own adapter read it (plan
    * 0162). Null is a statement that the product is not a pack. Absent is a
@@ -341,6 +361,18 @@ export interface SourceIngestCounters {
    * counts rows proposed as a product.
    */
   wordOrderRejectedPointers: number;
+  /**
+   * Observations whose stated size their own price and comparison price
+   * disprove (plan 0249): each row now carries a doubt, keeps its size, and
+   * waits for a person before a product is created from it.
+   */
+  sizesDisproved: number;
+  /**
+   * Of those, the rows whose ratio is close to a whole number from 2 to 48
+   * and that state no pack count: most often a pack stated at the size of
+   * one of its units.
+   */
+  probablePackCounts: number;
 }
 
 /**
@@ -406,6 +438,12 @@ export interface SourceIngestResult {
   /** One per conflict {@link SourceIngestCounters.pricesConflicted} counts. */
   priceConflicts: PriceConflict[];
   images: SourceIngestImages;
+  /**
+   * The first {@link SIZE_DOUBTS_NAMED} rows whose size the run doubted
+   * (plan 0249). {@link SourceIngestCounters.sizesDisproved} is the whole
+   * number.
+   */
+  sizeDoubts: SizeDoubtExample[];
 }
 
 /**
@@ -496,7 +534,7 @@ export class SourceIngest {
     input: SourceIngestSessionInput,
     reported: readonly ReportedObservation[],
     byExternalId: Map<string, SourceCatalogEntry>,
-    siblings: SiblingEntryIndex,
+    siblings: UndoubtedSiblingIndex,
     items: ItemMatchIndex,
     eans: ChainEanIndex,
     owedSoFar: OwedMemory = new Map()
@@ -506,6 +544,7 @@ export class SourceIngest {
     const counters = emptyCounters();
     const copies = emptyCopies();
     const priceConflicts: PriceConflict[] = [];
+    const sizeDoubts: SizeDoubtExample[] = [];
     /** The `source_entry_prices` rows this chunk observed, one per price. */
     const observed: ObservedPrice[] = [];
     /** Where each observation's prices landed, by its index, copies included. */
@@ -553,6 +592,9 @@ export class SourceIngest {
       const held = byExternalId.get(observation.externalId);
       let outcome: SourceEntryOutcome;
       let changed = false;
+      // Plan 0249: the stated size against the size the prices imply,
+      // written onto the row before the ladder saves it.
+      let sizeDoubt: SizeDoubtDecision = 'leave';
       if (observation.detailFetched === false) {
         // A partial observation reads no identity field, so it can neither
         // create a row nor change one (plan 0119, section 6).
@@ -566,6 +608,10 @@ export class SourceIngest {
           soldByWeightChanged(held, observation) ||
           approxWeightChanged(held, observation) ||
           imageChanged(held, observation);
+        sizeDoubt = sizeDoubtOfPartial(held, observation);
+        if (applySizeDoubt(held, sizeDoubt, context.runId)) {
+          siblings.refresh();
+        }
         outcome = await this.see(
           held,
           observation,
@@ -583,6 +629,15 @@ export class SourceIngest {
           ? writesSourceGroup(held, fields.sourceKind) &&
             sourceGroupChanged(held, fields)
           : false;
+        sizeDoubt = sizeDoubtOfFields(
+          fields,
+          held,
+          !held || writesSourceGroup(held, fields.sourceKind),
+          observation.prices
+        );
+        if (held && applySizeDoubt(held, sizeDoubt, context.runId)) {
+          siblings.refresh();
+        }
         outcome = held
           ? await this.touch(
               held,
@@ -603,10 +658,12 @@ export class SourceIngest {
               items,
               siblings,
               eans,
-              counters
+              counters,
+              sizeDoubt
             );
       }
       observations.push(observation);
+      this.countSizeDoubt(counters, sizeDoubts, outcome.entry, sizeDoubt);
 
       if (outcome.created) {
         counters.created += 1;
@@ -784,7 +841,29 @@ export class SourceIngest {
         `${counters.pricesSoldAnotherWay} observation(s) priced another way ` +
         'than their row is sold and not written.'
     );
-    return { outcomes, counters, copies, priceConflicts, images };
+    return { outcomes, counters, copies, priceConflicts, images, sizeDoubts };
+  }
+
+  /**
+   * Count a doubt this chunk recorded or kept, and name it while the report
+   * has room (plan 0249, section 3).
+   */
+  private countSizeDoubt(
+    counters: SourceIngestCounters,
+    named: SizeDoubtExample[],
+    row: SourceCatalogEntry,
+    decision: SizeDoubtDecision
+  ): void {
+    if (typeof decision === 'string') {
+      return;
+    }
+    counters.sizesDisproved += 1;
+    if (decision.probablePackCount !== null) {
+      counters.probablePackCounts += 1;
+    }
+    if (named.length < SIZE_DOUBTS_NAMED) {
+      named.push(sizeDoubtExample(row, decision));
+    }
   }
 
   /**
@@ -1268,7 +1347,9 @@ export class SourceIngest {
     } else if (bindWaitingByEan(row, items, eans, seenAt)) {
       rung = 2;
     }
-    if (rung === 1) {
+    // Rung 4's key holds the size, so a doubted row proposes nothing (plan
+    // 0249).
+    if (rung === 1 && !hasSizeDoubt(row)) {
       countAnyOrder(counters, proposeAnyOrder(row, siblings));
     }
 
@@ -1291,7 +1372,8 @@ export class SourceIngest {
     items: ItemMatchIndex,
     siblings: SiblingEntryIndex,
     eans: ChainEanIndex,
-    counters: SourceIngestCounters
+    counters: SourceIngestCounters,
+    sizeDoubt: SizeDoubtDecision = 'leave'
   ): Promise<SourceEntryOutcome> {
     const draft = this.entries.create({
       supermarketId,
@@ -1307,7 +1389,11 @@ export class SourceIngest {
       matchedBy: null,
       confidence: 0,
       decidedAt: null,
+      sizeDoubtImplied: null,
+      sizeDoubtRatio: null,
+      sizeDoubtRunId: null,
     });
+    applySizeDoubt(draft, sizeDoubt, runId);
     let rung: 1 | 2 | 3 | 4 | 5 = 5;
 
     // Rungs 2 and 3: the catalog's own items. An EAN is trusted immediately,
@@ -1336,7 +1422,7 @@ export class SourceIngest {
       draft.decidedAt =
         match.status === SourceEntryStatus.ACTIVE ? seenAt : null;
       rung = match.matchedBy === ItemSourceMatch.EAN ? 2 : 3;
-    } else {
+    } else if (!hasSizeDoubt(draft)) {
       // Rung 4: a sibling row of this chain under the same name and size. For a
       // leaflet that is the Mercadona product the walk found, and for a DEZA
       // leaflet the web listing.
@@ -1344,7 +1430,12 @@ export class SourceIngest {
         observation.name,
         observation.sizeFormat,
         fields.unitSize,
-        fields.approxWeight ?? null
+        fields.approxWeight ?? null,
+        // The count and the container join the key (plan 0248, D2 and D3).
+        {
+          packCount: fields.packCount ?? null,
+          packaging: fields.packaging ?? null,
+        }
       );
       if (sibling) {
         draft.itemId = sibling.itemId;
@@ -1363,7 +1454,8 @@ export class SourceIngest {
           draft.sizeFormat,
           draft.unitSize,
           null,
-          draft.approxWeight
+          draft.approxWeight,
+          draft.packCount ?? null
         );
         const rejected = reworded?.itemId
           ? null
@@ -1372,7 +1464,8 @@ export class SourceIngest {
               draft.sizeFormat,
               draft.unitSize,
               null,
-              draft.approxWeight
+              draft.approxWeight,
+              draft.packCount ?? null
             );
         if (reworded?.itemId) {
           proposeReworded(draft, reworded.itemId);
@@ -1629,6 +1722,8 @@ function emptyCounters(): SourceIngestCounters {
     pricesSoldAnotherWay: 0,
     wordOrderProposals: 0,
     wordOrderRejectedPointers: 0,
+    sizesDisproved: 0,
+    probablePackCounts: 0,
   };
 }
 
@@ -1878,7 +1973,8 @@ function proposeAnyOrder(
     row.sizeFormat,
     row.unitSize,
     row,
-    row.approxWeight
+    row.approxWeight,
+    row.packCount ?? null
   );
   if (reworded?.itemId) {
     proposeReworded(row, reworded.itemId);
@@ -1889,7 +1985,8 @@ function proposeAnyOrder(
     row.sizeFormat,
     row.unitSize,
     row,
-    row.approxWeight
+    row.approxWeight,
+    row.packCount ?? null
   );
   if (rejected !== null) {
     pointAtRejection(row, rejected);
@@ -1969,6 +2066,7 @@ function fieldsOf(
     // source that never reads a weight leaves the stored one alone.
     approxWeight: unitSize === null ? observation.approxWeight : null,
     sizeFormat: observation.sizeFormat,
+    packaging: observation.packaging,
     packCount: observation.packCount,
     categoryPath: observation.categoryPath,
     url: observation.url,
@@ -2021,7 +2119,8 @@ function priceEntryFor(
  */
 export class SourceIngestSession {
   private readonly byExternalId: Map<string, SourceCatalogEntry>;
-  private readonly siblings: SiblingEntryIndex;
+  /** Rung 4's index, with the doubted rows left out (plan 0249). */
+  private readonly siblings: UndoubtedSiblingIndex;
   private readonly eans: ChainEanIndex;
   private readonly outcomes: SourceEntryOutcome[] = [];
   /**
@@ -2034,6 +2133,7 @@ export class SourceIngestSession {
   private readonly copies = emptyCopies();
   private readonly priceConflicts: PriceConflict[] = [];
   private readonly images = emptyImages();
+  private readonly sizeDoubts: SizeDoubtExample[] = [];
   private closed = false;
 
   constructor(
@@ -2044,7 +2144,7 @@ export class SourceIngestSession {
     private readonly items: ItemMatchIndex
   ) {
     this.byExternalId = new Map(rows.map((row) => [row.externalId, row]));
-    this.siblings = new SiblingEntryIndex(rows);
+    this.siblings = new UndoubtedSiblingIndex(rows);
     this.eans = new ChainEanIndex(rows);
   }
 
@@ -2090,6 +2190,11 @@ export class SourceIngestSession {
     this.counters.wordOrderProposals += result.counters.wordOrderProposals;
     this.counters.wordOrderRejectedPointers +=
       result.counters.wordOrderRejectedPointers;
+    this.counters.sizesDisproved += result.counters.sizesDisproved;
+    this.counters.probablePackCounts += result.counters.probablePackCounts;
+    this.sizeDoubts.push(
+      ...result.sizeDoubts.slice(0, SIZE_DOUBTS_NAMED - this.sizeDoubts.length)
+    );
     this.priceConflicts.push(...result.priceConflicts);
     this.images.linked += result.images.linked;
     this.images.moved += result.images.moved;
@@ -2124,6 +2229,7 @@ export class SourceIngestSession {
       copies: this.copies,
       priceConflicts: this.priceConflicts,
       images: this.images,
+      sizeDoubts: this.sizeDoubts,
     };
   }
 }

@@ -12,11 +12,15 @@ import eggs from './__fixtures__/product-eggs-per-dozen.json';
 import fixedPackInStoreBarcode from './__fixtures__/product-fixed-pack-in-store-barcode.json';
 import inconsistent from './__fixtures__/product-inconsistent-bulk-price.json';
 import noEan from './__fixtures__/product-no-ean.json';
+import packContradictsSize from './__fixtures__/product-pack-contradicts-size.json';
+import packOfBottles from './__fixtures__/product-pack-of-bottles.json';
 import packOfPads from './__fixtures__/product-pack-of-pads.json';
 import packOfWipes from './__fixtures__/product-pack-of-wipes.json';
+import packSizeIsContent from './__fixtures__/product-pack-size-is-content.json';
 import per100g from './__fixtures__/product-reference-format-100g.json';
 import referenceFormat from './__fixtures__/product-reference-format-100ml.json';
 import rollOfServices from './__fixtures__/product-roll-of-services.json';
+import singleBottle from './__fixtures__/product-single-bottle.json';
 import singleRazor from './__fixtures__/product-single-razor.json';
 import sizeFormatM from './__fixtures__/product-size-format-m.json';
 import {
@@ -307,6 +311,132 @@ describe('normalizeProduct', () => {
       expect(
         normalizeProduct(capsulesWith({ pack_size: null })).packCount
       ).toBe(20);
+    });
+
+    it('reads pack_size when is_pack is true and total_units is not set', () => {
+      expect(
+        normalizeProduct(capsulesWith({ total_units: null })).packCount
+      ).toBe(20);
+    });
+
+    describe('pack_size as the content of one unit (plan 0248, section 1)', () => {
+      it('is what the captured products say they are', () => {
+        // The fields the cases read, pinned, so a recapture that moves one of
+        // them fails here rather than quietly changing what a case means.
+        expect(packOfBottles).toMatchObject({
+          id: '28113',
+          packaging: 'Pack-4',
+        });
+        expect(packOfBottles.price_instructions).toMatchObject({
+          is_pack: true,
+          pack_size: 0.5,
+          total_units: 4,
+          unit_size: 2,
+          size_format: 'l',
+        });
+        expect(packSizeIsContent).toMatchObject({
+          id: '21698',
+          packaging: null,
+        });
+        expect(packSizeIsContent.price_instructions).toMatchObject({
+          is_pack: true,
+          pack_size: 0.25,
+          total_units: 6,
+          unit_size: 1.5,
+          size_format: 'l',
+        });
+        expect(packContradictsSize).toMatchObject({ id: '18382' });
+        expect(packContradictsSize.price_instructions).toMatchObject({
+          is_pack: true,
+          pack_size: 0.08,
+          total_units: 2,
+          unit_size: 1.6,
+          size_format: 'kg',
+          unit_price: '1.70',
+          reference_price: '10.625',
+        });
+        expect(singleBottle).toMatchObject({
+          id: '27342',
+          packaging: 'Botella',
+        });
+        expect(singleBottle.price_instructions).toMatchObject({
+          is_pack: false,
+          unit_size: 2,
+          size_format: 'l',
+        });
+      });
+
+      it('reads total_units when pack_size times it is the size (case 2)', () => {
+        const bottles = normalizeProduct(packOfBottles);
+        expect(bottles.packCount).toBe(4);
+        // The size stays the whole pack (plan 0162).
+        expect(bottles.unitSize).toBe(2);
+        expect(bottles.unit).toBe(UnitOfMeasure.LITER);
+
+        const cans = normalizeProduct(packSizeIsContent);
+        expect(cans.packCount).toBe(6);
+        expect(cans.unitSize).toBe(1.5);
+      });
+
+      it('reads total_units when the comparison price proves the content (case 3)', () => {
+        const dessert = normalizeProduct(packContradictsSize);
+        expect(dessert.packCount).toBe(2);
+        // Only the count is read: the size is what unit_size says.
+        expect(dessert.unitSize).toBe(1.6);
+        expect(dessert.unit).toBe(UnitOfMeasure.KILOGRAM);
+      });
+
+      it('changes no price field', () => {
+        expect(normalizeProduct(packOfBottles)).toMatchObject({
+          price: 6,
+          unitPrice: 3,
+        });
+        expect(normalizeProduct(packContradictsSize)).toMatchObject({
+          price: 1.7,
+          unitPrice: 10.63,
+        });
+      });
+
+      it('states no count for the single bottle the pack was proposed as', () => {
+        expect(normalizeProduct(singleBottle).packCount).toBeNull();
+        expect(normalizeProduct(singleBottle).unitSize).toBe(2);
+      });
+
+      it('states no count when neither the size nor the comparison price agrees (case 4)', () => {
+        const contradicted = {
+          ...packContradictsSize,
+          price_instructions: {
+            ...packContradictsSize.price_instructions,
+            reference_price: '1.063',
+            bulk_price: '1.06',
+          },
+        };
+        expect(normalizeProduct(contradicted).packCount).toBeNull();
+      });
+
+      it('states no count when total_units is not a whole number above 1', () => {
+        for (const totalUnits of [1, 2.5]) {
+          const pack = {
+            ...packOfBottles,
+            price_instructions: {
+              ...packOfBottles.price_instructions,
+              pack_size: 2 / totalUnits,
+              total_units: totalUnits,
+            },
+          };
+          expect(normalizeProduct(pack).packCount).toBeNull();
+        }
+      });
+
+      it('reads the same count and the packaging from a category listing', () => {
+        const [bottles, single] = normalizeCategoryProducts({
+          ...categoryExpanded,
+          products: [packOfBottles, singleBottle],
+          categories: [],
+        });
+        expect(bottles).toMatchObject({ packCount: 4, packaging: 'Pack-4' });
+        expect(single).toMatchObject({ packCount: null, packaging: 'Botella' });
+      });
     });
 
     it('states no count when pack_size and total_units disagree', () => {

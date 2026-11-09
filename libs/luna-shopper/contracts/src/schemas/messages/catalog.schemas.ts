@@ -50,6 +50,7 @@ import {
   UNIT_BASES,
   WITHDRAW_MAX_SCOPES,
 } from '../../lib/messages/catalog.messages';
+import { COMPARABLE_BASES } from '../../lib/units/comparable-price';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
 import { LINE_ITEM_SET_MAX } from '../../lib/messages/list.messages';
@@ -411,6 +412,10 @@ const nullableSourceKind = (): JsonSchema => ({
 const nullableUnitBasis = (): JsonSchema => ({
   anyOf: [{ type: 'string', enum: [...UNIT_BASES] }, { type: 'null' }],
 });
+// Plan 0245: what a derived `comparablePrice` is a price per.
+const nullableComparableBasis = (): JsonSchema => ({
+  anyOf: [{ type: 'string', enum: [...COMPARABLE_BASES] }, { type: 'null' }],
+});
 const nullableLocalized = (): JsonSchema => ({
   anyOf: [ref(CATALOG_SCHEMA_IDS.localizedText), { type: 'null' }],
 });
@@ -556,6 +561,10 @@ const itemOfferView = object(
     unitPrice: numberOrNull(),
     unitPriceLabel: nullableString(),
     unitBasis: nullableUnitBasis(),
+    // Plan 0245: the catalog's own comparison figure and its basis. Stated
+    // but not required, so a reader built before it keeps validating.
+    comparablePrice: numberOrNull(),
+    comparableBasis: nullableComparableBasis(),
     observedAt: nullableString(),
     sourceKind: nullableSourceKind(),
     // Plan 0118. Stated but not required, so a reader built before it keeps
@@ -869,6 +878,10 @@ const supermarketItemProperties = () => ({
   unitPrice: numberOrNull(),
   unitPriceLabel: nullableString(),
   unitBasis: nullableUnitBasis(),
+  // Plan 0245: the catalog's own comparison figure and its basis. Stated
+  // but not required, so a reader built before it keeps validating.
+  comparablePrice: numberOrNull(),
+  comparableBasis: nullableComparableBasis(),
   observedAt: nullableString(),
   sourceKind: nullableSourceKind(),
   // Plan 0118. Stated but not required, so a reader built before it keeps

@@ -1,3 +1,5 @@
+> **PR:** [#938](https://github.com/IchirokuXVI/nx-portfolio/pull/938)
+
 # 0251: a completed run names what it could not read
 
 > Found on 2026-11-06 by a scheduled walk of every chain on Luna slot 4 (locked with

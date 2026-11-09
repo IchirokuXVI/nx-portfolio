@@ -1,4 +1,8 @@
-import { PriceSourceKind } from '@portfolio/luna-shopper/contracts';
+import {
+  COMPARABLE_BASES,
+  PriceSourceKind,
+  type ComparableBasis,
+} from '@portfolio/luna-shopper/contracts';
 import { Column, Entity, Index, JoinColumn, ManyToOne } from 'typeorm';
 import { BaseEntity } from './base.entity';
 import { Item } from './item.entity';
@@ -73,6 +77,27 @@ export class SupermarketItem extends BaseEntity {
    */
   @Column({ type: 'varchar', nullable: true })
   unitPriceLabel!: string | null;
+
+  /**
+   * The price of a kilo, a litre or one unit of the product, derived by the
+   * catalog from `price` and the item's size (plan 0245, section 1), and
+   * written wherever `price` is. **This is what orders offers**, and only
+   * between rows of one basis: `unitPrice` stays the chain's own figure.
+   * Null exactly when `comparableBasis` is, which a check constraint holds.
+   * Because it depends on the item, an edit of the item's size, unit, pack
+   * count or weight rewrites it (`recomputeComparablePrices`).
+   */
+  @Column({ type: 'numeric', precision: 12, scale: 4, nullable: true })
+  comparablePrice!: number | null;
+
+  /** What `comparablePrice` is a price per (plan 0245, decision C2). */
+  @Column({
+    type: 'enum',
+    enum: COMPARABLE_BASES,
+    enumName: 'comparable_basis',
+    nullable: true,
+  })
+  comparableBasis!: ComparableBasis | null;
 
   /** The effective row's `lastObservedAt`. Without it a price has no age. */
   @Column({ type: 'timestamptz', nullable: true })
