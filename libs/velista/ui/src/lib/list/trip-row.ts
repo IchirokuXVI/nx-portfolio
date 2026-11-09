@@ -2,11 +2,16 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
 import type { TripRowVm } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 import { CheckIcon, XCircleIcon } from '../icons/icons';
 
 /**
@@ -31,7 +36,7 @@ import { CheckIcon, XCircleIcon } from '../icons/icons';
         ', ' +
         (markKey() | rokuT: markArgs()) +
         ', ' +
-        ('list.trips.row.left' | rokuT: { count: vm.left ?? 0 }) +
+        ('list.trips.row.left' | rokuT: { count: leftWords() }) +
         ', ' +
         (numbersKey() | rokuT: numbersArgs())
       "
@@ -65,7 +70,7 @@ import { CheckIcon, XCircleIcon } from '../icons/icons';
 
       <span aria-hidden="true" class="tally">
         <span [class.zero]="(vm.left ?? 0) === 0" class="left">
-          {{ vm.left ?? 0 }}
+          {{ leftWords() }}
         </span>
         <span class="bought">{{ numbersKey() | rokuT: numbersArgs() }}</span>
       </span>
@@ -115,6 +120,24 @@ export class TripRow {
 
   protected readonly numbersArgs = computed(() => {
     const row = this.row();
-    return { bought: row.bought, asked: row.asked ?? 0 };
+    return {
+      bought: this._words(row.bought),
+      asked: this._words(row.asked ?? 0),
+    };
   });
+
+  /** What the trip left, in the line's unit: "3", or "750 g" (velista `0182`). */
+  protected readonly leftWords = computed(() =>
+    this._words(this.row().left ?? 0)
+  );
+
+  private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
+
+  private _words(quantity: number): string {
+    return formatAmount(
+      quantity,
+      this.row().unit ?? 'UNIT',
+      this._localeStore?.locale() ?? 'en'
+    );
+  }
 }
