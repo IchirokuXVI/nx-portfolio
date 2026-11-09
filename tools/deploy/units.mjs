@@ -15,6 +15,7 @@
 //   - a unit has no project
 //   - a unit.env line is neither a comment nor NAME="value"
 //   - a required key is absent, or empty where it must not be (only SECRETS may be empty)
+//   - OTA_PROJECTS, which is optional, names a project that is not in the unit
 //   - UNIT differs from the directory name, or RELEASE_TASKS is neither true nor false
 //   - a GATES entry names no directory under k8s/e2e
 //   - two TAG_PREFIX values are equal, or one starts with the other
@@ -74,6 +75,13 @@ export const REQUIRED_KEYS = [
   'BUILD_ENV_STAGING',
   'BUILD_ENV_PRODUCTION',
 ];
+
+/**
+ * Keys a unit.env may leave out. OTA_PROJECTS names the projects whose OTA files the
+ * pipelines write and sign before the image build (velista plan 0180, target 6); a
+ * unit without it, such as the portfolio, writes none.
+ */
+export const OPTIONAL_KEYS = ['OTA_PROJECTS'];
 
 /** The fields of k8s/e2e/<gate>/gate.env. Only BROWSERS may not be empty. */
 export const GATE_KEYS = ['HOSTS', 'TRIGGERS', 'BROWSERS', 'IMAGES'];
@@ -258,6 +266,18 @@ export function checkUnits(root) {
       if (fields[key] === undefined) say(`${key} is absent`);
       else if (fields[key] === '' && !MAY_BE_EMPTY.has(key)) {
         say(`${key} is empty`);
+      }
+    }
+    for (const project of words(fields.OTA_PROJECTS)) {
+      if (
+        !projects.some(
+          (candidate) =>
+            candidate.name === project && candidate.units.includes(unit.name)
+        )
+      ) {
+        say(
+          `OTA_PROJECTS names ${project}, and no project of the unit has that name`
+        );
       }
     }
     if (fields.UNIT && fields.UNIT !== unit.name) {

@@ -1,3 +1,5 @@
+> **PR:** [#940](https://github.com/IchirokuXVI/nx-portfolio/pull/940)
+
 # 0245: a comparable price says what it compares in
 
 > Found on 2026-11-05 while the measurement series was reviewed against plan `0244`. Every

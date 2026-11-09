@@ -197,7 +197,10 @@ export interface LidlClientOptions {
   storesUrl?: string;
   /** Defaults to {@link LIDL_PUBLIC_STORES_API_KEY}. A 401 means it rotated. */
   storesApiKey?: string;
-  /** How many index rows one request asks for. The endpoint caps it at 1,000. */
+  /**
+   * How many index rows one request asks for. The endpoint serves fewer, 60
+   * on 2026-11-08, and the walk steps by what it served (plan 0256).
+   */
   pageSize?: number;
   /**
    * Awaited before **every** request. This is where the harvester passes its per

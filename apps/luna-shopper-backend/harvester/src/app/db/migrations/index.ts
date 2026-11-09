@@ -30,6 +30,8 @@ import { NameWordsSizeMatch1760200000000 } from './1760200000000-NameWordsSizeMa
 import { SourceEntryApproxWeight1760244000000 } from './1760244000000-SourceEntryApproxWeight';
 import { PriceRefreshes1760300000000 } from './1760300000000-PriceRefreshes';
 import { ProbeGate1760400000000 } from './1760400000000-ProbeGate';
+import { SourceEntryPackaging1760500000000 } from './1760500000000-SourceEntryPackaging';
+import { SourceEntrySizeDoubt1760600000000 } from './1760600000000-SourceEntrySizeDoubt';
 
 /**
  * Every harvester migration, in the order TypeORM must apply them (plan 0027,
@@ -72,4 +74,6 @@ export const HARVESTER_MIGRATIONS = [
   SourceEntryApproxWeight1760244000000,
   PriceRefreshes1760300000000,
   ProbeGate1760400000000,
+  SourceEntryPackaging1760500000000,
+  SourceEntrySizeDoubt1760600000000,
 ];

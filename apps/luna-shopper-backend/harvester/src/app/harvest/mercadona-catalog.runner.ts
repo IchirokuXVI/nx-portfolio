@@ -305,6 +305,9 @@ export class MercadonaCatalogRunner implements CatalogRunner {
           // as one piece, null for a fixed pack.
           approxWeight: detail.approxWeight,
           sizeFormat: product.listing.sizeFormat,
+          // The container the listing prints, verbatim (plan 0248). The
+          // listing and the detail are the same product's payload.
+          packaging: product.listing.packaging,
           // Read from the detail's own `price_instructions` (plan 0162).
           packCount: detail.packCount,
           categoryPath: detail.categoryPath,

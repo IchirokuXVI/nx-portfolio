@@ -1,4 +1,4 @@
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import {
   HttpTestingController,
   provideHttpClientTesting,
@@ -6,14 +6,18 @@ import {
 } from '@angular/common/http/testing';
 import { signal, type WritableSignal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { APP_API_CONFIG } from '@portfolio/velista/models';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
+import { APP_API_CONFIG, APP_VERSION } from '@portfolio/velista/models';
 import {
   AppResumed,
+  AppUpdates,
   BackendReadiness,
   provideFakeBrowserFacade,
 } from '@portfolio/velista/platform';
 import { ApiUrl } from './api-url';
 import { SKIP_AUTH } from './auth/http-context';
+import { VELISTA_DATA_ACCESS_PROVIDERS } from './data-access-providers';
+import { gatewayInterceptor } from './gateway-interceptor';
 import {
   STARTUP_PROBE_BACKOFF_MS,
   STARTUP_PROBE_INTERVAL_MS,
@@ -246,5 +250,132 @@ describe('StartupProbe', () => {
     jest.advanceTimersByTime(STARTUP_PROBE_INTERVAL_MS * 3);
     await settle();
     httpMock.verify();
+  });
+});
+
+/**
+ * The same probe behind the real `gatewayInterceptor`, answered the way the gateway
+ * answers it. The probe asks for text, so a refusal's problem document arrives as a
+ * string, which is what the emulator walk of plan 0180 (row 12 of section 5) found
+ * reading as "cannot reach the server".
+ */
+describe('StartupProbe through gatewayInterceptor', () => {
+  let httpMock: HttpTestingController;
+  let readiness: BackendReadiness;
+  let checkNow: jest.Mock;
+
+  function start(): void {
+    TestBed.inject(StartupProbe);
+    TestBed.tick();
+  }
+
+  function pending(): TestRequest {
+    return httpMock.expectOne(HEALTH);
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    checkNow = jest.fn();
+
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(withInterceptors([gatewayInterceptor])),
+        provideHttpClientTesting(),
+        provideFakeBrowserFacade(),
+        {
+          provide: APP_API_CONFIG,
+          useValue: {
+            gatewayBaseUrl: GATEWAY,
+            realtimeBaseUrl: 'https://realtime.test',
+          },
+        },
+        {
+          provide: RokuTranslatorService,
+          useValue: { getLocale: () => 'en' },
+        },
+        { provide: APP_VERSION, useValue: '0.91.0' },
+        { provide: AppUpdates, useValue: { checkNow } },
+        { provide: AppResumed, useValue: { resumes: signal(0) } },
+        ...VELISTA_DATA_ACCESS_PROVIDERS,
+      ],
+    });
+
+    httpMock = TestBed.inject(HttpTestingController);
+    readiness = TestBed.inject(BackendReadiness);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+    jest.useRealTimers();
+  });
+
+  it('reads the refusal of MinClientVersionGuard as too-old and stops', async () => {
+    start();
+
+    // The exact body and headers the guard's refusal is rendered with.
+    pending().flush(
+      JSON.stringify({
+        type: 'https://errors.luna-shopper-backend/client_too_old',
+        title: 'client_too_old',
+        status: 426,
+        code: 'client_too_old',
+        detail: 'client version 0.91.0 is below the supported minimum 0.91.5',
+        message: 'This version of the app is out of date.',
+        correlationId: 'c1',
+      }),
+      {
+        status: 426,
+        statusText: 'Upgrade Required',
+        headers: {
+          'content-type': 'application/problem+json; charset=utf-8',
+          'x-min-client-version': '0.91.5',
+        },
+      }
+    );
+    await settle();
+
+    expect(readiness.state()).toBe('too-old');
+    expect(checkNow).toHaveBeenCalled();
+
+    jest.advanceTimersByTime(STARTUP_PROBE_INTERVAL_MS * 3);
+    await settle();
+    httpMock.verify();
+  });
+
+  it('still reads a 503 with a plain text body as unreachable', async () => {
+    start();
+
+    pending().flush('{"code":"client_too_old"}', {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { 'content-type': 'text/plain' },
+    });
+    await settle();
+
+    expect(readiness.state()).toBe('unreachable');
+    expect(checkNow).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(STARTUP_PROBE_BACKOFF_MS[0]);
+    await settle();
+    pending().flush('{"status":"ok"}', {
+      headers: { 'content-type': 'application/json' },
+    });
+    await settle();
+
+    expect(readiness.state()).toBe('ready');
+  });
+
+  it('reads the health answer as ready', async () => {
+    start();
+
+    pending().flush('{"status":"ok","info":{},"error":{},"details":{}}', {
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'x-min-client-version': '0.91.5',
+      },
+    });
+    await settle();
+
+    expect(readiness.state()).toBe('ready');
   });
 });

@@ -43,6 +43,8 @@ function counters(
     pricesSoldAnotherWay: 0,
     wordOrderProposals: 0,
     wordOrderRejectedPointers: 0,
+    sizesDisproved: 0,
+    probablePackCounts: 0,
     ...overrides,
   };
 }

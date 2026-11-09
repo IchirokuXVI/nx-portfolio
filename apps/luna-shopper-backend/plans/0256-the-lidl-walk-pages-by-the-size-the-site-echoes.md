@@ -1,3 +1,5 @@
+> **PR:** [#944](https://github.com/IchirokuXVI/nx-portfolio/pull/944)
+
 # 0256: the LIDL walk pages by the size the site echoes
 
 > Found on 2026-11-08 by the review of plan `0252` (PR #937), and confirmed live the same day with

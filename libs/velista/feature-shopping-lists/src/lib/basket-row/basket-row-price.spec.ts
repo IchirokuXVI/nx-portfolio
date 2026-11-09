@@ -79,6 +79,8 @@ const offer = (price: number | null): ProductOffer => ({
   currency: 'EUR',
   unitPrice: price,
   unitPriceLabel: 'EUR/L',
+  comparablePrice: null,
+  comparableBasis: null,
   observedAt: new Date('2026-09-01T06:00:00.000Z'),
   sourceKind: 'OFFICIAL_WEB',
   stale: false,
@@ -302,6 +304,8 @@ describe('BasketRowComponent: a piece sold by the kilo (velista 0179)', () => {
   const CHEESE_OFFER: ProductOffer = {
     ...offer(13.42),
     unitPriceLabel: 'EUR/kg',
+    comparablePrice: null,
+    comparableBasis: null,
     piecePrice: 20.94,
   };
 

@@ -96,6 +96,8 @@ function listed(id: string, warehouse: string) {
     id,
     slug: `producto-${id}`,
     display_name: `Producto ${id}`,
+    // The container, as the chain prints it (plan 0248).
+    packaging: 'Botella',
     published: true,
     share_url: `https://fixtures.test/product/${id}`,
     // As the chain prints it, size parameters included (plan 0198).
@@ -317,6 +319,19 @@ describe('MercadonaCatalogRunner (plans 0103 and 0108)', () => {
       sizeUnit: 'LITER',
       sizeFormat: 'l',
     });
+  });
+
+  it('carries the container the listing prints onto the observation (plan 0248)', async () => {
+    const { fetchImpl } = stubFetch({});
+    restore = withFetch(fetchImpl);
+    const { runner, context, report } = build();
+
+    await runner.run(context, report, walking('4661'), source());
+
+    expect(report.products.length).toBeGreaterThan(0);
+    for (const product of report.products) {
+      expect(product.packaging).toBe('Botella');
+    }
   });
 
   describe('the size and the unit it is in (plan 0177)', () => {
