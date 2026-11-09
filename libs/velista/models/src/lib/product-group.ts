@@ -16,11 +16,15 @@ export function productSuggestions(
 
 /**
  * The order the catalog ranks a group's members in (catalog `item.service.ts`,
- * `searchOffers`): an offer with a till price first, then unit price, then pack
- * price, and a product with no offer last.
+ * `searchOffers`; backend `0245`, section 4): an offer with a till price first,
+ * then the comparable figure within one basis, then pack price, and a product
+ * with no offer last.
  *
- * Unit price leads because the members of a group are the same product in
- * different packets, so the price per litre or per kilo is what compares them.
+ * The catalog orders by `comparablePrice` inside a basis block, so a price per
+ * kilo is never ranked against a price per unit. velista's copy of the order
+ * makes the same choice for the siblings it holds: two offers of different
+ * bases, or two with no figure, are ordered by pack price alone, and an offer
+ * with a figure comes before one with none.
  */
 export function compareGroupOffers(
   a: ProductOffer | null,
@@ -31,8 +35,12 @@ export function compareGroupOffers(
   if (aPriced !== bPriced) {
     return aPriced ? -1 : 1;
   }
-  const unit = nullsLast(a?.unitPrice ?? null, b?.unitPrice ?? null);
-  return unit !== 0 ? unit : nullsLast(a?.price ?? null, b?.price ?? null);
+  const figures = a !== null && b !== null ? sameBasisFigure(a, b) : null;
+  const compared =
+    figures !== null ? figures[0] - figures[1] : figureFirst(a, b);
+  return compared !== 0
+    ? compared
+    : nullsLast(a?.price ?? null, b?.price ?? null);
 }
 
 /**
@@ -55,9 +63,11 @@ export function similarProducts(
 /**
  * Whether another member of the group is cheaper than `offer`, strictly.
  *
- * Only a comparison both sides can make counts: unit price when both carry
- * one, pack price otherwise. A product with no price is never marked, because
- * nothing says it is dearer, and a tie is not a better price.
+ * Only a comparison both sides can make counts: the comparable figure when both
+ * carry one of the same basis (backend `0245`), pack price when neither carries
+ * one. A difference of basis is never cheaper, and neither is a figure against
+ * no figure. A product with no price is never marked, because nothing says it
+ * is dearer, and a tie is not a better price.
  */
 export function cheaperInGroup(
   productId: string,
@@ -80,14 +90,42 @@ export function cheaperInGroup(
 }
 
 function isCheaper(candidate: ProductOffer, than: ProductOffer): boolean {
-  if (candidate.unitPrice !== null && than.unitPrice !== null) {
-    return candidate.unitPrice < than.unitPrice;
+  const figures = sameBasisFigure(candidate, than);
+  if (figures !== null) {
+    return figures[0] < figures[1];
+  }
+  if (candidate.comparableBasis !== null || than.comparableBasis !== null) {
+    return false;
   }
   return (
     candidate.price !== null &&
     than.price !== null &&
     candidate.price < than.price
   );
+}
+
+/**
+ * An offer with a figure before one with none, as before the figure had a
+ * basis; zero when both or neither carry one, so two figures of different bases
+ * fall through to the pack price.
+ */
+function figureFirst(a: ProductOffer | null, b: ProductOffer | null): number {
+  const aHas = a !== null && a.comparablePrice !== null;
+  const bHas = b !== null && b.comparablePrice !== null;
+  return aHas === bHas ? 0 : aHas ? -1 : 1;
+}
+
+/** The two comparable figures, when both offers carry one of the same basis. */
+function sameBasisFigure(
+  a: ProductOffer,
+  b: ProductOffer
+): [number, number] | null {
+  return a.comparableBasis !== null &&
+    a.comparableBasis === b.comparableBasis &&
+    a.comparablePrice !== null &&
+    b.comparablePrice !== null
+    ? [a.comparablePrice, b.comparablePrice]
+    : null;
 }
 
 function nullsLast(a: number | null, b: number | null): number {

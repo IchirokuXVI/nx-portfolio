@@ -11,6 +11,7 @@ public class MainActivity extends BridgeActivity {
         // The app's own plugins are registered before super, which builds the bridge and
         // reads the list then (velista plan 0177).
         registerPlugin(VelistaGooglePlugin.class);
+        registerPlugin(VelistaNativeInfoPlugin.class);
         super.onCreate(savedInstanceState);
         // Edge to edge on every API level, as Capacitor 8's SystemBars documentation asks
         // for `insetsHandling: 'native'`. After super and not before it: super switches

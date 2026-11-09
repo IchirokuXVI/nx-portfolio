@@ -27,6 +27,46 @@ export class NativePluginDoubles {
   forgets = 0;
   loads = 0;
 
+  /** The updater's answers. A method named in `updaterErrors` rejects instead. */
+  updaterErrors = new Set<string>();
+  currentAnswer: unknown = {
+    bundle: { id: 'builtin', version: '0.20.0', status: 'success' },
+    native: '0.20.0',
+  };
+  listAnswer: unknown = { bundles: [] };
+  /** What `download()` rejects with when set, as a wrong checksum does. */
+  downloadError: unknown = null;
+  failedAnswers: unknown[] = [];
+  downloads: unknown[] = [];
+  sets: unknown[] = [];
+  resets = 0;
+  readyNotices = 0;
+
+  /** What `VelistaNativeInfo.info()` answers, or what it rejects with. */
+  nativeInfoAnswer: unknown = {
+    nativeApi: 1,
+    otaBaseUrl: 'https://staging.velista.app/ota/android/',
+    otaPublicKey: 'PEM',
+    builtinBundle: '0.20.0+0f7476f4e1a2',
+  };
+  nativeInfoError: unknown = null;
+
+  /** What `CapacitorHttp.request` answers, or what it rejects with. */
+  httpAnswer: { status: number; data: unknown } = { status: 200, data: '{}' };
+  httpError: unknown = null;
+  httpRequests: unknown[] = [];
+
+  /** Play's answers. A method named in `appUpdateErrors` rejects instead. */
+  appUpdateErrors = new Set<string>();
+  appUpdateInfoAnswer: unknown = {
+    currentVersionCode: '20000',
+    currentVersionName: '0.20.0',
+    updateAvailability: 1,
+  };
+  flexibleAnswer: unknown = { code: 0 };
+  immediateAnswer: unknown = { code: 0 };
+  flexibleCompletions = 0;
+
   readonly plugins: NativePlugins = {
     app: {
       getInfo: async () => ({ id: this.appId }),
@@ -87,7 +127,98 @@ export class NativePluginDoubles {
         this.forgets++;
       },
     },
+    updater: {
+      notifyAppReady: async () => {
+        this._updaterCall('notifyAppReady');
+        this.readyNotices++;
+        return {};
+      },
+      download: async (options) => {
+        this._updaterCall('download');
+        this.downloads.push(options);
+        if (this.downloadError !== null) {
+          throw this.downloadError;
+        }
+        return {
+          id: 'r4nd0m1d00',
+          version: options.version,
+          status: 'pending',
+        };
+      },
+      set: async (options) => {
+        this._updaterCall('set');
+        this.sets.push(options);
+      },
+      reset: async () => {
+        this._updaterCall('reset');
+        this.resets++;
+      },
+      list: async () => {
+        this._updaterCall('list');
+        return this.listAnswer;
+      },
+      current: async () => {
+        this._updaterCall('current');
+        return this.currentAnswer;
+      },
+      getFailedUpdate: async () => {
+        this._updaterCall('getFailedUpdate');
+        return this.failedAnswers.shift() ?? null;
+      },
+    },
+    appUpdate: {
+      getAppUpdateInfo: async () => {
+        this._appUpdateCall('getAppUpdateInfo');
+        return this.appUpdateInfoAnswer;
+      },
+      startFlexibleUpdate: async () => {
+        this._appUpdateCall('startFlexibleUpdate');
+        return this.flexibleAnswer;
+      },
+      completeFlexibleUpdate: async () => {
+        this._appUpdateCall('completeFlexibleUpdate');
+        this.flexibleCompletions++;
+      },
+      performImmediateUpdate: async () => {
+        this._appUpdateCall('performImmediateUpdate');
+        return this.immediateAnswer;
+      },
+      addListener: async (eventName, listener) => {
+        this._appUpdateCall('addListener');
+        this.listeners.set(eventName, listener);
+        return { remove: async () => void this.listeners.delete(eventName) };
+      },
+    },
+    nativeInfo: {
+      info: async () => {
+        if (this.nativeInfoError !== null) {
+          throw this.nativeInfoError;
+        }
+        return this.nativeInfoAnswer;
+      },
+    },
+    http: {
+      request: async (options) => {
+        this.httpRequests.push(options);
+        if (this.httpError !== null) {
+          throw this.httpError;
+        }
+        return this.httpAnswer;
+      },
+    },
   };
+
+  private _updaterCall(method: string): void {
+    if (this.updaterErrors.has(method)) {
+      throw new Error(`updater refused ${method}`);
+    }
+  }
+
+  private _appUpdateCall(method: string): void {
+    if (this.appUpdateErrors.has(method)) {
+      throw new Error(`Play refused ${method}`);
+    }
+  }
 
   /** The value to provide for `NATIVE_PLUGINS`. */
   readonly loader = (): Promise<NativePlugins> => {

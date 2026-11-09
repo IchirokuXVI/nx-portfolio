@@ -1013,6 +1013,14 @@ export interface SourceCatalogEntryView {
   /** The source's own size text, and half of the key for a source with no id. */
   sizeFormat: string | null;
   /**
+   * The container the chain prints (`Brik`, `Botella`, `Pack-4`), verbatim, as
+   * the last full read stated it (plan 0248). Null for a row whose source
+   * prints none, which is every chain but Mercadona, and for a Mercadona row no
+   * run has read whole since that plan. It tells two containers of one product
+   * apart, and they are never proposed as each other.
+   */
+  packaging: string | null;
+  /**
    * How many units the pack holds, as the last run that saw the row read it
    * (plan 0162). Null when the source stated no count. It is the source's, so
    * every run rewrites it exactly as it rewrites `sizeFormat`.
@@ -1075,6 +1083,35 @@ export interface SourceCatalogEntryView {
    * is waiting on. An accept writes every one of these that is still valid.
    */
   prices: SourceEntryPriceView[];
+  /**
+   * The size the row's own price and comparison price imply, when it
+   * disagrees with the stated one beyond about 15% (plan 0249), and null
+   * otherwise. Written by the ingest alone, from what it read.
+   *
+   * **Evidence, never a correction.** `unitSize` stays what the source sent,
+   * because the chain prints wrong comparison prices too. While it is set, a
+   * product is created from the row only with a `unitSize` the request
+   * names, and rung 4 neither proposes from the row nor proposes it. An
+   * accept onto an existing product is untouched.
+   */
+  sizeDoubt: SourceEntrySizeDoubtView | null;
+}
+
+/** A size its own unit price disproves (plan 0249, section 3). */
+export interface SourceEntrySizeDoubtView {
+  /** The implied size, in {@link unit}. */
+  implied: number;
+  /** The base unit both sizes are compared in: grams, millilitres or units. */
+  unit: UnitOfMeasure;
+  /** `implied / stated`, with the stated size in the same unit. */
+  ratio: number;
+  /**
+   * The comparison price's label the check read, as the chain printed it, or
+   * null when the row's prices were not loaded with it.
+   */
+  label: string | null;
+  /** The run whose observation recorded the doubt. */
+  runId: string;
 }
 
 /**

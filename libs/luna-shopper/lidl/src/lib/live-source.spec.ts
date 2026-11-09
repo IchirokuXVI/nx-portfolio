@@ -8,9 +8,9 @@ import { probeLidl } from './probe';
  *
  *   LUNA_LIVE_SOURCE_TEST=1 npx nx test luna-shopper/lidl --testFile=live-source.spec.ts
  *
- * It runs the probe the harvester runs once a day: three requests, a second
- * apart. The assortment is a rolling window and a price expires every Sunday,
- * so the probe asserts field names and floors of one, never a value.
+ * It runs the probe the harvester runs once a day: three or four requests, a
+ * second apart. The assortment is a rolling window and a price expires every
+ * Sunday, so the probe asserts field names and floors of one, never a value.
  */
 const live =
   process.env['LUNA_LIVE_SOURCE_TEST'] === '1' ? describe : describe.skip;
@@ -27,10 +27,12 @@ live('LIDL, live', () => {
     console.log(JSON.stringify(result, null, 2));
 
     expect(result.steps.filter((step) => !step.ok)).toEqual([]);
-    expect(result.steps.map((step) => step.name)).toEqual([
-      'listing',
-      'product',
-      'shops',
-    ]);
+    // A second listing page only when the first held no grocery row. A run
+    // that read no grocery product is red, so that someone looks (plan 0252).
+    const names = result.steps.map((step) => step.name);
+    expect([
+      ['listing', 'product', 'shops'],
+      ['listing', 'listing page 2', 'product', 'shops'],
+    ]).toContainEqual(names);
   });
 });

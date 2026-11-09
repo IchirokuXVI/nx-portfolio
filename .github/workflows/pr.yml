@@ -83,7 +83,7 @@ jobs:
       # k8s/units is complete (k8s plan 0014). Plain node that reads project.json
       # as text, so it needs no Nx and `nx affected` never sees it.
       - name: The deploy unit check's own tests
-        run: node --test tools/deploy/units.test.mjs tools/release/release-notes.test.mjs
+        run: node --test tools/deploy/units.test.mjs tools/release/release-notes.test.mjs apps/velista/scripts/ota-bundle.node-test.mjs apps/velista/scripts/ota-keygen.node-test.mjs apps/velista/scripts/native-api.node-test.mjs apps/velista/scripts/build-android.node-test.mjs
 
       - name: Every deployable app belongs to one deploy unit
         run: node tools/deploy/units.mjs check
@@ -115,7 +115,8 @@ jobs:
   # job brought a stack up on purpose, so an intended skip becomes a failure.
   # ---------------------------------------------------------------------------
   verify-infra:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright 1.59 installs no Chromium.
+    runs-on: ubuntu-24.04
     env:
       # A skip, an empty suite, or a stack that failed to come up all fail the job.
       LUNA_REQUIRE_STACK: '1'

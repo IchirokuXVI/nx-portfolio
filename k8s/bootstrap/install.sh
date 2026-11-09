@@ -43,7 +43,7 @@ CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.21.3}"
 # Chart version, which tracks the app version one for one. Check what is current
 # with `helm search repo metallb/metallb --versions`.
 # renovate: datasource=helm depName=metallb registryUrl=https://metallb.github.io/metallb
-METALLB_VERSION="${METALLB_VERSION:-0.16.1}"
+METALLB_VERSION="${METALLB_VERSION:-0.16.2}"
 # The k3s release a new host installs and nx-host-patch upgrades to. Both
 # clusters ran this one when it was pinned (2026-10-22).
 # renovate: datasource=github-releases depName=k3s-io/k3s

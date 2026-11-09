@@ -1,3 +1,5 @@
+> **PR:** [#941](https://github.com/IchirokuXVI/nx-portfolio/pull/941)
+
 # 0248: a Mercadona pack states its count and its container
 
 > Found on 2026-11-06 by a scheduled walk of every chain on Luna slot 4 (run
