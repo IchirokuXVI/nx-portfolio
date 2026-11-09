@@ -353,6 +353,9 @@ describe('toLine', () => {
     // Written to the schema the gateway answers with, not to suit the mapper.
     const wire = {
       ...valid,
+      // What the quantity counts, which the schema requires since backend
+      // plan 0246.
+      unit: 'UNIT',
       itemSetHash: null,
       approvedByUserId: null,
       createdAt: '2026-01-01T00:00:00.000Z',
