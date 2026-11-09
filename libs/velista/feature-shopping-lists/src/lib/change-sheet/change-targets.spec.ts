@@ -186,6 +186,8 @@ describe('basketProductOf', () => {
     currency: 'EUR',
     unitPrice: 1.1,
     unitPriceLabel: null,
+    comparablePrice: null,
+    comparableBasis: null,
     piecePrice: null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB' as const,

@@ -2702,6 +2702,8 @@ export type CatalogAdminSupermarketItemView = {
   unitPrice: number | null;
   unitPriceLabel: string | null;
   unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  comparablePrice?: number | null;
+  comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -2917,6 +2919,8 @@ export type CatalogItemOfferView = {
   unitPrice: number | null;
   unitPriceLabel: string | null;
   unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  comparablePrice?: number | null;
+  comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -3743,6 +3747,8 @@ export type CatalogSupermarketItemView = {
   unitPrice: number | null;
   unitPriceLabel: string | null;
   unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  comparablePrice?: number | null;
+  comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
   sourceKind: EnumsPriceSourceKind | null;
   priceCopiedFromScopeId?: string | null;
@@ -4090,7 +4096,10 @@ export type EnumsHarvestWarningCode =
   | 'PRICE_SOLD_ANOTHER_WAY'
   | 'SOURCE_PAUSED'
   | 'SOURCE_RESUMED'
-  | 'APPROX_WEIGHT_ROWS_DISAGREE';
+  | 'APPROX_WEIGHT_ROWS_DISAGREE'
+  | 'LISTING_UNREAD'
+  | 'LISTING_SHORT'
+  | 'DETAIL_UNREAD';
 
 /**
  * `enums.ItemImageSource` in the gateway's OpenAPI document.

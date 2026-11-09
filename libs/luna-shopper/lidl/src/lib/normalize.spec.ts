@@ -8,6 +8,7 @@ import searchPage from './__fixtures__/search-page.json';
 import storePage from './__fixtures__/store-page.json';
 import { isGroceryCategory } from './categories';
 import {
+  nextListOffset,
   normalizeListPage,
   normalizeListRow,
   normalizeProduct,
@@ -63,6 +64,22 @@ describe('normalizeListPage', () => {
     expect(page.offset).toBe(325);
     expect(page.fetchsize).toBe(5);
     expect(page.rows).toHaveLength(5);
+    expect(page.itemCount).toBe(5);
+  });
+
+  it('counts every item the page carried, also a tile that is no product (plan 0256)', () => {
+    const items = (searchPage as { items: unknown[] }).items;
+    const withTiles = normalizeListPage({
+      ...searchPage,
+      items: [{ banner: { title: 'Ofertas' } }, ...items, {}],
+    });
+
+    expect(withTiles.rows).toHaveLength(5);
+    expect(withTiles.itemCount).toBe(7);
+  });
+
+  it('counts no items on a page that carries none', () => {
+    expect(normalizeListPage({ numFound: 3 }).itemCount).toBe(0);
   });
 
   it('reads the fields the index carries', () => {
@@ -137,6 +154,29 @@ describe('normalizeListPage', () => {
       });
       expect(product?.brand).toBeNull();
     });
+  });
+});
+
+describe('nextListOffset (plan 0256)', () => {
+  const page = (itemCount: number, fetchsize: number | null) => ({
+    rows: [],
+    total: 679,
+    offset: 0,
+    fetchsize,
+    itemCount,
+  });
+
+  it('steps by the items the page carried', () => {
+    expect(nextListOffset(page(60, 60), 120, 100)).toBe(180);
+  });
+
+  it('steps by the echoed size when the page carried no items', () => {
+    expect(nextListOffset(page(0, 60), 120, 100)).toBe(180);
+  });
+
+  it('steps by the asked size when the page stated neither', () => {
+    expect(nextListOffset(page(0, null), 120, 100)).toBe(220);
+    expect(nextListOffset(page(0, 0), 120, 100)).toBe(220);
   });
 });
 

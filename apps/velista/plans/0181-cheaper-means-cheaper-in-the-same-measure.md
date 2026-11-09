@@ -1,3 +1,5 @@
+> **PR:** [#940](https://github.com/IchirokuXVI/nx-portfolio/pull/940)
+
 # 0181: cheaper means cheaper in the same measure
 
 > Found on 2026-11-05. The "cheaper option" mark and the order of a product's siblings

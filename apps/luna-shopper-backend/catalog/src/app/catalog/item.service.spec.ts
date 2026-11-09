@@ -719,7 +719,17 @@ describe('ItemService', () => {
     });
 
     it('is changed by an update, which can also clear it', async () => {
-      const { service, audit } = build({ items: items() });
+      // Plan 0245, section 3: the edit rewrites the comparison pair of the
+      // product's rows in the same transaction, one statement each time.
+      const statements: { sql: string; parameters?: unknown[] }[] = [];
+      const repository = {
+        ...items(),
+        query: async (sql: string, parameters?: unknown[]) => {
+          statements.push({ sql, parameters });
+          return [];
+        },
+      };
+      const { service, audit } = build({ items: repository });
       expect(
         (await service.update({ userId: ADMIN, itemId: 'i1', packCount: 4 }))
           .packCount
@@ -732,6 +742,12 @@ describe('ItemService', () => {
         { packCount: 4 },
         { packCount: null },
       ]);
+      expect(statements).toHaveLength(2);
+      for (const statement of statements) {
+        expect(statement.sql).toContain('UPDATE "supermarket_items" si');
+        expect(statement.sql).toContain('"comparablePrice"');
+        expect(statement.parameters).toEqual([['i1']]);
+      }
     });
 
     it('is left alone by an update that does not name it', async () => {

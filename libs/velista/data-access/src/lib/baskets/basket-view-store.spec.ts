@@ -1699,6 +1699,8 @@ describe('BasketViewStore: the estimated total', () => {
         currency: 'EUR',
         unitPrice: null,
         unitPriceLabel: null,
+        comparablePrice: null,
+        comparableBasis: null,
         observedAt: null,
         sourceKind: 'OFFICIAL_WEB',
         stale: false,

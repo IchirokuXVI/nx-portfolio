@@ -1,3 +1,4 @@
+import type { ComparableBasis } from './catalog-browse';
 import type { CatalogItem, CatalogSuggestion, ProductOffer } from './domain';
 import {
   cheaperInGroup,
@@ -6,12 +7,18 @@ import {
   similarProducts,
 } from './product-group';
 
-function offer(price: number | null, unitPrice: number | null): ProductOffer {
+function offer(
+  price: number | null,
+  unitPrice: number | null,
+  comparable: readonly [number, ComparableBasis] | null = null
+): ProductOffer {
   return {
     price,
     currency: 'EUR',
     unitPrice,
     unitPriceLabel: null,
+    comparablePrice: comparable?.[0] ?? null,
+    comparableBasis: comparable?.[1] ?? null,
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
@@ -82,6 +89,43 @@ describe('compareGroupOffers', () => {
       null,
     ]);
   });
+
+  it('orders two offers per kilo by their comparable figure', () => {
+    const dear = offer(1, 9, [4, 'KILOGRAM']);
+    const cheap = offer(3, 9, [2, 'KILOGRAM']);
+
+    expect([dear, cheap].sort(compareGroupOffers)).toEqual([cheap, dear]);
+  });
+
+  it('orders a per kilo offer and a per unit offer by price alone', () => {
+    const perKilo = offer(2, null, [0.5, 'KILOGRAM']);
+    const perUnit = offer(1, null, [3, 'UNIT']);
+
+    expect([perKilo, perUnit].sort(compareGroupOffers)).toEqual([
+      perUnit,
+      perKilo,
+    ]);
+  });
+
+  it('ignores the chain unit price', () => {
+    const lowLabel = offer(2, 0.1, [4, 'LITER']);
+    const highLabel = offer(2, 9, [3, 'LITER']);
+
+    expect([lowLabel, highLabel].sort(compareGroupOffers)).toEqual([
+      highLabel,
+      lowLabel,
+    ]);
+  });
+
+  it('still puts an offer with a till price before one without', () => {
+    const unpriced = offer(null, null, [0.1, 'KILOGRAM']);
+    const priced = offer(5, null, [9, 'KILOGRAM']);
+
+    expect([unpriced, priced].sort(compareGroupOffers)).toEqual([
+      priced,
+      unpriced,
+    ]);
+  });
 });
 
 describe('similarProducts', () => {
@@ -113,6 +157,43 @@ describe('cheaperInGroup', () => {
 
   it('compares pack prices when a unit price is missing', () => {
     expect(cheaperInGroup('c', offer(1, null), members)).toBe(true);
+  });
+
+  it('marks a cheaper sibling per kilo', () => {
+    const kilos = [
+      item('a', offer(3, null, [6, 'KILOGRAM'])),
+      item('b', offer(4, null, [5, 'KILOGRAM'])),
+    ];
+
+    expect(cheaperInGroup('a', offer(3, null, [6, 'KILOGRAM']), kilos)).toBe(
+      true
+    );
+    expect(cheaperInGroup('b', offer(4, null, [5, 'KILOGRAM']), kilos)).toBe(
+      false
+    );
+  });
+
+  it('never marks a sibling of another basis, however low its figure', () => {
+    const mixed = [
+      item('eggs-one', offer(0.3, null, [0.3, 'UNIT'])),
+      item('eggs-dozen', offer(2.2, 0.18, [2.2, 'KILOGRAM'])),
+    ];
+
+    expect(
+      cheaperInGroup('eggs-dozen', offer(2.2, 0.18, [2.2, 'KILOGRAM']), mixed)
+    ).toBe(false);
+  });
+
+  it('never marks across a figure on one side and none on the other', () => {
+    const one = [item('a', offer(0.5, null, [1, 'LITER']))];
+
+    expect(cheaperInGroup('b', offer(2, null), one)).toBe(false);
+  });
+
+  it('does not mark a tie of the comparable figure', () => {
+    const tied = [item('a', offer(1, null, [2, 'LITER']))];
+
+    expect(cheaperInGroup('b', offer(3, null, [2, 'LITER']), tied)).toBe(false);
   });
 
   it('never marks a product with no price', () => {

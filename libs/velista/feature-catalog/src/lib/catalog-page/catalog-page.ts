@@ -659,12 +659,17 @@ export class CatalogPage {
     this._translator.loaded();
     const context = this.context();
     const chainChosen = this.chain() !== null;
+    // Under the unit price order the row prints the figure that placed it, the
+    // catalog's comparable pair, and not the chain's own (velista `0181`).
+    const unitPriceFigure =
+      this.order() === 'unitPrice' ? 'comparable' : 'chain';
 
     return this._listed().map((product) =>
       this._onLine(
         productRowView(product, {
           locale,
           chainChosen,
+          unitPriceFigure,
           translate: (key, args) =>
             this._translator.t(key, undefined, locale, args),
           chainOf: (scope) => this._chainName(context, scope, locale),
