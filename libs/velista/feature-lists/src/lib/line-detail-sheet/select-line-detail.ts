@@ -19,6 +19,7 @@ import {
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
+import { offeredUnits } from '../line-page/select-line-page';
 
 import {
   priceWords,
@@ -125,10 +126,15 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
       input.locale,
-      input.pricesOf
+      input.pricesOf,
+      (itemId) => input.itemNameOf(itemId) ?? undefined
     ).text,
     quantity: line.quantity,
     unit: line.unit,
+    units: offeredUnits(
+      line,
+      (itemId) => input.itemNameOf(itemId) ?? undefined
+    ),
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     lastPurchase: rows.find((row) => row.outcome === 'BOUGHT') ?? null,

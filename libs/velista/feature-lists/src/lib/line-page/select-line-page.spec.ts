@@ -23,6 +23,7 @@ function line(overrides: Partial<Line> = {}): Line {
     listId: LIST_ID,
     content: 'Shampoo',
     quantity: 3,
+    unit: 'UNIT',
     itemIds: ['normal', 'classic'],
     productGroupId: null,
     groupItemIds: [],
@@ -107,11 +108,15 @@ const PRICES: Record<string, LineProductPriceRead> = {
 };
 
 function input(overrides: Partial<LinePageInput> = {}): LinePageInput {
+  const itemNameOf =
+    overrides.itemNameOf ?? ((itemId: string) => CATALOG[itemId] ?? null);
   return {
     line: line(),
     list: list(),
     zoneName: 'Home',
-    itemNameOf: (itemId) => CATALOG[itemId] ?? null,
+    itemNameOf,
+    // The size fields come with the record, as `ItemNames.sizingOf` answers.
+    productOf: (itemId) => itemNameOf(itemId),
     namesUnavailable: false,
     nameOf: (userId) => (userId === 'user-marta' ? 'Marta' : null),
     callerUserId: ME,

@@ -2,6 +2,7 @@ import {
   catalogName,
   lineCardOrder,
   lineName,
+  lineUnits,
   type AlsoOnVm,
   type CatalogItem,
   type Line,
@@ -9,11 +10,16 @@ import {
   type LineProductCardVm,
   type LineProductPrice,
   type LineProductPriceRead,
+  type LineUnit,
+  type LineUnitProduct,
+  type LineUnitProductRead,
   type PriceWords,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
 import {
+  lineAmountWords,
+  lineUnitCannotWords,
   priceWords,
   productDetailText,
   unitPriceWords,
@@ -47,6 +53,11 @@ export interface LinePageInput {
   readonly locale: string;
   /** The prices of one product near the reader. See {@link LineProductPriceRead}. */
   readonly priceOf: (itemId: string) => LineProductPriceRead;
+  /**
+   * The size fields of a product (velista `0183`). See
+   * {@link LineUnitProductRead}: `undefined` while its record is not read.
+   */
+  readonly productOf: (itemId: string) => LineUnitProductRead;
   /** The name of a supermarket, in any language it has, or null if nobody can name it. */
   readonly supermarketNameOf: (supermarketId: string) => string | null;
   readonly alsoOn: AlsoOnVm | null;
@@ -62,23 +73,27 @@ export interface LinePageInput {
 }
 
 export function selectLinePage(input: LinePageInput): LinePageVm | null {
-  const { line } = input;
-  if (line === undefined) {
+  if (input.line === undefined) {
     return null;
   }
+  // A line read before velista `0182` carries no unit, and counts pieces.
+  const line: Line = { ...input.line, unit: input.line.unit ?? 'UNIT' };
 
   // The favourite, then the cheapest (velista `0137`, section 2): the order the
   // basket is meant to choose in. The first card is the product the line shows,
   // and the row of the list shows it too: one function for both (velista `0145`).
-  const cards = lineCardOrder(line, input.priceOf).map((price) =>
-    cardOf(price.itemId, price, line, input)
+  // Ordered by what the line's amount costs with each product, among the ones
+  // that can serve its unit (velista `0183`, W3).
+  const cards = lineCardOrder(line, input.priceOf, input.productOf).map(
+    (price) => cardOf(price.itemId, price, line, input)
   );
 
   const name = lineName(
     line,
     (itemId) => input.itemNameOf(itemId)?.name ?? null,
     input.locale,
-    input.priceOf
+    input.priceOf,
+    input.productOf
   );
 
   return {
@@ -87,6 +102,7 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     canAddName: !name.own && input.canRename,
     quantity: line.quantity,
     unit: line.unit,
+    units: offeredUnits(line, input.productOf),
     quantityWords: formatAmount(line.quantity, line.unit, input.locale),
     listName: input.list?.name ?? null,
     zoneName: input.zoneName,
@@ -152,8 +168,67 @@ function cardOf(
     priceKind: unpriced ? 'noPrice' : price.kind,
     price: words,
     ...captionOf(price, item, line.preferredSupermarketId !== null, input),
+    ...lineCostOf(price, item, line, input),
     cheapest: unpriced ? false : price.cheapest,
     favorite: line.favoriteItemId === itemId,
+  };
+}
+
+/**
+ * The units the chip offers (velista `0183`, target state 1): `lineUnits` over
+ * the products whose records are read. While one is still being read the line's
+ * own unit alone, so the chip does not appear and then grow a segment.
+ */
+export function offeredUnits(
+  line: Pick<Line, 'itemIds' | 'unit'>,
+  productOf: (itemId: string) => LineUnitProductRead
+): readonly LineUnit[] {
+  const reads = line.itemIds.map((itemId) => productOf(itemId));
+  if (reads.some((read) => read === undefined)) {
+    return [line.unit];
+  }
+  const known = reads.filter(
+    (read): read is LineUnitProduct => read !== null && read !== undefined
+  );
+  return line.itemIds.length === 0 || known.length === 0
+    ? [line.unit]
+    : lineUnits(known);
+}
+
+/**
+ * The member's caption of the line's amount (velista `0183`, target states 4
+ * and 6): what the amount costs with it, or the words for a product that cannot
+ * serve the unit at all. Null on a line with one product, where there is no
+ * choice to inform, and while nothing is known.
+ */
+function lineCostOf(
+  price: LineProductPrice,
+  item: CatalogItem | null,
+  line: Line,
+  input: Pick<LinePageInput, 'locale' | 'translate'>
+): { readonly lineCost: string | null; readonly cannotServe: boolean } {
+  if (line.itemIds.length < 2) {
+    return { lineCost: null, cannotServe: false };
+  }
+  if (price.serves === false) {
+    return {
+      lineCost: lineUnitCannotWords(line.unit, input.translate),
+      cannotServe: true,
+    };
+  }
+  if (item === null || price.offer === null) {
+    return { lineCost: null, cannotServe: false };
+  }
+  return {
+    lineCost: lineAmountWords(
+      price.amount,
+      line,
+      item,
+      price.offer.currency,
+      input.locale,
+      input.translate
+    ),
+    cannotServe: false,
   };
 }
 

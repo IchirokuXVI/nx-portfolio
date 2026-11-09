@@ -92,7 +92,8 @@ export function selectLineHistory(
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
       input.locale,
-      input.pricesOf
+      input.pricesOf,
+      (itemId) => input.itemNameOf(itemId) ?? undefined
     ).text,
     listName: input.listName,
     scopes,

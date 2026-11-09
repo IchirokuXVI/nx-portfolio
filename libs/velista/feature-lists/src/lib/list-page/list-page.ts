@@ -539,7 +539,8 @@ export class ListPage {
       line,
       (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
       this._locale(),
-      this._itemNames.pricesOf
+      this._itemNames.pricesOf,
+      this._itemNames.sizingOf
     );
   }
 

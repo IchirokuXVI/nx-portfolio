@@ -95,6 +95,11 @@ export function listErrorKey(
       // two lines stay as they are, and the sentence says why.
       return 'list.error.unitDiffers';
 
+    case 'line_unit_not_offered':
+      // A unit the line's products do not serve (backend `0246`, 4.2), chosen
+      // on a chip drawn from a set that changed under it. Nothing was written.
+      return 'line.unit.notOffered';
+
     case 'rate_limited':
       // A run of quick adds hitting a bucket. The composer keeps its text, which is the
       // composer's business; this is only the sentence.

@@ -96,14 +96,26 @@
           <div class="amount">
             <span class="label">{{ 'list.detail.askedFor' | rokuT }}</span>
             @if (editScope === 'full') {
-              <lib-quantity-reel
-                (committedTo)="onAmountCommitted($event.to)"
-                (preview)="onAmountPreview($event)"
-                [label]="'list.detail.askedFor' | rokuT"
-                [readonly]="saving()"
-                [unit]="unit()"
-                [value]="amount()"
-              />
+              <!--
+                What the line counts in, above the reel, on a line whose products
+                offer more than one unit (velista 0183). Draws nothing otherwise.
+              -->
+              <div class="amount-controls">
+                <lib-line-unit-chip
+                  (chosen)="chooseUnit($event)"
+                  [disabled]="saving() || unitPending()"
+                  [units]="line.units"
+                  [value]="unit()"
+                />
+                <lib-quantity-reel
+                  (committedTo)="onAmountCommitted($event.to)"
+                  (preview)="onAmountPreview($event)"
+                  [label]="'list.detail.askedFor' | rokuT"
+                  [readonly]="saving() || unitPending()"
+                  [unit]="unit()"
+                  [value]="amount()"
+                />
+              </div>
             } @else {
               <!--
                 The number as text, where the reel's pill would be, so the sheet does not

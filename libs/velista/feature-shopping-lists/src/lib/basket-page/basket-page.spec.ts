@@ -54,6 +54,7 @@ import type {
   CatalogSuggestion,
   CategoryNode,
   ErrorCode,
+  LineUnit,
 } from '@portfolio/velista/models';
 import {
   DEFAULT_BASKET_VIEW_STATE,
@@ -4400,6 +4401,125 @@ describe('similar products on the basket', () => {
       }),
     });
     expect(drawn(best.fixture).groupCheaper()).toBe(false);
+  });
+
+  /*
+   * The cheaper mark under W3 (velista 0183, section 3; backend 0246 W3): the
+   * cost of what the row asks for, among the members that can serve its unit.
+   * The scenarios and their numbers are those of `line-products.spec.ts` and of
+   * the backend's `cheapestOf` spec (`basket-rules.spec.ts`).
+   */
+  describe('by the cost of the row amount (velista 0183, W3)', () => {
+    type Sizing = {
+      readonly unit: string;
+      readonly size: number | null;
+      readonly approxWeight: number | null;
+      readonly price: number;
+      readonly piecePrice?: number | null;
+    };
+    const LOOSE = (perKilo: number): Sizing => ({
+      unit: 'KILOGRAM',
+      size: null,
+      approxWeight: null,
+      price: perKilo,
+    });
+    const PIECE_700_G: Sizing = {
+      unit: 'KILOGRAM',
+      size: null,
+      approxWeight: 700,
+      price: 1.99,
+      piecePrice: 1.39,
+    };
+    const MELON_AS_ONE: Sizing = {
+      unit: 'UNIT',
+      size: null,
+      approxWeight: 1800,
+      price: 2.5,
+    };
+    const EGGS: Sizing = {
+      unit: 'UNIT',
+      size: 6,
+      approxWeight: null,
+      price: 1.1,
+    };
+    const BUNCH: Sizing = {
+      unit: 'UNIT',
+      size: null,
+      approxWeight: null,
+      price: 2.78,
+    };
+
+    const offerOf = (sizing: Sizing) => ({
+      ...OFFER,
+      price: sizing.price,
+      // A unit price that would say the opposite, which W3 never reads.
+      unitPrice: 0.01,
+      piecePrice: sizing.piecePrice ?? null,
+    });
+    const productOf = (id: string, sizing: Sizing): BasketProduct => ({
+      ...GROUPED,
+      id,
+      unit: sizing.unit,
+      size: sizing.size,
+      approxWeight: sizing.approxWeight,
+      productGroupId: 'g-fruit',
+      offer: offerOf(sizing),
+    });
+    const memberOf = (id: string, sizing: Sizing): CatalogItem => ({
+      ...member(id, sizing.price),
+      unit: sizing.unit as CatalogItem['unit'],
+      size: sizing.size,
+      approxWeight: sizing.approxWeight,
+      productGroupId: 'g-fruit',
+      offer: offerOf(sizing) as CatalogItem['offer'],
+    });
+
+    async function marked(
+      unit: LineUnit,
+      asked: number,
+      shown: Sizing,
+      other: Sizing
+    ): Promise<boolean> {
+      const { fixture } = await render({
+        lines: [
+          line('Fruit', {
+            productId: 'i-shown',
+            unit,
+            left: asked,
+            entries: [entry('l-groceries', 'zl-Fruit', asked)],
+          }),
+        ],
+        served: SERVED,
+        products: new Map([['i-shown', productOf('i-shown', shown)]]),
+        groupMembers: fakeGroupMembers({
+          members: {
+            'g-fruit': [memberOf('i-shown', shown), memberOf('i-other', other)],
+          },
+        }),
+      });
+      return drawn(fixture).groupCheaper();
+    }
+
+    it('marks two 700 g pieces at 1,39 against loose at 1,99 the kilo on a 1000 g row', async () => {
+      // 2,78 for the two pieces a kilo needs against 1,99 for the kilo.
+      expect(await marked('GRAM', 1000, PIECE_700_G, LOOSE(1.99))).toBe(true);
+      expect(await marked('GRAM', 1000, LOOSE(1.99), PIECE_700_G)).toBe(false);
+    });
+
+    it('still marks the piece on a 500 g row, where loose costs 1,00', async () => {
+      expect(await marked('GRAM', 500, PIECE_700_G, LOOSE(1.99))).toBe(true);
+    });
+
+    it('marks loose at 1,49 the kilo against a 1,8 kg piece priced as one at 2,50 on an 1800 g row', async () => {
+      // 2,68 loose against 2,50 for the whole melon.
+      expect(await marked('GRAM', 1800, LOOSE(1.49), MELON_AS_ONE)).toBe(true);
+      expect(await marked('GRAM', 1800, MELON_AS_ONE, LOOSE(1.49))).toBe(false);
+    });
+
+    it('never lets a loose product earn the mark on a count row, nor a counted pack on a weight row', async () => {
+      expect(await marked('UNIT', 2, BUNCH, LOOSE(0.5))).toBe(false);
+      expect(await marked('GRAM', 500, LOOSE(9.95), EGGS)).toBe(false);
+    });
   });
 });
 
