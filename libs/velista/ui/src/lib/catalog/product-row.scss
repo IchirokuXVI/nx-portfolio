@@ -203,6 +203,13 @@ lib-product-picture.thumb:not(.has-photo),
   font-size: var(--app-text-xs);
 }
 
+// The cost of a line's amount with this product (velista 0183).
+.line-cost {
+  color: var(--app-text-primary);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
 // ---- the chain line
 
 .chains {

@@ -116,6 +116,21 @@ lib-product-picture.picture {
   color: var(--app-text-muted);
 }
 
+// The cost of the line's amount (velista 0183): primary ink, because it is the
+// number CHEAPEST compares, and the words of a product that cannot serve the
+// unit muted and in italics, so a card past the others says why it is there.
+.line-cost {
+  margin-block-start: var(--app-space-2);
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--app-text-primary);
+
+  &.is-cannot {
+    font-style: italic;
+    color: var(--app-text-muted);
+  }
+}
+
 .word {
   margin-block-start: var(--app-space-2);
   font-size: var(--app-text-2xs);

@@ -1,0 +1,46 @@
+// One track with the segments in it, in the stepper's own surface, so the chip
+// reads as part of the amount and not as a second control beside it.
+.group {
+  display: inline-flex;
+  gap: var(--app-space-hair);
+  padding: var(--app-space-hair);
+  background: var(--app-surface-sunken);
+  border: 1px solid var(--app-border-subtle);
+  border-radius: var(--app-radius-full);
+}
+
+// Shorter than the stepper's 44 square on purpose, and still a 44 wide target:
+// the words set the width, and the minimum keeps "peso" from being a sliver.
+.segment {
+  min-inline-size: var(--app-touch-target);
+  block-size: var(--app-space-9);
+  padding: 0 var(--app-space-4);
+  background: none;
+  border: 0;
+  border-radius: var(--app-radius-full);
+  font: inherit;
+  font-size: var(--app-text-sm);
+  color: var(--app-text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &.is-on {
+    background: var(--app-surface-raised);
+    color: var(--app-text-primary);
+    font-weight: 600;
+    box-shadow: 0 0 0 1px var(--app-border-subtle);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &:disabled:not(.is-on) {
+    opacity: 0.5;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+  }
+}
