@@ -157,6 +157,8 @@ export interface LineView {
   listId: string;
   content: string;
   quantity: number;
+  /** What `quantity` counts (backend `0246`, velista `0182`). */
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds: string[];
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   version: number;
@@ -168,6 +170,8 @@ export interface LineSettlementView {
   itemId: string | null;
   outcome: 'BOUGHT' | 'NOT_AVAILABLE';
   quantity: number;
+  /** What `quantity` counts (backend `0246`). */
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   settledAt: string;
   revertedAt: string | null;
 }
@@ -192,6 +196,31 @@ export async function readLine(
   const line = (await listLines(s, listId)).find((l) => l.id === lineId);
   if (!line) throw new Error(`line ${lineId} is not on list ${listId}`);
   return line;
+}
+
+/**
+ * `POST /v1/lists/:id/lines`: one line of one product, in the unit the product
+ * is sold in (backend `0246`, velista `0182`). Answers the line the add made or
+ * raised.
+ */
+export async function addProductLine(
+  s: Session,
+  listId: string,
+  body: {
+    content: string;
+    itemId: string;
+    quantity: number;
+    unit: 'UNIT' | 'GRAM' | 'MILLILITER';
+  }
+): Promise<LineView> {
+  const answer = await s.post<{ line: LineView }>(`/v1/lists/${listId}/lines`, {
+    content: body.content,
+    itemIds: [body.itemId],
+    named: false,
+    quantity: body.quantity,
+    unit: body.unit,
+  });
+  return answer.line;
 }
 
 /** `PATCH /v1/lines/:id`: the absolute quantity a zone line asks for. */
@@ -549,7 +578,8 @@ export async function deleteSection(
 export async function ensureItem(
   admin: Session,
   name: { en: string; es: string },
-  categoryIds: string[]
+  categoryIds: string[],
+  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT'
 ): Promise<string> {
   const page = await admin.get<{
     items: { id: string; name: { en?: string } }[];
@@ -559,7 +589,26 @@ export async function ensureItem(
   const made = await admin.post<{ id: string }>('/v1/admin/catalog/items', {
     name,
     categoryIds,
-    defaultUnit: 'UNIT',
+    defaultUnit,
   });
   return made.id;
+}
+
+/**
+ * `POST /v1/admin/catalog/item-prices`: an `ADMIN` price of one product at one
+ * scope, observed now. For a product sold by the kilo it is the price of a kilo.
+ */
+export async function setAdminPrice(
+  admin: Session,
+  itemId: string,
+  priceScopeId: string,
+  price: number
+): Promise<void> {
+  await admin.post('/v1/admin/catalog/item-prices', {
+    itemId,
+    priceScopeId,
+    sourceKind: 'ADMIN',
+    price,
+    currency: 'EUR',
+  });
 }
