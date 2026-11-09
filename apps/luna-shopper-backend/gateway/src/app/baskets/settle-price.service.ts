@@ -568,8 +568,12 @@ export function snapshotOf(product: ItemView): ItemSnapshot {
  * priced as one, its price over what it weighs or holds. A product that
  * cannot serve the unit records no price.
  *
- * `estimated` is what `lineAmountOf` answers for the same pair: false only
- * for a count at a piece or pack price, and for a pack whose size is printed.
+ * `estimated` is false only for a count at a piece or pack price (M7): every
+ * `GRAM` or `MILLILITER` settlement is an estimate, whatever served it.
+ *
+ * The limit of M7's model: a weight served by whole packs or pieces records
+ * the price of one kilo derived from the pack, so a 750 g settle of 500 g
+ * packs at 1,39 reads 2,09 € spent while the two packs cost 2,78 €.
  */
 export function paidOf(
   product: ItemView,
@@ -600,10 +604,9 @@ export function paidOf(
   if (kind === 'PACK' && offer.price !== null) {
     const bridge = packBridgeOf(sizing);
     if (bridge !== null && bridge.unit === unit) {
-      return figureOf(
-        (offer.price * 1000) / bridge.amount,
-        sizing.unitSize === null
-      );
+      // Estimated whatever served it (M7): the kilo derived from a pack is
+      // not what the till charged for the whole packs.
+      return figureOf((offer.price * 1000) / bridge.amount, true);
     }
   }
   return null;

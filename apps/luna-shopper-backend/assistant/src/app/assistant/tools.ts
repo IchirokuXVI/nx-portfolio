@@ -146,12 +146,16 @@ interface UpsertItem {
 /**
  * What a weight or a volume is sent as (plan 0246, section 5). One sentence
  * for both tools, so `upsert_lines` and `settle_lines` cannot disagree.
+ *
+ * The last sentence is W1 over section 5: a new line from this tool names no
+ * product, a free text line counts pieces, so {@link freshLine} writes the
+ * amount into the name rather than sending a unit the gateway refuses.
  */
 const UNIT_PARAMETER = {
   type: 'string',
   enum: [...LINE_UNITS],
   description:
-    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs.',
+    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs. A thing not yet on the list becomes a new line that counts pieces, so its weight or volume is written into its name ("queso 300 g") and you still send it here the same way.',
 };
 
 /**
@@ -329,14 +333,7 @@ const upsertLines: AssistantTool = {
         const added = await runtime.api.addLines(
           runtime.context.caller,
           list.listId,
-          fresh.map((entry) => ({
-            content: entry.item.product,
-            ...(entry.item.quantity !== undefined
-              ? { quantity: entry.item.quantity }
-              : {}),
-            // The unit the person said a weight or a volume in (plan 0246).
-            ...(entry.item.unit !== undefined ? { unit: entry.item.unit } : {}),
-          }))
+          fresh.map((entry) => freshLine(entry.item))
         );
         wrote = true;
         // The batch answers in request order, which is what lets a line be put
@@ -347,10 +344,15 @@ const upsertLines: AssistantTool = {
         // read of the list, so a merge means that read was stale or the person
         // named one thing twice in one sentence, and either way "one more of
         // those" is the true report and "added" would not be.
+        //
+        // A line of another unit is answered and never raised (plan 0246 M5),
+        // so a merged answer in another unit than the add's pieces wrote
+        // nothing and is reported as unchanged, never as one more.
         added.forEach((result, position) => {
           runtime.link.list(list);
+          const raised = (result.line.unit ?? 'UNIT') === 'UNIT';
           results[fresh[position].index] = describeLine(
-            result.merged ? 'increased' : 'added',
+            result.merged ? (raised ? 'increased' : 'unchanged') : 'added',
             result.line
           );
         });
@@ -1179,6 +1181,37 @@ function itemRefused(
 ): ItemResult {
   const { reason } = refused(error, 'that', lineUnit);
   return { product, refused: true, reason };
+}
+
+/** How a weight or a volume is written into the name of a free text line. */
+const UNIT_SYMBOLS: Record<Exclude<LineUnit, 'UNIT'>, string> = {
+  GRAM: 'g',
+  MILLILITER: 'ml',
+};
+
+/**
+ * The batch item of a new line (plan 0246, W1 and section 9).
+ *
+ * Every line this tool creates is free text: it names no product. A free text
+ * line counts pieces, and the gateway refuses another unit on it with
+ * `line_unit_not_offered`. So a weight or a volume the person said is folded
+ * into the name and sent with no unit and no quantity: "300 g of cheese" is a
+ * line called "queso 300 g" at one, as plan 0246 section 9 states. A unit is
+ * sent only on a line that already exists, in its own unit.
+ */
+function freshLine(item: UpsertItem): { content: string; quantity?: number } {
+  if (item.unit !== undefined && item.unit !== 'UNIT') {
+    return {
+      content:
+        item.quantity !== undefined
+          ? `${item.product} ${item.quantity} ${UNIT_SYMBOLS[item.unit]}`
+          : item.product,
+    };
+  }
+  return {
+    content: item.product,
+    ...(item.quantity !== undefined ? { quantity: item.quantity } : {}),
+  };
 }
 
 /** A unit the model named, or undefined (plan 0246, section 5). */

@@ -85,6 +85,9 @@ class RecordingApi {
   /** Thrown by the next write, to exercise the refusal path. */
   failNextWriteWith: Error | undefined;
 
+  /** The gateway's answer to the next batch add, when a spec scripts it. */
+  nextAddLinesAnswer: { line: LineView; merged: boolean }[] | undefined;
+
   async listZones(caller: ApiCaller): Promise<MyZoneView[]> {
     this.record('listZones', caller, {});
     return this.zones;
@@ -117,6 +120,11 @@ class RecordingApi {
   ): Promise<LineView[]> {
     this.record('addLines', caller, { listId, items });
     this.throwIfArmed();
+    if (this.nextAddLinesAnswer !== undefined) {
+      const answer = this.nextAddLinesAnswer;
+      this.nextAddLinesAnswer = undefined;
+      return answer as unknown as LineView[];
+    }
     return items.map((item, index) =>
       line(`line-new-${index}`, listId, item.content, item.quantity ?? 1)
     );
@@ -925,22 +933,91 @@ describe('AssistantService', () => {
       });
     });
 
-    it('sends a weight in grams with its unit (plan 0246, section 5)', async () => {
+    it('writes a weight for a new line into its name and sends no unit (plan 0246, W1 and section 9)', async () => {
       const api = new RecordingApi();
 
       const provider = new FakeModelProvider([
         FakeModelProvider.calls('upsert_lines', {
-          items: [{ product: 'queso', quantity: 300, unit: 'GRAM' }],
+          items: [
+            { product: 'queso', quantity: 300, unit: 'GRAM' },
+            { product: 'agua', quantity: 1500, unit: 'MILLILITER' },
+            { product: 'leche' },
+          ],
         }),
         FakeModelProvider.says('Añadido.'),
       ]);
       const service = build(provider, api);
 
-      await service.turn(turnRequest('añade 300 gramos de queso'));
+      await service.turn(
+        turnRequest('añade 300 gramos de queso, agua y leche')
+      );
 
-      expect(api.of('addLines')[0].detail['items']).toEqual([
-        { content: 'queso', quantity: 300, unit: 'GRAM' },
+      // A new line is free text, which counts pieces: the gateway refuses
+      // any other unit on it with 422 `line_unit_not_offered`, so the batch
+      // the real gateway accepts names no unit at all.
+      const items = api.of('addLines')[0].detail['items'] as Record<
+        string,
+        unknown
+      >[];
+      expect(items).toEqual([
+        { content: 'queso 300 g' },
+        { content: 'agua 1500 ml' },
+        { content: 'leche' },
       ]);
+      expect(items.some((item) => 'unit' in item)).toBe(false);
+    });
+
+    it('reports a line of another unit the batch met as unchanged, never as one more (plan 0246 M5)', async () => {
+      const api = new RecordingApi();
+      api.nextAddLinesAnswer = [
+        {
+          line: {
+            ...line('line-weighed', 'list-flat', 'queso', 500),
+            unit: 'GRAM',
+          },
+          merged: true,
+        },
+      ];
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso' }],
+        }),
+        FakeModelProvider.says('Ya está.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade queso'));
+
+      const toolTurn = JSON.stringify(provider.requests[1].turns.at(-1));
+      expect(toolTurn).toContain('"action":"unchanged"');
+      expect(toolTurn).not.toContain('"action":"increased"');
+    });
+
+    it('sends the unit on a line that already exists (plan 0246, section 5)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        { ...line('line-existing', 'list-flat', 'queso', 500), unit: 'GRAM' },
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'queso', quantity: 250, unit: 'GRAM', mode: 'add' },
+          ],
+        }),
+        FakeModelProvider.says('Añadido.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade 250 gramos más de queso'));
+
+      expect(api.of('addLines')).toHaveLength(0);
+      expect(api.of('addLineQuantity')[0].detail).toEqual({
+        lineId: 'line-existing',
+        delta: 250,
+        unit: 'GRAM',
+      });
     });
 
     it('reports a delta on a line of another unit rather than retrying (plan 0246, section 5)', async () => {

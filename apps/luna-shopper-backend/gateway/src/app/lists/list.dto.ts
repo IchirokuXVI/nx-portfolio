@@ -228,11 +228,11 @@ export class AddLinesItemDto {
  * the basket's add, which take them alike because both are `LineService.add`.
  */
 export const ADD_CHOICE_DOCS = {
-  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId.`,
+  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit gets the same refusal naming that one line (plan 0246 M5).`,
   intoLineId:
-    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
+    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
   newLine:
-    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId.',
+    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add.',
 } as const;
 
 /**

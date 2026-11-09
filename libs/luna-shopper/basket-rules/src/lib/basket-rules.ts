@@ -4,7 +4,7 @@ import {
   type LineAmountProduct,
   type LineUnit,
   type ProductKind,
-} from '@portfolio/luna-shopper/contracts';
+} from '@portfolio/luna-shopper/contracts/line-units';
 
 /**
  * The rules that turn the entries of a basket row into its state, its numbers
@@ -22,8 +22,9 @@ import {
  *
  * **One import from the contracts library, of plain values** (plan 0246,
  * section 4.3): `lineAmountOf` and `priceOfOne`, the two pure functions of the
- * amount of a line, and the three plain types they take. They are browser
- * reachable as the rest of `units/` is, and a second copy of the table here
+ * amount of a line, and the three plain types they take. They come through
+ * the deep entry `contracts/line-units`, never the main barrel, which would
+ * compile ajv and every schema into velista. A second copy of the table here
  * would be the one copy of the two that drifts.
  *
  * ## No clock

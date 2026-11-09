@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  defaultQuantityOf,
   LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_ITEM_SET_MAX,
@@ -934,6 +935,14 @@ export class LineService {
    * more refuse the add with `line_add_needs_choice` when the caller set
    * `askIfAmbiguous`, and otherwise the add creates a line, as before. The
    * three fields are ignored on an add that carries a product or a group.
+   *
+   * ## A line of another unit is a question, never a sum (plan 0246 M5)
+   *
+   * Whatever way the add meets a line, a line that counts in another unit is
+   * not raised: the add refuses with `line_add_needs_choice` naming that one
+   * line, and writes nothing. `newLine: true` then creates a line in the add's
+   * unit, a product add included, and an `intoLineId` of another unit is
+   * `line_unit_differs`.
    */
   async add(req: AddLineRequest): Promise<AddLineResult> {
     const { list, permissions } = await this.listAccess.requireAccess(
@@ -946,10 +955,15 @@ export class LineService {
     // path needs the same number and never builds a row to put it on. The bound
     // is on what the request asked for; what a merge does to a line already near
     // the ceiling is {@link raiseForAdd}'s cap.
-    const quantity = this.validateQuantity(req.quantity ?? 1);
-    // What the quantity counts (plan 0246, section 3.2). Absent is `UNIT`, so a
-    // free text add counts pieces and never lands on a weight line by name.
+    //
+    // What the quantity counts comes first (plan 0246, section 3.2), because
+    // an add with no quantity starts at the amount of its unit (M4): one
+    // piece, or 1000 g or 1000 ml. Absent is `UNIT`, so a free text add counts
+    // pieces and never lands on a weight line by name.
     const unit = this.validateUnit(req.unit) ?? 'UNIT';
+    const quantity = this.validateQuantity(
+      req.quantity ?? defaultQuantityOf(unit)
+    );
     const approval = {
       decides: permissions.has(ListPermission.DECIDE),
       autoApproves: list.autoApproveLines,
@@ -978,34 +992,40 @@ export class LineService {
     const choice = this.validateAddChoice(req);
     const outcome = await this.dataSource.transaction(async (manager) => {
       await this.lockList(manager, req.listId);
-      const raise = async (line: ListLine) => {
-        // A line of another unit is not raised (plan 0246 M5): two lines of
-        // one name in two units are the shopper's decision, not a sum. The
-        // add answers the line that is there, as plan 0228 answers a line the
-        // add met, and writes nothing.
-        if ((line.unit ?? 'UNIT') !== unit) {
-          return {
-            merged: true as const,
-            written: await this.readWritten(manager, line.id),
-            unchanged: true,
-          };
-        }
-        return {
-          merged: true as const,
-          written: await this.raiseForAdd(manager, line, quantity, {
-            list: this.listRef(list),
-            actor,
-          }),
-          unchanged: false,
-        };
-      };
+      const raise = async (line: ListLine) => ({
+        merged: true as const,
+        written: await this.raiseForAdd(manager, line, quantity, {
+          list: this.listRef(list),
+          actor,
+        }),
+      });
+      // A line of another unit is not raised (plan 0246 M5): the two amounts
+      // cannot be summed. The add is answered as the duplicate decision of
+      // plan 0228, `line_add_needs_choice` naming that one line, and nothing
+      // is written. The client opens the line or answers `newLine: true`,
+      // which then creates a line in the add's unit, a product add included:
+      // otherwise a product add would meet the same line on every try.
+      const differs = (line: ListLine) => (line.unit ?? 'UNIT') !== unit;
+      const unitChoice = (line: ListLine) =>
+        this.needsChoice(manager, req.content.trim(), [line], 'unit');
 
       // The person chose a line (plan 0228, target 1.1). It is raised or the
-      // add is refused, and the add never falls back to a new line.
+      // add is refused, and the add never falls back to a new line. A chosen
+      // line of another unit is `line_unit_differs`: the person already
+      // answered, so no question is left, and nothing can be summed.
       if (freeText && choice.intoLineId !== undefined) {
-        return raise(
-          await this.lockChosenLine(manager, req.listId, choice.intoLineId)
+        const chosen = await this.lockChosenLine(
+          manager,
+          req.listId,
+          choice.intoLineId
         );
+        if (differs(chosen)) {
+          throw new LineUnitDiffersException(
+            `"${chosen.content}" counts in another unit`,
+            { messageArgs: { content: chosen.content } }
+          );
+        }
+        return raise(chosen);
       }
 
       // The flag the new line would carry, so an add that is not named meets
@@ -1025,8 +1045,11 @@ export class LineService {
         .map((identity) => targets.get(identity))
         .filter((line): line is ListLine => line !== undefined)
         .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
-      if (existing !== undefined) {
+      if (existing !== undefined && !differs(existing)) {
         return raise(existing);
+      }
+      if (existing !== undefined && !choice.newLine) {
+        throw await unitChoice(existing);
       }
 
       // A typed name meets the lines that hold a product under it (plan 0228,
@@ -1045,8 +1068,11 @@ export class LineService {
             req.listId,
             candidates[0].id
           );
-          if (line !== null) {
+          if (line !== null && !differs(line)) {
             return raise(line);
+          }
+          if (line !== null) {
+            throw await unitChoice(line);
           }
         }
         if (candidates.length > 1 && choice.askIfAmbiguous) {
@@ -1078,11 +1104,6 @@ export class LineService {
     });
 
     if (outcome.merged) {
-      // A line of another unit was answered and not written (plan 0246 M5),
-      // so there is nothing to announce.
-      if (outcome.unchanged) {
-        return { line: outcome.written.view, merged: true };
-      }
       // A merge is an update of a line that was already on the screen, so it
       // announces itself as one. `line.added` would put a second row in front of
       // every client that is drawing the first.
@@ -1174,11 +1195,12 @@ export class LineService {
     const itemSets = items.map((item) =>
       this.validateItemIds(item.itemIds ?? [])
     );
-    const quantities = items.map((item) =>
-      this.validateQuantity(item.quantity ?? 1)
-    );
-    // What each quantity counts (plan 0246, section 3.2). Absent is `UNIT`.
+    // What each quantity counts (plan 0246, section 3.2). Absent is `UNIT`,
+    // and an item with no quantity starts at the amount of its unit (M4).
     const units = items.map((item) => this.validateUnit(item.unit) ?? 'UNIT');
+    const quantities = items.map((item, index) =>
+      this.validateQuantity(item.quantity ?? defaultQuantityOf(units[index]))
+    );
     // What each item is, by the rule a single add follows. A batch item names no
     // group (`AddLinesItem` carries none), so it can be met in exactly one way:
     // by its product set, or as free text.
@@ -1396,7 +1418,10 @@ export class LineService {
       productGroupId,
       content: item.content,
       named: namedOnAdd(item.named, (item.itemIds ?? []).length > 0),
-      quantity: this.validateQuantity(item.quantity ?? 1),
+      quantity: this.validateQuantity(
+        item.quantity ??
+          defaultQuantityOf(this.validateUnit(item.unit) ?? 'UNIT')
+      ),
       unit: this.validateUnit(item.unit) ?? 'UNIT',
       // The digest is a property of the set alone, so it can be stamped on the
       // row before the join rows exist (plan 0048, section 1.1).
@@ -1602,7 +1627,8 @@ export class LineService {
   private async needsChoice(
     manager: EntityManager,
     content: string,
-    candidates: readonly ListLine[]
+    candidates: readonly ListLine[],
+    why: 'ambiguous' | 'unit' = 'ambiguous'
   ): Promise<LineAddNeedsChoiceException> {
     const shown = candidates.slice(0, LINE_ADD_CHOICE_MAX);
     const rows = await manager.getRepository(ListLineItem).find({
@@ -1622,7 +1648,9 @@ export class LineService {
       })),
     };
     return new LineAddNeedsChoiceException(
-      `${candidates.length} lines of this list that hold a product are called "${content}"`,
+      why === 'unit'
+        ? `The line "${content}" of this list counts in another unit`
+        : `${candidates.length} lines of this list that hold a product are called "${content}"`,
       { details: { ...details }, messageArgs: { content } }
     );
   }
