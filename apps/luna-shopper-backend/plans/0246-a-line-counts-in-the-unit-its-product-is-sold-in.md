@@ -1,3 +1,5 @@
+> **PR:** [#959](https://github.com/IchirokuXVI/nx-portfolio/pull/959)
+
 # 0246: a line counts in the unit its product is sold in
 
 > Decided on 2026-11-05. A list line holds an integer `quantity` with no unit, at four layers
