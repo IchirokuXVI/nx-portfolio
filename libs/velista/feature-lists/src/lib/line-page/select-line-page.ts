@@ -178,11 +178,18 @@ function cardOf(
  * The units the chip offers (velista `0183`, target state 1): `lineUnits` over
  * the products whose records are read. While one is still being read the line's
  * own unit alone, so the chip does not appear and then grow a segment.
+ *
+ * Only a line with several products chooses (backend `0246` W1 and W2): a line
+ * with one product has that product's unit, which `shownLineUnit` draws, and no
+ * chip, even for a kilo piece that could also serve grams.
  */
 export function offeredUnits(
   line: Pick<Line, 'itemIds' | 'unit'>,
   productOf: (itemId: string) => LineUnitProductRead
 ): readonly LineUnit[] {
+  if (line.itemIds.length < 2) {
+    return [line.unit];
+  }
   const reads = line.itemIds.map((itemId) => productOf(itemId));
   if (reads.some((read) => read === undefined)) {
     return [line.unit];

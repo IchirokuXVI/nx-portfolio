@@ -5,7 +5,38 @@ import type {
   ProductShopPrice,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { selectLinePage, type LinePageInput } from './select-line-page';
+import {
+  offeredUnits,
+  selectLinePage,
+  type LinePageInput,
+} from './select-line-page';
+
+describe('offeredUnits (velista 0183; backend 0246 W1 and W2)', () => {
+  const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const PIECE = { unit: 'KILOGRAM', size: null, approxWeight: 700 };
+
+  it('offers pieces and weight on a line of a loose product and a kilo piece', () => {
+    expect(
+      offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>
+        itemId === 'loose' ? LOOSE : PIECE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('offers no choice on a line of one product, even a kilo piece', () => {
+    expect(
+      offeredUnits({ itemIds: ['piece'], unit: 'UNIT' }, () => PIECE)
+    ).toEqual(['UNIT']);
+  });
+
+  it('offers the line unit alone while a record is still being read', () => {
+    expect(
+      offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>
+        itemId === 'loose' ? LOOSE : undefined
+      )
+    ).toEqual(['UNIT']);
+  });
+});
 
 /**
  * What the line page says, asserted against the function that decides it
