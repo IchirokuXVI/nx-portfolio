@@ -136,6 +136,37 @@ describe('productChoices', () => {
     expect(choices[2].offer).toBeNull();
   });
 
+  it('orders what the shop does not sell as the rest is ordered (velista 0183)', () => {
+    const sizes: Record<string, { unit: string; size: number | null }> = {
+      milk: { unit: 'LITER', size: null },
+      eggs: { unit: 'UNIT', size: 6 },
+      carton: { unit: 'MILLILITER', size: 1000 },
+    };
+    const choices = productChoices(
+      input(
+        {
+          milk: priced(1.2, 1.2),
+          eggs: { kind: 'notSold' },
+          carton: { kind: 'notSold' },
+        },
+        {
+          memberIds: ['eggs', 'carton'],
+          line: { quantity: 1500, unit: 'MILLILITER' },
+          productOf: (itemId) => ({ ...sizes[itemId], approxWeight: null }),
+        }
+      )
+    );
+
+    // The carton can serve the row and the eggs cannot, so the carton comes
+    // first among the products the shop does not sell.
+    expect(ids(choices)).toEqual(['milk', 'carton', 'eggs']);
+    expect(choices.map((choice) => choice.notSold)).toEqual([
+      false,
+      true,
+      true,
+    ]);
+  });
+
   it('keeps the product chosen now first when the shop does not sell it', () => {
     const choices = productChoices(
       input(

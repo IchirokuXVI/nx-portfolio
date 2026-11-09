@@ -5,6 +5,10 @@ import type {
   LineSettlement,
   ProductOffer,
 } from '@portfolio/velista/models';
+import {
+  selectLinePage,
+  type LinePageInput,
+} from '../line-page/select-line-page';
 import { selectLineDetail, type LineDetailInput } from './select-line-detail';
 
 /**
@@ -118,10 +122,15 @@ const CATALOG: readonly CatalogItem[] = [
 ];
 
 function select(overrides: Partial<LineDetailInput> = {}): LineDetailVm | null {
+  const itemNameOf =
+    overrides.itemNameOf ??
+    ((itemId: string) => CATALOG.find((row) => row.id === itemId) ?? null);
   return selectLineDetail({
     line: line(),
     settlements: [],
-    itemNameOf: (itemId) => CATALOG.find((row) => row.id === itemId) ?? null,
+    itemNameOf,
+    // Every record of these fixtures is settled: a product it cannot name is gone.
+    productOf: itemNameOf,
     namesUnavailable: false,
     nameOf: () => null,
     claimedBy: null,
@@ -631,6 +640,72 @@ describe('selectLineDetail', () => {
       });
 
       expect(detail?.lastPurchase).toBeNull();
+    });
+  });
+
+  describe('a record the catalog no longer has (velista 0183)', () => {
+    // Loose bananas, a kilo piece, and a third product whose record is gone.
+    const LOOSE: CatalogItem = {
+      ...item('item-loose', 'Loose bananas'),
+      size: null,
+      unit: 'KILOGRAM',
+    };
+    const PIECE: CatalogItem = {
+      ...item('item-piece', 'Banana bunch'),
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: 700,
+    };
+    const held = (itemId: string) =>
+      [LOOSE, PIECE].find((row) => row.id === itemId) ?? null;
+    const bananas = line({
+      content: '',
+      named: false,
+      unit: 'UNIT',
+      itemIds: ['item-gone', LOOSE.id, PIECE.id],
+    });
+
+    it('still draws the chip, as the line page does', () => {
+      const detail = select({
+        line: bananas,
+        itemNameOf: held,
+        // Settled: the lookup answered nothing for the gone record.
+        productOf: held,
+      });
+
+      expect(detail?.units).toEqual(['UNIT', 'GRAM']);
+    });
+
+    it('names the product the line page names', () => {
+      const pricesOf = () => [];
+      const detail = select({
+        line: bananas,
+        itemNameOf: held,
+        productOf: held,
+        pricesOf,
+      });
+      const page = selectLinePage({
+        line: bananas,
+        list: undefined,
+        zoneName: null,
+        itemNameOf: held,
+        namesUnavailable: false,
+        nameOf: () => null,
+        callerUserId: ME,
+        locale: 'en',
+        priceOf: pricesOf,
+        productOf: held,
+        supermarketNameOf: () => null,
+        alsoOn: null,
+        commentCount: null,
+        canEdit: true,
+        canStep: true,
+        canRename: true,
+        translate: (key) => key,
+      } satisfies LinePageInput);
+
+      expect(detail?.content).toBe(page?.content);
+      expect(detail?.units).toEqual(page?.units);
     });
   });
 });

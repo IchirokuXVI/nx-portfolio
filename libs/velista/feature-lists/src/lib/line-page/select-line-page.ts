@@ -1,5 +1,6 @@
 import {
   catalogName,
+  LINE_UNITS,
   lineCardOrder,
   lineName,
   lineUnits,
@@ -179,6 +180,9 @@ function cardOf(
  * the products whose records are read. While one is still being read the line's
  * own unit alone, so the chip does not appear and then grow a segment.
  *
+ * The line's stored unit is always one of them, so a line whose products
+ * serve none of its unit still draws the chip and has a way out.
+ *
  * Only a line with several products chooses (backend `0246` W1 and W2): a line
  * with one product counts in that product's unit (a legacy row is corrected by
  * `legacyLineUnit`, not here) and draws no chip, even for a kilo piece that
@@ -198,9 +202,15 @@ export function offeredUnits(
   const known = reads.filter(
     (read): read is LineUnitProduct => read !== null && read !== undefined
   );
-  return line.itemIds.length === 0 || known.length === 0
-    ? [line.unit]
-    : lineUnits(known);
+  if (known.length === 0) {
+    return [line.unit];
+  }
+  // The line's own unit is always on offer, also when no product serves it (a
+  // legacy line stored in pieces whose products are all loose): the chip is then
+  // drawn and the shopper can move to a unit the products serve. Choosing the
+  // stored unit again is refused by the gateway and put back as any refusal is.
+  const offered = new Set<LineUnit>([...lineUnits(known), line.unit]);
+  return LINE_UNITS.filter((unit) => offered.has(unit));
 }
 
 /**

@@ -18,6 +18,11 @@ import type { LineUnit } from '@portfolio/velista/models';
  * one group. The arrow keys move the choice, as a radio group's do, and Home
  * and End go to the ends. The group is one tab stop, on the chosen segment.
  *
+ * While a choice is being written the segments are `aria-disabled` and ignore
+ * clicks and keys, never natively `disabled`: a disabled button drops the focus
+ * to the body, so a keyboard user who chose by an arrow would start again from
+ * the top of the page.
+ *
  * It holds no state of its own: `value` is the line's unit as the store has it,
  * and `chosen` says what was pressed. The sheet writes it, and a refusal puts
  * the store's line back, which puts this back with it.
@@ -28,7 +33,6 @@ import type { LineUnit } from '@portfolio/velista/models';
   template: `
     @if (units().length > 1) {
       <div
-        [attr.aria-disabled]="disabled() || null"
         [attr.aria-label]="'line.unit.label' | rokuT"
         class="group"
         role="radiogroup"
@@ -38,9 +42,9 @@ import type { LineUnit } from '@portfolio/velista/models';
             (click)="choose(unit)"
             (keydown)="onKeydown($event)"
             [attr.aria-checked]="unit === value()"
+            [attr.aria-disabled]="disabled() || null"
             [attr.tabindex]="unit === value() ? 0 : -1"
             [class.is-on]="unit === value()"
-            [disabled]="disabled()"
             #segment
             class="segment"
             role="radio"

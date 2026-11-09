@@ -1145,6 +1145,25 @@ describe('LineDetailSheet: the unit chip (velista 0183)', () => {
     expect(segments(fixture)[0].getAttribute('aria-checked')).toBe('true');
   });
 
+  it('still draws the chip when a third record is gone from the catalog', async () => {
+    // `item-gone` is neither held nor pending: its lookup answered nothing, which
+    // `sizingOf` reads as null and not as "still loading".
+    const { fixture } = await render({
+      lines: [
+        line({
+          itemIds: ['item-gone', LOOSE.id, PIECE.id],
+          quantity: 2,
+          unit: 'UNIT',
+        }),
+      ],
+      itemNames: fakeItemNames({ items: [LOOSE, PIECE] }),
+    });
+    expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+      'line.unit.UNIT',
+      'line.unit.GRAM',
+    ]);
+  });
+
   it('sends one updateLine with the unit and its default amount, and moves the reel there', async () => {
     const { fixture, lines } = await bananas();
 
@@ -1165,11 +1184,17 @@ describe('LineDetailSheet: the unit chip (velista 0183)', () => {
 
     segments(fixture)[1].click();
     await settle(fixture);
-    expect(segments(fixture).every((segment) => segment.disabled)).toBe(true);
+    expect(
+      segments(fixture).every(
+        (segment) => segment.getAttribute('aria-disabled') === 'true'
+      )
+    ).toBe(true);
 
     lines.releaseWrites();
     await settle(fixture);
-    expect(segments(fixture).some((segment) => segment.disabled)).toBe(false);
+    expect(
+      segments(fixture).some((segment) => segment.hasAttribute('aria-disabled'))
+    ).toBe(false);
   });
 
   it('puts the segment and the amount back on line_unit_not_offered, with the error line', async () => {

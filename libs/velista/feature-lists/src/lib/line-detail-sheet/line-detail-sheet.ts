@@ -510,6 +510,7 @@ export class LineDetailSheet {
       // missed, and this sheet told the reader their line had no products.
       itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
       pricesOf: this._itemNames.pricesOf,
+      productOf: this._itemNames.sizingOf,
       namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),

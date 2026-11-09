@@ -81,11 +81,41 @@ describe('LineUnitChip', () => {
 
   it('chooses nothing while the write is pending', async () => {
     const { fixture, chosen } = await render(['UNIT', 'GRAM'], 'UNIT', true);
-    expect(segments(fixture).every((segment) => segment.disabled)).toBe(true);
+    expect(
+      segments(fixture).every(
+        (segment) => segment.getAttribute('aria-disabled') === 'true'
+      )
+    ).toBe(true);
+    // Never natively disabled, which would drop the focus to the body.
+    expect(segments(fixture).some((segment) => segment.disabled)).toBe(false);
     segments(fixture)[0].dispatchEvent(
       new KeyboardEvent('keydown', { key: 'ArrowRight' })
     );
     segments(fixture)[1].click();
     expect(chosen).toEqual([]);
+  });
+
+  it('keeps the focus on the segment chosen by the keys while the write is pending', async () => {
+    const { fixture, chosen } = await render(['UNIT', 'GRAM'], 'UNIT');
+    document.body.appendChild(fixture.nativeElement as HTMLElement);
+    segments(fixture)[0].focus();
+    segments(fixture)[0].dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowRight' })
+    );
+    expect(chosen).toEqual(['GRAM']);
+
+    // The host disables the chip the moment the choice is sent.
+    fixture.componentRef.setInput('disabled', true);
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(document.activeElement).toBe(segments(fixture)[1]);
+    // A key while the write is out moves nothing and chooses nothing.
+    segments(fixture)[1].dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'ArrowLeft' })
+    );
+    expect(document.activeElement).toBe(segments(fixture)[1]);
+    expect(chosen).toEqual(['GRAM']);
+    (fixture.nativeElement as HTMLElement).remove();
   });
 });

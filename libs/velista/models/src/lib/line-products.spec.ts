@@ -860,6 +860,25 @@ describe('the order of a line with several products (velista 0183, W3)', () => {
     expect(order(fixtures, 'UNIT', 2)).toEqual(['small', 'big']);
   });
 
+  it('marks no card while a record is still being read', () => {
+    // The loose product's record is out: only the piece has a cost, and marking
+    // it now would move the word to the loose product once the record lands.
+    const fixtures = { piece: PIECE_700_G, loose: LOOSE(1.99) };
+    const drawn = lineProductPrices(
+      ['piece', 'loose'],
+      pricesOf(fixtures),
+      null,
+      {
+        quantity: 1000,
+        unit: 'GRAM',
+        productOf: (itemId) =>
+          itemId === 'loose' ? undefined : fixtures.piece.product,
+      }
+    );
+    expect(drawn.map((card) => card.pending)).toEqual([false, true]);
+    expect(drawn.some((card) => card.cheapest)).toBe(false);
+  });
+
   it('holds the order while a record is still being read', () => {
     const fixtures = { piece: PIECE_700_G, loose: LOOSE(1.99) };
     const held = lineCardOrder(
@@ -898,6 +917,21 @@ describe('cheaperForLine and cheaperForLineInGroup (velista 0183)', () => {
     expect(
       sorted.map((m) => lineMemberCost({ quantity: 1000, unit: 'GRAM' }, m))
     ).toEqual([199, 199, 278, null]);
+  });
+
+  it('compares the unrounded price of one at 0, as the server does', () => {
+    // 1.231 and 1.234 both round to 1,23 €; the server orders them, so this does.
+    const pack = (price: number): LineMember => ({
+      product: { unit: 'UNIT', size: null, approxWeight: null },
+      offer: { price, piecePrice: null },
+    });
+    const line = { quantity: 0, unit: 'UNIT' as const };
+    const dear = pack(1.234);
+    const cheap = pack(1.231);
+    expect([dear, cheap].sort(cheaperForLine(line))).toEqual([cheap, dear]);
+    expect(
+      cheaperForLineInGroup(line, 'dear', dear, [{ id: 'cheap', ...cheap }])
+    ).toBe(true);
   });
 
   it('marks the row only for a strictly cheaper member that can serve its unit', () => {

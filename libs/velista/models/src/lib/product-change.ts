@@ -85,7 +85,7 @@ export interface ProductChoice {
  *    order of the lines and then of the groups.
  * 4. The products that cannot serve the row's unit at all, kept and marked: the
  *    shopper may have reasons, and choosing one is allowed.
- * 5. The products the shop of the read does not sell, last.
+ * 5. The products the shop of the read does not sell, last, in the same order.
  *
  * "Cheaper option" is the comparison of the cheaper mark of the row
  * (`cheaperForLineInGroup`): the cost of the row's amount, strictly lower, among
@@ -158,24 +158,24 @@ export function productChoices(
 
   const rest = choices.slice(head);
   const costOf = (choice: ProductChoice) => costs.get(choice.itemId) ?? null;
+  // One order for both groups: the costed ones cheapest first, then the ones
+  // that can serve the unit with no cost, then the ones that cannot serve it.
   // `sort` is stable, so a tie keeps the order the products were given in.
-  const sold = rest.filter((choice) => !choice.notSold);
-  const costed = sold
-    .filter((choice) => costOf(choice) !== null)
-    .sort((a, b) => (costOf(a) ?? 0) - (costOf(b) ?? 0));
-  const uncosted = sold.filter(
-    (choice) => costOf(choice) === null && choice.serves !== false
-  );
-  const cannot = sold.filter(
-    (choice) => costOf(choice) === null && choice.serves === false
-  );
-  const notSold = rest.filter((choice) => choice.notSold);
+  const byLineCost = (group: readonly ProductChoice[]) => [
+    ...group
+      .filter((choice) => costOf(choice) !== null)
+      .sort((a, b) => (costOf(a) ?? 0) - (costOf(b) ?? 0)),
+    ...group.filter(
+      (choice) => costOf(choice) === null && choice.serves !== false
+    ),
+    ...group.filter(
+      (choice) => costOf(choice) === null && choice.serves === false
+    ),
+  ];
 
   return [
     ...choices.slice(0, head),
-    ...costed,
-    ...uncosted,
-    ...cannot,
-    ...notSold,
+    ...byLineCost(rest.filter((choice) => !choice.notSold)),
+    ...byLineCost(rest.filter((choice) => choice.notSold)),
   ];
 }

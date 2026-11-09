@@ -36,8 +36,9 @@ export interface LineMember {
  * …)` is not null, so a loose product never serves a count line, a counted pack
  * never serves a weight line, and a missing figure is a missing amount. Its
  * figure is the cents of `lineAmount(quantity, …)` when the line asks for
- * something, and the price of one (`amountOfOne`) when it is at 0. Only figures
- * of one line are ever compared with each other, so the two never meet.
+ * something, and the price of one (`amountOfOne`) in euros, unrounded, when it
+ * is at 0. Only figures of one line are ever compared with each other, so the
+ * two never meet. Nothing draws this figure: a caption draws `lineAmount`.
  */
 export function lineMemberCost(
   line: LineAsk,
@@ -65,7 +66,9 @@ export function lineMemberCost(
     { price: member.offer.price, piecePrice: member.offer.piecePrice },
     product.kind
   );
-  return one === null || !Number.isFinite(one) ? null : Math.round(one * 100);
+  // The raw euros, unrounded, as the server's `priceOfOne` compares them: 1.231
+  // and 1.234 would both round to 123 cents and tie here and not there.
+  return one === null || !Number.isFinite(one) ? null : one;
 }
 
 /**
@@ -216,7 +219,9 @@ export interface LineProductPrice {
  * marks none, because the word compares, and so does a line where only one
  * product can serve its unit: the others are not in the comparison. A product
  * with no price never takes it. Two products at the same cost leave the word on
- * the first. Without a `rank` nothing is compared, so nothing is marked.
+ * the first. Without a `rank` nothing is compared, so nothing is marked, and
+ * nothing is marked either while a record among the first
+ * {@link LINE_PRICED_PRODUCTS_MAX} is still being read.
  */
 export function lineProductPrices(
   itemIds: readonly string[],
@@ -229,6 +234,14 @@ export function lineProductPrices(
   );
 
   if (prices.filter((price) => price.serves !== false).length < 2) {
+    return prices;
+  }
+  // A card whose record is still being read may yet serve the unit, or not, so
+  // the word waits for it as the order does (`orderLineCards`): marking the only
+  // costed card now would move the word once the record lands.
+  if (
+    prices.slice(0, LINE_PRICED_PRODUCTS_MAX).some((price) => price.pending)
+  ) {
     return prices;
   }
 

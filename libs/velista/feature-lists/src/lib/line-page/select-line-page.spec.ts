@@ -29,6 +29,26 @@ describe('offeredUnits (velista 0183; backend 0246 W1 and W2)', () => {
     ).toEqual(['UNIT']);
   });
 
+  it('keeps the stored unit on offer when no product serves it, so the chip has a way out', () => {
+    // A legacy line stored in pieces whose readable products are all loose.
+    expect(
+      offeredUnits(
+        { itemIds: ['loose-a', 'loose-b'], unit: 'UNIT' },
+        () => LOOSE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('reads a gone record as answered, not as still loading', () => {
+    expect(
+      offeredUnits(
+        { itemIds: ['gone', 'loose', 'piece'], unit: 'UNIT' },
+        (itemId) =>
+          itemId === 'gone' ? null : itemId === 'loose' ? LOOSE : PIECE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
   it('offers the line unit alone while a record is still being read', () => {
     expect(
       offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>

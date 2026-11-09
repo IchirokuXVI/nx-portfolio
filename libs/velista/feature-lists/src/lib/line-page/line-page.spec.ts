@@ -560,6 +560,30 @@ describe('LinePage', () => {
         fixture.nativeElement.querySelector('.unit-error')?.textContent
       ).toContain('line.unit.notOffered');
     });
+
+    it('takes the refusal away once a step lands', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      lines.answerNextUpdate({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_not_offered',
+          status: 422,
+          correlationId: 'cid-422',
+        }),
+      });
+      segments(fixture)[1].click();
+      await drain(fixture);
+      expect(fixture.nativeElement.querySelector('.unit-error')).not.toBeNull();
+
+      fixture.componentInstance.step(1);
+      await drain(fixture);
+
+      expect(lines.calls.at(-1)).toMatchObject({ kind: 'quantity', delta: 1 });
+      expect(fixture.nativeElement.querySelector('.unit-error')).toBeNull();
+    });
   });
 
   describe('the products', () => {

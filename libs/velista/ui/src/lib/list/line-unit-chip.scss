@@ -31,11 +31,13 @@
     box-shadow: 0 0 0 1px var(--app-border-subtle);
   }
 
-  &:disabled {
+  // `aria-disabled` and not `:disabled`, so the focused segment keeps the focus
+  // while the choice is written.
+  &[aria-disabled='true'] {
     cursor: default;
   }
 
-  &:disabled:not(.is-on) {
+  &[aria-disabled='true']:not(.is-on) {
     opacity: 0.5;
   }
 
