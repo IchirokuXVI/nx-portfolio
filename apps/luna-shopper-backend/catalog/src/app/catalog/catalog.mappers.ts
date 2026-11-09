@@ -407,6 +407,7 @@ export function toItemOfferView(
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
     unitBasis: unitBasisOf(row.unitPriceLabel),
+    ...comparablePairOf(row),
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,
@@ -414,6 +415,22 @@ export function toItemOfferView(
     outOfStockAt: toInstant(row.outOfStockAt),
     piecePrice: piecePriceOf(item, price),
   };
+}
+
+/**
+ * The stored comparison pair of a row (plan 0245), both halves or neither, so
+ * a row a check constraint already holds to that rule reads the same on the
+ * wire.
+ */
+function comparablePairOf(row: SupermarketItem): {
+  comparablePrice: number | null;
+  comparableBasis: SupermarketItem['comparableBasis'];
+} {
+  const comparablePrice = toNumber(row.comparablePrice ?? null);
+  const comparableBasis = row.comparableBasis ?? null;
+  return comparablePrice === null || comparableBasis === null
+    ? { comparablePrice: null, comparableBasis: null }
+    : { comparablePrice, comparableBasis };
 }
 
 /**
@@ -434,6 +451,7 @@ export function toSupermarketItemView(
     unitPrice: toNumber(row.unitPrice),
     unitPriceLabel: row.unitPriceLabel,
     unitBasis: unitBasisOf(row.unitPriceLabel),
+    ...comparablePairOf(row),
     observedAt: toInstant(row.priceObservedAt),
     sourceKind: row.priceSourceKind ?? null,
     priceCopiedFromScopeId: row.priceCopiedFromScopeId ?? null,

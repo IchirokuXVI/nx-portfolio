@@ -124,7 +124,7 @@ describe('catalogOrdersFor', () => {
 });
 
 describe('the place of the "Without a price" line', () => {
-  const priced = product(1.09, 1.09);
+  const priced = product(1.09, 1.09, true, 1.09);
   const noUnitPrice = product(1.09, null);
   const unpriced = product(null, null);
   const unsold = product(null, null, false);
@@ -159,19 +159,28 @@ describe('the place of the "Without a price" line', () => {
     expect(unpricedStart('price', [unpriced])).toBeNull();
   });
 
-  it('reads the unit price in the order by unit price', () => {
+  it('reads the comparable figure in the order by unit price', () => {
     const rows = [priced, noUnitPrice, unpriced];
 
-    // A price with no unit price was placed with the rows that have none.
+    // A price with no comparable figure was placed with the rows that have none.
     expect(unpricedStart('unitPrice', rows)).toBe(1);
     expect(unpricedStart('price', rows)).toBe(2);
+  });
+
+  it('counts a row the chain printed no unit price for as priced when it has the figure', () => {
+    // A LIDL row: no unit price from the chain, a figure from the catalog.
+    const lidl = product(0.99, null, true, 1.98);
+    const chainOnly = product(1.09, 1.09);
+
+    expect(unpricedStart('unitPrice', [lidl, chainOnly, unpriced])).toBe(1);
   });
 });
 
 function product(
   price: number | null,
   unitPrice: number | null,
-  sold = true
+  sold = true,
+  comparablePrice: number | null = null
 ): CatalogProduct {
   return {
     id: 'milk',
@@ -187,6 +196,8 @@ function product(
           currency: 'EUR',
           unitPrice,
           unitPriceLabel: null,
+          comparablePrice,
+          comparableBasis: comparablePrice === null ? null : 'KILOGRAM',
           observedAt: null,
           sourceKind: 'OFFICIAL_WEB',
           stale: false,

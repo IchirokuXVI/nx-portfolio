@@ -165,6 +165,8 @@ function offers(price: number): readonly CatalogScopeOffer[] {
       offer: {
         price,
         unitPrice: price * 2.5,
+        comparablePrice: price * 2.5,
+        comparableBasis: 'LITER',
         currency: 'EUR',
         priceScopeId: 'scope-m',
       } as CatalogScopeOffer['offer'],

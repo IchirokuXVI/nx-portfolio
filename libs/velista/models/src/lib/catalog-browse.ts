@@ -60,7 +60,9 @@ export function catalogOrdersFor(query: string): readonly CatalogOrder[] {
  * come last. A list where no row has a price draws none either: the line separates
  * two parts, and one part needs no separator.
  *
- * `unitPrice` reads the price per kilo or litre, since that is what placed the row.
+ * `unitPrice` reads the comparable figure (backend `0245`), since that is what
+ * placed the row. The chain's own `unitPrice` is not it: a chain that prints none
+ * still has a figure the catalog derived.
  */
 export function unpricedStart(
   order: CatalogOrder,
@@ -73,7 +75,7 @@ export function unpricedStart(
     const offer = product.offer;
     return (
       offer !== null &&
-      (order === 'price' ? offer.price : offer.unitPrice) !== null
+      (order === 'price' ? offer.price : offer.comparablePrice) !== null
     );
   };
 
@@ -99,6 +101,19 @@ export const PRICE_UNIT_BASES: readonly PriceUnitBasis[] = [
   'UNIT',
   'DOZEN',
   'WASH',
+];
+
+/**
+ * What `comparablePrice` is a price per, as the catalog derived it (backend
+ * `0245`). Three values and never `DOZEN` or `WASH`: those describe the chain's
+ * own figure, and a dozen is twelve units.
+ */
+export type ComparableBasis = 'KILOGRAM' | 'LITER' | 'UNIT';
+
+export const COMPARABLE_BASES: readonly ComparableBasis[] = [
+  'KILOGRAM',
+  'LITER',
+  'UNIT',
 ];
 
 /**

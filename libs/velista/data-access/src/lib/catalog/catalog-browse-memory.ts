@@ -8,6 +8,7 @@ import type {
   CatalogPriceState,
   CatalogProduct,
   CatalogScopeOffer,
+  ComparableBasis,
   Page,
   PricePoint,
   PriceUnitBasis,
@@ -229,6 +230,13 @@ interface Fixture {
   readonly basis: PriceUnitBasis | null;
   /** Price per chain. Null is stocked with no price, absent is not sold. */
   readonly prices: Partial<Record<ChainKey, number | null>>;
+  /**
+   * The catalog's comparable figure per chain and its basis (backend `0245`),
+   * worked out by hand from the price and the size, never by code: velista never
+   * derives one. Absent is no figure.
+   */
+  readonly comparable: Partial<Record<ChainKey, number>>;
+  readonly comparableBasis: ComparableBasis;
   readonly stale?: boolean;
 }
 
@@ -242,7 +250,8 @@ const PRODUCTS: readonly Fixture[] = [
     'LITER',
     'oils',
     'LITER',
-    { 'chain-mercadona': 8.45, 'chain-deza': 8.95 }
+    { 'chain-mercadona': 8.45, 'chain-deza': 8.95 },
+    ['LITER', { 'chain-mercadona': 8.45, 'chain-deza': 8.95 }]
   ),
   fixture(
     'item-rice',
@@ -253,7 +262,11 @@ const PRODUCTS: readonly Fixture[] = [
     'KILOGRAM',
     'rice',
     'KILOGRAM',
-    { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 }
+    { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 },
+    [
+      'KILOGRAM',
+      { 'chain-mercadona': 1.35, 'chain-deza': 1.29, 'chain-carrefour': 1.39 },
+    ]
   ),
   fixture(
     'item-tuna',
@@ -264,7 +277,8 @@ const PRODUCTS: readonly Fixture[] = [
     'KILOGRAM',
     'tuna-and-bonito',
     'KILOGRAM',
-    { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 }
+    { 'chain-mercadona': 2.79, 'chain-carrefour': 2.65 },
+    ['KILOGRAM', { 'chain-mercadona': 11.63, 'chain-carrefour': 11.04 }]
   ),
   fixture(
     'item-sugar',
@@ -275,7 +289,8 @@ const PRODUCTS: readonly Fixture[] = [
     'KILOGRAM',
     'sugar-honey-and-sweeteners',
     'KILOGRAM',
-    { 'chain-mercadona': 1.05, 'chain-deza': 1.15 }
+    { 'chain-mercadona': 1.05, 'chain-deza': 1.15 },
+    ['KILOGRAM', { 'chain-mercadona': 1.05, 'chain-deza': 1.15 }]
   ),
   fixture(
     'item-coffee',
@@ -286,7 +301,8 @@ const PRODUCTS: readonly Fixture[] = [
     'KILOGRAM',
     'ground-coffee',
     'KILOGRAM',
-    { 'chain-deza': 2.19, 'chain-carrefour': 2.39 }
+    { 'chain-deza': 2.19, 'chain-carrefour': 2.39 },
+    ['KILOGRAM', { 'chain-deza': 8.76, 'chain-carrefour': 9.56 }]
   ),
   fixture(
     'item-eggs',
@@ -297,7 +313,8 @@ const PRODUCTS: readonly Fixture[] = [
     'UNIT',
     'eggs',
     'DOZEN',
-    { 'chain-mercadona': 2.2 }
+    { 'chain-mercadona': 2.2 },
+    ['UNIT', { 'chain-mercadona': 0.18 }]
   ),
   fixture(
     'item-milk',
@@ -308,7 +325,8 @@ const PRODUCTS: readonly Fixture[] = [
     'LITER',
     'milk',
     'LITER',
-    { 'chain-mercadona': 0.89, 'chain-deza': 0.95 }
+    { 'chain-mercadona': 0.89, 'chain-deza': 0.95 },
+    ['LITER', { 'chain-mercadona': 0.89, 'chain-deza': 0.95 }]
   ),
   fixture(
     'item-milk-six',
@@ -319,7 +337,8 @@ const PRODUCTS: readonly Fixture[] = [
     'LITER',
     'milk',
     'LITER',
-    { 'chain-carrefour': 6.42 }
+    { 'chain-carrefour': 6.42 },
+    ['LITER', { 'chain-carrefour': 1.07 }]
   ),
   fixture(
     'item-milk-lactose',
@@ -331,6 +350,7 @@ const PRODUCTS: readonly Fixture[] = [
     'lactose-free-and-fortified-milk',
     'LITER',
     { 'chain-deza': 1.35 },
+    ['LITER', { 'chain-deza': 1.35 }],
     true
   ),
   fixture(
@@ -342,7 +362,8 @@ const PRODUCTS: readonly Fixture[] = [
     'KILOGRAM',
     'sliced-and-specialty-breads',
     'KILOGRAM',
-    { 'chain-mercadona': null, 'chain-carrefour': 1.99 }
+    { 'chain-mercadona': null, 'chain-carrefour': 1.99 },
+    ['KILOGRAM', { 'chain-carrefour': 4.42 }]
   ),
   fixture(
     'item-yogurt',
@@ -353,7 +374,11 @@ const PRODUCTS: readonly Fixture[] = [
     'KILOGRAM',
     'natural-and-skimmed-yogurts',
     'KILOGRAM',
-    { 'chain-mercadona': 1.1, 'chain-deza': 1.25, 'chain-carrefour': 1.19 }
+    { 'chain-mercadona': 1.1, 'chain-deza': 1.25, 'chain-carrefour': 1.19 },
+    [
+      'KILOGRAM',
+      { 'chain-mercadona': 2.2, 'chain-deza': 2.5, 'chain-carrefour': 2.38 },
+    ]
   ),
   // Sold nowhere near 14013, which is an ordinary product in a national catalog.
   fixture(
@@ -365,7 +390,8 @@ const PRODUCTS: readonly Fixture[] = [
     'LITER',
     'gazpachos-and-salmorejos',
     'LITER',
-    {}
+    {},
+    ['LITER', {}]
   ),
 ];
 
@@ -379,9 +405,26 @@ function fixture(
   category: string,
   basis: PriceUnitBasis | null,
   prices: Partial<Record<ChainKey, number | null>>,
+  [comparableBasis, comparable]: readonly [
+    ComparableBasis,
+    Partial<Record<ChainKey, number>>,
+  ],
   stale = false
 ): Fixture {
-  return { id, es, en, brand, size, unit, category, basis, prices, stale };
+  return {
+    id,
+    es,
+    en,
+    brand,
+    size,
+    unit,
+    category,
+    basis,
+    prices,
+    comparable,
+    comparableBasis,
+    stale,
+  };
 }
 
 function scopeOf(supermarketId: string): string {
@@ -435,7 +478,10 @@ function inOrder(
     case 'unitPrice':
       return [...rows].sort(
         (a, b) =>
-          last(a.product.offer?.unitPrice) - last(b.product.offer?.unitPrice) ||
+          // Kilo and litre figures first, counted ones after (backend `0245`, C5).
+          block(a.product.offer) - block(b.product.offer) ||
+          last(a.product.offer?.comparablePrice) -
+            last(b.product.offer?.comparablePrice) ||
           byName(a, b)
       );
     case 'category':
@@ -443,6 +489,12 @@ function inOrder(
         (a, b) => a.row.category.localeCompare(b.row.category) || byName(a, b)
       );
   }
+}
+
+/** The block of the `unitPrice` order an offer falls in: per kilo or litre, per unit, none. */
+function block(offer: ProductOffer | null): number {
+  const basis = offer?.comparableBasis ?? null;
+  return basis === null ? 2 : basis === 'UNIT' ? 1 : 0;
 }
 
 function startsWith(row: Fixture, needle: string): boolean {
@@ -469,6 +521,11 @@ function offerAt(row: Fixture, chain: ChainKey): ProductOffer {
             (price / (row.basis === 'DOZEN' ? row.size / 12 : row.size)) * 100
           ) / 100,
     unitPriceLabel: null,
+    comparablePrice: price === null ? null : (row.comparable[chain] ?? null),
+    comparableBasis:
+      price === null || row.comparable[chain] === undefined
+        ? null
+        : row.comparableBasis,
     piecePrice: null,
     observedAt: price === null ? null : observedAt(),
     sourceKind: 'OFFICIAL_API',
@@ -484,7 +541,7 @@ function toProduct(
 ): CatalogProduct {
   // Under the unit price order the offer of a row is the one that placed it.
   const by = (offer: ProductOffer) =>
-    order === 'unitPrice' ? offer.unitPrice : offer.price;
+    order === 'unitPrice' ? offer.comparablePrice : offer.price;
   let best: ProductOffer | null = null;
   for (const chain of Object.keys(row.prices) as ChainKey[]) {
     if (!scopes.has(scopeOf(chain))) {

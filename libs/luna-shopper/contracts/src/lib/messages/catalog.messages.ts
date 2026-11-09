@@ -11,6 +11,7 @@ import type {
   UnitOfMeasure,
 } from '../enums/catalog.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { ComparableBasis } from '../units/comparable-price';
 import type { AdminCredential } from './admin-auth.messages';
 import type { BasketShopView } from './basket.messages';
 
@@ -1180,6 +1181,15 @@ export interface ItemOfferView {
    * table (plan 0157). Null for a label the table does not know.
    */
   unitBasis: UnitBasis | null;
+  /**
+   * The price of a kilo, a litre or one unit of this product, derived by the
+   * catalog from `price` and the product's size (plan 0245). Null when the row
+   * has no price or the size is unknown. This is the figure that orders offers;
+   * `unitPrice` stays the chain's own figure.
+   */
+  comparablePrice: number | null;
+  /** What `comparablePrice` is a price per. Null exactly when it is. */
+  comparableBasis: ComparableBasis | null;
   /** The effective row's `lastObservedAt`. Null when there is no price row. */
   observedAt: string | null;
   /** Null when there is no price row at all. */
@@ -1654,6 +1664,15 @@ export interface SupermarketItemView {
    * table (plan 0157). Null for a label the table does not know.
    */
   unitBasis: UnitBasis | null;
+  /**
+   * The price of a kilo, a litre or one unit of this product, derived by the
+   * catalog from `price` and the product's size (plan 0245). Null when the row
+   * has no price or the size is unknown. This is the figure that orders offers;
+   * `unitPrice` stays the chain's own figure.
+   */
+  comparablePrice: number | null;
+  /** What `comparablePrice` is a price per. Null exactly when it is. */
+  comparableBasis: ComparableBasis | null;
   /** The effective row's `lastObservedAt`. Without it a price has no age. */
   observedAt: string | null;
   /** The effective row's kind. Null when no row prices this key at all. */

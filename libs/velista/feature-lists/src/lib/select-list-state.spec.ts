@@ -272,6 +272,8 @@ describe('selectListState', () => {
         unitPrice,
         currency: 'EUR',
         unitPriceLabel: null,
+        comparablePrice: null,
+        comparableBasis: null,
         observedAt: null,
         sourceKind: 'CATALOG',
         stale: false,
