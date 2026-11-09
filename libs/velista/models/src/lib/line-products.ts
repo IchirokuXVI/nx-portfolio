@@ -1,8 +1,9 @@
 import type { CatalogBrowseContext, ProductShopPrice } from './catalog-browse';
 import type { CatalogItem, Line, ProductOffer } from './domain';
+import { lineAmount, type LineAmountProduct } from './line-amount';
+import type { LineUnit } from './line-unit';
 import { compareGroupOffers } from './product-group';
 import type { LocalizedName } from './shopping-profile';
-import { amountOfOne, type SoldAs } from './sold-as';
 
 /**
  * What the line page knows about the prices of one product (velista `0135`,
@@ -326,34 +327,50 @@ export function lineShownProduct(
 /** One line, as {@link listCost} counts it. */
 export interface ListCostLine {
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). */
+  readonly unit: LineUnit;
   /** The price of the product the line shows, or null for none. */
   readonly offer: ProductOffer | null;
   /**
-   * How the shown product is priced (velista `0179`), which decides whether the
-   * line adds its price or its piece price.
+   * The shown product as {@link lineAmount} reads it: how it is sold and its
+   * size fields (velista `0179` and `0182`).
    */
-  readonly soldAs: SoldAs;
+  readonly product: LineAmountProduct;
+}
+
+/** What the pending lines of a list cost, in integer cents. */
+export interface ListCost {
+  readonly cents: number;
+  readonly currency: string | null;
+  /** Whether any line added an estimate: a weight, a volume or a kilo piece. */
+  readonly estimated: boolean;
 }
 
 /**
- * What the pending lines of a list cost (velista `0145`, section 6), or null with
- * no priced line.
+ * What the pending lines of a list cost (velista `0145`, section 6; `0182`,
+ * section 3), or null with no priced line.
  *
- * The sum, over the lines with a quantity above zero, of the quantity times the
- * price of the product the line shows: the piece price for a kilo piece, the
- * price for every other product (velista `0179`, section 3). A line with no
- * product or no such amount adds nothing, so a kilo piece with a price and no
- * piece price adds nothing. The first currency counted is the currency of the
- * sum, and a price in another is left out rather than added to it.
+ * The sum, over the lines with a quantity above zero, of {@link lineAmount} of
+ * the line's quantity in its unit with the product the line shows, in integer
+ * cents, each line rounded once by that table. A line with no product or no
+ * amount adds nothing, so a kilo piece with a price and no piece price adds
+ * nothing. The total is `estimated` when any line that added to it is. The first
+ * currency counted is the currency of the sum, and a price in another is left
+ * out rather than added to it.
  */
-export function listCost(
-  lines: readonly ListCostLine[]
-): { readonly amount: number; readonly currency: string | null } | null {
-  let amount = 0;
+export function listCost(lines: readonly ListCostLine[]): ListCost | null {
+  let cents = 0;
+  let estimated = false;
   let currency: string | null | undefined;
   for (const line of lines) {
-    const price = amountOfOne(line.offer, line.soldAs);
-    if (line.quantity <= 0 || price === null || line.offer === null) {
+    if (line.quantity <= 0 || line.offer === null) {
+      continue;
+    }
+    const amount = lineAmount(line.quantity, line.unit, line.product, {
+      price: line.offer.price,
+      piecePrice: line.offer.piecePrice,
+    });
+    if (amount === null) {
       continue;
     }
     if (currency === undefined) {
@@ -361,11 +378,10 @@ export function listCost(
     } else if (line.offer.currency !== currency) {
       continue;
     }
-    amount += line.quantity * price;
+    cents += amount.cents;
+    estimated ||= amount.estimated;
   }
-  return currency === undefined
-    ? null
-    : { amount: Math.round(amount * 100) / 100, currency };
+  return currency === undefined ? null : { cents, currency, estimated };
 }
 
 /**

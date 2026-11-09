@@ -10,6 +10,7 @@ import type {
   SettlementOutcome,
 } from './enums';
 import { isOpenBasket } from './enums';
+import type { LineUnit } from './line-unit';
 import type { ProductCategory } from './product-category';
 import type { ShopSectionName } from './shop';
 import type { LocalizedName } from './shopping-profile';
@@ -576,6 +577,11 @@ export interface BasketRowEntry {
    * can carry one version.
    */
   readonly version: number;
+  /**
+   * What `left`, `bought` and `asked` count (velista `0182`): the row's unit,
+   * since a row is one unit (backend `0246` M6).
+   */
+  readonly unit: LineUnit;
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
@@ -655,6 +661,12 @@ export interface BasketRow {
    * first), and merges the lines that agree.
    */
   readonly productId: string | null;
+  /**
+   * What `left`, `bought` and `asked` count (velista `0182`, backend `0246`
+   * section 3.4). A row is one unit, so two lines of one product in two units
+   * are two rows.
+   */
+  readonly unit: LineUnit;
   readonly left: number;
   readonly bought: number;
   readonly asked: number;
@@ -1230,6 +1242,8 @@ export interface BasketSettleRequest {
   readonly quantity?: number;
   /** The `left` of the lines the write names, as the person was looking at it. */
   readonly from: number;
+  /** The unit {@link quantity} and {@link from} are in: the row's (velista `0182`). */
+  readonly unit: LineUnit;
   /**
    * The product of the row as it was drawn (backend `0201`, section 4). Absent for
    * a row with no product, and on every `NOT_AVAILABLE`.
@@ -1292,6 +1306,12 @@ export type BasketRevertRequest =
   | { readonly target: 'CLOSE' };
 
 /**
+ * A settle as a screen asks for it: the store adds the unit of the row it names
+ * (velista `0182`), so no screen can send a unit the row does not count in.
+ */
+export type BasketSettleInput = Omit<BasketSettleRequest, 'unit'>;
+
+/**
  * Changing what one list asks for, from the basket (velista `0092`, section 6).
  *
  * **It writes to a household's list and not to this basket**, which is what
@@ -1320,7 +1340,21 @@ export interface BasketDemandRequest {
   readonly quantity: number;
   /** The entry's `left` the person was looking at. */
   readonly from: number;
+  /**
+   * The unit {@link quantity} and {@link from} are in, the line's (velista
+   * `0182`). Refused with `line_unit_mismatch` when it is not.
+   */
+  readonly unit: LineUnit;
 }
+
+/**
+ * A demand as a screen asks for it (velista `0182`): the store adds the unit of
+ * the entry that holds the line, and reads `unit` here only for a line the
+ * basket does not hold yet.
+ */
+export type BasketDemandInput = Omit<BasketDemandRequest, 'unit'> & {
+  readonly unit?: LineUnit;
+};
 
 /**
  * Take another product on these lines (`POST /v1/baskets/:id/lines/product`,
@@ -1354,6 +1388,11 @@ export interface BasketAddLineRequest {
   readonly targetListId: string;
   readonly content: string;
   readonly quantity: number;
+  /**
+   * What {@link quantity} counts (velista `0182`): the unit of the product added,
+   * and `UNIT` for typed text. Sent only when it is not `UNIT`.
+   */
+  readonly unit: LineUnit;
   /** The product set a suggestion carried, as the list's own add takes it. */
   readonly itemIds?: readonly string[];
   /**

@@ -4,6 +4,7 @@ import type {
   ListPermission,
   ZoneRole,
 } from './enums';
+import type { LineUnit } from './line-unit';
 import type { PriceWords } from './sold-as';
 
 /**
@@ -199,6 +200,8 @@ export interface LineRowVm {
    * learns to reach for.
    */
   readonly quantity: number;
+  /** What {@link quantity} counts, which the reel steps and draws by (velista `0182`). */
+  readonly unit: LineUnit;
   readonly approvalStatus: LineApprovalStatus;
   /**
    * Whether this line is settled: at zero with a purchase on record.
@@ -406,6 +409,12 @@ export interface ListHeaderVm {
    * nothing.
    */
   readonly cost?: string | null;
+  /**
+   * Whether {@link cost} is an estimate (velista `0182`, section 3): a weight, a
+   * volume or a kilo piece added to it. The header draws "≈" before an estimate
+   * and no mark before an exact sum.
+   */
+  readonly costEstimated?: boolean;
   /**
    * Who else has this list open right now, named and without the reader.
    *

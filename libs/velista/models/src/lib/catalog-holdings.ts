@@ -1,4 +1,5 @@
 import type { ListPermission } from './enums';
+import type { LineUnit } from './line-unit';
 
 /**
  * One line of a list that holds a product, as the catalog knows it (velista `0134`,
@@ -14,6 +15,8 @@ export interface HeldLine {
   /** What the line says. */
   readonly name: string;
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). */
+  readonly unit: LineUnit;
   /** Whether the line waits for approval. */
   readonly pending: boolean;
   /** The products the catalog knows this line holds. */

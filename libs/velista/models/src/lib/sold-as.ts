@@ -8,10 +8,12 @@ import type { ProductOffer } from './domain';
  * - `BY_THE_KILO`: `KILOGRAM` with no size and no weight. `price` is a kilo.
  * - `KILO_PIECE`: `KILOGRAM` with no size and a weight. `price` is a kilo, and
  *   the offer's `piecePrice` is one piece.
+ * - `BY_THE_LITRE`: `LITER` with no size (velista `0182`, backend `0246`
+ *   section 1). `price` is a litre.
  *
  * The weight line is not a kind: it is drawn whenever a weight is set.
  */
-export type SoldAs = 'PACK' | 'BY_THE_KILO' | 'KILO_PIECE';
+export type SoldAs = 'PACK' | 'BY_THE_KILO' | 'BY_THE_LITRE' | 'KILO_PIECE';
 
 /** Name how a product is priced, so no view tests the fields by hand. */
 export function soldAs(
@@ -19,7 +21,13 @@ export function soldAs(
   size: number | null,
   approxWeight: number | null
 ): SoldAs {
-  if (unit !== 'KILOGRAM' || size !== null) {
+  if (size !== null) {
+    return 'PACK';
+  }
+  if (unit === 'LITER') {
+    return 'BY_THE_LITRE';
+  }
+  if (unit !== 'KILOGRAM') {
     return 'PACK';
   }
   return approxWeight !== null && approxWeight > 0

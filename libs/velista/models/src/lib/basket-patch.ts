@@ -10,6 +10,7 @@ import type {
   BasketRowEntry,
 } from './basket-view';
 import type { BasketChangeMark, BasketRowNote, BasketRowState } from './enums';
+import type { LineUnit } from './line-unit';
 
 /**
  * The state of one line as one basket reads it, from a `basket.linesChanged`
@@ -24,6 +25,12 @@ export interface BasketEntryPatch {
   readonly lineId: string;
   /** `list_lines.version` after the write. */
   readonly version: number;
+  /**
+   * What `left` and `bought` count, the line's unit after the write (velista
+   * `0182`). A unit other than the row's moves the line to another row, which
+   * only a read can draw.
+   */
+  readonly unit: LineUnit;
   readonly left: number;
   readonly bought: number;
   readonly boughtElsewhere: number;
@@ -45,6 +52,7 @@ export function basketEntryPatchOf(entry: BasketRowEntry): BasketEntryPatch {
   return {
     lineId: entry.lineId,
     version: entry.version,
+    unit: entry.unit,
     left: entry.left,
     bought: entry.bought,
     boughtElsewhere: entry.boughtElsewhere,
@@ -202,6 +210,11 @@ function patchEntry(
     return BASKET_PATCH_READ;
   }
   if (!staysInRow(row, entry, patch.tripItemId)) {
+    return BASKET_PATCH_READ;
+  }
+  if (patch.unit !== row.unit) {
+    // The line counts in another unit now, so it belongs to another row
+    // (velista `0182`, backend `0246` section 3.6).
     return BASKET_PATCH_READ;
   }
   if (samePatched(entry, patch)) {

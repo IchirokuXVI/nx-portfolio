@@ -83,7 +83,7 @@ function piece(
 function row(
   productIds: readonly string[],
   numbers: Partial<
-    Pick<BasketRow, 'left' | 'bought' | 'boughtElsewhere' | 'state'>
+    Pick<BasketRow, 'left' | 'bought' | 'boughtElsewhere' | 'state' | 'unit'>
   > = {}
 ): BasketRow {
   const left = numbers.left ?? 1;
@@ -92,6 +92,7 @@ function row(
     rowKey: `l-${productIds.join('-') || 'text'}`,
     productId: productIds[0] ?? null,
     content: 'Something',
+    unit: numbers.unit ?? 'UNIT',
     left,
     bought,
     asked: bought + left,
@@ -138,6 +139,7 @@ describe('basketTotal', () => {
       leftCents: 0,
       totalCents: 0,
       currency: null,
+      estimated: false,
     });
   });
 
@@ -195,6 +197,7 @@ describe('basketTotal', () => {
       leftCents: 270,
       totalCents: 270,
       currency: 'EUR',
+      estimated: false,
     });
   });
 
@@ -350,6 +353,55 @@ describe('basketTotal', () => {
       leftCents: 135,
       totalCents: 135,
       currency: 'EUR',
+      estimated: false,
+    });
+  });
+
+  describe('a line asked for by weight (velista 0182, criterion 6)', () => {
+    const bananas: BasketProduct = {
+      ...product('p-bananas', offer(1.99)),
+      unit: 'KILOGRAM',
+    };
+
+    it('prices a weight row by its grams and calls the total an estimate', () => {
+      const total = basketTotal(
+        [row(['p-bananas'], { unit: 'GRAM', left: 500, bought: 250 })],
+        context([bananas])
+      );
+
+      expect(total.withPrice).toBe(1);
+      expect(total.boughtCents).toBe(50);
+      expect(total.totalCents).toBe(149);
+      expect(total.leftCents).toBe(99);
+      expect(total.estimated).toBe(true);
+    });
+
+    it('keeps a total of counts exact', () => {
+      expect(
+        basketTotal([row(['p-milk'], { left: 2 })], context([milk])).estimated
+      ).toBe(false);
+    });
+
+    it('calls a mix of a count and a weight an estimate', () => {
+      const total = basketTotal(
+        [
+          row(['p-milk'], { left: 2 }),
+          row(['p-bananas'], { unit: 'GRAM', left: 1000 }),
+        ],
+        context([milk, bananas])
+      );
+
+      expect(total.totalCents).toBe(270 + 199);
+      expect(total.estimated).toBe(true);
+    });
+
+    it('counts a weight row of a product it cannot weigh as unpriced', () => {
+      expect(
+        basketTotal(
+          [row(['p-milk'], { unit: 'GRAM', left: 500 })],
+          context([milk])
+        )
+      ).toEqual({ ...EMPTY_BASKET_TOTAL, lines: 1, withProduct: 1 });
     });
   });
 
@@ -371,6 +423,7 @@ describe('basketTotal', () => {
         leftCents: 4188,
         totalCents: 4188,
         currency: 'EUR',
+        estimated: true,
       });
     });
 
