@@ -2215,13 +2215,18 @@ export class BasketPage {
       name: addChoiceName(asked.choice, asked.entry.content),
       listName: asked.listName,
       added: asked.entry.quantity,
-      rows: addChoiceRows(asked.choice, asked.entry.quantity, {
-        itemOf: (itemId) => this._itemNames.nameOf(itemId),
-        // The basket holds no favourite, so a row shows the line's first product.
-        favoriteOf: () => null,
-        locale,
-        brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
-      }),
+      rows: addChoiceRows(
+        asked.choice,
+        asked.entry.quantity,
+        {
+          itemOf: (itemId) => this._itemNames.nameOf(itemId),
+          // The basket holds no favourite, so a row shows the line's first product.
+          favoriteOf: () => null,
+          locale,
+          brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+        },
+        asked.entry.unit
+      ),
     };
   });
 

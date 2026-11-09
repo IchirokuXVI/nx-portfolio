@@ -2000,13 +2000,18 @@ export class ListPage {
     }
     const facts = this._catalogFacts();
     const lines = this._lines.linesIn(asked.listId);
-    return addChoiceRows(asked.choice, asked.entry.quantity, {
-      itemOf: (itemId) => this._itemNames.nameOf(itemId),
-      favoriteOf: (lineId) =>
-        lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
-      locale: facts.locale,
-      brandSizeOf: facts.brandSizeOf,
-    });
+    return addChoiceRows(
+      asked.choice,
+      asked.entry.quantity,
+      {
+        itemOf: (itemId) => this._itemNames.nameOf(itemId),
+        favoriteOf: (lineId) =>
+          lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
+        locale: facts.locale,
+        brandSizeOf: facts.brandSizeOf,
+      },
+      asked.entry.unit
+    );
   });
 
   /** A line of the question was chosen: the same add, into that line. */

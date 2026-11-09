@@ -19,6 +19,7 @@ const ROWS: readonly AddChoiceRow[] = [
     imageUrl: null,
     from: 2,
     to: 3,
+    unit: 'UNIT',
   },
   {
     lineId: 'line-b',
@@ -27,6 +28,7 @@ const ROWS: readonly AddChoiceRow[] = [
     imageUrl: null,
     from: 0,
     to: 1,
+    unit: 'UNIT',
   },
 ];
 
@@ -92,6 +94,17 @@ describe('AddChoice', () => {
     expect(drawn[2].classList.contains('new')).toBe(true);
     expect(drawn[2].textContent).toContain('list.addChoice.newLine');
     expect(drawn[2].querySelector('.dashed lib-plus-icon')).not.toBeNull();
+  });
+
+  it('draws a line of another unit as what it holds, with no arrow (velista 0182)', async () => {
+    const fixture = await render({
+      rows: [{ ...ROWS[0], from: 1000, to: null, unit: 'GRAM' }],
+    });
+
+    const row = rows(fixture)[0];
+    expect(row.querySelector('.count')?.textContent?.trim()).toBe('1 kg');
+    expect(row.querySelector('.to')).toBeNull();
+    expect(row.getAttribute('aria-label')).toBe('list.addChoice.rowHolds');
   });
 
   it('titles the list and the basket each in their own words', async () => {

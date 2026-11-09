@@ -30,6 +30,7 @@ const CHOICE: AddChoice = {
       content: 'Leche entera',
       named: false,
       quantity: 2,
+      unit: 'UNIT',
       itemIds: ['item-a'],
       productGroupId: null,
       approvalStatus: 'APPROVED',
@@ -39,6 +40,7 @@ const CHOICE: AddChoice = {
       content: 'Leche entera',
       named: true,
       quantity: 0,
+      unit: 'UNIT',
       itemIds: ['item-missing'],
       productGroupId: null,
       approvalStatus: 'APPROVED',
@@ -65,6 +67,7 @@ describe('addChoiceRows', () => {
         imageUrl: 'https://img/milk.jpg',
         from: 2,
         to: 3,
+        unit: 'UNIT',
       },
       {
         lineId: 'line-b',
@@ -75,6 +78,7 @@ describe('addChoiceRows', () => {
         // A bought line counts, from 0 (D2).
         from: 0,
         to: 1,
+        unit: 'UNIT',
       },
     ]);
   });
@@ -87,6 +91,19 @@ describe('addChoiceRows', () => {
     );
 
     expect(rows[0].to).toBe(LINE_QUANTITY_MAX);
+  });
+
+  it('sums nothing onto a line of another unit (velista 0182, backend 0246 M5)', () => {
+    const rows = addChoiceRows(
+      { lines: [{ ...CHOICE.lines[0], quantity: 1000, unit: 'GRAM' }] },
+      1,
+      facts,
+      'UNIT'
+    );
+
+    expect(rows[0]).toEqual(
+      expect.objectContaining({ from: 1000, to: null, unit: 'GRAM' })
+    );
   });
 });
 

@@ -14,7 +14,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import type { AddChoiceRow } from '@portfolio/velista/models';
-import { handleBackWhile } from '@portfolio/velista/platform';
+import { formatAmount, handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, PlusIcon } from '../icons/icons';
 import { ProductPicture } from './product-picture';
 
@@ -90,10 +90,20 @@ let choiceCount = 0;
                 <span class="product">{{ row.product }}</span>
               }
             </span>
-            <span aria-hidden="true" class="count"
-              >{{ number(row.from) }} &rarr;
-              <b class="to">{{ number(row.to) }}</b></span
-            >
+            <!--
+              A line of another unit (backend 0246 M5) cannot take the add's
+              amount, so it shows what it holds and no arrow.
+            -->
+            @if (row.to; as to) {
+              <span aria-hidden="true" class="count"
+                >{{ amount(row.from, row) }} &rarr;
+                <b class="to">{{ amount(to, row) }}</b></span
+              >
+            } @else {
+              <span aria-hidden="true" class="count">{{
+                amount(row.from, row)
+              }}</span>
+            }
           </button>
         </li>
       }
@@ -156,10 +166,6 @@ export class AddChoice {
 
   private readonly _locale = inject(RokuLocaleStore).locale;
 
-  private readonly _numbers = computed(
-    () => new Intl.NumberFormat(this._locale())
-  );
-
   private readonly _options =
     viewChildren<ElementRef<HTMLButtonElement>>('option');
 
@@ -171,11 +177,17 @@ export class AddChoice {
     );
   }
 
-  protected number(value: number): string {
-    return this._numbers().format(value);
+  /** A row's quantity in its unit: "3", or "750 g" (velista `0182`). */
+  protected amount(value: number, row: AddChoiceRow): string {
+    return formatAmount(value, row.unit, this._locale());
   }
 
   protected rowLabel(row: AddChoiceRow): string {
+    if (row.to === null) {
+      return row.product === null
+        ? 'list.addChoice.rowHoldsNoProduct'
+        : 'list.addChoice.rowHolds';
+    }
     return row.product === null
       ? 'list.addChoice.rowNoProduct'
       : 'list.addChoice.row';
@@ -183,11 +195,11 @@ export class AddChoice {
 
   protected rowArgs(row: AddChoiceRow): Record<string, unknown> {
     return {
-      added: this.number(this.added()),
+      added: this.amount(this.added(), row),
       name: row.name,
       product: row.product ?? '',
-      from: this.number(row.from),
-      to: this.number(row.to),
+      from: this.amount(row.from, row),
+      to: row.to === null ? '' : this.amount(row.to, row),
     };
   }
 }

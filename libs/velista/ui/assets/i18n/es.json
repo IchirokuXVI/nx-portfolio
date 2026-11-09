@@ -842,6 +842,8 @@
       "newLine": "Una línea nueva",
       "row": "Añadir {{added}} a {{name}}, {{product}}: de {{from}} a {{to}}",
       "rowNoProduct": "Añadir {{added}} a {{name}}: de {{from}} a {{to}}",
+      "rowHolds": "{{name}}, {{product}}: {{from}}, contado en otra unidad",
+      "rowHoldsNoProduct": "{{name}}: {{from}}, contado en otra unidad",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {
