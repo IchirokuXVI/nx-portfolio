@@ -12,6 +12,7 @@ import {
   type PriceWords,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 import {
   priceWords,
   productDetailText,
@@ -85,6 +86,8 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     content: name.text,
     canAddName: !name.own && input.canRename,
     quantity: line.quantity,
+    unit: line.unit,
+    quantityWords: formatAmount(line.quantity, line.unit, input.locale),
     listName: input.list?.name ?? null,
     zoneName: input.zoneName,
     addedBy: addedByOf(line.createdByUserId, input),

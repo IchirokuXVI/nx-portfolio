@@ -735,7 +735,8 @@
       "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
       "back": "Volver al grupo",
-      "cost": "Unos {{cost}} por las líneas que tienen precio"
+      "cost": "Unos {{cost}} por las líneas que tienen precio",
+      "costExact": "{{cost}} por las líneas que tienen precio"
     },
     "presence": {
       "one": "{{name}} está en la lista",
@@ -987,7 +988,8 @@
       "tooFast": "Ve un poco más despacio e inténtalo de nuevo",
       "failed": "No ha funcionado. Inténtalo de nuevo en un momento",
       "mergeNeedsApproval": "Ese nombre es de una línea aprobada, y esta línea aún no lo está.",
-      "mergeTooManyProducts": "Juntas tienen más de {{max}} productos."
+      "mergeTooManyProducts": "Juntas tienen más de {{max}} productos.",
+      "unitDiffers": "Estas dos líneas se cuentan en unidades distintas, así que siguen separadas."
     },
     "detail": {
       "title": "Sobre esta línea",
@@ -1129,7 +1131,9 @@
       "each": "{{count}} a {{price}} cada uno",
       "older": "Ver más antiguas",
       "empty": "Todavía no se ha comprado nada.",
-      "loading": "Cargando el historial de compras"
+      "loading": "Cargando el historial de compras",
+      "about": "Unos {{price}}",
+      "atPer": "{{amount}} a {{price}} {{per}}"
     },
     "confirmDelete": {
       "title": "¿Borrar “{{name}}”?",
@@ -1627,13 +1631,15 @@
       "removed": "Ya no está en la lista",
       "boughtFromAnotherList": "Comprado desde otra lista de la compra",
       "boughtFromTheList": "Comprado desde la lista",
-      "alreadyBought": "Ya está comprado"
+      "alreadyBought": "Ya está comprado",
+      "takenBackAmount": "{{amount}} devueltos"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
       "bought_one": "{{count}} comprado",
       "bought_other": "{{count}} comprados",
-      "listLabel": "{{list}}, {{name}}, por conseguir"
+      "listLabel": "{{list}}, {{name}}, por conseguir",
+      "boughtAmount": "{{amount}} comprados"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -1989,7 +1995,7 @@
       "changedLabel": "{{name}}, ha cambiado"
     },
     "total": {
-      "amount": "~{{amount}}",
+      "amount": "≈{{amount}}",
       "open": "Total estimado, unos {{amount}}. Ver de dónde sale.",
       "barLabel": "Unos {{bought}} comprados de unos {{total}}",
       "boughtEnd": "{{amount}} comprado",
@@ -2013,7 +2019,8 @@
         "shop": "Con una tienda elegida, solo cuentan los precios de esa tienda.",
         "unpriced": "Aún no tenemos precio para estos productos. Las tiendas cambian lo que publican, así que puede aparecer más adelante.",
         "otherShop": "Elige otra tienda en el filtro para ver sus precios."
-      }
+      },
+      "amountExact": "{{amount}}"
     },
     "changes": {
       "banner_one": "{{count}} cambio en tus listas",
@@ -2102,7 +2109,14 @@
       "gotAll_one": "Ya lo tengo",
       "gotAll_other": "Ya tengo los {{count}}",
       "gotOther_one": "Ya tengo el que falta",
-      "gotOther_other": "Ya tengo los {{count}} que faltan"
+      "gotOther_other": "Ya tengo los {{count}} que faltan",
+      "toGetAmount": "Faltan {{amount}}",
+      "about": "≈ {{price}}",
+      "gotAmount": "Hoy se han cogido {{amount}}.",
+      "gotAtAmount": "Hoy se han cogido {{amount}} a {{price}}.",
+      "gotAtShopAmount": "Hoy se han cogido {{amount}} a {{price}}, en {{shop}}.",
+      "gotAllAmount": "Ya tengo los {{amount}}",
+      "gotOtherAmount": "Ya tengo los {{amount}} que faltan"
     }
   },
   "getList": {

@@ -101,6 +101,7 @@
                 (preview)="onAmountPreview($event)"
                 [label]="'list.detail.askedFor' | rokuT"
                 [readonly]="saving()"
+                [unit]="unit()"
                 [value]="amount()"
               />
             } @else {
@@ -108,7 +109,7 @@
                 The number as text, where the reel's pill would be, so the sheet does not
                 change shape between two readers.
               -->
-              <p class="shown">{{ amount() }}</p>
+              <p class="shown">{{ wordsOf(amount()) }}</p>
             }
           </div>
         </div>
@@ -239,7 +240,9 @@
             }
           </div>
 
-          <span aria-hidden="true" class="quantity">{{ line.quantity }}</span>
+          <span aria-hidden="true" class="quantity">{{
+            wordsOf(line.quantity)
+          }}</span>
         </div>
       }
 
@@ -257,7 +260,7 @@
             <dd class="fact-value">
               {{
                 'list.detail.lastBoughtValue'
-                  | rokuT: { when: bought.when, count: bought.quantity }
+                  | rokuT: { when: bought.when, count: bought.amount }
               }}
             </dd>
           </div>
@@ -395,7 +398,12 @@
         </span>
 
         <div class="step-row">
-          <lib-quantity-stepper [(value)]="howMany" [disabled]="line.busy" />
+          <lib-quantity-stepper
+            [(value)]="howMany"
+            [disabled]="line.busy"
+            [min]="howManyFloor()"
+            [unit]="unit()"
+          />
           <p class="step-note">{{ 'list.detail.howManyNote' | rokuT }}</p>
         </div>
       </div>

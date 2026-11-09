@@ -1456,7 +1456,8 @@ export class BasketPage {
         change.from,
         change.to,
         this._translator,
-        this._locale()
+        this._locale(),
+        row.row.unit
       ) ?? ''
     );
 
@@ -2608,6 +2609,8 @@ export class BasketPage {
       targetListId: listId,
       content: entry.content,
       quantity: entry.quantity,
+      // The composer's unit: grams for one product sold by the kilo (velista `0182`).
+      unit: entry.unit,
       ...(itemIds.length > 0 ? { itemIds } : {}),
       // A chosen card is not named (velista `0144`, section 3).
       ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),

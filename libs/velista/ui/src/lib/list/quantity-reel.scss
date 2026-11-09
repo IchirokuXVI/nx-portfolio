@@ -89,6 +89,8 @@
   align-items: center;
   justify-content: center;
   min-width: var(--app-quantity-width);
+  // "1,25 kg" stays one line (velista `0182`): the pill grows, it never wraps.
+  white-space: nowrap;
   height: var(--app-quantity-height);
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-md);
@@ -168,6 +170,7 @@
   align-self: stretch;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
 }
 
 // The neighbours keep their width even when empty, so the current number does not

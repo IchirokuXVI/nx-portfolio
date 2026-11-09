@@ -219,7 +219,7 @@ function selectHeader(input: ListStateInput): ListHeaderVm {
       ? lines.filter((line) => line.quantity > 0).length
       : (list?.wantedCount ?? 0),
     lineCount: counted ? lines.length : (list?.lineCount ?? 0),
-    cost: counted ? costOf(lines, input.catalog) : null,
+    ...costOf(counted ? lines : [], input.catalog),
     viewers: input.viewers,
     live: input.live,
   };
@@ -318,6 +318,7 @@ function toRow(
         ? (input.detailOf?.(line.itemIds[0]) ?? null)
         : null,
     quantity: line.quantity,
+    unit: line.unit,
     approvalStatus: line.approvalStatus,
     settled: isSettled(line),
     indicators: indicatorsFor(line, claimedBy),
@@ -402,15 +403,15 @@ function shownProductOf(
 }
 
 /**
- * What the pending lines cost (section 6), formatted, or null with no priced line
- * or no catalog.
+ * What the pending lines cost (section 6), formatted, and whether it is an
+ * estimate (velista `0182`), or a null cost with no priced line or no catalog.
  */
 function costOf(
   lines: readonly Line[],
   catalog: ListStateCatalog | undefined
-): string | null {
-  if (catalog === undefined) {
-    return null;
+): { readonly cost: string | null; readonly costEstimated: boolean } {
+  if (catalog === undefined || lines.length === 0) {
+    return { cost: null, costEstimated: false };
   }
   const cost = listCost(
     lines.map((line) => {
@@ -419,15 +420,27 @@ function costOf(
       const offer = shown?.kind === 'priced' ? shown.offer : null;
       return {
         quantity: line.quantity,
+        unit: line.unit,
         offer,
-        // How the shown product is priced, so a kilo piece adds its piece price
-        // (velista `0179`). A product the catalog has not named is read by its
+        // How the shown product is sold and its size, so a kilo piece adds its
+        // piece price and a weight its price per kilo times its grams (velista
+        // `0179` and `0182`). A product the catalog has not named is read by its
         // offer: a set piece price names a kilo piece.
-        soldAs: soldAsOf(offer, item),
+        product: {
+          kind: soldAsOf(offer, item),
+          unit: item?.unit ?? null,
+          size: item?.size ?? null,
+          approxWeight: item?.approxWeight ?? null,
+        },
       };
     })
   );
-  return cost === null ? null : catalog.formatMoney(cost.amount, cost.currency);
+  return cost === null
+    ? { cost: null, costEstimated: false }
+    : {
+        cost: catalog.formatMoney(cost.cents / 100, cost.currency),
+        costEstimated: cost.estimated,
+      };
 }
 
 /**

@@ -1,5 +1,6 @@
 import {
   catalogName,
+  lineUnitOfProduct,
   priceWordsText,
   soldAsOf,
   type CatalogProduct,
@@ -149,6 +150,7 @@ export function productRowView(
     label: [name, size, price ?? translate('catalog.row.noPrice'), perKilo]
       .filter((part): part is string => part !== null)
       .join(', '),
+    lineUnit: lineUnitOfProduct(offer, product),
   };
 }
 
@@ -248,6 +250,12 @@ export function priceWords(
         amount: formatMoney(offer.price, offer.currency, locale),
         per: translate('catalog.per.KILOGRAM'),
       };
+    case 'BY_THE_LITRE':
+      // A loose product sold by the litre (velista `0182`): its price is a litre.
+      return {
+        amount: formatMoney(offer.price, offer.currency, locale),
+        per: translate('catalog.per.LITER'),
+      };
     case 'PACK':
       return {
         amount: formatMoney(offer.price, offer.currency, locale),
@@ -293,6 +301,7 @@ export function unitPriceWords(
         per: translate('catalog.per.KILOGRAM'),
       };
     case 'BY_THE_KILO':
+    case 'BY_THE_LITRE':
       return null;
     case 'PACK': {
       const basis = product?.unitBasis ?? null;

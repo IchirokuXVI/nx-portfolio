@@ -40,15 +40,24 @@
 
     <!--
       What the pending lines cost (velista 0145, section 6): plain text that opens
-      nothing, and its words for a screen reader say it is an estimate for the
-      lines that have a price.
+      nothing. The estimate mark is drawn only before an estimate (velista 0182): a
+      weight, a volume or a kilo piece added to it. A sum of counts at their pack
+      prices is exact and carries no mark, and its words for a screen reader say
+      which it is.
     -->
     @if (header().cost; as cost) {
       <span class="cost">
-        <span aria-hidden="true">~{{ cost }}</span>
-        <span class="visually-hidden">{{
-          'list.header.cost' | rokuT: { cost: cost }
-        }}</span>
+        @if (header().costEstimated) {
+          <span aria-hidden="true">≈{{ cost }}</span>
+          <span class="visually-hidden">{{
+            'list.header.cost' | rokuT: { cost: cost }
+          }}</span>
+        } @else {
+          <span aria-hidden="true">{{ cost }}</span>
+          <span class="visually-hidden">{{
+            'list.header.costExact' | rokuT: { cost: cost }
+          }}</span>
+        }
       </span>
     }
   </p>

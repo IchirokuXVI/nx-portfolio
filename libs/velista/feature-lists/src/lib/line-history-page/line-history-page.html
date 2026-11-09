@@ -44,9 +44,7 @@
             <li>
               <span class="fact-value">
                 @if (times.more) {
-                  {{
-                    'list.history.timesMore' | rokuT: { count: times.count }
-                  }}
+                  {{ 'list.history.timesMore' | rokuT: { count: times.count } }}
                 } @else {
                   {{ 'list.history.times' | rokuT: { count: times.count } }}
                 }
@@ -87,7 +85,7 @@
     </div>
 
     @if (view.loading) {
-      <div class="content" aria-busy="true">
+      <div aria-busy="true" class="content">
         <p class="visually-hidden">{{ 'list.history.loading' | rokuT }}</p>
         <div aria-hidden="true" class="bones">
           <span class="bone"></span>
@@ -117,14 +115,14 @@
                       @if (row.mine) {
                         {{
                           'list.history.boughtYou'
-                            | rokuT: { count: row.quantity }
+                            | rokuT: { count: row.amount }
                         }}
                       } @else {
                         {{
                           'list.history.boughtBy'
                             | rokuT
                               : {
-                                  count: row.quantity,
+                                  count: row.amount,
                                   who:
                                     row.who ?? ('list.history.someone' | rokuT),
                                 }
@@ -160,17 +158,39 @@
                 </span>
 
                 @if (row.price !== null) {
+                  <!--
+                    A weight or a kilo piece cost about this (velista 0182): the estimate
+                    mark goes before it, and its words say so.
+                  -->
                   <span class="price">
-                    <span aria-hidden="true">{{ row.price }}</span>
+                    <span aria-hidden="true"
+                      >{{ row.estimated ? '≈' : '' }}{{ row.price }}</span
+                    >
                     <span class="visually-hidden">
-                      {{ row.price }}
+                      @if (row.estimated) {
+                        {{ 'list.history.about' | rokuT: { price: row.price } }}
+                      } @else {
+                        {{ row.price }}
+                      }
                       @if (row.unitPrice !== null) {
                         ,
-                        {{
-                          'list.history.each'
-                            | rokuT
-                              : { count: row.quantity, price: row.unitPrice }
-                        }}
+                        @if (row.unitPricePer; as per) {
+                          {{
+                            'list.history.atPer'
+                              | rokuT
+                                : {
+                                    amount: row.amount,
+                                    price: row.unitPrice,
+                                    per: ('catalog.per.' + per | rokuT),
+                                  }
+                          }}
+                        } @else {
+                          {{
+                            'list.history.each'
+                              | rokuT
+                                : { count: row.quantity, price: row.unitPrice }
+                          }}
+                        }
                       }
                     </span>
                   </span>
@@ -216,7 +236,7 @@
         </div>
       }
       @default {
-        <div class="content" aria-busy="true">
+        <div aria-busy="true" class="content">
           <p class="visually-hidden">{{ 'list.history.loading' | rokuT }}</p>
           <div aria-hidden="true" class="bones">
             <span class="bone"></span>

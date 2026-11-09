@@ -9,7 +9,7 @@
   class="number"
   type="button"
 >
-  {{ 'basket.total.amount' | rokuT: { amount: amounts().total } }}
+  {{ amountKey() | rokuT: { amount: amounts().total } }}
 </button>
 
 <!--
@@ -33,19 +33,19 @@
       <div class="entry">
         <dt>{{ 'basket.total.bought' | rokuT }}</dt>
         <dd>
-          {{ 'basket.total.amount' | rokuT: { amount: amounts().bought } }}
+          {{ amountKey() | rokuT: { amount: amounts().bought } }}
         </dd>
       </div>
       <div class="entry">
         <dt>{{ 'basket.total.left' | rokuT }}</dt>
         <dd>
-          {{ 'basket.total.amount' | rokuT: { amount: amounts().left } }}
+          {{ amountKey() | rokuT: { amount: amounts().left } }}
         </dd>
       </div>
       <div class="entry is-sum">
         <dt>{{ 'basket.total.total' | rokuT }}</dt>
         <dd>
-          {{ 'basket.total.amount' | rokuT: { amount: amounts().total } }}
+          {{ amountKey() | rokuT: { amount: amounts().total } }}
         </dd>
       </div>
     </dl>

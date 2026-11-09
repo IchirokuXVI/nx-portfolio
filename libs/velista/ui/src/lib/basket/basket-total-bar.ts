@@ -40,8 +40,8 @@ import { basketTotalAmounts, boughtShare } from './basket-total-amounts';
       <span [style.inline-size.%]="share()" class="fill"></span>
     </div>
     <!-- The captions carry the tilde, through the same string as the number. -->
-    @let bought = 'basket.total.amount' | rokuT: { amount: amounts().bought };
-    @let left = 'basket.total.amount' | rokuT: { amount: amounts().left };
+    @let bought = amountKey() | rokuT: { amount: amounts().bought };
+    @let left = amountKey() | rokuT: { amount: amounts().left };
     <p aria-hidden="true" class="ends">
       <span class="end bought">
         {{ 'basket.total.boughtEnd' | rokuT: { amount: bought } }}
@@ -60,6 +60,14 @@ export class BasketTotalBar {
 
   /** The reader's language tag, for the money. */
   readonly locale = input.required<string>();
+
+  /**
+   * The key an amount is drawn with: "≈" before an estimate, no mark before an
+   * exact sum of counts at their pack prices (velista `0182`, section 3).
+   */
+  protected readonly amountKey = computed(() =>
+    this.total().estimated ? 'basket.total.amount' : 'basket.total.amountExact'
+  );
 
   protected readonly amounts = computed(() =>
     basketTotalAmounts(this.total(), this.locale())

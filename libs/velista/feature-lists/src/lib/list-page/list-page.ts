@@ -82,6 +82,7 @@ import {
   AudioRecorder,
   BrowserFacade,
   ColumnScroll,
+  formatAmount,
   formatMoney,
   lineQueryOf,
   listIdOf,
@@ -1772,7 +1773,8 @@ export class ListPage {
             undefined,
             {
               name: this._lineName(line),
-              quantity: line.quantity,
+              // "3", or "750 g" for a weight (velista `0182`).
+              quantity: formatAmount(line.quantity, line.unit, this._locale()),
             }
           )
         );
@@ -1881,7 +1883,9 @@ export class ListPage {
       entry.itemIds,
       // A chosen card is not named (velista `0144`, section 3).
       entry.named,
-      options
+      options,
+      // A product sold by the kilo is asked for by weight (velista `0182`).
+      entry.unit
     );
 
     this._typedBusy.set(false);

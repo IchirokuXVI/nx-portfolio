@@ -15,7 +15,10 @@ import {
   type LineProductPriceRead,
   type LineSettlement,
 } from '@portfolio/velista/models';
-import { estimateFrom } from '../line-detail-sheet/select-line-detail';
+import {
+  estimateFrom,
+  withAmounts,
+} from '../line-detail-sheet/select-line-detail';
 
 /**
  * What the history page of a line draws (velista `0135`, section 5).
@@ -76,7 +79,7 @@ export function selectLineHistory(
   const rows: LineHistoryRowVm[] = (settlements ?? []).map((settlement) => ({
     ...toSettlementRow(
       settlement,
-      input,
+      withAmounts(input),
       scope === 'everywhere' ? input.listNameOf(settlement.listId) : null
     ),
     day: dayOfMonth(settlement.settledAt, input.locale),

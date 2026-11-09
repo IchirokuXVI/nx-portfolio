@@ -348,7 +348,7 @@
           it answers has not changed, only whether it can be answered again.
         -->
         <span [attr.aria-label]="reelLabel()" class="settled-count" role="img">
-          {{ stillToGet() }}
+          {{ stillToGetWords() }}
         </span>
       } @else {
         <lib-quantity-reel
@@ -362,6 +362,7 @@
           [min]="0"
           [readonly]="busy()"
           [took]="took()"
+          [unit]="unit()"
           [value]="shownOutstanding()"
         />
       }

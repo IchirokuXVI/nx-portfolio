@@ -64,6 +64,14 @@ export class BasketTotalNumber {
 
   protected readonly open = signal(false);
 
+  /**
+   * The key an amount is drawn with: "≈" before an estimate, no mark before an
+   * exact sum of counts at their pack prices (velista `0182`, section 3).
+   */
+  protected readonly amountKey = computed(() =>
+    this.total().estimated ? 'basket.total.amount' : 'basket.total.amountExact'
+  );
+
   protected readonly amounts = computed(() =>
     basketTotalAmounts(this.total(), this.locale())
   );

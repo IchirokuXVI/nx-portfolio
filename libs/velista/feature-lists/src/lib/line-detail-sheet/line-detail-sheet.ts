@@ -37,12 +37,15 @@ import {
   lineNameChange,
   lineNameRefused,
   priceWordsText,
+  stepFrom,
   type BasketShop,
   type Line,
+  type LineUnit,
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import {
   appPath,
+  formatAmount,
   lineIdOf,
   listIdOf,
   SheetNavigation,
@@ -239,6 +242,17 @@ export class LineDetailSheet {
 
   /** How many the how many step is offering to record. */
   readonly howMany = signal(1);
+
+  /** What the line counts in (velista `0182`), a count while it is not read yet. */
+  readonly unit = computed<LineUnit>(() => this.detail()?.unit ?? 'UNIT');
+
+  /** The least the how many step records: one step of the line's unit. */
+  readonly howManyFloor = computed(() => stepFrom(0, this.unit(), 1));
+
+  /** A quantity of this line in words: "3" for a count, "750 g" for a weight. */
+  wordsOf(quantity: number): string {
+    return formatAmount(quantity, this.unit(), this._localeStore.locale());
+  }
 
   /** Which product it will record, on a line carrying more than one. */
   readonly chosenItemId = signal<string | null>(null);
@@ -525,7 +539,8 @@ export class LineDetailSheet {
       return;
     }
 
-    this.howMany.set(Math.max(1, detail.quantity));
+    // Floored at one step of the line's unit (velista `0182`): one piece, or 25 g.
+    this.howMany.set(Math.max(this.howManyFloor(), detail.quantity));
     this.chosenItemId.set(detail.preselectedItemId);
     // The shop this device named last, while it is still the same trip.
     this.chosenShop.set(this._boughtShop.read());

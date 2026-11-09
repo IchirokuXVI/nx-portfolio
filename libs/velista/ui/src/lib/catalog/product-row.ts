@@ -8,7 +8,7 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { PriceWords } from '@portfolio/velista/models';
+import type { LineUnit, PriceWords } from '@portfolio/velista/models';
 import {
   BasketIcon,
   ChevronDownIcon,
@@ -74,6 +74,12 @@ export interface ProductRowView {
    * detail nor a price.
    */
   readonly summary: string | null;
+  /**
+   * What a line of this product counts in (velista `0182`), which an add from the
+   * card sends: `GRAM` for a product sold by the kilo, `UNIT` for everything else.
+   * Absent is a count.
+   */
+  readonly lineUnit?: LineUnit;
 }
 
 /** One line under a card that holds its product, with its own stepper. */
@@ -543,7 +549,7 @@ export type ProductRowExpanded = 'shops' | 'members';
       } @else if (slot() === 'stepper' && stepper(); as stepping) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <lib-quantity-stepper
-            (stepped)="stepped.emit($event)"
+            (stepped)="stepped.emit($event > 0 ? 1 : -1)"
             [accent]="stepping.value > 0"
             [compact]="true"
             [controlled]="true"
@@ -579,7 +585,10 @@ export type ProductRowExpanded = 'shops' | 'members';
                   </span>
                   <lib-quantity-stepper
                     (stepped)="
-                      lineStepped.emit({ lineId: line.lineId, by: $event })
+                      lineStepped.emit({
+                        lineId: line.lineId,
+                        by: $event > 0 ? 1 : -1,
+                      })
                     "
                     [accent]="line.quantity > 0"
                     [compact]="true"

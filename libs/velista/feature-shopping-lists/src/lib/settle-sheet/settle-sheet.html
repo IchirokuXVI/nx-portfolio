@@ -109,6 +109,13 @@
         @if (subtitle(); as sub) {
           <p class="subtitle">{{ sub }}</p>
         }
+        <!--
+          What a weight still to get comes to (velista 0182): an estimate until the
+          scale weighs it, so it carries the mark.
+        -->
+        @if (amountToGet(); as costs) {
+          <p class="subtitle">{{ costs }}</p>
+        }
         @if (finished()) {
           @if (whatHappened(); as caption) {
             <p class="happened">{{ caption }}</p>

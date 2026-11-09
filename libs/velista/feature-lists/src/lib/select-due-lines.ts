@@ -48,6 +48,7 @@ export function selectDueLines(input: DueLinesInput): DueLinesVm {
       lineId: row.id,
       name: row.content,
       quantity: due.quantity,
+      unit: row.unit,
       ...reasonOf(due, relative),
     });
   }

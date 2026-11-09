@@ -110,6 +110,11 @@ export function basketErrorKey(
   }
 
   switch (error.code) {
+    case 'line_unit_mismatch':
+    // The line counts in another unit now (velista `0182`). The store has read the
+    // basket again and keeps no error for it, so this is only reached by a caller
+    // holding the refusal itself, and the true number is already drawn.
+    // falls through
     case 'stale_quantity':
       // The number this write was moving is not where the control believed it
       // started, which is two phones in one shop working one line. The store has
@@ -227,6 +232,10 @@ export function basketErrorKey(
       return listNameOf(error) === null
         ? 'list.error.mergeNeedsApproval'
         : 'basket.error.mergeNeedsApproval';
+
+    case 'line_unit_differs':
+      // A rename onto a line that counts in another unit (backend `0246`, 3.3).
+      return 'list.error.unitDiffers';
 
     case 'line_merge_too_many_products':
       // Both sentences interpolate the bound, so without one this is the generic

@@ -4,12 +4,15 @@ import {
   basketRowProduct,
   catalogName,
   formatVisitMoment,
+  isMeasured,
   type BasketListRef,
   type BasketParticipant,
   type BasketProduct,
   type BasketRow,
   type BasketRowState,
+  type LineUnit,
 } from '@portfolio/velista/models';
+import { formatAmount, formatQuantity } from '@portfolio/velista/platform';
 import { productSizeText, type ListPickerRow } from '@portfolio/velista/ui';
 
 /**
@@ -259,15 +262,21 @@ export function touchedCaption(
     ? translator.t('basket.touched.got', undefined, locale, { name })
     : translator.t('basket.touched.gotSome', undefined, locale, {
         name,
-        count: row.bought,
+        // "Marc got 250 g" for a weight (velista `0182`).
+        count: isMeasured(row.unit)
+          ? formatAmount(row.bought, row.unit, locale)
+          : row.bought,
       });
 }
 
 export function quantityCaption(
-  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left'>,
+  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left' | 'unit'>,
   translator: RokuTranslatorService,
   locale: string
 ): string {
+  if (isMeasured(row.unit)) {
+    return measuredCaption(row, translator, locale);
+  }
   if (row.state === 'PARTLY') {
     return translator.t('basket.row.boughtOf', undefined, locale, {
       bought: row.bought,
@@ -290,6 +299,32 @@ export function quantityCaption(
         count: row.left,
       })
     : '';
+}
+
+/**
+ * {@link quantityCaption} for a weight or a volume (velista `0182`, section 3).
+ *
+ * **Its amount is always drawn**, at one gram as at a kilo: "1 kg" is the fact a
+ * shopper weighs against, where "×1" on a count was noise. Wanted, it says what is
+ * left ("750 g"). Partly settled and done, what was got of what was asked ("250 g
+ * of 750 g"), through the same sentence a count uses, with the amounts as words.
+ */
+function measuredCaption(
+  row: Pick<BasketRow, 'state' | 'bought' | 'asked' | 'left' | 'unit'>,
+  translator: RokuTranslatorService,
+  locale: string
+): string {
+  if (
+    row.state === 'PARTLY' ||
+    row.state === 'DONE' ||
+    row.state === 'NOT_AVAILABLE'
+  ) {
+    return translator.t('basket.row.boughtOf', undefined, locale, {
+      bought: formatAmount(row.bought, row.unit, locale),
+      asked: formatAmount(row.asked, row.unit, locale),
+    });
+  }
+  return row.left > 0 ? formatQuantity(row.left, row.unit, locale) : '';
 }
 
 /**
@@ -413,10 +448,22 @@ export function outstandingCaption(
   current: number,
   next: number | null,
   translator: RokuTranslatorService,
-  locale: string
+  locale: string,
+  unit: LineUnit = 'UNIT'
 ): string | null {
   if (next === null || next === current) {
     return null;
+  }
+
+  // A weight counts what moved in its words: "250 g bought" (velista `0182`).
+  if (isMeasured(unit)) {
+    return next < current
+      ? translator.t('basket.outstanding.boughtAmount', undefined, locale, {
+          amount: formatAmount(current - next, unit, locale),
+        })
+      : translator.t('basket.line.takenBackAmount', undefined, locale, {
+          amount: formatAmount(next - current, unit, locale),
+        });
   }
 
   return next < current

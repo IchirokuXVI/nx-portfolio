@@ -8,11 +8,16 @@ import {
   linkedSignal,
   output,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   DUE_LINE_STEP_QUIET_MS,
+  isMeasured,
   type DueLineRowVm,
 } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 import { QuantityStepper } from './quantity-stepper';
 
 /**
@@ -52,17 +57,18 @@ import { QuantityStepper } from './quantity-stepper';
           (valueChange)="step($event)"
           [label]="'list.due.quantityLabel' | rokuT: { name: vm.name }"
           [min]="1"
+          [unit]="vm.unit"
           [value]="amount()"
         />
         <button
           (click)="add()"
           [attr.aria-label]="
-            'list.due.addLabel' | rokuT: { count: amount(), name: vm.name }
+            'list.due.addLabel' | rokuT: { count: amountWords(), name: vm.name }
           "
           class="add"
           type="button"
         >
-          {{ 'list.due.add' | rokuT: { count: amount() } }}
+          {{ 'list.due.add' | rokuT: { count: amountWords() } }}
         </button>
       </div>
     </div>
@@ -99,6 +105,22 @@ export class DueLineRow {
     source: this._suggested,
     computation: (suggested) => suggested,
   });
+
+  private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
+
+  /**
+   * The amount as the button says it: the number for a count, "750 g" for a weight
+   * (velista `0182`).
+   */
+  readonly amountWords = computed<string | number>(() =>
+    !isMeasured(this.row().unit)
+      ? this.amount()
+      : formatAmount(
+          this.amount(),
+          this.row().unit,
+          this._localeStore?.locale() ?? 'en'
+        )
+  );
 
   private _timer: ReturnType<typeof setTimeout> | null = null;
 

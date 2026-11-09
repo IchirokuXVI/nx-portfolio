@@ -1062,6 +1062,8 @@ export class CatalogPage {
       name: row.name,
       detail: row.summary,
       imageUrl: row.imageUrl,
+      // A product sold by the kilo is asked for by weight (velista `0182`).
+      unit: row.lineUnit,
     });
   }
 

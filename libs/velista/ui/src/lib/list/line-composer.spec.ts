@@ -245,6 +245,35 @@ describe('LineComposer, one slot and the empty field decides', () => {
       expect(field?.value).toBe('oat');
     });
 
+    it('asks for a product sold by the kilo by weight, starting at a kilo (velista 0182)', async () => {
+      const { fixture } = await render();
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      const bananas: CatalogSuggestion = {
+        kind: 'item',
+        item: {
+          ...(OAT as Extract<CatalogSuggestion, { kind: 'item' }>).item,
+          id: 'item-bananas',
+          name: { es: 'Plátanos', en: 'Bananas' },
+          unit: 'KILOGRAM',
+        },
+      };
+
+      fixture.componentInstance.choose(
+        bananas,
+        document.createElement('button')
+      );
+      fixture.detectChanges();
+
+      expect(added).toEqual([
+        expect.objectContaining({
+          itemIds: ['item-bananas'],
+          quantity: 1000,
+          unit: 'GRAM',
+        }),
+      ]);
+    });
+
     it('sends again once the submit is over', async () => {
       const { fixture } = await render();
       const added: unknown[] = [];
@@ -258,7 +287,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
         .querySelector('form.composer')
         ?.dispatchEvent(new Event('submit'));
 
-      expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
+      expect(added).toEqual([{ content: 'oat', quantity: 1, unit: 'UNIT' }]);
     });
 
     it('sends a chosen card as not named, with the product name as its words (velista 0144)', async () => {
@@ -277,11 +306,12 @@ describe('LineComposer, one slot and the empty field decides', () => {
         {
           content: expect.any(String),
           quantity: 1,
+          unit: 'UNIT',
           itemIds: ['item-oat'],
           named: false,
         },
         // Typed text says nothing, and the server names the line.
-        { content: 'oat', quantity: 1 },
+        { content: 'oat', quantity: 1, unit: 'UNIT' },
       ]);
     });
   });
@@ -356,7 +386,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       fixture.detectChanges();
 
       expect(added).toEqual([
-        { content: 'oat', quantity: 3, anchor: button(fixture) },
+        { content: 'oat', quantity: 3, unit: 'UNIT', anchor: button(fixture) },
       ]);
       expect(field(fixture).value).toBe('oat');
       expect(fixture.componentInstance.quantity()).toBe(3);
@@ -411,7 +441,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       button(fixture).click();
       fixture.detectChanges();
 
-      expect(added).toEqual([{ content: 'oat', quantity: 1 }]);
+      expect(added).toEqual([{ content: 'oat', quantity: 1, unit: 'UNIT' }]);
       expect(field(fixture).value).toBe('');
     });
   });
@@ -424,7 +454,9 @@ describe('LineComposer, one slot and the empty field decides', () => {
     type(fixture, 'Sourdough loaf');
     await press(fixture);
 
-    expect(added).toEqual([{ content: 'Sourdough loaf', quantity: 1 }]);
+    expect(added).toEqual([
+      { content: 'Sourdough loaf', quantity: 1, unit: 'UNIT' },
+    ]);
     expect(detector.handlers).toBeNull();
   });
 

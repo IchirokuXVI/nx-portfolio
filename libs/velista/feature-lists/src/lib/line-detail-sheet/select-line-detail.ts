@@ -14,9 +14,11 @@ import {
   type LineItemChipVm,
   type LineProductPriceRead,
   type LineSettlement,
+  type LineUnit,
   type PriceWords,
   type ProductOffer,
 } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 
 import {
   priceWords,
@@ -87,6 +89,20 @@ export interface LineDetailInput {
   readonly busy: boolean;
 }
 
+/**
+ * The input of `toSettlementRow`, with the words of a quantity in its unit
+ * ("3", "750 g") in the reader's language (velista `0182`).
+ */
+export function withAmounts<T extends { readonly locale: string }>(
+  input: T
+): T & { formatAmount: (quantity: number, unit: LineUnit) => string } {
+  return {
+    ...input,
+    formatAmount: (quantity, unit) =>
+      formatAmount(quantity, unit, input.locale),
+  };
+}
+
 export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
   const { line } = input;
   if (line === undefined) {
@@ -94,7 +110,7 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
   }
 
   const rows = (input.settlements ?? []).map((settlement) =>
-    toSettlementRow(settlement, input, null)
+    toSettlementRow(settlement, withAmounts(input), null)
   );
   const purchases = (input.settlements ?? []).filter(
     (settlement) => settlement.outcome === 'BOUGHT'
@@ -112,6 +128,7 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
       input.pricesOf
     ).text,
     quantity: line.quantity,
+    unit: line.unit,
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     lastPurchase: rows.find((row) => row.outcome === 'BOUGHT') ?? null,

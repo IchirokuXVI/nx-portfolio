@@ -198,4 +198,48 @@ describe('QuantityStepper', () => {
       expect(host(fixture).classList.contains('is-accent')).toBe(false);
     });
   });
+
+  /** Velista `0182`: it steps by the unit and emits the signed amount it moved. */
+  describe('a weight', () => {
+    it('steps by 25 g below a kilo and 250 g from it, and says the signed amount', async () => {
+      const fixture = await render({ value: 975, unit: 'GRAM' });
+      const heard = record(fixture);
+
+      steps(fixture)[1]?.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe(1000);
+      steps(fixture)[1]?.click();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.value()).toBe(1250);
+      steps(fixture)[0]?.click();
+      steps(fixture)[0]?.click();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.value()).toBe(975);
+      expect(heard.stepped).toEqual([25, 250, -250, -25]);
+    });
+
+    it('draws the amount in words and keeps aria-valuenow the integer', async () => {
+      const fixture = await render({ value: 1500, unit: 'GRAM' });
+      const spin = host(fixture).querySelector('[role="spinbutton"]');
+
+      expect(drawn(fixture)).toEqual({ text: '1.5 kg', now: '1500' });
+      expect(spin?.getAttribute('aria-valuetext')).toBe('1.5 kg');
+    });
+
+    it('keeps a count at one per press with no value text', async () => {
+      const fixture = await render({ value: 2 });
+      const heard = record(fixture);
+
+      steps(fixture)[1]?.click();
+      fixture.detectChanges();
+
+      expect(heard.stepped).toEqual([1]);
+      expect(
+        host(fixture)
+          .querySelector('[role="spinbutton"]')
+          ?.hasAttribute('aria-valuetext')
+      ).toBe(false);
+    });
+  });
 });

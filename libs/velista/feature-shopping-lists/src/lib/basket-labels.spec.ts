@@ -455,6 +455,74 @@ describe('quantityCaption', () => {
       )
     ).toBe('basket.row.boughtOf:{"bought":2,"asked":6}');
   });
+
+  /**
+   * Velista `0182`, criterion 5: a weight draws its amount always, at one gram as
+   * at a kilo, because "1 kg" is the fact and "×1" was the noise.
+   */
+  describe('a line asked for by weight', () => {
+    it('draws its amount at one, where a count draws nothing', () => {
+      expect(
+        quantityCaption(
+          row({ unit: 'GRAM', left: 1, asked: 1 }),
+          translator,
+          'es'
+        )
+      ).toBe('1 g');
+      expect(
+        quantityCaption(
+          row({ unit: 'GRAM', left: 1000, asked: 1000 }),
+          translator,
+          'es'
+        )
+      ).toBe('1 kg');
+      expect(
+        quantityCaption(row({ left: 1, asked: 1 }), translator, 'es')
+      ).toBe('');
+    });
+
+    it('draws what is wanted in grams', () => {
+      expect(
+        quantityCaption(
+          row({ unit: 'GRAM', left: 750, asked: 750 }),
+          translator,
+          'es'
+        )
+      ).toBe('750 g');
+    });
+
+    it('draws what was got of what was asked when partly settled', () => {
+      expect(
+        quantityCaption(
+          row({
+            unit: 'GRAM',
+            state: 'PARTLY',
+            bought: 250,
+            left: 500,
+            asked: 750,
+          }),
+          translator,
+          'es'
+        )
+      ).toBe('basket.row.boughtOf:{"bought":"250 g","asked":"750 g"}');
+    });
+
+    it('draws the whole amount once done, in kilos from a thousand', () => {
+      expect(
+        quantityCaption(
+          row({
+            unit: 'GRAM',
+            state: 'DONE',
+            bought: 1500,
+            left: 0,
+            asked: 1500,
+          }),
+          translator,
+          'es'
+        )
+      ).toBe('basket.row.boughtOf:{"bought":"1,5 kg","asked":"1,5 kg"}');
+    });
+  });
 });
 
 /**

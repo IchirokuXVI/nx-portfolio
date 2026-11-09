@@ -365,7 +365,8 @@ export class LinePage {
   }
 
   /** One press of the stepper: one more, or one fewer, as a delta (section 2). */
-  step(by: 1 | -1): void {
+  /** One press of the stepper, as the signed amount it moved (velista `0182`). */
+  step(by: number): void {
     void this._lines.addQuantity(this.lineId(), by);
   }
 

@@ -155,17 +155,33 @@ describe('ListHeader', () => {
 
   // Velista 0145, section 6.
   describe('what the list costs', () => {
-    it('ends the progress line with the estimate, and says what it is', async () => {
-      const fixture = await render(header({ cost: '14,29 €' }));
+    it('ends the progress line with an estimate marked as one, and says what it is (velista 0182)', async () => {
+      const fixture = await render(
+        header({ cost: '14,29 €', costEstimated: true })
+      );
       const cost = host(fixture).querySelector('.progress-line .cost');
 
       expect(cost?.querySelector('[aria-hidden="true"]')?.textContent).toBe(
-        '~14,29 €'
+        '≈14,29 €'
       );
       expect(cost?.querySelector('.visually-hidden')?.textContent?.trim()).toBe(
         'list.header.cost'
       );
       expect(cost?.closest('button, a')).toBeNull();
+    });
+
+    it('draws an exact cost of counts with no estimate mark (velista 0182)', async () => {
+      const fixture = await render(
+        header({ cost: '14,29 €', costEstimated: false })
+      );
+      const cost = host(fixture).querySelector('.progress-line .cost');
+
+      expect(cost?.querySelector('[aria-hidden="true"]')?.textContent).toBe(
+        '14,29 €'
+      );
+      expect(cost?.querySelector('.visually-hidden')?.textContent?.trim()).toBe(
+        'list.header.costExact'
+      );
     });
 
     it('draws nothing with no priced line', async () => {

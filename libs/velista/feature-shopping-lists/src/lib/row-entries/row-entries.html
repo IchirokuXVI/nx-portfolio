@@ -49,6 +49,7 @@
             [label]="entry.label"
             [min]="0"
             [readonly]="busy()"
+            [unit]="unit()"
             [value]="entry.asks"
             class="ask-reel"
           />
@@ -61,7 +62,7 @@
             <span class="visually-hidden">
               {{ 'basket.entries.asks' | rokuT: { count: entry.asks } }}
             </span>
-            <span aria-hidden="true">{{ entry.asks }}</span>
+            <span aria-hidden="true">{{ wordsOf(entry.asks) }}</span>
           </span>
         }
       </li>
@@ -112,6 +113,7 @@
                     [label]="other.label"
                     [min]="0"
                     [readonly]="busy()"
+                    [unit]="unit()"
                     [value]="other.list.quantity ?? 0"
                     class="ask-reel"
                   />
