@@ -83,12 +83,17 @@ function price(
 ): ProductShopPrice {
   return {
     supermarketId,
-    chain: { en: supermarketId === MERCADONA ? 'Mercadona' : 'Carrefour', es: '' },
+    chain: {
+      en: supermarketId === MERCADONA ? 'Mercadona' : 'Carrefour',
+      es: '',
+    },
     logoUrl: null,
     kind: 'priced',
     offer: {
       price: amount,
       unitPrice: unit,
+      comparablePrice: unit,
+      comparableBasis: 'LITER',
       currency: 'EUR',
       priceScopeId: 'scope',
     } as ProductShopPrice['offer'],
@@ -204,9 +209,7 @@ describe('selectLinePage', () => {
           input({
             line: line({ itemIds: ['cheese'] }),
             itemNameOf: (itemId) => (itemId === 'cheese' ? known : null),
-            priceOf: () => [
-              { ...price(MERCADONA, 13.42, 13.42), offer },
-            ],
+            priceOf: () => [{ ...price(MERCADONA, 13.42, 13.42), offer }],
           })
         )?.cards[0];
       }
@@ -277,8 +280,9 @@ describe('selectLinePage', () => {
     it('puts the cheapest first on a line with no favourite', () => {
       // The line holds the dearer product first.
       const cards =
-        selectLinePage(input({ line: line({ itemIds: ['classic', 'normal'] }) }))
-          ?.cards ?? [];
+        selectLinePage(
+          input({ line: line({ itemIds: ['classic', 'normal'] }) })
+        )?.cards ?? [];
 
       expect(cards.map((card) => card.itemId)).toEqual(['normal', 'classic']);
       expect(cards.map((card) => card.cheapest)).toEqual([true, false]);

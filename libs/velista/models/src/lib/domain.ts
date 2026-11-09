@@ -1,4 +1,4 @@
-import type { PriceUnitBasis } from './catalog-browse';
+import type { ComparableBasis, PriceUnitBasis } from './catalog-browse';
 import type {
   CommentTranscription,
   LineApprovalStatus,
@@ -465,6 +465,17 @@ export interface ProductOffer {
   readonly unitPrice: number | null;
   /** "EUR/L", "EUR/lv". Text for a human, not a unit to parse. */
   readonly unitPriceLabel: string | null;
+  /**
+   * The price of a kilo, a litre or one unit of the product, derived by the
+   * catalog from the till price and the product's size (backend `0245`). Never
+   * derived here. **This is the figure that compares**: two offers are cheaper
+   * or dearer by it only when their {@link comparableBasis} is the same.
+   * {@link unitPrice} stays what the chain printed, and is what the unit price
+   * line draws. Null when the row has no price or the size is unknown.
+   */
+  readonly comparablePrice: number | null;
+  /** What {@link comparablePrice} is a price per. Null exactly when it is. */
+  readonly comparableBasis: ComparableBasis | null;
   /**
    * The price of one piece of a product sold by the kilo with an approximate
    * weight (backend 0244). The server derives it from the weight and the price

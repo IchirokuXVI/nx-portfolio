@@ -6,9 +6,11 @@ import {
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   ListPermission,
   SettlementOutcome,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -35,6 +37,42 @@ import {
   ValidateNested,
   type ValidationArguments,
 } from 'class-validator';
+
+/**
+ * What a line's `quantity` counts (plan 0246). One description for every DTO
+ * that names it, so the routes cannot say different things about one field.
+ */
+export const LINE_UNIT_DOCS = {
+  optional:
+    'What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit, and a free text line counts pieces.',
+  update:
+    'Change what `quantity` counts (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, and so does an edit of the products that leaves the line with products that do not offer its unit: name the new unit and quantity in the same request.',
+  required:
+    'The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again.',
+} as const;
+
+/** An optional line unit, as the add and the update take it. */
+function OptionalLineUnit(description: string): PropertyDecorator {
+  return (target, key) => {
+    ApiPropertyOptional({
+      enum: LINE_UNITS,
+      description,
+    })(target, key);
+    IsOptional()(target, key);
+    IsIn([...LINE_UNITS])(target, key);
+  };
+}
+
+/** A required line unit, as a delta, a settle and a demand take it (M8). */
+export function RequiredLineUnit(): PropertyDecorator {
+  return (target, key) => {
+    ApiProperty({
+      enum: LINE_UNITS,
+      description: LINE_UNIT_DOCS.required,
+    })(target, key);
+    IsIn([...LINE_UNITS])(target, key);
+  };
+}
 
 export class CreateListDto {
   @ApiProperty({ maxLength: 120 })
@@ -154,6 +192,9 @@ export class AddLinesItemDto {
   @Min(LINE_QUANTITY_MIN)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @OptionalLineUnit(LINE_UNIT_DOCS.optional)
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     type: [String],
@@ -308,6 +349,9 @@ export class AddLineQuantityDto {
   @Min(-LINE_QUANTITY_MAX)
   @Max(LINE_QUANTITY_MAX)
   delta!: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 }
 
 export class UpdateLineDto {
@@ -327,6 +371,9 @@ export class UpdateLineDto {
   @Min(LINE_QUANTITY_MIN)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @OptionalLineUnit(LINE_UNIT_DOCS.update)
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     minimum: LINE_QUANTITY_MIN,
@@ -446,6 +493,9 @@ export class SettleLineDto {
   @Min(1)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 
   @ApiPropertyOptional({
     format: 'uuid',

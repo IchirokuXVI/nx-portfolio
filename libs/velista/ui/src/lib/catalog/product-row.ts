@@ -312,7 +312,8 @@ export type ProductRowExpanded = 'shops' | 'members';
                 <span class="per">{{ per }}</span>
               }
             </span>
-          } @else if (row().seen; as seen) {
+          }
+          @if (row().seen; as seen) {
             <span class="unit seen">
               <lib-clock-icon aria-hidden="true" class="clock" />
               {{ seen }}

@@ -46,6 +46,43 @@ function build(): {
 
 const query = (url: string) => new URL(url).searchParams;
 
+describe('the unit on every write (plan 0246, section 5)', () => {
+  const bodyOf = (call: { init: RequestInit }) =>
+    JSON.parse(String(call.init.body)) as Record<string, unknown>;
+
+  it('sends the unit on an add, an update and a delta', async () => {
+    const { api, calls, reply } = build();
+    reply([]);
+    reply({ id: 'line-1' });
+    reply({ id: 'line-1' });
+
+    await api.addLines(CALLER, 'list-1', [
+      { content: 'queso', quantity: 300, unit: 'GRAM' },
+    ]);
+    await api.updateLine(CALLER, 'line-1', { quantity: 500, unit: 'GRAM' });
+    await api.addLineQuantity(CALLER, 'line-1', -100, 'GRAM');
+
+    expect(calls.map(bodyOf)).toEqual([
+      { items: [{ content: 'queso', quantity: 300, unit: 'GRAM' }] },
+      { quantity: 500, unit: 'GRAM' },
+      { delta: -100, unit: 'GRAM' },
+    ]);
+  });
+
+  it('sends the unit on a settle, beside the quantity', async () => {
+    const { api, calls, reply } = build();
+    reply({ line: { id: 'line-1' }, settlement: { id: 's-1' } });
+
+    await api.settleLine(CALLER, 'line-1', 'BOUGHT' as never, 'GRAM', 750);
+
+    expect(bodyOf(calls[0])).toEqual({
+      outcome: 'BOUGHT',
+      unit: 'GRAM',
+      quantity: 750,
+    });
+  });
+});
+
 describe('GatewayApiClient', () => {
   it('never asks for more lines than a page may hold', async () => {
     // The defect, as a number. 200 was over `MAX_PAGE_SIZE` and every line read

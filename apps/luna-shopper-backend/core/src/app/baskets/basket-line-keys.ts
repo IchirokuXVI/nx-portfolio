@@ -1,4 +1,7 @@
-import type { BasketLinePick } from '@portfolio/luna-shopper/contracts';
+import {
+  isLineUnit,
+  type BasketLinePick,
+} from '@portfolio/luna-shopper/contracts';
 import {
   NO_PICKS,
   productOf,
@@ -32,7 +35,7 @@ export class BasketLineKeys {
     for (const line of lines) {
       const productId = productOf(line, this.picks);
       this.products.set(line.lineId, productId);
-      this.keys.set(line.lineId, rowKeyOf(line.content, productId));
+      this.keys.set(line.lineId, rowKeyOf(line.content, productId, line.unit));
     }
     return this;
   }
@@ -44,8 +47,13 @@ export class BasketLineKeys {
    * the request read the products of, and guessing a product for it would put
    * it in a row it may not belong to.
    */
-  readonly keyOf = (line: { id: string; content: string }): string =>
-    this.keys.get(line.id) ?? rowKeyOf(line.content, null);
+  readonly keyOf = (line: {
+    id: string;
+    content: string;
+    unit?: string | null;
+  }): string =>
+    this.keys.get(line.id) ??
+    rowKeyOf(line.content, null, isLineUnit(line.unit) ? line.unit : 'UNIT');
 
   /** The product a line counts as, or null. */
   productOf(lineId: string): string | null {

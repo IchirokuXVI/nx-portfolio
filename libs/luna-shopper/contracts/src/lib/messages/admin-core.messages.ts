@@ -9,6 +9,7 @@ import type {
   ZoneStatus,
 } from '../enums/zone.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { LineUnit } from '../units/line-unit';
 import type { AdminCredential } from './admin-auth.messages';
 import type { MembershipView } from './zone.messages';
 
@@ -468,6 +469,8 @@ export interface AdminListLineView {
   listName: string;
   content: string;
   quantity: number;
+  /** What {@link quantity} counts (plan 0246, section 6). */
+  unit: LineUnit;
   approvalStatus: LineApprovalStatus;
   createdByUserId: string;
   /** ISO 8601 UTC. */
@@ -550,6 +553,11 @@ export interface UpdateAdminListLineRequest extends AdminCredential {
   lineId: string;
   content?: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts from now on (plan 0246, section 6). A unit
+   * change names the quantity it starts from, as a member's edit does.
+   */
+  unit?: LineUnit;
   /** The whole product set. An empty array returns the line to free text. */
   itemIds?: string[];
 }
@@ -619,6 +627,8 @@ export interface AdminBasketRowView {
   /** The anchor's list line id, as `BasketRowView.rowKey` is. */
   rowKey: string;
   content: string;
+  /** What the three numbers count (plan 0246 M6): a row is one unit. */
+  unit: LineUnit;
   left: number;
   bought: number;
   /** `bought + left`, computed, never stored. */
@@ -644,9 +654,14 @@ export interface AdminBasketSettlementView {
   /** The exact product bought. Null for free text, or when nobody said which. */
   itemId: string | null;
   outcome: SettlementOutcome;
-  /** Units bought, and `0` for `NOT_AVAILABLE`. */
+  /** What was bought in {@link unit}, and `0` for `NOT_AVAILABLE`. */
   quantity: number;
-  /** What one unit cost, in the minor unit of `pricePaidCurrency`. Null when nobody knew. */
+  /** What `quantity` counts (plan 0246, section 3.5). */
+  unit: LineUnit;
+  /**
+   * What one of {@link unit} cost, in the minor unit of `pricePaidCurrency`:
+   * a piece or pack, or a kilo or litre (plan 0246 M7). Null when nobody knew.
+   */
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   /** The price scope the shopper was looking at. A catalog id. */

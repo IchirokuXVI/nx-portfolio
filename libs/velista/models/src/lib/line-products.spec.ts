@@ -27,6 +27,9 @@ function offer(
   return {
     price,
     unitPrice,
+    // One basis for every fixture, the same figure as the unit price.
+    comparablePrice: unitPrice,
+    comparableBasis: unitPrice === null ? null : 'LITER',
     piecePrice,
     currency: 'EUR',
     priceScopeId: 'scope',

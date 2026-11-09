@@ -30,6 +30,7 @@ describe('paidColumns: the shop and its chain (plan 0163)', () => {
       supermarketId: CHAIN,
       pricePaidCents: 129,
       pricePaidCurrency: 'EUR',
+      estimated: false,
     });
   });
 
@@ -87,7 +88,55 @@ describe('paidColumns: the shop and its chain (plan 0163)', () => {
       supermarketId: null,
       pricePaidCents: null,
       pricePaidCurrency: null,
+      // No price, so nothing to estimate (plan 0246 M7).
+      estimated: false,
     });
+  });
+});
+
+describe('paidColumns: the estimate flag (plan 0246 M7)', () => {
+  const paid = {
+    priceScopeId: SCOPE,
+    supermarketLocationId: null,
+    pricePaidCents: 995,
+    pricePaidCurrency: 'EUR',
+  };
+
+  it('keeps the flag beside a price', () => {
+    expect(
+      paidColumns({ ...paid, estimated: true }, SettlementOutcome.BOUGHT)
+    ).toMatchObject({ pricePaidCents: 995, estimated: true });
+  });
+
+  it('reads an absent flag as exact', () => {
+    expect(paidColumns(paid, SettlementOutcome.BOUGHT).estimated).toBe(false);
+  });
+
+  it('drops the flag with the price on NOT_AVAILABLE, and when no price was known', () => {
+    expect(
+      paidColumns({ ...paid, estimated: true }, SettlementOutcome.NOT_AVAILABLE)
+        .estimated
+    ).toBe(false);
+    expect(
+      paidColumns(
+        {
+          ...paid,
+          pricePaidCents: null,
+          pricePaidCurrency: null,
+          estimated: true,
+        },
+        SettlementOutcome.BOUGHT
+      ).estimated
+    ).toBe(false);
+  });
+
+  it('refuses a flag that is not a boolean', () => {
+    expect(() =>
+      paidColumns(
+        { ...paid, estimated: 'yes' as never },
+        SettlementOutcome.BOUGHT
+      )
+    ).toThrow(ValidationException);
   });
 });
 

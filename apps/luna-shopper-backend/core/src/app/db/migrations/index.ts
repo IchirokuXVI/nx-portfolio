@@ -36,6 +36,7 @@ import { LineChangeBuyKinds1756003700000 } from './1756003700000-LineChangeBuyKi
 import { SettlementSnapshotAndReplacement1756003800000 } from './1756003800000-SettlementSnapshotAndReplacement';
 import { LineNamed1756003900000 } from './1756003900000-LineNamed';
 import { AssistantAllowance1756004000000 } from './1756004000000-AssistantAllowance';
+import { LineUnit1756004100000 } from './1756004100000-LineUnit';
 
 /**
  * Every core migration, in the order TypeORM must apply them (plan 0027,
@@ -196,4 +197,9 @@ export const CORE_MIGRATIONS = [
   // writes no existing row and references no table, so it follows everything
   // (plan 0234, section 4).
   AssistantAllowance1756004000000,
+  // One enum type and six columns with defaults or nulls on `list_lines`,
+  // `line_settlements`, `basket_trip_rows` and `list_line_changes`. Every row
+  // takes `UNIT` or null, and it reads and writes no row, so it follows every
+  // migration that touched those tables (plan 0246, section 7).
+  LineUnit1756004100000,
 ];

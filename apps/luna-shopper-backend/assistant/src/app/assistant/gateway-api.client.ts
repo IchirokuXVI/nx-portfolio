@@ -4,6 +4,7 @@ import type {
   AddLineResult,
   LinePage,
   LineSettlementResult,
+  LineUnit,
   LineView,
   ListPage,
   ListView,
@@ -176,7 +177,7 @@ export class GatewayApiClient {
   addLines(
     caller: ApiCaller,
     listId: string,
-    items: { content: string; quantity?: number }[]
+    items: { content: string; quantity?: number; unit?: LineUnit }[]
   ): Promise<AddLineResult[]> {
     return this.request<AddLineResult[]>(
       caller,
@@ -189,7 +190,7 @@ export class GatewayApiClient {
   updateLine(
     caller: ApiCaller,
     lineId: string,
-    body: { content?: string; quantity?: number }
+    body: { content?: string; quantity?: number; unit?: LineUnit }
   ): Promise<LineView> {
     return this.request<LineView>(
       caller,
@@ -211,13 +212,15 @@ export class GatewayApiClient {
   addLineQuantity(
     caller: ApiCaller,
     lineId: string,
-    delta: number
+    delta: number,
+    /** The unit the delta was made in, required by the route (plan 0246 M8). */
+    unit: LineUnit
   ): Promise<LineView> {
     return this.request<LineView>(
       caller,
       'POST',
       `/v1/lines/${encodeURIComponent(lineId)}/quantity`,
-      { delta }
+      { delta, unit }
     );
   }
 
@@ -237,13 +240,15 @@ export class GatewayApiClient {
     caller: ApiCaller,
     lineId: string,
     outcome: SettlementOutcome,
+    /** The unit `quantity` is in, required by the route (plan 0246). */
+    unit: LineUnit,
     quantity?: number
   ): Promise<LineSettlementResult> {
     return this.request<LineSettlementResult>(
       caller,
       'POST',
       `/v1/lines/${encodeURIComponent(lineId)}/settle`,
-      { outcome, ...(quantity === undefined ? {} : { quantity }) }
+      { outcome, unit, ...(quantity === undefined ? {} : { quantity }) }
     );
   }
 

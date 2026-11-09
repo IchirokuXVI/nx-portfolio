@@ -230,6 +230,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-milk',
         content: 'Milk, two litres',
         quantity: 2,
+        unit: 'UNIT',
         approvalStatus: 'APPROVED',
         createdByUserId: ROSA,
         createdAt: '2026-08-27T18:00:00.000Z',
@@ -239,6 +240,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-bread',
         content: 'Bread',
         quantity: 1,
+        unit: 'UNIT',
         approvalStatus: 'APPROVED',
         createdByUserId: MARC,
         createdAt: '2026-08-27T18:02:00.000Z',
@@ -248,6 +250,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-olives',
         content: 'Olives',
         quantity: 1,
+        unit: 'UNIT',
         approvalStatus: 'PENDING',
         createdByUserId: GUEST,
         createdAt: '2026-08-30T20:20:00.000Z',
@@ -271,6 +274,7 @@ const LIST_ROWS: readonly ListSeedInput[] = [
         id: 'line-tomato',
         content: 'Tomato seeds',
         quantity: 3,
+        unit: 'UNIT',
         approvalStatus: 'APPROVED',
         createdByUserId: MARC,
         createdAt: '2026-02-01T12:10:00.000Z',
@@ -302,6 +306,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 2,
         bought: 0,
         asked: 2,
+        unit: 'UNIT',
         // A shop that had none, said so by a guest, and nothing paid.
         settlements: [
           {
@@ -310,6 +315,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'NOT_AVAILABLE',
             quantity: 2,
+            unit: 'UNIT',
             pricePaidCents: null,
             pricePaidCurrency: null,
             priceScopeId: null,
@@ -327,6 +333,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 0,
         bought: 1,
         asked: 1,
+        unit: 'UNIT',
         // Bought, with what was paid (admin plan 0033; backend plan 0160).
         // The one before it was taken back, and stays listed as such.
         settlements: [
@@ -336,6 +343,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'BOUGHT',
             quantity: 1,
+            unit: 'UNIT',
             pricePaidCents: 129,
             pricePaidCurrency: 'EUR',
             priceScopeId: 'ps_mercadona_4661',
@@ -351,6 +359,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'BOUGHT',
             quantity: 1,
+            unit: 'UNIT',
             pricePaidCents: null,
             pricePaidCurrency: null,
             priceScopeId: null,
@@ -384,6 +393,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
         left: 0,
         bought: 3,
         asked: 3,
+        unit: 'UNIT',
         settlements: [
           {
             id: 'set-tomato-bought',
@@ -391,6 +401,7 @@ export const BASKET_SEED: readonly BasketRow[] = [
             itemId: null,
             outcome: 'BOUGHT',
             quantity: 3,
+            unit: 'UNIT',
             pricePaidCents: null,
             pricePaidCurrency: null,
             priceScopeId: null,

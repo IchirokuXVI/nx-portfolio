@@ -689,6 +689,13 @@ export interface GetBasketPriceChoicesRequest {
 export interface BasketPriceChoice {
   lineId: string;
   itemIds: string[];
+  /**
+   * What the line counts in and how much it asks for (plan 0246, section
+   * 4.3). The pick is the product whose cost for this amount in this unit is
+   * lowest, so the gateway needs both, and only core holds them.
+   */
+  unit: LineUnit;
+  quantity: number;
 }
 
 /**
@@ -849,10 +856,15 @@ export interface ChangeBasketLinesProductRequest {
 /** What one unit of a product costs at one scope, as the gateway read it. */
 export interface BasketScopePrice {
   priceScopeId: string;
-  /** One unit, in the minor unit of {@link pricePaidCurrency}. */
+  /**
+   * One of the buys' unit, in the minor unit of {@link pricePaidCurrency}:
+   * one piece or pack, or one kilo or litre (plan 0246 M7).
+   */
   pricePaidCents: number;
   /** ISO 4217. */
   pricePaidCurrency: string;
+  /** Whether the price makes the cost an estimate (plan 0246 M7). Absent is false. */
+  estimated?: boolean;
 }
 
 /** One line's share of a settle, when the caller allocates by hand. */
@@ -934,6 +946,12 @@ export interface AddBasketLineRequest {
   targetListId: string;
   content: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.2), as the list's own
+   * add takes it. Absent is `UNIT`, and the gateway refuses a unit the
+   * products do not offer with `line_unit_not_offered`.
+   */
+  unit?: LineUnit;
   itemIds?: string[];
   /**
    * Whether a person typed {@link content} (plan 0207, section 1.3). Handed to
@@ -1021,6 +1039,12 @@ export interface BasketTripBuys {
   priceScopeIds: string[];
   /** At least one of those buys recorded no scope. */
   unscoped: boolean;
+  /**
+   * What those buys count in, the row's unit (plan 0246 M7), so the price the
+   * gateway reads is the price of one of it. Absent is `UNIT`, which is what
+   * a core older than that plan meant.
+   */
+  unit?: LineUnit;
 }
 
 /** Where a search inside this basket is priced. */

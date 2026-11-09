@@ -1,4 +1,8 @@
-import { LineApprovalStatus } from '@portfolio/luna-shopper/contracts';
+import {
+  LINE_UNITS,
+  LineApprovalStatus,
+  type LineUnit,
+} from '@portfolio/luna-shopper/contracts';
 import {
   Column,
   DeleteDateColumn,
@@ -68,6 +72,23 @@ export class ListLine extends BaseEntity {
    */
   @Column({ type: 'int', default: 1 })
   quantity!: number;
+
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.1): pieces or packs,
+   * grams or millilitres. Base units only, so every amount is an integer.
+   *
+   * A line with one product counts in that product's unit (W2) and a free
+   * text line counts pieces. Only a line several products can serve lets the
+   * shopper choose (W1). Core stores what it is told; the gateway checks that
+   * the line's products offer it (M3).
+   */
+  @Column({
+    type: 'enum',
+    enum: LINE_UNITS,
+    enumName: 'line_unit',
+    default: 'UNIT',
+  })
+  unit!: LineUnit;
 
   /**
    * A digest of the sorted distinct ids in this line's product set, or null while

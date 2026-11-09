@@ -1,10 +1,20 @@
-import { LINE_ITEM_SET_MAX } from '@portfolio/luna-shopper/contracts';
+import {
+  LINE_ITEM_SET_MAX,
+  LineApprovalStatus,
+  ListPermission,
+} from '@portfolio/luna-shopper/contracts';
+import { ERROR_CODES } from '@portfolio/luna-shopper/platform';
+import type { EntityManager } from 'typeorm';
+import { ListLine, type ShoppingList } from '../entities';
+import { fakeLineChanges } from './changes/line-change.fake';
 import {
   assertMergeFits,
   isEarlierLine,
+  LineMergeService,
   mergedChoices,
   mergedItemIds,
 } from './line-merge.service';
+import { LineService } from './line.service';
 
 /**
  * The three decisions a merge makes before it touches a row (plan 0112).
@@ -140,5 +150,89 @@ describe('the product bound on a merge (plan 0112, section 2)', () => {
     expect(() => assertMergeFits(over, 3, over + 1)).toThrow(
       expect.objectContaining({ messageArgs: { max: over } })
     );
+  });
+});
+
+describe('two lines of two units never merge (plan 0246, section 3.3 and M5)', () => {
+  const line = (over: Partial<ListLine>): ListLine =>
+    ({
+      id: 'li1',
+      listId: 'l1',
+      content: 'Bananas',
+      quantity: 1,
+      unit: 'UNIT',
+      itemSetHash: null,
+      productGroupId: null,
+      favoriteItemId: null,
+      preferredSupermarketId: null,
+      named: true,
+      position: 1,
+      approvalStatus: LineApprovalStatus.APPROVED,
+      createdByUserId: 'u1',
+      approvedByUserId: 'u1',
+      version: 1,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      ...over,
+    }) as ListLine;
+
+  /** A manager that fails the test on any read or write. */
+  const untouched = {
+    getRepository: () => {
+      throw new Error('the merge touched a table');
+    },
+  } as unknown as EntityManager;
+
+  it('refuses the merge with line_unit_differs before it touches a row', async () => {
+    const merges = new LineMergeService(fakeLineChanges().recorder);
+
+    await expect(
+      merges.merge(
+        untouched,
+        line({ id: 'li1', unit: 'GRAM', quantity: 500 }),
+        line({ id: 'li2', unit: 'UNIT', quantity: 2 }),
+        {
+          list: { id: 'l1', zoneId: 'z1' },
+          actor: { userId: 'u1', participantId: null, basketId: null },
+        }
+      )
+    ).rejects.toMatchObject({ code: ERROR_CODES.LINE_UNIT_DIFFERS });
+  });
+
+  it('makes the list rename planner refuse instead of summing', async () => {
+    // A basket rename of "Plátanos" to "Bananas", on a list where "Bananas"
+    // is weighed and "Plátanos" counted.
+    const held = [
+      line({ id: 'li1', content: 'Bananas', unit: 'GRAM', position: 1 }),
+      line({ id: 'li2', content: 'Plátanos', unit: 'UNIT', position: 2 }),
+    ];
+    const manager = {
+      getRepository: (entity: unknown) => {
+        if (entity !== ListLine) {
+          throw new Error('the planner read past the refusal');
+        }
+        return {
+          find: async ({ where }: { where: { listId?: string } }) =>
+            where.listId ? held.map((row) => ({ ...row })) : held,
+        };
+      },
+    } as unknown as EntityManager;
+    const service = new LineService(
+      ...(new Array(12).fill({}) as ConstructorParameters<typeof LineService>)
+    );
+
+    await expect(
+      service.planListRename(
+        manager,
+        { id: 'l1', zoneId: 'z1', name: 'Groceries' } as ShoppingList,
+        ['li2'],
+        'Bananas',
+        new Set([ListPermission.READ, ListPermission.WRITE]),
+        { userId: 'u1', participantId: null, basketId: null }
+      )
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.LINE_UNIT_DIFFERS,
+      messageArgs: { listName: 'Groceries', content: 'Bananas' },
+    });
   });
 });

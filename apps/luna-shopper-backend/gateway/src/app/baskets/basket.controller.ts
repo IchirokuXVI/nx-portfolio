@@ -63,6 +63,7 @@ import {
   ApiProblemResponses,
   componentRef,
 } from '../docs';
+import { LineUnitCheck } from '../lists/line-unit-check';
 import { NatsClient } from '../messaging/nats-client';
 import { BasketCatalogService } from './basket-catalog.service';
 import {
@@ -215,12 +216,17 @@ export class BasketLiveController {
 @UseGuards(ParticipantGuard)
 @Controller({ path: 'baskets', version: '1' })
 export class BasketController {
+  /** The unit a line is allowed, on the basket's add (plan 0246, section 4.2). */
+  private readonly units: LineUnitCheck;
+
   constructor(
     private readonly nats: NatsClient,
     private readonly catalog: BasketCatalogService,
     /** What a settle cost, read here and never sent by a client (plan 0143). */
     private readonly prices: SettlePriceService
-  ) {}
+  ) {
+    this.units = new LineUnitCheck(nats);
+  }
 
   /**
    * The basket, its rows, its people and the products they name.
@@ -359,6 +365,7 @@ export class BasketController {
     notFound: true,
     finishedBasket: true,
     shopLocked: true,
+    lineUnitMismatch: true,
   })
   async settle(
     @Participant() participant: BasketParticipantContext,
@@ -390,6 +397,7 @@ export class BasketController {
       lineIds: dto.lineIds,
       outcome: dto.outcome,
       quantity: dto.quantity,
+      unit: dto.unit,
       from: dto.from,
       itemId: dto.itemId,
       allocations: dto.allocations,
@@ -461,6 +469,8 @@ export class BasketController {
       itemId: pricedItemId(dto.itemId, scope.pick),
       supermarketLocationId: own ?? dto.supermarketLocationId,
       servedLocations: scope.servesLocations,
+      // The price of one of the row's unit (plan 0246 M7).
+      unit: dto.unit,
     });
   }
 
@@ -564,6 +574,8 @@ export class BasketController {
       servedLocations: scope.servesLocations,
       priceScopeIds: scope.tripBuys?.priceScopeIds ?? [],
       unscoped: scope.tripBuys?.unscoped ?? false,
+      // The buys' unit, as core answered it (plan 0246 M7).
+      unit: scope.tripBuys?.unit ?? 'UNIT',
     });
   }
 
@@ -631,6 +643,7 @@ export class BasketController {
     membership: true,
     notFound: true,
     finishedBasket: true,
+    lineUnitMismatch: true,
   })
   demand(
     @Participant() participant: BasketParticipantContext,
@@ -644,6 +657,7 @@ export class BasketController {
       rowKey,
       lineId: dto.lineId,
       quantity: dto.quantity,
+      unit: dto.unit,
       from: dto.from,
     };
     return this.nats.send<BasketRowResult>(BASKET_PATTERNS.rowDemand, req);
@@ -666,6 +680,7 @@ export class BasketController {
     membership: true,
     finishedBasket: true,
     lineMerge: true,
+    lineUnitDiffers: true,
   })
   rename(
     @Participant() participant: BasketParticipantContext,
@@ -777,19 +792,27 @@ export class BasketController {
     notFound: true,
     finishedBasket: true,
     lineAddChoice: true,
+    lineUnitNotOffered: true,
   })
-  addLine(
+  async addLine(
     @Participant() participant: BasketParticipantContext,
     @UuidParam('id') id: string,
     @Body() dto: AddBasketLineDto
   ): Promise<BasketRowResult> {
+    const userId = requireAccount(participant);
+    // The list's own add through another door, so the same check (plan 0246,
+    // section 4.2). Absent is `UNIT`.
+    await this.units.assertOffered([
+      { unit: dto.unit ?? 'UNIT', itemIds: dto.itemIds ?? [] },
+    ]);
     const req: AddBasketLineRequest = {
       basketId: id,
       participantId: participant.participantId,
-      userId: requireAccount(participant),
+      userId,
       targetListId: dto.targetListId,
       content: dto.content,
       quantity: dto.quantity,
+      unit: dto.unit,
       itemIds: dto.itemIds,
       named: dto.named,
       askIfAmbiguous: dto.askIfAmbiguous,

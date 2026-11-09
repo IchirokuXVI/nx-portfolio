@@ -217,6 +217,14 @@ describeIntegration('the catalog orders of plan 0196 (real Postgres)', () => {
         price,
         unitPrice,
         unitPriceLabel: unitPrice === null ? null : 'kg',
+        // Since plan 0245 the order reads the catalog's own figure. It is
+        // seeded here as the chain's figure per kilo, which keeps every case
+        // below about the seek; the derivation and the basis blocks have
+        // their own spec (`comparable-price.integration.spec.ts`). A row
+        // with no till price has no figure, as the derivation answers.
+        comparablePrice: price === null ? null : unitPrice,
+        comparableBasis:
+          price === null || unitPrice === null ? null : 'KILOGRAM',
         currency: 'EUR',
         priceObservedAt: OBSERVED,
         priceSourceKind: PriceSourceKind.OFFICIAL_API,

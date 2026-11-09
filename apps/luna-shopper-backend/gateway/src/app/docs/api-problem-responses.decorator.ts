@@ -85,6 +85,23 @@ export interface ProblemResponseOptions {
    */
   lineAddChoice?: boolean;
   /**
+   * The route moves a number in the unit the body names, so a unit that is
+   * not the line's answers 409 `line_unit_mismatch` (plan 0246, section 3.2).
+   * Told apart from a plain conflict because the client reads the line again.
+   */
+  lineUnitMismatch?: boolean;
+  /**
+   * The route renames lines, so a merge of two lines of different units
+   * answers 409 `line_unit_differs` (plan 0246, section 3.3).
+   */
+  lineUnitDiffers?: boolean;
+  /**
+   * The route names a unit or the products of a line, so a unit the products
+   * cannot be counted in answers 422 `line_unit_not_offered`, with the units
+   * the line does offer in `details.offered` (plan 0246, section 4.2).
+   */
+  lineUnitNotOffered?: boolean;
+  /**
    * The route reads the catalog at one shop (plan 0170): `locationId` beside
    * another selector is a 400 of its own code, and an unknown shop a 404 of
    * its own code.
@@ -272,6 +289,15 @@ export function ApiProblemResponses(
   }
   if (options.lineAddChoice) {
     codes.push(ERROR_CODES.LINE_ADD_NEEDS_CHOICE);
+  }
+  if (options.lineUnitMismatch) {
+    codes.push(ERROR_CODES.LINE_UNIT_MISMATCH);
+  }
+  if (options.lineUnitDiffers) {
+    codes.push(ERROR_CODES.LINE_UNIT_DIFFERS);
+  }
+  if (options.lineUnitNotOffered) {
+    codes.push(ERROR_CODES.LINE_UNIT_NOT_OFFERED);
   }
   if (options.atLocation) {
     codes.push(

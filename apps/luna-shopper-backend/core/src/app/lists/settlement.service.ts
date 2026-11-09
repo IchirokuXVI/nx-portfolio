@@ -4,11 +4,11 @@ import {
   LINE_QUANTITY_MAX,
   RealtimeEvent,
   SettlementOutcome,
+  type LineSettlementHistoryView,
   type LineSettlementPage,
   type LineSettlementResult,
-  type LineSettlementHistoryView,
-  type ListItemSettlementsRequest,
   type LineSettlePickRequest,
+  type ListItemSettlementsRequest,
   type ListLineSettlementsRequest,
   type SettleLineRequest,
   type SettlePick,
@@ -23,11 +23,12 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import { DataSource, IsNull, Repository } from 'typeorm';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
+import { LineClaimService } from '../baskets/line-claim.service';
 import { LineSettlement, ListLine, ListLineItem } from '../entities';
 import { CoreEventsPublisher } from '../events/core-events.publisher';
-import { LineClaimService } from '../baskets/line-claim.service';
 import { LineChangeRecorder } from './changes/line-change.recorder';
 import { toLineItemSet, type LineItemSet } from './line-item-set';
+import { assertLineUnit, requireLineUnit } from './line-unit-rules';
 import { ListAccessService } from './list-access.service';
 import {
   toLineSettlementHistoryView,
@@ -160,6 +161,8 @@ export class SettlementService {
 
   async settle(req: SettleLineRequest): Promise<LineSettlementResult> {
     const quantity = this.validateSettleQuantity(req);
+    // Required, and in the line's unit (plan 0246, section 3.5).
+    requireLineUnit(req.unit);
     this.validateItemId(req.itemId);
     // Before the transaction, beside the other two shape checks: a malformed
     // message must be refused without a row locked (plan 0143, section 4.3).
@@ -180,6 +183,9 @@ export class SettlementService {
       if (!line) {
         throw new NotFoundException('Line not found');
       }
+      // Against the row the lock read, before anything moves (plan 0246,
+      // section 3.5): the outstanding demand stays in the line's unit.
+      assertLineUnit(line, req.unit);
 
       const items = await this.itemSetOf(
         manager.getRepository(ListLineItem),
@@ -213,7 +219,8 @@ export class SettlementService {
           line.id,
           before,
           remaining,
-          { userId: req.userId, participantId: null, basketId: null }
+          { userId: req.userId, participantId: null, basketId: null },
+          line.unit
         );
       }
 
@@ -225,6 +232,8 @@ export class SettlementService {
           itemId,
           outcome: req.outcome,
           quantity,
+          // What `quantity` counts, the line's (plan 0246, section 3.5).
+          unit: line.unit ?? 'UNIT',
           settledByUserId: req.userId,
           // Explicitly none: a settle straight from the list page is attributed
           // to an account holder, and the check constraint plan 0051 adds allows

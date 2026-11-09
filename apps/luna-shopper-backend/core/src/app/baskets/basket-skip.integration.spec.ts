@@ -18,18 +18,18 @@ import {
 } from '@portfolio/luna-shopper/test-fixtures/jest';
 import { randomUUID } from 'node:crypto';
 import { DataSource, IsNull } from 'typeorm';
+import { LineClaimService } from '../baskets/line-claim.service';
 import {
+  Basket,
   BasketLineSkip,
+  BasketParticipant,
   BasketSource,
   CORE_ENTITIES,
-  Basket,
-  BasketParticipant,
   ListLine,
   ShoppingList,
   Zone,
   ZoneMembership,
 } from '../entities';
-import { LineClaimService } from '../baskets/line-claim.service';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { LineChangeRecorder } from '../lists/changes/line-change.recorder';
 import { LineMergeService } from '../lists/line-merge.service';
@@ -119,11 +119,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         dataSource
           .getRepository(BasketParticipant)
           .findOne({ where: { id: participantId } }),
-      listParticipants: async ({
-        basketId,
-      }: {
-        basketId: string;
-      }) => ({
+      listParticipants: async ({ basketId }: { basketId: string }) => ({
         participants: (
           await dataSource
             .getRepository(BasketParticipant)
@@ -339,9 +335,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
   }
 
   const coverageOf = (held: Basket) =>
-    new BasketCoverageService(dataSource.getRepository(Basket)).listsOf(
-      held
-    );
+    new BasketCoverageService(dataSource.getRepository(Basket)).listsOf(held);
 
   const skipsOf = (basketId: string) =>
     dataSource
@@ -537,6 +531,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 1,
       });
@@ -595,6 +590,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 3,
       });
@@ -665,6 +661,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         rowKey: one.id,
         lineIds: [one.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 2,
       });
       // The shop had none, and that is the newer act.
@@ -680,6 +677,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         rowKey: two.id,
         lineIds: [two.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 2,
       });
       await skipService.skip({
@@ -708,6 +706,7 @@ describeIntegration('skipping a basket row (real Postgres)', () => {
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
         from: 3,
       });

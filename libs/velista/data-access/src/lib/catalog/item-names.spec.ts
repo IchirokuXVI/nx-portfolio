@@ -40,6 +40,8 @@ function product(id: string): CatalogItem {
           currency: 'EUR',
           unitPrice: null,
           unitPriceLabel: null,
+          comparablePrice: null,
+          comparableBasis: null,
           observedAt: null,
           sourceKind: 'CATALOG',
           stale: false,

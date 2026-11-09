@@ -166,6 +166,13 @@ export class BasketProductService {
     const { entries } = await this.read.keyedLinesOf(basket, coveredListIds);
     return entries
       .filter((entry) => needsPriceChoice(entry))
-      .map((entry) => ({ lineId: entry.lineId, itemIds: [...entry.itemIds] }));
+      .map((entry) => ({
+        lineId: entry.lineId,
+        itemIds: [...entry.itemIds],
+        // What the gateway's pick orders by (plan 0246, section 4.3): the
+        // cost of this amount in this unit with each product.
+        unit: entry.unit,
+        quantity: entry.quantity,
+      }));
   }
 }

@@ -295,9 +295,10 @@ export enum SourceLocationStatus {
  *
  * Every decision a file import makes that was not a write becomes one of these,
  * so a run page reads as a list of decisions rather than a set of counters that
- * lost their reasons. **A walk records counters and no warnings**: a file has
- * hundreds of rows and a person reads that list, a walk has 4,232 and nobody
- * does.
+ * lost their reasons. **A walk records counters and no warning per product**:
+ * a file has hundreds of rows and a person reads that list, a walk has 4,232
+ * and nobody does. What a walk does warn about is the run itself, a pause of
+ * its refusal guard, and a part of the listing it could not read (plan 0251).
  *
  * `LOYALTY_REQUIRED` and `CONDITIONAL_PRICE` are gone. They were the harvester
  * deciding which of a leaflet tile's numbers a shopper pays, and plan 0086
@@ -391,6 +392,27 @@ export enum HarvestWarningCode {
    * undo. No weight is written onto that product.
    */
   APPROX_WEIGHT_ROWS_DISAGREE = 'APPROX_WEIGHT_ROWS_DISAGREE',
+  /**
+   * A part of a chain's listing was not read at all, and the run still ended
+   * `COMPLETED` (plan 0251). One per part: a Carrefour category the storefront
+   * refused or that did not answer, a DEZA section that ran out of query
+   * budget or of narrowing terms. `name` is the part, as the chain printed it.
+   */
+  LISTING_UNREAD = 'LISTING_UNREAD',
+  /**
+   * A part of a chain's listing was read, and gave fewer rows than the chain
+   * printed for it (plan 0251). One per part: an El Jamón category, with the
+   * rows read and the count it printed in the message.
+   */
+  LISTING_SHORT = 'LISTING_SHORT',
+  /**
+   * A detail stage stopped because the chain stopped answering product pages,
+   * and the run went on with what its listing read and still ended
+   * `COMPLETED` (plan 0253). One per stage, with the counts in the message:
+   * pages asked, failed and timed out, and the products left without a page,
+   * which the next walk asks for again.
+   */
+  DETAIL_UNREAD = 'DETAIL_UNREAD',
 }
 
 /**

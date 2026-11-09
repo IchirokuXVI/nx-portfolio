@@ -11,6 +11,7 @@ import { isGroceryCategory } from './categories';
 import type { Json } from './json';
 import { LidlClient } from './lidl.client';
 import {
+  nextListOffset,
   normalizeListPage,
   normalizeStorePage,
   type LidlListPage,
@@ -20,7 +21,10 @@ import { LIDL_BASE_URL, LIDL_STORES_URL, type LidlListRow } from './types';
 /** The shops the store step reads: one page of five, as the live spec read. */
 const STORE_PAGE = 5;
 
-/** The rows one listing step asks for: one page of the walk. */
+/**
+ * The rows one listing step asks for: one page of the walk. The site serves
+ * fewer, and page 2 starts where page 1 ended (plan 0256).
+ */
 const LISTING_PAGE = 100;
 
 /** What a listing step says when no page it read held a grocery row. */
@@ -52,7 +56,8 @@ export interface LidlProbeOptions {
  * **The product is a grocery row, as the walk reads** (plan 0252). The window
  * opens with the weekly bazar on some days, and a bazar product carries no
  * region price. When the first page holds no grocery row the probe asks for
- * the next page once. With none there either it reads no product, says so in
+ * the next page once, starting where the first page's items ended (plan
+ * 0256). With none there either it reads no product, says so in
  * the listing step, and still reads the shops.
  *
  * **No category step.** The walk pages the in store index and has no tree
@@ -108,7 +113,12 @@ export async function probeLidl(
         const sample: SourceProbeSample = {
           total: value.total,
           rows: value.rows.length,
-          firstName: value.rows[0]?.name ?? null,
+          // What the site served and said it served, so a page cap that
+          // changes shows here (plan 0256, decision D2). They took the place
+          // of the first row's name: a sample holds six values, and the note
+          // below must still fit.
+          items: value.itemCount,
+          fetchsize: value.fetchsize,
           groceryRows: value.rows.filter((row) =>
             isGroceryCategory(row.siteCategory)
           ).length,
@@ -126,7 +136,11 @@ export async function probeLidl(
   }
   let row = groceryRow(page);
   if (row === undefined && hasNextPage(page)) {
-    const next = await listing('listing page 2', LISTING_PAGE, true);
+    const next = await listing(
+      'listing page 2',
+      nextListOffset(page, 0, LISTING_PAGE),
+      true
+    );
     if (next === undefined) {
       return probe.result(client.requests);
     }
@@ -214,9 +228,14 @@ function groceryRow(page: LidlListPage): LidlListRow | undefined {
   return grocery.find((row) => row.listPrice !== null) ?? grocery[0];
 }
 
-/** False only when the total says the first page was the whole index. */
+/**
+ * False only when the total says the first page was the whole index: when it
+ * reaches no further than the items the page carried (plan 0256, section 2).
+ */
 function hasNextPage(page: LidlListPage): boolean {
-  return page.total === null || page.total > LISTING_PAGE;
+  return (
+    page.total === null || page.total > nextListOffset(page, 0, LISTING_PAGE)
+  );
 }
 
 function cents(value: number | null | undefined): number | null {

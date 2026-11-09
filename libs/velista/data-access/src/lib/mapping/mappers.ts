@@ -6,6 +6,7 @@ import {
   BASKET_STATUSES,
   COMMENT_TRANSCRIPTION_FALLBACK,
   COMMENT_TRANSCRIPTIONS,
+  COMPARABLE_BASES,
   GENERATION_SCOPE_FALLBACK,
   GENERATION_SCOPES,
   LINE_APPROVAL_STATUS_FALLBACK,
@@ -671,11 +672,19 @@ export function toProductOffer(raw: unknown): ProductOffer | null {
     return null;
   }
 
+  // The pair is read whole or not at all (backend `0245`): a figure with no
+  // basis compares with nothing, and a basis with no figure says nothing.
+  const comparablePrice = positiveNum(raw['comparablePrice']);
+  const comparableBasis = oneOfOrNull(raw['comparableBasis'], COMPARABLE_BASES);
+  const comparable = comparablePrice !== null && comparableBasis !== null;
+
   return {
     price: typeof raw['price'] === 'number' ? raw['price'] : null,
     currency: nullableStr(raw['currency']),
     unitPrice: typeof raw['unitPrice'] === 'number' ? raw['unitPrice'] : null,
     unitPriceLabel: nullableStr(raw['unitPriceLabel']),
+    comparablePrice: comparable ? comparablePrice : null,
+    comparableBasis: comparable ? comparableBasis : null,
     // The server's figure for one piece of a kilo piece (backend `0244`), never
     // derived here.
     piecePrice: positiveNum(raw['piecePrice']),

@@ -1,7 +1,8 @@
-import type {
-  BasketPriceChoice,
-  ItemOfferView,
-  ItemView,
+import {
+  UnitOfMeasure,
+  type BasketPriceChoice,
+  type ItemOfferView,
+  type ItemView,
 } from '@portfolio/luna-shopper/contracts';
 import { picksOf } from './basket-picks';
 
@@ -37,6 +38,9 @@ const item = (id: string, offers: ItemOfferView[]): ItemView =>
 const line = (lineId: string, ...itemIds: string[]): BasketPriceChoice => ({
   lineId,
   itemIds,
+  // One piece, which orders the products by the price of one.
+  unit: 'UNIT',
+  quantity: 1,
 });
 
 describe('picksOf prefers a product in stock (plan 0220, section 15.5)', () => {
@@ -112,18 +116,58 @@ describe('picksOf (plan 0201, section 1)', () => {
     ]);
   });
 
-  it('compares the price for each kilo or litre before the price', () => {
+  it('orders by the cost of the line, not by the price for each kilo or litre (plan 0246, W3)', () => {
     const picks = picksOf(
       [line('l1', 'small', 'large')],
       [
-        // Cheaper to pay for, dearer for each litre.
+        // Cheaper to pay for, dearer for each litre: one of them is cheaper.
         item('small', [offer(HOME, 0.6, 1.2)]),
         item('large', [offer(HOME, 1.5, 0.75)]),
       ],
       [HOME]
     );
 
-    expect(picks).toEqual([{ lineId: 'l1', itemId: 'large' }]);
+    expect(picks).toEqual([{ lineId: 'l1', itemId: 'small' }]);
+  });
+
+  it('hands cheapestOf the kind, the size and the amount of the line (plan 0246, section 4.3)', () => {
+    // A 1000 g line: a kilo of loose bananas at 1,99 against two 700 g kilo
+    // pieces at 1,39, and a counted pack that cannot serve grams at all.
+    const loose = {
+      id: 'loose',
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      unitSize: null,
+      approxWeight: null,
+      offers: [offer(HOME, 1.99)],
+    } as unknown as ItemView;
+    const bunch = {
+      id: 'bunch',
+      defaultUnit: UnitOfMeasure.KILOGRAM,
+      unitSize: null,
+      approxWeight: 700,
+      offers: [{ ...offer(HOME, 1.99), piecePrice: 1.39 } as ItemOfferView],
+    } as unknown as ItemView;
+    const eggs = {
+      id: 'eggs',
+      defaultUnit: UnitOfMeasure.UNIT,
+      unitSize: 6,
+      approxWeight: null,
+      offers: [offer(HOME, 0.5)],
+    } as unknown as ItemView;
+    const weighed = (quantity: number): BasketPriceChoice => ({
+      lineId: 'l1',
+      itemIds: ['eggs', 'bunch', 'loose'],
+      unit: 'GRAM',
+      quantity,
+    });
+
+    expect(picksOf([weighed(1000)], [loose, bunch, eggs], [HOME])).toEqual([
+      { lineId: 'l1', itemId: 'loose' },
+    ]);
+    // At zero the price of one decides: one piece at 1,39.
+    expect(picksOf([weighed(0)], [loose, bunch, eggs], [HOME])).toEqual([
+      { lineId: 'l1', itemId: 'bunch' },
+    ]);
   });
 
   it('keeps the product the line holds first on a tie', () => {
