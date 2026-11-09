@@ -1,3 +1,5 @@
+> **PR:** [#939](https://github.com/IchirokuXVI/nx-portfolio/pull/939)
+
 # 0250: Carrefour and El Jamón read the sizes they print
 
 > Found on 2026-11-06 by a scheduled walk of every chain on Luna slot 4 (locked with
