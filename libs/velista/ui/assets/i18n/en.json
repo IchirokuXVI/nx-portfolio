@@ -2005,6 +2005,7 @@
       "boughtEnd": "{{amount}} bought",
       "leftEnd": "{{amount}} left",
       "title": "Estimated total",
+      "titleExact": "Total",
       "bought": "Bought",
       "left": "Still to buy",
       "total": "Total",

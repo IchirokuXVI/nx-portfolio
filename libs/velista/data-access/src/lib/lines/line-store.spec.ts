@@ -1052,6 +1052,111 @@ describe('LineStore', () => {
           { delta: 1, unit: 'UNIT' },
         ]);
       });
+
+      it('keeps GRAM on a line whose product a curator made a pack, and steps 25 g', async () => {
+        // 750 g read as 750 pieces would turn the next plus into 751 pieces.
+        const { store, lines } = await build(
+          [line('a', { quantity: 750, unit: 'GRAM', itemIds: ['bananas'] })],
+          [
+            items({
+              bananas: { unit: 'KILOGRAM', size: 1, approxWeight: null },
+            }),
+          ]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 750,
+          unit: 'GRAM',
+        });
+        await store.addQuantity('a', 25);
+
+        expect(lines.updates).toEqual([]);
+        expect(lines.deltas).toEqual([{ delta: 25, unit: 'GRAM' }]);
+      });
+
+      it('draws three pieces as stored, and its first plus asks for a kilo', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 3, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 3,
+          unit: 'UNIT',
+        });
+        await store.addQuantity('a', 1);
+
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+        expect(lines.deltas).toEqual([]);
+      });
+
+      it('asks for a kilo from a turn of several steps, never the summed grams', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.addQuantity('a', 75);
+
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+      });
+
+      it('sends nothing for a minus at nothing', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.addQuantity('a', -25);
+
+        expect(lines.updates).toEqual([]);
+        expect(lines.deltas).toEqual([]);
+      });
+
+      it('saves a kilo from the detail sheet above nothing, and zero as zero', async () => {
+        const { store, lines } = await build(
+          [
+            line('a', { quantity: 3, unit: 'UNIT', itemIds: ['bananas'] }),
+            line('b', { quantity: 2, unit: 'UNIT', itemIds: ['pears'] }),
+          ],
+          [items({ bananas: LOOSE, pears: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 5 });
+        await store.updateLine('b', { quantity: 0 });
+
+        expect(lines.updates).toEqual([
+          { quantity: 1000, unit: 'GRAM' },
+          { quantity: 0, unit: 'GRAM' },
+        ]);
+      });
+
+      it('holds a second tap until the correction answers', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 3, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+        lines.holdWrites();
+
+        const first = store.addQuantity('a', 1);
+        const second = store.addQuantity('a', 250);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+        expect(lines.deltas).toEqual([]);
+
+        lines.releaseWrites();
+        expect(await first).toBe('succeeded');
+        expect(await second).toBe('succeeded');
+        expect(lines.deltas).toEqual([{ delta: 250, unit: 'GRAM' }]);
+      });
     });
 
     it('shows the server’s value once the write has landed', async () => {

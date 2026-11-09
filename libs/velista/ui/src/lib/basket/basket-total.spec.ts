@@ -96,6 +96,14 @@ describe('BasketTotalNumber', () => {
     );
   });
 
+  it('titles the popover of an exact total "Total", with no estimate (velista 0182)', async () => {
+    await opened({ total: { ...MOCK, estimated: false } });
+
+    expect(
+      popover()?.querySelector('#basket-total-title')?.textContent?.trim()
+    ).toBe('basket.total.titleExact');
+  });
+
   it('opens the popover from the number, and closes it on a second press', async () => {
     const fixture = await render();
 

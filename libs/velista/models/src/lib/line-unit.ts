@@ -47,29 +47,58 @@ export function lineUnitOfProduct(
   return lineUnitOf(soldAsOf(offer, product));
 }
 
+/** A product's record, as far as reading what it is sold as needs it. */
+interface UnitRecord {
+  readonly unit: string | null;
+  readonly size: number | null;
+  readonly approxWeight: number | null;
+}
+
 /**
- * The unit a line is drawn, stepped and next written in (backend `0246` M2 and
- * section 3.2).
+ * The unit a legacy line is corrected to, or null for a line that is not one
+ * (backend `0246` M2).
  *
- * The stored unit, except on a one product line whose stored unit is not its
- * product's: the rows the migration wrote `UNIT` on. Such a line is drawn in its
- * product's unit, and its next absolute write states that unit, which is what
- * corrects the row. A line with several products keeps its stored unit, and so
- * does one whose product is not read yet.
+ * The migration left exactly one kind of row behind: a line for one product
+ * sold by the kilo or the litre, stored in `UNIT`. That is the only case. Any
+ * other disagreement between a line and its product (a loose product a curator
+ * turned into a pack or a kilo piece, a line with several products) is the
+ * server's to keep, so the line stays in its stored unit on screen and on the
+ * wire. A product not read yet is no evidence either way.
  */
-export function shownLineUnit(
+export function legacyLineUnit(
   line: { readonly unit: LineUnit; readonly itemIds: readonly string[] },
-  productOf: (itemId: string) => {
-    readonly unit: string | null;
-    readonly size: number | null;
-    readonly approxWeight: number | null;
-  } | null
-): LineUnit {
-  if (line.itemIds.length !== 1) {
-    return line.unit;
+  productOf: (itemId: string) => UnitRecord | null
+): LineUnit | null {
+  if (line.unit !== 'UNIT' || line.itemIds.length !== 1) {
+    return null;
   }
   const product = productOf(line.itemIds[0]);
-  return product === null ? line.unit : lineUnitOfProduct(null, product);
+  if (product === null) {
+    return null;
+  }
+  const unit = lineUnitOfProduct(null, product);
+  return isMeasured(unit) ? unit : null;
+}
+
+/**
+ * The unit a line is drawn and stepped in (backend `0246` M2 and section 3.2).
+ *
+ * The stored unit, except on a {@link legacyLineUnit legacy line} at nothing,
+ * which is drawn in its product's unit ("0 g"): zero is zero in every unit.
+ * Above zero the stored number counts pieces, so it is drawn as stored ("×3"),
+ * and its first write sends {@link defaultQuantity} in the product's unit
+ * rather than read the old number in a new unit.
+ */
+export function shownLineUnit(
+  line: {
+    readonly unit: LineUnit;
+    readonly quantity: number;
+    readonly itemIds: readonly string[];
+  },
+  productOf: (itemId: string) => UnitRecord | null
+): LineUnit {
+  const legacy = legacyLineUnit(line, productOf);
+  return legacy !== null && line.quantity === 0 ? legacy : line.unit;
 }
 
 /** The amount a new line starts at in a unit: one piece, one kilo, one litre. */

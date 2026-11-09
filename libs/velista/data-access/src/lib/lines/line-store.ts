@@ -9,12 +9,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   addMayMeetLine,
   defaultQuantity,
-  LINE_QUANTITY_MAX,
+  legacyLineUnit,
   LINE_QUANTITY_MIN,
   LINES_PAGE_SIZE,
   SETTLEMENTS_PAGE_SIZE,
   shownLineUnit,
-  stepAt,
   type AddLineOptions,
   type Comment,
   type Line,
@@ -149,6 +148,15 @@ export class LineStore {
    * draws every line in its stored unit.
    */
   private readonly _items = inject(ItemNames, { optional: true });
+
+  /**
+   * The corrections of legacy lines still on their way, by line id, each
+   * answering how it went. A step on such a line waits for it.
+   */
+  private readonly _corrections = new Map<
+    string,
+    Promise<'succeeded' | 'failed' | 'overwritten'>
+  >();
 
   /** Lines known to be gone, and how this client learned it. */
   private readonly _deletions = signal<ReadonlyMap<string, LineDeletion>>(
@@ -763,13 +771,28 @@ export class LineStore {
       return { state: 'failed', error: null };
     }
     // Every absolute write states what its number counts (velista `0182`): the
-    // unit the line is drawn in, unless the caller names another. For a line the
-    // migration left in `UNIT` that is its product's unit, and this write is what
-    // corrects the stored row (backend `0246` section 3.2).
-    const sent =
+    // line's own unit, unless the caller names another. A line the migration left
+    // in `UNIT` is corrected to its product's unit by this write (backend `0246`
+    // section 3.2). At nothing it is drawn in that unit, so the number typed is
+    // in it; above nothing it was drawn in pieces, and the write names the
+    // default amount instead of reading pieces as grams. Zero is zero in both.
+    const legacy =
       changes.quantity !== undefined && changes.unit === undefined
-        ? { ...changes, unit: this._unitShown(before) }
-        : changes;
+        ? this._legacyUnit(before)
+        : null;
+    const sent =
+      changes.quantity === undefined || changes.unit !== undefined
+        ? changes
+        : legacy === null
+          ? { ...changes, unit: before.unit }
+          : {
+              ...changes,
+              unit: legacy,
+              quantity:
+                before.quantity === 0 || changes.quantity === 0
+                  ? changes.quantity
+                  : defaultQuantity(legacy),
+            };
 
     const listId = before.listId;
     const fields = claimedBy(sent);
@@ -860,14 +883,26 @@ export class LineStore {
     delta: number,
     options: { readonly reportDropped?: boolean } = {}
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+    // A step during the correction of the line waits for its answer: the row is
+    // patched to the new unit already, and a delta in it could reach core before
+    // the correction and be refused (backend `0246` section 3.2). A step after a
+    // failed correction is dropped, since the line is back in the old unit.
+    const correcting = this._corrections.get(lineId);
+    if (correcting !== undefined) {
+      if ((await correcting) === 'failed') {
+        return 'failed';
+      }
+      return this.addQuantity(lineId, delta, options);
+    }
+
     const before = this._lineById(lineId);
     if (before === null || delta === 0) {
       return 'failed';
     }
 
-    const unit = this._unitShown(before);
-    if (unit !== before.unit) {
-      return this._correctUnit(before, unit, delta);
+    const legacy = this._legacyUnit(before);
+    if (legacy !== null) {
+      return this._correctUnit(before, legacy, delta);
     }
 
     return this._write(
@@ -1781,9 +1816,18 @@ export class LineStore {
       : shownLineUnit(line, (itemId) => items.nameOf(itemId));
   }
 
+  /** {@link legacyLineUnit} of a stored line, over the products this session read. */
+  private _legacyUnit(line: Line): LineUnit | null {
+    const items = this._items;
+    return items === null
+      ? null
+      : legacyLineUnit(line, (itemId) => items.nameOf(itemId));
+  }
+
   /**
-   * The lines as a screen draws them: a line the migration left in `UNIT` carries
-   * its product's unit (backend `0246` M2). The same array when no line differs.
+   * The lines as a screen draws them: a line the migration left in `UNIT` at
+   * nothing carries its product's unit (backend `0246` M2). The same array when
+   * no line differs.
    */
   private _shownLines(lines: readonly Line[]): readonly Line[] {
     if (this._items === null) {
@@ -1802,27 +1846,38 @@ export class LineStore {
   }
 
   /**
-   * A step on a line whose stored unit is not the one it is drawn in (backend
-   * `0246` section 3.2). A delta in the drawn unit would be refused with
-   * `line_unit_mismatch` against the stored one, so the step is an absolute
-   * update that states the unit, which corrects the row; the next step is a
-   * delta again. One step up from nothing asks for the unit's default amount,
-   * one kilo, as an add does.
+   * A step on a legacy line (backend `0246` section 3.2). A delta in the
+   * product's unit would be refused with `line_unit_mismatch` against the stored
+   * one, so the step is an absolute update that states the unit, which corrects
+   * the row; the next step is a delta again.
+   *
+   * It never reads the old number in the new unit: three pieces are not three
+   * grams. Whatever the step or the turn of the reel asked for, the update names
+   * the unit's default amount, one kilo or one litre, as an add does. A minus at
+   * nothing sends nothing.
+   *
+   * Steps on the line wait for it ({@link _corrections}).
    */
   private async _correctUnit(
     before: Line,
     unit: LineUnit,
     delta: number
   ): Promise<'succeeded' | 'failed' | 'overwritten'> {
-    const quantity =
-      before.quantity === 0 && delta === stepAt(0, unit)
-        ? defaultQuantity(unit)
-        : Math.min(
-            LINE_QUANTITY_MAX,
-            Math.max(LINE_QUANTITY_MIN, before.quantity + delta)
-          );
-    const outcome = await this.updateLine(before.id, { quantity, unit });
-    return outcome.state;
+    if (delta < 0 && before.quantity === 0) {
+      return 'succeeded';
+    }
+    const writing = this.updateLine(before.id, {
+      quantity: defaultQuantity(unit),
+      unit,
+    }).then((outcome) => outcome.state);
+    this._corrections.set(before.id, writing);
+    try {
+      return await writing;
+    } finally {
+      if (this._corrections.get(before.id) === writing) {
+        this._corrections.delete(before.id);
+      }
+    }
   }
 
   private _lineById(lineId: string): Line | null {
