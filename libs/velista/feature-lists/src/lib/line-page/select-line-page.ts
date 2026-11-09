@@ -180,8 +180,9 @@ function cardOf(
  * own unit alone, so the chip does not appear and then grow a segment.
  *
  * Only a line with several products chooses (backend `0246` W1 and W2): a line
- * with one product has that product's unit, which `shownLineUnit` draws, and no
- * chip, even for a kilo piece that could also serve grams.
+ * with one product counts in that product's unit (a legacy row is corrected by
+ * `legacyLineUnit`, not here) and draws no chip, even for a kilo piece that
+ * could also serve grams.
  */
 export function offeredUnits(
   line: Pick<Line, 'itemIds' | 'unit'>,
