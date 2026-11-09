@@ -60,6 +60,7 @@ import {
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
   type Line,
+  LINE_UNITS,
   LINE_VOICE_MAX_SECONDS,
   lineName,
   type LineName,
@@ -84,6 +85,7 @@ import {
   ColumnScroll,
   formatAmount,
   formatMoney,
+  formatQuantityChange,
   lineQueryOf,
   listIdOf,
   ListSearchNavigation,
@@ -1237,7 +1239,7 @@ export class ListPage {
           `${entry.key}.${replay === null ? 'unsure' : 'lost'}`,
           undefined,
           locale,
-          { ...entry.args, name }
+          { ...entry.args, name, delta: droppedDelta(entry.args, locale) }
         ),
         canResend: replay !== null,
       };
@@ -2715,3 +2717,20 @@ function rowInView(row: HTMLElement, column: HTMLElement): boolean {
 type ListCategoryHeading =
   | { readonly kind: 'key'; readonly key: string }
   | { readonly kind: 'text'; readonly text: string };
+
+/**
+ * The change a dropped note names, in the line's unit: "+250 g", not "+250"
+ * (velista `0182`). An entry written before the unit rode along, or with one this
+ * build cannot read, keeps the bare number it was written with.
+ */
+function droppedDelta(
+  args: Readonly<Record<string, string>>,
+  locale: string
+): string {
+  const written = args['delta'] ?? '';
+  const unit = LINE_UNITS.find((one) => one === args['unit']);
+  const delta = Number(written);
+  return unit === undefined || !Number.isInteger(delta) || delta === 0
+    ? written
+    : formatQuantityChange(delta, unit, locale);
+}

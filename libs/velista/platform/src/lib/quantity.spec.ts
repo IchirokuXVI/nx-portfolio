@@ -1,4 +1,4 @@
-import { formatAmount, formatQuantity } from './quantity';
+import { formatAmount, formatQuantity, formatQuantityChange } from './quantity';
 
 describe('formatQuantity (velista 0182, criterion 3)', () => {
   it('draws a count as ×N in both languages', () => {
@@ -42,5 +42,18 @@ describe('formatAmount', () => {
   it('says a weight or a volume as formatQuantity draws it', () => {
     expect(formatAmount(250, 'GRAM', 'es')).toBe('250 g');
     expect(formatAmount(2000, 'MILLILITER', 'es')).toBe('2 l');
+  });
+});
+
+describe('formatQuantityChange (velista 0182)', () => {
+  it('keeps a count a signed bare number', () => {
+    expect(formatQuantityChange(2, 'UNIT', 'en')).toBe('+2');
+    expect(formatQuantityChange(-1, 'UNIT', 'es')).toBe('-1');
+  });
+
+  it('names a weight or a volume with its unit', () => {
+    expect(formatQuantityChange(250, 'GRAM', 'en')).toBe('+250 g');
+    expect(formatQuantityChange(-1500, 'GRAM', 'es')).toBe('-1,5 kg');
+    expect(formatQuantityChange(50, 'MILLILITER', 'en')).toBe('+50 mL');
   });
 });

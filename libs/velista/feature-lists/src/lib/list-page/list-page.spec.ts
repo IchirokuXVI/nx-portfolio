@@ -9,6 +9,7 @@ import {
 } from '@angular/router';
 import {
   RokuLocaleStore,
+  RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -3596,6 +3597,50 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
     });
 
     expect(entries(fixture)).toBe(0);
+  });
+
+  /**
+   * The values the notice's sentence was asked for. The testing translator echoes the
+   * key, so the words are read off the call: the spy is set after the first draw, and
+   * a dismiss of an id nobody holds makes the notices read again.
+   */
+  function noticeValues(fixture: ComponentFixture<ListPage>) {
+    const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+    fixture.componentInstance.dismissDropped('none');
+    fixture.detectChanges();
+    const call = t.mock.calls.find(([key]) =>
+      key.startsWith('list.dropped.quantity.')
+    );
+    return call?.[3];
+  }
+
+  it('names a change to a weight line with its unit: +250 g, not +250 (velista 0182)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('ln-1', { content: 'Plátanos', quantity: 750, unit: 'GRAM' }),
+      ],
+      dropped: [
+        dropped({
+          args: { name: 'Plátanos', delta: '+250', unit: 'GRAM' },
+          replay: { kind: 'line-quantity', lineId: 'ln-1', delta: 250 },
+        }),
+      ],
+    });
+
+    expect(noticeValues(fixture)).toEqual(
+      expect.objectContaining({ delta: '+250 g' })
+    );
+  });
+
+  it('keeps a count change a bare number, also from an entry with no unit', async () => {
+    const { fixture } = await render({
+      lines: [line('ln-1', { content: 'Pan de pueblo', quantity: 1 })],
+      dropped: [dropped()],
+    });
+
+    expect(noticeValues(fixture)).toEqual(
+      expect.objectContaining({ delta: '+1' })
+    );
   });
 
   it('keeps the live region on the page before it has anything to say', async () => {

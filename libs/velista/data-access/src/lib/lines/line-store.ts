@@ -870,9 +870,12 @@ export class LineStore {
             subject: overlayKey(lineId, 'quantity'),
             lineId,
             key: 'list.dropped.quantity',
+            // The unit rides along so the page says "+250 g" in the reader's
+            // language (velista `0182`). `delta` stays the bare signed number.
             args: {
               name: before.content,
               delta: delta > 0 ? `+${delta}` : `${delta}`,
+              unit: before.unit,
             },
             replay: { kind: 'line-quantity', lineId, delta },
           }

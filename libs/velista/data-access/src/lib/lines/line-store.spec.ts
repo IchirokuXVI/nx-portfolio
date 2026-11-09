@@ -830,7 +830,7 @@ describe('LineStore', () => {
           subject: 'a:quantity',
           lineId: 'a',
           key: 'list.dropped.quantity',
-          args: { name: 'Pan de pueblo', delta: '+1' },
+          args: { name: 'Pan de pueblo', delta: '+1', unit: 'UNIT' },
           replay: { kind: 'line-quantity', lineId: 'a', delta: 1 },
         }),
       ]);
@@ -848,7 +848,7 @@ describe('LineStore', () => {
 
       expect(TestBed.inject(DroppedWrites).take(`list:${LIST}`)).toEqual([
         expect.objectContaining({
-          args: { name: 'Pan de pueblo', delta: '-2' },
+          args: { name: 'Pan de pueblo', delta: '-2', unit: 'UNIT' },
           replay: null,
         }),
       ]);

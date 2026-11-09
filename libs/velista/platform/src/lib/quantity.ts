@@ -68,6 +68,21 @@ export function formatAmount(
   }
 }
 
+/**
+ * A signed change to a quantity, as a note about it says it: "+2" or "-1" for a
+ * count, "+250 g" or "-1,5 kg" for a weight or a volume (velista `0182`). The
+ * number after the sign is {@link formatAmount}'s, so a change reads in the unit
+ * the line counts in and never as a bare number of grams.
+ */
+export function formatQuantityChange(
+  delta: number,
+  unit: LineUnit,
+  locale: string
+): string {
+  const sign = delta < 0 ? '-' : '+';
+  return `${sign}${formatAmount(Math.abs(delta), unit, locale)}`;
+}
+
 function formatNumber(value: number, locale: string): string {
   try {
     return new Intl.NumberFormat(locale).format(value);
