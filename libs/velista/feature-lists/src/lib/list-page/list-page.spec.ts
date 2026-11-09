@@ -1298,6 +1298,30 @@ describe('ListPage', () => {
       jest.useRealTimers();
     });
 
+    it('says a raised weight line in its unit: 1.25 kg, not 1250 (velista 0182)', async () => {
+      const { fixture, lines } = await render({
+        lines: [
+          line('ln-bread', {
+            content: 'Pan',
+            position: 3,
+            quantity: 1250,
+            unit: 'GRAM',
+          }),
+        ],
+      });
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-bread' });
+      const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+      await typeAndAdd(fixture, 'Pan');
+
+      const call = t.mock.calls.find(
+        ([key]) => key === 'list.addChoice.merged'
+      );
+      expect(call?.[3]).toEqual(
+        expect.objectContaining({ quantity: expect.stringMatching(/ kg$/) })
+      );
+    });
+
     it('marks the raised row where it stands, for 2.5 s, and says where the units went', async () => {
       jest.useFakeTimers();
       const { fixture, lines } = await render({

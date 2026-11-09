@@ -1945,8 +1945,11 @@ export class ListPage {
       this.announcement.set(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
-          quantity: new Intl.NumberFormat(this._locale()).format(
-            outcome.line.quantity
+          // In the line's unit: "1,25 kg", not "1250" (velista `0182`).
+          quantity: formatAmount(
+            outcome.line.quantity,
+            outcome.line.unit,
+            this._locale()
           ),
         })
       );

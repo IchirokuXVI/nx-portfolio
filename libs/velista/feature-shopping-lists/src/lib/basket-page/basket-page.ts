@@ -51,6 +51,7 @@ import {
   cheaperInGroup,
   countableBasketRows,
   isLinkVisitor,
+  type LineUnit,
   LINK_VISIT_HOURS,
   productSuggestions,
   selectBasketSurface,
@@ -62,6 +63,7 @@ import {
   appPath,
   BrowserFacade,
   ColumnScroll,
+  formatAmount,
   ListSearchNavigation,
   NavChrome,
   PageReturn,
@@ -2341,9 +2343,11 @@ export class BasketPage {
    * row's everywhere else. The rows the basket draws first, then the store's for a
    * row a filter hides. Null when no row holds the line.
    */
-  private _shownRow(
-    lineId: string
-  ): { readonly name: string; readonly quantity: number } | null {
+  private _shownRow(lineId: string): {
+    readonly name: string;
+    readonly quantity: number;
+    readonly unit: LineUnit;
+  } | null {
     const drawn = this.resultRows().find((each) =>
       each.entry === null
         ? each.row.entries.some((held) => held.lineId === lineId)
@@ -2365,6 +2369,7 @@ export class BasketPage {
         this._locale()
       ),
       quantity: drawn?.entry?.left ?? row.left,
+      unit: drawn?.entry?.unit ?? row.unit,
     };
   }
 
@@ -2701,8 +2706,11 @@ export class BasketPage {
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name:
             shown?.name ?? (line.content === '' ? entry.content : line.content),
-          quantity: new Intl.NumberFormat(this._locale()).format(
-            shown?.quantity ?? line.left
+          // In the row's unit: "750 g", not "750" (velista `0182`).
+          quantity: formatAmount(
+            shown?.quantity ?? line.left,
+            shown?.unit ?? line.unit,
+            this._locale()
           ),
         })
       );
