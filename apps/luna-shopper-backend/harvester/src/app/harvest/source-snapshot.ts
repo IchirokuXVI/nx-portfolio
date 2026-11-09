@@ -55,6 +55,14 @@ export interface SourceEntryFields {
   approxWeight?: number | null;
   sizeFormat: string | null;
   /**
+   * The container the source prints, verbatim, or null (plan 0248).
+   *
+   * **Absent means the source does not read containers at all**, which is
+   * every adapter but Mercadona's: it leaves the stored text alone. Null is a
+   * statement, and is written.
+   */
+  packaging?: string | null;
+  /**
    * How many units the pack holds, or null (plan 0162).
    *
    * **Absent means the source does not read counts at all**, which is the
@@ -90,6 +98,8 @@ export function sourceGroupChanged(
     existing.brand !== fields.brand ||
     existing.ean !== fields.ean ||
     existing.sizeFormat !== fields.sizeFormat ||
+    (fields.packaging !== undefined &&
+      (existing.packaging ?? null) !== fields.packaging) ||
     (fields.packCount !== undefined &&
       (existing.packCount ?? null) !== fields.packCount) ||
     numeric(existing.unitSize) !== numeric(fields.unitSize) ||
@@ -134,6 +144,9 @@ export function applySourceGroup(
     row.approxWeight = fields.approxWeight;
   }
   row.sizeFormat = fields.sizeFormat;
+  if (fields.packaging !== undefined) {
+    row.packaging = fields.packaging;
+  }
   if (fields.packCount !== undefined) {
     row.packCount = fields.packCount;
   }

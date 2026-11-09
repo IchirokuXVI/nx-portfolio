@@ -594,6 +594,9 @@ export class RunExecutor implements OnApplicationShutdown {
           // Plan 0221: rows proposed by the words of their name in any order.
           wordOrderProposals: imported.wordOrderProposals,
           wordOrderRejectedPointers: imported.wordOrderRejectedPointers,
+          // Plan 0249: sizes their own prices disprove, held for a person.
+          sizesDisproved: imported.sizesDisproved,
+          probablePackCounts: imported.probablePackCounts,
         });
       }
       if (thrownAfterAbort) {
@@ -975,6 +978,12 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     // And the rows queued pointing at the one rejected row their words meet,
     // which the owner asked the queue to show (2026-11-05).
     wordOrderRejectedPointers: written.wordOrderRejectedPointers,
+    // Plan 0249: rows whose stated size their own price and comparison price
+    // disprove. Each keeps its size, carries a doubt, and waits for a person
+    // before a product is created from it. The first twenty are named.
+    sizesDisproved: written.sizesDisproved,
+    sizesDisprovedExamples: written.sizesDisprovedExamples,
+    probablePackCounts: written.probablePackCounts,
     // Plan 0198: the photo links this run sent to catalog for its bound rows.
     // A link is saved whatever the switch of the chain says.
     imagesLinked: written.imagesLinked,

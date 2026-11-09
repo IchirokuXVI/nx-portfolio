@@ -1226,6 +1226,8 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      comparablePrice: null,
+      comparableBasis: null,
       observedAt: '2026-09-01T08:00:00.000Z',
       sourceKind: 'OFFICIAL_WEB',
       stale: true,
@@ -1239,6 +1241,8 @@ describe('toCatalogItem: the price it used to drop', () => {
       currency: 'EUR',
       unitPrice: 1.05,
       unitPriceLabel: 'EUR/L',
+      comparablePrice: null,
+      comparableBasis: null,
       piecePrice: null,
       observedAt: new Date('2026-09-01T08:00:00.000Z'),
       sourceKind: 'OFFICIAL_WEB',
@@ -1343,6 +1347,8 @@ describe('toCatalogSuggestion', () => {
     currency: 'EUR',
     unitPrice: 1.05,
     unitPriceLabel: 'EUR/L',
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: '2026-09-01T08:00:00.000Z',
     sourceKind: 'OFFICIAL_WEB',
     stale: false,
@@ -1395,6 +1401,8 @@ describe('toCatalogSuggestions', () => {
     currency: 'EUR',
     unitPrice: price,
     unitPriceLabel: 'EUR/L',
+    comparablePrice: null,
+    comparableBasis: null,
     observedAt: '2026-09-20T08:00:00.000Z',
     sourceKind: 'OFFICIAL_WEB',
     stale,
@@ -1579,6 +1587,8 @@ describe('a piece whose weight varies (velista 0179, backend 0244)', () => {
       currency: 'EUR',
       unitPrice: 13.42,
       unitPriceLabel: 'EUR/kg',
+      comparablePrice: null,
+      comparableBasis: null,
       piecePrice: 20.94,
       observedAt: '2026-11-01T08:00:00.000Z',
       sourceKind: 'OFFICIAL_API',
@@ -1609,6 +1619,51 @@ describe('a piece whose weight varies (velista 0179, backend 0244)', () => {
     expect(
       toProductOffer({ ...cheese.bestOffer, piecePrice: value })?.piecePrice
     ).toBeNull();
+  });
+});
+
+describe('toProductOffer: the comparable pair (backend 0245)', () => {
+  const wire = {
+    price: 0.99,
+    currency: 'EUR',
+    unitPrice: null,
+    unitPriceLabel: null,
+    comparablePrice: 1.98,
+    comparableBasis: 'KILOGRAM',
+    observedAt: '2026-11-01T08:00:00.000Z',
+    sourceKind: 'OFFICIAL_WEB',
+    priceScopeId: 'scope-lidl',
+  };
+
+  it('reads the figure and its basis, apart from the chain unit price', () => {
+    const offer = toProductOffer(wire);
+    expect(offer?.comparablePrice).toBe(1.98);
+    expect(offer?.comparableBasis).toBe('KILOGRAM');
+    expect(offer?.unitPrice).toBeNull();
+  });
+
+  it.each(['KILOGRAM', 'LITER', 'UNIT'])('reads the basis %s', (basis) => {
+    expect(
+      toProductOffer({ ...wire, comparableBasis: basis })?.comparableBasis
+    ).toBe(basis);
+  });
+
+  it.each([
+    ['a string figure', { comparablePrice: '1.98' }],
+    ['a negative figure', { comparablePrice: -1 }],
+    ['a zero figure', { comparablePrice: 0 }],
+    ['a figure that is not finite', { comparablePrice: Number.NaN }],
+    ['an unknown basis', { comparableBasis: 'DOZEN' }],
+    ['a figure with no basis', { comparableBasis: null }],
+    ['a basis with no figure', { comparablePrice: null }],
+    [
+      'an absent pair',
+      { comparablePrice: undefined, comparableBasis: undefined },
+    ],
+  ])('reads %s as no pair at all', (_, patch) => {
+    const offer = toProductOffer({ ...wire, ...patch });
+    expect(offer?.comparablePrice).toBeNull();
+    expect(offer?.comparableBasis).toBeNull();
   });
 });
 

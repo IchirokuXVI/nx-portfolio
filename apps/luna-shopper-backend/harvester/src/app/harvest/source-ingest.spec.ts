@@ -3900,3 +3900,263 @@ describe('SourceIngest, a reworded name is proposed as the same product (plan 02
     });
   });
 });
+
+describe('SourceIngest, a size its own unit price disproves (plan 0249)', () => {
+  /** Mercadona 18382: 1.70 for a stated 1.6 kg, at 10.63 per kilo. */
+  const CAKE = {
+    externalId: '18382',
+    name: 'Postre Caramel Cake Hacendado',
+    sizeFormat: 'kg',
+    unitSize: 1.6,
+    sizeUnit: UnitOfMeasure.KILOGRAM,
+  } as const;
+  const CAKE_PRICE = {
+    price: 1.7,
+    currency: 'EUR',
+    unitPrice: 10.63,
+    unitPriceLabel: 'kg',
+    validFrom: null,
+    validUntil: null,
+  };
+  const input = (observations: ReportedObservation[]) => ({
+    supermarketId: CHAIN,
+    defaultPriceScopeId: SCOPE,
+    sourceKind: PriceSourceKind.OFFICIAL_API,
+    observations,
+  });
+
+  it('keeps the stated size of a disagreeing row and records the doubt with the run', async () => {
+    const { ingest, context, saved, priceRows } = build({});
+
+    const { counters, sizeDoubts } = await ingest.ingest(
+      context,
+      input([observation({ ...CAKE, price: CAKE_PRICE })])
+    );
+
+    expect(saved[0]).toMatchObject({
+      unitSize: 1.6,
+      sizeUnit: UnitOfMeasure.KILOGRAM,
+      sizeDoubtRunId: RUN,
+    });
+    expect(Number(saved[0].sizeDoubtImplied)).toBeCloseTo(159.92, 1);
+    expect(Number(saved[0].sizeDoubtRatio)).toBeCloseTo(0.1, 2);
+    // The price, its comparison price and its label are stored verbatim.
+    expect(priceRows[0]).toMatchObject({
+      price: 1.7,
+      unitPrice: 10.63,
+      unitPriceLabel: 'kg',
+    });
+    expect(counters).toMatchObject({
+      sizesDisproved: 1,
+      probablePackCounts: 0,
+    });
+    expect(sizeDoubts).toEqual([
+      expect.objectContaining({
+        externalId: '18382',
+        name: CAKE.name,
+        stated: 1600,
+        unit: UnitOfMeasure.GRAM,
+        label: 'kg',
+      }),
+    ]);
+  });
+
+  it('clears the doubt when a later observation agrees', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          ...CAKE,
+          sizeDoubtImplied: 159.9247,
+          sizeDoubtRatio: 0.0999529,
+          sizeDoubtRunId: OTHER_RUN,
+        },
+      ],
+    });
+
+    const { counters } = await ingest.ingest(
+      context,
+      input([
+        // The chain corrected its size to 0.16 kg.
+        observation({ ...CAKE, unitSize: 0.16, price: CAKE_PRICE }),
+      ])
+    );
+
+    expect(saved[0]).toMatchObject({
+      unitSize: 0.16,
+      sizeDoubtImplied: null,
+      sizeDoubtRatio: null,
+      sizeDoubtRunId: null,
+    });
+    expect(counters.sizesDisproved).toBe(0);
+  });
+
+  it('keeps a doubt a later observation gives nothing to judge by, while the size stays', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          ...CAKE,
+          sizeDoubtImplied: 159.9247,
+          sizeDoubtRatio: 0.0999529,
+          sizeDoubtRunId: OTHER_RUN,
+        },
+      ],
+    });
+
+    await ingest.ingest(
+      context,
+      input([
+        observation({
+          ...CAKE,
+          price: { ...CAKE_PRICE, unitPrice: null, unitPriceLabel: null },
+        }),
+      ])
+    );
+
+    expect(saved[0]).toMatchObject({ sizeDoubtRunId: OTHER_RUN });
+  });
+
+  it('checks a partial observation against the size the row holds', async () => {
+    const { ingest, context, saved } = build({
+      rows: [{ ...CAKE, id: 'cake-row' }],
+    });
+    const partial: PartialSourceObservation = {
+      externalId: CAKE.externalId,
+      detailFetched: false,
+      observedAt: new Date('2026-11-06T10:00:00.000Z'),
+      prices: [{ scopeKey: null, ...CAKE_PRICE }],
+    };
+
+    const { counters } = await ingest.ingest(context, input([partial]));
+
+    expect(saved[0]).toMatchObject({ unitSize: 1.6, sizeDoubtRunId: RUN });
+    expect(counters.sizesDisproved).toBe(1);
+  });
+
+  it('records a probable pack count for the Amstel pack stated at one can', async () => {
+    const { ingest, context } = build({});
+
+    const { counters, sizeDoubts } = await ingest.ingest(
+      context,
+      input([
+        observation({
+          name: 'Cerveza Amstel 100% Malta pack 28 latas',
+          unitSize: 330,
+          sizeUnit: UnitOfMeasure.MILLILITER,
+          sizeFormat: '33 cl.',
+          price: {
+            ...CAKE_PRICE,
+            price: 20.72,
+            unitPrice: 2.24,
+            unitPriceLabel: '€/l',
+          },
+        }),
+      ])
+    );
+
+    expect(counters).toMatchObject({
+      sizesDisproved: 1,
+      probablePackCounts: 1,
+    });
+    expect(sizeDoubts[0]).toMatchObject({ probablePackCount: 28 });
+  });
+
+  it('does not check a row sold by weight', async () => {
+    const { ingest, context, saved } = build({});
+
+    const { counters } = await ingest.ingest(
+      context,
+      input([
+        observation({
+          ...CAKE,
+          soldByWeight: true,
+          price: { ...CAKE_PRICE, unitPrice: 1.7 },
+        }),
+      ])
+    );
+
+    expect(saved[0].sizeDoubtImplied).toBeNull();
+    expect(counters.sizesDisproved).toBe(0);
+  });
+
+  it('proposes nothing by rung 4 from a doubted row', async () => {
+    const { ingest, context, saved } = build({
+      rows: [
+        {
+          id: 'walk-row',
+          externalId: '4241',
+          name: CAKE.name,
+          sizeFormat: CAKE.sizeFormat,
+          unitSize: 1.6,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          status: SourceEntryStatus.ACTIVE,
+          itemId: 'item-cake',
+        },
+      ],
+    });
+
+    const { outcomes } = await ingest.ingest(
+      context,
+      input([observation({ ...CAKE, price: CAKE_PRICE })])
+    );
+
+    expect(outcomes[0]).toMatchObject({ rung: 5, created: true });
+    expect(saved[0]).toMatchObject({
+      status: SourceEntryStatus.UNRESOLVED,
+      itemId: null,
+      candidateEntryId: null,
+    });
+  });
+
+  it('proposes no row the same session found doubted', async () => {
+    const { ingest, context, saved } = build({
+      // A sibling with no item, whose size nothing has doubted yet.
+      rows: [{ id: 'walk-row', ...CAKE }],
+    });
+    const session = await ingest.open(context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+
+    // The first chunk reads the sibling, and its prices disprove its size.
+    await session.push([observation({ ...CAKE, price: CAKE_PRICE })]);
+    // The second, a row of the same name and size with no comparison price.
+    const outcomes = await session.push([
+      observation({
+        externalId: 'second-cake',
+        name: CAKE.name,
+        sizeFormat: CAKE.sizeFormat,
+        unitSize: 1.6,
+        sizeUnit: UnitOfMeasure.KILOGRAM,
+        price: { ...CAKE_PRICE, unitPrice: null, unitPriceLabel: null },
+      }),
+    ]);
+
+    expect(saved[0]).toMatchObject({ id: 'walk-row', sizeDoubtRunId: RUN });
+    expect(outcomes[0]).toMatchObject({ rung: 5 });
+    expect(saved[1]).toMatchObject({ candidateEntryId: null });
+  });
+
+  it('proposes the same sibling while its size agrees', async () => {
+    const { ingest, context, saved } = build({
+      rows: [{ id: 'walk-row', ...CAKE, unitSize: 0.16 }],
+    });
+
+    const { outcomes } = await ingest.ingest(
+      context,
+      input([
+        observation({
+          externalId: 'second-cake',
+          name: CAKE.name,
+          sizeFormat: CAKE.sizeFormat,
+          unitSize: 0.16,
+          sizeUnit: UnitOfMeasure.KILOGRAM,
+          price: CAKE_PRICE,
+        }),
+      ])
+    );
+
+    expect(outcomes[0]).toMatchObject({ rung: 4 });
+    expect(saved[0]).toMatchObject({ candidateEntryId: 'walk-row' });
+  });
+});

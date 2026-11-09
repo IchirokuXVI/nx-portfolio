@@ -107,6 +107,8 @@ describe('lineName', () => {
         offer: {
           price,
           unitPrice: price,
+          comparablePrice: price,
+          comparableBasis: 'LITER',
           currency: 'EUR',
         } as unknown as ProductOffer,
         cheapest: false,

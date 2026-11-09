@@ -1,3 +1,5 @@
+> **PR:** [#937](https://github.com/IchirokuXVI/nx-portfolio/pull/937)
+
 # 0252: the LIDL probe reads a grocery product
 
 > Found on 2026-11-06 when the LIDL row was switched on for a scheduled walk on Luna slot 4

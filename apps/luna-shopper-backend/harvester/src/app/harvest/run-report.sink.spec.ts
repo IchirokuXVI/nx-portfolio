@@ -17,6 +17,7 @@ import type { RunScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
 import type { ObservedPlace } from './run-report';
 import { RunReportSink } from './run-report.sink';
+import type { SizeDoubtExample } from './size-doubt';
 import type {
   AvailabilitySent,
   RunClaimCounts,
@@ -104,6 +105,8 @@ function build(
     priceConflicts?: PriceConflict[];
     /** What the ingest said about photo links (plan 0198). */
     images?: Partial<SourceIngestImages>;
+    /** The doubted rows the ingest named (plan 0249). */
+    sizeDoubts?: SizeDoubtExample[];
     /** The scopes this run copies to, by the scope copied from (plan 0118). */
     copies?: Record<string, string[]>;
     /** What the ingest said its copies wrote. */
@@ -144,8 +147,11 @@ function build(
       pricesConfirmed: 0,
       wordOrderProposals: 0,
       wordOrderRejectedPointers: 0,
+      sizesDisproved: 0,
+      probablePackCounts: 0,
       ...options.counters,
     },
+    sizeDoubts: options.sizeDoubts ?? [],
     copies: {
       pricedScopes: new Set(options.pricedScopes ?? []),
       pricesCopied: new Map(Object.entries(options.pricesCopied ?? {})),
@@ -427,6 +433,41 @@ describe('RunReportSink', () => {
 
     expect(written.wordOrderProposals).toBe(14);
     expect(written.wordOrderRejectedPointers).toBe(2);
+  });
+
+  it('carries the sizes the ingest doubted, with the rows it named (plan 0249)', async () => {
+    const doubt: SizeDoubtExample = {
+      entryId: 'entry-18382',
+      externalId: '18382',
+      name: 'Postre Caramel Cake Hacendado',
+      stated: 1600,
+      implied: 159.9247,
+      unit: 'GRAM',
+      ratio: 0.0999529,
+      label: 'kg',
+      probablePackCount: null,
+    };
+    const { sink } = build({
+      counters: { sizesDisproved: 39, probablePackCounts: 2 },
+      sizeDoubts: [doubt],
+    });
+    sink.product(observation());
+
+    const written = await sink.drain();
+
+    expect(written.sizesDisproved).toBe(39);
+    expect(written.probablePackCounts).toBe(2);
+    expect(written.sizesDisprovedExamples).toEqual([doubt]);
+  });
+
+  it('reports no doubted size for a run that checked nothing (plan 0249)', async () => {
+    const { sink } = build();
+    sink.product(observation());
+
+    const written = await sink.drain();
+
+    expect(written.sizesDisproved).toBe(0);
+    expect(written.sizesDisprovedExamples).toEqual([]);
   });
 
   it('names the price conflicts the ingest counted, and no more than a report can hold', async () => {

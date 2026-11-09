@@ -25,6 +25,12 @@ import {
  * roll is and `125x157cm` is the two sides of one tablecloth, so a size
  * printed in `m`, `cm` or `mm` answers no `unitSize` and no `packCount`. Only
  * a weight, a volume or a count is multiplied, and only its `N` is a pack.
+ *
+ * **A size field that states only a count takes the size of one unit from the
+ * name (plan 0250, section 2.4).** `paté clásico 75g, pk-2` is two tins of
+ * 75 g: 150 g, a pack of 2, the name `paté clásico`, and `sizeFormat` `75g
+ * pk-2`, both printed texts with the name's first, so nothing the chain
+ * printed is lost and the key is the same on every walk.
  */
 export interface ElJamonSize {
   /** The printed name without its size. Never empty. */
@@ -79,6 +85,17 @@ const QUANTITY =
 /** `pk 3`, `pk-2`, `pack 6`: a count and no size. */
 const PACK_ONLY = /^(?:pk|pack)[\s-]*(\d+)$/i;
 
+/**
+ * The size of one unit at the end of a name, `paté clásico 75g`: one quantity
+ * and a weight or volume word (plan 0250, section 2.4).
+ *
+ * **One quantity and not `NxQ`.** `bacon en tiras family 2x100g, pk-2` states
+ * its count twice, and which of the two the field's count is cannot be read,
+ * so that name keeps today's answer, as a pack of packs does on Carrefour.
+ */
+const NAME_UNIT_SIZE =
+  /(?:^|\s)(\d+(?:[.,]\d+)?\s*(?:g|gr|grs|kg|kgs|ml|cl|l|lt)\.?)$/i;
+
 export function splitSize(printed: string): ElJamonSize {
   const text = printed.replace(/\s+/g, ' ').trim();
   const comma = lastSeparator(text);
@@ -98,12 +115,23 @@ export function splitSize(printed: string): ElJamonSize {
   const lower = sizeFormat.toLowerCase();
   const packOnly = PACK_ONLY.exec(lower);
   if (packOnly) {
+    const count = packCountOf(packOnly[1]);
+    const ofOne = count === null ? null : unitSizeInName(name);
+    if (count !== null && ofOne !== null) {
+      return {
+        name: ofOne.name,
+        sizeFormat: `${ofOne.printed} ${sizeFormat}`,
+        ...sourceSizeOf(round(count * ofOne.amount), ofOne.word),
+        packCount: count,
+        soldByWeight: false,
+      };
+    }
     return {
       name,
       sizeFormat,
       unitSize: null,
       sizeUnit: null,
-      packCount: packCountOf(packOnly[1]),
+      packCount: count,
       soldByWeight: false,
     };
   }
@@ -144,6 +172,31 @@ export function splitSize(printed: string): ElJamonSize {
     // `kg` with no number: the row is priced per kilogram and weighed at the
     // till, which is what the unit price label `Kilo` says beside it.
     soldByWeight: lower === 'kg',
+  };
+}
+
+/**
+ * The size of one unit printed at the end of a name, or null when the name
+ * ends in none or would be left empty.
+ */
+function unitSizeInName(
+  name: string
+): { name: string; printed: string; amount: number; word: string } | null {
+  const match = NAME_UNIT_SIZE.exec(name);
+  if (!match) {
+    return null;
+  }
+  const rest = name.slice(0, name.length - match[0].length).trim();
+  const quantity = QUANTITY.exec(match[1].toLowerCase());
+  // `2 x 100g` is an `NxQ` printed with spaces, so it is refused as one.
+  if (!rest || /\d\s*[x×]$/i.test(rest) || !quantity || quantity[1]) {
+    return null;
+  }
+  return {
+    name: rest,
+    printed: match[1],
+    amount: Number(quantity[2].replace(',', '.')),
+    word: quantity[3],
   };
 }
 

@@ -410,6 +410,210 @@ describe('the sibling key with size (plan 0155)', () => {
       expect(loose.match('Queso curado de oveja', 'kg', null, 1560)).toBeNull();
     });
   });
+
+  describe('the count and the container (plan 0248, D2 and D3)', () => {
+    /** Product 27342, the single two litre bottle, as a walk stores it. */
+    const bottle = (over: Partial<SourceCatalogEntry> = {}) =>
+      row({
+        id: 'row-27342',
+        name: 'Refresco Coca-Cola',
+        sizeFormat: 'l',
+        unitSize: '2.0000' as unknown as number,
+        packCount: null,
+        packaging: 'Botella',
+        status: SourceEntryStatus.UNRESOLVED,
+        itemId: null,
+        ...over,
+      });
+
+    it('keeps the key of a row that states neither', () => {
+      // Every row of a chain that prints no container and sells no packs.
+      expect(siblingKey('Refresco cola', 'l', 1, null, {})).toBe(
+        'refresco cola|l|1'
+      );
+      expect(
+        siblingKey('Refresco cola', 'l', 1, null, {
+          packCount: null,
+          packaging: null,
+        })
+      ).toBe('refresco cola|l|1');
+      expect(
+        siblingKey('Refresco cola', 'l', 2, null, {
+          packCount: 4,
+          packaging: 'Pack-4',
+        })
+      ).toBe('refresco cola|l|2|x4|pack 4');
+    });
+
+    it('gives two rows that differ only by the count two keys', () => {
+      expect(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 })
+      ).not.toBe(siblingKey('Refresco Coca-Cola', 'l', 2, null, {}));
+      expect(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 })
+      ).not.toBe(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 6 })
+      );
+      // A smallint answers a number, and a count read as text is the same.
+      expect(
+        siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: '4' })
+      ).toBe(siblingKey('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 }));
+    });
+
+    it('gives two rows that differ only by the container two keys', () => {
+      expect(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).not.toBe(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Botella' })
+      );
+      expect(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).not.toBe(siblingKey('Leche entera', 'l', 1, null, {}));
+    });
+
+    it('gives two rows with the same container one key, as the chain cases it or not', () => {
+      expect(
+        siblingKey('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).toBe(siblingKey('LECHE ENTERA', 'l', 1, null, { packaging: 'brik' }));
+    });
+
+    it('never proposes the pack of four 28113 as the single bottle 27342', () => {
+      const index = new SiblingEntryIndex([bottle()]);
+
+      expect(
+        index.match('Refresco Coca-Cola', 'l', 2, null, {
+          packCount: 4,
+          packaging: 'Pack-4',
+        })
+      ).toBeNull();
+      // The count alone separates them, whatever the container says.
+      expect(
+        index.match('Refresco Coca-Cola', 'l', 2, null, {
+          packCount: 4,
+          packaging: 'Botella',
+        })
+      ).toBeNull();
+      // And the same bottle still finds itself.
+      expect(
+        index.match('Refresco Coca-Cola', 'l', 2, null, {
+          packCount: null,
+          packaging: 'Botella',
+        })
+      ).toEqual({ itemId: null, entryId: 'row-27342' });
+    });
+
+    it('never proposes a brik as the bottle of the same milk', () => {
+      const index = new SiblingEntryIndex([
+        bottle({
+          id: 'row-brik',
+          name: 'Leche entera',
+          unitSize: 1,
+          packaging: 'Brik',
+        }),
+      ]);
+
+      expect(
+        index.match('Leche entera', 'l', 1, null, { packaging: 'Botella' })
+      ).toBeNull();
+      expect(
+        index.match('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+      ).toEqual({ itemId: null, entryId: 'row-brik' });
+    });
+
+    describe('a container separates two rows only when both state one', () => {
+      it('proposes the walk row Mercadona printed a bottle on to a leaflet that states no container', () => {
+        // Plan 0086, section 4: a leaflet never prints `packaging`.
+        const index = new SiblingEntryIndex([bottle()]);
+
+        expect(
+          index.match('Refresco Coca-Cola', 'l', 2, null, {
+            packCount: null,
+            packaging: null,
+          })
+        ).toEqual({ itemId: null, entryId: 'row-27342' });
+        expect(index.match('Refresco Coca-Cola', 'l', 2, null)).toEqual({
+          itemId: null,
+          entryId: 'row-27342',
+        });
+      });
+
+      it('proposes nothing to a leaflet that meets a brik and a bottle of two products', () => {
+        const index = new SiblingEntryIndex([
+          bottle({
+            id: 'row-brik',
+            name: 'Leche entera',
+            unitSize: 1,
+            packaging: 'Brik',
+            status: SourceEntryStatus.ACTIVE,
+            itemId: 'item-brik',
+          }),
+          bottle({
+            id: 'row-bottle',
+            name: 'Leche entera',
+            unitSize: 1,
+            packaging: 'Botella',
+            status: SourceEntryStatus.ACTIVE,
+            itemId: 'item-bottle',
+          }),
+        ]);
+
+        expect(index.match('Leche entera', 'l', 1, null, {})).toBeNull();
+        // Each container still finds its own product.
+        expect(
+          index.match('Leche entera', 'l', 1, null, { packaging: 'Brik' })
+        ).toEqual({ itemId: 'item-brik', entryId: null });
+      });
+
+      it('never proposes a brik row to a bottle row', () => {
+        const index = new SiblingEntryIndex([
+          bottle({ id: 'row-brik', packaging: 'Brik' }),
+        ]);
+
+        expect(
+          index.match('Refresco Coca-Cola', 'l', 2, null, {
+            packaging: 'Botella',
+          })
+        ).toBeNull();
+      });
+
+      it('proposes a stored row with no container to a walk row that states one', () => {
+        const index = new SiblingEntryIndex([
+          bottle({ id: 'row-leaflet', packaging: null }),
+        ]);
+
+        expect(
+          index.match('Refresco Coca-Cola', 'l', 2, null, {
+            packaging: 'Botella',
+          })
+        ).toEqual({ itemId: null, entryId: 'row-leaflet' });
+      });
+
+      it('never joins two rows that differ only by the count, with or without a container', () => {
+        const single = new SiblingEntryIndex([
+          bottle({ packaging: null, packCount: null }),
+        ]);
+        const pack = new SiblingEntryIndex([
+          bottle({ id: 'row-28113', packaging: null, packCount: 4 }),
+        ]);
+
+        expect(
+          single.match('Refresco Coca-Cola', 'l', 2, null, { packCount: 4 })
+        ).toBeNull();
+        expect(
+          single.match('Refresco Coca-Cola', 'l', 2, null, {
+            packCount: 4,
+            packaging: 'Pack-4',
+          })
+        ).toBeNull();
+        expect(pack.match('Refresco Coca-Cola', 'l', 2, null, {})).toBeNull();
+        expect(
+          pack.match('Refresco Coca-Cola', 'l', 2, null, {
+            packaging: 'Botella',
+          })
+        ).toBeNull();
+      });
+    });
+  });
 });
 
 describe('rung 3 and the weight of one piece (plan 0244, section 5.8)', () => {
@@ -520,6 +724,19 @@ describe('the word order key (plan 0221, section 3.1)', () => {
     // In another order too.
     expect(wordOrderKey('Refresco COCA COLA zero zero', '2 L', 2)).toBe(
       wordOrderKey('Refresco zero zero COCA COLA', '2 L', 2)
+    );
+  });
+
+  it('keeps the count of a pack, so a pack of four never meets the single unit (plan 0248, D3)', () => {
+    expect(wordOrderKey('Refresco cola ZERO', '2 L', 2, null, 4)).not.toBe(
+      wordOrderKey('Refresco ZERO cola', '2 L', 2)
+    );
+    expect(wordOrderKey('Refresco cola ZERO', '2 L', 2, null, 4)).toBe(
+      wordOrderKey('Refresco ZERO cola', '2 L', 2, null, '4')
+    );
+    // A row that states no count keeps the key it had before the plan.
+    expect(wordOrderKey('Refresco cola ZERO', '2 L', 2, null, null)).toBe(
+      wordOrderKey('Refresco cola ZERO', '2 L', 2)
     );
   });
 

@@ -460,15 +460,37 @@ function agree(a: number, b: number, step: number): boolean {
 /**
  * How many units the pack holds (plan 0162, section 1).
  *
- * **A pack has a count.** When `is_pack` is true the count is `pack_size`, or
- * `total_units` when `pack_size` is not set. When both are set and differ the
- * source contradicts itself and the answer is null, because a count is read
- * and never chosen.
+ * **A pack has a count.** When `is_pack` is true it is read in five cases, in
+ * this order (plan 0248, section 1):
  *
- * Proved by `product-capsules-per-unit.json` (`is_pack: true`, `pack_size: 20`,
- * `total_units: 20`, so the two agree) and by `product-detail-es.json`
- * (`is_pack: false`). The other two cases are that capsule fixture with one
- * field changed in the spec, because no captured product shows them.
+ * 0. Only one of `pack_size` and `total_units` is set: the count is that one.
+ *    No captured product shows either shape, so the spec changes one field of
+ *    the capsule fixture.
+ * 1. The two are equal: the count is that number. Proved by
+ *    `product-capsules-per-unit.json` (`pack_size: 20`, `total_units: 20`).
+ * 2. **`pack_size` is the content of one unit.** `total_units` is a whole
+ *    number above 1 and `pack_size × total_units` is `unit_size` within the
+ *    four decimals the payload prints: the count is `total_units`. On packs of
+ *    drinks and desserts the chain uses `pack_size` this way. Proved by
+ *    `product-pack-of-bottles.json`, product 28113, four bottles of Coca-Cola
+ *    (`pack_size: 0.5`, `total_units: 4`, `unit_size: 2`, `size_format: "l"`),
+ *    and by `product-pack-size-is-content.json`, product 21698, six cans of
+ *    an energy drink (`0.25`, `6`, `1.5`), both captured on 2026-11-08.
+ * 3. **The comparison price proves the content when `unit_size` does not.**
+ *    `total_units` is a whole number above 1 and the comparison price is the
+ *    pack price over `pack_size × total_units` ({@link comparedOver}): the
+ *    count is `total_units`. Proved by `product-pack-contradicts-size.json`,
+ *    product 18382, two desserts, captured on 2026-11-08: `pack_size: 0.08`,
+ *    `total_units: 2`, `unit_size: 1.6` in `kg`, `unit_price: "1.70"` and
+ *    `reference_price: "10.625"`, which is 1.70 over 0.16 and not over 1.6.
+ *    Only the count is read. The size stays what `unit_size` says, and a size
+ *    that its own comparison price disproves is plan 0249's.
+ * 4. Anything else is null: the source contradicts itself in a way no case
+ *    above names, and a count is read and never chosen.
+ *
+ * `product-detail-es.json` and `product-single-bottle.json` (product 27342,
+ * the single two litre bottle the pack of four was proposed as) answer
+ * `is_pack: false`.
  *
  * **So has a box priced as one piece that the chain compares per piece inside
  * (plan 0177).** `is_pack` is false on such a product, and the count is
@@ -497,16 +519,41 @@ function readPackCount(price: Json): number | null {
   const packSize = readNumber(price, 'pack_size');
   const totalUnits = readNumber(price, 'total_units');
   if (readBoolean(price, 'is_pack') === true) {
-    if (packSize !== null && totalUnits !== null && packSize !== totalUnits) {
-      return null;
-    }
-    return packCountOf(packSize ?? totalUnits);
+    return readPackOfUnits(price, packSize, totalUnits);
   }
   const comparedPerPiece =
     readString(price, 'reference_format')?.trim().toLowerCase() === 'ud';
   const sizeUnit = mapSizeFormat(readString(price, 'size_format'));
   const sizedByContent = sizeUnit !== null && sizeUnit !== UnitOfMeasure.UNIT;
   return comparedPerPiece && sizedByContent ? packCountOf(totalUnits) : null;
+}
+
+/** `unit_size` carries four decimals (plan 0248, section 1, case 2). */
+const UNIT_SIZE_STEP = 0.0001;
+
+/** The five cases of {@link readPackCount} for `is_pack: true`, in order. */
+function readPackOfUnits(
+  price: Json,
+  packSize: number | null,
+  totalUnits: number | null
+): number | null {
+  if (packSize === null || totalUnits === null) {
+    return packCountOf(packSize ?? totalUnits);
+  }
+  if (packSize === totalUnits) {
+    return packCountOf(packSize);
+  }
+  if (!Number.isInteger(totalUnits) || totalUnits <= 1) {
+    return null;
+  }
+  const content = packSize * totalUnits;
+  const unitSize = readNumber(price, 'unit_size');
+  if (unitSize !== null && agree(content, unitSize, UNIT_SIZE_STEP)) {
+    return packCountOf(totalUnits);
+  }
+  return content > 0 && comparedOver(price, content)
+    ? packCountOf(totalUnits)
+    : null;
 }
 
 /**

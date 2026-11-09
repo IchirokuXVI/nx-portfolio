@@ -37,6 +37,8 @@ function offer(price: number, unitPrice: number): ProductOffer {
     currency: 'EUR',
     unitPrice,
     unitPriceLabel: null,
+    comparablePrice: unitPrice,
+    comparableBasis: unitPrice === null ? null : 'LITER',
     observedAt: null,
     sourceKind: 'OFFICIAL_WEB',
     stale: false,

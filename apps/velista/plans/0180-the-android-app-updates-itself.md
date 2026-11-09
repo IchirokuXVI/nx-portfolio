@@ -1,3 +1,5 @@
+> **PR:** [#933](https://github.com/IchirokuXVI/nx-portfolio/pull/933)
+
 # 0180: the Android app updates itself
 
 > Asked for by the owner on 2026-11-04. Release `0.19.0` (version code `19000`) went to the
@@ -361,7 +363,9 @@ Play for native changes.
   clock runs from the creation of the WebView, so a slow network would read as a broken
   bundle. An offline boot is a good boot. `appReadyTimeout` is 20 s, twice Capgo's
   default, because the cold boot of an old phone with a slow WebView is the case that
-  matters, and a false rollback costs a full download again. Without the call, the
+  matters, and a false rollback costs a full download again. The updater gives a bundle
+  that has never booted at least 30 s whatever the setting, so the setting shortens
+  nothing on the first boot. Without the call, the
   updater returns to the previous bundle or to the built-in one. On the next boot the app reads the failed bundle
   (the `updateFailed` event or a `list()` entry in error) and records its `bundle` id under
   a new `StorageKeys` entry in local storage. A recorded id is never downloaded again. The
@@ -641,7 +645,7 @@ and refuses `--bundle` in that case. Use a throwaway key pair for the local sign
 | 5 | Serve a critical bundle | Applies at once when nothing is held. |
 | 6 | Serve a zip whose SHA-256 differs from the manifest | Download refused. The running bundle stays. |
 | 7 | Serve a manifest with a wrong signature | No download at all. |
-| 8 | Serve a bundle whose `main.js` throws at boot | Rollback within 20 s. The id is recorded. A relaunch does not download it again. |
+| 8 | Serve a bundle whose `main.js` throws at boot | Rollback within 30 s. The id is recorded. A relaunch does not download it again. |
 | 9 | Serve a bundle with a higher `nativeApi` | Not downloaded. The flexible update is asked once and answers unavailable (not installed from Play). The app goes on with its bundle. The immediate flow and the dead end face come only on a refusal. |
 | 10 | Background the app, resume | One manifest request per resume, at most one per 10 minutes. |
 | 11 | `adb install -r` a higher version code | The new APK boots its own bundle (`resetWhenUpdate`). |
@@ -677,7 +681,7 @@ get one run. This needs the Play Console and stays an owner step.
 | Signature wrong or missing | Manifest ignored. | D5. |
 | Zip SHA-256 wrong | Download refused by the updater. | D5, proved in target 1. |
 | Download stops halfway | Bundle not listed as ready. Next check tries again. | Updater keeps partial data out. |
-| New bundle crashes at boot | Rollback after 20 s. Id recorded, never retried. | D7. |
+| New bundle crashes at boot | Rollback after 30 s. Id recorded, never retried. | D7. |
 | New bundle boots but is broken later | Not detected. Fix by a new release or a cluster redeploy, which the app follows. | D8. |
 | Bundle needs newer native layer | Not applied. Flexible update once per code; the running bundle goes on. Immediate only on a refusal. | D4, D9. |
 | Branch APK pointed at a cluster | Built with `--no-ota`, or the cluster's bundle replaces the branch's at the first check. | Target state item 3. |
@@ -757,6 +761,127 @@ manifest later without a schema change to anything else, by a `schema: 2`.
   bump. The alternative is the first draft's rule, which is safer by one review and costs
   one Play release per native edit.
   **Decision:** `--accept` stays, and the README names the changes that must bump.
+
+## What the build decided
+
+### Target 1: the spike, 2026-11-06
+
+Measured on `Medium_Phone_API_37.0` (Android 17, WebView 145) with
+`@capgo/capacitor-updater` 8.54.2 and `@capawesome/capacitor-app-update` 8.1.1, a staging
+APK built with `VELISTA_NATIVE_DEBUG=1` and `VELISTA_APP_VERSION=0.90.1`, and a zip of a
+second build (`0.90.2`, `index.html` at its root, no `nginx.conf`) served over plain HTTP
+from the machine through `adb reverse tcp:8787`. Each method was called from the WebView
+over the DevTools protocol. The updater logs under the tag `CapgoUpdater`.
+
+1. **No request reaches a Capgo host.** The second session ran with Wi-Fi off and private
+   DNS off, so all traffic went over the emulator's `eth0` and the `-tcpdump` capture is
+   complete: it holds the DNS queries and TLS names of `staging.velista.app` and
+   `api.staging.velista.app`. Over four minutes of install, launch, idle, a refused
+   download, two downloads, `next()`, a rollback, `set()`, resumes and an `adb install -r`,
+   the capture has no DNS query, no TLS server name and no byte string with `capgo` in it.
+   Every name in it belongs to Google or to velista. The first capture was useless and is
+   not evidence: with Wi-Fi on, the emulator routes through Netsim, which `-tcpdump` does
+   not see, and private DNS hid the names.
+2. **`next()` applies at the next move to the background, in the same process, and not at
+   a cold start.** After `next({ id })` and `KEYCODE_HOME` the log reads `App moved to
+   background`, `Checking for pending update`, `Reloading: .../versions/<id>`, `Updated to
+   bundle`, and the resumed page shows `0.90.2`. After `next({ id })` and `am force-stop`
+   the cold start booted `builtin`; `getNextBundle()` still named the bundle, and it applied
+   at the next move to the background. The source agrees: `installNext()` runs only from
+   the background handler. A hidden reload drops whatever the page held, so a queued
+   `next()` must never be left in place while `ReloadBlocker` is held. `next({ id:
+   'builtin' })` does not withdraw a queued bundle (it resolved and the queued bundle still
+   applied at the next background). A process killed without passing through the
+   background keeps the queue for the next one.
+3. **`download({ checksum })` refuses a zip whose SHA-256 differs, before it is listed.** A
+   good zip with 64 zeros as the checksum: the log reads `Checksum mismatch`, `Bundle
+   deleted and confirmed gone`; `download()` rejects with `Failed to download from: <url>`;
+   `list()` stays empty; the `downloadFailed` event carries only `{ version }`. A good
+   checksum resolves with `status: 'pending'` and the bundle is listed.
+4. **`CapacitorHttp.request` reaches the network; a WebView `fetch` of the same URL never
+   does.** `https://staging.velista.app/ota/android/manifest.json` through `CapacitorHttp`
+   answered 404 with `server: nginx/1.31.8` and `X-Android-Response-Source: NETWORK 404`,
+   and the root answered 200 with velista's `<title>`. The WebView `fetch` of the same URL
+   answered 404 with an empty body, no `server` header and `client-via:
+   shouldInterceptRequest`: Capacitor's local server. D3 holds.
+5. **`resetWhenUpdate` keys on the version code.** With an OTA bundle running, `adb install
+   -r` of code 2 with the same `versionName`: `Stored native build version 1 does not match
+   current native build version 2. Triggering reset.`, `Deleting obsolete bundle`, and the
+   app boots `builtin` with an empty `list()`. Code 3 with a new name did the same. The same
+   code with a new name logs no reset and keeps the downloaded bundle in `list()`, but the
+   app still boots `builtin`: Capacitor's own `Bridge.isNewBinary()` compares code and
+   name and clears the server path. Every AAB carries a new code and a new name (D10), so
+   both checks fire.
+6. **`updateUrl: ''` stays empty.** The synced `capacitor.config.json` carries the three
+   empty strings, and Capacitor's `JSONUtils.getString` returns the stored value, falling
+   back to the default only when the key is missing. Proof at runtime: `getLatest()`
+   logged `IllegalArgumentException: Expected URL scheme 'http' or 'https' but no scheme was
+   found for ` (an empty URL) and made no request. Its promise then never settled, so
+   the app must never call `getLatest()`. `statsUrl: ''` skips every stats call in
+   `sendStats` before any request is built.
+7. **`current().bundle.version` is not `builtin` for the APK's own bundle.** For the
+   built-in bundle `current()` answers `{ bundle: { id: 'builtin', version: <versionName>,
+   checksum: '', status: 'success' }, native: <versionName> }`: the version is the APK's
+   `versionName` (it read `0.90.3` from an APK whose bundle was `0.90.1`). The marker is
+   `bundle.id === 'builtin'`. For a downloaded bundle, `bundle.version` is exactly the
+   `version` passed to `download()` (`0.90.2+spike0000003`), and `bundle.id` is a random
+   ten character id the updater chose. So D8 reads `bundle.id === 'builtin'` and then
+   `VelistaNativeInfo.info().builtinBundle`, else `bundle.version`; `set()`, `next()` and
+   `delete()` take the random `id`, never the version.
+
+**A failed boot, as the target 5 builder sees it.** A bundle applied by `set()` or `next()`
+that never calls `notifyAppReady()` waits **30 s, not 20 s**: the updater raises the window
+of a bundle in `pending` to at least 30 000 ms (`PENDING_BUNDLE_APP_READY_MIN_TIMEOUT_MS`);
+`appReadyTimeout` applies to a bundle that has already succeeded once. Then it logs
+`notifyAppReady was not called, roll back current bundle: <id>`, reloads `builtin` (or the
+previous good bundle) and, 20 s later, `Deleting failing bundle` (`autoDeleteFailed`).
+- `updateFailed` is emitted once, with `{ bundle: BundleInfo }`, to the failing document
+  just before the reload and not retained, so the next document never receives it.
+- `getFailedUpdate()` in the next document answers `{ bundle: { id, version, checksum,
+  downloaded, status: 'pending' } }` once; a second call answers nothing (cleared on
+  read). The value is persisted, so a process restart before the read keeps it. This is
+  the record D7 needs. It persists until it is read, and the app reads it before each
+  decision and stores `bundle.version`.
+- `list()` shows the bundle with `status: 'error'` only between the rollback and the
+  deletion about 20 s later; after that it is gone. Do not rely on `list()`.
+- `downloadFailed` carries `{ version }`, plus `error` (`HTTP error: 404`) on an HTTP
+  failure. `updateAvailable` is logged when a download completes. `appReady` comes with
+  `{ bundle, status }`.
+- `set({ id })` in the foreground reloads into the bundle at once; a `notifyAppReady()`
+  after the reload turns its status to `success`.
+
+**What the spike changed in the build.**
+- The updater refuses every URL that is not https unless `httpsOnly: false`
+  (`httpsOnly is enabled and <url> is not https`). `capacitor.config.ts` sets `httpsOnly`
+  to false only when `VELISTA_OTA_URL` starts with `http:`, which `build-android.mjs`
+  allows for localhost alone and refuses with `--bundle`.
+- `build-android.mjs` passes the four native facts and the cleartext switch to Gradle as
+  `ORG_GRADLE_PROJECT_*` environment variables, so the PEM keeps its line breaks and the
+  Windows shell quotes nothing. The cleartext configuration for localhost is generated
+  under `android/app/build/` and merged into the release source set only for that build,
+  so no committed file or manifest changes for it.
+- `VELISTA_OTA_PUBLIC_KEY` names a PEM that replaces the flavor's committed key, so the
+  walk of section 5 can use a throwaway pair.
+
+### Target 5: the native half, measured on the emulator
+
+The same emulator and plugin versions as target 1. These are the facts that the code of
+`libs/velista/native` and `apps/velista/src/nginx.conf` cites.
+
+- Android's `CapacitorHttp` parses any body whose `Content-Type` contains
+  `application/json`, whatever `responseType` asks. A parse and a new serialization do
+  not give back the signed bytes.
+- `responseType: 'text'` reads the body line by line and drops the final line break. A
+  365 byte manifest came back as 364 characters.
+- `responseType: 'arraybuffer'` answers base64 of the exact bytes. The app asks for it
+  and decodes the bytes as UTF-8.
+- nginx therefore serves `manifest.json` as `text/plain`.
+- `download()` of a version that the updater already holds answers without a second
+  download.
+- After `set()` the WebView comes back at the bundle root (`/en`), not at the page that
+  was tapped.
+- The new document runs one check right after the reload, because the 10 minute floor
+  is per document.
 
 ## Sources checked on 2026-11-04
 

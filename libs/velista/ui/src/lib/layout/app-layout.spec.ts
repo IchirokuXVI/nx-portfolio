@@ -340,11 +340,14 @@ describe('AppLayout', () => {
     });
 
     /**
-     * Velista `0166`, D3. Inside a native shell a reload loads the same bundle, so
-     * the dead end comes at once and its one action is the store listing.
+     * Velista `0166`, D3, in the order of velista `0180` D9. Inside a native shell a
+     * reload loads the same bundle, so the way out is a verified bundle, then Play's
+     * immediate update, and only then the dead end, whose one action is the store
+     * listing. With no updater bound (the unavailable defaults), the bundle check
+     * answers nothing and Play answers false, so the chain ends at the dead end.
      */
     describe('inside a native shell', () => {
-      async function refusedNative(storeUrl: string | null) {
+      async function refusedNativeFixture(storeUrl: string | null) {
         const reload = jest.fn();
         const openExternal = jest.fn();
         const fixture = await createFixture({}, [], [
@@ -357,12 +360,43 @@ describe('AppLayout', () => {
         TestBed.tick();
         fixture.detectChanges();
 
-        const button = (fixture.nativeElement as HTMLElement).querySelector(
+        const host: HTMLElement = fixture.nativeElement;
+        return { fixture, reload, openExternal, host };
+      }
+
+      /**
+       * Let the bundle check and Play's answer run out. The chain is promises only,
+       * and no pending task tracks it, so `whenStable` would not wait for it; one
+       * macrotask runs every microtask queued before it.
+       */
+      async function settleChain(
+        fixture: ComponentFixture<AppLayout>
+      ): Promise<void> {
+        await new Promise((resolve) => setTimeout(resolve));
+        fixture.detectChanges();
+      }
+
+      async function refusedNative(storeUrl: string | null) {
+        const refused = await refusedNativeFixture(storeUrl);
+        await settleChain(refused.fixture);
+
+        const button = refused.host.querySelector(
           'lib-update-screen button'
         ) as HTMLButtonElement | null;
-        const host: HTMLElement = fixture.nativeElement;
-        return { button, reload, openExternal, host };
+        return { ...refused, button };
       }
+
+      it('draws the updating face while the bundle and Play are still asked', async () => {
+        const { fixture, host } = await refusedNativeFixture(null);
+
+        expect(host.textContent).toContain('update.required.title');
+        expect(host.querySelector('lib-update-screen button')).toBeNull();
+
+        await settleChain(fixture);
+
+        expect(host.textContent).toContain('update.failed.bodyNative');
+        expect(host.textContent).not.toContain('update.required.title');
+      });
 
       it('offers the newer version from the store, and opens it', async () => {
         const store = 'https://play.google.com/store/apps/details?id=app.test';
