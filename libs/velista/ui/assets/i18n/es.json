@@ -1133,7 +1133,7 @@
       "empty": "Todavía no se ha comprado nada.",
       "loading": "Cargando el historial de compras",
       "about": "Unos {{price}}",
-      "atPer": "{{amount}} a {{price}} {{per}}"
+      "atPer": "{{amount}} a {{price}} {{- per}}"
     },
     "confirmDelete": {
       "title": "¿Borrar “{{name}}”?",

@@ -3882,3 +3882,23 @@ describe('every key the list and line page templates name exists in both locales
     expect(keys).toContain('list.readOnly.banner');
   });
 });
+
+/**
+ * Velista 0182: the history's "250 g at €1.99 / kg" was read out as
+ * "&#x2F; kg", because the translator escapes a value and the template escapes
+ * again. The "per" words are app copy with a slash in them, so the key takes
+ * them unescaped.
+ */
+describe('the history names a price per kilo with its slash', () => {
+  const I18N = join(__dirname, '..', '..', '..', '..', 'ui', 'assets', 'i18n');
+
+  for (const locale of ['en', 'es']) {
+    it(`takes the per words unescaped in ${locale}.json`, () => {
+      const json = JSON.parse(
+        readFileSync(join(I18N, `${locale}.json`), 'utf8')
+      ) as { list: { history: { atPer: string } } };
+
+      expect(json.list.history.atPer).toContain('{{- per}}');
+    });
+  }
+});

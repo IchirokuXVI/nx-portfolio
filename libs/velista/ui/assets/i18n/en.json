@@ -1133,7 +1133,7 @@
       "empty": "Nothing bought yet.",
       "loading": "Loading the buy history",
       "about": "About {{price}}",
-      "atPer": "{{amount}} at {{price}} {{per}}"
+      "atPer": "{{amount}} at {{price}} {{- per}}"
     },
     "confirmDelete": {
       "title": "Delete “{{name}}”?",
