@@ -115,7 +115,8 @@ jobs:
   # job brought a stack up on purpose, so an intended skip becomes a failure.
   # ---------------------------------------------------------------------------
   verify-infra:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest became 26.04, where Playwright 1.59 installs no Chromium.
+    runs-on: ubuntu-24.04
     env:
       # A skip, an empty suite, or a stack that failed to come up all fail the job.
       LUNA_REQUIRE_STACK: '1'
