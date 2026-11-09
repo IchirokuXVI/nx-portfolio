@@ -35,6 +35,9 @@ function input(
     memberIds: [],
     pickedId: null,
     priceOf: (itemId) => prices[itemId] ?? { kind: 'noPrice' },
+    // A count row at one, over one litre packs: the price of one decides.
+    line: { quantity: 1, unit: 'UNIT' },
+    productOf: () => ({ unit: 'LITER', size: 1, approxWeight: null }),
     ...overrides,
   };
 }
@@ -70,7 +73,7 @@ describe('productChoices', () => {
     expect(ids(choices)).toEqual(['milk', 'oat', 'soy']);
   });
 
-  it('orders the rest by the price for each kilo or litre, then the price', () => {
+  it('orders the rest by the cost of the row amount, never the price per litre (velista 0183)', () => {
     const choices = productChoices(
       input(
         {
@@ -84,12 +87,13 @@ describe('productChoices', () => {
       )
     );
 
+    // The six pack is the cheapest litre and the dearest buy for a row of one.
     expect(ids(choices)).toEqual([
       'milk',
-      'six',
+      'noUnit',
       'asturiana',
       'pascual',
-      'noUnit',
+      'six',
     ]);
   });
 
@@ -181,17 +185,56 @@ describe('productChoices', () => {
           milk: priced(0.92, 0.92),
           six: priced(5.34, 0.89),
           asturiana: priced(1.09, 1.09),
+          own: priced(0.85, 0.85),
         },
-        { memberIds: ['six', 'asturiana'] }
+        { memberIds: ['six', 'asturiana', 'own'] }
       )
     );
 
+    // The six pack is cheaper by the litre and not for this row (velista 0183).
     expect(
       choices.map((choice) => [choice.itemId, choice.cheaper] as const)
     ).toEqual([
       ['milk', false],
-      ['six', true],
+      ['own', true],
       ['asturiana', false],
+      ['six', false],
+    ]);
+  });
+
+  it('keeps a product that cannot serve the row unit, after the others, marked (velista 0183)', () => {
+    const sizes: Record<string, { unit: string; size: number | null }> = {
+      milk: { unit: 'LITER', size: null },
+      carton: { unit: 'MILLILITER', size: 1000 },
+      eggs: { unit: 'UNIT', size: 6 },
+    };
+    const choices = productChoices(
+      input(
+        {
+          milk: priced(1.2, 1.2),
+          carton: priced(0.9, 0.9),
+          eggs: priced(0.1, null),
+        },
+        {
+          memberIds: ['eggs', 'carton'],
+          line: { quantity: 1500, unit: 'MILLILITER' },
+          productOf: (itemId) => ({ ...sizes[itemId], approxWeight: null }),
+        }
+      )
+    );
+
+    expect(ids(choices)).toEqual(['milk', 'carton', 'eggs']);
+    expect(choices.map((choice) => choice.serves)).toEqual([true, true, false]);
+    // 1,5 L loose at 1,20 is 1,80; two cartons of a litre are 1,80 too, not less.
+    expect(choices.map((choice) => choice.amount?.cents ?? null)).toEqual([
+      180,
+      180,
+      null,
+    ]);
+    expect(choices.map((choice) => choice.cheaper)).toEqual([
+      false,
+      false,
+      false,
     ]);
   });
 

@@ -1,6 +1,7 @@
 import { catalogName } from './catalog-browse';
 import type { Line } from './domain';
 import { lineShownProduct, type LineProductPriceRead } from './line-products';
+import type { LineUnitProductRead } from './line-unit';
 import type { LocalizedName } from './shopping-profile';
 
 /**
@@ -32,7 +33,7 @@ export type LineNameSource = Pick<
   Line,
   'content' | 'named' | 'itemIds' | 'favoriteItemId'
 > &
-  Partial<Pick<Line, 'preferredSupermarketId'>>;
+  Partial<Pick<Line, 'preferredSupermarketId' | 'quantity' | 'unit'>>;
 
 /**
  * The one answer to "what is this line called" (velista `0144`, sections 1 and 2).
@@ -52,14 +53,17 @@ export type LineNameSource = Pick<
  *
  * `nameOf` answers the catalog's name of a product, or null while it is not loaded.
  * `pricesOf` answers its prices, and is absent where a screen reads none.
+ * `productOf` answers its size fields (velista `0183`), which say whether it can
+ * serve the line's unit. A screen that passes prices passes these too.
  */
 export function lineName(
   line: LineNameSource,
   nameOf: (itemId: string) => LocalizedName | null,
   locale: string,
-  pricesOf: (itemId: string) => LineProductPriceRead = noPrices
+  pricesOf: (itemId: string) => LineProductPriceRead = noPrices,
+  productOf: (itemId: string) => LineUnitProductRead = noProducts
 ): LineName {
-  const itemId = shownItemId(line, pricesOf);
+  const itemId = shownItemId(line, pricesOf, productOf);
   if (itemId === null) {
     return {
       text: line.content,
@@ -144,7 +148,8 @@ export function lineNameRefused(line: LineNameSource, typed: string): boolean {
 /** The product the line shows (velista `0145`, section 2), or null. */
 function shownItemId(
   line: LineNameSource,
-  pricesOf: (itemId: string) => LineProductPriceRead
+  pricesOf: (itemId: string) => LineProductPriceRead,
+  productOf: (itemId: string) => LineUnitProductRead
 ): string | null {
   return (
     lineShownProduct(
@@ -152,14 +157,22 @@ function shownItemId(
         itemIds: line.itemIds,
         favoriteItemId: line.favoriteItemId,
         preferredSupermarketId: line.preferredSupermarketId ?? null,
+        quantity: line.quantity ?? 1,
+        unit: line.unit ?? 'UNIT',
       },
-      pricesOf
+      pricesOf,
+      productOf
     )?.itemId ?? null
   );
 }
 
 /** No price read: the favourite when the line holds it, else the first product. */
 function noPrices(): LineProductPriceRead {
+  return undefined;
+}
+
+/** No record read: nothing ranks, so the favourite or the first product shows. */
+function noProducts(): LineUnitProductRead {
   return undefined;
 }
 

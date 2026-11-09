@@ -205,6 +205,11 @@ export interface LineDetailVm {
   /** What {@link quantity} counts (velista `0182`). */
   readonly unit: LineUnit;
   /**
+   * The units the line's products offer (velista `0183`). Two or more draws
+   * the chip above the amount.
+   */
+  readonly units: readonly LineUnit[];
+  /**
    * What the line stands for, in one phrase: the product, or how many of them.
    *
    * A key and its arguments rather than an assembled string, because "3 products"
@@ -362,6 +367,15 @@ export interface LineProductCardVm {
    * (velista `0179`), drawn after {@link chain}, or null.
    */
   readonly unit: PriceWords | null;
+  /**
+   * What the line's amount costs with this product, "2 × ~700 g · ≈ 2,78 €",
+   * or the words for a product that cannot serve the line's unit, "not sold by
+   * the piece" (velista `0183`, target states 4 and 6). Null on a line with one
+   * product and while nothing is known.
+   */
+  readonly lineCost: string | null;
+  /** The product cannot serve the line's unit, so it is drawn last and muted. */
+  readonly cannotServe: boolean;
   readonly cheapest: boolean;
   /** The one product the household wants (section 3.1). */
   readonly favorite: boolean;
@@ -393,6 +407,11 @@ export interface LinePageVm {
   readonly quantity: number;
   /** What {@link quantity} counts (velista `0182`). */
   readonly unit: LineUnit;
+  /**
+   * The units the line's products offer (velista `0183`). Two or more draws
+   * the chip that chooses among them.
+   */
+  readonly units: readonly LineUnit[];
   /** {@link quantity} in words for a reader who may not move it: "3", "750 g". */
   readonly quantityWords: string;
   /** "On Weekly shop, in Home", as parts, so the copy can order them. */
