@@ -399,7 +399,12 @@ export async function buyBasketRow(
   s: Session,
   basketId: string,
   lineIds: readonly string[],
-  body: { quantity: number; from: number }
+  body: {
+    quantity: number;
+    from: number;
+    /** The row's unit, which a settle must state (backend `0246`). */
+    unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
+  }
 ): Promise<void> {
   const rowKey = lineIds[0];
   if (rowKey === undefined) {
@@ -408,6 +413,7 @@ export async function buyBasketRow(
   await s.post(`/v1/baskets/${basketId}/rows/${rowKey}/settle`, {
     outcome: 'BOUGHT',
     lineIds,
+    unit: 'UNIT',
     ...body,
   });
 }

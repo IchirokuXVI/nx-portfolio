@@ -278,22 +278,25 @@ test.describe('adding from the catalog', () => {
       await expectCatalogLit(page);
     });
 
-    await test.step('8. the stepper of a list adds the product there, and takes it off again', async () => {
+    await test.step('8. the stepper of a list adds the product there, by the litre', async () => {
+      // The demo world's Milk is a litre with no size, so a line of it counts
+      // millilitres (velista `0182`): the first press adds a litre, and a press
+      // down from a litre takes off one fine step of 50 ml.
       const list = page.locator('lib-lists-table .list').first();
       const count = list.locator('.row').getByRole('spinbutton');
-      const before = Number(await count.getAttribute('aria-valuenow'));
+      await expect(count).toHaveAttribute('aria-valuenow', '0');
 
       await list
         .locator('.row')
         .getByRole('button', { name: 'One more' })
         .click();
-      await expect(count).toHaveAttribute('aria-valuenow', String(before + 1));
+      await expect(count).toHaveAttribute('aria-valuenow', '1000');
 
       await list
         .locator('.row')
         .getByRole('button', { name: 'One fewer' })
         .click();
-      await expect(count).toHaveAttribute('aria-valuenow', String(before));
+      await expect(count).toHaveAttribute('aria-valuenow', '950');
     });
 
     await test.step('9. back returns to the list, in the order it was left in', async () => {

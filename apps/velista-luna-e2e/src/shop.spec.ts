@@ -207,8 +207,10 @@ test.describe('one trip, by the owner', () => {
       await expect(row(page, 'Bread').locator('.caption-price')).toHaveText(
         '€0.95'
       );
+      // The demo world's Milk is a litre with no size, so it is sold by the
+      // litre and its price says so (velista `0179`).
       await expect(row(page, 'Milk').locator('.caption-price')).toHaveText(
-        '€1.15'
+        '€1.15/ L'
       );
       await expect(row(page, 'Milk').locator('.caption-lists')).toHaveText(
         'Groceries'
@@ -419,7 +421,7 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     const itemId = await ensureItem(
       admin,
       NAME,
-      [await categoryIdBySlug(admin, slug)],
+      [await categoryIdBySlug(alice, slug)],
       'KILOGRAM'
     );
     await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 1.99);
