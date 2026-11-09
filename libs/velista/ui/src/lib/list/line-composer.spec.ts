@@ -274,6 +274,29 @@ describe('LineComposer, one slot and the empty field decides', () => {
       ]);
     });
 
+    it('caps a loose product at the 100 kilos the server takes', async () => {
+      const { fixture } = await render();
+      const added: { quantity: number }[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      const bananas: CatalogSuggestion = {
+        kind: 'item',
+        item: {
+          ...(OAT as Extract<CatalogSuggestion, { kind: 'item' }>).item,
+          id: 'item-bananas',
+          unit: 'KILOGRAM',
+        },
+      };
+
+      fixture.componentInstance.quantity.set(150);
+      fixture.componentInstance.choose(
+        bananas,
+        document.createElement('button')
+      );
+      fixture.detectChanges();
+
+      expect(added[0]?.quantity).toBe(100000);
+    });
+
     it('sends again once the submit is over', async () => {
       const { fixture } = await render();
       const added: unknown[] = [];

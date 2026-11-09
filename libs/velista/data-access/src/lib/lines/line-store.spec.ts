@@ -6,6 +6,7 @@ import {
   provideVelistaTesting,
 } from '@portfolio/velista/platform';
 import { TimeoutError } from 'rxjs';
+import { ItemNames } from '../catalog/item-names';
 import { GatewayError, NetworkError } from '../errors';
 import { DroppedWrites, Mutations } from '../mutations';
 import { REALTIME_CLIENT } from '../realtime/realtime-client';
@@ -94,6 +95,10 @@ function service(seed: readonly Line[]) {
   const addOptions: (AddLineOptions | undefined)[] = [];
   /** The unit every write named, in order, for velista `0182`. */
   const units: (string | undefined)[] = [];
+  /** What each absolute update asked for, in order. */
+  const updates: Record<string, unknown>[] = [];
+  /** What each delta asked for, in order. */
+  const deltas: { delta: number; unit: string }[] = [];
 
   /** Set while the reads after the first are held open, opened by `releaseFollowUps`. */
   let followUps: Promise<void> | null = null;
@@ -166,6 +171,7 @@ function service(seed: readonly Line[]) {
     },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
       units.push(changes.unit);
+      updates.push({ ...changes });
       const absorbedLineId = absorbNext;
       absorbNext = null;
       return {
@@ -175,6 +181,7 @@ function service(seed: readonly Line[]) {
     },
     addQuantity: async (lineId, delta, unit) => {
       units.push(unit);
+      deltas.push({ delta, unit });
       return answer(line(lineId, { quantity: 1 + delta, unit, version: 2 }));
     },
     settle: async (lineId, outcome, options) => {
@@ -259,6 +266,8 @@ function service(seed: readonly Line[]) {
     },
     addOptions,
     units,
+    updates,
+    deltas,
     /** The rest of a long list stays out until `releaseFollowUps`. */
     holdFollowUps: () => {
       followUps = new Promise<void>((resolve) => {
@@ -831,7 +840,12 @@ describe('LineStore', () => {
           lineId: 'a',
           key: 'list.dropped.quantity',
           args: { name: 'Pan de pueblo', delta: '+1', unit: 'UNIT' },
-          replay: { kind: 'line-quantity', lineId: 'a', delta: 1 },
+          replay: {
+            kind: 'line-quantity',
+            lineId: 'a',
+            delta: 1,
+            unit: 'UNIT',
+          },
         }),
       ]);
     });
@@ -944,6 +958,99 @@ describe('LineStore', () => {
           unit: 'GRAM',
         });
         expect(lines.calls.filter((call) => call === 'list')).toHaveLength(2);
+      });
+    });
+
+    /**
+     * The rows backend `0246` M2 left: a one product line for a loose product,
+     * stored in `UNIT`. velista draws it in grams and its first write states the
+     * unit, which corrects the row (section 3.2).
+     */
+    describe('a line the migration left in UNIT (backend 0246 M2)', () => {
+      const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+      const PACK = { unit: 'LITER', size: 1, approxWeight: null };
+      const items = (records: Record<string, object>): Provider => ({
+        provide: ItemNames,
+        useValue: { nameOf: (itemId: string) => records[itemId] ?? null },
+      });
+
+      it('reads and steps in grams', async () => {
+        const { store } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 0,
+          unit: 'GRAM',
+        });
+        expect(store.forList(LIST)().lines[0].unit).toBe('GRAM');
+      });
+
+      it('raises from nothing to a kilo with one absolute update that states the unit', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        const writing = store.addQuantity('a', 25);
+
+        expect(store.linesIn(LIST)[0].quantity).toBe(1000);
+        expect(await writing).toBe('succeeded');
+        expect(lines.updates).toEqual([{ quantity: 1000, unit: 'GRAM' }]);
+        expect(lines.deltas).toEqual([]);
+      });
+
+      it('takes the delta path again once the server answers the line in GRAM', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+        await store.addQuantity('a', 25);
+
+        await store.addQuantity('a', 250);
+
+        expect(lines.updates).toHaveLength(1);
+        expect(lines.deltas).toEqual([{ delta: 250, unit: 'GRAM' }]);
+      });
+
+      it('sends a set from the detail sheet in the product’s unit', async () => {
+        const { store, lines } = await build(
+          [line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas'] })],
+          [items({ bananas: LOOSE })]
+        );
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 750 });
+
+        expect(lines.updates).toEqual([{ quantity: 750, unit: 'GRAM' }]);
+      });
+
+      it('leaves a line with several products, and a pack, in their stored unit', async () => {
+        const { store, lines } = await build(
+          [
+            line('a', { quantity: 0, unit: 'UNIT', itemIds: ['bananas', 'b'] }),
+            line('b', { quantity: 1, unit: 'UNIT', itemIds: ['milk'] }),
+          ],
+          [items({ bananas: LOOSE, b: LOOSE, milk: PACK })]
+        );
+        await store.load(LIST);
+
+        expect(store.linesIn(LIST).map((one) => one.unit)).toEqual([
+          'UNIT',
+          'UNIT',
+        ]);
+        await store.addQuantity('a', 1);
+        await store.addQuantity('b', 1);
+
+        expect(lines.updates).toEqual([]);
+        expect(lines.deltas).toEqual([
+          { delta: 1, unit: 'UNIT' },
+          { delta: 1, unit: 'UNIT' },
+        ]);
       });
     });
 

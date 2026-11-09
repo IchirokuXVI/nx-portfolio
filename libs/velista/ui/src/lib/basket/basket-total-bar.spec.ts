@@ -12,6 +12,7 @@ const MOCK: BasketTotal = {
   leftCents: 1247,
   totalCents: 2407,
   currency: 'EUR',
+  estimated: true,
 };
 
 async function render(
@@ -45,6 +46,15 @@ describe('BasketTotalBar', () => {
 
     expect(track?.getAttribute('role')).toBe('img');
     expect(track?.getAttribute('aria-label')).toBe('basket.total.barLabel');
+  });
+
+  it('drops "about" from the name of an exact total (velista 0182)', async () => {
+    const fixture = await render({ ...MOCK, estimated: false });
+    const track = host(fixture).querySelector('.track');
+
+    expect(track?.getAttribute('aria-label')).toBe(
+      'basket.total.barLabelExact'
+    );
   });
 
   it('hides the two captions from a reader who has heard the track', async () => {

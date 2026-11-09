@@ -31,8 +31,7 @@ import { basketTotalAmounts, boughtShare } from './basket-total-amounts';
   template: `
     <div
       [attr.aria-label]="
-        'basket.total.barLabel'
-          | rokuT: { bought: amounts().bought, total: amounts().total }
+        labelKey() | rokuT: { bought: amounts().bought, total: amounts().total }
       "
       class="track"
       role="img"
@@ -67,6 +66,13 @@ export class BasketTotalBar {
    */
   protected readonly amountKey = computed(() =>
     this.total().estimated ? 'basket.total.amount' : 'basket.total.amountExact'
+  );
+
+  /** The track's name says "about" only before an estimate, as the number does. */
+  protected readonly labelKey = computed(() =>
+    this.total().estimated
+      ? 'basket.total.barLabel'
+      : 'basket.total.barLabelExact'
   );
 
   protected readonly amounts = computed(() =>

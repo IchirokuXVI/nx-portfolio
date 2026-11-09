@@ -3646,7 +3646,12 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
       dropped: [
         dropped({
           args: { name: 'Plátanos', delta: '+250', unit: 'GRAM' },
-          replay: { kind: 'line-quantity', lineId: 'ln-1', delta: 250 },
+          replay: {
+            kind: 'line-quantity',
+            lineId: 'ln-1',
+            delta: 250,
+            unit: 'GRAM',
+          },
         }),
       ],
     });
@@ -3654,6 +3659,35 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
     expect(noticeValues(fixture)).toEqual(
       expect.objectContaining({ delta: '+250 g' })
     );
+    expect(action(fixture, 'list.dropped.resend')).toBeDefined();
+  });
+
+  it('offers no resend once the line counts in another unit (velista 0182)', async () => {
+    // A minus 250 g sent again after the line moved to pieces would take 250
+    // pieces off, so the notice says the change may not have been saved.
+    const { fixture, lines } = await render({
+      lines: [line('ln-1', { content: 'Plátanos', quantity: 3, unit: 'UNIT' })],
+      dropped: [
+        dropped({
+          args: { name: 'Plátanos', delta: '-250', unit: 'GRAM' },
+          replay: {
+            kind: 'line-quantity',
+            lineId: 'ln-1',
+            delta: -250,
+            unit: 'GRAM',
+          },
+        }),
+      ],
+    });
+
+    expect(notice(fixture)?.textContent).toContain(
+      'list.dropped.quantity.unsure'
+    );
+    expect(action(fixture, 'list.dropped.resend')).toBeUndefined();
+    await fixture.componentInstance.resendDropped(
+      fixture.componentInstance.droppedNotices()[0].id
+    );
+    expect(lines.calls.some((call) => call.kind === 'quantity')).toBe(false);
   });
 
   it('keeps a count change a bare number, also from an entry with no unit', async () => {

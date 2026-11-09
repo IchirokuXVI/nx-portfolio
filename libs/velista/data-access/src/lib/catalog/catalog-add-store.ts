@@ -11,6 +11,7 @@ import {
   visitAddition,
   visitAfterAdd,
   visitAfterStep,
+  visitFloor,
   visitTakeBack,
   visitWithout,
   type AddTargetList,
@@ -492,7 +493,14 @@ export class CatalogAddStore {
       return;
     }
     const entry = visitAddition(this._visit(), lineId);
-    if (by === -1 && next === 0 && entry !== null && entry.created) {
+    // The minus at the floor takes a product the visit added back: at nothing,
+    // or at the kilo a weight line the visit made started at (velista `0182`).
+    if (
+      by === -1 &&
+      entry !== null &&
+      entry.created &&
+      (next === 0 || line.quantity <= visitFloor(entry, line.unit))
+    ) {
       await this._takeBack(lineId);
       return;
     }

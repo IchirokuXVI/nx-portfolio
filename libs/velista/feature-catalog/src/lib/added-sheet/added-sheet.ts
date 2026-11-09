@@ -104,7 +104,7 @@ export class AddedSheet {
         imageUrl: entry.imageUrl,
         quantity: entry.quantity,
         unit: units.get(entry.lineId) ?? 'UNIT',
-        floor: visitFloor(entry),
+        floor: visitFloor(entry, units.get(entry.lineId) ?? 'UNIT'),
         pending: entry.pending,
       })),
     }));

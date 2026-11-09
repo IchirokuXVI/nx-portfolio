@@ -1,4 +1,10 @@
-import { lineUnitOfProduct, stepAt, stepFrom, stepsFrom } from './line-unit';
+import {
+  lineUnitOfProduct,
+  shownLineUnit,
+  stepAt,
+  stepFrom,
+  stepsFrom,
+} from './line-unit';
 
 describe('stepAt (velista 0182, section 3)', () => {
   it('steps a count by one at any value', () => {
@@ -74,5 +80,37 @@ describe('lineUnitOfProduct', () => {
     ).toBe('UNIT');
     expect(lineUnitOfProduct({ piecePrice: 1.39 }, null)).toBe('UNIT');
     expect(lineUnitOfProduct(null, null)).toBe('UNIT');
+  });
+});
+
+describe('shownLineUnit (backend 0246 M2, section 3.2)', () => {
+  const loose = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const pack = { unit: 'LITER', size: 1, approxWeight: null };
+
+  it("draws a one product line the migration left in UNIT in its product's unit", () => {
+    expect(shownLineUnit({ unit: 'UNIT', itemIds: ['i1'] }, () => loose)).toBe(
+      'GRAM'
+    );
+  });
+
+  it('keeps the stored unit when it agrees, or the product is not read yet', () => {
+    expect(shownLineUnit({ unit: 'GRAM', itemIds: ['i1'] }, () => loose)).toBe(
+      'GRAM'
+    );
+    expect(shownLineUnit({ unit: 'UNIT', itemIds: ['i1'] }, () => pack)).toBe(
+      'UNIT'
+    );
+    expect(shownLineUnit({ unit: 'UNIT', itemIds: ['i1'] }, () => null)).toBe(
+      'UNIT'
+    );
+  });
+
+  it('leaves a line with several products, or none, in its stored unit', () => {
+    expect(
+      shownLineUnit({ unit: 'UNIT', itemIds: ['i1', 'i2'] }, () => loose)
+    ).toBe('UNIT');
+    expect(shownLineUnit({ unit: 'UNIT', itemIds: [] }, () => loose)).toBe(
+      'UNIT'
+    );
   });
 });

@@ -1,7 +1,7 @@
 <button
   (click)="toggle()"
   [attr.aria-expanded]="open()"
-  [attr.aria-label]="'basket.total.open' | rokuT: { amount: amounts().total }"
+  [attr.aria-label]="openKey() | rokuT: { amount: amounts().total }"
   #control
   #origin="cdkOverlayOrigin"
   aria-haspopup="dialog"

@@ -1999,7 +1999,9 @@
     "total": {
       "amount": "≈{{amount}}",
       "open": "Estimated total, about {{amount}}. See what is behind it.",
+      "openExact": "Total, {{amount}}. See what is behind it.",
       "barLabel": "About {{bought}} bought of about {{total}}",
+      "barLabelExact": "{{bought}} bought of {{total}}",
       "boughtEnd": "{{amount}} bought",
       "leftEnd": "{{amount}} left",
       "title": "Estimated total",

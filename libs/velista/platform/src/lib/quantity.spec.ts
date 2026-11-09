@@ -26,6 +26,13 @@ describe('formatQuantity (velista 0182, criterion 3)', () => {
     expect(formatQuantity(1750, 'GRAM', 'en')).toBe('1.75 kg');
   });
 
+  it('says the exact amount from a thousand, to the gram', () => {
+    // 975 g added twice sums to 1975 on the server (backend 0246 section 3.3).
+    expect(formatQuantity(1975, 'GRAM', 'es')).toBe('1,975 kg');
+    expect(formatQuantity(1001, 'GRAM', 'en')).toBe('1.001 kg');
+    expect(formatQuantity(1050, 'MILLILITER', 'es')).toBe('1,05 l');
+  });
+
   it('draws millilitres below a thousand and litres from it', () => {
     expect(formatQuantity(500, 'MILLILITER', 'en')).toBe('500 mL');
     expect(formatQuantity(500, 'MILLILITER', 'es')).toBe('500 ml');
