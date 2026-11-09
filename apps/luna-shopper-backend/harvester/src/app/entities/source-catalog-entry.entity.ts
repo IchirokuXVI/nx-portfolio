@@ -312,4 +312,32 @@ export class SourceCatalogEntry extends BaseEntity {
    */
   @OneToMany(() => SourceEntryPrice, (price) => price.entry)
   prices!: SourceEntryPrice[];
+
+  /**
+   * The size the row's own price and comparison price imply, in the base unit
+   * of {@link unitSize} (grams, millilitres or units), when the two disagree
+   * beyond the tolerance of plan 0249, section 2. Null when the last check
+   * agreed, or none could be made.
+   *
+   * **In neither group above.** The ingest writes the three doubt columns
+   * from what it read, and nothing else writes them. The stated size stays
+   * what the source sent: a doubt is evidence for a person, never a
+   * correction, because the chain prints wrong comparison prices too. While
+   * it is set, a product is created from the row only with a size the person
+   * names (`createdSize`), and rung 4 neither proposes from the row nor
+   * proposes it.
+   */
+  @Column({ type: 'numeric', precision: 14, scale: 4, nullable: true })
+  sizeDoubtImplied!: number | null;
+
+  /**
+   * `sizeDoubtImplied / stated` (plan 0249). Unscaled, so a ratio of a
+   * millionth, a box stated a thousand times too heavy, is kept.
+   */
+  @Column({ type: 'numeric', nullable: true })
+  sizeDoubtRatio!: number | null;
+
+  /** The run whose observation recorded the doubt (plan 0249). */
+  @Column({ type: 'uuid', nullable: true })
+  sizeDoubtRunId!: string | null;
 }

@@ -1,3 +1,5 @@
+> **PR:** [#942](https://github.com/IchirokuXVI/nx-portfolio/pull/942)
+
 # 0249: a size its own unit price disproves is held for a person
 
 > Found on 2026-11-06 by a scheduled walk of every chain on Luna slot 4 (locked with

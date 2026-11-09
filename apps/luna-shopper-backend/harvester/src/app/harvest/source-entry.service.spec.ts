@@ -2206,3 +2206,62 @@ describe('SourceEntryService, a bound row that is decided again (plan 0191)', ()
     });
   });
 });
+
+describe('SourceEntryService, a row whose size is in doubt (plan 0249)', () => {
+  /** A litre the row states, and a doubt that its prices imply 100 ml. */
+  const doubted = () =>
+    entry({
+      unitSize: 1,
+      sizeUnit: UnitOfMeasure.LITER,
+      sizeDoubtImplied: 100,
+      sizeDoubtRatio: 0.1,
+      sizeDoubtRunId: 'run-monday',
+    });
+
+  it('refuses a create that names no size, with both sizes, and writes nothing', async () => {
+    const { service, createItem, saved } = build({ row: doubted() });
+
+    await expect(
+      service.createItem({ userId: ADMIN, entryId: 'e-1' })
+    ).rejects.toThrow(/states 1 LITER.*imply 0\.1 LITER/);
+    expect(createItem).not.toHaveBeenCalled();
+    expect(saved).toHaveLength(0);
+  });
+
+  it('creates with the size the person names', async () => {
+    const { service, createItem } = build({ row: doubted() });
+
+    await service.createItem({ userId: ADMIN, entryId: 'e-1', unitSize: 0.1 });
+
+    expect(createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        unitSize: 100,
+        defaultUnit: UnitOfMeasure.MILLILITER,
+      })
+    );
+  });
+
+  it('still accepts the row onto an existing product, which takes no size', async () => {
+    const { service, saved } = build({ row: doubted() });
+
+    const result = await service.accept({
+      userId: ADMIN,
+      entryId: 'e-1',
+      itemId: 'item-1',
+    });
+
+    expect(result.entry).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-1',
+      unitSize: 1,
+      sizeDoubt: expect.objectContaining({
+        implied: 100,
+        unit: UnitOfMeasure.MILLILITER,
+        ratio: 0.1,
+        runId: 'run-monday',
+      }),
+    });
+    // The doubt stays: an accept is a decision about the product, not the size.
+    expect(saved[0].sizeDoubtImplied).toBe(100);
+  });
+});
