@@ -363,6 +363,7 @@ describeIntegration(
         rowKey: row.id,
         lineIds: [row.id],
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity,
         from,
       });
@@ -606,6 +607,7 @@ describeIntegration(
         userId: a.userId,
         lineId: milk.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
       });
 
@@ -802,6 +804,7 @@ describeIntegration(
         rowKey: milk.id,
         lineIds: [milk.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 2,
       });
       await buy(a, milk, 2, 2);

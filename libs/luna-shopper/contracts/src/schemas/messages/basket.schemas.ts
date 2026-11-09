@@ -817,6 +817,8 @@ const addLineRequest = object(
     targetListId: nonEmptyString(),
     content: nonEmptyString(),
     quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    // The list's own add through another door (plan 0246, section 3.2).
+    unit: ref(ENUM_IDS.lineUnit),
     itemIds: array(nonEmptyString()),
     named: boolean(),
     // Handed to the list's own add as they arrived (plan 0228).

@@ -11563,6 +11563,16 @@
               }
             }
           },
+          "422": {
+            "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "`rate_limited` — Too many requests. Please slow down and try again shortly.",
             "content": {
@@ -32045,6 +32055,15 @@
             "type": "number",
             "minimum": 1,
             "maximum": 100000
+          },
+          "unit": {
+            "type": "string",
+            "enum": [
+              "UNIT",
+              "GRAM",
+              "MILLILITER"
+            ],
+            "description": "What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit, and a free text line counts pieces."
           },
           "itemIds": {
             "description": "The product set to attach, as the list’s own add takes it.",

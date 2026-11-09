@@ -529,6 +529,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
       rowKey: lines[0].id,
       lineIds: lines.map((row) => row.id),
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity,
       from,
       itemId,
@@ -789,6 +790,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
         rowKey: priced.id,
         lineId: priced.id,
         quantity: 1,
+        unit: 'UNIT',
         from: 1,
       });
       expect(answer.progress.total).toBe(2);
@@ -962,6 +964,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
         rowKey: milk.id,
         lineIds: [milk.id],
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         from: 2,
         itemId: oat,
       });
@@ -1177,6 +1180,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
           rowKey: second.id,
           lineIds: [first.id],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 2,
         })
@@ -1191,6 +1195,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
           rowKey: first.id,
           lineIds: [],
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 1,
           from: 2,
         })
@@ -1354,6 +1359,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
         rowKey: zero.id,
         lineId: zero.id,
         quantity: 2,
+        unit: 'UNIT',
         from: 0,
       });
 
@@ -1386,6 +1392,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
           rowKey: rejected.id,
           lineId: rejected.id,
           quantity: 5,
+          unit: 'UNIT',
           from: 2,
         })
       ).rejects.toThrow('Row not found');
@@ -1404,6 +1411,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
         rowKey: milk.id,
         lineId: milk.id,
         quantity: 0,
+        unit: 'UNIT',
         from: 2,
       });
 
@@ -1431,6 +1439,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
           rowKey,
           lineId,
           quantity: 5,
+          unit: 'UNIT',
           from,
         });
 
@@ -1478,6 +1487,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
           rowKey: lineId,
           lineId,
           quantity,
+          unit: 'UNIT',
           from,
         });
 
@@ -1511,6 +1521,7 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
         rowKey: second.id,
         lineId: second.id,
         quantity: 4,
+        unit: 'UNIT',
         from: 1,
       });
       expect(await quantityOf(second.id)).toBe(4);
@@ -1569,9 +1580,22 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
         participantId: held.participantId,
         // Oldest line first, and the products in the order the line holds them.
         lines: [
-          { lineId: choice.id, itemIds: [b, a] },
-          { lineId: stale.id, itemIds: [b, c] },
-          { lineId: taken.id, itemIds: [c, a, b] },
+          // With the unit and the amount the pick orders by (plan 0246).
+          expect.objectContaining({
+            lineId: choice.id,
+            itemIds: [b, a],
+            unit: 'UNIT',
+          }),
+          expect.objectContaining({
+            lineId: stale.id,
+            itemIds: [b, c],
+            unit: 'UNIT',
+          }),
+          expect.objectContaining({
+            lineId: taken.id,
+            itemIds: [c, a, b],
+            unit: 'UNIT',
+          }),
         ],
       });
 
@@ -1624,7 +1648,13 @@ describeIntegration('a basket row is a product (real Postgres)', () => {
       expect(answer).toEqual({
         basketId: live.id,
         participantId: owner.id,
-        lines: [{ lineId: milk.id, itemIds: [a, b] }],
+        lines: [
+          expect.objectContaining({
+            lineId: milk.id,
+            itemIds: [a, b],
+            unit: 'UNIT',
+          }),
+        ],
       });
       // A second ask makes no second basket.
       expect(

@@ -36,6 +36,7 @@ export type AddBasketLineDto = {
   targetListId: string;
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
   askIfAmbiguous?: boolean;

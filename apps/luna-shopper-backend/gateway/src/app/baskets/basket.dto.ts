@@ -6,6 +6,7 @@ import {
   BASKET_SHARING_LIMITS,
   BasketStatus,
   LINE_QUANTITY_MAX,
+  LINE_UNITS,
   SettlementOutcome,
   type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
@@ -30,6 +31,7 @@ import {
 } from 'class-validator';
 import {
   ADD_CHOICE_DOCS,
+  LINE_UNIT_DOCS,
   NotBesideNewLine,
   RequiredLineUnit,
 } from '../lists/list.dto';
@@ -266,6 +268,14 @@ export class AddBasketLineDto {
   @Min(1)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @ApiPropertyOptional({
+    enum: LINE_UNITS,
+    description: LINE_UNIT_DOCS.optional,
+  })
+  @IsOptional()
+  @IsIn([...LINE_UNITS])
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     type: [String],

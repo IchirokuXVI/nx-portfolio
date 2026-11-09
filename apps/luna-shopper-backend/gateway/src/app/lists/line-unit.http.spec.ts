@@ -14,6 +14,8 @@ import {
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { BasketController } from '../baskets/basket.controller';
+import type { AddBasketLineDto } from '../baskets/basket.dto';
 import { SettlePriceService } from '../baskets/settle-price.service';
 import { NatsClient } from '../messaging/nats-client';
 import { CommentTranscriptionService } from './comment-transcription.service';
@@ -386,5 +388,68 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
         LINE_PATTERNS.update,
       ]);
     });
+  });
+});
+
+describe('the basket add checks the unit too (plan 0246, sections 3.2 and 4.2)', () => {
+  /** A basket controller over a broker that answers catalog and records core. */
+  function controller() {
+    const sent: { subject: unknown; payload: Record<string, unknown> }[] = [];
+    const nats = {
+      send: async (subject: unknown, payload: unknown) => {
+        const body = JSON.parse(JSON.stringify(payload)) as Record<
+          string,
+          unknown
+        >;
+        if (subject === ITEM_PATTERNS.getMany) {
+          const { ids } = body as unknown as GetItemsRequest;
+          return {
+            items: ids
+              .filter((id) => SIZES[id])
+              .map((id) => ({ id, ...SIZES[id] })),
+          };
+        }
+        sent.push({ subject, payload: body });
+        return { lines: [] };
+      },
+    };
+    return {
+      sent,
+      basket: new BasketController(nats as never, {} as never, {} as never),
+    };
+  }
+  const OWNER = { participantId: 'p-1', userId: 'user-1' } as never;
+  const BASKET = 'cf000000-0000-4000-a000-0000000000d1';
+
+  it('refuses a unit the products do not offer, naming the offered units', async () => {
+    const w = controller();
+
+    await expect(
+      w.basket.addLine(OWNER, BASKET, {
+        targetListId: LIST,
+        content: 'Bananas',
+        itemIds: [LOOSE],
+        unit: 'UNIT',
+      } as AddBasketLineDto)
+    ).rejects.toMatchObject({
+      code: ERROR_CODES.LINE_UNIT_NOT_OFFERED,
+      details: { offered: ['GRAM'] },
+    });
+    expect(w.sent).toEqual([]);
+  });
+
+  it('hands the unit to core beside the quantity', async () => {
+    const w = controller();
+
+    await w.basket.addLine(OWNER, BASKET, {
+      targetListId: LIST,
+      content: 'Bananas',
+      itemIds: [LOOSE],
+      unit: 'GRAM',
+      quantity: 1000,
+    } as AddBasketLineDto);
+
+    expect(w.sent).toHaveLength(1);
+    expect(w.sent[0].payload).toMatchObject({ unit: 'GRAM', quantity: 1000 });
   });
 });

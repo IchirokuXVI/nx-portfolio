@@ -946,6 +946,12 @@ export interface AddBasketLineRequest {
   targetListId: string;
   content: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.2), as the list's own
+   * add takes it. Absent is `UNIT`, and the gateway refuses a unit the
+   * products do not offer with `line_unit_not_offered`.
+   */
+  unit?: LineUnit;
   itemIds?: string[];
   /**
    * Whether a person typed {@link content} (plan 0207, section 1.3). Handed to

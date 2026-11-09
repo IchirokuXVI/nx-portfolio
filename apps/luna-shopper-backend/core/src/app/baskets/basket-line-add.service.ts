@@ -97,6 +97,8 @@ export class BasketLineAddService {
       listId: req.targetListId,
       content: req.content,
       quantity: req.quantity,
+      // What the quantity counts, as the list's own add takes it (plan 0246).
+      unit: req.unit,
       itemIds: req.itemIds,
       // Whether a person typed the name, as it arrived (plan 0207, section
       // 1.3). `LineService.add` keeps the two rules about it.

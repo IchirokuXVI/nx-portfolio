@@ -369,6 +369,7 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
 
@@ -403,11 +404,13 @@ describeIntegration('what every write records (real Postgres)', () => {
         userId: ids.owner,
         lineId: milk.id,
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
       });
       await settlements.settle({
         userId: ids.owner,
         lineId: bread.id,
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
       await lines.reorder({
