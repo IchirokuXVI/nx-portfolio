@@ -280,23 +280,27 @@ test.describe('adding from the catalog', () => {
 
     await test.step('8. the stepper of a list adds the product there, by the litre', async () => {
       // The demo world's Milk is a litre with no size, so a line of it counts
-      // millilitres (velista `0182`): the first press adds a litre, and a press
-      // down from a litre takes off one fine step of 50 ml.
+      // millilitres (velista `0182`). The list's plus is an add, so each press
+      // puts one more litre on the line: 1000, then 2000. Its minus steps the
+      // line: from a litre on, one step is 250 ml, so the presses down read 1750,
+      // 1500, 1250 and 1000. One more press down takes the product back, because
+      // the visit made the line and a minus at the litre it started at removes
+      // it, as a minus at one does for a count. The list's stepper reads 0 again.
       const list = page.locator('lib-lists-table .list').first();
-      const count = list.locator('.row').getByRole('spinbutton');
+      const row = list.locator('.row');
+      const count = row.getByRole('spinbutton');
+      const more = row.getByRole('button', { name: 'One more' });
+      const fewer = row.getByRole('button', { name: 'One fewer' });
       await expect(count).toHaveAttribute('aria-valuenow', '0');
 
-      await list
-        .locator('.row')
-        .getByRole('button', { name: 'One more' })
-        .click();
-      await expect(count).toHaveAttribute('aria-valuenow', '1000');
-
-      await list
-        .locator('.row')
-        .getByRole('button', { name: 'One fewer' })
-        .click();
-      await expect(count).toHaveAttribute('aria-valuenow', '950');
+      for (const reads of ['1000', '2000']) {
+        await more.click();
+        await expect(count).toHaveAttribute('aria-valuenow', reads);
+      }
+      for (const reads of ['1750', '1500', '1250', '1000', '0']) {
+        await fewer.click();
+        await expect(count).toHaveAttribute('aria-valuenow', reads);
+      }
     });
 
     await test.step('9. back returns to the list, in the order it was left in', async () => {
