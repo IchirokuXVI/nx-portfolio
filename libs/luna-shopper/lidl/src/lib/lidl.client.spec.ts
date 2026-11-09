@@ -122,37 +122,97 @@ describe('LidlClient.walkInStore', () => {
     expect(calls[0].headers['user-agent']).toBe(USER_AGENT);
   });
 
-  it('pages by the size it asked for, until the total it was told', async () => {
-    const page = (offset: number, rows: number) => ({
-      numFound: 5,
-      offset,
-      fetchsize: 2,
-      items: Array.from({ length: rows }, (_, index) => ({
-        gridbox: { data: { productId: offset + index, category: 'Food' } },
-      })),
-    });
-    const { fetchImpl, calls } = fakeFetch([
-      json(page(0, 2)),
-      json(page(2, 2)),
-      json(page(4, 1)),
-    ]);
-    const client = new LidlClient({
-      userAgent: USER_AGENT,
-      fetchImpl,
-      pageSize: 2,
-    });
+  /**
+   * An index of `total` rows that serves at most `cap` items a page and
+   * echoes the size it served, as the live site did on 2026-11-08 (plan
+   * 0256). The answer is read off the asked offset and size, so a walk that
+   * skips rows is seen to skip them.
+   */
+  function cappedIndex(total: number, cap: number): (url: string) => Response {
+    return (url) => {
+      const query = new URL(url).searchParams;
+      const offset = Number(query.get('offset'));
+      const asked = Number(query.get('fetchsize'));
+      const served = Math.max(0, Math.min(asked, cap, total - offset));
+      return json({
+        numFound: total,
+        offset,
+        fetchsize: Math.min(asked, cap),
+        items: Array.from({ length: served }, (_, index) => ({
+          gridbox: {
+            data: { productId: String(offset + index), category: 'Food' },
+          },
+        })),
+      })();
+    };
+  }
+
+  /** A fetch that answers every index request and records its paging. */
+  function serve(answer: (url: string) => Response): {
+    fetchImpl: typeof fetch;
+    offsets: string[];
+    sizes: string[];
+  } {
+    const offsets: string[] = [];
+    const sizes: string[] = [];
+    const fetchImpl = (async (url: string) => {
+      const query = new URL(String(url)).searchParams;
+      offsets.push(query.get('offset') ?? '');
+      sizes.push(query.get('fetchsize') ?? '');
+      return answer(String(url));
+    }) as unknown as typeof fetch;
+    return { fetchImpl, offsets, sizes };
+  }
+
+  it('steps by the items a capped page served, and reads every row once', async () => {
+    const { fetchImpl, offsets, sizes } = serve(cappedIndex(150, 60));
+    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl });
 
     const rows = await collect(client.walkInStore());
 
-    expect(rows).toHaveLength(5);
-    expect(
-      calls.map((call) => new URL(call.url).searchParams.get('offset'))
-    ).toEqual(['0', '2', '4']);
-    expect(
-      calls.every(
-        (call) => new URL(call.url).searchParams.get('fetchsize') === '2'
-      )
-    ).toBe(true);
+    expect(offsets).toEqual(['0', '60', '120']);
+    // It still asks for 100 (decision D1): the cap is the site's.
+    expect(sizes.every((size) => size === '100')).toBe(true);
+    expect(rows.map((row) => row.externalId)).toEqual(
+      Array.from({ length: 150 }, (_, index) => String(index))
+    );
+  });
+
+  it('steps by 100 when the site serves the 100 it was asked for', async () => {
+    const { fetchImpl, offsets } = serve(cappedIndex(150, 1000));
+    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl });
+
+    expect(await collect(client.walkInStore())).toHaveLength(150);
+    expect(offsets).toEqual(['0', '100']);
+  });
+
+  it('makes two requests for a total of one row more than the cap', async () => {
+    const { fetchImpl, offsets } = serve(cappedIndex(61, 60));
+    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl });
+
+    expect(await collect(client.walkInStore())).toHaveLength(61);
+    expect(offsets).toEqual(['0', '60']);
+  });
+
+  it('steps past a tile that is not a product, and on past a page of tiles only', async () => {
+    const product = (id: number) => ({
+      gridbox: { data: { productId: String(id), category: 'Food' } },
+    });
+    const banner = { banner: { data: { title: 'Ofertas' } } };
+    const pages: Record<string, unknown> = {
+      '0': { numFound: 6, items: [product(0), banner, banner] },
+      '3': { numFound: 6, items: [banner, banner] },
+      '5': { numFound: 6, items: [product(5)] },
+    };
+    const { fetchImpl, offsets } = serve((url) =>
+      json(pages[new URL(url).searchParams.get('offset') ?? ''])()
+    );
+    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl });
+
+    const rows = await collect(client.walkInStore());
+
+    expect(offsets).toEqual(['0', '3', '5']);
+    expect(rows.map((row) => row.externalId)).toEqual(['0', '5']);
   });
 
   it('yields a product once however often the paging repeats it', async () => {
@@ -173,6 +233,21 @@ describe('LidlClient.walkInStore', () => {
     });
 
     expect(await collect(client.walkInStore())).toHaveLength(1);
+  });
+
+  it('stops on a page that repeats what it saw when no total is stated', async () => {
+    const page = {
+      items: [1, 2].map((id) => ({
+        gridbox: { data: { productId: String(id), category: 'Food' } },
+      })),
+    };
+    const { fetchImpl, offsets } = serve(() => json(page)());
+    const client = new LidlClient({ userAgent: USER_AGENT, fetchImpl });
+
+    const rows = await collect(client.walkInStore());
+
+    expect(offsets).toEqual(['0', '2']);
+    expect(rows.map((row) => row.externalId)).toEqual(['1', '2']);
   });
 
   it('stops when a page answers nothing rather than paging to the total', async () => {
