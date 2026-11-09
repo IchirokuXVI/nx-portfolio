@@ -185,6 +185,19 @@ describe('toBasketRow', () => {
     );
   });
 
+  it('reads the unit of a row, and its entries count in it (velista 0182, criterion 1)', () => {
+    const weighed = toBasketRow({ ...ROW, unit: 'GRAM', left: 750 });
+
+    expect(weighed?.unit).toBe('GRAM');
+    expect(weighed?.entries.every((held) => held.unit === 'GRAM')).toBe(true);
+  });
+
+  it('reads a missing or unknown unit as a count', () => {
+    expect(toBasketRow(ROW)?.unit).toBe('UNIT');
+    expect(toBasketRow({ ...ROW, unit: 'KILOGRAM' })?.unit).toBe('UNIT');
+    expect(toBasketRow(ROW)?.entries[0].unit).toBe('UNIT');
+  });
+
   it('reads an unknown state as WANTED, which hides nothing', () => {
     // A row this build cannot classify is still a thing to buy. The other way
     // round would take it off somebody's screen.

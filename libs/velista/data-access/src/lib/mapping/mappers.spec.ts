@@ -305,6 +305,8 @@ describe('toLine', () => {
     listId: 'l1',
     content: 'Milk',
     quantity: 2,
+    // What the quantity counts (velista 0182, backend 0246).
+    unit: 'UNIT',
     // A product set, where this was a single nullable `itemId` that was null on every
     // line ever created (backend plan 0048, section 1.1).
     itemIds: ['item-milk'],
@@ -334,6 +336,23 @@ describe('toLine', () => {
 
   it('maps a well formed line', () => {
     expect(toLine(valid)).toEqual(valid);
+  });
+
+  describe('the unit (velista 0182, criterion 1)', () => {
+    it('reads a weight and a volume', () => {
+      expect(toLine({ ...valid, unit: 'GRAM', quantity: 750 })).toMatchObject({
+        unit: 'GRAM',
+        quantity: 750,
+      });
+      expect(toLine({ ...valid, unit: 'MILLILITER' })?.unit).toBe('MILLILITER');
+    });
+
+    it('reads a missing or unknown unit as a count', () => {
+      const { unit: _unit, ...before } = valid;
+      expect(toLine(before)?.unit).toBe('UNIT');
+      expect(toLine({ ...valid, unit: 'KILOGRAM' })?.unit).toBe('UNIT');
+      expect(toLine({ ...valid, unit: 3 })?.unit).toBe('UNIT');
+    });
   });
 
   it('reads a comment count as known only when it is a whole number (velista 0158)', () => {
@@ -1656,6 +1675,33 @@ describe('toLineSettlement, what one unit cost (velista 0095, section 7)', () =>
       expect(settlement?.currency).toBeNull();
     }
   });
+
+  it('maps the unit and whether its cost is an estimate (velista 0182, criterion 1)', () => {
+    const weighed = toLineSettlement({
+      ...RAW,
+      quantity: 750,
+      unit: 'GRAM',
+      estimated: true,
+      pricePaidCents: 199,
+    });
+
+    expect(weighed).toMatchObject({
+      quantity: 750,
+      unit: 'GRAM',
+      estimated: true,
+      unitPriceCents: 199,
+    });
+  });
+
+  it('reads a missing unit as a count and only a JSON true as an estimate', () => {
+    expect(toLineSettlement(RAW)).toMatchObject({
+      unit: 'UNIT',
+      estimated: false,
+    });
+    expect(
+      toLineSettlement({ ...RAW, unit: 'OUNCE', estimated: 'yes' })
+    ).toMatchObject({ unit: 'UNIT', estimated: false });
+  });
 });
 
 /** `GET /v1/items/:id/list-lines` (backend `0196`, section 3). */
@@ -1668,7 +1714,13 @@ describe('toItemLists', () => {
     autoApproveLines: true,
     myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
     lines: [
-      { id: 'ln-1', content: 'Leche', quantity: 2, approvalStatus: 'APPROVED' },
+      {
+        id: 'ln-1',
+        content: 'Leche',
+        quantity: 2,
+        unit: 'UNIT',
+        approvalStatus: 'APPROVED',
+      },
       {
         id: 'ln-2',
         content: 'Leche para el café',
@@ -1716,6 +1768,7 @@ describe('toItemLists', () => {
           listId: 'list-weekly',
           name: 'Leche',
           quantity: 2,
+          unit: 'UNIT',
           pending: false,
           itemIds: ['item-milk'],
         },
@@ -1724,6 +1777,7 @@ describe('toItemLists', () => {
           listId: 'list-weekly',
           name: 'Leche para el café',
           quantity: 0,
+          unit: 'UNIT',
           pending: true,
           itemIds: ['item-milk'],
         },
@@ -1794,6 +1848,7 @@ describe('toItemLists', () => {
         listId: 'list-weekly',
         name: 'Leche',
         quantity: 0,
+        unit: 'UNIT',
         pending: false,
         itemIds: ['item-milk'],
       },

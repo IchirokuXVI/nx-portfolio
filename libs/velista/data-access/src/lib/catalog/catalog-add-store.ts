@@ -1,10 +1,12 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
   addedToLine,
+  defaultQuantity,
   firstAddTarget,
   isCatalogUrl,
   isUnsavedLine,
   sameLineName,
+  stepFrom,
   unsavedLineId,
   visitAddition,
   visitAfterAdd,
@@ -16,6 +18,7 @@ import {
   type HeldLine,
   type ItemList,
   type Line,
+  type LineUnit,
   type MyZone,
   type ShoppingListSummary,
   type VisitList,
@@ -36,6 +39,12 @@ export interface CatalogAddProduct {
   readonly detail: string | null;
   /** The photo of the row, which the sheet of the visit draws, or null. */
   readonly imageUrl: string | null;
+  /**
+   * What a line of this product counts in (velista `0182`):
+   * `lineUnitOf(soldAsOf(offer, product))`. Absent is a count. An add starts at
+   * `defaultQuantity` of it, one piece or one kilo.
+   */
+  readonly unit?: LineUnit;
 }
 
 /** Where a read is: not asked for, on its way, answered, or not answered. */
@@ -357,8 +366,9 @@ export class CatalogAddStore {
       ),
       product.name
     );
+    const unit = product.unit ?? 'UNIT';
     if (own !== null) {
-      this._move(own.lineId, 1);
+      this._move(own.lineId, defaultQuantity(own.unit));
       return own.lineId;
     }
     const lineId = unsavedLineId(listId, product.itemId);
@@ -368,7 +378,8 @@ export class CatalogAddStore {
         lineId,
         listId,
         name: product.name,
-        quantity: 1,
+        quantity: defaultQuantity(unit),
+        unit,
         pending: false,
         itemIds: [product.itemId],
       },
@@ -389,6 +400,9 @@ export class CatalogAddStore {
     generation: number
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
+    // One piece or one kilo, in the product's unit (velista `0182`).
+    const unit = product.unit ?? 'UNIT';
+    const amount = defaultQuantity(unit);
     try {
       // Not named: the words are the product's (velista `0144`, section 3), and
       // they are still sent, because the server needs them and `sameLineName`
@@ -396,9 +410,11 @@ export class CatalogAddStore {
       const result = await this._lines.addLineResult(
         listId,
         product.name,
-        1,
+        amount,
         [product.itemId],
-        false
+        false,
+        undefined,
+        unit
       );
       if (generation !== this._generation) {
         return;
@@ -410,7 +426,7 @@ export class CatalogAddStore {
       // and each add still on its way corrects itself the same way.
       const elsewhere = drawnOn !== result.line.id && !isUnsavedLine(drawnOn);
       if (elsewhere) {
-        this._move(drawnOn, -1);
+        this._move(drawnOn, -amount);
       }
       this._held.update((held) =>
         upsert(
@@ -428,7 +444,8 @@ export class CatalogAddStore {
             imageUrl: product.imageUrl,
           },
           stateOf(result.line),
-          result.merged
+          result.merged,
+          amount
         )
       );
     } catch {
@@ -447,10 +464,10 @@ export class CatalogAddStore {
             sameLineName(line.name, product.name)
         );
       if (drawn !== undefined) {
-        if (isUnsavedLine(drawn.lineId) && drawn.quantity <= 1) {
+        if (isUnsavedLine(drawn.lineId) && drawn.quantity <= amount) {
           this._drop(drawn.lineId);
         } else {
-          this._move(drawn.lineId, -1);
+          this._move(drawn.lineId, -amount);
         }
       }
       this._failures.update((count) => count + 1);
@@ -467,8 +484,11 @@ export class CatalogAddStore {
     if (line === undefined || isUnsavedLine(lineId)) {
       return;
     }
-    const next = line.quantity + by;
-    if (next < 0) {
+    // One step of the line's unit, so a weight moves by 25 g or 250 g and a count
+    // by one (velista `0182`, section 3).
+    const next = stepFrom(line.quantity, line.unit, by);
+    const delta = next - line.quantity;
+    if (next < 0 || delta === 0) {
       return;
     }
     const entry = visitAddition(this._visit(), lineId);
@@ -477,20 +497,24 @@ export class CatalogAddStore {
       return;
     }
 
-    this._move(lineId, by);
+    this._move(lineId, delta);
     try {
-      const answer = await this._lines.addQuantity(lineId, by);
+      const answer = await this._lines.addQuantity(
+        lineId,
+        delta,
+        line.unit ?? 'UNIT'
+      );
       if (generation !== this._generation) {
         return;
       }
       const ahead = this._adding.get(keyOf(product.listId, product.itemId));
       this._held.update((held) => upsert(held, heldOf(answer, ahead ?? 0)));
       this._visit.update((visit) =>
-        visitAfterStep(visit, product, stateOf(answer), answer.quantity - by)
+        visitAfterStep(visit, product, stateOf(answer), answer.quantity - delta)
       );
     } catch {
       if (generation === this._generation) {
-        this._move(lineId, by === 1 ? -1 : 1);
+        this._move(lineId, -delta);
         this._failures.update((count) => count + 1);
       }
     }
@@ -508,6 +532,7 @@ export class CatalogAddStore {
     );
     const at = this._visit().indexOf(entry);
     const before = this._held();
+    const unit = before.find((line) => line.lineId === lineId)?.unit ?? 'UNIT';
     this._visit.update((visit) => visitWithout(visit, lineId));
     if (undo.kind === 'delete') {
       this._drop(lineId);
@@ -519,7 +544,11 @@ export class CatalogAddStore {
       if (undo.kind === 'delete') {
         await this._lines.deleteLine(undo.lineId);
       } else {
-        const answer = await this._lines.addQuantity(undo.lineId, -undo.by);
+        const answer = await this._lines.addQuantity(
+          undo.lineId,
+          -undo.by,
+          unit
+        );
         if (generation === this._generation) {
           this._held.update((held) => upsert(held, heldOf(answer, 0)));
         }
@@ -742,7 +771,9 @@ function heldOf(line: Line, ahead: number): HeldLine {
     lineId: line.id,
     listId: line.listId,
     name: line.content,
-    quantity: line.quantity + ahead,
+    // Each add on its way is one piece or one kilo of the line's unit.
+    quantity: line.quantity + ahead * defaultQuantity(line.unit),
+    unit: line.unit,
     pending: line.approvalStatus === 'PENDING',
     itemIds: line.itemIds,
   };

@@ -1740,6 +1740,7 @@ describe('BasketViewStore: the estimated total', () => {
       leftCents: 345,
       totalCents: 345,
       currency: 'EUR',
+      estimated: false,
     });
   });
 
@@ -1867,6 +1868,7 @@ describe('BasketViewStore: the estimated total', () => {
       leftCents: 0,
       totalCents: 0,
       currency: null,
+      estimated: false,
     });
     expect(
       harnessed.view.settleShop(

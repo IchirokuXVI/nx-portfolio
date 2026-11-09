@@ -10,6 +10,8 @@ import {
   GENERATION_SCOPES,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
+  LINE_UNIT_FALLBACK,
+  LINE_UNITS,
   LIST_PERMISSIONS,
   MEMBERSHIP_STATUS_FALLBACK,
   MEMBERSHIP_STATUSES,
@@ -400,6 +402,9 @@ export function toLine(raw: unknown): Line | null {
     // that predates the flag named every line it made.
     named: raw['named'] !== false,
     quantity: numOr(raw['quantity'], 1),
+    // What the quantity counts (velista `0182`). A unit this build does not know,
+    // and a server before backend `0246`, read as a count.
+    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
     // A set now, where this read a single nullable `itemId` (backend plan 0048,
     // section 1.1). Ids that are not strings are dropped rather than kept as
     // holes: a product reference nobody can resolve is not a product.
@@ -582,6 +587,7 @@ function toHeldLine(
     listId,
     name,
     quantity: numOr(raw['quantity'], 0),
+    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
     pending: raw['approvalStatus'] === 'PENDING',
     itemIds: [itemId],
   };
@@ -610,6 +616,10 @@ export function toLineSettlement(raw: unknown): LineSettlement | null {
       SETTLEMENT_OUTCOME_FALLBACK
     ),
     quantity: numOr(raw['quantity'], 0),
+    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
+    // Only a JSON `true` is an estimate: a server before backend `0246` priced
+    // counts alone, and a count at its price is exact.
+    estimated: raw['estimated'] === true,
     settledByUserId: nullableStr(raw['settledByUserId']),
     settledAt,
     // Absent against a backend before luna `0054`, which reads as null: a history

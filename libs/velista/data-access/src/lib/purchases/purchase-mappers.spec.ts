@@ -54,9 +54,28 @@ describe('purchase mappers (velista 0095, test 1)', () => {
       name: null,
       startedAt: new Date('2026-09-20T10:00:00.000Z'),
       purchaseCount: 3,
-      spend: { cents: 1240, currency: 'EUR', unpricedCount: 1 },
+      bought: {},
+      spend: {
+        cents: 1240,
+        currency: 'EUR',
+        unpricedCount: 1,
+        estimated: false,
+      },
       unpricedCount: 1,
     });
+  });
+
+  it('maps what an entry bought per unit, and whether its spend is an estimate (velista 0182)', () => {
+    const entry = toPurchaseEntry({
+      ...ENTRY,
+      bought: { UNIT: 2, GRAM: 750, MILLILITER: 0, OUNCE: 4 },
+      estimated: true,
+    });
+
+    // A zero and a unit this build does not know are left out.
+    expect(entry?.bought).toEqual({ UNIT: 2, GRAM: 750 });
+    expect(entry?.spend?.estimated).toBe(true);
+    expect(toPurchaseEntry({ ...ENTRY, bought: 'lots' })?.bought).toEqual({});
   });
 
   it('refuses an entry with no id or no readable date', () => {
@@ -103,10 +122,22 @@ describe('purchase mappers (velista 0095, test 1)', () => {
       content: 'Milk',
       itemId: 'item-1',
       quantity: 3,
+      unit: 'UNIT',
+      estimated: false,
       unitPriceCents: 115,
       currency: 'EUR',
       listName: 'Home',
     });
+
+    // A weighed row counts grams, and its cost is an estimate (velista 0182).
+    expect(
+      toPurchaseEntryRow({
+        ...ROW,
+        quantity: 250,
+        unit: 'GRAM',
+        estimated: true,
+      })
+    ).toMatchObject({ quantity: 250, unit: 'GRAM', estimated: true });
 
     const gone = toPurchaseEntryRow({
       ...ROW,

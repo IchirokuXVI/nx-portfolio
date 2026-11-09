@@ -8,6 +8,8 @@ import {
   BASKET_STATUS_FALLBACK,
   BASKET_STATUSES,
   BASKET_USUAL_STATES,
+  LINE_UNIT_FALLBACK,
+  LINE_UNITS,
   PARTICIPANT_KIND_FALLBACK,
   PARTICIPANT_KINDS,
   type Basket,
@@ -34,6 +36,7 @@ import {
   type BasketSession,
   type BasketShareLink,
   type BasketShop,
+  type LineUnit,
   type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
@@ -175,7 +178,10 @@ export function toBasketPresenceEntry(
  * client does not draw, and zero is the state that offers nothing rather than the
  * state that offers the wrong thing.
  */
-function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
+function toBasketRowEntry(
+  raw: unknown,
+  rowUnit: LineUnit = LINE_UNIT_FALLBACK
+): BasketRowEntry | null {
   if (!isRecord(raw)) {
     return null;
   }
@@ -207,6 +213,10 @@ function toBasketRowEntry(raw: unknown): BasketRowEntry | null {
     // Zero when absent, which is a gateway before backend `0204`: every patch is
     // then at least as new as the entry, and the store applies it.
     version: atLeastZero(raw['version']),
+    // The entry view names no unit: a row is one unit (backend `0246` M6), so
+    // an entry counts in its row's. A write answer has no row, and the store
+    // puts each entry back into the row that holds it.
+    unit: oneOf(raw['unit'], LINE_UNITS, rowUnit),
     left,
     bought,
     // Zero when absent, which is a gateway without backend `0188` behind it, and
@@ -274,7 +284,11 @@ export function toBasketRow(raw: unknown): BasketRow | null {
     BASKET_ROW_STATES,
     BASKET_ROW_STATE_FALLBACK
   );
-  const entries = mapArray(raw['entries'], toBasketRowEntry);
+  // What the row counts (velista `0182`), a count when absent or unknown.
+  const unit = oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK);
+  const entries = mapArray(raw['entries'], (entry) =>
+    toBasketRowEntry(entry, unit)
+  );
   if (entries.length === 0 && state !== 'REMOVED') {
     return null;
   }
@@ -286,6 +300,7 @@ export function toBasketRow(raw: unknown): BasketRow | null {
   return {
     rowKey,
     content,
+    unit,
     left,
     bought,
     // Read where the wire states it, and the sum where it does not, which is the
@@ -455,7 +470,7 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
   }
 
   return {
-    entries: mapArray(raw['entries'], toBasketRowEntry),
+    entries: mapArray(raw['entries'], (entry) => toBasketRowEntry(entry)),
     skippedCount: atLeastZero(raw['skippedCount']),
   };
 }
@@ -965,6 +980,7 @@ export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
   }
   const lineId = str(raw['lineId']);
   const version = wholeCount(raw['version']);
+  const unit = oneOfOrNull(raw['unit'], LINE_UNITS);
   const left = wholeCount(raw['left']);
   const bought = wholeCount(raw['bought']);
   const boughtElsewhere = wholeCount(raw['boughtElsewhere']);
@@ -977,6 +993,9 @@ export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
   if (
     lineId === null ||
     version === null ||
+    // Required since backend `0246`: a patch that does not say what it counts
+    // cannot be put on a row, and the store reads instead.
+    unit === null ||
     left === null ||
     bought === null ||
     boughtElsewhere === null ||
@@ -994,6 +1013,7 @@ export function toBasketEntryPatch(raw: unknown): BasketEntryPatch | null {
   return {
     lineId,
     version,
+    unit,
     left,
     bought,
     boughtElsewhere,

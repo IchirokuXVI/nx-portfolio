@@ -71,7 +71,9 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
   'list-weekly': [
     // Wanted again, and the shop had none last time. The combined row of the mock,
     // and the one that proves the two indicators are a list rather than a value.
-    missing('ln-w-01', 'list-weekly', 'Sourdough loaf', 2, 1, { boughtCount: 3 }),
+    missing('ln-w-01', 'list-weekly', 'Sourdough loaf', 2, 1, {
+      boughtCount: 3,
+    }),
     // Settled, with a set of products behind it, so the line page has both its
     // histories and the "which one did you buy" step has something to ask.
     settled('ln-w-02', 'list-weekly', 'Milk', 2, {
@@ -109,8 +111,12 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
     wanted('ln-w-12', 'list-weekly', 'Kitchen roll', 2, 17),
   ],
   'list-cleaning': [
-    settled('ln-c-01', 'list-cleaning', 'Bleach', 1, { createdByUserId: 'user-toni' }),
-    settled('ln-c-02', 'list-cleaning', 'Sponges', 2, { createdByUserId: 'user-toni' }),
+    settled('ln-c-01', 'list-cleaning', 'Bleach', 1, {
+      createdByUserId: 'user-toni',
+    }),
+    settled('ln-c-02', 'list-cleaning', 'Sponges', 2, {
+      createdByUserId: 'user-toni',
+    }),
     settled('ln-c-03', 'list-cleaning', 'Floor cleaner', 4, {
       createdByUserId: 'user-toni',
     }),
@@ -121,7 +127,9 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
   // `WRITE` and no `DECIDE` (see `SEED_LIST_ACCESS`). Rosa decides on this one, so
   // every row here opens and no reel on it moves.
   'list-pantry': [
-    settled('ln-p-01', 'list-pantry', 'Rice', 1, { createdByUserId: 'user-mum' }),
+    settled('ln-p-01', 'list-pantry', 'Rice', 1, {
+      createdByUserId: 'user-mum',
+    }),
     // Approved and therefore untouchable by `WRITE`: no edit, no delete, no reel.
     wanted('ln-p-02', 'list-pantry', 'Olive oil', 1, 2, {
       createdByUserId: 'user-mum',
@@ -146,7 +154,9 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
     wanted('ln-m-01', 'list-market', 'Tinned tomatoes', 3, 1, {
       createdByUserId: 'user-dad',
     }),
-    settled('ln-m-02', 'list-market', 'Bread', 2, { createdByUserId: 'user-dad' }),
+    settled('ln-m-02', 'list-market', 'Bread', 2, {
+      createdByUserId: 'user-dad',
+    }),
     wanted('ln-m-03', 'list-market', 'Coffee', 1, 4, {
       approvalStatus: 'PENDING',
       createdByUserId: 'user-rosa',
@@ -171,14 +181,24 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
     settled('ln-s-02', 'list-sunday', 'Rosemary', 2, {
       createdByUserId: 'user-mum',
     }),
-    wanted('ln-s-03', 'list-sunday', 'Potatoes', 3, 3, { createdByUserId: 'user-mum' }),
-    wanted('ln-s-04', 'list-sunday', 'Carrots', 5, 4, { createdByUserId: 'user-mum' }),
-    wanted('ln-s-05', 'list-sunday', 'Gravy', 1, 6, { createdByUserId: 'user-mum' }),
-    wanted('ln-s-06', 'list-sunday', 'Red wine', 2, 7, { createdByUserId: 'user-mum' }),
+    wanted('ln-s-03', 'list-sunday', 'Potatoes', 3, 3, {
+      createdByUserId: 'user-mum',
+    }),
+    wanted('ln-s-04', 'list-sunday', 'Carrots', 5, 4, {
+      createdByUserId: 'user-mum',
+    }),
+    wanted('ln-s-05', 'list-sunday', 'Gravy', 1, 6, {
+      createdByUserId: 'user-mum',
+    }),
+    wanted('ln-s-06', 'list-sunday', 'Red wine', 2, 7, {
+      createdByUserId: 'user-mum',
+    }),
     wanted('ln-s-07', 'list-sunday', 'Mint sauce', 1, 8, {
       createdByUserId: 'user-mum',
     }),
-    wanted('ln-s-08', 'list-sunday', 'Cream', 1, 10, { createdByUserId: 'user-mum' }),
+    wanted('ln-s-08', 'list-sunday', 'Cream', 1, 10, {
+      createdByUserId: 'user-mum',
+    }),
     wanted('ln-s-09', 'list-sunday', 'Apple pie', 1, 11, {
       createdByUserId: 'user-dad',
     }),
@@ -200,6 +220,8 @@ function line(
     // Typed by a person, like every line of the fixture.
     named: true,
     quantity,
+    // Counted, as every free text line is (velista `0182`).
+    unit: 'UNIT',
     position,
     // Free text, which is what most lines are and stays first class (section 6).
     itemIds: [],

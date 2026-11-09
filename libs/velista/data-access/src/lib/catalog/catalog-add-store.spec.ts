@@ -112,6 +112,8 @@ function setup(world: World) {
   const calls: string[] = [];
   /** The `named` of every add, in order (velista `0144`). */
   const addedNamed: (false | undefined)[] = [];
+  /** The unit every add and every step named (velista `0182`). */
+  const units: (string | undefined)[] = [];
   const storage = new Map<string, string>();
   if (world.lastList !== undefined) {
     storage.set(StorageKeys.lastList, world.lastList);
@@ -236,9 +238,18 @@ function setup(world: World) {
         hasMore: false,
       });
     },
-    addLineResult: async (listId, content, quantity, itemIds, named) => {
+    addLineResult: async (
+      listId,
+      content,
+      quantity,
+      itemIds,
+      named,
+      _options,
+      unit
+    ) => {
       calls.push(`add:${listId}:${content}:${quantity}:${itemIds?.join(',')}`);
       addedNamed.push(named);
+      units.push(unit);
       await written();
       const existing = linesOf(listId).find(
         (held) =>
@@ -257,6 +268,7 @@ function setup(world: World) {
       const made = line(`line-${++nextId}`, listId, {
         content,
         quantity: quantity ?? 1,
+        unit: unit ?? 'UNIT',
         itemIds: [...(itemIds ?? [])],
         approvalStatus: pendingNext ? 'PENDING' : 'APPROVED',
       });
@@ -264,8 +276,9 @@ function setup(world: World) {
       server.set(made.id, made);
       return { line: made, merged: false };
     },
-    addQuantity: async (lineId, delta) => {
+    addQuantity: async (lineId, delta, unit) => {
       calls.push(`quantity:${lineId}:${delta}`);
+      units.push(unit);
       await written();
       const current = server.get(lineId) as Line;
       const moved = { ...current, quantity: current.quantity + delta };
@@ -308,6 +321,7 @@ function setup(world: World) {
     store,
     calls,
     addedNamed,
+    units,
     storage,
     /** The lines as the server holds them. */
     server,
@@ -687,6 +701,51 @@ describe('CatalogAddStore', () => {
 
       expect(store.linesStatus()).toBe('ready');
       expect(store.held().map((held) => held.lineId)).toContain('m-milk');
+    });
+  });
+
+  describe('a product sold by the kilo (velista 0182, criterion 7)', () => {
+    const BANANAS = {
+      itemId: 'bananas',
+      name: 'Plátanos',
+      detail: null,
+      imageUrl: null,
+      unit: 'GRAM' as const,
+    };
+
+    it('adds a kilo, in grams, and says so', async () => {
+      const { store, calls, units } = setup(HOME);
+      await store.ensure();
+
+      await store.add(BANANAS);
+
+      expect(calls).toContain('add:weekly:Plátanos:1000:bananas');
+      expect(units).toEqual(['GRAM']);
+      expect(store.visit()[0]?.quantity).toBe(1000);
+    });
+
+    it('steps by the unit, in the line’s unit', async () => {
+      const { store, calls, units } = setup(HOME);
+      await store.ensure();
+      await store.add(BANANAS);
+
+      await store.step(on('weekly', BANANAS), 'line-1', 1);
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+
+      expect(calls).toContain('quantity:line-1:250');
+      expect(calls).toContain('quantity:line-1:-250');
+      expect(calls).toContain('quantity:line-1:-25');
+      expect(units).toEqual(['GRAM', 'GRAM', 'GRAM', 'GRAM']);
+    });
+
+    it('counts a product with no unit named, as before', async () => {
+      const { store, units } = setup(HOME);
+      await store.ensure();
+
+      await store.add(MILK);
+
+      expect(units).toEqual(['UNIT']);
     });
   });
 

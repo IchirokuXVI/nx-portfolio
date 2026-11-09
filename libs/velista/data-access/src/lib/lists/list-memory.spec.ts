@@ -619,6 +619,7 @@ describe('LineMemory refuses what the server would refuse', () => {
           listId: 'list-weekly',
           name: 'Milk',
           quantity: 0,
+          unit: 'UNIT',
           pending: false,
           itemIds: ['item-milk-hacendado', 'item-milk-pascual'],
         },

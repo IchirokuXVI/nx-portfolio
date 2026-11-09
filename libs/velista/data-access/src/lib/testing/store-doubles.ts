@@ -9,6 +9,7 @@ import type {
   Line,
   LineApprovalStatus,
   LineSettlement,
+  LineUnit,
   LiveBasketSummary,
   Membership,
   MembershipStatus,
@@ -995,7 +996,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
       _approval: unknown,
       itemIds?: readonly string[],
       named?: false,
-      options?: AddLineOptions
+      options?: AddLineOptions,
+      unit: LineUnit = 'UNIT'
     ): Promise<
       | {
           readonly state: 'added';
@@ -1046,6 +1048,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         content,
         named: named !== false || (itemIds ?? []).length === 0,
         quantity,
+        unit,
         itemIds: [...(itemIds ?? [])],
         // Following no group, like every line the composer adds: nothing on the
         // client creates a binding, so a double that invented one would put a `Keep`

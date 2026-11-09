@@ -1663,7 +1663,7 @@ describe('BasketStore: moving a row’s reel', () => {
     expect(sent).toEqual([
       {
         target: { rowKey: milk.rowKey, lineIds: ['zl-1', 'zl-2'] },
-        body: { outcome: 'BOUGHT', quantity: 2, from: milk.left },
+        body: { outcome: 'BOUGHT', quantity: 2, from: milk.left, unit: 'UNIT' },
       },
     ]);
   });
@@ -1769,6 +1769,61 @@ describe('BasketStore: moving a row’s reel', () => {
     // And the failure is still there to be named, rather than cleared by the read
     // that followed it.
     expect((store.error() as GatewayError).code).toBe('stale_quantity');
+  });
+
+  /**
+   * Velista `0182`, criterion 7: the line counts in another unit now. Read again as
+   * for a stale quantity, so the server's row replaces the preview, and no error is
+   * kept, because the person did nothing wrong.
+   */
+  it('reads the basket again on a line_unit_mismatch and keeps no error', async () => {
+    let reads = 0;
+    const memory = new BasketMemory();
+    const sent: (string | undefined)[] = [];
+    const { store } = build({
+      getBasket: () => {
+        reads += 1;
+        return memory.getBasket();
+      },
+      settle: (id, rowKey, body) => {
+        sent.push(body.unit);
+        return memory.settle(id, rowKey, { ...body, unit: 'GRAM' });
+      },
+    });
+    await store.open('basket-saturday');
+    const readsAfterOpen = reads;
+    const milk = rowOf(store, 'Milk');
+
+    const result = await store.setLeft(milk.rowKey, 0, milk.left);
+
+    // The store sent the row's own unit; the fake answered as a server whose line
+    // had moved to grams meanwhile.
+    expect(sent).toEqual(['UNIT']);
+    expect(result).toBeNull();
+    expect(reads).toBe(readsAfterOpen + 1);
+    expect(store.error()).toBeNull();
+  });
+
+  it('sends the unit of the entry on a demand (velista 0182)', async () => {
+    const memory = new BasketMemory();
+    const sent: (string | undefined)[] = [];
+    const { store } = build({
+      getBasket: () => memory.getBasket(),
+      setDemand: (id, body) => {
+        sent.push(body.unit);
+        return memory.setDemand(id, body);
+      },
+    });
+    await store.open('basket-saturday');
+    const milk = rowOf(store, 'Milk');
+
+    await store.setDemand({
+      lineId: milk.entries[0].lineId,
+      quantity: milk.entries[0].asked + 1,
+      from: milk.entries[0].left,
+    });
+
+    expect(sent).toEqual(['UNIT']);
   });
 });
 

@@ -1,6 +1,9 @@
 import {
+  LINE_UNIT_FALLBACK,
+  LINE_UNITS,
   PURCHASE_ENTRY_KIND_FALLBACK,
   PURCHASE_ENTRY_KINDS,
+  type LineUnit,
   type PurchaseEntry,
   type PurchaseEntryPage,
   type PurchaseEntryRow,
@@ -48,7 +51,10 @@ export function toPurchaseEntry(raw: unknown): PurchaseEntry | null {
     // `anyBoughtLineCount` since backend 0159, which renamed it from
     // `boughtLineCount` because a trip counts something else under that name.
     purchaseCount: count(raw['anyBoughtLineCount']),
-    spend: toSpend(raw['spent'], unpricedCount),
+    bought: toBoughtByUnit(raw['bought']),
+    // Only a JSON `true` is an estimate (velista `0182`): a server before backend
+    // `0246` priced counts alone.
+    spend: toSpend(raw['spent'], unpricedCount, raw['estimated'] === true),
     unpricedCount,
   };
 }
@@ -87,6 +93,8 @@ export function toPurchaseEntryRow(raw: unknown): PurchaseEntryRow | null {
     content: nullableStr(raw['content']),
     itemId: nullableStr(raw['itemId']),
     quantity: count(raw['quantity']),
+    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
+    estimated: raw['estimated'] === true,
     unitPriceCents: price?.cents ?? null,
     currency: price?.currency ?? null,
     listName: nullableStr(raw['listName']),
@@ -112,9 +120,32 @@ function toMoney(raw: unknown): { cents: number; currency: string } | null {
   return { cents: Math.round(cents), currency };
 }
 
-function toSpend(raw: unknown, unpricedCount: number): PurchaseSpend | null {
+function toSpend(
+  raw: unknown,
+  unpricedCount: number,
+  estimated: boolean
+): PurchaseSpend | null {
   const money = toMoney(raw);
-  return money === null ? null : { ...money, unpricedCount };
+  return money === null ? null : { ...money, unpricedCount, estimated };
+}
+
+/**
+ * What an entry bought, per unit (velista `0182`, backend `0246` section 3.5).
+ * A unit this build does not know, a count that is not a number and a zero are
+ * left out, so an entry that bought nothing is `{}`.
+ */
+function toBoughtByUnit(raw: unknown): Partial<Record<LineUnit, number>> {
+  if (!isRecord(raw)) {
+    return {};
+  }
+  const bought: Partial<Record<LineUnit, number>> = {};
+  for (const unit of LINE_UNITS) {
+    const amount = count(raw[unit]);
+    if (amount > 0) {
+      bought[unit] = amount;
+    }
+  }
+  return bought;
 }
 
 function count(raw: unknown): number {

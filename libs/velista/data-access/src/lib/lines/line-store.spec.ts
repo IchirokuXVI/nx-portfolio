@@ -28,6 +28,7 @@ function line(id: string, overrides: Partial<Line> = {}): Line {
     listId: LIST,
     content: 'Sourdough loaf',
     quantity: 1,
+    unit: 'UNIT',
     itemIds: [],
     productGroupId: null,
     groupItemIds: [],
@@ -91,6 +92,8 @@ function service(seed: readonly Line[]) {
   let raiseNext: Line | null = null;
   /** What each add said about a name the list holds, in order (backend `0228`). */
   const addOptions: (AddLineOptions | undefined)[] = [];
+  /** The unit every write named, in order, for velista `0182`. */
+  const units: (string | undefined)[] = [];
 
   /** Set while the reads after the first are held open, opened by `releaseFollowUps`. */
   let followUps: Promise<void> | null = null;
@@ -162,6 +165,7 @@ function service(seed: readonly Line[]) {
       };
     },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
+      units.push(changes.unit);
       const absorbedLineId = absorbNext;
       absorbNext = null;
       return {
@@ -169,9 +173,12 @@ function service(seed: readonly Line[]) {
         absorbedLineId,
       };
     },
-    addQuantity: async (lineId, delta) =>
-      answer(line(lineId, { quantity: 1 + delta, version: 2 })),
+    addQuantity: async (lineId, delta, unit) => {
+      units.push(unit);
+      return answer(line(lineId, { quantity: 1 + delta, unit, version: 2 }));
+    },
     settle: async (lineId, outcome, options) => {
+      units.push(options.unit);
       // Awaited, and that matters: `answer` is what `failNext` throws from, and an
       // unawaited rejection here takes the whole jest worker down rather than failing
       // the one spec that staged it.
@@ -251,6 +258,7 @@ function service(seed: readonly Line[]) {
       raiseNext = value;
     },
     addOptions,
+    units,
     /** The rest of a long list stays out until `releaseFollowUps`. */
     holdFollowUps: () => {
       followUps = new Promise<void>((resolve) => {
@@ -870,6 +878,73 @@ describe('LineStore', () => {
 
       expect(outcome).toBe('overwritten');
       expect(store.writeNoteOf('a')?.outcome).toBe('overwritten');
+    });
+
+    describe('the unit (velista 0182, criterion 7)', () => {
+      it('sends the line’s unit with the delta, and adds base units', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 750, unit: 'GRAM' }),
+        ]);
+        await store.load(LIST);
+
+        const writing = store.addQuantity('a', -250);
+
+        expect(store.linesIn(LIST)[0].quantity).toBe(500);
+        await writing;
+        expect(lines.units).toEqual(['GRAM']);
+      });
+
+      it('sends the line’s unit with an absolute quantity, and none with a rename', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 750, unit: 'GRAM' }),
+        ]);
+        await store.load(LIST);
+
+        await store.updateLine('a', { quantity: 1000 });
+        await store.updateLine('a', { content: 'Bananas' });
+
+        expect(lines.units).toEqual(['GRAM', undefined]);
+      });
+
+      it('settles in the line’s unit', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 750, unit: 'GRAM' }),
+        ]);
+        await store.load(LIST);
+
+        await store.settle('a', 'BOUGHT', { quantity: 250 });
+
+        expect(lines.units).toEqual(['GRAM']);
+      });
+
+      it('recovers a line_unit_mismatch as stale_quantity: reads the line again and shows no error', async () => {
+        const { store, lines } = await build([
+          line('a', { quantity: 2, unit: 'UNIT' }),
+        ]);
+        await store.load(LIST);
+        // Somebody moved the line to grams; the read brings it.
+        lines.setServed([
+          line('a', { quantity: 750, unit: 'GRAM', version: 3 }),
+        ]);
+        lines.failNext(
+          new GatewayError({
+            status: 409,
+            code: 'line_unit_mismatch',
+            correlationId: 'c1',
+            detail: 'This line counts in another unit',
+          })
+        );
+
+        const outcome = await store.addQuantity('a', 1);
+
+        expect(outcome).toBe('overwritten');
+        expect(store.writeNoteOf('a')).toBeNull();
+        expect(store.linesIn(LIST)[0]).toMatchObject({
+          quantity: 750,
+          unit: 'GRAM',
+        });
+        expect(lines.calls.filter((call) => call === 'list')).toHaveLength(2);
+      });
     });
 
     it('shows the server’s value once the write has landed', async () => {
