@@ -1,3 +1,5 @@
+> **PR:** [#960](https://github.com/IchirokuXVI/nx-portfolio/pull/960)
+
 # 0182: a loose product is asked for by weight
 
 > Decided on 2026-11-05. A line for bananas sold by the kilo says "×1" and means one kilo,
