@@ -31453,7 +31453,7 @@
           },
           "askIfAmbiguous": {
             "type": "boolean",
-            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit gets the same refusal naming that one line (plan 0246 M5)."
+            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before."
           },
           "intoLineId": {
             "type": "string",
@@ -31462,7 +31462,7 @@
           },
           "newLine": {
             "type": "boolean",
-            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
+            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
           }
         },
         "required": [
@@ -32080,7 +32080,7 @@
           },
           "askIfAmbiguous": {
             "type": "boolean",
-            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit gets the same refusal naming that one line (plan 0246 M5)."
+            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before."
           },
           "intoLineId": {
             "type": "string",
@@ -32089,7 +32089,7 @@
           },
           "newLine": {
             "type": "boolean",
-            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
+            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
           }
         },
         "required": [

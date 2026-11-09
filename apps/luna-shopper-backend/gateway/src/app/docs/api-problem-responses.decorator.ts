@@ -82,8 +82,8 @@ export interface ProblemResponseOptions {
    * product can answer 409 with a code of its own when the body set
    * `askIfAmbiguous` (plan 0228). It is told apart from a plain conflict
    * because the client asks the person which line, from `details.lines`. An
-   * add that meets one line of another unit answers the same code with that
-   * line alone, whatever the body set (plan 0246 M5).
+   * add that meets a line of another unit and none of its own unit answers
+   * the same code with that line alone, whatever the body set (plan 0246 M5).
    */
   lineAddChoice?: boolean;
   /**

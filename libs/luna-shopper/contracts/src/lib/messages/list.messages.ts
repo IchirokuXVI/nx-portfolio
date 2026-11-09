@@ -764,6 +764,11 @@ export interface LineAddChoice {
   content: string;
   named: boolean;
   quantity: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.1), so a client can
+   * say why a line of another unit was offered rather than raised (M5).
+   */
+  unit: LineUnit;
   itemIds: string[];
   productGroupId: string | null;
   approvalStatus: LineApprovalStatus;

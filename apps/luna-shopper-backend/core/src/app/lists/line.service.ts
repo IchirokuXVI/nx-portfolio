@@ -7,6 +7,7 @@ import {
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   LineItemSource,
   ListPermission,
@@ -272,6 +273,15 @@ interface LineWriter {
   transaction<T>(
     work: (manager: EntityManager, record: RecordLine) => Promise<T>
   ): Promise<T>;
+}
+
+/**
+ * An add identity asked of the lines in one unit (plan 0246 M5), as the key
+ * {@link LineService.findAddTarget} answers beside the identity alone. The NUL
+ * cannot occur in a name or a digest, so no identity reads as another's.
+ */
+function inUnit(identity: string, unit: LineUnit): string {
+  return `${identity}\0${unit}`;
 }
 
 /**
@@ -938,11 +948,14 @@ export class LineService {
    *
    * ## A line of another unit is a question, never a sum (plan 0246 M5)
    *
-   * Whatever way the add meets a line, a line that counts in another unit is
-   * not raised: the add refuses with `line_add_needs_choice` naming that one
-   * line, and writes nothing. `newLine: true` then creates a line in the add's
-   * unit, a product add included, and an `intoLineId` of another unit is
-   * `line_unit_differs`.
+   * The add lands on a line of its own unit first, whichever line of the
+   * thing sits earlier. Only when its unit holds none is a line that counts in
+   * another unit met, and it is not raised: the add refuses with
+   * `line_add_needs_choice` naming that one line, and writes nothing.
+   * `newLine: true` then creates a line in the add's unit, a product add
+   * included, which every later add of that unit raises. An `intoLineId` of
+   * another unit is `line_unit_differs`. {@link addMany} has no place for the
+   * question, so its item creates a line in its own unit instead.
    */
   async add(req: AddLineRequest): Promise<AddLineResult> {
     const { list, permissions } = await this.listAccess.requireAccess(
@@ -1041,15 +1054,25 @@ export class LineService {
       // one name (plan 0091, section 3.1) asked of two ways to be the same thing.
       // For a free text add this is the free text line of the name, which takes
       // the add even beside `newLine` (plan 0228, target 1.2).
-      const existing = identities
-        .map((identity) => targets.get(identity))
-        .filter((line): line is ListLine => line !== undefined)
-        .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
-      if (existing !== undefined && !differs(existing)) {
-        return raise(existing);
+      //
+      // Asked first of the lines in the add's unit (plan 0246 M5), so the line
+      // a `newLine` answer created is the one the next add of that unit raises.
+      // Only when the unit holds none does a line of another unit answer, and
+      // then as a question.
+      const earliest = (keys: readonly string[]) =>
+        keys
+          .map((key) => targets.get(key))
+          .filter((line): line is ListLine => line !== undefined)
+          .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
+      const sameUnit = earliest(
+        identities.map((identity) => inUnit(identity, unit))
+      );
+      if (sameUnit !== undefined) {
+        return raise(sameUnit);
       }
-      if (existing !== undefined && !choice.newLine) {
-        throw await unitChoice(existing);
+      const otherUnit = earliest(identities);
+      if (otherUnit !== undefined && !choice.newLine) {
+        throw await unitChoice(otherUnit);
       }
 
       // A typed name meets the lines that hold a product under it (plan 0228,
@@ -1229,20 +1252,13 @@ export class LineService {
       const creations: { key: string; index: number; quantity: number }[] = [];
       const raises = new Map<string, { line: ListLine; delta: number }>();
       const byKey = new Map<string, number>();
-      const slots: (
-        | { created: number }
-        | { raised: string }
-        | { answered: string }
-      )[] = [];
-      // The lines met in another unit (plan 0246 M5): answered, never raised.
-      const answered = new Set<string>();
+      const slots: ({ created: number } | { raised: string })[] = [];
       for (const [index, key] of keys.entries()) {
-        const target = targets.get(key);
-        if (target && (target.unit ?? 'UNIT') !== units[index]) {
-          answered.add(target.id);
-          slots.push({ answered: target.id });
-          continue;
-        }
+        // Only a line in the item's unit is a target (plan 0246 M5). A line of
+        // another unit cannot be summed, and a batch has no place to ask the
+        // question a single add asks, so the item creates its own line in its
+        // unit beside it.
+        const target = targets.get(inUnit(key, units[index]));
         if (target) {
           const raise = raises.get(target.id) ?? { line: target, delta: 0 };
           raise.delta += quantities[index];
@@ -1252,7 +1268,7 @@ export class LineService {
         }
         // Two items of one thing fold only in one unit (plan 0246, section
         // 3.3): the second unit starts its own creation.
-        const unitKey = `${key}\0${units[index]}`;
+        const unitKey = inUnit(key, units[index]);
         const planned = byKey.get(unitKey);
         if (planned !== undefined) {
           creations[planned].quantity += quantities[index];
@@ -1316,14 +1332,7 @@ export class LineService {
           })
         );
       }
-      // Read as they stand, for the answer alone: nothing was written to them.
-      const met = new Map<string, WrittenLine>();
-      for (const lineId of answered) {
-        if (!raised.has(lineId)) {
-          met.set(lineId, await this.readWritten(manager, lineId));
-        }
-      }
-      return { creations, created, slots, raised, met };
+      return { creations, created, slots, raised };
     });
 
     // N events after the commit, and deliberately not one batch event: a new
@@ -1356,11 +1365,6 @@ export class LineService {
     for (const [lineId, entry] of written.raised) {
       views.set(lineId, this.announce(list, entry, 'caller'));
     }
-    // Answered and not announced: a line met in another unit did not change.
-    const metViews = new Map<string, LineView>();
-    for (const [lineId, entry] of written.met) {
-      metViews.set(lineId, entry.view);
-    }
     // One basket announcement for the whole batch, naming every line it touched
     // (plan 0139, section 3). The list rooms take the burst above, because each
     // of those events carries a whole line and a client applies them one by one.
@@ -1372,13 +1376,6 @@ export class LineService {
     // answer with that same line twice, and the second of them says `merged`.
     const seen = new Set<number>();
     return written.slots.map((slot) => {
-      if ('answered' in slot) {
-        return {
-          line: (views.get(slot.answered) ??
-            metViews.get(slot.answered)) as LineView,
-          merged: true,
-        };
-      }
       if ('raised' in slot) {
         return { line: views.get(slot.raised) as LineView, merged: true };
       }
@@ -1641,6 +1638,7 @@ export class LineService {
         content: line.content,
         named: line.named,
         quantity: line.quantity,
+        unit: line.unit ?? 'UNIT',
         itemIds: toLineItemSet(rows.filter((row) => row.lineId === line.id))
           .itemIds,
         productGroupId: line.productGroupId ?? null,
@@ -1708,13 +1706,37 @@ export class LineService {
    * when the two name the same thing **and** mean the same products by it. A
    * rename still asks the name alone, because it asks a person before it merges
    * (plan 0112), and an add asks nobody.
+   *
+   * ## The earliest line in each unit as well (plan 0246 M5)
+   *
+   * Each identity is answered twice: the earliest line under it whatever its
+   * unit, and under {@link inUnit} the earliest line under it in each unit. An
+   * add raises only a line of its own unit, so it asks the second key first.
+   * Asking the first alone would answer the earliest line of another unit
+   * forever, beside a line of the add's unit created after it.
    */
   private async findAddTarget(
     manager: EntityManager,
     listId: string,
     identities: readonly string[]
   ): Promise<Map<string, ListLine>> {
-    return this.findEarliestLines(manager, listId, identities, lineIdentities);
+    return this.findEarliestLines(
+      manager,
+      listId,
+      [
+        ...identities,
+        ...identities.flatMap((identity) =>
+          LINE_UNITS.map((unit) => inUnit(identity, unit))
+        ),
+      ],
+      (candidate) => {
+        const own = lineIdentities(candidate);
+        return [
+          ...own,
+          ...own.map((identity) => inUnit(identity, candidate.unit ?? 'UNIT')),
+        ];
+      }
+    );
   }
 
   /**
@@ -1730,7 +1752,7 @@ export class LineService {
     keysOf: (
       candidate: Pick<
         ListLine,
-        'content' | 'named' | 'itemSetHash' | 'productGroupId'
+        'content' | 'named' | 'itemSetHash' | 'productGroupId' | 'unit'
       >
     ) => readonly string[]
   ): Promise<Map<string, ListLine>> {
@@ -1751,6 +1773,8 @@ export class LineService {
         named: true,
         itemSetHash: true,
         productGroupId: true,
+        // What an add asks first: a line of its own unit (plan 0246 M5).
+        unit: true,
         approvalStatus: true,
         position: true,
       },
@@ -1771,11 +1795,19 @@ export class LineService {
 
     // Read again, whole and locked. The rows above were a few columns of a row
     // this transaction is about to write, and a raise needs the entity itself.
+    // Once per row, so two keys of one line answer the same entity.
+    const locked = new Map<string, ListLine | null>();
     for (const [key, id] of ids) {
-      const line = await repo.findOne({
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
+      if (!locked.has(id)) {
+        locked.set(
+          id,
+          await repo.findOne({
+            where: { id },
+            lock: { mode: 'pessimistic_write' },
+          })
+        );
+      }
+      const line = locked.get(id);
       if (line) {
         targets.set(key, line);
       }
