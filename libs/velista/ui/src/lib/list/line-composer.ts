@@ -20,6 +20,7 @@ import {
   defaultQuantity,
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
+  LINE_QUANTITY_MAX,
   lineUnitOfProduct,
   type CatalogSuggestion,
   type LineUnit,
@@ -734,8 +735,12 @@ export class LineComposer {
       content,
       // The stepper counts what the person asks for. For a product sold by the
       // kilo or the litre each one is a kilo or a litre, so the line starts at
-      // `defaultQuantity` of its unit, "1 kg", and the reel then weighs it.
-      quantity: this.quantity() * defaultQuantity(unit),
+      // `defaultQuantity` of its unit, "1 kg", and the reel then weighs it. The
+      // unit is known only once the product is chosen, so the count is capped
+      // here, at 100 kilos or litres, which the server still takes.
+      quantity:
+        Math.min(this.quantity(), LINE_QUANTITY_MAX / defaultQuantity(unit)) *
+        defaultQuantity(unit),
       unit,
       ...(products ? { itemIds } : {}),
       ...(products && named === false ? { named } : {}),

@@ -90,6 +90,10 @@ describe('BasketTotalNumber', () => {
     expect(number(fixture).textContent?.trim()).toBe(
       'basket.total.amountExact'
     );
+    // The name says "Total" and not "about", as the number drops its mark.
+    expect(number(fixture).getAttribute('aria-label')).toBe(
+      'basket.total.openExact'
+    );
   });
 
   it('opens the popover from the number, and closes it on a second press', async () => {

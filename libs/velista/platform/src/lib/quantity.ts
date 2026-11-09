@@ -14,10 +14,11 @@ import {
  * `Intl.NumberFormat` with `style: 'unit'` in the reader's language, and never a
  * translation key with a number in it, for the reason {@link formatMoney} gives.
  *
- * **Two decimals at most, where the plan says one** (builder decision of velista
- * `0182`): the coarse step is 250 g, so 1250 g is a value the reel lands on, and
- * one decimal would draw it as "1,3 kg", which is not what was asked for. A value
- * that needs one decimal or none draws as the plan's examples do.
+ * **Up to three decimals, where the plan says one** (builder decision of velista
+ * `0182`), so the words always say the exact amount: 1250 g is a value the reel
+ * lands on and reads "1,25 kg", and 975 g added twice sums to 1975 on the server
+ * and reads "1,975 kg", not "1,98 kg". A value that needs one decimal or none
+ * draws as the plan's examples do.
  */
 export function formatQuantity(
   quantity: number,
@@ -57,14 +58,14 @@ export function formatAmount(
     return new Intl.NumberFormat(locale, {
       style: 'unit',
       unit: name,
-      maximumFractionDigits: 2,
+      maximumFractionDigits: 3,
     }).format(value);
   } catch {
     // An unrecognised locale tag, which `Intl` throws for. The English symbols
     // are ugly and correct, and a pill with no number would be worse.
     const symbol =
       unit === 'GRAM' ? (coarse ? 'kg' : 'g') : coarse ? 'l' : 'ml';
-    return `${Number(value.toFixed(2))} ${symbol}`;
+    return `${Number(value.toFixed(3))} ${symbol}`;
   }
 }
 

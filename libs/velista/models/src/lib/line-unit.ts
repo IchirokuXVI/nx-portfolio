@@ -47,6 +47,31 @@ export function lineUnitOfProduct(
   return lineUnitOf(soldAsOf(offer, product));
 }
 
+/**
+ * The unit a line is drawn, stepped and next written in (backend `0246` M2 and
+ * section 3.2).
+ *
+ * The stored unit, except on a one product line whose stored unit is not its
+ * product's: the rows the migration wrote `UNIT` on. Such a line is drawn in its
+ * product's unit, and its next absolute write states that unit, which is what
+ * corrects the row. A line with several products keeps its stored unit, and so
+ * does one whose product is not read yet.
+ */
+export function shownLineUnit(
+  line: { readonly unit: LineUnit; readonly itemIds: readonly string[] },
+  productOf: (itemId: string) => {
+    readonly unit: string | null;
+    readonly size: number | null;
+    readonly approxWeight: number | null;
+  } | null
+): LineUnit {
+  if (line.itemIds.length !== 1) {
+    return line.unit;
+  }
+  const product = productOf(line.itemIds[0]);
+  return product === null ? line.unit : lineUnitOfProduct(null, product);
+}
+
 /** The amount a new line starts at in a unit: one piece, one kilo, one litre. */
 export function defaultQuantity(unit: LineUnit): number {
   return isMeasured(unit) ? 1000 : 1;

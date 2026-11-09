@@ -44,6 +44,7 @@ import {
   ProductPickStore,
   REALTIME_CLIENT,
   type RealtimeClientI,
+  replayInUnit,
   SessionStore,
   ShoppingProfileStore,
   toAddChoice,
@@ -1228,10 +1229,12 @@ export class ListPage {
     this._translator.loaded();
     const lines = this._lineById();
     return this._dropped().map((entry) => {
-      const replay = entry.replay;
       // Off the entry, not the replay, so an unsure entry is named as the row names
       // the line too.
       const line = lines.get(entry.lineId);
+      // No resend once the line counts in another unit (velista `0182`): the
+      // sentence then says the change may not have been saved.
+      const replay = replayInUnit(entry.replay, line?.unit);
       const name =
         line === undefined ? entry.args['name'] : this._lineName(line);
       return {
@@ -1255,7 +1258,11 @@ export class ListPage {
 
   /** "Send it again": the same delta, through the same path as a turn of the reel. */
   async resendDropped(id: string): Promise<void> {
-    const replay = this._dropped().find((entry) => entry.id === id)?.replay;
+    const entry = this._dropped().find((dropped) => dropped.id === id);
+    const replay = replayInUnit(
+      entry?.replay ?? null,
+      entry === undefined ? undefined : this._lineById().get(entry.lineId)?.unit
+    );
     this.dismissDropped(id);
     if (replay !== null && replay !== undefined) {
       await this.changeQuantity({ lineId: replay.lineId, delta: replay.delta });

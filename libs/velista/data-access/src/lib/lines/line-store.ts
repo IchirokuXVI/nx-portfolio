@@ -8,9 +8,13 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   addMayMeetLine,
+  defaultQuantity,
+  LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   LINES_PAGE_SIZE,
   SETTLEMENTS_PAGE_SIZE,
+  shownLineUnit,
+  stepAt,
   type AddLineOptions,
   type Comment,
   type Line,
@@ -22,6 +26,7 @@ import {
   type SettlementOutcome,
 } from '@portfolio/velista/models';
 import { onEdge } from '@portfolio/velista/platform';
+import { ItemNames } from '../catalog/item-names';
 import { GatewayError } from '../errors';
 import {
   listWritesPage,
@@ -138,6 +143,12 @@ export class LineStore {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _mutations = inject(Mutations);
+  /**
+   * The products' records, to draw a line the migration left in `UNIT` in its
+   * product's unit (backend `0246` M2). Optional, so a store with no catalog
+   * draws every line in its stored unit.
+   */
+  private readonly _items = inject(ItemNames, { optional: true });
 
   /** Lines known to be gone, and how this client learned it. */
   private readonly _deletions = signal<ReadonlyMap<string, LineDeletion>>(
@@ -333,7 +344,7 @@ export class LineStore {
 
   /** One list's lines, in `position` order with rejected ones last. */
   linesIn(listId: string): readonly Line[] {
-    return this._byList().get(listId) ?? [];
+    return this._shownLines(this._byList().get(listId) ?? []);
   }
 
   /**
@@ -430,7 +441,7 @@ export class LineStore {
   /** A signal view of one list, for a container that reads it in a computed. */
   forList(listId: string) {
     return computed(() => ({
-      lines: this._byList().get(listId) ?? [],
+      lines: this._shownLines(this._byList().get(listId) ?? []),
       state: this._state().get(listId) ?? ('idle' as LineLoadState),
       error: this._error().get(listId) ?? null,
       complete: (this._cursor().get(listId) ?? null) === null,
@@ -752,15 +763,17 @@ export class LineStore {
       return { state: 'failed', error: null };
     }
     // Every absolute write states what its number counts (velista `0182`): the
-    // line's own unit, unless the caller names another.
+    // unit the line is drawn in, unless the caller names another. For a line the
+    // migration left in `UNIT` that is its product's unit, and this write is what
+    // corrects the stored row (backend `0246` section 3.2).
     const sent =
       changes.quantity !== undefined && changes.unit === undefined
-        ? { ...changes, unit: before.unit }
+        ? { ...changes, unit: this._unitShown(before) }
         : changes;
 
     const listId = before.listId;
-    const fields = claimedBy(changes);
-    const apply = (line: Line) => applyLineChanges(line, changes);
+    const fields = claimedBy(sent);
+    const apply = (line: Line) => applyLineChanges(line, sent);
     const overlay: Overlay<unknown> = {
       key: overlayKey(lineId, fields.join('+')),
       apply: (current) => apply(current as Line) as unknown,
@@ -852,6 +865,11 @@ export class LineStore {
       return 'failed';
     }
 
+    const unit = this._unitShown(before);
+    if (unit !== before.unit) {
+      return this._correctUnit(before, unit, delta);
+    }
+
     return this._write(
       lineId,
       before,
@@ -877,7 +895,9 @@ export class LineStore {
               delta: delta > 0 ? `+${delta}` : `${delta}`,
               unit: before.unit,
             },
-            replay: { kind: 'line-quantity', lineId, delta },
+            // The unit too, so a resend is offered only while the line still
+            // counts in it: 250 g sent again as 250 pieces would be a new order.
+            replay: { kind: 'line-quantity', lineId, delta, unit: before.unit },
           }
         : undefined
     );
@@ -1751,6 +1771,58 @@ export class LineStore {
         0
       ) + 1
     );
+  }
+
+  /** {@link shownLineUnit} of a stored line, over the products this session read. */
+  private _unitShown(line: Line): LineUnit {
+    const items = this._items;
+    return items === null
+      ? line.unit
+      : shownLineUnit(line, (itemId) => items.nameOf(itemId));
+  }
+
+  /**
+   * The lines as a screen draws them: a line the migration left in `UNIT` carries
+   * its product's unit (backend `0246` M2). The same array when no line differs.
+   */
+  private _shownLines(lines: readonly Line[]): readonly Line[] {
+    if (this._items === null) {
+      return lines;
+    }
+    let changed = false;
+    const shown = lines.map((line) => {
+      const unit = this._unitShown(line);
+      if (unit === line.unit) {
+        return line;
+      }
+      changed = true;
+      return { ...line, unit };
+    });
+    return changed ? shown : lines;
+  }
+
+  /**
+   * A step on a line whose stored unit is not the one it is drawn in (backend
+   * `0246` section 3.2). A delta in the drawn unit would be refused with
+   * `line_unit_mismatch` against the stored one, so the step is an absolute
+   * update that states the unit, which corrects the row; the next step is a
+   * delta again. One step up from nothing asks for the unit's default amount,
+   * one kilo, as an add does.
+   */
+  private async _correctUnit(
+    before: Line,
+    unit: LineUnit,
+    delta: number
+  ): Promise<'succeeded' | 'failed' | 'overwritten'> {
+    const quantity =
+      before.quantity === 0 && delta === stepAt(0, unit)
+        ? defaultQuantity(unit)
+        : Math.min(
+            LINE_QUANTITY_MAX,
+            Math.max(LINE_QUANTITY_MIN, before.quantity + delta)
+          );
+    const outcome = await this.updateLine(before.id, { quantity, unit });
+    return outcome.state;
   }
 
   private _lineById(lineId: string): Line | null {

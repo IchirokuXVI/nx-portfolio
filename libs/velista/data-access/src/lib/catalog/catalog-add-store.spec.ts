@@ -731,12 +731,24 @@ describe('CatalogAddStore', () => {
 
       await store.step(on('weekly', BANANAS), 'line-1', 1);
       await store.step(on('weekly', BANANAS), 'line-1', -1);
-      await store.step(on('weekly', BANANAS), 'line-1', -1);
 
       expect(calls).toContain('quantity:line-1:250');
       expect(calls).toContain('quantity:line-1:-250');
-      expect(calls).toContain('quantity:line-1:-25');
-      expect(units).toEqual(['GRAM', 'GRAM', 'GRAM', 'GRAM']);
+      expect(units).toEqual(['GRAM', 'GRAM', 'GRAM']);
+    });
+
+    it('takes a kilo line the visit made back with one minus at its kilo', async () => {
+      const { store, calls } = setup(HOME);
+      await store.ensure();
+      await store.add(BANANAS);
+
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+
+      // Taken back whole: to nothing here, where the reader may not delete the
+      // line, and never one 25 g step.
+      expect(calls).toContain('quantity:line-1:-1000');
+      expect(calls).not.toContain('quantity:line-1:-25');
+      expect(store.visit()).toEqual([]);
     });
 
     it('counts a product with no unit named, as before', async () => {

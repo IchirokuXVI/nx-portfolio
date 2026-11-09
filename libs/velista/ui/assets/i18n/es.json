@@ -1649,14 +1649,14 @@
       "boughtFromAnotherList": "Comprado desde otra lista de la compra",
       "boughtFromTheList": "Comprado desde la lista",
       "alreadyBought": "Ya está comprado",
-      "takenBackAmount": "{{amount}} devueltos"
+      "takenBackAmount": "Devuelto: {{amount}}"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",
       "bought_one": "{{count}} comprado",
       "bought_other": "{{count}} comprados",
       "listLabel": "{{list}}, {{name}}, por conseguir",
-      "boughtAmount": "{{amount}} comprados"
+      "boughtAmount": "Comprado: {{amount}}"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -2014,7 +2014,9 @@
     "total": {
       "amount": "≈{{amount}}",
       "open": "Total estimado, unos {{amount}}. Ver de dónde sale.",
+      "openExact": "Total: {{amount}}. Ver de dónde sale.",
       "barLabel": "Unos {{bought}} comprados de unos {{total}}",
+      "barLabelExact": "Comprado: {{bought}} de {{total}}",
       "boughtEnd": "{{amount}} comprado",
       "leftEnd": "{{amount}} por comprar",
       "title": "Total estimado",
@@ -2127,13 +2129,13 @@
       "gotAll_other": "Ya tengo los {{count}}",
       "gotOther_one": "Ya tengo el que falta",
       "gotOther_other": "Ya tengo los {{count}} que faltan",
-      "toGetAmount": "Faltan {{amount}}",
+      "toGetAmount": "Por coger: {{amount}}",
       "about": "≈ {{price}}",
-      "gotAmount": "Hoy se han cogido {{amount}}.",
-      "gotAtAmount": "Hoy se han cogido {{amount}} a {{price}}.",
-      "gotAtShopAmount": "Hoy se han cogido {{amount}} a {{price}}, en {{shop}}.",
-      "gotAllAmount": "Ya tengo los {{amount}}",
-      "gotOtherAmount": "Ya tengo los {{amount}} que faltan"
+      "gotAmount": "Cogido hoy: {{amount}}.",
+      "gotAtAmount": "Cogido hoy: {{amount}} a {{price}}.",
+      "gotAtShopAmount": "Cogido hoy: {{amount}} a {{price}}, en {{shop}}.",
+      "gotAllAmount": "Ya tengo todo: {{amount}}",
+      "gotOtherAmount": "Ya tengo lo que falta: {{amount}}"
     }
   },
   "getList": {

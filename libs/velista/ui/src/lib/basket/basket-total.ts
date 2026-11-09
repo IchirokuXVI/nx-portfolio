@@ -72,6 +72,11 @@ export class BasketTotalNumber {
     this.total().estimated ? 'basket.total.amount' : 'basket.total.amountExact'
   );
 
+  /** The control's name says "about" only before an estimate, as the number does. */
+  protected readonly openKey = computed(() =>
+    this.total().estimated ? 'basket.total.open' : 'basket.total.openExact'
+  );
+
   protected readonly amounts = computed(() =>
     basketTotalAmounts(this.total(), this.locale())
   );
