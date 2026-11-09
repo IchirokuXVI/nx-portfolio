@@ -1,7 +1,7 @@
 import productTwoRegions from './__fixtures__/product-two-region-prices.json';
 import searchPage from './__fixtures__/search-page.json';
 import storePage from './__fixtures__/store-page.json';
-import { probeLidl } from './probe';
+import { LIDL_PROBE_NO_GROCERY_NOTE, probeLidl } from './probe';
 
 /**
  * The LIDL probe against the committed fixtures and a fake fetch (plan 0219,
@@ -32,8 +32,32 @@ const productHtml = (payload: unknown): string =>
     payload
   )}</script></body></html>`;
 
+/**
+ * The bazar rows of the fixture only, in their captured order. The index of a
+ * day whose window opens with non food is built here from captured rows rather
+ * than captured on a day that happens to have that shape.
+ */
+function bazarOnly(): unknown {
+  const page = clone(searchPage) as unknown as { items: Item[] };
+  page.items = page.items.filter(
+    (item) => item.gridbox.data['category'] === 'NonFood'
+  );
+  return page;
+}
+
+/** The index answered by offset, for the probe's second page. */
+const byOffset =
+  (pages: Record<string, unknown>) =>
+  (url: string): Response => {
+    const offset = new URL(url).searchParams.get('offset') ?? '';
+    if (!(offset in pages)) {
+      throw new Error(`Unexpected index offset ${offset}`);
+    }
+    return json(pages[offset])();
+  };
+
 interface Routes {
-  search?: () => Response;
+  search?: (url: string) => Response;
   product?: () => Response;
   stores?: () => Response;
 }
@@ -52,7 +76,7 @@ function fakeFetch(routes: Routes = {}) {
     const url = String(input);
     calls.push(url);
     if (url.includes('/q/api/search')) {
-      return (routes.search ?? json(index()))();
+      return (routes.search ?? json(index()))(url);
     }
     if (url.includes('/p/')) {
       return (
@@ -78,6 +102,7 @@ const run = (fetchImpl: typeof fetch) =>
 
 describe('probeLidl', () => {
   it('passes every step over the fixtures, in three requests', async () => {
+    // The fixture's first row is grocery, so no second page is asked for.
     const { fetchImpl, calls } = fakeFetch();
 
     const result = await run(fetchImpl);
@@ -111,6 +136,31 @@ describe('probeLidl', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('reads a page whose rows all lost their category as a change of shape', async () => {
+    const uncategorized = index((items) => {
+      for (const item of items) {
+        delete item.gridbox.data['category'];
+      }
+    });
+    const { fetchImpl, calls } = fakeFetch({ search: json(uncategorized) });
+
+    const result = await run(fetchImpl);
+
+    // Problems with no status and no exception: the harvester's verdict
+    // reads this as SHAPE_CHANGED, as it reads a lost path.
+    expect(result.steps).toEqual([
+      expect.objectContaining({
+        name: 'listing',
+        ok: false,
+        httpStatus: null,
+        error: null,
+        problems: ['0 of 5 rows carried siteCategory'],
+      }),
+    ]);
+    expect(result.failure).toBeUndefined();
+    expect(calls).toHaveLength(1);
+  });
+
   it('stops at a 403 on the first step with no second request', async () => {
     const { fetchImpl, calls } = fakeFetch({
       search: () => new Response('denied', { status: 403 }),
@@ -139,6 +189,151 @@ describe('probeLidl', () => {
 
     expect(failed.steps[0].problems).toEqual(['2 of 5 rows carried path']);
     expect(passed.steps.every((step) => step.ok)).toBe(true);
+  });
+
+  it('reads the first grocery row when a bazar row comes first', async () => {
+    const bazarFirst = index((items) => {
+      // The two bazar rows, both priced, ahead of the grocery rows; the two
+      // region product moves to the third grocery row.
+      const [food, bazar1, bazar2, salmon, cheese] = items.splice(0);
+      delete food.gridbox.data['price'];
+      cheese.gridbox.data['productId'] = PRODUCT_ID;
+      cheese.gridbox.data['canonicalPath'] = `/p/queso/p${PRODUCT_ID}`;
+      salmon.gridbox.data['category'] = 'NonFood';
+      items.push(bazar1, bazar2, salmon, food, cheese);
+    });
+    const { fetchImpl, calls } = fakeFetch({ search: json(bazarFirst) });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['product', true],
+      ['shops', true],
+    ]);
+    // The unpriced grocery row is passed over for the priced one after it.
+    expect(new URL(calls[1]).pathname).toBe(`/p/queso/p${PRODUCT_ID}`);
+    expect(result.steps[0].sample['groceryRows']).toBe(2);
+    expect(calls).toHaveLength(3);
+  });
+
+  it('falls back to an unpriced grocery row before a priced bazar row', async () => {
+    const unpriced = index((items) => {
+      for (const item of items) {
+        if (item.gridbox.data['category'] === 'Food') {
+          delete item.gridbox.data['price'];
+        }
+      }
+    });
+    const { fetchImpl, calls } = fakeFetch({ search: json(unpriced) });
+
+    await run(fetchImpl);
+
+    expect(new URL(calls[1]).pathname).toBe(`/p/producto/p${PRODUCT_ID}`);
+  });
+
+  it('asks for the next page once when the first holds no grocery row', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      search: byOffset({ '0': bazarOnly(), '100': index() }),
+    });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['listing page 2', true],
+      ['product', true],
+      ['shops', true],
+    ]);
+    expect(result.requests).toBe(4);
+    expect(calls).toHaveLength(4);
+    expect(new URL(calls[1]).searchParams.get('offset')).toBe('100');
+    expect(new URL(calls[2]).pathname).toBe(`/p/producto/p${PRODUCT_ID}`);
+    expect(result.steps[0].sample['groceryRows']).toBe(0);
+    expect(result.steps[0].sample['note']).toBeUndefined();
+  });
+
+  it('passes with no product step when neither page holds a grocery row', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      search: byOffset({ '0': bazarOnly(), '100': bazarOnly() }),
+    });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['listing page 2', true],
+      ['shops', true],
+    ]);
+    expect(result.steps[1].sample['note']).toBe(LIDL_PROBE_NO_GROCERY_NOTE);
+    expect(calls).toHaveLength(3);
+    expect(calls.some((url) => url.includes('/p/'))).toBe(false);
+  });
+
+  it('asks for no second page when the total says the first was all', async () => {
+    const whole = bazarOnly() as { numFound: number };
+    whole.numFound = 2;
+    const { fetchImpl, calls } = fakeFetch({ search: json(whole) });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['shops', true],
+    ]);
+    expect(result.steps[0].sample['note']).toBe(LIDL_PROBE_NO_GROCERY_NOTE);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('asks for no second page at a total of exactly one page', async () => {
+    const whole = bazarOnly() as { numFound: number };
+    whole.numFound = 100;
+    const { fetchImpl, calls } = fakeFetch({ search: json(whole) });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => step.name)).toEqual(['listing', 'shops']);
+    expect(calls.filter((url) => url.includes('/q/api/search'))).toHaveLength(
+      1
+    );
+  });
+
+  it('asks for a second page at a total of one row more than a page', async () => {
+    const first = bazarOnly() as { numFound: number };
+    first.numFound = 101;
+    const { fetchImpl, calls } = fakeFetch({
+      search: byOffset({ '0': first, '100': index() }),
+    });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => step.name)).toEqual([
+      'listing',
+      'listing page 2',
+      'product',
+      'shops',
+    ]);
+    expect(calls.filter((url) => url.includes('/q/api/search'))).toHaveLength(
+      2
+    );
+  });
+
+  it('stops at a 403 on the second page with no later request', async () => {
+    const { fetchImpl, calls } = fakeFetch({
+      search: (url) =>
+        new URL(url).searchParams.get('offset') === '0'
+          ? json(bazarOnly())()
+          : new Response('denied', { status: 403 }),
+    });
+
+    const result = await run(fetchImpl);
+
+    expect(result.steps.map((step) => [step.name, step.ok])).toEqual([
+      ['listing', true],
+      ['listing page 2', false],
+    ]);
+    expect(result.steps[1].httpStatus).toBe(403);
+    expect(calls).toHaveLength(2);
   });
 
   it('reads a shop with no offer region as a change of shape', async () => {
