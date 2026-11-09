@@ -65,6 +65,7 @@ import {
   validateMessageResponse,
 } from './index';
 import { BASKET_SCHEMA_IDS } from './messages/basket.schemas';
+import { PURCHASE_SCHEMA_IDS } from './messages/purchase.schemas';
 import { messageRequestSchemaId, messageResponseSchemaId } from './registry';
 import { validateSchema } from './validator';
 
@@ -394,6 +395,8 @@ describe('contract schemas', () => {
             listId: 'li',
             content: 'Milk',
             quantity: 1,
+            // A free text line counts pieces (plan 0246 W1).
+            unit: 'UNIT',
             // A free text line, which is what most lines are: an empty set and a
             // null hash, both stated rather than left out (plan 0048, 1.1).
             itemIds: [],
@@ -440,6 +443,7 @@ describe('contract schemas', () => {
             // Two were asked for, two were bought, and the line stays where it
             // is at zero (plan 0047, section 1).
             quantity: 0,
+            unit: 'UNIT',
             itemIds: ['3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13'],
             itemSetHash: 'h',
             // Subscribed to Milk, and the one product on it is still the
@@ -479,6 +483,9 @@ describe('contract schemas', () => {
             itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
             outcome: 'BOUGHT',
             quantity: 2,
+            // Two packs at the price of a pack, which is exact (plan 0246 M7).
+            unit: 'UNIT',
+            estimated: false,
             settledByUserId: 'u',
             // The list page settled it, so no participant (plan 0151).
             settledByParticipantId: null,
@@ -510,6 +517,8 @@ describe('contract schemas', () => {
               // settlement of zero rather than the absence of one (section 4).
               outcome: 'NOT_AVAILABLE',
               quantity: 0,
+              unit: 'UNIT',
+              estimated: false,
               settledByUserId: 'u',
               settledByParticipantId: null,
               settledAt: '2026-01-01T00:00:00.000Z',
@@ -540,6 +549,8 @@ describe('contract schemas', () => {
       itemId: '3f1a0c5e-2b7d-4a6f-8c91-0d2e4b6a8c13',
       outcome: 'BOUGHT',
       quantity: 2,
+      unit: 'UNIT',
+      estimated: false,
       settledByUserId: 'u',
       settledByParticipantId: null,
       settledAt: '2026-01-01T00:00:00.000Z',
@@ -721,6 +732,7 @@ describe('contract schemas', () => {
         rowKey: 'l-1',
         content: 'Milk',
         productId: null,
+        unit: 'UNIT',
         left: 1,
         bought: 0,
         asked: 1,
@@ -820,6 +832,7 @@ describe('contract schemas', () => {
         rowKey: 'l-1',
         content: 'Milk',
         productId: 'i-9',
+        unit: 'UNIT',
         left: 1,
         bought: 1,
         asked: 2,
@@ -839,6 +852,10 @@ describe('contract schemas', () => {
 
       expect(rowValid({})).toBe(true);
       expect(rowValid({ productId: null })).toBe(true);
+      // A row is one unit and says which (plan 0246 M6).
+      expect(rowValid({ unit: 'GRAM' })).toBe(true);
+      expect(rowValid({ unit: undefined })).toBe(false);
+      expect(rowValid({ unit: 'KILOGRAM' })).toBe(false);
       // Required and nullable: a row by name says so.
       expect(rowValid({ productId: undefined })).toBe(false);
       // The union of the product sets left the wire.
@@ -884,11 +901,15 @@ describe('contract schemas', () => {
           lineIds: ['l-1', 'l-2'],
           outcome: 'BOUGHT',
           quantity: 1,
+          unit: 'UNIT',
           from: 2,
           ...over,
         }).valid;
       expect(settle({})).toBe(true);
       expect(settle({ itemId: 'i-9' })).toBe(true);
+      // The settle names its unit, always (plan 0246, section 3.5).
+      expect(settle({ unit: 'GRAM', quantity: 750 })).toBe(true);
+      expect(settle({ unit: undefined })).toBe(false);
       expect(settle({ lineIds: undefined })).toBe(false);
       expect(settle({ lineIds: [] })).toBe(false);
       expect(settle({ lineIds: ['l-1', 'l-1'] })).toBe(false);
@@ -949,9 +970,19 @@ describe('contract schemas', () => {
           ...named,
           lineId: 'l-1',
           quantity: 2,
+          unit: 'UNIT',
           from: 0,
         }).valid
       ).toBe(true);
+      // And its unit, checked like a delta's (plan 0246, section 3.4).
+      expect(
+        validateMessageRequest('basket.row.demand', {
+          ...named,
+          lineId: 'l-1',
+          quantity: 2,
+          from: 0,
+        }).valid
+      ).toBe(false);
 
       // The read carries the picks of the gateway.
       const picks = [{ lineId: 'l-1', itemId: 'i-2' }];
@@ -1045,6 +1076,8 @@ describe('contract schemas', () => {
       const patch = {
         lineId: 'l-1',
         version: 4,
+        // What `left` and `bought` count (plan 0246, section 3.6).
+        unit: 'GRAM',
         left: 2,
         bought: 1,
         boughtElsewhere: 0,
@@ -1091,6 +1124,10 @@ describe('contract schemas', () => {
       expect(
         event({ lineIds: ['l-1'], entries: [{ ...patch, tripItemId: null }] })
       ).toBe(true);
+      // A patch always says its unit, so a client can tell the line moved row.
+      expect(
+        event({ lineIds: ['l-1'], entries: [{ ...patch, unit: undefined }] })
+      ).toBe(false);
 
       // A room holds guests: a patch names no list, no basket and no account,
       // and it says nothing that only one reader may be told.
@@ -1481,6 +1518,7 @@ describe('contract schemas', () => {
         listId: 'li',
         content: 'Milk',
         quantity: 1,
+        unit: 'UNIT',
         itemIds: [],
         itemSetHash: null,
         productGroupId: null,
@@ -1528,6 +1566,7 @@ describe('contract schemas', () => {
         listId: 'li',
         content: 'Milk',
         quantity: 1,
+        unit: 'UNIT',
         itemIds: [],
         itemSetHash: null,
         productGroupId: null,
@@ -3158,5 +3197,114 @@ describe('a line edit may say what it saw (plan 0209, section 2.2)', () => {
     expect(
       validateMessageRequest('line.update', { ...edit, from: 1.5 }).valid
     ).toBe(false);
+  });
+});
+
+describe('a line counts in a unit (plan 0246)', () => {
+  it('an add may name its unit, and absent is UNIT', () => {
+    const add = { userId: 'u', listId: 'li', content: 'Cheese' };
+    expect(validateMessageRequest('line.add', add).valid).toBe(true);
+    expect(
+      validateMessageRequest('line.add', {
+        ...add,
+        unit: 'GRAM',
+        quantity: 300,
+      }).valid
+    ).toBe(true);
+    // Kilos never reach the wire.
+    expect(
+      validateMessageRequest('line.add', { ...add, unit: 'KILOGRAM' }).valid
+    ).toBe(false);
+    // Every quantity stays a whole number: 0.3 kg is 300 g.
+    expect(
+      validateMessageRequest('line.add', {
+        ...add,
+        unit: 'GRAM',
+        quantity: 0.3,
+      }).valid
+    ).toBe(false);
+    expect(
+      validateMessageRequest('line.addMany', {
+        userId: 'u',
+        listId: 'li',
+        items: [{ content: 'Cheese', unit: 'GRAM', quantity: 300 }],
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('line.update', {
+        userId: 'u',
+        lineId: 'l',
+        unit: 'MILLILITER',
+        quantity: 1000,
+      }).valid
+    ).toBe(true);
+  });
+
+  it('a delta and a settle name their unit, always (M8)', () => {
+    const delta = { userId: 'u', lineId: 'l', delta: 250 };
+    expect(
+      validateMessageRequest('line.addQuantity', { ...delta, unit: 'GRAM' })
+        .valid
+    ).toBe(true);
+    expect(validateMessageRequest('line.addQuantity', delta).valid).toBe(false);
+    const settle = { userId: 'u', lineId: 'l', outcome: 'BOUGHT', quantity: 1 };
+    expect(
+      validateMessageRequest('line.settle', { ...settle, unit: 'UNIT' }).valid
+    ).toBe(true);
+    expect(validateMessageRequest('line.settle', settle).valid).toBe(false);
+  });
+
+  it('a purchase entry states what it bought per unit and whether its spend is an estimate', () => {
+    const entry = {
+      id: 'e',
+      kind: 'SESSION',
+      name: null,
+      open: false,
+      startedAt: '2026-11-05T10:00:00.000Z',
+      endedAt: '2026-11-05T10:30:00.000Z',
+      settledLineCount: 2,
+      anyBoughtLineCount: 2,
+      lineCount: 2,
+      boughtLineCount: 2,
+      bought: { UNIT: 3, GRAM: 750 },
+      estimated: true,
+      spent: { cents: 1123, currency: 'EUR' },
+      unpricedCount: 0,
+    };
+    const valid = (value: unknown) =>
+      validateSchema(PURCHASE_SCHEMA_IDS.entryView, value).valid;
+    expect(valid(entry)).toBe(true);
+    expect(valid({ ...entry, bought: {}, estimated: false })).toBe(true);
+    // A unit that bought nothing is omitted, not zero, and no other key rides.
+    expect(valid({ ...entry, bought: { UNIT: 0 } })).toBe(false);
+    expect(valid({ ...entry, bought: { KILOGRAM: 1 } })).toBe(false);
+    expect(valid({ ...entry, bought: undefined })).toBe(false);
+    expect(valid({ ...entry, estimated: undefined })).toBe(false);
+  });
+
+  it('a purchase row says what its quantity counts', () => {
+    const row = {
+      id: 's',
+      itemId: 'i-1',
+      itemSnapshot: null,
+      outcome: 'BOUGHT',
+      quantity: 750,
+      unit: 'GRAM',
+      estimated: true,
+      pricePaid: { cents: 995, currency: 'EUR' },
+      priceScopeId: null,
+      supermarketLocationId: null,
+      settledAt: '2026-11-05T10:00:00.000Z',
+      lineId: null,
+      listId: null,
+      listName: null,
+      zoneId: null,
+      content: null,
+    };
+    const valid = (value: unknown) =>
+      validateSchema(PURCHASE_SCHEMA_IDS.rowView, value).valid;
+    expect(valid(row)).toBe(true);
+    expect(valid({ ...row, unit: undefined })).toBe(false);
+    expect(valid({ ...row, estimated: undefined })).toBe(false);
   });
 });

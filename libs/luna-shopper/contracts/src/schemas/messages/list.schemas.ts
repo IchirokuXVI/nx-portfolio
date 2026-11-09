@@ -165,6 +165,9 @@ const lineViewProperties: Record<string, JsonSchema> = {
   listId: nonEmptyString(),
   content: string(),
   quantity: integer(),
+  // What `quantity` counts, in base units (plan 0246, section 3.1). Required:
+  // an absent unit would read as pieces on one client and as nothing on another.
+  unit: ref(ENUM_IDS.lineUnit),
   // The product set and its digest (plan 0048, section 1.1). Both required and
   // both honest when empty: `[]` and `null` say "this is a free text line".
   itemIds: array(nonEmptyString()),
@@ -217,6 +220,7 @@ const lineViewRequired = [
   'listId',
   'content',
   'quantity',
+  'unit',
   'itemIds',
   'itemSetHash',
   'productGroupId',
@@ -307,6 +311,11 @@ const lineSettlementProperties: Record<string, JsonSchema> = {
   // Zero for `NOT_AVAILABLE`, and unbounded above by the line's own demand:
   // buying more than was asked for is recorded as it happened (section 4.2).
   quantity: integer({ minimum: 0 }),
+  // What `quantity` counts, and whether what it cost is an estimate (plan
+  // 0246, section 3.5 and M7). `pricePaidCents` is the price of one of `unit`:
+  // a piece or pack, or a kilo or litre.
+  unit: ref(ENUM_IDS.lineUnit),
+  estimated: boolean(),
   settledByUserId: nonEmptyString(),
   // Exactly one of this and `settledByUserId` is set: a basket settle names
   // the participant, the list page names the account.
@@ -333,6 +342,8 @@ const lineSettlementRequired = [
   'itemId',
   'outcome',
   'quantity',
+  'unit',
+  'estimated',
   'settledByUserId',
   'settledByParticipantId',
   'settledAt',
@@ -548,6 +559,8 @@ const addLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
+    // What `quantity` counts (plan 0246, section 3.2). Absent is `UNIT`.
+    unit: ref(ENUM_IDS.lineUnit),
     // The line's product set (plan 0048, section 1.1). Absent or empty is a free
     // text line, which is deliberately still the ordinary case.
     //
@@ -575,6 +588,8 @@ const addLinesItem = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
+    // Absent is `UNIT`, and two items fold only in one unit (plan 0246).
+    unit: ref(ENUM_IDS.lineUnit),
     itemIds: { ...array(nonEmptyString()), maxItems: LINE_ITEM_SET_MAX },
     named: boolean(),
   },
@@ -603,11 +618,14 @@ const addLineQuantityRequest = object(
     // Schema states "not zero" only as a `not`, which reads far worse than the
     // one decorator that says it (plan 0040, section 3.7).
     delta: integer({ minimum: -LINE_QUANTITY_MAX, maximum: LINE_QUANTITY_MAX }),
+    // Required (plan 0246 M8): a delta in a unit that is not the line's is
+    // refused with `line_unit_mismatch`, and an absent one cannot be checked.
+    unit: ref(ENUM_IDS.lineUnit),
     // Optional: a delta needs no starting point, and the basket sends one so a
     // settle that landed in between refuses the gesture (plan 0136, section 5.3).
     expect: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
   },
-  ['userId', 'lineId', 'delta']
+  ['userId', 'lineId', 'delta', 'unit']
 );
 const updateLineRequest = object(
   LIST_SCHEMA_IDS.updateLineRequest,
@@ -619,6 +637,10 @@ const updateLineRequest = object(
       minimum: LINE_QUANTITY_MIN,
       maximum: LINE_QUANTITY_MAX,
     }),
+    // A change of what `quantity` counts (plan 0246, section 3.2). It must name
+    // `quantity` too. That rule is stated by the DTO and by core and not here,
+    // for the reason the settle's `quantity` rule is not (plan 0047, section 4).
+    unit: ref(ENUM_IDS.lineUnit),
     // The quantity the client saw (plan 0209, section 2.2). Optional: absent,
     // the edit writes what it was given.
     from: integer({ minimum: LINE_QUANTITY_MIN, maximum: LINE_QUANTITY_MAX }),
@@ -672,6 +694,9 @@ const settleLineRequest = object(
     lineId: nonEmptyString(),
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    // Required (plan 0246, section 3.5), and refused like a delta's when it is
+    // not the line's.
+    unit: ref(ENUM_IDS.lineUnit),
     itemId: nonEmptyString(),
     // Written by the gateway (plan 0143). A client body has no field for it.
     paid: ref(LIST_SCHEMA_IDS.settlementPaid),
@@ -680,7 +705,7 @@ const settleLineRequest = object(
       anyOf: [ref(CATALOG_SCHEMA_IDS.itemSnapshot), { type: 'null' }],
     },
   },
-  ['userId', 'lineId', 'outcome']
+  ['userId', 'lineId', 'outcome', 'unit']
 );
 const settlePickRequest = object(
   LIST_SCHEMA_IDS.settlePickRequest,

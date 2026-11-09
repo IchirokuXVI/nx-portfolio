@@ -17,6 +17,10 @@ export * from './lib/units/source-size';
 // What a verbatim unit price label means (plan 0157), read by catalog and by
 // the harvester (plan 0189). Browser reachable too.
 export * from './lib/units/unit-basis';
+// What a line's quantity counts, the amount of a line and the price of one
+// (plan 0246). Browser reachable too: velista mirrors both functions.
+export * from './lib/units/line-amount';
+export * from './lib/units/line-unit';
 
 // The one barcode reader, shared by catalog, the harvester and the gateway
 // (plan 0184). Browser reachable, as the brand key is.

@@ -11,6 +11,7 @@ import type {
   SettlementOutcome,
 } from '../enums/list.enums';
 import type { Paginated } from '../pagination';
+import type { LineUnit } from '../units/line-unit';
 import type { UserUsernameView } from './auth.messages';
 import type { BasketParticipantView } from './basket-sharing.messages';
 import type {
@@ -223,6 +224,15 @@ export interface BasketEntryPatch {
   lineId: string;
   /** `list_lines.version` after the write. */
   version: number;
+  /**
+   * What `left` and `bought` count: the line's unit after the write (plan 0246,
+   * section 3.6).
+   *
+   * A row is one unit (M6), so a unit change moves the line to another row.
+   * **A client reads the basket again when this differs from the `unit` of the
+   * row that holds the line**, as it does for {@link tripItemId}.
+   */
+  unit: LineUnit;
   left: number;
   bought: number;
   boughtElsewhere: number;
@@ -261,6 +271,13 @@ export interface BasketRowView {
    * row.
    */
   productId: string | null;
+  /**
+   * What `left`, `bought` and `asked` count (plan 0246, section 3.4).
+   *
+   * A row is one unit (M6): the row key carries it, so two lines of one
+   * product in two units are two rows, and no sum here adds grams to pieces.
+   */
+  unit: LineUnit;
   left: number;
   bought: number;
   /** `bought + left`, computed, never stored. */
@@ -744,6 +761,12 @@ export interface SettleBasketRowRequest {
    */
   quantity?: number;
   /**
+   * The unit {@link quantity} and {@link from} are in: the row's (plan 0246,
+   * section 3.5). Required, and refused with `line_unit_mismatch` when a named
+   * line counts in another unit.
+   */
+  unit: LineUnit;
+  /**
    * The sum of `left` over the named lines as the client drew them. Refused
    * with `stale_quantity`.
    */
@@ -886,6 +909,12 @@ export interface SetBasketRowDemandRequest {
   lineId: string;
   /** What that list asks for from now on. */
   quantity: number;
+  /**
+   * The unit {@link quantity} and {@link from} are in (plan 0246, section
+   * 3.4). Required, and refused with `line_unit_mismatch` when it is not the
+   * line's, as a delta's is.
+   */
+  unit: LineUnit;
   /** That entry's `left` as the client drew it. */
   from: number;
 }
