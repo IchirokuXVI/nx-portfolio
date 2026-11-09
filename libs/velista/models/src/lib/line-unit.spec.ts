@@ -1,4 +1,5 @@
 import {
+  legacyLineUnit,
   lineUnitOfProduct,
   lineUnits,
   servesLineUnit,
@@ -175,33 +176,43 @@ describe('lineUnitOfProduct', () => {
   });
 });
 
-describe('shownLineUnit (backend 0246 M2, section 3.2)', () => {
+describe('legacyLineUnit and shownLineUnit (backend 0246 M2, section 3.2)', () => {
   const loose = { unit: 'KILOGRAM', size: null, approxWeight: null };
-  const pack = { unit: 'LITER', size: 1, approxWeight: null };
+  const looseLitre = { unit: 'LITER', size: null, approxWeight: null };
+  const pack = { unit: 'KILOGRAM', size: 1, approxWeight: null };
+  const piece = { unit: 'KILOGRAM', size: null, approxWeight: 300 };
+  const at = (
+    unit: 'UNIT' | 'GRAM',
+    quantity: number,
+    itemIds: readonly string[] = ['i1']
+  ) => ({ unit, quantity, itemIds });
 
-  it("draws a one product line the migration left in UNIT in its product's unit", () => {
-    expect(shownLineUnit({ unit: 'UNIT', itemIds: ['i1'] }, () => loose)).toBe(
-      'GRAM'
-    );
+  it('reads only a stored UNIT on one loose product as legacy', () => {
+    expect(legacyLineUnit(at('UNIT', 3), () => loose)).toBe('GRAM');
+    expect(legacyLineUnit(at('UNIT', 3), () => looseLitre)).toBe('MILLILITER');
+    expect(legacyLineUnit(at('UNIT', 3), () => pack)).toBeNull();
+    expect(legacyLineUnit(at('UNIT', 3), () => piece)).toBeNull();
+    expect(legacyLineUnit(at('UNIT', 3), () => null)).toBeNull();
+    expect(legacyLineUnit(at('UNIT', 3, ['i1', 'i2']), () => loose)).toBeNull();
+    expect(legacyLineUnit(at('UNIT', 3, []), () => loose)).toBeNull();
+  });
+
+  it('keeps GRAM on a line whose product a curator turned into a pack or a piece', () => {
+    expect(legacyLineUnit(at('GRAM', 750), () => pack)).toBeNull();
+    expect(shownLineUnit(at('GRAM', 750), () => pack)).toBe('GRAM');
+    expect(shownLineUnit(at('GRAM', 750), () => piece)).toBe('GRAM');
+  });
+
+  it("draws a legacy line in its product's unit at nothing only", () => {
+    expect(shownLineUnit(at('UNIT', 0), () => loose)).toBe('GRAM');
+    expect(shownLineUnit(at('UNIT', 3), () => loose)).toBe('UNIT');
   });
 
   it('keeps the stored unit when it agrees, or the product is not read yet', () => {
-    expect(shownLineUnit({ unit: 'GRAM', itemIds: ['i1'] }, () => loose)).toBe(
-      'GRAM'
-    );
-    expect(shownLineUnit({ unit: 'UNIT', itemIds: ['i1'] }, () => pack)).toBe(
-      'UNIT'
-    );
-    expect(shownLineUnit({ unit: 'UNIT', itemIds: ['i1'] }, () => null)).toBe(
-      'UNIT'
-    );
-  });
-
-  it('leaves a line with several products, or none, in its stored unit', () => {
-    expect(
-      shownLineUnit({ unit: 'UNIT', itemIds: ['i1', 'i2'] }, () => loose)
-    ).toBe('UNIT');
-    expect(shownLineUnit({ unit: 'UNIT', itemIds: [] }, () => loose)).toBe(
+    expect(shownLineUnit(at('GRAM', 0), () => loose)).toBe('GRAM');
+    expect(shownLineUnit(at('UNIT', 0), () => pack)).toBe('UNIT');
+    expect(shownLineUnit(at('UNIT', 0), () => null)).toBe('UNIT');
+    expect(shownLineUnit(at('UNIT', 0, ['i1', 'i2']), () => loose)).toBe(
       'UNIT'
     );
   });

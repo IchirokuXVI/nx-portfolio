@@ -2020,6 +2020,7 @@
       "boughtEnd": "{{amount}} comprado",
       "leftEnd": "{{amount}} por comprar",
       "title": "Total estimado",
+      "titleExact": "Total",
       "bought": "Comprado",
       "left": "Por comprar",
       "total": "Total",
@@ -2134,8 +2135,8 @@
       "gotAmount": "Cogido hoy: {{amount}}.",
       "gotAtAmount": "Cogido hoy: {{amount}} a {{price}}.",
       "gotAtShopAmount": "Cogido hoy: {{amount}} a {{price}}, en {{shop}}.",
-      "gotAllAmount": "Ya tengo todo: {{amount}}",
-      "gotOtherAmount": "Ya tengo lo que falta: {{amount}}"
+      "gotAllAmount": "Ya lo tengo todo ({{amount}})",
+      "gotOtherAmount": "Ya tengo lo que falta ({{amount}})"
     }
   },
   "getList": {

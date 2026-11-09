@@ -77,6 +77,11 @@ export class BasketTotalNumber {
     this.total().estimated ? 'basket.total.open' : 'basket.total.openExact'
   );
 
+  /** The popover's title says "Estimated" only before an estimate, as the number does. */
+  protected readonly titleKey = computed(() =>
+    this.total().estimated ? 'basket.total.title' : 'basket.total.titleExact'
+  );
+
   protected readonly amounts = computed(() =>
     basketTotalAmounts(this.total(), this.locale())
   );

@@ -15,6 +15,7 @@ import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { CatalogAddStore } from './catalog-add-store';
+import { ItemNames } from './item-names';
 
 const MILK = {
   itemId: 'milk',
@@ -89,6 +90,17 @@ interface World {
   readonly lastList?: string;
   /** How many lines one page of a list answers. A hundred, as the store asks. */
   readonly linePageSize?: number;
+  /** The products' records the session read, for a legacy line (backend 0246 M2). */
+  readonly items?: Readonly<
+    Record<
+      string,
+      {
+        readonly unit: string | null;
+        readonly size: number | null;
+        readonly approxWeight: number | null;
+      }
+    >
+  >;
 }
 
 /** After every promise that is already on its way has answered. */
@@ -285,6 +297,14 @@ function setup(world: World) {
       server.set(lineId, moved);
       return moved;
     },
+    updateLine: async (lineId, changes) => {
+      calls.push(`update:${lineId}:${changes.quantity}:${changes.unit}`);
+      await written();
+      const current = server.get(lineId) as Line;
+      const updated = { ...current, ...changes } as Line;
+      server.set(lineId, updated);
+      return { line: updated, absorbedLineId: null };
+    },
     deleteLine: async (lineId) => {
       calls.push(`delete:${lineId}`);
       await written();
@@ -299,6 +319,16 @@ function setup(world: World) {
       { provide: ZONE_SERVICE, useValue: zones },
       { provide: LIST_SERVICE, useValue: lists },
       { provide: LINE_SERVICE, useValue: lines },
+      ...(world.items === undefined
+        ? []
+        : [
+            {
+              provide: ItemNames,
+              useValue: {
+                nameOf: (itemId: string) => world.items?.[itemId] ?? null,
+              },
+            },
+          ]),
       {
         provide: SessionStore,
         useValue: { isGuest: () => world.guest === true },
@@ -749,6 +779,113 @@ describe('CatalogAddStore', () => {
       expect(calls).toContain('quantity:line-1:-1000');
       expect(calls).not.toContain('quantity:line-1:-25');
       expect(store.visit()).toEqual([]);
+    });
+
+    it('steps a weight line the visit made down from under its kilo, never taking it back', async () => {
+      const { store, calls, server } = setup(HOME);
+      await store.ensure();
+      await store.add(BANANAS);
+      // Lowered to 525 g on the list page while the visit is open.
+      server.set('line-1', {
+        ...(server.get('line-1') as Line),
+        quantity: 525,
+      });
+      await store.step(on('weekly', BANANAS), 'line-1', 1);
+      expect(store.held()[0]?.quantity).toBe(775);
+
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+
+      expect(calls).toContain('quantity:line-1:-25');
+      expect(calls).not.toContain('delete:line-1');
+      expect(store.held()[0]?.quantity).toBe(750);
+    });
+
+    it('takes a count line the visit made back at nothing, as before', async () => {
+      const { store, calls } = setup(HOME);
+      await store.ensure();
+      await store.add(MILK);
+
+      await store.step(on('weekly', MILK), 'line-1', -1);
+
+      // Taken back: lowered to nothing, where the reader may not delete it.
+      expect(calls).toContain('quantity:line-1:-1');
+      expect(store.visit()).toEqual([]);
+    });
+
+    describe('a line the migration left in UNIT (backend 0246 M2)', () => {
+      const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+      const legacy = (quantity: number): World => ({
+        ...HOME,
+        items: { bananas: LOOSE },
+        lines: [
+          line('old', 'weekly', {
+            content: 'Plátanos',
+            quantity,
+            unit: 'UNIT',
+            itemIds: ['bananas'],
+          }),
+        ],
+      });
+
+      it('draws it as the list page does: as stored above nothing, in grams at nothing', async () => {
+        const above = setup(legacy(3));
+        await above.store.ensure();
+        expect(above.store.held()[0]).toMatchObject({
+          quantity: 3,
+          unit: 'UNIT',
+        });
+
+        TestBed.resetTestingModule();
+        const empty = setup(legacy(0));
+        await empty.store.ensure();
+        expect(empty.store.held()[0]).toMatchObject({
+          quantity: 0,
+          unit: 'GRAM',
+        });
+      });
+
+      it('asks for a kilo on its first plus, with an absolute update that states the unit', async () => {
+        const { store, calls } = setup(legacy(3));
+        await store.ensure();
+
+        await store.step(on('weekly', BANANAS), 'old', 1);
+
+        expect(calls).toContain('update:old:1000:GRAM');
+        expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+        expect(store.held()[0]).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+      });
+
+      it('steps in grams once corrected, a second press waiting for the first', async () => {
+        const { store, calls, holdWrites, releaseNext } = setup(legacy(0));
+        await store.ensure();
+        holdWrites();
+
+        const first = store.step(on('weekly', BANANAS), 'old', 1);
+        const second = store.step(on('weekly', BANANAS), 'old', 1);
+        await settled();
+        expect(calls.filter((call) => call.startsWith('quantity:'))).toEqual(
+          []
+        );
+
+        releaseNext();
+        await first;
+        await settled();
+        releaseNext();
+        await second;
+
+        expect(calls).toContain('update:old:1000:GRAM');
+        expect(calls).toContain('quantity:old:250');
+      });
+
+      it('sends nothing for a minus at nothing', async () => {
+        const { store, calls } = setup(legacy(0));
+        await store.ensure();
+
+        await store.step(on('weekly', BANANAS), 'old', -1);
+
+        expect(calls.some((call) => call.startsWith('update:'))).toBe(false);
+        expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+      });
     });
 
     it('counts a product with no unit named, as before', async () => {
