@@ -213,9 +213,10 @@ export interface LineProductPrice {
  * **One card is the cheapest** (velista `0183`, target state 5): the lowest
  * cost of the line's amount among the products that can serve its unit, which
  * is {@link cheaperForLine}, the price of one at 0. A line with one product
- * marks none, because the word compares, and a product with no price never
- * takes it. Two products at the same cost leave the word on the first. Without
- * a `rank` nothing is compared, so nothing is marked.
+ * marks none, because the word compares, and so does a line where only one
+ * product can serve its unit: the others are not in the comparison. A product
+ * with no price never takes it. Two products at the same cost leave the word on
+ * the first. Without a `rank` nothing is compared, so nothing is marked.
  */
 export function lineProductPrices(
   itemIds: readonly string[],
@@ -227,7 +228,7 @@ export function lineProductPrices(
     ranked(priceOf(itemId, pricesOf(itemId), supermarketId), rank)
   );
 
-  if (prices.length < 2) {
+  if (prices.filter((price) => price.serves !== false).length < 2) {
     return prices;
   }
 

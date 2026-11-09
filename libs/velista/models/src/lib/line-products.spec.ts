@@ -813,7 +813,8 @@ describe('the order of a line with several products (velista 0183, W3)', () => {
     const drawn = cards(fixtures, 'GRAM', 500);
     expect(drawn.map((card) => card.itemId)).toEqual(['loose', 'eggs']);
     expect(drawn.map((card) => card.serves)).toEqual([true, false]);
-    expect(cheapest(fixtures, 'GRAM', 500)).toBe('loose');
+    // Only one product can serve the line, so nothing is compared and nothing marked.
+    expect(cheapest(fixtures, 'GRAM', 500)).toBeNull();
   });
 
   it('keeps the favourite first when it can serve the unit, whatever it costs', () => {
