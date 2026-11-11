@@ -759,6 +759,100 @@ describe('DiaCatalogRunner', () => {
     ]);
   });
 
+  it('knows every leaf and name of the menu of 2026-11-11 (plan 0254)', async () => {
+    const leaf = (
+      id: string,
+      name: string,
+      path: string,
+      rootId: string,
+      rootName: string
+    ): FakeDiaLeaf => ({ id, name, path: `${path}/c/${id}`, rootId, rootName });
+    const navidad = (id: string, name: string, slug: string) =>
+      leaf(id, name, `/navidad/${slug}`, 'L124', 'Navidad');
+    const belleza = (id: string, name: string, slug: string) =>
+      leaf(id, name, `/cabello-y-belleza/${slug}`, 'L130', 'Cabello y belleza');
+    const added = [
+      navidad('L2355', 'Caldos y cremas', 'caldos-y-cremas'),
+      navidad('L2222', 'Ibéricos y quesos', 'ibericos-y-quesos'),
+      navidad(
+        'L2230',
+        'Carnes, pescados y mariscos',
+        'carnes-pescados-y-mariscos'
+      ),
+      navidad('L2255', 'Platos especiales', 'platos-especiales'),
+      navidad(
+        'L2356',
+        'Bombones, chocolates y trufas',
+        'bombones-chocolates-y-trufas'
+      ),
+      navidad('L2258', 'Mesa y hogar', 'mesa-y-hogar'),
+      leaf(
+        'L2353',
+        'Turrones y dulces de Navidad',
+        '/chocolates-y-golosinas/turrones-y-dulces-de-navidad',
+        'L110',
+        'Chocolates y golosinas'
+      ),
+      leaf(
+        'L2354',
+        'Especial otoño',
+        '/novedades-y-recomendados/especial-otono',
+        'L128',
+        'Novedades y recomendados'
+      ),
+      belleza('L2358', 'Limpieza facial', 'limpieza-facial'),
+      belleza('L2359', 'Cremas y cuidado facial', 'cremas-y-cuidado-facial'),
+      belleza(
+        'L2360',
+        'Perfumes y colonias mujer',
+        'perfumes-y-colonias-mujer'
+      ),
+      belleza(
+        'L2361',
+        'Perfumes y colonias hombre',
+        'perfumes-y-colonias-hombre'
+      ),
+      belleza(
+        'L2362',
+        'Colonias infantiles y familiares',
+        'colonias-infantiles-y-familiares'
+      ),
+    ];
+    const renamed = [
+      leaf('L2030', 'Ensaladas', '/verduras/ensaladas', 'L104', 'Verduras'),
+      leaf(
+        'L2025',
+        'Verduras congeladas',
+        '/verduras/verduras-congeladas',
+        'L104',
+        'Verduras'
+      ),
+      leaf('L2015', 'Pavo y conejo', '/carnes/pavo-y-conejo', 'L102', 'Carnes'),
+      leaf(
+        'L2136',
+        'Roscones, tartas y churros',
+        '/congelados-y-helados/roscones-tartas-y-churros',
+        'L119',
+        'Congelados y helados'
+      ),
+      leaf(
+        'L2140',
+        'Pouches y snacks',
+        '/infantil/pouches-y-snacks',
+        'L120',
+        'Infantil'
+      ),
+    ];
+    const runner = new TestRunner(
+      world({ leaves: [...added, ...renamed], listings: {} })
+    );
+    const ctx = context();
+    await runner.run(ctx, report, input({ priceScopes: [MADRID] }), source());
+
+    expect(reportOf(ctx)['unmappedLeaves']).toEqual([]);
+    expect(reportOf(ctx)['renamedLeaves']).toEqual([]);
+  });
+
   it('walks every page of a leaf, and plans a leaf per store', async () => {
     const many = Array.from({ length: 45 }, (_, index) => ({
       ...COKE,
