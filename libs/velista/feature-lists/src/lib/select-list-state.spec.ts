@@ -368,6 +368,13 @@ describe('selectListState', () => {
         },
         locale: 'es',
         brandSizeOf: (known) => `${known.brand} · 1 L`,
+        // What `productSizeText` answers for these records (velista 0191).
+        sizeOf: (known) =>
+          typeof known.approxWeight === 'number'
+            ? '~1,56 kg'
+            : known.size === null
+              ? null
+              : '1 L',
         formatMoney: (amount) => `${amount.toFixed(2).replace('.', ',')} €`,
         translate: (key) => key,
         ...overrides,
@@ -404,6 +411,125 @@ describe('selectListState', () => {
         favorite: false,
         others: 0,
         price: { amount: money(0.92), per: null },
+        brand: 'Hacendado',
+        size: '1 L',
+        perMeasure: null,
+        askedCost: null,
+      });
+    });
+
+    describe("the compact row's facts (velista 0191)", () => {
+      it('gives a pack its brand, its size and its unit price, also when it equals the price', () => {
+        const row = rowOf(
+          { content: 'Leche', itemIds: ['milk'], quantity: 2 },
+          {
+            catalog: catalog({
+              itemOf: (itemId) =>
+                itemId === 'milk'
+                  ? ({
+                      ...ITEMS.get('milk'),
+                      unitBasis: 'LITER',
+                    } as CatalogItem)
+                  : null,
+            }),
+          }
+        );
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            brand: 'Hacendado',
+            size: '1 L',
+            perMeasure: { amount: money(0.92), per: 'catalog.per.LITER' },
+            askedCost: null,
+          })
+        );
+      });
+
+      it('costs 750 g of a loose product, as an estimate', () => {
+        const row = rowOf({
+          content: 'Manzanas',
+          itemIds: ['apples'],
+          quantity: 750,
+          unit: 'GRAM',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            size: null,
+            perMeasure: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
+            // Formatted by the catalog the spec hands in, which spaces with a plain space.
+            askedCost: { amount: '1,87 €', estimated: true },
+          })
+        );
+      });
+
+      it('costs nothing at zero', () => {
+        const row = rowOf({
+          content: 'Manzanas',
+          itemIds: ['apples'],
+          quantity: 0,
+          unit: 'GRAM',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({ askedCost: null })
+        );
+      });
+
+      it('gives a kilo piece its weight and its price per kilo, and no asked cost', () => {
+        const row = rowOf({
+          content: 'Queso',
+          itemIds: ['cheese'],
+          quantity: 1,
+          unit: 'UNIT',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            size: '~1,56 kg',
+            perMeasure: { amount: money(13.42), per: 'catalog.per.KILOGRAM' },
+            price: { amount: money(20.94), per: null },
+            askedCost: null,
+          })
+        );
+      });
+
+      it('reads an empty brand as none', () => {
+        const row = rowOf(
+          { content: 'Leche', itemIds: ['milk'] },
+          {
+            catalog: catalog({
+              itemOf: (itemId) =>
+                itemId === 'milk'
+                  ? ({ ...ITEMS.get('milk'), brand: '  ' } as CatalogItem)
+                  : null,
+            }),
+          }
+        );
+
+        expect(row.product).toEqual(expect.objectContaining({ brand: null }));
+      });
+
+      it('has none of them for a product the catalog has not named', () => {
+        const row = rowOf(
+          {
+            content: 'Manzanas',
+            itemIds: ['apples'],
+            quantity: 750,
+            unit: 'GRAM',
+          },
+          { catalog: catalog({ itemOf: () => null }) }
+        );
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            name: null,
+            brand: null,
+            size: null,
+            perMeasure: null,
+            askedCost: null,
+          })
+        );
       });
     });
 

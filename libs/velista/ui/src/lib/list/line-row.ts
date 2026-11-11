@@ -11,11 +11,14 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  lineRowFacts,
   lineStatuses,
   priceWordsText,
+  type LineRowFacts,
   type LineRowShownProduct,
   type LineRowVm,
   type LineStatus,
+  type ListRowLayout,
   type QuantityStep,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
@@ -124,6 +127,15 @@ export type LineRowAction =
 export class LineRow {
   readonly line = input.required<LineRowVm>();
 
+  /**
+   * How the row is drawn (velista `0191`): the row of today, or the compact row with
+   * the label and the brand on one line and three fact lines beside the stepper. One
+   * component either way, so every row feature exists once and both layouts draw it.
+   */
+  readonly layout = input<ListRowLayout>('default');
+
+  protected readonly compact = computed(() => this.layout() === 'compact');
+
   /** Whether the list is in reorder mode, which changes what the row is. */
   readonly reordering = input(false);
 
@@ -219,6 +231,22 @@ export class LineRow {
     () => this.mayChoose() && !this.reordering()
   );
 
+  /**
+   * The compact row's three facts, or null while it shows no product (velista
+   * `0191`, section 2.2). Decided by `lineRowFacts` over what the builder set, at the
+   * stored quantity, which is the one the builder costed.
+   */
+  protected readonly facts = computed<LineRowFacts | null>(() => {
+    const shown = this.shown();
+    return shown === null ? null : lineRowFacts(shown, this.line().quantity);
+  });
+
+  /** The second fact as one string ("2,50 € / kg"), or empty. */
+  protected readonly perMeasureText = computed(() => {
+    const words = this.facts()?.perMeasure ?? null;
+    return words === null ? '' : priceWordsText(words);
+  });
+
   /** Every status word that applies, in the order of section 4. */
   protected readonly statuses = computed(() => lineStatuses(this.line()));
 
@@ -265,7 +293,9 @@ export class LineRow {
     this._translator.locale();
     this._translator.loaded();
     const parts: (string | null | undefined)[] = [line.content];
-    if (line.product === undefined) {
+    if (this.compact() && shown !== null) {
+      parts.push(...this._compactNameParts(shown));
+    } else if (line.product === undefined) {
       parts.push(line.detail);
     } else if (shown !== null) {
       if (shown.favorite) {
@@ -290,6 +320,35 @@ export class LineRow {
     return parts
       .filter((part): part is string => part != null && part !== '')
       .join(', ');
+  }
+
+  /**
+   * The product's part of a compact row's name (velista `0191`, section 5): what the
+   * row draws, in its order. The favourite, the brand, the size, the price per
+   * measure, the third fact ("about 1,88 €" for an estimate), and "+N". A named line's
+   * product name is not drawn, so it is not read (decision E).
+   */
+  private _compactNameParts(shown: LineRowShownProduct): (string | null)[] {
+    const facts = lineRowFacts(shown, this.line().quantity);
+    const price = facts.price;
+    return [
+      shown.favorite ? this._translator.t('list.row.favorite') : null,
+      shown.brand,
+      facts.size,
+      facts.perMeasure === null ? null : priceWordsText(facts.perMeasure),
+      price === null
+        ? null
+        : price.estimated
+          ? this._translator.t('list.row.about', undefined, undefined, {
+              price: price.amount,
+            })
+          : price.amount,
+      shown.others > 0
+        ? this._translator.t('list.row.more', undefined, undefined, {
+            count: shown.others,
+          })
+        : null,
+    ];
   }
 
   /**

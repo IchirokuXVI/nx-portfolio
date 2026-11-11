@@ -189,6 +189,14 @@ export const StorageKeys = {
    * any later start. A higher code asks once more.
    */
   flexibleUpdateAsked: `flexible-update-asked:${APP_KEY}`,
+  /**
+   * How this device draws the rows of a zone list (velista `0191`, decision A): the
+   * row of today or the compact row.
+   *
+   * One record for the device, like `mappingSettings`, and with no expiry: it is about
+   * this screen and this person's eyes, not a fact about one trip. Not on the server.
+   */
+  listRows: `list-rows:${APP_KEY}`,
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

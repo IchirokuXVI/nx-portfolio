@@ -97,6 +97,18 @@
       [value]="languageName()"
     />
 
+    <!--
+      How the rows of a zone list are drawn (velista 0191, decision A): the other
+      choice about how the app looks on this phone, so it sits under the language.
+      Kept on the device, off by default, and it applies at once: there is no save.
+    -->
+    <lib-account-switch
+      (changed)="listRows.setLayout($event ? 'compact' : 'default')"
+      [checked]="listRows.layout() === 'compact'"
+      [hint]="'account.listRows.hint' | rokuT"
+      [label]="'account.listRows.label' | rokuT"
+    />
+
     @switch (appRow()) {
       @case ('installed') {
         <!--

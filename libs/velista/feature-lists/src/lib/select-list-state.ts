@@ -1,7 +1,10 @@
 import {
   catalogName,
+  lineAmount,
+  lineAmountProductOf,
   lineShownProduct,
   listCost,
+  soldAs,
   soldAsOf,
   type CatalogItem,
   type Line,
@@ -12,6 +15,7 @@ import {
   type LineProductPrice,
   type LineProductPriceRead,
   type LineRowProduct,
+  type LineRowShownProduct,
   type LineRowVm,
   type LineWriteState,
   type ListAbilitiesVm,
@@ -19,9 +23,14 @@ import {
   type ListPageState,
   type ListPermission,
   type ListViewerVm,
+  type ProductOffer,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { priceWords, type CatalogTranslate } from '@portfolio/velista/ui';
+import {
+  measurePriceWords,
+  priceWords,
+  type CatalogTranslate,
+} from '@portfolio/velista/ui';
 
 /**
  * What the caller may do on this list, as the server answered it.
@@ -132,6 +141,11 @@ export interface ListStateCatalog {
   readonly locale: string;
   /** "Hacendado · 1 L", or null with neither. */
   readonly brandSizeOf: (item: CatalogItem) => string | null;
+  /**
+   * How big a product is ("1000 ml", "~2,5 kg"), or null for a loose product and a
+   * count of one: `productSizeText` (velista `0191`, the compact row's first fact).
+   */
+  readonly sizeOf: (item: CatalogItem) => string | null;
   /** A price in the reader's language. */
   readonly formatMoney: (amount: number, currency: string | null) => string;
   /**
@@ -391,7 +405,49 @@ function rowProduct(
     // piece, and no price without one, a price per kilo with its "/ kg", or the
     // price. A product the catalog has not named is priced by its offer alone.
     price: priceWords(offer, item, catalog.locale, catalog.translate),
+    // The compact row's facts (velista `0191`, section 2.1). Built here and
+    // nowhere else, so both layouts read one product.
+    brand: item === null ? null : nonEmpty(item.brand ?? ''),
+    size: item === null ? null : catalog.sizeOf(item),
+    perMeasure:
+      item === null
+        ? null
+        : measurePriceWords(offer, item, catalog.locale, catalog.translate),
+    askedCost: item === null ? null : askedCostOf(line, item, offer, catalog),
   };
+}
+
+/**
+ * What a line's amount of a loose product costs, with its estimate mark, or null
+ * (velista `0191`, decision C): only for a product sold by the kilo or the litre, a
+ * line above zero, and a cost with every figure it needs.
+ */
+function askedCostOf(
+  line: Line,
+  item: CatalogItem,
+  offer: ProductOffer | null,
+  catalog: ListStateCatalog
+): LineRowShownProduct['askedCost'] {
+  const kind = soldAs(item.unit, item.size, item.approxWeight);
+  if (
+    offer === null ||
+    line.quantity <= 0 ||
+    (kind !== 'BY_THE_KILO' && kind !== 'BY_THE_LITRE')
+  ) {
+    return null;
+  }
+  const cost = lineAmount(
+    line.quantity,
+    line.unit,
+    lineAmountProductOf(item),
+    offer
+  );
+  return cost === null
+    ? null
+    : {
+        amount: catalog.formatMoney(cost.cents / 100, offer.currency),
+        estimated: cost.estimated,
+      };
 }
 
 /** `lineShownProduct` over the catalog's prices, or null for a line with none. */

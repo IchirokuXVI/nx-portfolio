@@ -857,4 +857,351 @@ describe('LineRow', () => {
       ).toContain('3');
     });
   });
+  /**
+   * Velista `0191`: the compact row. The same component and view model as the row of
+   * today, drawn in its own branch, so every case here is about what the branch draws
+   * and what it still shares (section 8).
+   */
+  describe('compact layout (velista 0191)', () => {
+    async function compact(
+      line: LineRowVm,
+      inputs: { pending?: number | null } = {}
+    ): Promise<ComponentFixture<LineRow>> {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [LineRow, RokuTranslatorTestingModule.forTesting()],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(LineRow);
+      fixture.componentRef.setInput('line', line);
+      fixture.componentRef.setInput('layout', 'compact');
+      if (inputs.pending !== undefined) {
+        fixture.componentRef.setInput('pending', inputs.pending);
+      }
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    /** A pack: the size, the price per litre equal to the price, the price. */
+    function pack(
+      overrides: Partial<LineRowShownProduct> = {}
+    ): LineRowShownProduct {
+      return shown({
+        brand: 'Hacendado',
+        size: '1 L',
+        perMeasure: { amount: '0,99 €', per: '/ L' },
+        price: { amount: '0,99 €', per: null },
+        askedCost: null,
+        ...overrides,
+      });
+    }
+
+    /** A loose product at 2,50 € / kg, costed at 750 g. */
+    function loose(
+      overrides: Partial<LineRowShownProduct> = {}
+    ): LineRowShownProduct {
+      return shown({
+        name: 'Plátano de Canarias IGP',
+        brand: null,
+        brandSize: null,
+        size: null,
+        perMeasure: { amount: '2,50 €', per: '/ kg' },
+        price: { amount: '2,50 €', per: '/ kg' },
+        askedCost: { amount: '1,88 €', estimated: true },
+        ...overrides,
+      });
+    }
+
+    function facts(fixture: ComponentFixture<LineRow>): string[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.facts > *')
+      ).map((fact) => fact.textContent?.trim() ?? '');
+    }
+
+    it('carries .compact and draws none of the row of today', async () => {
+      const fixture = await compact(vm({ product: pack() }));
+
+      expect(row(fixture).classList).toContain('compact');
+      expect(query(fixture, '.body')).toBeNull();
+      expect(query(fixture, '.line-2')).toBeNull();
+    });
+
+    it('draws line 1 as the label, then the brand, then the marks', async () => {
+      const fixture = await compact(
+        vm({
+          content: 'Leche',
+          named: true,
+          product: pack(),
+          editor: 'Ana',
+          commentCount: 2,
+          indicators: ['bought'],
+        })
+      );
+      const line1 = query(fixture, '.compact-line-1') as HTMLElement;
+      const children = Array.from(line1.children).map((child) =>
+        child.className.split(' ').filter((name) => name !== '')
+      );
+
+      expect(children[0]).toEqual(expect.arrayContaining(['content', 'label']));
+      expect(children[1]).toEqual(['brand']);
+      expect(children[2]).toEqual(['marks']);
+      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
+      expect(text(fixture, '.compact-line-1 .brand')).toBe('Hacendado');
+      // The editor's initial with no word, the comment count, then the status word.
+      expect(text(fixture, '.marks .editor-avatar')).toBe('A');
+      expect(query(fixture, '.editor-label')).toBeNull();
+      expect(text(fixture, '.marks .comment-count')).toBe('2');
+      expect(statusWords(fixture)).toEqual(['line.indicator.bought']);
+      // A named line draws no product name (decision E).
+      expect(fixture.nativeElement.textContent).not.toContain(
+        'Leche semidesnatada'
+      );
+    });
+
+    it('draws the three facts in order: size, price per measure, price', async () => {
+      const fixture = await compact(vm({ product: pack() }));
+
+      expect(facts(fixture)).toEqual(['1 L', '0,99 € / L', '0,99 €']);
+      expect(query(fixture, '.fact.price')?.textContent).not.toContain('≈');
+    });
+
+    it('draws a product with no brand without a brand', async () => {
+      const fixture = await compact(vm({ product: pack({ brand: null }) }));
+
+      expect(query(fixture, '.brand')).toBeNull();
+    });
+
+    it('marks what 750 g of a loose product costs, with an empty size line', async () => {
+      const fixture = await compact(
+        vm({ quantity: 750, unit: 'GRAM', product: loose() })
+      );
+
+      expect(facts(fixture)).toEqual(['', '2,50 € / kg', '≈1,88 €']);
+    });
+
+    it('leaves the third line of a loose product at zero empty', async () => {
+      const fixture = await compact(
+        vm({
+          quantity: 0,
+          unit: 'GRAM',
+          product: loose({ askedCost: null }),
+        })
+      );
+
+      expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
+      expect(query(fixture, '.fact.price.none')).toBeNull();
+    });
+
+    it('says No price for a product with none', async () => {
+      const fixture = await compact(
+        vm({ product: pack({ price: null, perMeasure: null }) })
+      );
+
+      expect(text(fixture, '.fact.price.none')).toBe('list.row.noPrice');
+    });
+
+    it('draws a line of several products as the star, the brand and +2 in the brand', async () => {
+      const fixture = await compact(
+        vm({
+          product: pack({
+            brand: 'Quesería Artesana de Villalón',
+            favorite: true,
+            others: 2,
+          }),
+        })
+      );
+      const brand = query(fixture, '.compact-line-1 .brand.multi');
+
+      expect(brand?.querySelector('.favorite')).not.toBeNull();
+      expect(brand?.querySelector('.brand-text')?.textContent).toBe(
+        'Quesería Artesana de Villalón'
+      );
+      expect(brand?.querySelector('.more')?.textContent).toBe('+2');
+    });
+
+    it('draws a free text line as the dashed square and Choose a product, two buttons that choose', async () => {
+      const fixture = await compact(
+        vm({
+          content: 'Pan de molde',
+          product: { kind: 'none', canChoose: true },
+        })
+      );
+      const chosen: string[] = [];
+      fixture.componentInstance.chooseProduct.subscribe((id) =>
+        chosen.push(id)
+      );
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      const square = query(fixture, 'button.picture.choose') as HTMLElement;
+      const words = query(
+        fixture,
+        '.facts button.compact-choose'
+      ) as HTMLElement;
+      expect(square.getAttribute('aria-label')).toBe('list.row.chooseFor');
+      expect(words.textContent?.trim()).toBe('list.row.choose');
+      tap(square);
+      tap(words);
+
+      expect(chosen).toEqual(['ln-1', 'ln-1']);
+      expect(opened).toEqual([]);
+      expect(query(fixture, '.brand')).toBeNull();
+    });
+
+    it('says No product to a reader who may not choose', async () => {
+      const fixture = await compact(
+        vm({ product: { kind: 'none', canChoose: false } })
+      );
+
+      expect(query(fixture, 'button')?.classList).not.toContain('choose');
+      expect(text(fixture, '.fact.no-product')).toBe('list.row.noProduct');
+      expect(query(fixture, 'lib-product-picture')).not.toBeNull();
+    });
+
+    it('draws the four bones and the real label while the product loads', async () => {
+      const fixture = await compact(
+        vm({ content: 'Leche', product: { kind: 'loading' } })
+      );
+
+      expect(query(fixture, '.picture.bone')).not.toBeNull();
+      expect(query(fixture, '.compact-line-1 .brand-bone')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelectorAll('.facts > .fact-bone')
+      ).toHaveLength(3);
+      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
+      expect(stepper(fixture)).not.toBeNull();
+    });
+
+    it('draws a failed product as the label, the plain picture and three empty lines', async () => {
+      const fixture = await compact(
+        vm({ content: 'Leche', product: { kind: 'unread' } })
+      );
+
+      expect(query(fixture, 'lib-product-picture')).not.toBeNull();
+      expect(query(fixture, '.brand')).toBeNull();
+      expect(facts(fixture)).toEqual([]);
+    });
+
+    describe('the accessible name (section 5)', () => {
+      it('says the label, the brand, the size, both prices and the quantity of a pack', async () => {
+        const fixture = await compact(
+          vm({ content: 'Leche', named: true, quantity: 2, product: pack() })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Leche, Hacendado, 1 L, 0,99 € / L, 0,99 €, 2'
+        );
+      });
+
+      it('says an estimate as about its amount, for a loose product', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Plátano de Canarias IGP',
+            named: false,
+            quantity: 750,
+            unit: 'GRAM',
+            product: loose(),
+          })
+        );
+
+        // The testing translator answers the key; `list.row.about` reads
+        // "about 1,88 €" in the app.
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Plátano de Canarias IGP, 2,50 € / kg, list.row.about, 750 g'
+        );
+      });
+
+      it('says the favourite and +N, as the row draws them', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Queso',
+            product: pack({ favorite: true, others: 2 }),
+          })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Queso, list.row.favorite, Hacendado, 1 L, 0,99 € / L, 0,99 €, list.row.more, 1'
+        );
+      });
+
+      it('says the label and the quantity of a free text line', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Pan de molde',
+            quantity: 2,
+            product: { kind: 'none', canChoose: true },
+          })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe('Pan de molde, 2');
+      });
+    });
+
+    it('draws the decisions and both notices under a compact row', async () => {
+      const decided = await compact(
+        vm({ approvalStatus: 'PENDING', decidable: true, product: pack() })
+      );
+      expect(
+        decided.nativeElement.querySelectorAll('.decisions .decision')
+      ).toHaveLength(2);
+      expect(row(decided).classList).toContain('awaiting');
+
+      const failed = await compact(vm({ write: 'failed', product: pack() }));
+      expect(text(failed, '.notice.failed')).toBe('list.line.failed');
+
+      const overwritten = await compact(
+        vm({ write: 'overwritten', overwrittenBy: 'Ana', product: pack() })
+      );
+      expect(text(overwritten, '.notice.overwritten')).toBe(
+        'list.line.overwritten'
+      );
+    });
+
+    it('keeps the status words for a screen reader, as the row of today does', async () => {
+      const fixture = await compact(
+        vm({ indicators: ['bought', 'notAvailable'], product: pack() })
+      );
+      const described = row(fixture).getAttribute('aria-describedby');
+
+      expect(described).toBe('st-ln-1');
+      expect(
+        fixture.nativeElement.querySelector(`#${described}`)?.textContent
+      ).toContain('line.indicator.notAvailable');
+    });
+
+    it('draws the row stepper bound as in the default layout', async () => {
+      const fixture = await compact(vm({ quantity: 3, product: pack() }), {
+        pending: 5,
+      });
+      const steps: Array<{ lineId: string; step: QuantityStep }> = [];
+      const opened: string[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((s) => steps.push(s));
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      expect(stepper(fixture)?.classList).toContain('variant-row');
+      expect(stepper(fixture)?.getAttribute('data-value')).toBe('5');
+      plus(fixture).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      plus(fixture).dispatchEvent(new Event('pointerup', { bubbles: true }));
+      plus(fixture).click();
+
+      expect(steps).toEqual([
+        { lineId: 'ln-1', step: { from: 5, to: 6, repeat: false } },
+      ]);
+      expect(opened).toEqual([]);
+
+      const reader = await compact(vm({ adjustable: false, product: pack() }));
+      expect(stepper(reader)?.classList).toContain('is-readonly');
+    });
+
+    it('opens the line on a tap, as the row of today does', async () => {
+      const fixture = await compact(vm({ product: pack() }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      row(fixture).click();
+
+      expect(opened).toEqual(['ln-1']);
+    });
+  });
 });

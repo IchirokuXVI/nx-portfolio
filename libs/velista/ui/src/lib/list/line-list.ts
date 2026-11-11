@@ -12,6 +12,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import {
   basketMatchRange,
   type LineRowVm,
+  type ListRowLayout,
   type QuantityStep,
 } from '@portfolio/velista/models';
 import { LineRow, type LineRowAction } from './line-row';
@@ -95,6 +96,7 @@ interface RowBand {
             (retry)="retry.emit($event)"
             [canMoveDown]="!last"
             [canMoveUp]="!first"
+            [layout]="rowLayout()"
             [line]="line"
             [match]="matchOf(line)"
             [pending]="pending().get(line.id) ?? null"
@@ -120,6 +122,22 @@ export class LineList {
   readonly lines = input.required<readonly LineRowVm[]>();
 
   readonly reordering = input(false);
+
+  /**
+   * How every row is drawn, as the device chose (velista `0191`): the row of today or
+   * the compact row.
+   */
+  readonly layout = input<ListRowLayout>('default');
+
+  /**
+   * The layout the rows get. Decision I of velista `0191`: while the list is being
+   * reordered every row is the row of today, because the grip and a dragged row are
+   * that row's business. Velista `0189` removes the reorder mode; when it lands, this
+   * goes and the rows take {@link layout} straight.
+   */
+  protected readonly rowLayout = computed<ListRowLayout>(() =>
+    this.reordering() ? 'default' : this.layout()
+  );
 
   /** What the live region currently says. Empty announces nothing. */
   readonly announcement = input('');

@@ -235,3 +235,52 @@ describe('LineList reordering by drag', () => {
     expect(rows(fixture)[0].style.transform).toBe('');
   });
 });
+
+/** Velista `0191`: the layout the device chose reaches every row. */
+describe('LineList layout (velista 0191)', () => {
+  function drawn(reordering: boolean, layout?: 'default' | 'compact') {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [LineList, RokuTranslatorTestingModule.forTesting()],
+    });
+    const fixture = TestBed.createComponent(LineList);
+    fixture.componentRef.setInput('lines', LINES);
+    fixture.componentRef.setInput('reordering', reordering);
+    if (layout !== undefined) {
+      fixture.componentRef.setInput('layout', layout);
+    }
+    fixture.detectChanges();
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-row .row'
+      )
+    );
+  }
+
+  it('draws the row of today by default', () => {
+    const drawnRows = drawn(false);
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.some((row) => row.classList.contains('compact'))).toBe(
+      false
+    );
+  });
+
+  it('passes compact to every row', () => {
+    const drawnRows = drawn(false, 'compact');
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.every((row) => row.classList.contains('compact'))).toBe(
+      true
+    );
+  });
+
+  it('draws every row as the row of today while the list is reordered (decision I)', () => {
+    const drawnRows = drawn(true, 'compact');
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.some((row) => row.classList.contains('compact'))).toBe(
+      false
+    );
+  });
+});

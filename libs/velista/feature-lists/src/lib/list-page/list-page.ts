@@ -31,6 +31,7 @@ import {
   ItemNames,
   LineStore,
   LIST_SERVICE,
+  ListRowsStore,
   type ListServiceI,
   ListStore,
   type ListViewSnapshot,
@@ -125,6 +126,7 @@ import {
   PageHeader,
   PageHeaderAction,
   productBrandSizeText,
+  productSizeText,
   RowSkeleton,
   SpinnerIcon,
   type SuggestionChoice,
@@ -294,6 +296,13 @@ export class ListPage {
 
   /** The products on the lines, for their categories, names and prices (section 3). */
   private readonly _itemNames = inject(ItemNames);
+
+  /**
+   * How the rows are drawn, the row of today or the compact row, as this device
+   * chose in the account page (velista `0191`). Every line list of the page reads it,
+   * the search results included (decision G).
+   */
+  protected readonly listRows = inject(ListRowsStore);
 
   /** Bumped when the app or the socket comes back, which starts a new visit. */
   private readonly _priceVisit = signal(0);
@@ -565,6 +574,14 @@ export class ListPage {
       pricesOf: this._itemNames.pricesOf,
       locale,
       brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      sizeOf: (item) =>
+        productSizeText(
+          item.size,
+          item.unit,
+          locale,
+          translate,
+          item.approxWeight
+        ),
       formatMoney: (amount, currency) => formatMoney(amount, currency, locale),
       translate,
     };

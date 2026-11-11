@@ -32,6 +32,7 @@ import {
   LINE_SERVICE,
   LineStore,
   LIST_SERVICE,
+  ListRowsStore,
   ListViewStore,
   MEMORY_OPERATOR_SETTINGS,
   overlayKey,
@@ -387,6 +388,8 @@ async function render(options: Options = {}): Promise<{
       // What the route provides beside the page (velista `0082`), real, over the
       // fakes above, so a spec asserts what the page draws of a real view.
       ListViewStore,
+      // How this device draws the rows (velista `0191`), real, over the storage above.
+      ListRowsStore,
       // Beside it on the route (velista `0088`), real, over a service the spec answers.
       TripStore,
       { provide: TRIP_SERVICE, useValue: tripService },
@@ -4011,4 +4014,86 @@ describe('the history names a price per kilo with its slash', () => {
       expect(json.list.history.atPer).toContain('{{- per}}');
     });
   }
+});
+
+describe('ListPage: compact rows (velista 0191)', () => {
+  const COMPACT = new Map([
+    [StorageKeys.listRows, JSON.stringify({ version: 1, layout: 'compact' })],
+  ]);
+  const ROWS = [
+    line('ln-milk', { content: 'Leche', position: 1 }),
+    line('ln-bread', { content: 'Pan', position: 2 }),
+  ];
+
+  function lineRows(fixture: ComponentFixture<ListPage>): HTMLElement[] {
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-row .row'
+      )
+    );
+  }
+
+  it('draws the row of today with no choice on the device', async () => {
+    const { fixture } = await render({ lines: ROWS });
+
+    expect(lineRows(fixture)).toHaveLength(2);
+    expect(
+      lineRows(fixture).some((row) => row.classList.contains('compact'))
+    ).toBe(false);
+  });
+
+  it('draws every row compact when the device chose it', async () => {
+    const { fixture } = await render({
+      lines: ROWS,
+      storage: new Map(COMPACT),
+    });
+
+    expect(lineRows(fixture)).toHaveLength(2);
+    expect(
+      lineRows(fixture).every((row) => row.classList.contains('compact'))
+    ).toBe(true);
+  });
+
+  it('draws the search results compact too (decision G)', async () => {
+    const { fixture } = await render({
+      lines: ROWS,
+      storage: new Map(COMPACT),
+      search: true,
+      returned: {
+        view: {
+          state: DEFAULT_LIST_VIEW_STATE,
+          openTrips: new Set<string>(),
+        },
+        words: 'le',
+        dueExpanded: false,
+        scrollTop: 0,
+      },
+    });
+    const results = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '#list-results lib-line-row .row'
+      )
+    );
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((row) => row.classList.contains('compact'))).toBe(
+      true
+    );
+  });
+
+  it('redraws the rows when the choice flips, with no reload', async () => {
+    const { fixture } = await render({ lines: ROWS });
+
+    TestBed.inject(ListRowsStore).setLayout('compact');
+    fixture.detectChanges();
+    expect(
+      lineRows(fixture).every((row) => row.classList.contains('compact'))
+    ).toBe(true);
+
+    TestBed.inject(ListRowsStore).setLayout('default');
+    fixture.detectChanges();
+    expect(
+      lineRows(fixture).some((row) => row.classList.contains('compact'))
+    ).toBe(false);
+  });
 });
