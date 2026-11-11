@@ -33,8 +33,11 @@ export interface ProbeNoticeMessage {
  *
  * In the quiet warning tone of "Will not run" on a schedule: the warning ink and
  * glyph on the surface the form already stands on, with no tinted box, no alert
- * role and no motion. `role="status"`, because it appears when the person picks
- * a chain or a mode, and a screen reader should hear it once they are free.
+ * role and no motion. `role="status"` names it as advice and not an alert. It
+ * is not a promise that a screen reader announces it: the notice arrives
+ * already filled inside an `@if`, and many screen readers announce a live
+ * region only when an existing one changes. A person who walks the form still
+ * reads it in its place beside the start.
  *
  * Presentational: the page reads the probes and the chain's name and hands
  * them in. A chain the reference could not name is "This chain", never its id.
@@ -101,7 +104,12 @@ export class ProbeNotice {
       args: {
         chain:
           this.chain() ?? this._translator.t('harvest.probeNotice.thisChain'),
-        age: probeAge(verdict.startedAt, this.now(), locale),
+        age: probeAge(
+          verdict.startedAt,
+          this.now(),
+          this._translator.t('harvest.probeNotice.justNow'),
+          locale
+        ),
         status: this._translator.t(
           `harvest.probeNotice.status.${verdict.status}`
         ),
@@ -121,16 +129,22 @@ export class ProbeNotice {
 
 /**
  * How long ago the probe started, in the harvest feature's relative format:
- * "3 days ago", "yesterday". A start a skewed clock puts in the future reads
- * as "now", so the sentence never has a hole in it.
+ * "3 days ago", "yesterday".
+ *
+ * An age that rounds to no seconds, a start that a skewed clock puts in the
+ * future and a start that cannot be read all answer `justNow`. The relative
+ * format says "now" there, and "the last probe, now, was unreachable" reads
+ * wrong, so the sentence takes its own words and never has a hole in it.
  */
 export function probeAge(
   startedAt: string,
   now: number,
+  justNow: string,
   locale?: string
 ): string {
-  return (
-    formatSince(startedAt, now, locale) ||
-    new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'second')
-  );
+  const then = new Date(startedAt).getTime();
+  if (Number.isNaN(then) || Math.round((now - then) / 1000) <= 0) {
+    return justNow;
+  }
+  return formatSince(startedAt, now, locale) || justNow;
 }

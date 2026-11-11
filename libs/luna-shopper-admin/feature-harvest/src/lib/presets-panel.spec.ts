@@ -642,9 +642,10 @@ describe('the presets panel, a red probe', () => {
   });
 
   it('draws no notice for a chain whose newest probe passed', async () => {
-    const { fixture } = await render();
+    const { fixture, recorded } = await render();
 
     expect(fixture.componentInstance.presets()).toHaveLength(1);
+    expect(recorded.probeReads).toEqual([MERCADONA]);
     expect(fixture.nativeElement.querySelector('[data-probe-notice]')).toBe(
       null
     );

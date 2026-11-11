@@ -562,6 +562,7 @@ describe('the new run page, a red probe', () => {
     const { fixture } = await render();
     await chain(fixture, DEZA);
     await settled(fixture);
+    expect(notice(fixture)).not.toBeNull();
 
     formOf(fixture).mode.set('FILE_IMPORT');
     await settled(fixture);
@@ -570,10 +571,15 @@ describe('the new run page, a red probe', () => {
   });
 
   it('draws no notice for a chain whose newest probe passed', async () => {
+    const reads = jest.spyOn(HarvestMemory.prototype, 'listProbes');
     const { fixture } = await render();
     await chain(fixture, MERCADONA);
     await settled(fixture);
 
+    // The probes were read, so the absence is the green verdict and not a
+    // read that never happened.
+    expect(reads).toHaveBeenCalledWith(MERCADONA, expect.anything());
+    reads.mockRestore();
     expect(fixture.componentInstance.probeNotice()).toBe(null);
     expect(notice(fixture)).toBe(null);
   });

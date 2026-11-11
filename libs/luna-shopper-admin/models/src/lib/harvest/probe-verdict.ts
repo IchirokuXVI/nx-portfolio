@@ -144,7 +144,7 @@ export function redProbe(page: unknown): ProbeVerdict | null {
  * table does. A chain with no probe gets no notice whatever this answers.
  */
 export function readsTheChain(
-  mode: HarvestRunMode | string,
+  mode: HarvestRunMode,
   adapterKey: string
 ): boolean {
   if (mode === 'CATALOG_DISCOVERY') {

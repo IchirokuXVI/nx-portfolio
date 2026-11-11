@@ -65,6 +65,15 @@ describe('the probe notice', () => {
     );
   });
 
+  it('says "just now" for a probe that started this second', () => {
+    const notice = render('Deza', {
+      ...VERDICT,
+      startedAt: new Date(NOW).toISOString(),
+    }).componentInstance;
+
+    expect(notice.message().args['age']).toBe('harvest.probeNotice.justNow');
+  });
+
   it('is a status with the warning glyph, and nothing to press', () => {
     const host: HTMLElement = render('Deza').nativeElement;
 
@@ -76,13 +85,37 @@ describe('the probe notice', () => {
 });
 
 describe('probeAge', () => {
+  const JUST_NOW = 'just now';
+
   it('is the relative format of the harvest feature', () => {
-    expect(probeAge('2026-11-10T09:00:00.000Z', NOW, 'en')).toBe('yesterday');
-    expect(probeAge('2026-11-11T08:00:00.000Z', NOW, 'en')).toBe('1 hour ago');
+    expect(probeAge('2026-11-10T09:00:00.000Z', NOW, JUST_NOW, 'en')).toBe(
+      'yesterday'
+    );
+    expect(probeAge('2026-11-11T08:00:00.000Z', NOW, JUST_NOW, 'en')).toBe(
+      '1 hour ago'
+    );
+    expect(probeAge('2026-11-11T08:59:30.000Z', NOW, JUST_NOW, 'en')).toBe(
+      '30 seconds ago'
+    );
   });
 
-  it('reads a start in the future as now, so the sentence has no hole', () => {
-    expect(probeAge('2026-11-12T09:00:00.000Z', NOW, 'en')).toBe('now');
+  it('answers its own words for an age of no seconds, never "now"', () => {
+    expect(probeAge('2026-11-11T09:00:00.000Z', NOW, JUST_NOW, 'en')).toBe(
+      JUST_NOW
+    );
+    expect(probeAge('2026-11-11T08:59:59.700Z', NOW, JUST_NOW, 'en')).toBe(
+      JUST_NOW
+    );
+  });
+
+  it('reads a start in the future as just now, so the sentence has no hole', () => {
+    expect(probeAge('2026-11-12T09:00:00.000Z', NOW, JUST_NOW, 'en')).toBe(
+      JUST_NOW
+    );
+  });
+
+  it('reads a start it cannot parse as just now', () => {
+    expect(probeAge('not a date', NOW, JUST_NOW, 'en')).toBe(JUST_NOW);
   });
 });
 
@@ -98,6 +131,7 @@ describe('the probe notice copy', () => {
     expect(harvest.probeNotice.textNoSentence).toBe(
       "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong. You can start it anyway."
     );
+    expect(harvest.probeNotice.justNow).toBe('just now');
     expect(harvest.probeNotice.status).toEqual({
       SHAPE_CHANGED: 'a shape change',
       BLOCKED: 'refused',
