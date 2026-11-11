@@ -230,7 +230,10 @@ export class DezaCatalogRunner implements CatalogRunner {
       if (!next) {
         next = state.narrow();
         if (!next) {
-          stoppedBy = 'NO_TERM';
+          // A section whose own query fit under the ceiling was read whole and
+          // had nothing to narrow. One with a capped query left every capped
+          // query with no term of its own untried.
+          stoppedBy = state.capped.length === 0 ? 'COMPLETE' : 'NO_TERM';
           break;
         }
       }
@@ -238,8 +241,7 @@ export class DezaCatalogRunner implements CatalogRunner {
       next = null;
       state.queries += 1;
 
-      const before = crawl.products.size;
-      const capped = await this.crawlQuery(
+      const { capped, added, vocabulary } = await this.crawlQuery(
         context,
         crawl,
         client(),
@@ -252,12 +254,19 @@ export class DezaCatalogRunner implements CatalogRunner {
       // covers a query that returns products; this covers one that returns none.
       await context.heartbeat();
       if (capped) {
-        state.capped.push(terms);
+        state.capture(terms, vocabulary);
       }
       // A pass that adds nothing new is where a term based cover stops paying:
       // the remaining vocabulary is describing products already seen, and the
       // budget is better left unspent than spent proving it again.
-      if (crawl.products.size === before) {
+      //
+      // **What this query added, not what the run grew by.** The pool crawls
+      // `source.workers` sections at once, and they share `crawl.products`. A
+      // test of the run's product count before and after this query counted
+      // every product another section recorded meanwhile, so a section that had
+      // stopped growing was reset to zero barren passes by its neighbours and
+      // spent its whole budget, ending `BUDGET` with nothing left to find.
+      if (added === 0) {
         state.barren += 1;
         if (state.barren >= BARREN_QUERIES) {
           stoppedBy = 'BARREN';
@@ -271,23 +280,37 @@ export class DezaCatalogRunner implements CatalogRunner {
     state.finish(stoppedBy);
   }
 
-  /** One query, every page of it, recorded. Answers whether it hit the ceiling. */
+  /**
+   * One query, every page of it, recorded. Answers whether it hit the ceiling,
+   * how many of its rows were new to the run, and the vocabulary of the rows it
+   * returned: the only terms that can reach the rows hidden behind its ceiling
+   * are terms those rows carry (plan 0257).
+   */
   private async crawlQuery(
     context: RunContext,
     crawl: Crawl,
     client: DezaClient,
     section: DezaSection,
     terms: string[]
-  ): Promise<boolean> {
+  ): Promise<{
+    capped: boolean;
+    added: number;
+    vocabulary: Map<string, number>;
+  }> {
     const query: DezaQuery = { section: section.code, terms };
+    const vocabulary = new Map<string, number>();
     let lastPage = 0;
+    let added = 0;
     for await (const row of client.walkQuery(query, (page) => {
       lastPage = Math.max(lastPage, page.lastPage);
     })) {
-      crawl.record(section, row);
+      if (crawl.record(section, row)) {
+        added += 1;
+      }
+      learn(vocabulary, row.name);
       await context.heartbeat();
     }
-    return lastPage >= DEZA_CEILING_PAGES;
+    return { capped: lastPage >= DEZA_CEILING_PAGES, added, vocabulary };
   }
 }
 
@@ -302,7 +325,6 @@ const DEFAULT_SECTION_BUDGET = 25;
 /** Consecutive queries adding nothing new before a section gives up. */
 const BARREN_QUERIES = 3;
 
-/**
 /** A word short enough to be noise is not a useful narrowing term. */
 const MIN_TERM_LENGTH = 4;
 
@@ -326,10 +348,12 @@ interface CrawledProduct {
  * - `BUDGET`: it spent its query budget with a capped query still open.
  * - `BARREN`: three passes in a row added nothing new. That is the stop rule
  *   of plan 0085 working, and the section is not reported as unfinished.
- * - `NO_TERM`: a query is capped and its own vocabulary has no term left to
- *   narrow it by.
+ * - `NO_TERM`: every capped query is closed: none has a term of its own left
+ *   to narrow it by (plan 0257).
+ * - `COMPLETE`: the section's own query fit under the ceiling, so it was read
+ *   whole and nothing was narrowed. Only the `sections` list names it.
  */
-type SectionStop = 'BUDGET' | 'BARREN' | 'NO_TERM';
+type SectionStop = 'BUDGET' | 'BARREN' | 'NO_TERM' | 'COMPLETE';
 
 /** A section the run could not finish, as `incompleteSections` names it. */
 interface IncompleteSection {
@@ -341,7 +365,7 @@ interface IncompleteSection {
    */
   queries: number | null;
   /** Null for a section that threw: `openQueries` then holds the error. */
-  stoppedBy: Exclude<SectionStop, 'BARREN'> | null;
+  stoppedBy: Exclude<SectionStop, 'BARREN' | 'COMPLETE'> | null;
   /** The capped queries that were never narrowed. */
   openQueries: string[];
   /**
@@ -359,11 +383,56 @@ interface IncompleteSection {
   termsTried: number | null;
 }
 
+/**
+ * Every section the run began, finished or not, as `sections` names it (plan
+ * 0257, section 2): what each one took and why it ended, which is the number
+ * the owner sets the budget from.
+ */
+interface SectionSummary {
+  code: string;
+  name: string;
+  /**
+   * Distinct products recorded under this section, repeats of another
+   * included. A product filed under two sections counts in both, so this does
+   * **not** add up to the run's product count. {@link firstSeen} does.
+   */
+  products: number;
+  /**
+   * The products that were new to the run when this section recorded them.
+   * Each product is first seen by exactly one section, so the sum over
+   * `sections` is the run's product count.
+   */
+  firstSeen: number;
+  /** Null for a section that threw, as in `incompleteSections`. */
+  queries: number | null;
+  stoppedBy: SectionStop | null;
+}
+
+/**
+ * A query that came back at the ceiling, and what it can still be narrowed by
+ * (plan 0257, section 1).
+ */
+interface CappedQuery {
+  terms: string[];
+  /**
+   * The words of the rows this query returned. The section's own query reads
+   * the section's vocabulary instead, which grows with every row the section
+   * shows, because every row of the section is a row of that query.
+   */
+  vocabulary: Map<string, number>;
+  /** The terms a narrowing of this query added, in the order it added them. */
+  tried: Set<string>;
+  /** No term of its own is left untried. It stays for the report. */
+  closed: boolean;
+}
+
 interface SectionState {
   queries: number;
   barren: number;
   /** Queries that came back at the ceiling, oldest first. */
-  capped: string[][];
+  capped: CappedQuery[];
+  /** Keep a capped query, with the vocabulary of the rows it returned. */
+  capture(terms: string[], vocabulary: Map<string, number>): void;
   /** The next narrowing of an already capped query, or null when there is none. */
   narrow(): string[] | null;
   finish(stoppedBy: SectionStop): void;
@@ -385,42 +454,75 @@ class Crawl {
 
   private readonly incomplete: IncompleteSection[] = [];
   private readonly vocabularies = new Map<string, Map<string, number>>();
+  /** Section code -> its summary and the keys of the products it recorded. */
+  private readonly summaries = new Map<
+    string,
+    { summary: Omit<SectionSummary, 'products'>; products: Set<string> }
+  >();
 
   constructor(readonly budget: number = DEFAULT_SECTION_BUDGET) {}
 
   begin(section: DezaSection): SectionState {
     const vocabulary = new Map<string, number>();
     this.vocabularies.set(section.code, vocabulary);
-    const used = new Set<string>();
-    /** The capped queries a narrowing was taken from, and how many terms each. */
-    const narrowed = new Map<string[], number>();
+    const summary = this.summarize(section);
+    /**
+     * Every query issued, by its terms in any order: `[leche, desnatada]` and
+     * `[desnatada, leche]` are one query to the site, and a section never
+     * issues one twice.
+     */
+    const issued = new Set<string>([queryKey([])]);
     /** The capped query the last narrowing was taken from. */
-    let lastNarrowed: string[] | null = null;
+    let lastNarrowed: CappedQuery | null = null;
     const state: SectionState = {
       queries: 0,
       barren: 0,
       capped: [],
+      capture: (terms, rows) => {
+        state.capped.push({
+          terms,
+          // The section's own query returned every row the section shows.
+          vocabulary: terms.length === 0 ? vocabulary : rows,
+          tried: new Set(),
+          closed: false,
+        });
+      },
       narrow: () => {
-        // Oldest capped query first, so the section's own vocabulary is spread
-        // across the section before anything is narrowed twice.
-        for (const terms of state.capped) {
-          const term = mostFrequentUnused(vocabulary, used, terms);
-          if (term) {
-            used.add(term);
-            narrowed.set(terms, (narrowed.get(terms) ?? 0) + 1);
-            lastNarrowed = terms;
-            return [...terms, term];
+        // Newest capped query first (plan 0257). A capped query is a ceiling
+        // with rows behind it, and the newest is the narrowest one still
+        // capped: splitting it by a word of its own rows reaches rows that a
+        // second single term drawn from the whole section would show again.
+        for (let index = state.capped.length - 1; index >= 0; index -= 1) {
+          const query = state.capped[index];
+          if (query.closed) {
+            continue;
           }
+          const term = mostFrequentUntried(query, issued);
+          if (!term) {
+            query.closed = true;
+            continue;
+          }
+          query.tried.add(term);
+          lastNarrowed = query;
+          const terms = [...query.terms, term];
+          issued.add(queryKey(terms));
+          return terms;
         }
         return null;
       },
       finish: (stoppedBy) => {
+        summary.queries = state.queries;
+        summary.stoppedBy = stoppedBy;
         // A section never capped was read whole by its own query. One that
         // stopped barren was narrowed until three passes added nothing, which
         // is where plan 0085 says a term cover has done what it can: it is
         // not unfinished, and naming it would put the one section that
         // finished beside the ones that did not.
-        if (state.capped.length === 0 || stoppedBy === 'BARREN') {
+        if (
+          state.capped.length === 0 ||
+          stoppedBy === 'BARREN' ||
+          stoppedBy === 'COMPLETE'
+        ) {
           return;
         }
         // The capped queries no narrowing was taken from, still at the
@@ -429,17 +531,17 @@ class Crawl {
         // total to check against, and a number would be a guess. The
         // section's own query is here only when it was never narrowed. Where
         // the section was still digging is named beside them.
-        const digging: string[] | null = lastNarrowed;
+        const digging: CappedQuery | null = lastNarrowed;
         this.incomplete.push({
           code: section.code,
           name: section.name,
           queries: state.queries,
           stoppedBy,
           openQueries: state.capped
-            .filter((terms) => !narrowed.has(terms))
-            .map(describeQuery),
-          narrowing: digging === null ? null : describeQuery(digging),
-          termsTried: digging === null ? 0 : (narrowed.get(digging) ?? 0),
+            .filter((query) => query.tried.size === 0)
+            .map((query) => describeQuery(query.terms)),
+          narrowing: digging === null ? null : describeQuery(digging.terms),
+          termsTried: digging === null ? 0 : digging.tried.size,
         });
       },
     };
@@ -448,6 +550,9 @@ class Crawl {
 
   /** A section that never ran, or that threw. Recorded the same way. */
   unfinished(section: DezaSection, openQueries: string[]): void {
+    const summary = this.summarize(section);
+    summary.queries = null;
+    summary.stoppedBy = null;
     this.incomplete.push({
       code: section.code,
       name: section.name,
@@ -472,20 +577,31 @@ class Crawl {
    * set. The key is what deduplicates it. The section path of the **first**
    * sighting is kept, because a product genuinely filed in two places has no one
    * true section and the first is as good an answer as the last.
+   *
+   * Answers whether the row was new to the run, which is what a section's
+   * barren rule and its `firstSeen` count read.
    */
-  record(section: DezaSection, row: DezaProductRow): void {
+  record(section: DezaSection, row: DezaProductRow): boolean {
     for (const shop of row.shops) {
       this.shops.set(shop.code, shop.printedName);
     }
-    this.learn(section.code, row.name);
+    const vocabulary = this.vocabularies.get(section.code);
+    if (vocabulary) {
+      learn(vocabulary, row.name);
+    }
 
     const key = entryKey(row.name, row.sizeFormat);
+    const summarized = this.summaries.get(section.code);
+    summarized?.products.add(key);
     const held = this.products.get(key);
     if (held) {
       for (const shop of row.shops) {
         held.shops.add(shop.code);
       }
-      return;
+      return false;
+    }
+    if (summarized) {
+      summarized.summary.firstSeen += 1;
     }
     this.products.set(key, {
       name: row.name,
@@ -499,6 +615,7 @@ class Crawl {
       categoryPath: [...section.path, ...row.attributes],
       shops: new Set(row.shops.map((shop) => shop.code)),
     });
+    return true;
   }
 
   toReport(): Record<string, unknown> {
@@ -509,21 +626,50 @@ class Crawl {
        * that something is missing and nothing about what.
        */
       incompleteSections: this.incomplete,
+      /**
+       * Every section, finished or not, in the order the run began them, with
+       * what each took and why it ended (plan 0257, section 2).
+       */
+      sections: [...this.summaries.values()].map(
+        ({ summary, products }): SectionSummary => ({
+          code: summary.code,
+          name: summary.name,
+          products: products.size,
+          firstSeen: summary.firstSeen,
+          queries: summary.queries,
+          stoppedBy: summary.stoppedBy,
+        })
+      ),
     };
   }
 
-  /** The vocabulary a section's own descriptions offer as narrowing terms. */
-  private learn(sectionCode: string, name: string): void {
-    const vocabulary = this.vocabularies.get(sectionCode);
-    if (!vocabulary) {
-      return;
+  /** The summary of a section, made on its first mention. */
+  private summarize(section: DezaSection): Omit<SectionSummary, 'products'> {
+    let held = this.summaries.get(section.code);
+    if (!held) {
+      held = {
+        summary: {
+          code: section.code,
+          name: section.name,
+          firstSeen: 0,
+          queries: 0,
+          stoppedBy: null,
+        },
+        products: new Set(),
+      };
+      this.summaries.set(section.code, held);
     }
-    for (const word of normalizeName(name).split(' ')) {
-      if (word.length < MIN_TERM_LENGTH || /^\d+$/.test(word)) {
-        continue;
-      }
-      vocabulary.set(word, (vocabulary.get(word) ?? 0) + 1);
+    return held.summary;
+  }
+}
+
+/** The words of a description that are worth narrowing a query by. */
+function learn(vocabulary: Map<string, number>, name: string): void {
+  for (const word of normalizeName(name).split(' ')) {
+    if (word.length < MIN_TERM_LENGTH || /^\d+$/.test(word)) {
+      continue;
     }
+    vocabulary.set(word, (vocabulary.get(word) ?? 0) + 1);
   }
 }
 
@@ -555,21 +701,38 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
-function mostFrequentUnused(
-  vocabulary: Map<string, number>,
-  used: Set<string>,
-  terms: string[]
+/**
+ * The most frequent word of a capped query's own rows that it has not been
+ * narrowed by, is not one of its own terms, and would not issue a query the
+ * section already issued under another order of the same terms.
+ *
+ * The tried set is the query's own (plan 0257): a term spent under `[leche]`
+ * is still a term `[yogur]` may be narrowed by.
+ */
+function mostFrequentUntried(
+  query: CappedQuery,
+  issued: Set<string>
 ): string | null {
   let best: string | null = null;
   let bestCount = 0;
-  for (const [term, count] of vocabulary) {
-    if (count <= bestCount || used.has(term) || terms.includes(term)) {
+  for (const [term, count] of query.vocabulary) {
+    if (
+      count <= bestCount ||
+      query.tried.has(term) ||
+      query.terms.includes(term) ||
+      issued.has(queryKey([...query.terms, term]))
+    ) {
       continue;
     }
     best = term;
     bestCount = count;
   }
   return best;
+}
+
+/** One query, whatever order its terms are in. */
+function queryKey(terms: string[]): string {
+  return [...terms].sort().join(' ');
 }
 
 function describeQuery(terms: string[]): string {

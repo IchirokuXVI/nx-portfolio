@@ -35,6 +35,36 @@ function cappedSection() {
   }));
 }
 
+/** `count` rows of one description, numbered from `from` so each is its own product. */
+function rows(description: string, from: number, count: number) {
+  return Array.from({ length: count }, (_, index) => ({
+    description: `${description} ${from + index} g`,
+    section: 'W011',
+    shops: ['T1'],
+  }));
+}
+
+/**
+ * A section whose own query sees `leche` and `queso`, and whose `[leche]` is
+ * capped with rows that carry `entera` (130) and `fresca` (20). `[leche
+ * entera]` is capped too and carries no other word.
+ *
+ * The section's most frequent untried word after `[leche]` is `queso`, so a
+ * narrowing that drew from the section would issue `[queso]` third.
+ */
+function lecheSection() {
+  return [
+    ...rows('Leche', 0, 150),
+    ...rows('Queso', 150, 150),
+    ...rows('Leche fresca', 300, 20),
+    ...rows('Leche entera', 320, 350),
+  ];
+}
+
+/** The queries the fake was asked for Carniceria, in order. */
+const carniceria = (listing: FakeListing): string[] =>
+  listing.queries.filter((query) => query.startsWith('W011|'));
+
 interface Built {
   runner: DezaCatalogRunner;
   context: RunContext;
@@ -143,7 +173,13 @@ describe('DezaCatalogRunner (plan 0085)', () => {
   });
 
   it('stops at the budget and names the section with its open queries', async () => {
-    listing = await startFakeListing(SECTIONS, cappedSection());
+    // `producto` is capped and its rows carry no other word, so it closes
+    // unnarrowed and the section's own query is narrowed again, by `pollo`.
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Producto', 0, 280),
+      ...rows('Pollo', 280, 20),
+      ...rows('Producto', 300, 120),
+    ]);
     const { runner, context, report, runReport } = build(listing);
 
     await runner.run(
@@ -158,10 +194,10 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     ).toHaveLength(3);
     // Nothing pretends the catalog is whole: the section is named, with what
     // it spent, why it stopped, and every capped query no narrowing was taken
-    // from (plan 0251). `producto` appears in all 400 descriptions, so
-    // narrowing by it narrows nothing and it is open. The section's own query
-    // was narrowed twice, so it is not: it is where the section was still
-    // digging when the budget ran out, with the two terms it spent.
+    // from (plan 0251). `producto` was never narrowed, so it is open. The
+    // section's own query was narrowed twice, so it is not: it is where the
+    // section was still digging when the budget ran out, with the two terms it
+    // spent.
     expect(runReport['incompleteSections']).toEqual([
       {
         code: 'W011',
@@ -185,6 +221,24 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         'narrowing (the whole section), 2 terms tried, still capped: ' +
         'producto.',
     });
+    expect(runReport['sections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        products: 320,
+        firstSeen: 320,
+        queries: 3,
+        stoppedBy: 'BUDGET',
+      },
+      {
+        code: 'W051',
+        name: 'Bolleria',
+        products: 0,
+        firstSeen: 0,
+        queries: 1,
+        stoppedBy: 'COMPLETE',
+      },
+    ]);
     // Before the last flush, which is what writes it onto the row.
     expect(
       (context.warn as jest.Mock).mock.invocationCallOrder[0]
@@ -213,6 +267,11 @@ describe('DezaCatalogRunner (plan 0085)', () => {
       source({ baseUrl: listing.url })
     );
 
+    expect(runReport['sections']).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'W011', stoppedBy: 'NO_TERM' }),
+      ])
+    );
     // Never narrowed, so the whole section is the open query.
     expect(runReport['incompleteSections']).toEqual([
       {
@@ -308,6 +367,25 @@ describe('DezaCatalogRunner (plan 0085)', () => {
         termsTried: null,
       },
     ]);
+    // Named in `sections` too, with nothing it could not know (plan 0257).
+    expect(runReport['sections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        products: 1,
+        firstSeen: 1,
+        queries: null,
+        stoppedBy: null,
+      },
+      {
+        code: 'W051',
+        name: 'Bolleria',
+        products: 0,
+        firstSeen: 0,
+        queries: 1,
+        stoppedBy: 'COMPLETE',
+      },
+    ]);
     expect(context.warn).toHaveBeenCalledTimes(1);
     expect(context.warn).toHaveBeenCalledWith({
       code: HarvestWarningCode.LISTING_UNREAD,
@@ -335,6 +413,270 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     expect(report.products).toHaveLength(400);
     expect(runReport['incompleteSections']).toEqual([]);
     expect(context.warn).not.toHaveBeenCalled();
+    // A finished section is still named in `sections`, with what it took and
+    // why it ended (plan 0257): the whole section, `producto`, the seven
+    // brands under `producto`, then three barren variants.
+    expect(runReport['sections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        products: 400,
+        firstSeen: 400,
+        queries: 12,
+        stoppedBy: 'BARREN',
+      },
+      {
+        code: 'W051',
+        name: 'Bolleria',
+        products: 0,
+        firstSeen: 0,
+        queries: 1,
+        stoppedBy: 'COMPLETE',
+      },
+    ]);
+  });
+
+  it('narrows a capped term by a word of its own rows, not by a second single term (plan 0257)', async () => {
+    listing = await startFakeListing(SECTIONS, lecheSection());
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    // `[leche]` returned 300 rows, so it is split by the most frequent word of
+    // those rows, `entera`. The section's own most frequent untried word is
+    // `queso`, which the old narrowing would have issued as a second single
+    // term over rows the section had already shown.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      'W011|leche',
+      'W011|leche entera',
+    ]);
+    expect(runReport['incompleteSections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        queries: 3,
+        stoppedBy: 'BUDGET',
+        openQueries: ['leche entera'],
+        narrowing: 'leche',
+        termsTried: 1,
+      },
+    ]);
+  });
+
+  it('closes a capped query with no word of its own left and narrows the next newest (plan 0257)', async () => {
+    listing = await startFakeListing(SECTIONS, lecheSection());
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 4 })
+    );
+
+    // `[leche entera]` is capped, but its rows carry no word it does not
+    // already have. It is closed, and the next newest capped query, `[leche]`,
+    // gives its next word. The closed query stays open in the report, because
+    // it is still at the ceiling and was never narrowed.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      'W011|leche',
+      'W011|leche entera',
+      'W011|leche fresca',
+    ]);
+    expect(runReport['incompleteSections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        queries: 4,
+        stoppedBy: 'BUDGET',
+        openQueries: ['leche entera'],
+        narrowing: 'leche',
+        termsTried: 2,
+      },
+    ]);
+  });
+
+  it('tries a term spent under one query again under another (plan 0257)', async () => {
+    // `oferta` is a word of the rows of `[leche]` and of `[queso]` both.
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Leche', 0, 160),
+      ...rows('Queso', 160, 140),
+      ...rows('Leche oferta', 300, 20),
+      ...rows('Leche', 320, 180),
+      ...rows('Queso oferta', 500, 200),
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    // Each capped query keeps its own tried terms, so `oferta`, spent on
+    // `[leche]`, still narrows `[queso]`, and then the section's own query.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      'W011|leche',
+      'W011|leche oferta',
+      'W011|queso',
+      'W011|queso oferta',
+      'W011|oferta',
+    ]);
+    // Every capped query closed, so the section ran out of terms.
+    expect(runReport['incompleteSections']).toEqual([
+      {
+        code: 'W011',
+        name: 'Carniceria',
+        queries: 6,
+        stoppedBy: 'NO_TERM',
+        openQueries: [],
+        narrowing: '(the whole section)',
+        termsTried: 3,
+      },
+    ]);
+  });
+
+  it('never issues one query twice, whatever the order of its terms (plan 0257)', async () => {
+    // `[oferta]` is capped and its rows carry `leche`, but `[leche oferta]`
+    // was already issued. The site reads both orders as one query.
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Leche', 0, 160),
+      ...rows('Queso', 160, 140),
+      ...rows('Leche oferta', 300, 160),
+      ...rows('Queso oferta', 460, 320),
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      'W011|leche',
+      'W011|leche oferta',
+      'W011|oferta',
+      'W011|oferta queso',
+      'W011|queso',
+    ]);
+  });
+
+  it('ends a section barren on what its own queries add, whatever another section adds meanwhile (plan 0257)', async () => {
+    // Carniceria shows 300 rows of `pollo asado`, and every narrowing of it
+    // returns the same 300 rows. Bolleria, crawled by the second worker at the
+    // same time, adds 85 products with each of its twenty narrowings. A test of
+    // the run's product count saw Bolleria's products land during Carniceria's
+    // queries and never counted a barren pass.
+    const words = [
+      'alfa',
+      'beta',
+      'gamma',
+      'delta',
+      'epsilon',
+      'zeta',
+      'theta',
+      'iota',
+      'kappa',
+      'lambda',
+      'sigma',
+      'omega',
+      'tango',
+      'fresa',
+      'limon',
+      'melon',
+      'nuez',
+      'pera',
+      'kiwi',
+      'mango',
+    ];
+    listing = await startFakeListing(SECTIONS, [
+      ...rows('Pollo asado', 0, 301),
+      ...Array.from({ length: 2000 }, (_, index) => ({
+        description: `${words[index % words.length]} ${index} g`,
+        section: 'W051',
+        shops: ['T1'],
+      })),
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url }, 2)
+    );
+
+    // The section's own query, then three narrowings that added nothing.
+    expect(carniceria(listing)).toEqual([
+      'W011|',
+      'W011|pollo',
+      'W011|pollo asado',
+      'W011|asado',
+    ]);
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({
+        code: 'W011',
+        firstSeen: 300,
+        queries: 4,
+        stoppedBy: 'BARREN',
+      }),
+      expect.objectContaining({
+        code: 'W051',
+        firstSeen: 2000,
+        queries: 21,
+        stoppedBy: 'NO_TERM',
+      }),
+    ]);
+    // Bolleria really was adding while Carniceria spent its barren passes.
+    const during = listing.queries.slice(
+      listing.queries.indexOf('W011|pollo'),
+      listing.queries.indexOf('W011|asado')
+    );
+    expect(during.some((query) => query.startsWith('W051|'))).toBe(true);
+  });
+
+  it('counts a product under the section that saw it first, so firstSeen adds up (plan 0257)', async () => {
+    const repeated = {
+      description: 'Perlas de perfume LENOR classic 195 g',
+      shops: ['T1'],
+    };
+    listing = await startFakeListing(SECTIONS, [
+      { ...repeated, section: 'W011' },
+      { ...repeated, section: 'W051' },
+      {
+        description: 'Croissants ALTEZA 360 g',
+        section: 'W051',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report, runReport } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    // `products` counts the repeat under both sections; `firstSeen` under
+    // the first only, so its sum is the run's product count.
+    expect(runReport['sections']).toEqual([
+      expect.objectContaining({ code: 'W011', products: 1, firstSeen: 1 }),
+      expect.objectContaining({ code: 'W051', products: 2, firstSeen: 1 }),
+    ]);
+    expect(runReport['products']).toBe(2);
   });
 
   it('writes one entry for a description the listing repeats', async () => {
