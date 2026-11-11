@@ -210,12 +210,14 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([3, 4]);
     });
 
-    it('stops when the page scrolls', () => {
+    it('stops when the page scrolls, and the release after it adds nothing', () => {
       const h = render({ value: 2 });
       fire(h.plus, 'pointerdown');
       jest.advanceTimersByTime(400);
       window.dispatchEvent(new Event('scroll'));
       jest.advanceTimersByTime(3000);
+      fire(h.plus, 'pointerup');
+      h.plus.click();
       expect(tos(h)).toEqual([3]);
     });
 
@@ -242,8 +244,10 @@ describe('QuantityStepper (velista 0188)', () => {
       fire(h.minus, 'pointerdown');
       jest.advanceTimersByTime(5000);
       expect(tos(h)).toEqual([75, 50, 25]);
+      // The release of the hold, long after it stopped, adds no step: no 0.
       fire(h.minus, 'pointerup');
       h.minus.click();
+      expect(tos(h)).toEqual([75, 50, 25]);
       jest.advanceTimersByTime(1);
       h.minus.click();
       expect(tos(h)).toEqual([75, 50, 25, 0]);

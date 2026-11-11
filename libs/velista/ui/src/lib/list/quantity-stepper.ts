@@ -162,7 +162,7 @@ export class QuantityStepper {
   private _holdCount = 0;
   private _swallowClick = false;
   private _announceTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly _onScroll = () => this.endHold();
+  private readonly _onScroll = () => this._stopRepeat();
 
   constructor() {
     inject(DestroyRef).onDestroy(() => {
@@ -195,14 +195,14 @@ export class QuantityStepper {
   /** A primary pointer down on a button that is not at an end starts the hold. */
   startHold(direction: 1 | -1, event: PointerEvent): void {
     this._swallowClick = false;
-    this.endHold();
+    this._stopRepeat();
+    this._holdCount = 0;
     const primary =
       (event as { isPrimary?: boolean }).isPrimary !== false &&
       (event.button === undefined || event.button === 0);
     if (!primary || this.disabled() || this._atEnd(direction)) {
       return;
     }
-    this._holdCount = 0;
     this._document.defaultView?.addEventListener('scroll', this._onScroll, {
       capture: true,
       passive: true,
@@ -214,17 +214,13 @@ export class QuantityStepper {
   }
 
   /**
-   * The hold ends: a lift, a slide off, a cancel or a scroll. The click that follows
-   * a lift is swallowed only when the hold repeated, and only in this task.
+   * The finger leaves the button: a lift, a slide off or a cancel. The click that
+   * follows a lift is swallowed when the hold repeated, also when the repeat had
+   * already stopped at an end or on a scroll, and only in this task: a hold that
+   * stopped at the last amount above 0 must not reach 0 on the release (S8b).
    */
   endHold(): void {
-    if (this._holdTimer !== null) {
-      clearTimeout(this._holdTimer);
-      this._holdTimer = null;
-    }
-    this._document.defaultView?.removeEventListener('scroll', this._onScroll, {
-      capture: true,
-    });
+    this._stopRepeat();
     if (this._holdCount > 0) {
       this._swallowClick = true;
       this._holdCount = 0;
@@ -290,11 +286,22 @@ export class QuantityStepper {
     (event.target as HTMLInputElement).value = this.fieldText();
   }
 
+  /** The repeat stops; the finger may still be down, so the release is still to come. */
+  private _stopRepeat(): void {
+    if (this._holdTimer !== null) {
+      clearTimeout(this._holdTimer);
+      this._holdTimer = null;
+    }
+    this._document.defaultView?.removeEventListener('scroll', this._onScroll, {
+      capture: true,
+    });
+  }
+
   /** One step of the hold: from the current value, so the caller's answer is the base. */
   private _repeat(direction: 1 | -1): void {
     this._holdTimer = null;
     if (this.disabled()) {
-      this.endHold();
+      this._stopRepeat();
       return;
     }
     const value = this.value();
@@ -304,11 +311,11 @@ export class QuantityStepper {
       next = min > 0 ? Math.max(min, next) : next;
       if (next <= 0 || next === value) {
         // A repeat never takes an amount to 0 (S8b) and never presses into the floor.
-        this.endHold();
+        this._stopRepeat();
         return;
       }
     } else if (this._atEnd(1)) {
-      this.endHold();
+      this._stopRepeat();
       return;
     }
     this._holdCount++;
