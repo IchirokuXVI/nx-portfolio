@@ -264,24 +264,23 @@ describeIntegration('harvest alerts (real Postgres)', () => {
        VALUES ($1, $2, 'Plan 0255 preset', '{}'::jsonb, $3, $3)`,
       [PRESET, CHAIN, ADMIN]
     );
-    try {
-      const named = await runningRun();
-      const deleted = await runningRun();
-      for (const [run, presetId] of [
-        [named, PRESET],
-        [deleted, GONE],
-      ] as const) {
-        await one.query(
-          `UPDATE "harvest_runs"
-              SET "heartbeatAt" = '2026-11-06T13:49:05Z',
-                  "presetId" = $2, "processed" = 10279, "totalPlanned" = 18280,
-                  "created" = 3, "updated" = 4
-            WHERE "id" = $1`,
-          [run.id, presetId]
-        );
-      }
-
+    // One chain holds one active run, so the two runs go stale in turn.
+    const staleRun = async (presetId: string): Promise<HarvestRun> => {
+      const run = await runningRun();
+      await one.query(
+        `UPDATE "harvest_runs"
+            SET "heartbeatAt" = '2026-11-06T13:49:05Z',
+                "presetId" = $2, "processed" = 10279, "totalPlanned" = 18280,
+                "created" = 3, "updated" = 4
+          WHERE "id" = $1`,
+        [run.id, presetId]
+      );
       await runs.reapStale(900);
+      return run;
+    };
+    try {
+      const named = await staleRun(PRESET);
+      const deleted = await staleRun(GONE);
 
       const payloadOf = async (runId: string) => {
         const [row]: HarvestAlert[] = await one.query(
