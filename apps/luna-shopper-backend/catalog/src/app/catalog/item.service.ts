@@ -4,7 +4,9 @@ import {
   APPROX_WEIGHT_FILL_MAX,
   brandKey,
   BULK_DECISION_MAX_OPERATIONS,
+  carriesQuantityStep,
   CONTENT_LOCALES,
+  isQuantityStep,
   ITEM_LOOKUP_LIMITS,
   LINE_ITEM_SET_MAX,
   PACK_COUNT_FILL_MAX,
@@ -13,6 +15,7 @@ import {
   packCountOf,
   PriceSourceKind,
   PRODUCT_GROUP_MEMBERS_MAX,
+  QUANTITY_STEPS,
   readGtin,
   toBaseUnit,
   UnitOfMeasure,
@@ -80,6 +83,8 @@ import {
   ITEM_MERGE_INTO_FORMAT_DETAIL,
   ITEM_MERGED_INTO_DETAIL,
   ITEM_MERGED_ITEM_DETAIL,
+  ITEM_QUANTITY_STEP_DETAIL,
+  ITEM_QUANTITY_STEPS_ALLOWED_DETAIL,
   ITEM_UNIT_BECOMES_DETAIL,
   ITEM_UNIT_DETAIL,
   ITEM_UNIT_SIZE_DETAIL,
@@ -91,6 +96,7 @@ import {
   ItemMergedException,
   ItemMergeFormatDiffersException,
   ItemMergeTwoArticlesOneChainException,
+  ItemQuantityStepNotAllowedException,
   ItemUnitNotBaseException,
   NotFoundException,
   requireProductEan,
@@ -527,14 +533,17 @@ export class ItemService {
       ean: requireProductEan(req.ean),
       unitSize: req.unitSize ?? null,
       ...approxWeightOf(req, actor),
+      quantityStep: req.quantityStep ?? null,
       packCount: req.packCount ?? null,
       defaultUnit: req.defaultUnit,
       productGroupId: await this.resolveGroup(req.productGroupId ?? null),
     });
     // A base unit, and no size on a kilogram (plan 0237, section 3.3). Then
-    // a weight only beside no size (plan 0244, section 3.2).
+    // a weight only beside no size (plan 0244, section 3.2), then a step only
+    // on a product sold by the kilo or the litre (plan 0261, section 2.2).
     requireBaseUnit(draft, {});
     requireWeightBesideNoSize(draft, {});
+    requireStepOnLooseProduct(draft, {});
     // The three brand columns, in the one step every write shares (plan 0115,
     // section 4). An unregistered brand is still accepted: refusing it is the
     // curator's decision, not the catalog's.
@@ -650,12 +659,14 @@ export class ItemService {
         ean: eans[index],
         unitSize: input.unitSize ?? null,
         ...approxWeightOf(input, actor),
+        quantityStep: input.quantityStep ?? null,
         packCount: input.packCount ?? null,
         defaultUnit: input.defaultUnit,
         productGroupId: await this.resolveGroup(input.productGroupId ?? null),
       });
       requireBaseUnit(draft, { index });
       requireWeightBesideNoSize(draft, { index });
+      requireStepOnLooseProduct(draft, { index });
       this.applyBrand(draft, input.brand, registered);
       drafts.push({ draft, leaves, input });
     }
@@ -1226,6 +1237,11 @@ export class ItemService {
    * {@link fillPackCounts} applies its own. The skips are counted from the
    * same rows, locked first, so the counts and the write agree. A product
    * named twice is a caller's mistake and refuses the whole call.
+   *
+   * **It never writes a product a person gave a step** (plan 0261, S6). A
+   * weight would make it a kilo piece, which carries no step, so the run
+   * would clear a person's decision. It is skipped and counted in
+   * `skippedHasStep`, and the curator decides.
    */
   async setApproxWeights(
     req: SetApproxWeightsRequest
@@ -1271,6 +1287,7 @@ export class ItemService {
       written: 0,
       skippedHasSize: 0,
       skippedSetByAdmin: 0,
+      skippedHasStep: 0,
     };
     if (entries.length === 0) {
       return none;
@@ -1281,7 +1298,8 @@ export class ItemService {
       // Locked in id order, as every edit locks, so a person's edit of the
       // same product waits for this call or this call for it.
       const held = (await tx.manager.query(
-        `SELECT "id", "unitSize", "approxWeight", "approxWeightSetBy"
+        `SELECT "id", "unitSize", "approxWeight", "approxWeightSetBy",
+                "quantityStep"
            FROM "items"
           WHERE "id" = ANY($1::uuid[])
           ORDER BY "id"
@@ -1292,6 +1310,7 @@ export class ItemService {
         unitSize: string | null;
         approxWeight: string | null;
         approxWeightSetBy: string | null;
+        quantityStep: number | null;
       }[];
       const result = { ...none };
       for (const row of held) {
@@ -1299,6 +1318,8 @@ export class ItemService {
           result.skippedHasSize += 1;
         } else if (row.approxWeightSetBy === 'ADMIN') {
           result.skippedSetByAdmin += 1;
+        } else if (row.quantityStep !== null) {
+          result.skippedHasStep += 1;
         }
       }
       const before = new Map(held.map((row) => [row.id, row]));
@@ -1312,6 +1333,7 @@ export class ItemService {
           WHERE i."id" = v."id"
             AND i."unitSize" IS NULL
             AND (i."approxWeightSetBy" IS NULL OR i."approxWeightSetBy" = 'SOURCE')
+            AND i."quantityStep" IS NULL
             AND i."approxWeight" IS DISTINCT FROM v."approxWeight"
       RETURNING i."id", i."approxWeight"`,
         [itemIds, entries.map((entry) => entry.approxWeight)]
@@ -3490,6 +3512,11 @@ export class ItemService {
             ? 'SOURCE'
             : 'ADMIN';
     }
+    // A person's step (plan 0261). It names no writer, because only a person
+    // writes it (S7). The rules are checked after every field is applied.
+    if (input.quantityStep !== undefined) {
+      row.quantityStep = input.quantityStep;
+    }
     if (input.packCount !== undefined) {
       row.packCount = input.packCount;
     }
@@ -3906,7 +3933,13 @@ function refuseFailedExpectations(
 export function expectationMismatches(
   row: Pick<
     Item,
-    'name' | 'brand' | 'unitSize' | 'approxWeight' | 'defaultUnit' | 'packCount'
+    | 'name'
+    | 'brand'
+    | 'unitSize'
+    | 'approxWeight'
+    | 'quantityStep'
+    | 'defaultUnit'
+    | 'packCount'
   >,
   slugs: readonly string[],
   expect: ItemExpectation
@@ -3952,6 +3985,17 @@ export function expectationMismatches(
       mismatches.push({
         field: 'approxWeight',
         expected: expect.approxWeight,
+        actual,
+      });
+    }
+  }
+  // Plan 0261, section 2.4: a smallint, which Postgres answers as a number.
+  if (expect.quantityStep !== undefined) {
+    const actual = row.quantityStep ?? null;
+    if (actual !== expect.quantityStep) {
+      mismatches.push({
+        field: 'quantityStep',
+        expected: expect.quantityStep,
         actual,
       });
     }
@@ -4061,6 +4105,18 @@ function requireBaseUnitOnEdit(row: Item, input: UpdateItemInput): void {
   if (input.unitSize !== undefined || input.approxWeight !== undefined) {
     requireWeightBesideNoSize(row, { itemId: row.id });
   }
+  // Plan 0261, section 2.2: last, so the two codes above still answer
+  // first. It runs for the unit too, unlike the weight rule: a change of
+  // unit alone on a stepped product breaks `item_quantity_step_on_loose`,
+  // and a check only the database catches is a 500.
+  if (
+    input.quantityStep !== undefined ||
+    input.unitSize !== undefined ||
+    input.approxWeight !== undefined ||
+    input.defaultUnit !== undefined
+  ) {
+    requireStepOnLooseProduct(row, { itemId: row.id });
+  }
 }
 
 /**
@@ -4102,6 +4158,62 @@ export function requireWeightBesideNoSize(
         [ITEM_APPROX_WEIGHT_DETAIL]: weight,
         [ITEM_UNIT_SIZE_DETAIL]: unitSize,
         defaultUnit: row.defaultUnit,
+      },
+    }
+  );
+}
+
+/**
+ * Refuse a product that would hold a step off {@link QUANTITY_STEPS}, or a
+ * step on a product that is not sold by the kilo or the litre (plan 0261,
+ * section 2.2 and S3), with `item_quantity_step_not_allowed`.
+ *
+ * It reads the row as it will be saved, as {@link requireBaseUnit} does, so
+ * an edit that gives a stepped product a size, a weight or another unit is
+ * refused unless the same edit sends `quantityStep: null`. `where` names the
+ * product or the position of the entry in a batch. The checks
+ * `item_quantity_step_allowed` and `item_quantity_step_on_loose` restate the
+ * rule, and this is what answers a caller before the database would.
+ */
+export function requireStepOnLooseProduct(
+  row: Pick<Item, 'unitSize' | 'approxWeight' | 'defaultUnit' | 'quantityStep'>,
+  where: { itemId?: string; index?: number }
+): void {
+  const step = row.quantityStep ?? null;
+  if (step === null) {
+    return;
+  }
+  const unitSize =
+    row.unitSize === null || row.unitSize === undefined
+      ? null
+      : Number(row.unitSize);
+  const weight =
+    row.approxWeight === null || row.approxWeight === undefined
+      ? null
+      : Number(row.approxWeight);
+  const listed = isQuantityStep(step);
+  const loose = carriesQuantityStep({
+    defaultUnit: row.defaultUnit,
+    unitSize,
+    approxWeight: weight,
+  });
+  if (listed && loose) {
+    return;
+  }
+  throw new ItemQuantityStepNotAllowedException(
+    !listed
+      ? `A step is one of ${QUANTITY_STEPS.join(', ')}, and ${step} is not.`
+      : 'Only a product sold by the kilo or the litre has a step: no size, ' +
+          'no weight, and a KILOGRAM or LITER unit. Send a null step with ' +
+          'an edit that makes it a pack or a piece.',
+    {
+      details: {
+        ...where,
+        [ITEM_QUANTITY_STEP_DETAIL]: step,
+        [ITEM_QUANTITY_STEPS_ALLOWED_DETAIL]: [...QUANTITY_STEPS],
+        defaultUnit: row.defaultUnit,
+        [ITEM_UNIT_SIZE_DETAIL]: unitSize,
+        [ITEM_APPROX_WEIGHT_DETAIL]: weight,
       },
     }
   );

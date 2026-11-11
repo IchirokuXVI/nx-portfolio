@@ -334,7 +334,9 @@ export function ApiProblemResponses(
       ERROR_CODES.ITEM_UNIT_NOT_BASE,
       ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE,
       // Plan 0244, section 3.2: a weight never beside a size.
-      ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE
+      ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE,
+      // Plan 0261, section 3: a step only on a product by the kilo or litre.
+      ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED
     );
   }
   if (options.itemExpectation) {
