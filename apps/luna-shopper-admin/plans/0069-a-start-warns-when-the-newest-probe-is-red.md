@@ -1,3 +1,5 @@
+> **PR:** [#966](https://github.com/IchirokuXVI/nx-portfolio/pull/966)
+
 # 0069 A start warns when the newest probe is red
 
 > Backend half: plan `0247` of `apps/luna-shopper-backend/plans/` (a probe gates a scheduled
