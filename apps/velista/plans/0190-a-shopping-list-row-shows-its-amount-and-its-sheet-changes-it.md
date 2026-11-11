@@ -11,9 +11,11 @@
 > Amends velista `0054` and `0073` (the row's number is a reel bound to what is still to
 > get, and moving it down buys), velista `0139` section 3 and `0092` section 6 (each list's
 > ask in the sheet is a reel), velista `0140` section 1 (Change is a word). Needs velista
-> `0188` built first: this plan uses its typed variant at the sheet size, its short form and
-> exact form, and its amount cell, and specifies none of them. Needs PRs #959, #960 and #961
-> in `dev`. Velista `0189` (the search field at the top, the progress bar removed) touches
+> `0188` built first: this plan uses its `lib-quantity-stepper` at `variant="sheet-narrow"`,
+> its `lib-amount-figure`, its `shortAmount` and `exactAmount`, and its `quantityRuns`, and
+> specifies none of them. After this plan no reel exists in velista: the shopping list row and
+> `row-entries` are the reel's last users, so this plan deletes it (section 7). Needs PRs #959,
+> #960 and #961 in `dev`. Velista `0189` (the search field at the top, the progress bar removed) touches
 > the same page and not the same lines; either can land first.
 >
 > Prerequisite reading: the decisions of 2026-11-10 and 2026-11-11, sections 1 and 3 as
@@ -69,14 +71,28 @@
 
 On the shopping list (the basket page), replace each row's reel with one plain amount cell
 that is a button opening the row's settle sheet. In that sheet, replace each list's reel with
-the typed stepper of velista `0188` at the sheet size, save its changes after the presses
-stop, and replace the word "Cambiar" on each list's row with the swap icon.
+`lib-quantity-stepper` of velista `0188` at `variant="sheet-narrow"`, save its changes after
+the presses stop, and replace the word "Cambiar" on each list's row with the swap icon. Then
+delete the reel, which has no user left.
 
 ### Context
 
 - Velista `0188` builds the stepper (its look, its step, its hold, its typed field, its short
-  and exact forms). This plan only consumes it. Read `0188` for the names it chose; this file
-  calls them "the typed variant", "the short form", "the exact form" and "the amount cell".
+  and exact forms). This plan only consumes it, by the names `0188` sections 2 to 4 give:
+  - the read only cell is `lib-amount-figure` (`AmountFigure`, inputs `quantity`, `unit`,
+    `form` (`'short'` or `'exact'`) and `speak`), exported from `@portfolio/velista/ui`;
+  - the sheet's typed control is `lib-quantity-stepper` with `variant="sheet-narrow"`, 168 by
+    48 (48 + 72 + 48), with `value`, `unit`, `name`, `disabled`, `readonly` and the outputs
+    `valueChange` and `stepped` (a `QuantityStep`: `from`, `to`, `repeat`);
+  - the formatters are `shortAmount` and `exactAmount` from `@portfolio/velista/platform`,
+    each answering `AmountWords` (`figure`, `symbol`, `long`, `spoken`);
+  - the wait before a save is `QUANTITY_STEP_QUIET_MS` (800 ms), and the helper that holds it
+    is `quantityRuns` from `@portfolio/velista/platform`;
+  - the stepper says the amount once when the presses stop (`0188` decision E), so this plan
+    adds no announcement of its own.
+- Velista `0188` also takes the typeahead's held lines on this page (`basket-page.ts`
+  `changeHolding`, a `quantityRuns` that writes `setDemand`, `0188` section 5.6). They are
+  not this plan's.
 - Today a row's number is `<lib-quantity-reel>` bound to what is still to get
   (`basket-row.html:354`). Moving it down records a buy and up takes one back, through
   `BasketPage.setRowLeft` and `BasketStore.setLeft` (`basket-page.ts:1431`,
@@ -96,27 +112,31 @@ stop, and replace the word "Cambiar" on each list's row with the swap icon.
 
 1. A basket row draws, at its trailing edge, one amount cell, 59 by 48 CSS px, the same size
    on every row, no fill and no border, centred: the number over its unit symbol, in the
-   short form of velista `0188`. It is a `<button>` that opens the row's settle sheet, the
-   same navigation as the body.
+   short form, drawn by `lib-amount-figure`. It is a `<button>` that opens the row's settle
+   sheet, the same navigation as the body.
 2. The row has no reel, no minus, no plus, no preview caption and no progress caption under
    the number. Its text column gets the width the reel used (195 px against 111 in the mock
    at 390 px).
 3. In the settle sheet each list that holds the row and whose ask the reader may change draws
-   the typed variant of velista `0188` at 168 by 48. Its steps and typed values are saved
-   after the presses stop, by `SettleSheet`, through `BasketStore.setDemand`.
+   `lib-quantity-stepper variant="sheet-narrow"`, 168 by 48. Its steps and typed values are
+   saved `QUANTITY_STEP_QUIET_MS` after the presses stop, by `SettleSheet` through
+   `quantityRuns`, with `BasketStore.setDemand`.
 4. Each list's row in the sheet changes its product with a 44 by 44 button that draws
    `SwapIcon` and no word, named "Cambiar el producto en <list>".
-5. No reel is left in `feature-shopping-lists`.
+5. No reel is left in velista: its component, its gesture, its export, its constants and
+   `stepsFrom` are deleted (section 7).
 
 ### Scope
 
 - Work in `libs/velista/feature-shopping-lists` (`basket-row`, `basket-page`, `settle-sheet`,
   `row-entries`, `basket-labels.ts`), `libs/velista/ui/assets/i18n/en.json` and `es.json`,
-  and `apps/velista-luna-e2e`.
-- Do NOT touch the stepper component, its formatters or its styles (velista `0188`), the
-  search field or the progress bar (velista `0189`), the add rules (velista `0185`, backend
-  `0260`), the deletion of a line at zero (backend `0263`, velista `0192`), the list page,
-  the line row, the list's line sheet, `QuantityReel` itself, or any backend project.
+  `apps/velista-luna-e2e`, and the reel's deletion of section 7 (in `libs/velista/ui`,
+  `libs/velista/models` and `basket-row.ts`).
+- Do NOT touch the stepper component, its formatters, `quantityRuns` or its styles (velista
+  `0188`), the typeahead's held lines on the basket page (`changeHolding`, velista `0188`
+  section 5.6), the search field or the progress bar (velista `0189`), the add rules
+  (velista `0185`, backend `0260`), the deletion of a line at zero (backend `0263`, velista
+  `0192`), the list page, the line row, the list's line sheet, or any backend project.
 
 ### Constraints
 
@@ -124,27 +144,33 @@ stop, and replace the word "Cambiar" on each list's row with the swap icon.
   takes a typed amount.
 - The component emits on every step; the save waits in `SettleSheet` (section 4). No write
   per step.
-- Every amount drawn on the row uses the short form, every amount in the sheet the exact
-  form, both from velista `0188`. No local formatter.
+- Every amount drawn on the row uses `shortAmount`, every amount in the sheet `exactAmount`,
+  both from `@portfolio/velista/platform`. No local formatter.
+- No announcement of an amount is added: the stepper says it once (`0188` decision E).
 - Copy through RokuTranslator keys in `en` and `es`. No dashes as punctuation in copy or
   comments.
 - Zoneless, `OnPush`, signals, `input()` and `output()`, as the files already are.
 
 ### Action boundaries
 
-- Proceed with sections 1 to 7 once velista `0188` and PRs #959 to #961 are in `dev` and the
+- Proceed with sections 1 to 8 once velista `0188` and PRs #959 to #961 are in `dev` and the
   owner has answered question 1 in this file.
 - Stop and ask if question 1 has no answer here: removing the row's reel removes the only
   way to buy part of a row, and the build must not decide that alone.
-- Stop and ask if velista `0188` exports no amount cell and no short form function the row
-  can use, or if its typed variant cannot be held at 168 by 48.
+- Stop and ask if velista `0188` is not in `dev`: this plan builds on `lib-amount-figure`,
+  `lib-quantity-stepper` at `sheet-narrow`, `shortAmount`, `exactAmount`, `quantityRuns` and
+  `QUANTITY_STEP_QUIET_MS`, and specifies none of them.
+- The deletions of section 7 are named by this plan: delete those files, the export, the
+  constants, `stepsFrom` and their specs without stopping. The reel is replaced by the
+  owner's decision of 2026-11-10 (velista `0188`). Before each deletion, search the
+  workspace; if a user that section 7 does not name is found, stop and ask.
 - Stop and ask before deleting a file this plan does not name, before adding a dependency,
   and before removing `BasketStore.setLeft` (decision F keeps it).
 - Stop and ask before any change that alters behaviour this plan does not settle.
 
 ### Progress evidence
 
-Each criterion of section 8 with its spec output, `npx nx build velista`, and a walk on a
+Each criterion of section 9 with its spec output, `npx nx build velista`, and a walk on a
 slot at 390 by 844: screenshots of the basket with eight rows (compare the mock's "Amount in
 one fixed cell"), the measured width of a row's text column, the settle sheet of a row two
 lists ask for (compare "D3 Outline"), a step that saves once after the presses stop (one
@@ -225,9 +251,9 @@ lists ask for (compare "D3 Outline"), a step that saves once after the presses s
 - Replace the whole `<span class="numbers">` block (`:334` to `:398`) with:
   - `@if (!crossed())` is already the outer branch, so inside it: a
     `<button type="button" class="amount" (click)="onAmount()" [attr.aria-label]="amountLabel()">`
-    holding the amount cell of velista `0188` (or, if `0188` exports only a function, two
-    spans `amount-number` and `amount-unit` filled by the short form, number over symbol),
-    with `aria-hidden="true"` on the drawn number since the button's name says it.
+    holding `<lib-amount-figure [quantity]="shownAmount()" [unit]="unit()" form="short"
+    [speak]="false" />`. `speak` is off because the button's name says the amount; the
+    figure is `aria-hidden` by itself (`0188` section 3.1).
   - `[class.took]="took()"` on the button, so the mark of velista `0170` target 4 stays
     (`basket-row.ts:348`). Copy the edge rule the reel draws for `took` from the reel's
     stylesheet into `.amount.took`; do not import the reel's styles.
@@ -246,15 +272,15 @@ lists ask for (compare "D3 Outline"), a step that saves once after the presses s
   and `caption` (`:588` to `:606`), `_reel` (`:608`), `_deafUntil` (`:610` to `:617`),
   `onReelAutoClosed`, `onPreview` and `onCommitted` (`:689` to `:708`), `showsReel`
   (`:835` to `:852`), `reelLabel` (`:562` to `:586`) and the import of
-  `outstandingCaption`. Keep `QUANTITY_REEL_CLICK_SHIELD_MS`: `_holdIfRemote` uses it for
-  the status control.
+  `outstandingCaption`. `_holdIfRemote` (`:679` to `:687`) keeps its 250 ms shield for the
+  status control, under the new name `STATUS_FLIP_SHIELD_MS` (section 7).
 - `onBody` (`:718`) loses its reel branch and its deaf window and only emits `open`.
 - New `onAmount()` emits `open`.
 - New `shownAmount = computed(...)`: `asked` (the entry's, else the row's) when `state()` is
   `DONE` or `NOT_AVAILABLE`, else `stillToGet()` (decision B).
 - New `amountLabel = computed(...)`: `basket.amount.label` or, under a list heading with a
-  named list, `basket.amount.listLabel`, with `name`, `list` and `amount` in the exact form
-  of velista `0188`.
+  named list, `basket.amount.listLabel`, with `name`, `list` and `amount` the `spoken` of
+  `exactAmount`.
 - Rewrite the class comment's "The number is the control" section (`:169` to `:185`): the
   number is an amount cell that opens the sheet, and buying part of a row is whatever
   question 1 decides. Rewrite the `finished` input's comment (`:358` to `:363`), which says
@@ -263,11 +289,11 @@ lists ask for (compare "D3 Outline"), a step that saves once after the presses s
 `basket-row.scss`:
 
 - Replace `.numbers`, `.settled-count`, `.preview` and `.progress` (`:425` to `:470`) with
-  `.amount`: `flex: none`, `inline-size` 59 px and `block-size` 48 px from tokens if `0188`
-  defines them (else the two numbers, with a comment naming velista `0190` section 3),
-  `display: flex`, column, centred both ways, no border, transparent background, no padding,
-  `font-variant-numeric: tabular-nums`, the number and unit sizes and colours that velista
-  `0188` gives its amount cell, the focus ring of `.body` (`:160`), `cursor: pointer`.
+  `.amount`: `flex: none`, `inline-size: var(--app-stepper-cell-row)` (59 px) and
+  `block-size: var(--app-stepper-button)` (48 px), the tokens of `0188` section 3.2,
+  `display: flex`, centred both ways, no border, transparent background, no padding, the
+  focus ring of `.body` (`:160`), `cursor: pointer`. The number and symbol sizes and colours
+  are `lib-amount-figure`'s own; the row sets none.
 - The row keeps `align-items: flex-start` (`:13`). The cell sits at the top of the row
   beside the name line, as in the mock.
 - `.row:has(.body:hover)` (`:168`) also matches `.amount:hover`, so the row lights the same
@@ -291,35 +317,38 @@ nothing imports it. Keep `quantityCaption` (decision C).
 `row-entries.html`:
 
 - Remove `aria-live="polite"` and `role="status"` from the section (`:9`): with a control
-  that changes its value on every step, the region would read each step (section 5 says how
-  the amount is said once).
+  that changes its value on every step, the region would read each step. The stepper says the
+  amount once by itself (section 5).
 - Change (`:34` to `:44`): the button keeps its place before the amount, keeps
   `[attr.aria-label]="entry.changeLabel"`, and draws `<lib-swap-icon class="change-glyph" />`
   in place of `{{ 'basket.change.one' | rokuT }}`.
-- The ask reel (`:47` to `:55`): the typed variant of velista `0188`, with its value
-  `entry.asks`, its unit `unit()`, its label `entry.label`, its read only state from
-  `busy()` only where `0188` offers one, and its value output bound to
+- The ask reel (`:47` to `:55`): `<lib-quantity-stepper variant="sheet-narrow">` with
+  `[value]="entry.asks"` (the sheet passes `runs.shown(lineId, asks)`), `[unit]="unit()"`,
+  `[name]="entry.label"`, `[disabled]="busy()"`, and `(stepped)` bound to
   `onAsked(entry.lineId, $event)`.
-- The number with no control (`:57` to `:66`): the exact form in place of `wordsOf`, in a
-  span of class `row-number` (decision I).
-- The reel of a list that does not ask (`:111` to `:119`): the same typed variant at value
-  `other.list.quantity ?? 0`, bound to `onRaised(other.list, $event)` (decision H).
+- The number with no control (`:57` to `:66`): `<lib-amount-figure form="exact">` in place of
+  `wordsOf`, in a span of class `row-number` (decision I).
+- The reel of a list that does not ask (`:111` to `:119`): the same stepper at value
+  `other.list.quantity ?? 0`, `(stepped)` bound to `onRaised(other.list, $event)`
+  (decision H).
 
 `row-entries.ts`:
 
-- Swap `QuantityReel` for the `0188` component and add `SwapIcon` to `imports`.
-- `demanded` keeps its shape `{ lineId, from, to }` and is emitted on every step: `onAsked`
-  takes the new value, and `from` is the entry's `asks` as the sheet last drew it. The
-  waiting and the first `from` of a run are the sheet's (section 4).
-- `raised` keeps its shape and is emitted on every step above 0.
-- `wordsOf` uses the exact form of velista `0188`.
+- Swap `QuantityReel` for `QuantityStepper` and `AmountFigure` and add `SwapIcon` to
+  `imports`.
+- `demanded` becomes `{ lineId; step: QuantityStep }` and is emitted on every step:
+  `onAsked` passes the stepper's `QuantityStep` through. The waiting and the first `from` of
+  a run are the sheet's `quantityRuns` (section 4).
+- `raised` becomes `{ list; step: QuantityStep }` and is emitted on every step.
+- `wordsOf` goes; any text that still needs the words reads `exactAmount(...).spoken`.
 - Rewrite the class comment's "The quantity is the reel the list page uses" and "Change"
   sections to say: the typed control of `0188`, one per list that holds the row; Change is
   the swap icon.
 
 `row-entries.scss`:
 
-- `.ask-reel` stays `flex: none`, renamed `.ask-amount`, at the 168 px the control has.
+- `.ask-reel` stays `flex: none`, renamed `.ask-amount`. The stepper sizes itself at 168 px
+  (`0188` section 3.2); the class sets no width.
 - `.change`: `inline-size` and `block-size` `var(--app-touch-target)` (44 px), padding 0,
   `display: flex`, centred; the border, radius and raised surface it has stay, as the mock
   draws them. New `.change-glyph` at the size `.change-product-glyph` uses on the row
@@ -328,29 +357,34 @@ nothing imports it. Keep `quantityCaption` (decision C).
 
 ## 4. The save, in `SettleSheet`
 
-- New file `settle-sheet/demand-saves.ts`: a small class the sheet constructs, not a
-  service. It holds, per line id, the `from` of the current run (the asks the sheet drew
-  when the run began), the latest `to`, and a timer. `step(lineId, from, to)` starts a run
-  if none is open (keeping that `from`) or replaces `to`, and restarts the timer. When the
-  timer ends it calls back with `{ lineId, from, to }`, skipped when `to === from`.
-  `flush()` ends every timer at once and returns a promise of all the sends.
-- The wait: the constant velista `0188` exports for its consumers, if it exports one; else
-  `DEMAND_SAVE_WAIT_MS = 700` in `demand-saves.ts`, with a comment naming the decision
-  ("the logic layer waits for the presses to stop"). A typed value committed by Enter or
-  blur sends at once, through `flush` for that line; only steps wait.
-- One write per line at a time. A run that ends while a write of the same line is out waits
-  for that write and then sends with `from` equal to the line's asks after the answer.
+- `SettleSheet` builds two runs in its field initializers (an injection context):
+  `demandRuns = quantityRuns<string>((lineId, run) => this.demand(lineId, run))` keyed by
+  line id, and `raiseRuns = quantityRuns<string>((listId, run) => this.raise(listId, run))`
+  keyed by list id, both from `@portfolio/velista/platform` with the default wait,
+  `QUANTITY_STEP_QUIET_MS` (800 ms). No wait constant and no run class are written here.
+  `(demanded)` calls `demandRuns.step(lineId, step)`, `(raised)` calls `raiseRuns.step`.
+  The sheet passes `demandRuns.shown(lineId, asks)` to each control, so the drawn amount is
+  the run's while it is open.
+- A typed value committed by Enter or blur is a step with `repeat: false` like a press, and
+  the sheet calls `flush(key)` right after it, so a typed amount is sent at once; only
+  presses wait.
+- One write per line at a time, in the sheet. It keeps a map of the write in flight per key
+  (a promise). A run that `quantityRuns` sends while a write of the same key is out waits
+  for that write, then sends with `from` equal to the line's asks after the answer.
+- The sheet's `flushAll()` calls `flush` for every key in `demandRuns.pending()` and
+  `raiseRuns.pending()`, then returns a promise of every write in flight.
 - `SettleSheet.demand` (`:1315`) becomes the callback: it keeps its three endings (stays
   open, the row left the basket and the page is handed `basket.demand.nothingLeft`, refused
   with the store's re-read count). It no longer sets `_settling` for the whole sheet: the
   stepper of the line stays live while its save is out. The settle targets read a new
   `saving` signal (true while any run waits or any demand write is out) beside `busy()`.
-- `SettleSheet.raise` (`:803`) goes through the same class, keyed by the list id, and keeps
-  its two writes (`addLine` for a list with no line, `setDemand` for one at zero).
-- `settleAll`, `settleNone` and `skip` call `flush()` and await it first (decision J). If a
-  save was refused they stop, and its sentence is drawn.
-- `close()` (`:1397`) calls `flush()` without awaiting it and closes: nothing a person
-  stepped is dropped. A refusal after the sheet closed shows on the row through the store's
+- `SettleSheet.raise` (`:803`) is the `send` of `raiseRuns` and keeps its two writes
+  (`addLine` for a list with no line, `setDemand` for one at zero). A run that ends at 0
+  sends nothing.
+- `settleAll`, `settleNone` and `skip` call `flushAll()` and await it first (decision J). If
+  a save was refused they stop, and its sentence is drawn.
+- `close()` (`:1397`) calls `flushAll()` without awaiting it and closes: nothing a person
+  stepped is dropped. `quantityRuns` also flushes on destroy and on a hidden page. A refusal after the sheet closed shows on the row through the store's
   re-read, as a refused write does today.
 - Rewrite the class comment (`:125` to `:130`), which names a "got" reel that no longer
   exists, and the comment of `demand` (`:1295` to `:1314`), which says the reel commits on
@@ -362,15 +396,12 @@ nothing imports it. Keep `quantityCaption` (decision C).
   swap when drawn), Enter and Space open the sheet, and it is announced as "Cantidad de
   Plátano de Canarias IGP: 1,25 kg, botón" (decision D). The drawn number is hidden from the
   accessibility tree, so it is not read twice. Nothing on the row announces by itself.
-- **In the sheet.** Each list's control is the `spinbutton` of velista `0188`, named by the
-  existing `basket.demand.askLabel` ("Compra semanal, pide"), with its value text, Arrow Up
-  and Down, Home and End as `0188` defines them. A focused spinbutton's value is announced by
-  the screen reader as it changes, so the sheet adds nothing for the typed field. For steps
-  made with the minus and plus buttons the amount is said once when the presses stop: if
-  `0188`'s component announces at rest by itself, the sheet adds nothing; if it leaves that
-  to the consumer, the sheet sets a visually hidden polite paragraph to
-  `basket.demand.said` ("Compra semanal pide 1 kg") when a run's save lands, one sentence
-  per run.
+- **In the sheet.** Each list's control is the `spinbutton` of `lib-quantity-stepper`
+  (`0188` section 3.5), its `name` the existing `basket.demand.askLabel` ("Compra semanal,
+  pide"), with its value text, Arrow Up and Down, Home and End as `0188` defines them. A
+  focused spinbutton's value is announced by the screen reader as it changes. For steps made
+  with the minus and plus buttons the stepper says the amount once when the presses stop
+  (`0188` decision E). The sheet adds no live region and no sentence of its own.
 - **Swap.** A button with no visible word, named `basket.change.oneLabel` ("Cambiar el
   producto en Compra semanal"), 44 by 44, in the tab order before the list's control.
 
@@ -381,14 +412,34 @@ nothing imports it. Keep `quantityCaption` (decision C).
 | `basket.amount.label` (new) | Amount of {{name}}: {{amount}} | Cantidad de {{name}}: {{amount}} |
 | `basket.amount.listLabel` (new) | {{list}}, amount of {{name}}: {{amount}} | {{list}}, cantidad de {{name}}: {{amount}} |
 | `basket.change.oneLabel` (changed) | Change the product on {{name}} | Cambiar el producto en {{name}} |
-| `basket.demand.said` (new, only if section 5 needs it) | {{list}} asks for {{amount}} | {{list}} pide {{amount}} |
 
 Remove `basket.change.one`, `basket.outstanding.label`, `basket.outstanding.listLabel`,
 `basket.outstanding.bought`, `basket.outstanding.boughtAmount`, `basket.line.takenBack` and
 `basket.line.takenBackAmount` from both files after a search finds no other user of each.
 Keep any key that is still read.
 
-## 7. Specs and e2e
+## 7. Deleting the reel
+
+The owner replaced the reel with the stepper on 2026-11-10 (velista `0188`). Once `0188` is
+built, the shopping list row (`basket-row`) and `row-entries` are the reel's last users
+(`0188` section 6), so after sections 1 and 3 nothing renders it. This plan deletes it.
+Checked on `feat/velista-0183-line-unit-chip` on 2026-11-11; the builder searches again
+before each deletion (Action boundaries).
+
+| File, export or symbol | Users once `0188` and this plan are built | What happens |
+| --- | --- | --- |
+| `libs/velista/ui/src/lib/list/quantity-reel.ts`, `.html`, `.scss`, `.spec.ts` | none | Deleted |
+| `libs/velista/ui/src/lib/list/quantity-reel-gesture.ts`, `.spec.ts` | the reel only | Deleted |
+| `libs/velista/ui/src/index.ts:86` (`export * from './lib/list/quantity-reel'`) | none | Removed |
+| `QUANTITY_REEL_PX_PER_UNIT`, `QUANTITY_REEL_PAGE_STEP`, `QUANTITY_REEL_TAP_SLOP_PX`, `QUANTITY_REEL_TAP_MAX_MS` (`libs/velista/models/src/lib/limits.ts:163`, `:177`, `:188`, `:197`) | the reel and its gesture only | Removed with their comments |
+| `QUANTITY_REEL_IDLE_MS` (`limits.ts:174`) | the reel and the basket specs; `0188` moves `DUE_LINE_STEP_QUIET_MS` (`due-lines.ts:68`) and `line-row.spec.ts` off it | Removed; each basket spec that read it advances `QUANTITY_STEP_QUIET_MS` instead |
+| `QUANTITY_REEL_CLICK_SHIELD_MS` (`limits.ts:210`) | `basket-row.ts:23`, `:685` (`_holdIfRemote`, the status control's shield after another person's flip) and `:690` (`onReelAutoClosed`, removed in section 1) | Kept, renamed `STATUS_FLIP_SHIELD_MS`, value 250 unchanged. Its comment is rewritten: how long the status control ignores a press after another person flipped the row, so a press aimed at the old state does not undo theirs. It no longer speaks of a reel |
+| `stepsFrom` (`libs/velista/models/src/lib/line-unit.ts:179`) and its describe in `line-unit.spec.ts:144` | the reel only (`quantity-reel.ts:771`) | Removed |
+| `basket-labels.ts:426` comment on the row's reel | goes with `outstandingCaption` (section 2) | Removed |
+
+`TOOK_DURATION_MS` is not this plan's: `0188` moves it to `quantity-stepper.ts`.
+
+## 8. Specs and e2e
 
 Unit specs (`npx nx test velista-feature-shopping-lists`, the builder confirms the project
 name):
@@ -411,28 +462,36 @@ name):
   on a row's `.amount` navigates to `sheet/rows/<rowKey>/settle` with the kept search query,
   as the body does.
 - `row-entries.spec.ts`: the describe "who may change what a list asks for" (`:293`) asserts
-  the `0188` control where it asserted the reel; "sends one demand" (`:368`) asserts one
-  `demanded` per step; "raises a list" (`:466`) asserts `raised` per step above 0; Change
-  (`:229`) asserts a button with `lib-swap-icon`, no text, and the name
-  `basket.change.oneLabel`; the section has no `aria-live`.
-- New `demand-saves.spec.ts`, with Jest fake timers: three steps inside the wait send once,
-  with the first `from` and the last `to`; a run back to its start sends nothing; `flush`
-  sends at once; a run that ends while a write is out sends after it, with the answer's
-  `from`.
-- `settle-sheet.spec.ts`: the tests at `:1140`, `:1154` and `:1164` step the control and
-  advance the fake timers before they expect `setDemand`; `:948` and `:1255` assert no
-  control on a finished trip; `:2461` asserts the control where `demandEditable` is true.
-  Add: three presses send one `setDemand`; "Ya lo tengo todo" pressed during a wait sends the
-  demand first and settles after it; a refused demand stops the settle; closing during a wait
-  still sends.
+  `lib-quantity-stepper` where it asserted the reel; "sends one demand" (`:368`) asserts one
+  `demanded` per step; "raises a list" (`:466`) asserts `raised` per step; Change (`:229`)
+  asserts a button with `lib-swap-icon`, no text, and the name `basket.change.oneLabel`; the
+  section has no `aria-live`.
+- `settle-sheet.spec.ts`, with Jest fake timers: the tests at `:1140`, `:1154` and `:1164`
+  step the control and advance `QUANTITY_STEP_QUIET_MS` before they expect `setDemand`;
+  `:948` and `:1255` assert no control on a finished trip; `:2461` asserts the control where
+  `demandEditable` is true. Add: three presses send one `setDemand` with the first `from` and
+  the last `to`; a run back to its start sends nothing; a typed amount sends at once; a run
+  that ends while a write of the line is out sends after it, with the answer's `from`; "Ya lo
+  tengo todo" pressed during a wait sends the demand first and settles after it; a refused
+  demand stops the settle; closing during a wait still sends. `quantityRuns` itself is
+  `0188`'s and its spec is not repeated here.
+- The specs of section 7 go with their files: `quantity-reel.spec.ts`,
+  `quantity-reel-gesture.spec.ts`, and the `stepsFrom` describe of `line-unit.spec.ts`.
 
-`apps/velista-luna-e2e` (the helpers first, then the steps; every step below depends on
-question 1, and the text says the version for "no partial buy from the row"):
+`apps/velista-luna-e2e` is this plan's to change: the helpers in `support/app.ts` and the
+basket specs `shop`, `guest`, `member` and `sync` (`0188` section 7 leaves them here). The
+helpers first, then the steps; every step below depends on question 1, and the text says the
+version for "no partial buy from the row":
 
-- `support/app.ts`: `reel` (`:102`) and `nudge` (`:110`) stay for the sheet's spinbutton, and
-  `nudge` waits for the save (it polls the API, since a blur no longer commits by itself on
-  a step run). `askReel` (`:164`) is renamed `askAmount` and finds the `0188` spinbutton by
-  the same label. New `amountCell(row)`: `row.getByRole('button', { name: /^Amount of / })`.
+- `support/app.ts`: `reel` (`:102`) is renamed `amountField` (the sheet's spinbutton by its
+  label) and its comment says "the typed amount of a sheet's stepper". `nudge` (`:110`) is
+  renamed `stepAmount`, keeps its Arrow keys and its blur, and waits for the save (it polls
+  the API, since a run of arrow steps is sent `QUANTITY_STEP_QUIET_MS` after the last one).
+  `askReel` (`:164`) is renamed `askAmount` and finds the stepper's spinbutton by the same
+  label. New `amountCell(row)`: `row.getByRole('button', { name: /^Amount of / })`. No
+  helper name or comment left in the file says "reel".
+- `stepper-fit.spec.ts` (written by `0188`): add the `sheet-narrow` variant, on a settle
+  sheet of the slot, to the variants whose figure and symbol must not overflow.
 - `shop.spec.ts` step 6 (`:233`): keep the sheet assertions; `askAmount(dialog, 'Groceries')`
   has `aria-valuenow` 2. Drop "Part of a row is bought with the row's own reel" and assert
   instead that `amountCell(row(page, 'Milk'))` reads "2" and opens the settle sheet.
@@ -448,31 +507,37 @@ question 1, and the text says the version for "no partial buy from the row"):
   it bought without a reload (`.touched` names Guest 1). The title says "buys Milk".
 - `sync.spec.ts` (`:66`): `amountCell(row(page, 'Eggs'))` has the name "Amount of Eggs: 11".
 - `member.spec.ts` (`:208`): `askAmount` in place of `reel`; (`:312`) asserts no
-  `amountCell` on the crossed out row.
+  `amountCell` on the crossed out row, in place of `lib-quantity-reel`.
+- Every other call of `reel`, `nudge` or `askReel` in the four specs takes the new name.
 
-## 8. Acceptance criteria
+## 9. Acceptance criteria
 
-- [ ] No `lib-quantity-reel` is rendered anywhere in `feature-shopping-lists` (a search of the
-      library's templates finds none).
+- [ ] No reel exists in velista: a search of `libs` and `apps` finds no `lib-quantity-reel`,
+      `QuantityReel`, `quantity-reel`, `QUANTITY_REEL_` or `stepsFrom`, and the files of
+      section 7 are gone.
+- [ ] `STATUS_FLIP_SHIELD_MS` is 250 and `_holdIfRemote` reads it.
 - [ ] Every basket row that is not crossed out draws one `.amount` button of 59 by 48, the
       short form number over its unit, and a press on it opens `sheet/rows/<rowKey>/settle`.
 - [ ] The row's text column measures 195 px at 390 px in the walk, or the measured number is
       recorded with the reason it differs.
 - [ ] The cell's accessible name carries the exact form, and it sits in the tab order after
       the body.
-- [ ] In the settle sheet each list that may change its ask draws the `0188` typed control at
-      168 by 48, and three presses send one `setDemand` after the presses stop.
+- [ ] In the settle sheet each list that may change its ask draws `lib-quantity-stepper` at
+      `sheet-narrow`, 168 by 48, and three presses send one `setDemand`
+      `QUANTITY_STEP_QUIET_MS` after the presses stop.
 - [ ] A settle button pressed during a wait settles after the waiting demand lands.
 - [ ] Each list's Change is a 44 by 44 swap icon with no word, named "Cambiar el producto en
       <list>".
 - [ ] The keys of section 6 exist in `en` and `es`, and the removed keys have no reader.
 - [ ] `npx nx affected -t lint test` is green, `npx nx build velista` builds, and the e2e
-      steps of section 7 pass on a slot.
+      steps of section 8 pass on a slot.
 
 ## Not in this plan
 
-- **The stepper itself**, its look, its step, its hold, its typed field and its formatters.
-  Velista `0188`.
+- **The stepper itself**, its look, its step, its hold, its typed field, its formatters and
+  `quantityRuns`. Velista `0188`.
+- **The typeahead's held lines on the shopping list page** (`changeHolding`). Velista `0188`
+  section 5.6.
 - **The search field at the top and the removal of the progress bar.** Velista `0189`.
 - **The amount a new line starts at, and an add onto a line that exists.** Velista `0185`,
   backend `0260`.
@@ -498,5 +563,5 @@ question 1, and the text says the version for "no partial buy from the row"):
    pointer target only and leave the text as the one stop?
 4. The lists that do not ask yet, under "Añadir a otra lista", get the same typed control
    starting at 0 (decision H). Is that right, or should they keep a single "Añadir" action?
-5. A step waits 700 ms after the last press before it is saved, unless velista `0188` names
-   another wait. Is that the feel you want?
+5. A step waits `QUANTITY_STEP_QUIET_MS`, 800 ms, after the last press before it is saved,
+   the wait velista `0188` gives every surface. Is that the feel you want in the sheet too?

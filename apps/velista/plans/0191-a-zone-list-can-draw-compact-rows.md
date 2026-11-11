@@ -16,8 +16,8 @@
 > and `0190`; where `0189` touches the same page (the search at the top, the reorder mode
 > going), section 7 says what this plan does in either order.
 >
-> Prerequisite reading: the owner's decisions of 2026-11-10 and 2026-11-11, sections 1 and 6
-> (the decisions file of this batch, carried into this plan's section 0); velista `0145`
+> Prerequisite reading: the owner's decisions of 2026-11-10 and 2026-11-11, as this plan's
+> section 0 restates them; velista `0145`
 > sections 1, 3, 5 and 7 (the row of today: flat surface, picture, the two lines, the free
 > text line, the bones); velista `0179` section 2 (how a price is worded by how a product is
 > sold); velista `0182` section 3 (the cost of an amount and the estimate mark); velista
@@ -27,9 +27,9 @@
 > The mock the owner approved: `apps/velista/plans/mocks/stepper/index.html`, the strip "The
 > alternative view: a compact row". The decided frames are the three line ones ("Compact
 > row, three lines" and "Three lines, long texts"). The two line frames beside them were
-> not chosen and are being removed from the mock. Its working copy is under
-> `tools/dev/.run/stepper-mock/` (`src/mock.css:334` to `:475` are the compact rules,
-> `src/page.js:475` to `:567` the facts it draws).
+> not chosen and are not in the committed mock. The mock is one self contained page: its
+> compact rules are the `.mk-cmp` and `.mk-c…` style rules inlined in that file, and every size the row
+> needs is restated in section 1 of this plan.
 >
 > Code anchors, on `origin/feat/velista-0183-line-unit-chip` as of 2026-11-11:
 > `libs/velista/ui/src/lib/list/line-row.ts:124` to `:142` (the component), `:212` (`shown`),
@@ -200,8 +200,8 @@ kilo piece, a line at zero and a long brand.
   Only on this phone." in `en`, "Filas compactas" and "Las listas muestran el tamaño y el
   precio por kilo en cada fila. Solo en este teléfono." in `es`. No backend field: the
   choice is about this screen size and this person's eyes, and the theme and the mapping
-  settings set the pattern (`storage-keys.ts`). Off by default, because the decisions file
-  says the default row stays and a trial that flips everybody is a different decision.
+  settings set the pattern (`storage-keys.ts`). Off by default, because the owner
+  said the default row stays and a trial that flips everybody is a different decision.
   Questions 1 and 2.
 - **B. One component, one view model.** `LineRow` gains `layout = input<ListRowLayout>('default')`
   and draws the inside of its `.row` element in two branches. Everything outside the
@@ -376,7 +376,7 @@ choose target `--app-touch-target`, the type sizes `--app-text-base`, `--app-tex
 ### 3.2 The grid
 
 Inside `.row.compact` (the class the `layout` input sets on the row element), one grid,
-copied from `mock.css:340` to `:445`:
+copied from the mock's compact rules (`.mk-cmp` and the rules after it):
 
 - `.row.compact`: `align-items: stretch`, `min-height: 0` (the two line height token does
   not apply), `padding-block: var(--app-space-4)`. The row's hairline is the shared
@@ -515,7 +515,7 @@ The owner asked for these to be stated; the plan does not fix them.
    px at 390, 90 at 375, 75 at 360, 35 at 320. At 320 every fact crops to a few characters.
    A line waiting for approval loses 12 px more to its edge and padding
    (`line-row.scss:42` to `:46`). Question 6.
-6. **The search results get less.** The decisions file measured, on the default row, that
+6. **The search results get less.** The mock measured, on the default row (velista `0189`), that
    with the keyboard open the results show one row of the list and one product. A compact
    row is 31 px taller; whether one product still fits whole was not measured. The walk
    measures it.

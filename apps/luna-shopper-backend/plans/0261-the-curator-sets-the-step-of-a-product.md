@@ -289,8 +289,9 @@ Stated here, built in velista `0186`; no server code reads it.
 | `GRAM` or `MILLILITER`, several products, some serving the unit with a step | the smallest of those steps (S5) |
 | `GRAM` or `MILLILITER`, no product serving the unit with a step | the default: 25 at every amount (S4) |
 
-An amount off the grid of its step (a legacy 975 on a step of 100) snaps onto it in the
-direction of the step, as `stepFrom` does today (`line-unit.ts:162`). The server never refuses
+An amount off the grid of its step (a legacy 975 on a step of 100) does not snap onto it
+(amended on 2026-11-11: velista `0188` decision B, so that plus then minus always returns): a
+plus adds the step to the amount as it stands, and 975 goes to 1075. The server never refuses
 an amount off the step: the step is how velista moves an amount, not a rule on the line, and
 an amount the assistant or an older build wrote stays valid.
 
