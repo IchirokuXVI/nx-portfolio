@@ -1,4 +1,6 @@
 > **PR:** [#946](https://github.com/IchirokuXVI/nx-portfolio/pull/946)
+>
+> Section 1, item 2 (the newest capped query first) is withdrawn by plan 0258, section 2: the weight decides across every open capped query.
 
 # 0257: a DEZA section narrows the query that is still capped
 
