@@ -537,6 +537,169 @@ describe('the probe alerts (plan 0247, section 4.4)', () => {
   });
 });
 
+describe('a stale run says when it stopped (plan 0255)', () => {
+  const PRESET = '2ddb77c5-f169-468a-a467-376c7521c83e';
+
+  /** The run of 2026-11-06 on slot 4, as the reaper read it. */
+  const carrefourStale = (
+    over: Record<string, unknown> = {}
+  ): AlertForMessage => ({
+    ...runAlert(HarvestAlertKind.RUN_STALE),
+    supermarketId: 'chain-carrefour',
+    runId: '6fd4b58c-0dff-4193-b244-0a97dff3c708',
+    payload: {
+      mode: HarvestRunMode.CATALOG_DISCOVERY,
+      trigger: HarvestRunTrigger.SCHEDULED,
+      presetId: PRESET,
+      presetName: 'Carrefour catalog',
+      scheduleId: 'schedule-1',
+      adapterKey: 'carrefour-web',
+      requestedAt: '2026-11-06T13:30:30.000Z',
+      startedAt: '2026-11-06T13:30:31.000Z',
+      finishedAt: '2026-11-06T15:13:05.000Z',
+      failed: 1,
+      totalPlanned: 18280,
+      error:
+        'The stale reaper marked the run after no heartbeat for 900 seconds.',
+      schedulesStopped: null,
+      staleAfterSeconds: 900,
+      heartbeatAt: '2026-11-06T13:49:05.000Z',
+      processed: 10279,
+      created: 0,
+      updated: 0,
+      ...over,
+    },
+  });
+  const carrefour = context({
+    chainName: (id) => (id === 'chain-carrefour' ? 'Carrefour' : null),
+  });
+
+  it('reads 18 min to the last heartbeat and names the preset, with the numbers of 2026-11-06', () => {
+    const { body } = alertMail(carrefourStale(), carrefour);
+    expect(body).toContain(`Preset: Carrefour catalog (${PRESET})`);
+    expect(body).toContain('Started: 2026-11-06 14:30:31 Madrid time');
+    expect(body).toContain(
+      'Last sign of life: 2026-11-06 14:49:05 Madrid time (18 min 34 s after it started)'
+    );
+    expect(body).toContain(
+      'Marked stale: 2026-11-06 16:13:05 Madrid time (1 h 24 min after its last sign of life)'
+    );
+    expect(body).toContain(
+      'Read before it stopped: 10279 of 18280 planned items'
+    );
+    expect(body).toContain('Rows it left: none');
+    expect(body).toContain('Failed: 1 of 18280 planned items');
+    expect(body).toContain('Stale window: no heartbeat for 900 seconds');
+    // The reap is no longer told as the end of a run of 1 h 42 min.
+    expect(body).not.toContain('Finished:');
+    expect(body).not.toContain('Duration:');
+    expect(body).not.toContain('1 h 42 min');
+  });
+
+  it('says how many rows a stale run wrote, created and updated together', () => {
+    expect(
+      alertMail(carrefourStale({ created: 120, updated: 35 }), carrefour).body
+    ).toContain('Rows it left: 155');
+    expect(
+      alertMail(carrefourStale({ created: 0, updated: 7 }), carrefour).body
+    ).toContain('Rows it left: 7');
+  });
+
+  it('keeps the uuid line for a preset whose name could not be read', () => {
+    for (const presetName of [null, undefined, '']) {
+      const { body } = alertMail(carrefourStale({ presetName }), carrefour);
+      expect(body).toContain(`Preset: ${PRESET}\n`);
+      expect(body).not.toContain('Carrefour catalog');
+    }
+  });
+
+  it('renders a row written before plan 0255, which holds none of the new facts', () => {
+    const old = carrefourStale();
+    for (const key of [
+      'presetName',
+      'heartbeatAt',
+      'processed',
+      'created',
+      'updated',
+    ]) {
+      delete old.payload[key];
+    }
+    const { body } = alertMail(old, carrefour);
+    expect(body).toContain(`Preset: ${PRESET}\n`);
+    expect(body).toContain('Last sign of life: not recorded\n');
+    expect(body).toContain('Marked stale: 2026-11-06 16:13:05 Madrid time\n');
+    expect(body).toContain('Read before it stopped: not recorded');
+    expect(body).toContain('Rows it left: not recorded');
+    expect(body).toContain('Failed: 1 of 18280 planned items');
+  });
+
+  it('claims no time after the start for a run that never started', () => {
+    const { body } = alertMail(
+      carrefourStale({ startedAt: null, processed: 0, totalPlanned: null }),
+      carrefour
+    );
+    expect(body).toContain(
+      'Last sign of life: 2026-11-06 14:49:05 Madrid time\n'
+    );
+    expect(body).toContain(
+      'Read before it stopped: 0 of an unknown number of planned items'
+    );
+  });
+
+  it('names the preset in every kind with a preset line, and changes nothing else', () => {
+    const named = { presetName: 'Weekly Mercadona' };
+    const failed = runAlert(HarvestAlertKind.RUN_FAILED, named);
+    const blocked = runAlert(HarvestAlertKind.RUN_BLOCKED, named);
+    const refused = slotAlert();
+    refused.payload['presetName'] = 'Weekly DEZA';
+    const skipped: AlertForMessage = {
+      ...slotAlert(),
+      kind: HarvestAlertKind.SLOT_PROBE_FAILED,
+      payload: { ...slotAlert().payload, presetName: 'Weekly DEZA' },
+    };
+    expect(alertMail(failed, context()).body).toContain(
+      'Preset: Weekly Mercadona (preset-1)'
+    );
+    expect(alertMail(blocked, context()).body).toContain(
+      'Preset: Weekly Mercadona (preset-1)'
+    );
+    expect(alertMail(refused, context()).body).toContain(
+      'Preset: Weekly DEZA (preset-2)'
+    );
+    expect(alertMail(skipped, context()).body).toContain(
+      'Preset: Weekly DEZA (preset-2)'
+    );
+    // Without the name, each body is the one it was before plan 0255, and a
+    // failed run still prints its end and its duration.
+    const unnamed = (alert: AlertForMessage) =>
+      alertMail(alert, context())
+        .body.replace('Preset: Weekly Mercadona (preset-1)', 'Preset: preset-1')
+        .replace('Preset: Weekly DEZA (preset-2)', 'Preset: preset-2');
+    expect(unnamed(failed)).toBe(
+      alertMail(runAlert(HarvestAlertKind.RUN_FAILED), context()).body
+    );
+    expect(unnamed(refused)).toBe(alertMail(slotAlert(), context()).body);
+    expect(alertMail(failed, context()).body).toContain(
+      'Finished: 2026-11-05 04:04:10 Madrid time\nDuration: 1 h 4 min'
+    );
+    expect(alertMail(failed, context()).body).not.toContain(
+      'Last sign of life'
+    );
+  });
+
+  it('use no dash as punctuation', () => {
+    const DASH_AS_PUNCTUATION = /\s[-–—]\s|[–—]/;
+    for (const mail of [
+      alertMail(carrefourStale(), carrefour),
+      alertMail(carrefourStale({ created: 3, updated: 4 }), carrefour),
+      alertMail(carrefourStale({ heartbeatAt: undefined }), carrefour),
+    ]) {
+      expect(mail.subject).not.toMatch(DASH_AS_PUNCTUATION);
+      expect(mail.body).not.toMatch(DASH_AS_PUNCTUATION);
+    }
+  });
+});
+
 describe('times and durations', () => {
   it('writes Madrid time across the summer change', () => {
     expect(madridTime('2026-07-01T10:00:00.000Z')).toBe(

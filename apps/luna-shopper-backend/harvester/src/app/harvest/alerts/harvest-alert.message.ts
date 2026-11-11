@@ -213,15 +213,19 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
       lines.push(`Mode: ${modeLabel(p['mode'])}`);
       lines.push(`Trigger: ${text(p['trigger'])}`);
       if (p['presetId']) {
-        lines.push(`Preset: ${text(p['presetId'])}`);
+        lines.push(presetLine(p));
       }
       if (p['scheduleId']) {
         lines.push(`Schedule: ${text(p['scheduleId'])}`);
       }
       lines.push(`Requested: ${madridTime(p['requestedAt'])}`);
       lines.push(`Started: ${madridTime(p['startedAt'])}`);
-      lines.push(`Finished: ${madridTime(p['finishedAt'])}`);
-      lines.push(`Duration: ${durationOf(p['startedAt'], p['finishedAt'])}`);
+      if (alert.kind === HarvestAlertKind.RUN_STALE) {
+        lines.push(...staleLines(p));
+      } else {
+        lines.push(`Finished: ${madridTime(p['finishedAt'])}`);
+        lines.push(`Duration: ${durationOf(p['startedAt'], p['finishedAt'])}`);
+      }
       lines.push(
         `Failed: ${numberOr(p['failed'], 0)} of ${
           typeof p['totalPlanned'] === 'number'
@@ -250,7 +254,7 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
     case HarvestAlertKind.SLOT_REFUSED: {
       lines.push(`Chain: ${chainOf(alert, context)}`);
       lines.push(`Schedule: ${text(p['scheduleId'] ?? alert.scheduleId)}`);
-      lines.push(`Preset: ${text(p['presetId'])}`);
+      lines.push(presetLine(p));
       lines.push(
         `${p['retry'] === true ? 'Retry of the slot' : 'Slot'}: ${madridTime(p['slot'])}`
       );
@@ -311,7 +315,7 @@ function bodyOf(alert: AlertForMessage, context: MessageContext): string {
     case HarvestAlertKind.SLOT_PROBE_FAILED: {
       lines.push(`Chain: ${chainOf(alert, context)}`);
       lines.push(`Schedule: ${text(p['scheduleId'] ?? alert.scheduleId)}`);
-      lines.push(`Preset: ${text(p['presetId'])}`);
+      lines.push(presetLine(p));
       lines.push(
         `${p['retry'] === true ? 'Retry of the slot' : 'Slot'}: ${madridTime(p['slot'])}`
       );
@@ -360,6 +364,73 @@ function stepLines(steps: unknown): string {
       return `  ${text(record['name'])}: ${record['ok'] === true ? 'ok' : 'not ok'}`;
     })
     .join('\n');
+}
+
+/**
+ * `Preset: <name> (<uuid>)`, or `Preset: <uuid>` when the payload holds no
+ * name: a preset deleted since, a name that could not be read, or a row
+ * written before plan 0255.
+ */
+function presetLine(payload: Record<string, unknown>): string {
+  const id = text(payload['presetId']);
+  const name = payload['presetName'];
+  return typeof name === 'string' && name.trim() !== ''
+    ? `Preset: ${name.trim()} (${id})`
+    : `Preset: ${id}`;
+}
+
+/**
+ * The lines a stale run prints in place of `Finished` and `Duration` (plan
+ * 0255, section 1). The reap time says nothing about when the run stopped,
+ * so the mail says when it last showed life, what it had read by then, and
+ * what it left. A row written before plan 0255 holds none of the new facts,
+ * and each of them then prints as "not recorded".
+ */
+function staleLines(payload: Record<string, unknown>): string[] {
+  const started = payload['startedAt'];
+  const reaped = payload['finishedAt'];
+  const last = toDate(payload['heartbeatAt']);
+  const ran = last ? durationOf(started, last) : 'not recorded';
+  const dead = last ? durationOf(last, reaped) : 'not recorded';
+  return [
+    `Last sign of life: ${madridTime(last)}${
+      ran === 'not recorded' ? '' : ` (${ran} after it started)`
+    }`,
+    `Marked stale: ${madridTime(reaped)}${
+      dead === 'not recorded' ? '' : ` (${dead} after its last sign of life)`
+    }`,
+    `Read before it stopped: ${readLabel(payload)}`,
+    `Rows it left: ${rowsLabel(payload)}`,
+  ];
+}
+
+/** `10279 of 18280 planned items`, or "not recorded". */
+function readLabel(payload: Record<string, unknown>): string {
+  const processed = payload['processed'];
+  if (typeof processed !== 'number' || !Number.isFinite(processed)) {
+    return 'not recorded';
+  }
+  const planned = payload['totalPlanned'];
+  return `${processed} of ${
+    typeof planned === 'number' ? planned : 'an unknown number of'
+  } planned items`;
+}
+
+/**
+ * The rows the run wrote, `created + updated`, or "none" when both are 0.
+ * Which chains write only at the end is not guessed: the line states the
+ * run's counters.
+ */
+function rowsLabel(payload: Record<string, unknown>): string {
+  const counts = [payload['created'], payload['updated']].filter(
+    (value): value is number =>
+      typeof value === 'number' && Number.isFinite(value)
+  );
+  if (counts.length === 0) {
+    return 'not recorded';
+  }
+  const rows = counts.reduce((sum, value) => sum + value, 0);
+  return rows === 0 ? 'none' : String(rows);
 }
 
 function footer(context: MessageContext): string {

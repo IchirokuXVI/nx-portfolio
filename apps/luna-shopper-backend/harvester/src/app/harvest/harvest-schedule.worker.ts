@@ -16,6 +16,7 @@ import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestSchedule } from '../entities';
 import {
   slotAlertFor,
+  slotOutcomeMayAlert,
   type HarvestAlertDraft,
 } from './alerts/harvest-alert.rules';
 import {
@@ -281,7 +282,14 @@ export class HarvestScheduleWorker
       // A refused slot tells the owner, in the same write (plan 0218,
       // section 2.3). `schedule` is the row before the claim, so its last
       // outcome is the one this slot is compared with.
-      ...alertArgument(schedule, slot, false, result, at)
+      ...alertArgument(
+        schedule,
+        slot,
+        false,
+        result,
+        at,
+        await this.presetNameFor(schedule, result)
+      )
     );
     this.log(schedule, slot, result, false);
   }
@@ -402,7 +410,14 @@ export class HarvestScheduleWorker
         at,
         attempts: null,
       },
-      ...alertArgument(schedule, slot, retry, result, at)
+      ...alertArgument(
+        schedule,
+        slot,
+        retry,
+        result,
+        at,
+        await this.presetNameFor(schedule, result)
+      )
     );
     this.log(schedule, slot, result, retry);
   }
@@ -569,6 +584,25 @@ export class HarvestScheduleWorker
     );
   }
 
+  /**
+   * The preset's name for a slot that can alert, so its mail names the
+   * preset (plan 0255), and null for any other slot, which reads nothing. A
+   * name that cannot be read leaves the uuid line, never the outcome.
+   */
+  private async presetNameFor(
+    schedule: HarvestSchedule,
+    result: ScheduledStart
+  ): Promise<string | null> {
+    if (!slotOutcomeMayAlert(result.outcome)) {
+      return null;
+    }
+    try {
+      return await this.store.presetNameOf(schedule.presetId);
+    } catch {
+      return null;
+    }
+  }
+
   private log(
     schedule: HarvestSchedule,
     slot: Date,
@@ -614,7 +648,8 @@ function alertArgument(
   slot: Date,
   retry: boolean,
   result: ScheduledStart,
-  at: Date
+  at: Date,
+  presetName: string | null
 ): [] | [HarvestAlertDraft] {
   const alert = slotAlertFor({
     schedule,
@@ -625,6 +660,7 @@ function alertArgument(
     // catalog at send time and falls back to the chain's id.
     adapterKey: null,
     at,
+    presetName,
   });
   return alert ? [alert] : [];
 }

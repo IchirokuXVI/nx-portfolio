@@ -14,6 +14,7 @@ import {
   runAlertFor,
   SCHEDULES_STOP_AFTER,
   slotAlertFor,
+  slotOutcomeMayAlert,
   testAlertFor,
   type ProbeAlertProbe,
   type RunAlertRun,
@@ -172,6 +173,94 @@ describe('runAlertFor', () => {
 
   it('stops the schedules at the same number the scheduler skips at', () => {
     expect(SCHEDULES_STOP_AFTER).toBe(SOURCE_FAILING_AFTER);
+  });
+
+  it('keeps the last heartbeat, the counters and the preset name of a stale run (plan 0255)', () => {
+    const draft = runAlertFor(
+      runInput({
+        run: run({
+          presetName: 'Carrefour catalog',
+          heartbeatAt: new Date('2026-11-06T13:49:05.000Z'),
+          processed: 10279,
+          created: 0,
+          updated: 0,
+        }),
+        status: HarvestRunStatus.STALE,
+        staleAfterSeconds: 900,
+        finishedAt: new Date('2026-11-06T15:13:05.000Z'),
+      })
+    );
+    expect(draft?.payload).toMatchObject({
+      presetId: 'preset-1',
+      presetName: 'Carrefour catalog',
+      heartbeatAt: '2026-11-06T13:49:05.000Z',
+      finishedAt: '2026-11-06T15:13:05.000Z',
+      processed: 10279,
+      created: 0,
+      updated: 0,
+    });
+  });
+
+  it('stores null for each fact of plan 0255 a caller does not know', () => {
+    expect(runAlertFor(runInput())?.payload).toMatchObject({
+      presetName: null,
+      heartbeatAt: null,
+      processed: null,
+      created: null,
+      updated: null,
+    });
+  });
+});
+
+describe('the preset name of a slot alert (plan 0255)', () => {
+  const schedule: SlotAlertSchedule = {
+    id: 'schedule-1',
+    presetId: 'preset-1',
+    supermarketId: 'chain-1',
+    lastOutcome: HarvestScheduleOutcome.STARTED,
+    lastOutcomeNote: null,
+  };
+  const base = {
+    schedule,
+    slot: new Date('2026-11-05T03:00:00.000Z'),
+    retry: false,
+    adapterKey: null,
+    at: new Date('2026-11-05T03:00:30.000Z'),
+  };
+
+  it('carries the name on a refused slot and on a slot its probe skipped, null without one', () => {
+    for (const result of [
+      { outcome: HarvestScheduleOutcome.REFUSED, note: 'disabled' },
+      {
+        outcome: HarvestScheduleOutcome.SKIPPED_PROBE_FAILED,
+        note: 'probe probe-1 BLOCKED: listing: the response was HTTP 403',
+      },
+    ]) {
+      expect(
+        slotAlertFor({ ...base, result, presetName: 'Weekly Mercadona' })
+          ?.payload['presetName']
+      ).toBe('Weekly Mercadona');
+      expect(slotAlertFor({ ...base, result })?.payload['presetName']).toBe(
+        null
+      );
+    }
+  });
+
+  it('asks for a name only for the outcomes that can alert', () => {
+    expect(slotOutcomeMayAlert(HarvestScheduleOutcome.REFUSED)).toBe(true);
+    expect(
+      slotOutcomeMayAlert(HarvestScheduleOutcome.SKIPPED_PROBE_FAILED)
+    ).toBe(true);
+    for (const outcome of Object.values(HarvestScheduleOutcome).filter(
+      (outcome) =>
+        outcome !== HarvestScheduleOutcome.REFUSED &&
+        outcome !== HarvestScheduleOutcome.SKIPPED_PROBE_FAILED
+    )) {
+      expect(slotOutcomeMayAlert(outcome)).toBe(false);
+      expect(
+        slotAlertFor({ ...base, result: { outcome, note: 'x' } })
+      ).toBeNull();
+    }
   });
 });
 

@@ -47,6 +47,8 @@ function build(
     adapterKey?: string;
     consecutiveFailures?: number;
     enabledSchedules?: number | Error;
+    presetId?: string;
+    presetName?: string | Error | null;
   } = {}
 ) {
   let row = {
@@ -55,7 +57,7 @@ function build(
     trigger: options.trigger ?? HarvestRunTrigger.MANUAL,
     supermarketId: CHAIN,
     priceScopeId: null,
-    presetId: null,
+    presetId: options.presetId ?? null,
     scheduleId: null,
     requestedAt: new Date('2026-11-05T03:00:00.000Z'),
     startedAt: new Date('2026-11-05T03:00:01.000Z'),
@@ -87,6 +89,12 @@ function build(
     }),
     finish: jest.fn(async () => undefined),
     countEnabledSchedules,
+    presetNameOf: jest.fn(async () => {
+      if (options.presetName instanceof Error) {
+        throw options.presetName;
+      }
+      return options.presetName ?? null;
+    }),
   } as unknown as HarvestRunStore & { finish: jest.Mock };
 
   const source = {
@@ -181,6 +189,31 @@ function draftOf(finish: jest.Mock): HarvestAlertDraft | undefined {
 }
 
 describe('RunExecutor and the owner alert (plan 0218)', () => {
+  it('names the preset of a failed run, and keeps the alert when the name cannot be read (plan 0255)', async () => {
+    const named = build('ratio', {
+      presetId: 'preset-1',
+      presetName: 'Weekly DIA',
+    });
+    await named.executor.runToCompletion('run-1');
+    expect(draftOf(named.store.finish)?.payload).toMatchObject({
+      presetId: 'preset-1',
+      presetName: 'Weekly DIA',
+    });
+
+    const unread = build('ratio', {
+      presetId: 'preset-1',
+      presetName: new Error('connection lost'),
+    });
+    await unread.executor.runToCompletion('run-1');
+    expect(draftOf(unread.store.finish)).toMatchObject({
+      kind: HarvestAlertKind.RUN_FAILED,
+      payload: expect.objectContaining({
+        presetId: 'preset-1',
+        presetName: null,
+      }),
+    });
+  });
+
   it('passes a RUN_FAILED draft to finish for a run that fails on the ratio', async () => {
     const { executor, store, countEnabledSchedules } = build('ratio');
 

@@ -579,6 +579,23 @@ export class HarvestRunStore {
   }
 
   /**
+   * The name of a preset, for the preset line of an alert (plan 0255), or
+   * null when the preset was deleted or the read failed. A name is never a
+   * reason an alert is not written: the mail then names the uuid only.
+   */
+  async presetNameOf(presetId: string): Promise<string | null> {
+    try {
+      const [row]: { name: string }[] = await this.runs.query(
+        `SELECT "name" FROM "harvest_run_presets" WHERE "id" = $1`,
+        [presetId]
+      );
+      return row?.name ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * The stale reaper (plan 0038, section 6.6): a RUNNING run whose heartbeat
    * stopped is marked STALE, logged, and its lock released.
    *
@@ -633,6 +650,11 @@ export class HarvestRunStore {
    * The `RUN_STALE` alert of a run the reaper marks, with the reaper's own
    * sentence as its error. The chain's adapter key is read for the message's
    * fallback name, and a failed read leaves it out rather than the alert.
+   *
+   * `run` is the row as the reaper read it, so its `heartbeatAt` is the last
+   * one the run wrote: `finish` writes the reap time over it, and the alert
+   * keeps it here (plan 0255). The preset's name is read here too, before
+   * the transaction of the reap opens.
    */
   private async staleAlertOf(
     run: HarvestRun,
@@ -647,8 +669,11 @@ export class HarvestRunStore {
         adapterKey = null;
       }
     }
+    const presetName = run.presetId
+      ? await this.presetNameOf(run.presetId)
+      : null;
     return runAlertFor({
-      run,
+      run: { ...run, presetName },
       status: HarvestRunStatus.STALE,
       error:
         `The stale reaper marked the run after no heartbeat for ` +

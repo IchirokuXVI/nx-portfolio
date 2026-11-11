@@ -798,6 +798,9 @@ export class RunExecutor implements OnApplicationShutdown {
         run.supermarketId && needsScheduleCount(status, failuresBefore)
           ? await this.store.countEnabledSchedules(run.supermarketId)
           : 0;
+      const presetName = run.presetId
+        ? await this.presetNameOf(run.presetId)
+        : null;
       return runAlertFor({
         run: {
           id: run.id,
@@ -805,6 +808,7 @@ export class RunExecutor implements OnApplicationShutdown {
           trigger: run.trigger,
           supermarketId: run.supermarketId,
           presetId: run.presetId,
+          presetName,
           scheduleId: run.scheduleId,
           requestedAt: run.requestedAt,
           startedAt: row.startedAt ?? run.startedAt,
@@ -824,6 +828,18 @@ export class RunExecutor implements OnApplicationShutdown {
         `Harvest run ${run.id}: its alert could not be decided: ` +
           describeError(error).message
       );
+      return null;
+    }
+  }
+
+  /**
+   * The preset's name for the alert's preset line (plan 0255), or null. A
+   * name that cannot be read leaves the uuid line, never the alert.
+   */
+  private async presetNameOf(presetId: string): Promise<string | null> {
+    try {
+      return await this.store.presetNameOf(presetId);
+    } catch {
       return null;
     }
   }
