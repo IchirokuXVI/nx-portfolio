@@ -4,13 +4,20 @@ import {
   MembershipStatus,
   RealtimeEvent,
   ZoneRole,
+  type AddLineQuantityRequest,
+  type LineUnit,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
+import {
+  LineUnitMismatchException,
+  ValidationException,
+} from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
 import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import {
+  BasketTripRow,
   LineSettlement,
   ListLineGroupRemoval,
   ListLineItem,
@@ -56,6 +63,8 @@ interface Harness {
   service: LineService;
   saved: Partial<ListLine>[];
   events: { event: RealtimeEvent; line: LineView }[];
+  /** What the trip rows of the line were rewritten to (plan 0246). */
+  tripRows: { where: unknown; set: unknown }[];
 }
 
 function build(options: {
@@ -76,6 +85,8 @@ function build(options: {
    * default, so an add of anything else creates.
    */
   existing?: ListLine[];
+  /** What the line counts in (plan 0246). `UNIT` when absent. */
+  unit?: LineUnit;
 }): Harness {
   const list = {
     id: LIST_ID,
@@ -92,6 +103,7 @@ function build(options: {
     listId: LIST_ID,
     content: 'Tinned tomatoes',
     quantity: options.quantity ?? 3,
+    unit: options.unit ?? 'UNIT',
     itemSetHash: null,
     // Free text, as a row reads it: the column is null and never absent, and
     // an add compares it to decide which line it lands on.
@@ -106,6 +118,7 @@ function build(options: {
   } as ListLine;
 
   const saved: Partial<ListLine>[] = [];
+  const tripRows: { where: unknown; set: unknown }[] = [];
   const events: { event: RealtimeEvent; line: LineView }[] = [];
 
   const lineRepo = {
@@ -200,6 +213,14 @@ function build(options: {
           if (entity === LineSettlement) {
             return settlements.repo;
           }
+          if (entity === BasketTripRow) {
+            return {
+              update: async (where: unknown, set: unknown) => {
+                tripRows.push({ where, set });
+                return { affected: 1 };
+              },
+            };
+          }
           return lineRepo;
         },
       } as unknown as EntityManager),
@@ -231,11 +252,94 @@ function build(options: {
     announcer
   );
 
-  return { service, saved, events, recorded: changes.recorded };
+  return { service, saved, events, tripRows, recorded: changes.recorded };
 }
 
 const WRITER = [ListPermission.READ, ListPermission.WRITE];
 const DECIDER = [ListPermission.READ, ListPermission.DECIDE];
+
+describe('a delta and an edit name the unit (plan 0246, section 3.2)', () => {
+  it('refuses a delta in another unit with line_unit_mismatch, and changes nothing', async () => {
+    const w = build({ permissions: DECIDER, quantity: 750, unit: 'GRAM' });
+
+    await expect(
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: 1,
+        unit: 'UNIT',
+      })
+    ).rejects.toBeInstanceOf(LineUnitMismatchException);
+    expect(w.saved).toHaveLength(0);
+    expect(w.events).toHaveLength(0);
+  });
+
+  it('refuses a delta with no unit as a validation error', async () => {
+    const w = build({ permissions: DECIDER, quantity: 750, unit: 'GRAM' });
+
+    await expect(
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: -250,
+      } as AddLineQuantityRequest)
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('moves a weight line by grams', async () => {
+    const w = build({ permissions: DECIDER, quantity: 1000, unit: 'GRAM' });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: -250,
+      unit: 'GRAM',
+    });
+
+    expect(view).toMatchObject({ quantity: 750, unit: 'GRAM' });
+  });
+
+  it('refuses a unit change that names no quantity, and writes nothing', async () => {
+    const w = build({ permissions: DECIDER, quantity: 2 });
+
+    await expect(
+      w.service.update({ userId: SHOPPER, lineId: 'li1', unit: 'GRAM' })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('changes the unit with the quantity it starts from', async () => {
+    const w = build({ permissions: DECIDER, quantity: 2 });
+
+    const result = await w.service.update({
+      userId: SHOPPER,
+      lineId: 'li1',
+      unit: 'GRAM',
+      quantity: 1000,
+    });
+
+    expect(result).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    // A trip row that names the line follows it in the same transaction
+    // (plan 0246, section 3.4), so a trip never reads a count against a weight.
+    expect(w.tripRows).toEqual([
+      { where: { lineId: 'li1' }, set: { unit: 'GRAM', asked: 1000 } },
+    ]);
+  });
+
+  it('leaves the trip rows alone when the unit did not move', async () => {
+    const w = build({ permissions: DECIDER, quantity: 2 });
+
+    await w.service.update({
+      userId: SHOPPER,
+      lineId: 'li1',
+      unit: 'UNIT',
+      quantity: 5,
+    });
+
+    expect(w.tripRows).toEqual([]);
+  });
+});
 
 describe('line.addQuantity (plan 0040, section 3)', () => {
   it('adds, and the answer carries the count the row now holds', async () => {
@@ -245,6 +349,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       delta: 2,
+      unit: 'UNIT',
     });
 
     // Five because the server says five, which is the difference between this and
@@ -261,6 +366,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       delta: 1,
+      unit: 'UNIT',
     });
 
     expect(view.version).toBe(5);
@@ -277,6 +383,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       delta: -3,
+      unit: 'UNIT',
     });
 
     expect(view.quantity).toBe(0);
@@ -287,7 +394,12 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     const w = build({ permissions: DECIDER, quantity: 3 });
 
     await expect(
-      w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta: -4 })
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: -4,
+        unit: 'UNIT',
+      })
     ).rejects.toThrow(/at least 0/);
     expect(w.saved).toHaveLength(0);
     expect(w.events).toHaveLength(0);
@@ -302,7 +414,12 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     const w = build({ permissions: DECIDER, quantity: 99999 });
 
     await expect(
-      w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta: 100 })
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: 100,
+        unit: 'UNIT',
+      })
     ).rejects.toThrow(/at most 100000/);
     expect(w.saved).toHaveLength(0);
   });
@@ -311,7 +428,12 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     const w = build({ permissions: DECIDER });
 
     await expect(
-      w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta: 0 })
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: 0,
+        unit: 'UNIT',
+      })
     ).rejects.toThrow(/non zero/);
     expect(w.saved).toHaveLength(0);
   });
@@ -320,7 +442,12 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     const w = build({ permissions: DECIDER });
 
     await expect(
-      w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta: 100001 })
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: 100001,
+        unit: 'UNIT',
+      })
     ).rejects.toThrow(/delta must be between/);
   });
 
@@ -331,7 +458,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     const patch = build({ permissions: WRITER });
 
     const fromDelta = await delta.service
-      .addQuantity({ userId: SHOPPER, lineId: 'li1', delta: 2 })
+      .addQuantity({ userId: SHOPPER, lineId: 'li1', delta: 2, unit: 'UNIT' })
       .catch((error: Error) => error);
     const fromPatch = await patch.service
       .update({ userId: SHOPPER, lineId: 'li1', quantity: 5 })
@@ -355,6 +482,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       delta: 2,
+      unit: 'UNIT',
     });
 
     expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
@@ -376,6 +504,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       delta: 2,
+      unit: 'UNIT',
     });
 
     expect(view.approvalStatus).toBe(LineApprovalStatus.APPROVED);
@@ -398,6 +527,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       delta: 1,
+      unit: 'UNIT',
     });
 
     expect(view.approvalStatus).toBe(LineApprovalStatus.PENDING);
@@ -419,6 +549,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         delta: -2,
+        unit: 'UNIT',
       });
       const fromPatch = await patch.service.update({
         userId: SHOPPER,
@@ -439,6 +570,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         delta: -2,
+        unit: 'UNIT',
       });
 
       expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineUpdated]);

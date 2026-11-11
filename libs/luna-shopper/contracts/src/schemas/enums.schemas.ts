@@ -35,6 +35,7 @@ import {
   ZoneStatus,
 } from '../lib/enums/zone.enums';
 import { AiTextProvider } from '../lib/legal/legal-settings';
+import { LINE_UNITS } from '../lib/units/line-unit';
 import { enumOf, JsonSchema, schemaId } from './builders';
 
 /**
@@ -82,6 +83,8 @@ export const ENUM_IDS = {
   allowanceScope: schemaId('enums/AllowanceScope'),
   allowancePeriod: schemaId('enums/AllowancePeriod'),
   allowanceLimit: schemaId('enums/AllowanceLimit'),
+  /** What a line's quantity counts (plan 0246, section 1). */
+  lineUnit: schemaId('enums/LineUnit'),
 } as const;
 
 export const enumSchemas: JsonSchema[] = [
@@ -119,4 +122,5 @@ export const enumSchemas: JsonSchema[] = [
   enumOf(ENUM_IDS.allowanceScope, Object.values(AllowanceScope)),
   enumOf(ENUM_IDS.allowancePeriod, Object.values(AllowancePeriod)),
   enumOf(ENUM_IDS.allowanceLimit, Object.values(AllowanceLimit)),
+  enumOf(ENUM_IDS.lineUnit, LINE_UNITS),
 ];

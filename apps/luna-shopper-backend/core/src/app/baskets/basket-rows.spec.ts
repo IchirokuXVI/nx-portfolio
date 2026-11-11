@@ -64,6 +64,7 @@ function entry(over: Partial<BasketEntry> = {}): BasketEntry {
     listId: 'list-a',
     content: 'Milk',
     quantity: 1,
+    unit: 'UNIT',
     version: 1,
     itemSetHash: null,
     favoriteItemId: null,
@@ -154,7 +155,7 @@ describe('grouping (plan 0201, section 2)', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0].productId).toBe('i1');
-    expect(groups[0].key).toBe('item:i1');
+    expect(groups[0].key).toBe('item:i1:UNIT');
     expect(groups[0].entries.map((row) => row.listId)).toEqual([
       'list-a',
       'list-b',
@@ -250,8 +251,45 @@ describe('grouping (plan 0201, section 2)', () => {
       entry({ content: 'Milk' }),
     ]);
 
-    expect(groups.map((group) => group.key)).toEqual(['item:i1', 'text:milk']);
+    expect(groups.map((group) => group.key)).toEqual([
+      'item:i1:UNIT',
+      'text:milk:UNIT',
+    ]);
     expect(groups[1].productId).toBeNull();
+  });
+
+  it('keeps two lines of one product in two units as two rows with two keys (plan 0246 M6)', () => {
+    const grams = entry({ itemIds: ['i1', 'i2'], unit: 'GRAM', quantity: 500 });
+    const pieces = entry({ itemIds: ['i1', 'i2'], unit: 'UNIT', quantity: 2 });
+
+    const groups = groupEntries([grams, pieces], NO_PICKS);
+
+    expect(groups.map((group) => group.key)).toEqual([
+      'item:i1:GRAM',
+      'item:i1:UNIT',
+    ]);
+    const context = {
+      servedListIds: new Set(['list-a']),
+      demandEditable: () => true,
+      facts: NO_FACTS,
+      marks: NO_ROW_MARKS,
+    };
+    const rows = groups.map((group) => toRowView(group, context));
+    // Each row is one unit, and no sum adds grams to pieces.
+    expect(rows.map((row) => [row.unit, row.left])).toEqual([
+      ['GRAM', 500],
+      ['UNIT', 2],
+    ]);
+  });
+
+  it('counts only the buys in the unit of the entry (plan 0246, section 3.5)', () => {
+    const changed = entry({
+      unit: 'GRAM',
+      quantity: 750,
+      settlements: [bought(2, { unit: 'UNIT' }), bought(250, { unit: 'GRAM' })],
+    });
+
+    expect(boughtOf(changed)).toBe(250);
   });
 
   it('folds a free text pair by normalizeContent', () => {
@@ -1121,6 +1159,8 @@ describe('what a patch and an entry both state (plan 0204)', () => {
     expect(toEntryPatch(only, NO_FACTS)).toEqual({
       lineId: only.lineId,
       version: 7,
+      // What the numbers count (plan 0246, section 3.6).
+      unit: 'UNIT',
       left: 2,
       bought: 0,
       boughtElsewhere: 0,

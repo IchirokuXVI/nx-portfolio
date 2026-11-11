@@ -36,6 +36,7 @@ export type AddBasketLineDto = {
   targetListId: string;
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
   askIfAmbiguous?: boolean;
@@ -93,6 +94,7 @@ export type AddItemPriceDto = {
 export type AddLineDto = {
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
   productGroupId?: string;
@@ -106,6 +108,7 @@ export type AddLineDto = {
  */
 export type AddLineQuantityDto = {
   delta: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
 };
 
 /**
@@ -121,6 +124,7 @@ export type AddLinesDto = {
 export type AddLinesItemDto = {
   content: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
   named?: boolean;
 };
@@ -697,6 +701,9 @@ export type ProblemDetails = {
     | 'line_merge_needs_approval'
     | 'line_merge_too_many_products'
     | 'line_add_needs_choice'
+    | 'line_unit_mismatch'
+    | 'line_unit_differs'
+    | 'line_unit_not_offered'
     | 'brand_label_empty'
     | 'brand_key_taken'
     | 'brand_link_to_self'
@@ -970,6 +977,7 @@ export type SetApprovalDto = {
 export type SetBasketRowDemandDto = {
   lineId: string;
   quantity: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   from: number;
 };
 
@@ -1062,6 +1070,7 @@ export type SettleBasketRowDto = {
   lineIds: string[];
   outcome: SettlementOutcome;
   quantity?: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   from: number;
   itemId?: string;
   priceScopeId?: string;
@@ -1083,6 +1092,7 @@ export type SettleItemAtChainDto = {
 export type SettleLineDto = {
   outcome: 'BOUGHT' | 'NOT_AVAILABLE';
   quantity?: number;
+  unit: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemId?: string;
   priceScopeId?: string;
   supermarketLocationId?: string;
@@ -1170,6 +1180,7 @@ export type TurnScopeDto = {
 export type UpdateAdminLineDto = {
   content?: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   itemIds?: string[];
 };
 
@@ -1313,6 +1324,7 @@ export type UpdateItemsDto = {
 export type UpdateLineDto = {
   content?: string;
   quantity?: number;
+  unit?: 'UNIT' | 'GRAM' | 'MILLILITER';
   from?: number;
   itemIds?: string[];
   adoptItemIds?: string[];
@@ -1558,6 +1570,7 @@ export type AdminCoreAdminBasketPage = {
 export type AdminCoreAdminBasketRowView = {
   rowKey: string;
   content: string;
+  unit: EnumsLineUnit;
   left: number;
   bought: number;
   asked: number;
@@ -1573,6 +1586,7 @@ export type AdminCoreAdminBasketSettlementView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
   pricePaidCents: number | null;
   pricePaidCurrency: string | null;
   priceScopeId: string | null;
@@ -1635,6 +1649,7 @@ export type AdminCoreAdminListLineView = {
   listName: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   approvalStatus: EnumsLineApprovalStatus;
   createdByUserId: string;
   createdAt: string;
@@ -2526,6 +2541,7 @@ export type BasketBasketRowView = {
   rowKey: string;
   content: string;
   productId: string | null;
+  unit: EnumsLineUnit;
   left: number;
   bought: number;
   asked: number;
@@ -4130,6 +4146,11 @@ export type EnumsLineChangeKind =
 export type EnumsLineSuggestionReason = 'PERIOD' | 'STAPLE';
 
 /**
+ * `enums.LineUnit` in the gateway's OpenAPI document.
+ */
+export type EnumsLineUnit = 'UNIT' | 'GRAM' | 'MILLILITER';
+
+/**
  * `enums.ListPermission` in the gateway's OpenAPI document.
  */
 export type EnumsListPermission = 'READ' | 'WRITE' | 'DECIDE' | 'MANAGE';
@@ -5524,6 +5545,8 @@ export type ListLineSettlementHistoryView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
+  estimated: boolean;
   settledByUserId: string;
   settledByParticipantId: string | null;
   settledAt: string;
@@ -5563,6 +5586,8 @@ export type ListLineSettlementView = {
   itemId: string | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
+  estimated: boolean;
   settledByUserId: string;
   settledByParticipantId: string | null;
   settledAt: string;
@@ -5601,6 +5626,7 @@ export type ListLineView = {
   listId: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   itemIds: string[];
   itemSetHash: string | null;
   productGroupId: string | null;
@@ -5749,6 +5775,7 @@ export type ListUpdateLineResult = {
   listId: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   itemIds: string[];
   itemSetHash: string | null;
   productGroupId: string | null;
@@ -6007,6 +6034,12 @@ export type PurchasePurchaseEntryView = {
   anyBoughtLineCount: number;
   lineCount: number;
   boughtLineCount: number;
+  bought: {
+    UNIT?: number;
+    GRAM?: number;
+    MILLILITER?: number;
+  };
+  estimated: boolean;
   spent: PurchaseMoneyView | null;
   unpricedCount: number;
 };
@@ -6030,6 +6063,8 @@ export type PurchasePurchaseRowView = {
   itemSnapshot: CatalogItemSnapshot | null;
   outcome: EnumsSettlementOutcome;
   quantity: number;
+  unit: EnumsLineUnit;
+  estimated: boolean;
   pricePaid: PurchaseMoneyView | null;
   priceScopeId: string | null;
   supermarketLocationId: string | null;

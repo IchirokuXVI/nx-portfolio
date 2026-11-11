@@ -6,9 +6,11 @@ import {
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   ListPermission,
   SettlementOutcome,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { PageQueryDto } from '@portfolio/luna-shopper/platform';
 import { Transform, Type } from 'class-transformer';
@@ -35,6 +37,42 @@ import {
   ValidateNested,
   type ValidationArguments,
 } from 'class-validator';
+
+/**
+ * What a line's `quantity` counts (plan 0246). One description for every DTO
+ * that names it, so the routes cannot say different things about one field.
+ */
+export const LINE_UNIT_DOCS = {
+  optional:
+    'What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit, and a free text line counts pieces.',
+  update:
+    'Change what `quantity` counts (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, and so does an edit of the products that leaves the line with products that do not offer its unit: name the new unit and quantity in the same request.',
+  required:
+    'The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again.',
+} as const;
+
+/** An optional line unit, as the add and the update take it. */
+function OptionalLineUnit(description: string): PropertyDecorator {
+  return (target, key) => {
+    ApiPropertyOptional({
+      enum: LINE_UNITS,
+      description,
+    })(target, key);
+    IsOptional()(target, key);
+    IsIn([...LINE_UNITS])(target, key);
+  };
+}
+
+/** A required line unit, as a delta, a settle and a demand take it (M8). */
+export function RequiredLineUnit(): PropertyDecorator {
+  return (target, key) => {
+    ApiProperty({
+      enum: LINE_UNITS,
+      description: LINE_UNIT_DOCS.required,
+    })(target, key);
+    IsIn([...LINE_UNITS])(target, key);
+  };
+}
 
 export class CreateListDto {
   @ApiProperty({ maxLength: 120 })
@@ -155,6 +193,9 @@ export class AddLinesItemDto {
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
 
+  @OptionalLineUnit(LINE_UNIT_DOCS.optional)
+  unit?: LineUnit;
+
   @ApiPropertyOptional({
     type: [String],
     format: 'uuid',
@@ -187,11 +228,11 @@ export class AddLinesItemDto {
  * the basket's add, which take them alike because both are `LineService.add`.
  */
 export const ADD_CHOICE_DOCS = {
-  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId.`,
+  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before.`,
   intoLineId:
-    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
+    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
   newLine:
-    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still takes the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId.',
+    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add.',
 } as const;
 
 /**
@@ -308,6 +349,9 @@ export class AddLineQuantityDto {
   @Min(-LINE_QUANTITY_MAX)
   @Max(LINE_QUANTITY_MAX)
   delta!: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 }
 
 export class UpdateLineDto {
@@ -327,6 +371,9 @@ export class UpdateLineDto {
   @Min(LINE_QUANTITY_MIN)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @OptionalLineUnit(LINE_UNIT_DOCS.update)
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     minimum: LINE_QUANTITY_MIN,
@@ -446,6 +493,9 @@ export class SettleLineDto {
   @Min(1)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @RequiredLineUnit()
+  unit!: LineUnit;
 
   @ApiPropertyOptional({
     format: 'uuid',

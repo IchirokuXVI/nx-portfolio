@@ -3,15 +3,18 @@ import {
   LINE_ITEM_SET_CEILING,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   UsernamePropagation,
   ZoneRole,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
+  IsIn,
   IsInt,
   IsObject,
   IsOptional,
@@ -210,6 +213,15 @@ export class UpdateAdminLineDto {
   @Min(LINE_QUANTITY_MIN)
   @Max(LINE_QUANTITY_MAX)
   quantity?: number;
+
+  @ApiPropertyOptional({
+    enum: LINE_UNITS,
+    description:
+      'Change what `quantity` counts: UNIT, GRAM or MILLILITER, in base units (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone.',
+  })
+  @IsOptional()
+  @IsIn([...LINE_UNITS])
+  unit?: LineUnit;
 
   @ApiPropertyOptional({
     type: [String],

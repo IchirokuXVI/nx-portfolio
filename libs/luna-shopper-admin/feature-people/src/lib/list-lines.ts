@@ -21,6 +21,13 @@ export type ListLine = ListLineRow;
 const QUANTITY_MIN = 0;
 const QUANTITY_MAX = 100000;
 
+/** What a line's quantity counts, which is the whole of `LineUnit` (backend plan 0246). */
+const LINE_UNIT_OPTIONS = [
+  { value: 'UNIT', label: 'people.lines.unitOption.UNIT' },
+  { value: 'GRAM', label: 'people.lines.unitOption.GRAM' },
+  { value: 'MILLILITER', label: 'people.lines.unitOption.MILLILITER' },
+] as const;
+
 /** How far a line can get, which is the whole of `LineApprovalStatus`. */
 const LINE_APPROVAL_OPTIONS = [
   { value: 'PENDING', label: 'people.lists.approval.PENDING' },
@@ -117,6 +124,17 @@ export const LIST_LINES = defineResource<ListLine>({
       integer: true,
       min: QUANTITY_MIN,
       max: QUANTITY_MAX,
+      help: 'people.lines.quantityHelp',
+    },
+    {
+      // What the quantity counts, beside it (backend plan 0246, section 6).
+      // A change of unit is sent with the quantity it starts from, or core
+      // refuses it.
+      kind: 'enum',
+      name: 'unit',
+      label: 'people.lines.unit',
+      options: LINE_UNIT_OPTIONS,
+      help: 'people.lines.unitHelp',
     },
     {
       kind: 'enum',
@@ -153,7 +171,14 @@ export const LIST_LINES = defineResource<ListLine>({
   ],
 
   list: {
-    columns: ['listName', 'content', 'quantity', 'approvalStatus', 'createdAt'],
+    columns: [
+      'listName',
+      'content',
+      'quantity',
+      'unit',
+      'approvalStatus',
+      'createdAt',
+    ],
     // The card is titled with what the line says, so what belongs under it is
     // which list it is on and whether it counts yet. Across lists the first is
     // what tells two identical lines apart.
@@ -172,7 +197,7 @@ export const LIST_LINES = defineResource<ListLine>({
     sections: [
       {
         title: 'people.lines.section.line',
-        fields: ['content', 'quantity', 'approvalStatus'],
+        fields: ['content', 'quantity', 'unit', 'approvalStatus'],
       },
     ],
     facts: {

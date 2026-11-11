@@ -73,6 +73,7 @@ import {
 import { ApiContractResponse, ApiProblemResponses } from '../docs';
 import { NatsClient } from '../messaging/nats-client';
 import { CommentTranscriptionService } from './comment-transcription.service';
+import { LineUnitCheck } from './line-unit-check';
 import {
   AddCommentDto,
   AddLineDto,
@@ -254,7 +255,12 @@ export class ItemHistoryController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'lists', version: '1' })
 export class ListsController {
-  constructor(private readonly nats: NatsClient) {}
+  /** The unit a line is allowed (plan 0246, section 4.2). */
+  private readonly units: LineUnitCheck;
+
+  constructor(private readonly nats: NatsClient) {
+    this.units = new LineUnitCheck(nats);
+  }
 
   @Patch(':id')
   @ApiContractResponse(LIST_PATTERNS.update)
@@ -422,17 +428,28 @@ export class ListsController {
 
   @Post(':id/lines')
   @ApiContractResponse(LINE_PATTERNS.add, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, lineAddChoice: true })
-  addLine(
+  @ApiProblemResponses({
+    body: true,
+    lineAddChoice: true,
+    lineUnitDiffers: true,
+    lineUnitNotOffered: true,
+  })
+  async addLine(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
     @Body() dto: AddLineDto
   ): Promise<AddLineResult> {
+    // Absent is `UNIT` (plan 0246, section 3.2), and the products sent must
+    // offer the unit (section 4.2).
+    await this.units.assertOffered([
+      { unit: dto.unit ?? 'UNIT', itemIds: dto.itemIds ?? [] },
+    ]);
     return this.nats.send<AddLineResult>(LINE_PATTERNS.add, {
       userId: user.userId,
       listId: id,
       content: dto.content,
       quantity: dto.quantity,
+      unit: dto.unit,
       itemIds: dto.itemIds,
       productGroupId: dto.productGroupId,
       named: dto.named,
@@ -457,12 +474,21 @@ export class ListsController {
    */
   @Post(':id/lines/batch')
   @ApiContractResponse(LINE_PATTERNS.addMany, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true })
-  addLines(
+  @ApiProblemResponses({ body: true, lineUnitNotOffered: true })
+  async addLines(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
     @Body() dto: AddLinesDto
   ): Promise<AddLineResult[]> {
+    // Every item, in one catalog read (plan 0246, section 4.2). One item that
+    // asks for a unit its products do not offer refuses the batch, as any
+    // other bad item does.
+    await this.units.assertOffered(
+      dto.items.map((item) => ({
+        unit: item.unit ?? 'UNIT',
+        itemIds: item.itemIds ?? [],
+      }))
+    );
     return this.nats.send<AddLineResult[]>(LINE_PATTERNS.addMany, {
       userId: user.userId,
       listId: id,
@@ -493,12 +519,17 @@ export class ListsController {
 @ApiProblemResponses({ auth: true, membership: true })
 @Controller({ path: 'lines', version: '1' })
 export class LinesController {
+  /** The unit a line is allowed (plan 0246, section 4.2). */
+  private readonly units: LineUnitCheck;
+
   constructor(
     private readonly nats: NatsClient,
     private readonly transcription: CommentTranscriptionService,
     /** What a settle cost, read here and never sent by a client (plan 0143). */
     private readonly prices: SettlePriceService
-  ) {}
+  ) {
+    this.units = new LineUnitCheck(nats);
+  }
 
   /**
    * Edit a line (plan 0007, section 2), and merge it on a rename that collides
@@ -511,17 +542,44 @@ export class LinesController {
    */
   @Patch(':id')
   @ApiContractResponse(LINE_PATTERNS.update)
-  @ApiProblemResponses({ body: true, lineMerge: true, staleQuantity: true })
-  update(
+  @ApiProblemResponses({
+    body: true,
+    lineMerge: true,
+    staleQuantity: true,
+    lineUnitDiffers: true,
+    lineUnitNotOffered: true,
+  })
+  async update(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
     @Body() dto: UpdateLineDto
   ): Promise<UpdateLineResult> {
+    // An edit that names the unit or the products is checked against what the
+    // line will count in and hold after it (plan 0246, section 4.2). Core is
+    // asked for whichever half the edit leaves as it is.
+    if (
+      dto.unit !== undefined ||
+      dto.itemIds !== undefined ||
+      (dto.adoptItemIds ?? []).length > 0
+    ) {
+      const basis =
+        dto.unit !== undefined && dto.itemIds !== undefined
+          ? null
+          : await this.units.basisOf(user.userId, id);
+      const unit = dto.unit ?? basis?.unit;
+      const itemIds = dto.itemIds ?? basis?.itemIds;
+      if (unit !== undefined && itemIds !== undefined) {
+        await this.units.assertOffered([{ unit, itemIds }]);
+      }
+    }
     return this.nats.send<UpdateLineResult>(LINE_PATTERNS.update, {
       userId: user.userId,
       lineId: id,
       content: dto.content,
       quantity: dto.quantity,
+      // What the quantity counts, which core refuses without a quantity
+      // beside it (plan 0246, section 3.2).
+      unit: dto.unit,
       // The quantity the client saw (plan 0209), checked in core under the
       // lock of the write.
       from: dto.from,
@@ -557,7 +615,7 @@ export class LinesController {
   @ApiContractResponse(LINE_PATTERNS.addQuantity, {
     status: HttpStatus.CREATED,
   })
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, lineUnitMismatch: true })
   addQuantity(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
@@ -567,6 +625,8 @@ export class LinesController {
       userId: user.userId,
       lineId: id,
       delta: dto.delta,
+      // Required (plan 0246 M8), and checked against the line by core.
+      unit: dto.unit,
     });
   }
 
@@ -607,7 +667,7 @@ export class LinesController {
    */
   @Post(':id/settle')
   @ApiContractResponse(LINE_PATTERNS.settle, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true })
+  @ApiProblemResponses({ body: true, lineUnitMismatch: true })
   async settle(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
@@ -636,12 +696,16 @@ export class LinesController {
       ),
       supermarketLocationId: dto.supermarketLocationId,
       servedLocations: true,
+      // The price of one of the line's unit (plan 0246 M7). Core refuses a
+      // unit that is not the line's, so a price read in it is never written.
+      unit: dto.unit,
     });
     const req: SettleLineRequest = {
       userId: user.userId,
       lineId: id,
       outcome: dto.outcome,
       quantity: dto.quantity,
+      unit: dto.unit,
       itemId: dto.itemId,
       paid: paid ?? undefined,
       ...(itemSnapshot ? { itemSnapshot } : {}),

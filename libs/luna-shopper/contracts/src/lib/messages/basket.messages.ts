@@ -11,6 +11,7 @@ import type {
   SettlementOutcome,
 } from '../enums/list.enums';
 import type { Paginated } from '../pagination';
+import type { LineUnit } from '../units/line-unit';
 import type { UserUsernameView } from './auth.messages';
 import type { BasketParticipantView } from './basket-sharing.messages';
 import type {
@@ -223,6 +224,15 @@ export interface BasketEntryPatch {
   lineId: string;
   /** `list_lines.version` after the write. */
   version: number;
+  /**
+   * What `left` and `bought` count: the line's unit after the write (plan 0246,
+   * section 3.6).
+   *
+   * A row is one unit (M6), so a unit change moves the line to another row.
+   * **A client reads the basket again when this differs from the `unit` of the
+   * row that holds the line**, as it does for {@link tripItemId}.
+   */
+  unit: LineUnit;
   left: number;
   bought: number;
   boughtElsewhere: number;
@@ -261,6 +271,13 @@ export interface BasketRowView {
    * row.
    */
   productId: string | null;
+  /**
+   * What `left`, `bought` and `asked` count (plan 0246, section 3.4).
+   *
+   * A row is one unit (M6): the row key carries it, so two lines of one
+   * product in two units are two rows, and no sum here adds grams to pieces.
+   */
+  unit: LineUnit;
   left: number;
   bought: number;
   /** `bought + left`, computed, never stored. */
@@ -672,6 +689,13 @@ export interface GetBasketPriceChoicesRequest {
 export interface BasketPriceChoice {
   lineId: string;
   itemIds: string[];
+  /**
+   * What the line counts in and how much it asks for (plan 0246, section
+   * 4.3). The pick is the product whose cost for this amount in this unit is
+   * lowest, so the gateway needs both, and only core holds them.
+   */
+  unit: LineUnit;
+  quantity: number;
 }
 
 /**
@@ -743,6 +767,12 @@ export interface SettleBasketRowRequest {
    * `NOT_AVAILABLE`, which records no units.
    */
   quantity?: number;
+  /**
+   * The unit {@link quantity} and {@link from} are in: the row's (plan 0246,
+   * section 3.5). Required, and refused with `line_unit_mismatch` when a named
+   * line counts in another unit.
+   */
+  unit: LineUnit;
   /**
    * The sum of `left` over the named lines as the client drew them. Refused
    * with `stale_quantity`.
@@ -826,10 +856,15 @@ export interface ChangeBasketLinesProductRequest {
 /** What one unit of a product costs at one scope, as the gateway read it. */
 export interface BasketScopePrice {
   priceScopeId: string;
-  /** One unit, in the minor unit of {@link pricePaidCurrency}. */
+  /**
+   * One of the buys' unit, in the minor unit of {@link pricePaidCurrency}:
+   * one piece or pack, or one kilo or litre (plan 0246 M7).
+   */
   pricePaidCents: number;
   /** ISO 4217. */
   pricePaidCurrency: string;
+  /** Whether the price makes the cost an estimate (plan 0246 M7). Absent is false. */
+  estimated?: boolean;
 }
 
 /** One line's share of a settle, when the caller allocates by hand. */
@@ -886,6 +921,12 @@ export interface SetBasketRowDemandRequest {
   lineId: string;
   /** What that list asks for from now on. */
   quantity: number;
+  /**
+   * The unit {@link quantity} and {@link from} are in (plan 0246, section
+   * 3.4). Required, and refused with `line_unit_mismatch` when it is not the
+   * line's, as a delta's is.
+   */
+  unit: LineUnit;
   /** That entry's `left` as the client drew it. */
   from: number;
 }
@@ -905,6 +946,12 @@ export interface AddBasketLineRequest {
   targetListId: string;
   content: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.2), as the list's own
+   * add takes it. Absent is `UNIT`, and the gateway refuses a unit the
+   * products do not offer with `line_unit_not_offered`.
+   */
+  unit?: LineUnit;
   itemIds?: string[];
   /**
    * Whether a person typed {@link content} (plan 0207, section 1.3). Handed to
@@ -992,6 +1039,12 @@ export interface BasketTripBuys {
   priceScopeIds: string[];
   /** At least one of those buys recorded no scope. */
   unscoped: boolean;
+  /**
+   * What those buys count in, the row's unit (plan 0246 M7), so the price the
+   * gateway reads is the price of one of it. Absent is `UNIT`, which is what
+   * a core older than that plan meant.
+   */
+  unit?: LineUnit;
 }
 
 /** Where a search inside this basket is priced. */

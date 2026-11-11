@@ -1,4 +1,5 @@
 import { lineProductOf } from '@portfolio/luna-shopper/basket-rules';
+import type { LineUnit } from '@portfolio/luna-shopper/contracts';
 import { normalizeContent } from '../lists/line-content';
 
 /**
@@ -34,6 +35,8 @@ export interface KeyedLine {
   favoriteItemId: string | null;
   /** The product of its latest buy in this trip, or null. */
   tripItemId: string | null;
+  /** What its quantity counts, which is part of its key (plan 0246 M6). */
+  unit: LineUnit;
 }
 
 /**
@@ -63,7 +66,18 @@ export function productOf(line: KeyedLine, picks: BasketPicks): string | null {
  *
  * The two are namespaced apart so a product id can never collide with a piece
  * of text somebody typed.
+ *
+ * **A row is one unit** (plan 0246 M6), so the unit is appended: two lines of
+ * one product in two units, which only lines holding several products can be,
+ * are two rows, and no sum of a row adds grams to pieces.
  */
-export function rowKeyOf(content: string, productId: string | null): string {
-  return productId ? `item:${productId}` : `text:${normalizeContent(content)}`;
+export function rowKeyOf(
+  content: string,
+  productId: string | null,
+  unit: LineUnit
+): string {
+  const base = productId
+    ? `item:${productId}`
+    : `text:${normalizeContent(content)}`;
+  return `${base}:${unit}`;
 }

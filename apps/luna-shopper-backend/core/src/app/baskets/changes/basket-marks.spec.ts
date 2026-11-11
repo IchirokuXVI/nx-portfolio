@@ -59,6 +59,7 @@ function keysWith(products: Record<string, string[]>, lines: ChangeLineRow[]) {
       itemIds: products[row.id] ?? [],
       favoriteItemId: row.favoriteItemId,
       tripItemId: null,
+      unit: 'UNIT' as const,
     }))
   ).keyOf;
 }
@@ -380,6 +381,7 @@ describe('a line that left the basket', () => {
         key: textKey(gone),
         rowKey: gone.id,
         content: 'Olives',
+        unit: 'UNIT',
         lineIds: [gone.id],
         marked: true,
       },
@@ -547,7 +549,7 @@ describe('a mark belongs to the product a line counts as (plan 0201)', () => {
       keyOf
     );
 
-    expect([...byKey]).toEqual([['item:i1', BasketRowMark.CHANGED]]);
+    expect([...byKey]).toEqual([['item:i1:UNIT', BasketRowMark.CHANGED]]);
   });
 
   it('does not mark a row of the same name that counts as another product', () => {
@@ -565,7 +567,7 @@ describe('a mark belongs to the product a line counts as (plan 0201)', () => {
       keyOf
     );
 
-    expect([...byKey]).toEqual([['item:i2', BasketRowMark.ADDED]]);
+    expect([...byKey]).toEqual([['item:i2:UNIT', BasketRowMark.ADDED]]);
   });
 
   it('passes the mark of a line that left to the row its product is still on', () => {
@@ -592,7 +594,7 @@ describe('a mark belongs to the product a line counts as (plan 0201)', () => {
     );
 
     expect(removed).toEqual([]);
-    expect(byKey.get('item:i1')).toBe(BasketRowMark.CHANGED);
+    expect(byKey.get('item:i1:UNIT')).toBe(BasketRowMark.CHANGED);
   });
 
   it('draws a disabled row for a line that left when only its name is still covered', () => {
@@ -622,9 +624,10 @@ describe('a mark belongs to the product a line counts as (plan 0201)', () => {
     expect(byKey.size).toBe(0);
     expect(removed).toEqual([
       {
-        key: 'item:i2',
+        key: 'item:i2:UNIT',
         rowKey: gone.id,
         content: 'Milk',
+        unit: 'UNIT',
         lineIds: [gone.id],
         marked: true,
       },
@@ -635,7 +638,8 @@ describe('a mark belongs to the product a line counts as (plan 0201)', () => {
 describe('the disabled row itself', () => {
   const removed = [
     {
-      key: 'text:olives',
+      key: 'text:olives:UNIT',
+      unit: 'UNIT' as const,
       rowKey: 'll-1',
       content: 'Olives',
       lineIds: ['ll-1'],

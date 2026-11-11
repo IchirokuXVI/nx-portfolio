@@ -1,3 +1,11 @@
+import {
+  lineAmountOf,
+  priceOfOne,
+  type LineAmountProduct,
+  type LineUnit,
+  type ProductKind,
+} from '@portfolio/luna-shopper/contracts/line-units';
+
 /**
  * The rules that turn the entries of a basket row into its state, its numbers
  * and the progress of the basket (plan 0204, section 4).
@@ -8,10 +16,16 @@
  *
  * ## Framework free, by hard constraint
  *
- * No Nest, no TypeORM, no Angular, no `process`, and no import from the
- * contracts library. An Angular build compiles this file under a configuration
- * that has no node types. Every type here is declared here, and each caller
- * maps its own rows and models into them.
+ * No Nest, no TypeORM, no Angular and no `process`. An Angular build compiles
+ * this file under a configuration that has no node types. Every type here is
+ * declared here, and each caller maps its own rows and models into them.
+ *
+ * **One import from the contracts library, of plain values** (plan 0246,
+ * section 4.3): `lineAmountOf` and `priceOfOne`, the two pure functions of the
+ * amount of a line, and the three plain types they take. They come through
+ * the deep entry `contracts/line-units`, never the main barrel, which would
+ * compile ajv and every schema into velista. A second copy of the table here
+ * would be the one copy of the two that drifts.
  *
  * ## No clock
  *
@@ -244,53 +258,97 @@ export function needsPriceChoice(line: BasketRuleLine): boolean {
   return !(line.favoriteItemId && line.itemIds.includes(line.favoriteItemId));
 }
 
-/** One product with its price at the scopes that count, for {@link cheapestOf}. */
+/**
+ * One product with the figures of one offer at the scopes that count, for
+ * {@link cheapestOf} (plan 0246, section 4.3): how it is sold, its size
+ * fields, and its two prices in euros.
+ */
 export interface BasketRulePrice {
   itemId: string;
-  /** The price of one, or null when the scopes that count have none. */
+  kind: ProductKind;
+  /** The unit the product was created in, which says what its size is in. */
+  defaultUnit: LineAmountProduct['defaultUnit'];
+  unitSize: number | null;
+  approxWeight: number | null;
+  /** The price of one of what the row names, or null. */
   price: number | null;
-  /** The price for each kilo or litre, or null. */
-  unitPrice: number | null;
+  /** The price of one piece of a kilo piece, or null (plan 0244). */
+  piecePrice: number | null;
+}
+
+/** What a line asks for, as {@link cheapestOf} orders its products by. */
+export interface BasketRuleAmount {
+  unit: LineUnit;
+  /** In {@link unit}, an integer. Zero is a line that asks for nothing now. */
+  quantity: number;
 }
 
 /**
- * The cheapest of these products, or null when none has a price (plan 0201,
- * section 1, step 3).
+ * The cheapest of these products for this line, or null when none can serve
+ * it (plan 0201, section 1, step 3; plan 0246, section 4.3).
  *
- * **One comparison of prices.** It is the comparison that gives a card of a
- * line the word CHEAPEST (velista plan 0137, section 2): the price for each
- * kilo or litre first, then the price. A product with no unit price comes
- * after every product that has one. A tie keeps the order of the input, which
- * is the order the line holds its products in.
+ * **The cost of the line's amount decides, and the price of one is what each
+ * product shows** (owner, W3). The candidates are the products that can serve
+ * the line's unit at all: `lineAmountOf(max(quantity, 1), …)` is not null. A
+ * loose product cannot serve a count line and a counted pack cannot serve a
+ * weight line, and a missing figure is a missing amount. They are ordered by
+ * `lineAmountOf(quantity, …).cents` when the line has an amount, and by
+ * `priceOfOne` when it is at zero. So a pick can change when the amount does,
+ * which is right: 500 g of bananas is cheapest loose, and a whole melon is
+ * cheapest as the piece.
  *
- * A product with no price is not a candidate. The caller decides which prices
- * count: with a shop, only the prices of that shop.
+ * `unitPrice` and the comparable price of plan 0245 are not read: they answer
+ * which kilo is cheapest, and W3 asks what this line costs with each product.
+ *
+ * A tie keeps the order of the input, which is the order the line holds its
+ * products in. The caller decides which prices count: with a shop, only the
+ * prices of that shop.
  */
-export function cheapestOf(prices: readonly BasketRulePrice[]): string | null {
-  let best: BasketRulePrice | null = null;
+export function cheapestOf(
+  prices: readonly BasketRulePrice[],
+  line: BasketRuleAmount
+): string | null {
+  let best: { itemId: string; cost: number } | null = null;
   for (const candidate of prices) {
-    if (candidate.price === null) {
+    const cost = costOf(candidate, line);
+    if (cost === null) {
       continue;
     }
-    if (best === null || isCheaper(candidate, best)) {
-      best = candidate;
+    // Strictly cheaper, so an equal cost keeps the product that came first.
+    if (best === null || cost < best.cost) {
+      best = { itemId: candidate.itemId, cost };
     }
   }
   return best?.itemId ?? null;
 }
 
-/** Strictly cheaper, so an equal price keeps the product that came first. */
-function isCheaper(a: BasketRulePrice, b: BasketRulePrice): boolean {
-  if (a.unitPrice !== b.unitPrice) {
-    if (a.unitPrice === null) {
-      return false;
-    }
-    if (b.unitPrice === null) {
-      return true;
-    }
-    return a.unitPrice < b.unitPrice;
+/** What {@link cheapestOf} orders a candidate by, or null for none. */
+function costOf(
+  candidate: BasketRulePrice,
+  line: BasketRuleAmount
+): number | null {
+  const product: LineAmountProduct = {
+    kind: candidate.kind,
+    defaultUnit: candidate.defaultUnit,
+    unitSize: candidate.unitSize,
+    approxWeight: candidate.approxWeight,
+  };
+  const offer = { price: candidate.price, piecePrice: candidate.piecePrice };
+  const serves = lineAmountOf(
+    Math.max(line.quantity, 1),
+    line.unit,
+    product,
+    offer
+  );
+  if (serves === null) {
+    return null;
   }
-  return (a.price as number) < (b.price as number);
+  if (line.quantity > 0) {
+    return (
+      lineAmountOf(line.quantity, line.unit, product, offer)?.cents ?? null
+    );
+  }
+  return priceOfOne(product, offer);
 }
 
 function sumsOf(entries: readonly BasketRuleEntry[]): {

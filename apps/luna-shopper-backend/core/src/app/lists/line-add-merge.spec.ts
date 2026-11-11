@@ -9,6 +9,7 @@ import {
   SettlementOutcome,
   ZoneRole,
   type LineAddNeedsChoiceDetails,
+  type LineUnit,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
 import {
@@ -101,6 +102,8 @@ interface Seed {
   named?: boolean;
   /** Another list's line, which an add to this one must never reach. */
   listId?: string;
+  /** What its quantity counts (plan 0246). `UNIT` when absent. */
+  unit?: LineUnit;
 }
 
 interface Harness {
@@ -143,6 +146,7 @@ function build(options: {
         content: seed.content,
         named: seed.named ?? true,
         quantity: seed.quantity ?? 1,
+        unit: seed.unit ?? 'UNIT',
         // The digest of the products seeded onto the line, as the service
         // stamps it, since it is half of what an add compares.
         itemSetHash: itemSetHash(
@@ -318,6 +322,7 @@ function add(
   content: string,
   extra: {
     quantity?: number;
+    unit?: LineUnit;
     itemIds?: string[];
     productGroupId?: string;
     named?: boolean;
@@ -333,6 +338,329 @@ function add(
     ...extra,
   });
 }
+
+describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)', () => {
+  it('creates a line in the unit it names, and in UNIT without one', async () => {
+    const w = build({});
+
+    const weighed = await add(w, 'Bananas', {
+      itemIds: [WHOLE],
+      unit: 'GRAM',
+      quantity: 1000,
+    });
+    const counted = await add(w, 'Bread');
+
+    expect(weighed.merged).toBe(false);
+    expect(weighed.line).toMatchObject({ unit: 'GRAM', quantity: 1000 });
+    expect(counted.line).toMatchObject({ unit: 'UNIT', quantity: 1 });
+    expect(w.saved.map((row) => row.unit)).toEqual(['GRAM', 'UNIT']);
+  });
+
+  it('refuses a unit that is not one of the three', async () => {
+    const w = build({});
+
+    await expect(
+      add(w, 'Bananas', { unit: 'KILOGRAM' as LineUnit })
+    ).rejects.toBeInstanceOf(ValidationException);
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('answers a line of another unit as the duplicate decision of plan 0228 and sums nothing', async () => {
+    // A free text add counts pieces, so it never lands on a weight line by
+    // name alone (M5): the add is refused with the one line in details, and
+    // the client opens it, as for a typed name that meets several lines.
+    const w = build({
+      holds: [{ id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' }],
+    });
+
+    const refused = await add(w, 'Bananas', { quantity: 2 }).catch(
+      (error: unknown) => error
+    );
+
+    expect(refused).toBeInstanceOf(LineAddNeedsChoiceException);
+    const exception = refused as LineAddNeedsChoiceException;
+    expect(exception.code).toBe(ERROR_CODES.LINE_ADD_NEEDS_CHOICE);
+    expect(exception.exposesDetails).toBe(true);
+    expect(exception.details).toEqual({
+      lines: [
+        {
+          lineId: 'li1',
+          content: 'bananas',
+          named: true,
+          quantity: 500,
+          unit: 'GRAM',
+          itemIds: [],
+          productGroupId: null,
+          approvalStatus: LineApprovalStatus.APPROVED,
+        },
+      ],
+    });
+    expect(w.saved).toHaveLength(0);
+    expect(w.events).toHaveLength(0);
+  });
+
+  it('answers the one product line of a typed name in another unit the same way', async () => {
+    const w = build({
+      holds: [
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+      ],
+      products: [{ lineId: WHOLE_LINE, itemId: WHOLE, position: 0 }],
+    });
+
+    const refused = await add(w, 'bananas').catch((error: unknown) => error);
+
+    expect(refused).toBeInstanceOf(LineAddNeedsChoiceException);
+    expect(
+      (refused as LineAddNeedsChoiceException).details as unknown
+    ).toMatchObject({ lines: [{ lineId: WHOLE_LINE, itemIds: [WHOLE] }] });
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('creates a line in the add unit on a newLine answer, a product add included', async () => {
+    // Without it a product add would meet the same line on every try.
+    const w = build({
+      holds: [
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+      ],
+      products: [{ lineId: WHOLE_LINE, itemId: WHOLE, position: 0 }],
+    });
+
+    const asked = await add(w, 'Bananas', { itemIds: [WHOLE] }).catch(
+      (error: unknown) => error
+    );
+    const created = await add(w, 'Bananas', {
+      itemIds: [WHOLE],
+      newLine: true,
+    });
+
+    expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+    expect(created.merged).toBe(false);
+    expect(created.line).toMatchObject({ unit: 'UNIT', quantity: 1 });
+    expect(created.line.id).not.toBe(WHOLE_LINE);
+  });
+
+  it('refuses a chosen line of another unit with line_unit_differs', async () => {
+    const w = build({
+      holds: [
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+      ],
+      products: [{ lineId: WHOLE_LINE, itemId: WHOLE, position: 0 }],
+    });
+
+    await expect(
+      add(w, 'Bananas', { intoLineId: WHOLE_LINE, quantity: 2 })
+    ).rejects.toMatchObject({ code: ERROR_CODES.LINE_UNIT_DIFFERS });
+    expect(w.saved).toHaveLength(0);
+    expect(w.events).toHaveLength(0);
+  });
+
+  it('starts an add with no quantity at the amount of its unit (M4)', async () => {
+    const w = build({});
+
+    const weighed = await add(w, 'Bananas', {
+      itemIds: [WHOLE],
+      unit: 'GRAM',
+    });
+    const poured = await add(w, 'Milk', {
+      itemIds: [OAT],
+      unit: 'MILLILITER',
+    });
+    const counted = await add(w, 'Bread');
+
+    expect(weighed.line).toMatchObject({ unit: 'GRAM', quantity: 1000 });
+    expect(poured.line).toMatchObject({ unit: 'MILLILITER', quantity: 1000 });
+    expect(counted.line).toMatchObject({ unit: 'UNIT', quantity: 1 });
+  });
+
+  it('raises a weight line by 1000 when the add names no quantity (M4)', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' }],
+    });
+
+    const result = await add(w, 'Bananas', { unit: 'GRAM' });
+
+    expect(result.line).toMatchObject({ unit: 'GRAM', quantity: 1500 });
+  });
+
+  it('starts a batch item with no quantity at the amount of its unit (M4)', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        { content: 'Cheese', itemIds: [WHOLE], unit: 'GRAM' },
+        { content: 'Bread' },
+      ],
+    });
+
+    expect(results[0].line).toMatchObject({ unit: 'GRAM', quantity: 1000 });
+    expect(results[1].line).toMatchObject({ unit: 'UNIT', quantity: 1 });
+  });
+
+  it('raises a line of the same unit as before', async () => {
+    const w = build({
+      holds: [{ id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' }],
+    });
+
+    const result = await add(w, 'Bananas', { unit: 'GRAM', quantity: 250 });
+
+    expect(result.line).toMatchObject({ unit: 'GRAM', quantity: 750 });
+    expect(w.saved).toHaveLength(1);
+  });
+
+  it('folds two items of a batch only when their units agree', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        {
+          content: 'Cheese',
+          itemIds: [WHOLE, OAT],
+          unit: 'GRAM',
+          quantity: 300,
+        },
+        { content: 'Cheese', itemIds: [WHOLE, OAT], unit: 'UNIT', quantity: 2 },
+        {
+          content: 'cheese',
+          itemIds: [WHOLE, OAT],
+          unit: 'GRAM',
+          quantity: 200,
+        },
+      ],
+    });
+
+    // Two lines: 500 g, and two pieces of the same products.
+    expect(results.map((entry) => entry.merged)).toEqual([false, false, true]);
+    expect(results[0].line.id).toBe(results[2].line.id);
+    expect(results[0].line.id).not.toBe(results[1].line.id);
+    expect(results[0].line).toMatchObject({ unit: 'GRAM', quantity: 500 });
+    expect(results[1].line).toMatchObject({ unit: 'UNIT', quantity: 2 });
+  });
+
+  it('refuses a rename onto a line of another unit with line_unit_differs', async () => {
+    // Even with the merge confirmed: converting needs a product, and a merge
+    // has none to prefer. The two lines stay.
+    const w = build({
+      holds: [
+        { id: 'li1', content: 'Bananas', quantity: 500, unit: 'GRAM' },
+        { id: 'li2', content: 'Plátanos', quantity: 2, unit: 'UNIT' },
+      ],
+    });
+
+    await expect(
+      w.service.update({
+        userId: ADDER,
+        lineId: 'li2',
+        content: 'bananas',
+        confirmMerge: true,
+      })
+    ).rejects.toMatchObject({ code: ERROR_CODES.LINE_UNIT_DIFFERS });
+    expect(w.saved).toHaveLength(0);
+    expect(w.events).toHaveLength(0);
+  });
+
+  it('raises the line of the add unit a newLine answer created, and creates nothing', async () => {
+    // A (GRAM) sits first and B (UNIT) is the line the newLine answer made.
+    // Asked of the earliest line alone, every later UNIT add met A, asked
+    // again, and each answer made another line.
+    const w = build({
+      holds: [
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+        { id: OAT_LINE, content: 'Bananas', quantity: 1, unit: 'UNIT' },
+      ],
+      products: [
+        { lineId: WHOLE_LINE, itemId: WHOLE, position: 0 },
+        { lineId: OAT_LINE, itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const result = await add(w, 'Bananas', { itemIds: [WHOLE], quantity: 2 });
+
+    expect(result.merged).toBe(true);
+    expect(result.line).toMatchObject({
+      id: OAT_LINE,
+      unit: 'UNIT',
+      quantity: 3,
+    });
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0]).toMatchObject({ id: OAT_LINE, quantity: 3 });
+    expect(w.events.map((entry) => entry.event)).toEqual([
+      RealtimeEvent.LineUpdated,
+    ]);
+  });
+
+  it('raises the GRAM line beside an earlier UNIT line of the same products', async () => {
+    const w = build({
+      holds: [
+        { id: OAT_LINE, content: 'Bananas', quantity: 1, unit: 'UNIT' },
+        { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
+      ],
+      products: [
+        { lineId: OAT_LINE, itemId: WHOLE, position: 0 },
+        { lineId: WHOLE_LINE, itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const result = await add(w, 'Bananas', {
+      itemIds: [WHOLE],
+      unit: 'GRAM',
+      quantity: 250,
+    });
+
+    expect(result.line).toMatchObject({ id: WHOLE_LINE, quantity: 1000 });
+    expect(w.saved).toHaveLength(1);
+  });
+
+  it('creates a batch item in its unit beside a line of another unit, and writes it', async () => {
+    // A batch has no place for the question a single add asks, and nothing
+    // may be summed, so the item gets its own line (plan 0246 M5).
+    const w = build({
+      holds: [{ id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' }],
+    });
+
+    const [result] = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Bananas', quantity: 3 }],
+    });
+
+    expect(result.merged).toBe(false);
+    expect(result.line).toMatchObject({ unit: 'UNIT', quantity: 3 });
+    expect(result.line.id).not.toBe('li1');
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0]).toMatchObject({
+      content: 'Bananas',
+      unit: 'UNIT',
+      quantity: 3,
+    });
+    expect(w.events.map((entry) => entry.event)).toEqual([
+      RealtimeEvent.LineAdded,
+    ]);
+  });
+
+  it('raises the line of the batch item unit beside an earlier line of another unit', async () => {
+    const w = build({
+      holds: [
+        { id: 'li1', content: 'bananas', quantity: 500, unit: 'GRAM' },
+        { id: 'li2', content: 'Bananas', quantity: 2, unit: 'UNIT' },
+      ],
+    });
+
+    const [result] = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Bananas', quantity: 3 }],
+    });
+
+    expect(result.merged).toBe(true);
+    expect(result.line).toMatchObject({ id: 'li2', quantity: 5 });
+    expect(w.saved).toHaveLength(1);
+    expect(w.saved[0]).toMatchObject({ id: 'li2', quantity: 5 });
+  });
+});
 
 describe('which line an add lands on (plan 0091, sections 1 and 3.1)', () => {
   it('raises the line already holding the name, and announces an update', async () => {
@@ -1069,6 +1397,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           content: 'Leche entera',
           named: true,
           quantity: 2,
+          unit: 'UNIT',
           itemIds: [WHOLE],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.APPROVED,
@@ -1078,6 +1407,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           content: 'Leche entera',
           named: false,
           quantity: 1,
+          unit: 'UNIT',
           itemIds: [OAT],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.PENDING,
@@ -1087,6 +1417,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           content: 'LECHE ENTERA',
           named: true,
           quantity: 0,
+          unit: 'UNIT',
           itemIds: [],
           productGroupId: GROUP,
           approvalStatus: LineApprovalStatus.APPROVED,

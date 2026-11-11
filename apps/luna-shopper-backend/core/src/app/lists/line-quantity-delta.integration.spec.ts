@@ -12,6 +12,7 @@ import { randomUUID } from 'node:crypto';
 import { DataSource } from 'typeorm';
 import { CoreAuditService } from '../audit/core-audit.service';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import {
   CORE_ENTITIES,
   LineSettlement,
@@ -23,7 +24,6 @@ import {
   Zone,
   ZoneMembership,
 } from '../entities';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LineChangeRecorder } from './changes/line-change.recorder';
 import { LineMergeService } from './line-merge.service';
@@ -275,8 +275,18 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
 
     await whileTheRowIsHeld(line.id, () =>
       Promise.all([
-        lines.addQuantity({ userId: ids.owner, lineId: line.id, delta: 1 }),
-        lines.addQuantity({ userId: ids.owner, lineId: line.id, delta: 1 }),
+        lines.addQuantity({
+          userId: ids.owner,
+          lineId: line.id,
+          delta: 1,
+          unit: 'UNIT',
+        }),
+        lines.addQuantity({
+          userId: ids.owner,
+          lineId: line.id,
+          delta: 1,
+          unit: 'UNIT',
+        }),
       ])
     );
 
@@ -298,7 +308,12 @@ describeIntegration('the quantity delta and the batch (real Postgres)', () => {
     await whileTheRowIsHeld(line.id, () =>
       Promise.all(
         Array.from({ length: 10 }, () =>
-          lines.addQuantity({ userId: ids.owner, lineId: line.id, delta: 2 })
+          lines.addQuantity({
+            userId: ids.owner,
+            lineId: line.id,
+            delta: 2,
+            unit: 'UNIT',
+          })
         )
       )
     );

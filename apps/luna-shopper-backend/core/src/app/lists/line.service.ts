@@ -1,11 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
+  defaultQuantityOf,
   LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_ITEM_SET_MAX,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  LINE_UNITS,
   LineApprovalStatus,
   LineItemSource,
   ListPermission,
@@ -25,6 +27,9 @@ import {
   type LineOrder,
   type LinePage,
   type LineSettlementSummary,
+  type LineUnit,
+  type LineUnitBasis,
+  type LineUnitBasisRequest,
   type LineView,
   type ListLinesRequest,
   type ReorderLinesRequest,
@@ -42,6 +47,7 @@ import {
   LineMergeNeedsApprovalException,
   LineMergeRequiredException,
   LineMergeTooManyProductsException,
+  LineUnitDiffersException,
   NotFoundException,
   StaleQuantityException,
   ValidationException,
@@ -59,6 +65,7 @@ import { CoreAuditService } from '../audit/core-audit.service';
 import { BasketAnnouncer } from '../baskets/basket-announcer.service';
 import { LineClaimService } from '../baskets/line-claim.service';
 import {
+  BasketTripRow,
   LineComment,
   LineSettlement,
   ListLine,
@@ -91,6 +98,11 @@ import {
   mergedItemIds,
 } from './line-merge.service';
 import { namedAfterEdit, namedOnAdd } from './line-named';
+import {
+  assertLineUnit,
+  requireLineUnit,
+  validateLineUnit,
+} from './line-unit-rules';
 import { ListAccessService } from './list-access.service';
 import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
@@ -174,6 +186,8 @@ interface FoldLine {
   position: number;
   content: string;
   quantity: number;
+  /** What the quantity counts (plan 0246): two units never fold into one. */
+  unit: LineUnit;
   approvalStatus: LineApprovalStatus;
 }
 
@@ -227,6 +241,11 @@ interface LineEdit {
    * refused with `stale_quantity`. The operator path never names it.
    */
   from?: number;
+  /**
+   * What {@link quantity} counts from now on (plan 0246, section 3.2). A unit
+   * change must name the quantity it starts from, or the edit is refused.
+   */
+  unit?: LineUnit;
 }
 
 /**
@@ -254,6 +273,15 @@ interface LineWriter {
   transaction<T>(
     work: (manager: EntityManager, record: RecordLine) => Promise<T>
   ): Promise<T>;
+}
+
+/**
+ * An add identity asked of the lines in one unit (plan 0246 M5), as the key
+ * {@link LineService.findAddTarget} answers beside the identity alone. The NUL
+ * cannot occur in a name or a digest, so no identity reads as another's.
+ */
+function inUnit(identity: string, unit: LineUnit): string {
+  return `${identity}\0${unit}`;
 }
 
 /**
@@ -917,6 +945,17 @@ export class LineService {
    * more refuse the add with `line_add_needs_choice` when the caller set
    * `askIfAmbiguous`, and otherwise the add creates a line, as before. The
    * three fields are ignored on an add that carries a product or a group.
+   *
+   * ## A line of another unit is a question, never a sum (plan 0246 M5)
+   *
+   * The add lands on a line of its own unit first, whichever line of the
+   * thing sits earlier. Only when its unit holds none is a line that counts in
+   * another unit met, and it is not raised: the add refuses with
+   * `line_add_needs_choice` naming that one line, and writes nothing.
+   * `newLine: true` then creates a line in the add's unit, a product add
+   * included, which every later add of that unit raises. An `intoLineId` of
+   * another unit is `line_unit_differs`. {@link addMany} has no place for the
+   * question, so its item creates a line in its own unit instead.
    */
   async add(req: AddLineRequest): Promise<AddLineResult> {
     const { list, permissions } = await this.listAccess.requireAccess(
@@ -929,7 +968,15 @@ export class LineService {
     // path needs the same number and never builds a row to put it on. The bound
     // is on what the request asked for; what a merge does to a line already near
     // the ceiling is {@link raiseForAdd}'s cap.
-    const quantity = this.validateQuantity(req.quantity ?? 1);
+    //
+    // What the quantity counts comes first (plan 0246, section 3.2), because
+    // an add with no quantity starts at the amount of its unit (M4): one
+    // piece, or 1000 g or 1000 ml. Absent is `UNIT`, so a free text add counts
+    // pieces and never lands on a weight line by name.
+    const unit = this.validateUnit(req.unit) ?? 'UNIT';
+    const quantity = this.validateQuantity(
+      req.quantity ?? defaultQuantityOf(unit)
+    );
     const approval = {
       decides: permissions.has(ListPermission.DECIDE),
       autoApproves: list.autoApproveLines,
@@ -965,13 +1012,33 @@ export class LineService {
           actor,
         }),
       });
+      // A line of another unit is not raised (plan 0246 M5): the two amounts
+      // cannot be summed. The add is answered as the duplicate decision of
+      // plan 0228, `line_add_needs_choice` naming that one line, and nothing
+      // is written. The client opens the line or answers `newLine: true`,
+      // which then creates a line in the add's unit, a product add included:
+      // otherwise a product add would meet the same line on every try.
+      const differs = (line: ListLine) => (line.unit ?? 'UNIT') !== unit;
+      const unitChoice = (line: ListLine) =>
+        this.needsChoice(manager, req.content.trim(), [line], 'unit');
 
       // The person chose a line (plan 0228, target 1.1). It is raised or the
-      // add is refused, and the add never falls back to a new line.
+      // add is refused, and the add never falls back to a new line. A chosen
+      // line of another unit is `line_unit_differs`: the person already
+      // answered, so no question is left, and nothing can be summed.
       if (freeText && choice.intoLineId !== undefined) {
-        return raise(
-          await this.lockChosenLine(manager, req.listId, choice.intoLineId)
+        const chosen = await this.lockChosenLine(
+          manager,
+          req.listId,
+          choice.intoLineId
         );
+        if (differs(chosen)) {
+          throw new LineUnitDiffersException(
+            `"${chosen.content}" counts in another unit`,
+            { messageArgs: { content: chosen.content } }
+          );
+        }
+        return raise(chosen);
       }
 
       // The flag the new line would carry, so an add that is not named meets
@@ -987,12 +1054,25 @@ export class LineService {
       // one name (plan 0091, section 3.1) asked of two ways to be the same thing.
       // For a free text add this is the free text line of the name, which takes
       // the add even beside `newLine` (plan 0228, target 1.2).
-      const existing = identities
-        .map((identity) => targets.get(identity))
-        .filter((line): line is ListLine => line !== undefined)
-        .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
-      if (existing !== undefined) {
-        return raise(existing);
+      //
+      // Asked first of the lines in the add's unit (plan 0246 M5), so the line
+      // a `newLine` answer created is the one the next add of that unit raises.
+      // Only when the unit holds none does a line of another unit answer, and
+      // then as a question.
+      const earliest = (keys: readonly string[]) =>
+        keys
+          .map((key) => targets.get(key))
+          .filter((line): line is ListLine => line !== undefined)
+          .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
+      const sameUnit = earliest(
+        identities.map((identity) => inUnit(identity, unit))
+      );
+      if (sameUnit !== undefined) {
+        return raise(sameUnit);
+      }
+      const otherUnit = earliest(identities);
+      if (otherUnit !== undefined && !choice.newLine) {
+        throw await unitChoice(otherUnit);
       }
 
       // A typed name meets the lines that hold a product under it (plan 0228,
@@ -1011,8 +1091,11 @@ export class LineService {
             req.listId,
             candidates[0].id
           );
-          if (line !== null) {
+          if (line !== null && !differs(line)) {
             return raise(line);
+          }
+          if (line !== null) {
+            throw await unitChoice(line);
           }
         }
         if (candidates.length > 1 && choice.askIfAmbiguous) {
@@ -1025,7 +1108,7 @@ export class LineService {
       const line = await repo.save(
         repo.create(
           this.newLine(
-            { ...req, quantity },
+            { ...req, quantity, unit },
             req.listId,
             req.userId,
             position,
@@ -1135,8 +1218,11 @@ export class LineService {
     const itemSets = items.map((item) =>
       this.validateItemIds(item.itemIds ?? [])
     );
-    const quantities = items.map((item) =>
-      this.validateQuantity(item.quantity ?? 1)
+    // What each quantity counts (plan 0246, section 3.2). Absent is `UNIT`,
+    // and an item with no quantity starts at the amount of its unit (M4).
+    const units = items.map((item) => this.validateUnit(item.unit) ?? 'UNIT');
+    const quantities = items.map((item, index) =>
+      this.validateQuantity(item.quantity ?? defaultQuantityOf(units[index]))
     );
     // What each item is, by the rule a single add follows. A batch item names no
     // group (`AddLinesItem` carries none), so it can be met in exactly one way:
@@ -1168,7 +1254,11 @@ export class LineService {
       const byKey = new Map<string, number>();
       const slots: ({ created: number } | { raised: string })[] = [];
       for (const [index, key] of keys.entries()) {
-        const target = targets.get(key);
+        // Only a line in the item's unit is a target (plan 0246 M5). A line of
+        // another unit cannot be summed, and a batch has no place to ask the
+        // question a single add asks, so the item creates its own line in its
+        // unit beside it.
+        const target = targets.get(inUnit(key, units[index]));
         if (target) {
           const raise = raises.get(target.id) ?? { line: target, delta: 0 };
           raise.delta += quantities[index];
@@ -1176,13 +1266,16 @@ export class LineService {
           slots.push({ raised: target.id });
           continue;
         }
-        const planned = byKey.get(key);
+        // Two items of one thing fold only in one unit (plan 0246, section
+        // 3.3): the second unit starts its own creation.
+        const unitKey = inUnit(key, units[index]);
+        const planned = byKey.get(unitKey);
         if (planned !== undefined) {
           creations[planned].quantity += quantities[index];
           slots.push({ created: planned });
           continue;
         }
-        byKey.set(key, creations.length);
+        byKey.set(unitKey, creations.length);
         slots.push({ created: creations.length });
         creations.push({ key, index, quantity: quantities[index] });
       }
@@ -1203,6 +1296,7 @@ export class LineService {
               {
                 ...items[creation.index],
                 quantity: this.capQuantity(creation.quantity),
+                unit: units[creation.index],
               },
               req.listId,
               req.userId,
@@ -1321,7 +1415,11 @@ export class LineService {
       productGroupId,
       content: item.content,
       named: namedOnAdd(item.named, (item.itemIds ?? []).length > 0),
-      quantity: this.validateQuantity(item.quantity ?? 1),
+      quantity: this.validateQuantity(
+        item.quantity ??
+          defaultQuantityOf(this.validateUnit(item.unit) ?? 'UNIT')
+      ),
+      unit: this.validateUnit(item.unit) ?? 'UNIT',
       // The digest is a property of the set alone, so it can be stamped on the
       // row before the join rows exist (plan 0048, section 1.1).
       itemSetHash: itemSetHash(this.validateItemIds(item.itemIds ?? [])),
@@ -1526,7 +1624,8 @@ export class LineService {
   private async needsChoice(
     manager: EntityManager,
     content: string,
-    candidates: readonly ListLine[]
+    candidates: readonly ListLine[],
+    why: 'ambiguous' | 'unit' = 'ambiguous'
   ): Promise<LineAddNeedsChoiceException> {
     const shown = candidates.slice(0, LINE_ADD_CHOICE_MAX);
     const rows = await manager.getRepository(ListLineItem).find({
@@ -1539,6 +1638,7 @@ export class LineService {
         content: line.content,
         named: line.named,
         quantity: line.quantity,
+        unit: line.unit ?? 'UNIT',
         itemIds: toLineItemSet(rows.filter((row) => row.lineId === line.id))
           .itemIds,
         productGroupId: line.productGroupId ?? null,
@@ -1546,7 +1646,9 @@ export class LineService {
       })),
     };
     return new LineAddNeedsChoiceException(
-      `${candidates.length} lines of this list that hold a product are called "${content}"`,
+      why === 'unit'
+        ? `The line "${content}" of this list counts in another unit`
+        : `${candidates.length} lines of this list that hold a product are called "${content}"`,
       { details: { ...details }, messageArgs: { content } }
     );
   }
@@ -1604,13 +1706,37 @@ export class LineService {
    * when the two name the same thing **and** mean the same products by it. A
    * rename still asks the name alone, because it asks a person before it merges
    * (plan 0112), and an add asks nobody.
+   *
+   * ## The earliest line in each unit as well (plan 0246 M5)
+   *
+   * Each identity is answered twice: the earliest line under it whatever its
+   * unit, and under {@link inUnit} the earliest line under it in each unit. An
+   * add raises only a line of its own unit, so it asks the second key first.
+   * Asking the first alone would answer the earliest line of another unit
+   * forever, beside a line of the add's unit created after it.
    */
   private async findAddTarget(
     manager: EntityManager,
     listId: string,
     identities: readonly string[]
   ): Promise<Map<string, ListLine>> {
-    return this.findEarliestLines(manager, listId, identities, lineIdentities);
+    return this.findEarliestLines(
+      manager,
+      listId,
+      [
+        ...identities,
+        ...identities.flatMap((identity) =>
+          LINE_UNITS.map((unit) => inUnit(identity, unit))
+        ),
+      ],
+      (candidate) => {
+        const own = lineIdentities(candidate);
+        return [
+          ...own,
+          ...own.map((identity) => inUnit(identity, candidate.unit ?? 'UNIT')),
+        ];
+      }
+    );
   }
 
   /**
@@ -1626,7 +1752,7 @@ export class LineService {
     keysOf: (
       candidate: Pick<
         ListLine,
-        'content' | 'named' | 'itemSetHash' | 'productGroupId'
+        'content' | 'named' | 'itemSetHash' | 'productGroupId' | 'unit'
       >
     ) => readonly string[]
   ): Promise<Map<string, ListLine>> {
@@ -1647,6 +1773,8 @@ export class LineService {
         named: true,
         itemSetHash: true,
         productGroupId: true,
+        // What an add asks first: a line of its own unit (plan 0246 M5).
+        unit: true,
         approvalStatus: true,
         position: true,
       },
@@ -1667,11 +1795,19 @@ export class LineService {
 
     // Read again, whole and locked. The rows above were a few columns of a row
     // this transaction is about to write, and a raise needs the entity itself.
+    // Once per row, so two keys of one line answer the same entity.
+    const locked = new Map<string, ListLine | null>();
     for (const [key, id] of ids) {
-      const line = await repo.findOne({
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
+      if (!locked.has(id)) {
+        locked.set(
+          id,
+          await repo.findOne({
+            where: { id },
+            lock: { mode: 'pessimistic_write' },
+          })
+        );
+      }
+      const line = locked.get(id);
       if (line) {
         targets.set(key, line);
       }
@@ -1778,6 +1914,15 @@ export class LineService {
    * can check the result. The numbers themselves come from the contract, so the
    * DTOs and this method cannot state different ones.
    */
+  /**
+   * A {@link LineUnit}, or undefined when none was named (plan 0246, section
+   * 3.2). Checked here for the reason {@link validateQuantity} gives: the
+   * gateway is one caller of core, not a wall.
+   */
+  private validateUnit(unit: unknown): LineUnit | undefined {
+    return validateLineUnit(unit);
+  }
+
   private validateQuantity(quantity: number): number {
     if (!Number.isInteger(quantity) || quantity < LINE_QUANTITY_MIN) {
       throw new ValidationException(
@@ -1908,7 +2053,12 @@ export class LineService {
   async updateAsOperator(
     listId: string,
     lineId: string,
-    changes: { content?: string; quantity?: number; itemIds?: string[] },
+    changes: {
+      content?: string;
+      quantity?: number;
+      unit?: LineUnit;
+      itemIds?: string[];
+    },
     actorId: string
   ): Promise<LineView> {
     const { line, list } = await this.loadLineOfList(listId, lineId);
@@ -1936,6 +2086,7 @@ export class LineService {
     actor: LineChangeActor
   ): Promise<UpdateLineResult> {
     this.authorizeEdit(req, line, permissions);
+    this.validateUnitEdit(req);
 
     // A new name, as the fold reads it, is a question about the rest of the list
     // and takes the list lock to answer it (plan 0112). A change of case, accents
@@ -1967,36 +2118,57 @@ export class LineService {
     // transaction answered the access check and nothing else: a settle that
     // landed after that read would otherwise be overwritten by a save of the
     // row as it stood before the purchase.
+    let unitMoved = false;
+    const written = await writer.transaction(async (manager, record) => {
+      const locked = await this.lockLine(manager, line.id);
+      // Asked again of the row the lock read, since its approval may have
+      // moved since the check outside.
+      this.authorizeEdit(req, locked, permissions);
+      assertFrom(req, locked);
+      const unitBefore = locked.unit ?? 'UNIT';
+      const prepared = await this.prepareEdit(
+        locked,
+        list,
+        req,
+        permissions,
+        manager
+      );
+      unitMoved = (locked.unit ?? 'UNIT') !== unitBefore;
+      return this.writePreparedEdit(
+        manager,
+        locked,
+        list,
+        prepared,
+        actor,
+        record
+      );
+    });
     return this.announce(
       list,
-      await writer.transaction(async (manager, record) => {
-        const locked = await this.lockLine(manager, line.id);
-        // Asked again of the row the lock read, since its approval may have
-        // moved since the check outside.
-        this.authorizeEdit(req, locked, permissions);
-        assertFrom(req, locked);
-        const prepared = await this.prepareEdit(
-          locked,
-          list,
-          req,
-          permissions,
-          manager
-        );
-        return this.writePreparedEdit(
-          manager,
-          locked,
-          list,
-          prepared,
-          actor,
-          record
-        );
-      }),
+      written,
       // The quantity alone moved, so the baskets are sent the numbers and do
       // not read again (plan 0204, section 3). A name, a product set, a
       // favourite or a chain is something a room must not carry or core does
-      // not hold, and those edits send the ids as before.
-      movesQuantityAlone(req) ? 'moved' : 'here'
+      // not hold, and those edits send the ids as before. So is a unit change
+      // (plan 0246 M6): it moves the line to another row.
+      movesQuantityAlone(req) && !unitMoved ? 'moved' : 'here'
     );
+  }
+
+  /**
+   * A unit change names the quantity it starts from (plan 0246, section 3.2):
+   * 500 read as 500 pieces after a chip moved from grams is worse than a
+   * reset. Refused before anything is read, and whatever the line's unit.
+   */
+  private validateUnitEdit(req: LineEdit): void {
+    if (
+      this.validateUnit(req.unit) !== undefined &&
+      req.quantity === undefined
+    ) {
+      throw new ValidationException('a unit change must name the quantity', {
+        messageArgs: { field: 'quantity' },
+      });
+    }
   }
 
   /**
@@ -2024,6 +2196,12 @@ export class LineService {
     }
     if (req.quantity !== undefined) {
       line.quantity = this.validateQuantity(req.quantity);
+    }
+    // What the quantity counts (plan 0246, section 3.2). The gateway checked
+    // that the line's products offer it; core stores what it is told.
+    const unit = this.validateUnit(req.unit);
+    if (unit !== undefined) {
+      line.unit = unit;
     }
     // `undefined` leaves the set alone; `[]` clears it back to free text.
     //
@@ -2077,6 +2255,7 @@ export class LineService {
     record?: RecordLine
   ): Promise<WrittenLine> {
     const written = await this.writeEdit(manager, line, prepared.set, record);
+    await this.followUnit(manager, prepared.before, written.line);
     await this.changes.edited(
       manager,
       this.listRef(list),
@@ -2086,6 +2265,31 @@ export class LineService {
       actor
     );
     return written;
+  }
+
+  /**
+   * Rewrite the trip rows of a line whose unit changed (plan 0246, section
+   * 3.4), in the transaction of the edit, so a trip never reads a count
+   * against a weight.
+   *
+   * A frozen row takes the line's unit and its new quantity as what it asked:
+   * no conversion between pieces and weight exists (W4), and the quantity is
+   * the amount the person just said the line starts from.
+   */
+  private async followUnit(
+    manager: EntityManager,
+    before: LineSnapshot,
+    after: ListLine
+  ): Promise<void> {
+    if ((before.unit ?? 'UNIT') === (after.unit ?? 'UNIT')) {
+      return;
+    }
+    await manager
+      .getRepository(BasketTripRow)
+      .update(
+        { lineId: after.id },
+        { unit: after.unit, asked: after.quantity }
+      );
   }
 
   /**
@@ -2252,10 +2456,16 @@ export class LineService {
                 key
               );
 
+        // What the quantity counts after the edit (plan 0246, section 3.2).
+        const unit = this.validateUnit(req.unit);
+
         if (target === undefined) {
           line.content = content;
           if (quantity !== undefined) {
             line.quantity = quantity;
+          }
+          if (unit !== undefined) {
+            line.unit = unit;
           }
           if (nextItemIds !== undefined) {
             line.itemSetHash = itemSetHash(nextItemIds);
@@ -2274,6 +2484,7 @@ export class LineService {
             touchesSet ? { next: nextItemIds, adopt } : undefined,
             record
           );
+          await this.followUnit(manager, before, written.line);
           await this.changes.edited(
             manager,
             this.listRef(locked),
@@ -2283,6 +2494,17 @@ export class LineService {
             actor
           );
           return { written };
+        }
+
+        // Two lines of two units never merge (plan 0246 M5): converting needs
+        // a product, and a merge has none to prefer. Refused before the
+        // question of step 4, so nobody is asked to confirm a merge that
+        // cannot happen.
+        if ((unit ?? line.unit ?? 'UNIT') !== (target.unit ?? 'UNIT')) {
+          throw new LineUnitDiffersException(
+            `"${target.content}" counts in another unit`,
+            { messageArgs: { content: target.content } }
+          );
         }
 
         // Section 2, step 2. Statuses as they stand before the edit.
@@ -2325,6 +2547,9 @@ export class LineService {
         line.content = content;
         if (quantity !== undefined) {
           line.quantity = quantity;
+        }
+        if (unit !== undefined) {
+          line.unit = unit;
         }
         // The rule of this write, on the renamed line (plan 0207, section 1.3).
         // The merge then names the survivor when either line is named: a rename
@@ -2486,7 +2711,13 @@ export class LineService {
     const repo = manager.getRepository(ListLine);
     const rows = await repo.find({
       where: { listId: list.id },
-      select: { id: true, content: true, approvalStatus: true, position: true },
+      select: {
+        id: true,
+        content: true,
+        unit: true,
+        approvalStatus: true,
+        position: true,
+      },
       order: { position: 'ASC', id: 'ASC' },
     });
     const wanted = new Set(lineIds);
@@ -2523,6 +2754,7 @@ export class LineService {
       position: line.position,
       content: line.content,
       quantity: line.quantity,
+      unit: line.unit ?? 'UNIT',
       approvalStatus: line.approvalStatus,
     });
     // The approval a rename that merges nothing leaves, asked of a copy.
@@ -2593,6 +2825,14 @@ export class LineService {
         continue;
       }
 
+      // Two lines of two units are refused, not summed (plan 0246 M5), and
+      // the rename does not happen on any list.
+      if ((line.unit ?? 'UNIT') !== target.unit) {
+        throw new LineUnitDiffersException(
+          `In ${list.name}, "${target.content}" counts in another unit`,
+          { messageArgs: { listName: list.name, content: target.content } }
+        );
+      }
       if (this.mergeNeedsApproval(line, target, list, permissions)) {
         throw new LineMergeNeedsApprovalException(
           `In ${list.name}, that name belongs to an approved line, and only somebody who can approve lines can merge a pending line into it`,
@@ -2861,6 +3101,9 @@ export class LineService {
    */
   async addQuantity(req: AddLineQuantityRequest): Promise<LineView> {
     this.validateDelta(req.delta);
+    // Required (plan 0246 M8): an old client holding a weight line would add
+    // one gram where it meant one kilo. Refused before anything is read.
+    requireLineUnit(req.unit);
 
     // Resolved **before** the transaction, and not because it is cheaper there.
     // Every repository the access service holds draws its own connection from the
@@ -2886,6 +3129,11 @@ export class LineService {
       if (!line) {
         throw new NotFoundException('Line not found');
       }
+
+      // The unit the delta was made in, against the row the lock read (plan
+      // 0246, section 3.2). First, because a stale quantity in another unit
+      // would name a number the caller cannot read.
+      assertLineUnit(line, req.unit);
 
       if (req.expect !== undefined && line.quantity !== req.expect) {
         // The `from` bargain of plan 0136 section 5.3, checked against **this**
@@ -2926,6 +3174,22 @@ export class LineService {
 
     // A delta moves the quantity and nothing else (plan 0204, section 3).
     return this.announce(list, written, 'moved');
+  }
+
+  /**
+   * What a line counts in and the products it holds, for the gateway's unit
+   * check (plan 0246, section 4.2). `READ`: a reader of the list sees both on
+   * the line already.
+   */
+  async unitBasis(req: LineUnitBasisRequest): Promise<LineUnitBasis> {
+    const line = await this.listAccess.getLine(req.lineId);
+    await this.listAccess.requireAccess(
+      line.listId,
+      req.userId,
+      ListPermission.READ
+    );
+    const items = await this.itemSetOf(line.id);
+    return { unit: line.unit ?? 'UNIT', itemIds: [...items.itemIds] };
   }
 
   /**

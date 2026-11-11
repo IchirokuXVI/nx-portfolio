@@ -1,6 +1,8 @@
 import {
+  LINE_UNITS,
   LineApprovalStatus,
   LineChangeKind,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import {
   Column,
@@ -119,6 +121,27 @@ export class ListLineChange {
 
   @Column({ type: 'int', nullable: true })
   quantityAfter!: number | null;
+
+  /**
+   * What {@link quantityBefore} and {@link quantityAfter} count (plan 0246,
+   * section 3.4). A unit change is an edit with both set and different. Null
+   * on every row written before plan 0246, and on a row with no quantity.
+   */
+  @Column({
+    type: 'enum',
+    enum: LINE_UNITS,
+    enumName: 'line_unit',
+    nullable: true,
+  })
+  unitBefore!: LineUnit | null;
+
+  @Column({
+    type: 'enum',
+    enum: LINE_UNITS,
+    enumName: 'line_unit',
+    nullable: true,
+  })
+  unitAfter!: LineUnit | null;
 
   @Column({ type: 'varchar', nullable: true })
   approvalBefore!: LineApprovalStatus | null;

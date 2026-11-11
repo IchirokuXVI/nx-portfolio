@@ -125,9 +125,10 @@ class RecordingApi {
   async addLineQuantity(
     caller: ApiCaller,
     lineId: string,
-    delta: number
+    delta: number,
+    unit: string
   ): Promise<LineView> {
-    this.record('addLineQuantity', caller, { lineId, delta });
+    this.record('addLineQuantity', caller, { lineId, delta, unit });
     this.throwIfArmed();
     // The server's answer, which is the whole point of the route: the count the
     // bot reports is the one the row holds, not one it worked out (plan 0040,
@@ -162,9 +163,10 @@ class RecordingApi {
     caller: ApiCaller,
     lineId: string,
     outcome: SettlementOutcome,
+    unit: string,
     quantity?: number
   ): Promise<LineSettlementResult> {
-    this.record('settleLine', caller, { lineId, outcome, quantity });
+    this.record('settleLine', caller, { lineId, outcome, unit, quantity });
     this.throwIfArmed();
     const existing = this.findLine(lineId);
     const wanted = existing?.quantity ?? 1;
@@ -923,6 +925,231 @@ describe('AssistantService', () => {
       });
     });
 
+    it('writes a weight for a new line into its name and sends no unit (plan 0246, W1 and section 9)', async () => {
+      const api = new RecordingApi();
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'queso', quantity: 300, unit: 'GRAM' },
+            { product: 'agua', quantity: 1500, unit: 'MILLILITER' },
+            { product: 'leche' },
+          ],
+        }),
+        FakeModelProvider.says('Añadido.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(
+        turnRequest('añade 300 gramos de queso, agua y leche')
+      );
+
+      // A new line is free text, which counts pieces: the gateway refuses
+      // any other unit on it with 422 `line_unit_not_offered`, so the batch
+      // the real gateway accepts names no unit at all.
+      const items = api.of('addLines')[0].detail['items'] as Record<
+        string,
+        unknown
+      >[];
+      expect(items).toEqual([
+        { content: 'queso 300 g' },
+        { content: 'agua 1500 ml' },
+        { content: 'leche' },
+      ]);
+      expect(items.some((item) => 'unit' in item)).toBe(false);
+    });
+
+    it('writes a weight set on a free text line into its name and sends no unit (plan 0246, W1)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'queso', 2),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 300, unit: 'GRAM' }],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pon 300 g de queso'));
+
+      // The gateway answers 422 line_unit_not_offered to a unit on a line
+      // that names no product, so the amount goes into the name at one.
+      expect(api.of('addLines')).toHaveLength(0);
+      expect(api.of('updateLine')).toHaveLength(1);
+      expect(api.of('updateLine')[0].detail).toEqual({
+        lineId: 'line-existing',
+        content: 'queso 300 g',
+        quantity: 1,
+      });
+    });
+
+    it('finds a free text line by its name with the folded amount taken off, and renames it (plan 0246, W1)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'Queso 300 g', 1),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 500, unit: 'GRAM' }],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('que el queso sea de 500 g'));
+
+      expect(api.of('addLines')).toHaveLength(0);
+      expect(api.of('updateLine')[0].detail).toEqual({
+        lineId: 'line-existing',
+        content: 'queso 500 g',
+        quantity: 1,
+      });
+    });
+
+    it('keeps a whole name that only looks like an amount, and a product line, out of that match', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        // No space before the unit, so not the shape the tool writes.
+        line('line-loose', 'list-flat', 'queso 300g', 1),
+        // A product line under a name that ends in an amount is its name.
+        {
+          ...line('line-product', 'list-flat', 'leche 500 ml', 1),
+          itemIds: ['item-1'],
+        },
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'queso', quantity: 2 },
+            { product: 'leche', quantity: 3 },
+          ],
+        }),
+        FakeModelProvider.says('Añadido.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade dos quesos y tres leches'));
+
+      expect(api.of('updateLine')).toHaveLength(0);
+      expect(api.of('addLines')[0].detail['items']).toEqual([
+        { content: 'queso', quantity: 2 },
+        { content: 'leche', quantity: 3 },
+      ]);
+    });
+
+    it('prefers the whole name over a folded one', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-folded', 'list-flat', 'queso 300 g', 1),
+        line('line-plain', 'list-flat', 'queso', 1),
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 4 }],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pon cuatro quesos'));
+
+      expect(api.of('updateLine')[0].detail).toEqual({
+        lineId: 'line-plain',
+        content: 'queso',
+        quantity: 4,
+      });
+    });
+
+    it('sends the unit on a set of a line that has products (plan 0246, section 5)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        {
+          ...line('line-existing', 'list-flat', 'queso', 500),
+          unit: 'GRAM',
+          itemIds: ['item-1'],
+        },
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 300, unit: 'GRAM' }],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pon 300 g de queso'));
+
+      expect(api.of('updateLine')[0].detail).toEqual({
+        lineId: 'line-existing',
+        content: 'queso',
+        quantity: 300,
+        unit: 'GRAM',
+      });
+    });
+
+    it('sends the unit on a line that already exists (plan 0246, section 5)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        { ...line('line-existing', 'list-flat', 'queso', 500), unit: 'GRAM' },
+      ]);
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'queso', quantity: 250, unit: 'GRAM', mode: 'add' },
+          ],
+        }),
+        FakeModelProvider.says('Añadido.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade 250 gramos más de queso'));
+
+      expect(api.of('addLines')).toHaveLength(0);
+      expect(api.of('addLineQuantity')[0].detail).toEqual({
+        lineId: 'line-existing',
+        delta: 250,
+        unit: 'GRAM',
+      });
+    });
+
+    it('reports a delta on a line of another unit rather than retrying (plan 0246, section 5)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        { ...line('line-existing', 'list-flat', 'queso', 500), unit: 'GRAM' },
+      ]);
+      api.failNextWriteWith = new GatewayApiError(
+        409,
+        'This line counts in another unit now.',
+        'line_unit_mismatch'
+      );
+
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'queso', quantity: 2, mode: 'add' }],
+        }),
+        FakeModelProvider.says('Esa línea cuenta en gramos.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade dos quesos más'));
+
+      // One try, in pieces as the person said it, and no second one in grams.
+      expect(api.of('addLineQuantity')).toHaveLength(1);
+      expect(api.of('addLineQuantity')[0].detail['unit']).toBe('UNIT');
+      const toolTurn = provider.requests[1].turns.at(-1);
+      expect(JSON.stringify(toolTurn?.toolResults)).toContain(
+        'that line counts in grams; say the amount in grams or change the line'
+      );
+    });
+
     it("mode 'add' calls the quantity route and never reads then writes", async () => {
       const api = new RecordingApi();
       api.linesByList.set('list-flat', [
@@ -942,6 +1169,8 @@ describe('AssistantService', () => {
       expect(api.of('addLineQuantity')[0].detail).toEqual({
         lineId: 'line-existing',
         delta: 2,
+        // Pieces, because nobody said a weight (plan 0246 M8).
+        unit: 'UNIT',
       });
       // Never the read-compute-write it replaces: no absolute quantity is sent,
       // so there is nothing between a read and a write for a second writer to
@@ -2089,6 +2318,9 @@ function line(
     content,
     quantity,
     itemId: null,
+    // Free text, as every line the assistant creates (plan 0246, W1).
+    itemIds: [],
+    productGroupId: null,
     position: 0,
     approvalStatus: LineApprovalStatus.APPROVED,
     createdByUserId: 'user-1',

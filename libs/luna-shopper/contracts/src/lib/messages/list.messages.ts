@@ -8,6 +8,7 @@ import type {
   TripRowOutcome,
 } from '../enums/list.enums';
 import type { PageQuery, Paginated } from '../pagination';
+import type { LineUnit } from '../units/line-unit';
 import type { ItemSnapshot } from './catalog.messages';
 
 /**
@@ -68,6 +69,12 @@ export const LINE_PATTERNS = {
    * gateway asks before it reads a price, so it prices what core will write.
    */
   settlePick: 'line.settlePick',
+  /**
+   * What a line counts in and the products it holds (plan 0246, section 4.2).
+   * The gateway asks before an edit that names a unit or a product set, to
+   * check that the products offer the unit. `READ`.
+   */
+  unitBasis: 'line.unitBasis',
   /** One line's own settlements, newest first (plan 0047, section 6.1). */
   settlements: 'line.settlements',
   /**
@@ -270,8 +277,22 @@ export interface LineView {
    * the line stays where it is until somebody deletes it on purpose. There is no
    * trip status beside it any more, because `READY` was a fact about one shopping
    * trip written onto a record that outlives every trip.
+   *
+   * Counted in {@link unit} since plan 0246: pieces or packs, grams or
+   * millilitres, always an integer.
    */
   quantity: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.1). Base units only, so
+   * 750 g is 750 and never 0.75.
+   *
+   * A line with one product counts in that product's unit and nobody chooses
+   * it (W2): a product by the kilo is weighed, everything else is counted, a
+   * kilo piece included. A free text line counts pieces. Only a line that
+   * several products can serve lets the shopper choose, among the units
+   * `lineUnitsOf` answers for them (W1).
+   */
+  unit: LineUnit;
   /**
    * The products this line stands for (plan 0048, section 1.1), in the order they
    * were attached. Empty for a free text line, which stays first class.
@@ -669,6 +690,13 @@ export interface AddLineRequest {
   listId: string;
   content: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.2). Absent is `UNIT`.
+   * The gateway refuses a unit that none of the line's products offers with
+   * `line_unit_not_offered` (M3). An add that lands on a line of another unit
+   * sums nothing and answers that line as the duplicate of plan 0228 (M5).
+   */
+  unit?: LineUnit;
   /** Set by a basket write alone (plan 0138). Never sent by a client. */
   via?: LineWriteVia;
   /**
@@ -706,6 +734,9 @@ export interface AddLineRequest {
    *
    * Read on a free text add only, as are {@link intoLineId} and
    * {@link newLine}: an add that carries products or a group is unchanged.
+   * The one exception is a line of another unit (plan 0246 M5): any add that
+   * meets one is refused with `line_add_needs_choice` naming that line, and
+   * `newLine: true` then creates a line on a product add too.
    */
   askIfAmbiguous?: boolean;
   /**
@@ -733,6 +764,11 @@ export interface LineAddChoice {
   content: string;
   named: boolean;
   quantity: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.1), so a client can
+   * say why a line of another unit was offered rather than raised (M5).
+   */
+  unit: LineUnit;
   itemIds: string[];
   productGroupId: string | null;
   approvalStatus: LineApprovalStatus;
@@ -770,6 +806,11 @@ export interface AddLineResult {
 export interface AddLinesItem {
   content: string;
   quantity?: number;
+  /**
+   * What {@link quantity} counts (plan 0246, section 3.2). Absent is `UNIT`.
+   * Two items of one name fold only when their units agree (M5).
+   */
+  unit?: LineUnit;
   /** The same product set {@link AddLineRequest} carries. */
   itemIds?: string[];
   /**
@@ -816,6 +857,17 @@ export interface UpdateLineRequest {
   via?: LineWriteVia;
   content?: string;
   quantity?: number;
+  /**
+   * Change what {@link quantity} counts (plan 0246, section 3.2).
+   *
+   * **A unit change must name `quantity`**, the amount it starts from, or it
+   * is refused as a validation error: 500 read as 500 pieces after a chip
+   * moved from grams is worse than a reset. The client sends
+   * `defaultQuantityOf` the new unit. Absent leaves the unit alone. The
+   * gateway refuses a unit the line's products do not offer with
+   * `line_unit_not_offered` (M3).
+   */
+  unit?: LineUnit;
   /**
    * The quantity the client saw (plan 0209, section 2.2). When present, the
    * line must still hold it when the edit reads the line under its lock, or
@@ -949,6 +1001,13 @@ export interface AddLineQuantityRequest {
   userId: string;
   lineId: string;
   delta: number;
+  /**
+   * The unit {@link delta} was made in (plan 0246, section 3.2). Required
+   * (M8): an old client holding a weight line would add one gram where it
+   * meant one kilo. A unit that is not the line's is refused with
+   * `line_unit_mismatch` and changes nothing.
+   */
+  unit: LineUnit;
   /** Set by a basket write alone (plan 0138). Never sent by a client. */
   via?: LineWriteVia;
   /**
@@ -998,9 +1057,10 @@ export interface SettlementPaid {
    */
   supermarketId?: string | null;
   /**
-   * What **one unit** cost at {@link priceScopeId}, in the minor unit of
-   * {@link pricePaidCurrency}. Never the row's total, and never catalog's
-   * `unitPrice`, which is a per kilogram number.
+   * What **one** of the settlement's unit cost at {@link priceScopeId}, in
+   * the minor unit of {@link pricePaidCurrency} (plan 0246 M7): one piece or
+   * pack for `UNIT`, one kilo or one litre for `GRAM` and `MILLILITER`. Never
+   * the row's total, and never catalog's `unitPrice`.
    */
   pricePaidCents: number | null;
   /**
@@ -1008,6 +1068,14 @@ export interface SettlementPaid {
    * the price was not known.
    */
   pricePaidCurrency: string | null;
+  /**
+   * Whether {@link pricePaidCents} makes what was spent an estimate (plan 0246
+   * M7): false only for a count of pieces or packs at a piece or pack price,
+   * as `lineAmountOf` decides for the product settled. Written by the gateway
+   * beside the price. Absent reads as false, and core keeps it only beside a
+   * price.
+   */
+  estimated?: boolean;
 }
 
 /**
@@ -1036,6 +1104,23 @@ export interface SettlePick {
 export interface LineSettlePickRequest {
   userId: string;
   lineId: string;
+}
+
+/** What a line counts in and holds, for the gateway's unit check (plan 0246). */
+export interface LineUnitBasisRequest {
+  userId: string;
+  lineId: string;
+}
+
+/**
+ * What a line counts in and the products it holds (plan 0246, section 4.2).
+ * Core holds both and no catalog; the gateway holds the catalog, so it asks
+ * here and reads the products' size fields there.
+ */
+export interface LineUnitBasis {
+  unit: LineUnit;
+  /** The line's products, in attachment order. Empty for a free text line. */
+  itemIds: string[];
 }
 
 /**
@@ -1082,8 +1167,16 @@ export interface SettleLineRequest {
    * the extra unit is real and belongs in the consumption history even though it
    * has no demand left to satisfy. A settlement clamped to the outstanding demand
    * would quietly under report what the household goes through.
+   *
+   * Counted in {@link unit} since plan 0246.
    */
   quantity?: number;
+  /**
+   * The unit {@link quantity} is in (plan 0246, section 3.5). Required, and
+   * refused with `line_unit_mismatch` when it is not the line's, as a delta's
+   * is. The outstanding demand stays in the line's unit.
+   */
+  unit: LineUnit;
   /**
    * The product actually bought, when the caller said which (plan 0047, section
    * 3.2). It is **copied onto the settlement** rather than joined later, because
@@ -1110,8 +1203,21 @@ export interface LineSettlementView {
   /** The exact product bought, or null for a free text line (section 3.2). */
   itemId: string | null;
   outcome: SettlementOutcome;
-  /** Units bought, and 0 for `NOT_AVAILABLE`. */
+  /** What was bought in {@link unit}, and 0 for `NOT_AVAILABLE`. */
   quantity: number;
+  /**
+   * What {@link quantity} counts: the line's unit when it was settled (plan
+   * 0246, section 3.5). `pricePaidCents` is the price of one of it (M7): one
+   * piece or pack for `UNIT`, one kilo or one litre for `GRAM` and
+   * `MILLILITER`.
+   */
+  unit: LineUnit;
+  /**
+   * Whether what this settlement cost is an estimate (plan 0246 M7): false
+   * only for a count of pieces or packs at a piece or pack price, as
+   * `lineAmountOf` decides for the product settled.
+   */
+  estimated: boolean;
   /**
    * Who settled it, and **null when a shared basket did** (plan 0051,
    * section 6).

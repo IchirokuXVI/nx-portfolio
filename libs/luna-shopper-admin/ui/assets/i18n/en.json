@@ -2471,6 +2471,14 @@
       "listNameHelp": "The list this line was written on.",
       "content": "What it says",
       "quantity": "How many",
+      "quantityHelp": "In the unit beside it: pieces, grams or millilitres. 750 g is 750 and 1.5 l is 1500.",
+      "unit": "Counted in",
+      "unitHelp": "What the quantity counts. Changing it changes what the number means, so give the quantity in the new unit in the same edit.",
+      "unitOption": {
+        "UNIT": "Pieces",
+        "GRAM": "Grams",
+        "MILLILITER": "Millilitres"
+      },
       "approvalStatus": "Approval",
       "approvalStatusHelp": "Fixed here. “Approve” and “Reject” beside the line on its list’s page are how it moves, because each tells the zone. Correcting the wording above leaves an approved line approved.",
       "createdByUserId": "Written by",

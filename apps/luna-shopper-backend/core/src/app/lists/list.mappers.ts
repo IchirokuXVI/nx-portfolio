@@ -119,6 +119,9 @@ export function toLineView(
     listId: line.listId,
     content: line.content,
     quantity: line.quantity,
+    // `UNIT` and never absent (plan 0246, section 3.1), which is what the column
+    // defaults to. The `??` is for a line that was built by hand.
+    unit: line.unit ?? 'UNIT',
     itemIds: [...items.itemIds],
     itemSetHash: line.itemSetHash,
     // The subscription and the part of the set it still accounts for (plan 0070,
@@ -184,6 +187,9 @@ export function toLineSettlementView(
     itemId: settlement.itemId,
     outcome: settlement.outcome,
     quantity: settlement.quantity,
+    // Plan 0246, section 3.5. The `??` is for a settlement built by hand.
+    unit: settlement.unit ?? 'UNIT',
+    estimated: settlement.estimated ?? false,
     settledByUserId: settlement.settledByUserId,
     // Who settled a basket row, where `settledByUserId` is null by the actor
     // check (plan 0151, section 5).

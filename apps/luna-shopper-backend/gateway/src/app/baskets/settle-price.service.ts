@@ -2,7 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   ITEM_PATTERNS,
   SUPERMARKET_LOCATION_PATTERNS,
-  UnitOfMeasure,
+  packBridgeOf,
+  productKindOf,
   type BasketScopePrice,
   type CatalogScopeView,
   type GetItemsRequest,
@@ -10,6 +11,7 @@ import {
   type ItemOfferView,
   type ItemSnapshot,
   type ItemView,
+  type LineUnit,
   type SettlePick,
   type SettlementPaid,
   type ShopAvailabilityRequest,
@@ -85,6 +87,12 @@ export interface SettlePriceInput {
   supermarketLocationId: string | undefined;
   /** Plan 0136's one condition for serving `locations` to this reader. */
   servedLocations: boolean;
+  /**
+   * What the settle counts in, the line's (plan 0246 M7). The price recorded
+   * is the price of one of it: a piece or pack, or a kilo or litre. Absent is
+   * `UNIT`.
+   */
+  unit?: LineUnit;
 }
 
 /** What one settle records beyond what the client said (plan 0202). */
@@ -318,12 +326,17 @@ export class SettlePriceService {
     }
     const itemSnapshot = snapshotOf(product);
     const at = shop === null ? null : atShopOf(product, shop);
-    // What one piece cost at that scope (plan 0244, section 4): the piece
-    // price of a kilo piece, and the price of anything else.
+    // What one of the settle's unit cost at that scope (plan 0244, section
+    // 4; plan 0246 M7): the piece price of a kilo piece counted, the price of
+    // a kilo of anything weighed, and the price of anything else.
     const paidAt =
       at === null || at.priceScopeId === null
         ? null
-        : paidPriceOf(product, offerAtScope(product, at.priceScopeId));
+        : paidOf(
+            product,
+            offerAtScope(product, at.priceScopeId),
+            input.unit ?? 'UNIT'
+          );
     if (
       shop === null ||
       at === null ||
@@ -331,7 +344,9 @@ export class SettlePriceService {
       paidAt === null ||
       at.currency === null
     ) {
-      this.log.debug('Settle shop not recorded: no price for the product there');
+      this.log.debug(
+        'Settle shop not recorded: no price for the product there'
+      );
       return { paid: null, itemSnapshot };
     }
     return {
@@ -341,8 +356,9 @@ export class SettlePriceService {
         supermarketId: shop.supermarket.id,
         // Catalog holds the price in currency units with two decimals
         // (`numeric(12,2)`), and this column is the minor unit.
-        pricePaidCents: Math.round(paidAt * 100),
+        pricePaidCents: Math.round(paidAt.price * 100),
         pricePaidCurrency: at.currency,
+        estimated: paidAt.estimated,
       },
       itemSnapshot,
     };
@@ -373,9 +389,10 @@ export class SettlePriceService {
       return NOTHING;
     }
     const best = product.bestOffer ?? null;
-    // The piece price of a kilo piece, as at a shop (plan 0244, section 4).
-    // The cheapest offer is still catalog's, chosen by the price of a kilo.
-    const paid = paidPriceOf(product, best);
+    // The price of one of the unit, as at a shop (plan 0244, section 4; plan
+    // 0246 M7). The cheapest offer is still catalog's, chosen by the price of
+    // a kilo.
+    const paid = paidOf(product, best, input.unit ?? 'UNIT');
     return {
       paid:
         best && paid !== null && best.currency !== null
@@ -383,8 +400,9 @@ export class SettlePriceService {
               priceScopeId: best.priceScopeId,
               supermarketLocationId: null,
               supermarketId: null,
-              pricePaidCents: Math.round(paid * 100),
+              pricePaidCents: Math.round(paid.price * 100),
               pricePaidCurrency: best.currency,
+              estimated: paid.estimated,
             }
           : null,
       itemSnapshot: snapshotOf(product),
@@ -404,8 +422,11 @@ export class SettlePriceService {
     const asked = new Set(scopes);
     const prices: BasketScopePrice[] = [];
     for (const offer of product?.offers ?? []) {
-      // A rewritten buy records what one piece cost too (plan 0244).
-      const paid = product ? paidPriceOf(product, offer) : null;
+      // A rewritten buy records the price of one of its unit too (plan 0244;
+      // plan 0246 M7).
+      const paid = product
+        ? paidOf(product, offer, input.unit ?? 'UNIT')
+        : null;
       if (
         asked.has(offer.priceScopeId) &&
         paid !== null &&
@@ -413,8 +434,9 @@ export class SettlePriceService {
       ) {
         prices.push({
           priceScopeId: offer.priceScopeId,
-          pricePaidCents: Math.round(paid * 100),
+          pricePaidCents: Math.round(paid.price * 100),
           pricePaidCurrency: offer.currency,
+          estimated: paid.estimated,
         });
       }
     }
@@ -529,38 +551,85 @@ export function snapshotOf(product: ItemView): ItemSnapshot {
 }
 
 /**
- * Whether a product is a kilo piece (plan 0244, section 1): `KILOGRAM` with
- * an approximate weight, whose `price` is a kilo and whose piece is priced
- * by `piecePrice`.
+ * What one of the settle's unit cost under this offer, in currency units,
+ * and whether what was spent is then an estimate, or null when nothing can be
+ * recorded (plan 0244, section 4; plan 0246 M7 and section 4.4).
+ *
+ * On a count line (`UNIT`) it is one piece or pack: a kilo piece records its
+ * `piecePrice` and a pack its `price`. A kilo piece whose offer has a price
+ * and no piece price is recorded with no price, as a product with no offer
+ * is: **the price of a kilo is never written as the price of a piece.** A
+ * product sold by the kilo on a count line is a line written before plan
+ * 0246, read as kilos then (plan 0244 D4), so it keeps its `price`.
+ *
+ * On a weight or volume line it is one kilo or one litre, which is what
+ * `pricePaidCents × quantity / 1000` reads (M7): the `price` of a product
+ * sold by the kilo or the litre or of a kilo piece, and for a pack or a piece
+ * priced as one, its price over what it weighs or holds. A product that
+ * cannot serve the unit records no price.
+ *
+ * `estimated` is false only for a count at a piece or pack price (M7): every
+ * `GRAM` or `MILLILITER` settlement is an estimate, whatever served it.
+ *
+ * The limit of M7's model: a weight served by whole packs or pieces records
+ * the price of one kilo derived from the pack, so a 750 g settle of 500 g
+ * packs at 1,39 reads 2,09 € spent while the two packs cost 2,78 €.
  */
-function isKiloPiece(product: ItemView): boolean {
-  return (
-    product.defaultUnit === UnitOfMeasure.KILOGRAM &&
-    product.approxWeight !== null &&
-    product.approxWeight !== undefined
-  );
+export function paidOf(
+  product: ItemView,
+  offer: ItemOfferView | null | undefined,
+  unit: LineUnit
+): { price: number; estimated: boolean } | null {
+  if (!offer) {
+    return null;
+  }
+  const sizing = {
+    defaultUnit: product.defaultUnit,
+    unitSize: product.unitSize ?? null,
+    approxWeight: product.approxWeight ?? null,
+  };
+  const kind = productKindOf(sizing);
+  if (unit === 'UNIT') {
+    if (kind === 'KILO_PIECE') {
+      return figureOf(offer.piecePrice ?? null, true);
+    }
+    return figureOf(offer.price, kind !== 'PACK');
+  }
+  if (
+    (unit === 'GRAM' && (kind === 'BY_THE_KILO' || kind === 'KILO_PIECE')) ||
+    (unit === 'MILLILITER' && kind === 'BY_THE_LITRE')
+  ) {
+    return figureOf(offer.price, true);
+  }
+  if (kind === 'PACK' && offer.price !== null) {
+    const bridge = packBridgeOf(sizing);
+    if (bridge !== null && bridge.unit === unit) {
+      // Estimated whatever served it (M7): the kilo derived from a pack is
+      // not what the till charged for the whole packs.
+      return figureOf((offer.price * 1000) / bridge.amount, true);
+    }
+  }
+  return null;
 }
 
 /**
- * What one buy of the product cost under this offer, in currency units, or
- * null when nothing can be recorded (plan 0244, section 4).
- *
- * A kilo piece records its `piecePrice`, and anything else its `price`. A
- * kilo piece whose offer has a price and no piece price is recorded with no
- * price, as a product with no offer is: **the price of a kilo is never
- * written as a price paid.**
+ * What one piece or pack of the product cost under this offer, as a count
+ * line records it (plan 0244, section 4). {@link paidOf} with `UNIT`.
  */
 export function paidPriceOf(
   product: ItemView,
   offer: ItemOfferView | null | undefined
 ): number | null {
-  if (!offer) {
-    return null;
-  }
-  if (isKiloPiece(product)) {
-    return offer.piecePrice ?? null;
-  }
-  return offer.price;
+  return paidOf(product, offer, 'UNIT')?.price ?? null;
+}
+
+function figureOf(
+  price: number | null,
+  estimated: boolean
+): { price: number; estimated: boolean } | null {
+  return price === null || !Number.isFinite(price)
+    ? null
+    : { price, estimated };
 }
 
 /**

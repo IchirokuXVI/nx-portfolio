@@ -254,8 +254,15 @@ const rowEntryView = object(
 /** No `listId` and no `demandEditable`: a room holds guests (plan 0204). */
 const entryPatch = object(
   BASKET_SCHEMA_IDS.entryPatch,
-  entryNumbers,
-  entryNumbersRequired
+  {
+    ...entryNumbers,
+    // What `left` and `bought` count after the write (plan 0246, section 3.6).
+    // On the patch and not on the entry: a row is one unit, so the row states
+    // it, and a patch whose unit differs from its row's makes a client read
+    // the basket again.
+    unit: ref(ENUM_IDS.lineUnit),
+  },
+  [...entryNumbersRequired, 'unit']
 );
 
 /**
@@ -296,6 +303,8 @@ const rowView = object(
     content: string(),
     // The product every entry counts as, or null (plan 0201, section 2).
     productId: nullableString(),
+    // What the three numbers below count: a row is one unit (plan 0246 M6).
+    unit: ref(ENUM_IDS.lineUnit),
     left: integer({ minimum: 0 }),
     bought: integer({ minimum: 0 }),
     asked: integer({ minimum: 0 }),
@@ -315,6 +324,7 @@ const rowView = object(
     'rowKey',
     'content',
     'productId',
+    'unit',
     'left',
     'bought',
     'asked',
@@ -538,10 +548,17 @@ const linePick = object(
   ['lineId', 'itemId']
 );
 
+// The line's unit and amount ride beside its products, because the pick is
+// the cost of that amount with each of them (plan 0246, section 4.3).
 const priceChoice = object(
   BASKET_SCHEMA_IDS.priceChoice,
-  { lineId: nonEmptyString(), itemIds: array(nonEmptyString()) },
-  ['lineId', 'itemIds']
+  {
+    lineId: nonEmptyString(),
+    itemIds: array(nonEmptyString()),
+    unit: ref(ENUM_IDS.lineUnit),
+    quantity: integer({ minimum: 0 }),
+  },
+  ['lineId', 'itemIds', 'unit', 'quantity']
 );
 
 const priceChoicesView = object(
@@ -625,6 +642,8 @@ const tripBuys = object(
   {
     priceScopeIds: array(nonEmptyString()),
     unscoped: boolean(),
+    // The row's unit, so the price read is one of it (plan 0246 M7).
+    unit: ref(ENUM_IDS.lineUnit),
   },
   ['priceScopeIds', 'unscoped']
 );
@@ -636,6 +655,8 @@ const scopePrice = object(
     priceScopeId: nonEmptyString(),
     pricePaidCents: integer({ minimum: 0 }),
     pricePaidCurrency: nonEmptyString({ maxLength: 3 }),
+    // Optional (plan 0246 M7), so a gateway older than that plan reads exact.
+    estimated: { type: 'boolean' },
   },
   ['priceScopeId', 'pricePaidCents', 'pricePaidCurrency']
 );
@@ -705,6 +726,9 @@ const settleRequest = object(
     lineIds: writeLineIds,
     outcome: ref(ENUM_IDS.settlementOutcome),
     quantity: integer({ minimum: 1, maximum: LINE_QUANTITY_MAX }),
+    // The unit `quantity` and `from` are in, the row's (plan 0246, section
+    // 3.5). Required, and refused when a named line counts in another.
+    unit: ref(ENUM_IDS.lineUnit),
     from: integer({ minimum: 0 }),
     itemId: nonEmptyString(),
     allocations: array(ref(BASKET_SCHEMA_IDS.allocationEntry)),
@@ -713,7 +737,7 @@ const settleRequest = object(
     // Written by the gateway too: what the product is called (plan 0202).
     itemSnapshot: nullableItemSnapshot(),
   },
-  ['basketId', 'participantId', 'rowKey', 'lineIds', 'outcome', 'from']
+  ['basketId', 'participantId', 'rowKey', 'lineIds', 'outcome', 'unit', 'from']
 );
 
 /**
@@ -746,9 +770,11 @@ const demandRequest = object(
     rowKey: nonEmptyString(),
     lineId: nonEmptyString(),
     quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    // Required, and checked like a delta's (plan 0246, section 3.4).
+    unit: ref(ENUM_IDS.lineUnit),
     from: integer({ minimum: 0 }),
   },
-  ['basketId', 'participantId', 'rowKey', 'lineId', 'quantity', 'from']
+  ['basketId', 'participantId', 'rowKey', 'lineId', 'quantity', 'unit', 'from']
 );
 
 const renameRequest = object(
@@ -791,6 +817,8 @@ const addLineRequest = object(
     targetListId: nonEmptyString(),
     content: nonEmptyString(),
     quantity: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    // The list's own add through another door (plan 0246, section 3.2).
+    unit: ref(ENUM_IDS.lineUnit),
     itemIds: array(nonEmptyString()),
     named: boolean(),
     // Handed to the list's own add as they arrived (plan 0228).

@@ -1,5 +1,6 @@
 import type { SettlementOutcome, TripKind } from '../enums/list.enums';
 import type { Paginated } from '../pagination';
+import type { LineUnit } from '../units/line-unit';
 import type { BasketShopView } from './basket.messages';
 import type { ItemSnapshot } from './catalog.messages';
 
@@ -104,8 +105,25 @@ export interface PurchaseEntryView {
    */
   boughtLineCount: number;
   /**
+   * What the entry's standing `BOUGHT` purchases bought, **per unit** (plan
+   * 0246, section 3.5): `{ UNIT: 3, GRAM: 750 }`. A unit with nothing bought
+   * is omitted rather than zero, so an entry that bought nothing is `{}`.
+   *
+   * Never one number: a sum across units would add grams to pieces.
+   */
+  bought: Partial<Record<LineUnit, number>>;
+  /**
+   * Whether any priced purchase of the entry is an estimate (plan 0246 M7),
+   * so {@link spent} is one too. False when nothing carries a price.
+   */
+  estimated: boolean;
+  /**
    * What the entry cost: the sum over its standing `BOUGHT` purchases that
    * carry a price, of the price of one unit times the units.
+   *
+   * Since plan 0246 (M7) a `GRAM` or `MILLILITER` purchase adds
+   * `pricePaidCents × quantity / 1000`, the price of a kilo or a litre times
+   * the amount, and the sum is rounded once.
    *
    * **Null and never zero when no purchase carries a price** (section 3.3),
    * which is a correct answer and needs no flag of its own.
@@ -135,10 +153,11 @@ export interface PurchaseEntryPage {
  * One row of an entry: what was bought, how many, and at what price each
  * (section 4).
  *
- * **One row per `(lineId, itemId, pricePaidCents, pricePaidCurrency)`.** Three
- * partial settles of one milk at one price are one row of three. The same milk
- * at two prices, which is two shops in one session, is two rows: a history that
- * averaged them would report a price nobody paid.
+ * **One row per `(lineId, itemId, unit, pricePaidCents, pricePaidCurrency)`.**
+ * Three partial settles of one milk at one price are one row of three. The
+ * same milk at two prices, which is two shops in one session, is two rows: a
+ * history that averaged them would report a price nobody paid. The unit is in
+ * the key since plan 0246, so a row never adds grams to pieces.
  */
 export interface PurchaseRowView {
   /** The earliest settlement folded into the row. The cursor's key. */
@@ -154,9 +173,23 @@ export interface PurchaseRowView {
   itemSnapshot: ItemSnapshot | null;
   /** `NOT_AVAILABLE` only when the line had nothing bought in this entry. */
   outcome: SettlementOutcome;
-  /** Standing `BOUGHT` units. Zero for `NOT_AVAILABLE`. */
+  /** Standing `BOUGHT` amount in {@link unit}. Zero for `NOT_AVAILABLE`. */
   quantity: number;
-  /** What **one unit** cost, or null when nothing recorded it. */
+  /**
+   * What {@link quantity} counts, as the settlements recorded it (plan 0246,
+   * section 3.5).
+   */
+  unit: LineUnit;
+  /**
+   * Whether what the row cost is an estimate (plan 0246 M7): true when any
+   * settlement folded into it is.
+   */
+  estimated: boolean;
+  /**
+   * What **one** of {@link unit} cost, or null when nothing recorded it: one
+   * piece or pack for `UNIT`, one kilo or one litre for `GRAM` and
+   * `MILLILITER` (plan 0246 M7).
+   */
   pricePaid: MoneyView | null;
   /**
    * The chain catchment the price was read at, and the one shop, when the

@@ -126,6 +126,20 @@ export const ERROR_CATALOG: Record<
     en: 'This list already has more than one line called "{content}". Choose the line to add to, or add a new line.',
     es: 'Esta lista ya tiene más de una línea llamada "{content}". Elige la línea a la que sumar, o añade una línea nueva.',
   },
+  // The three unit refusals (plan 0246). Each says what is true of the line,
+  // so the person knows what to send instead.
+  [ERROR_CODES.LINE_UNIT_MISMATCH]: {
+    en: 'This line counts in another unit now. Look at it again and change the amount there.',
+    es: 'Esta línea cuenta ahora en otra unidad. Vuelve a mirarla y cambia la cantidad ahí.',
+  },
+  [ERROR_CODES.LINE_UNIT_DIFFERS]: {
+    en: 'These two lines count in different units, so they cannot be merged.',
+    es: 'Estas dos líneas cuentan en unidades distintas, así que no se pueden unir.',
+  },
+  [ERROR_CODES.LINE_UNIT_NOT_OFFERED]: {
+    en: 'The products of this line cannot be counted in that unit.',
+    es: 'Los productos de esta línea no se pueden contar en esa unidad.',
+  },
   // The brand registry's two refusals (plan 0115, section 5.3). Both name what
   // to do rather than what failed: type a real word, or open the brand that
   // already holds the key.

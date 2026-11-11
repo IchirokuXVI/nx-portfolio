@@ -21,6 +21,8 @@ import {
   type LineSettlementPage,
   type LineSettlementResult,
   type LineSettlePickRequest,
+  type LineUnitBasis,
+  type LineUnitBasisRequest,
   type LineView,
   type ListAccessView,
   type ListCommentsRequest,
@@ -141,6 +143,11 @@ export class ListController {
   @MessagePattern(LINE_PATTERNS.settlePick)
   settlePick(@Payload() req: LineSettlePickRequest): Promise<SettlePick> {
     return this.history.settlePick(req);
+  }
+
+  @MessagePattern(LINE_PATTERNS.unitBasis)
+  unitBasis(@Payload() req: LineUnitBasisRequest): Promise<LineUnitBasis> {
+    return this.lines.unitBasis(req);
   }
 
   @MessagePattern(LINE_PATTERNS.settlements)

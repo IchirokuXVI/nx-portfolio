@@ -16,6 +16,11 @@ export interface SettlementPaidColumns {
   supermarketLocationId: string | null;
   /** The shop's chain, set exactly when the shop is (plan 0163, section 5). */
   supermarketId: string | null;
+  /**
+   * Whether the price recorded makes an estimate of what was spent (plan 0246
+   * M7). False whenever no price is recorded: there is no cost to estimate.
+   */
+  estimated: boolean;
 }
 
 /** Nothing was recorded, which is an ordinary settle. */
@@ -25,6 +30,7 @@ const NOTHING_PAID: SettlementPaidColumns = {
   priceScopeId: null,
   supermarketLocationId: null,
   supermarketId: null,
+  estimated: false,
 };
 
 /**
@@ -122,12 +128,20 @@ export function paidColumns(
   // malformed message is a bug wherever it lands, and dropping the price
   // silently first would hide it on exactly the outcome nobody looks at.
   const bought = outcome === SettlementOutcome.BOUGHT;
+  if (paid.estimated !== undefined && typeof paid.estimated !== 'boolean') {
+    throw new ValidationException('estimated must be a boolean', {
+      messageArgs: { field: 'estimated' },
+    });
+  }
   return {
     pricePaidCents: bought ? paid.pricePaidCents : null,
     pricePaidCurrency: bought ? paid.pricePaidCurrency : null,
     priceScopeId: paid.priceScopeId,
     supermarketLocationId: paid.supermarketLocationId,
     supermarketId,
+    // Kept only beside a price (plan 0246 M7): absent reads as exact.
+    estimated:
+      bought && paid.pricePaidCents !== null && paid.estimated === true,
   };
 }
 

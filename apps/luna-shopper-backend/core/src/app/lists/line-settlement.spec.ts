@@ -1,4 +1,3 @@
-import { fakeLineChanges } from './changes/line-change.fake';
 import {
   LineApprovalStatus,
   ListPermission,
@@ -7,15 +6,17 @@ import {
   SettlementOutcome,
   ZoneRole,
   type LineSettlementResult,
+  type LineUnit,
 } from '@portfolio/luna-shopper/contracts';
 import { ValidationException } from '@portfolio/luna-shopper/platform';
 import type { DataSource, EntityManager } from 'typeorm';
 import { fakeBasketAnnouncer } from '../baskets/basket-announcer.fake';
+import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import { LineSettlement, ListLineItem } from '../entities';
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
-import { fakeLineClaims } from '../baskets/line-claims.fake';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
+import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeLineItems } from './line-items.fake';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { ListAccessService } from './list-access.service';
@@ -69,6 +70,8 @@ function build(options: {
   approvalStatus?: LineApprovalStatus;
   /** The line's product set, in the order it was attached. */
   itemIds?: string[];
+  /** What the line counts in (plan 0246). `UNIT` when absent. */
+  unit?: LineUnit;
 }): Harness {
   const list = {
     id: LIST_ID,
@@ -85,6 +88,7 @@ function build(options: {
     listId: LIST_ID,
     content: 'Milk',
     quantity: options.quantity ?? 2,
+    unit: options.unit ?? 'UNIT',
     itemSetHash: null,
     position: 10,
     approvalStatus: options.approvalStatus ?? LineApprovalStatus.APPROVED,
@@ -203,6 +207,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 2,
     });
 
@@ -229,6 +234,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 2,
     });
 
@@ -257,6 +263,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
       });
 
@@ -274,12 +281,14 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
       });
       const second = await w.service.settle({
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
 
@@ -293,6 +302,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
       });
 
       // Nothing was bought, so nothing is counted, and the line still wants one.
@@ -310,11 +320,13 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
       });
       const bought = await w.service.settle({
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
 
@@ -334,6 +346,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 2,
     });
     expect(first.line.quantity).toBe(1);
@@ -342,6 +355,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 1,
     });
     expect(second.line.quantity).toBe(0);
@@ -359,6 +373,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 3,
     });
 
@@ -373,6 +388,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
     });
 
     expect(settlement.quantity).toBe(1);
@@ -386,6 +402,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.NOT_AVAILABLE,
+      unit: 'UNIT',
     });
 
     expect(settlement.outcome).toBe(SettlementOutcome.NOT_AVAILABLE);
@@ -408,6 +425,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         quantity: 3,
       })
     ).rejects.toThrow(/no quantity/);
@@ -422,6 +440,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 0,
       })
     ).rejects.toThrow(/whole number/);
@@ -441,6 +460,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 1,
     });
 
@@ -456,6 +476,7 @@ describe('line.settle (plan 0047, section 4)', () => {
       userId: SHOPPER,
       lineId: 'li1',
       outcome: SettlementOutcome.BOUGHT,
+      unit: 'UNIT',
       quantity: 1,
     });
 
@@ -475,6 +496,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
       });
 
       expect(settlement.itemId).toBe(MILK_ITEM);
@@ -487,6 +509,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         itemId: BREAD_ITEM,
       });
 
@@ -502,6 +525,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
       });
 
       expect(settlement.itemId).toBeNull();
@@ -514,6 +538,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
       });
 
       expect(settlement.itemId).toBeNull();
@@ -529,6 +554,7 @@ describe('line.settle (plan 0047, section 4)', () => {
           userId: SHOPPER,
           lineId: 'li1',
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           itemId: BREAD_ITEM,
         })
       ).rejects.toThrow(/not one this line stands for/);
@@ -543,6 +569,7 @@ describe('line.settle (plan 0047, section 4)', () => {
           userId: SHOPPER,
           lineId: 'li1',
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           itemId: 'the milk',
         })
       ).rejects.toThrow(/valid item reference/);
@@ -557,6 +584,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
       })
     ).rejects.toThrow();
     expect(w.written).toHaveLength(0);
@@ -577,6 +605,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 1,
       });
 
@@ -595,6 +624,7 @@ describe('line.settle (plan 0047, section 4)', () => {
           userId: SHOPPER,
           lineId: 'li1',
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
         })
       ).rejects.toThrow(/write access to this list/);
       expect(w.written).toHaveLength(0);
@@ -617,6 +647,57 @@ describe('line.settle (plan 0047, section 4)', () => {
       pricePaidCurrency: 'EUR',
     };
 
+    it('records a GRAM settle in grams, at the price of a kilo, as an estimate (plan 0246 M7)', async () => {
+      // 750 g of cheese at 9,95 the kilo: the gateway sends the price of one
+      // kilo and the flag, and core stores both beside the unit.
+      const w = build({ quantity: 1000, unit: 'GRAM', itemIds: [MILK_ITEM] });
+
+      const { line, settlement } = await w.service.settle({
+        userId: SHOPPER,
+        lineId: 'li1',
+        outcome: SettlementOutcome.BOUGHT,
+        unit: 'GRAM',
+        quantity: 750,
+        paid: {
+          priceScopeId: SCOPE,
+          supermarketLocationId: null,
+          pricePaidCents: 995,
+          pricePaidCurrency: 'EUR',
+          estimated: true,
+        },
+      });
+
+      expect(w.written[0]).toMatchObject({
+        quantity: 750,
+        unit: 'GRAM',
+        pricePaidCents: 995,
+        estimated: true,
+      });
+      expect(settlement).toMatchObject({
+        unit: 'GRAM',
+        estimated: true,
+        pricePaidCents: 995,
+      });
+      // What is still wanted stays in the line's unit.
+      expect(line).toMatchObject({ quantity: 250, unit: 'GRAM' });
+    });
+
+    it('refuses a settle in another unit than the line, and writes nothing', async () => {
+      const w = build({ quantity: 1000, unit: 'GRAM' });
+
+      await expect(
+        w.service.settle({
+          userId: SHOPPER,
+          lineId: 'li1',
+          outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
+          quantity: 1,
+        })
+      ).rejects.toMatchObject({ code: 'line_unit_mismatch' });
+      expect(w.written).toHaveLength(0);
+      expect(w.saved).toHaveLength(0);
+    });
+
     it('writes all four columns on the settlement', async () => {
       const w = build({ quantity: 2 });
 
@@ -624,6 +705,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
         paid: PAID,
       });
@@ -643,6 +725,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
       });
 
@@ -660,6 +743,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.BOUGHT,
+        unit: 'UNIT',
         quantity: 2,
       });
 
@@ -680,6 +764,7 @@ describe('line.settle (plan 0047, section 4)', () => {
         userId: SHOPPER,
         lineId: 'li1',
         outcome: SettlementOutcome.NOT_AVAILABLE,
+        unit: 'UNIT',
         paid: PAID,
       });
 
@@ -707,6 +792,7 @@ describe('line.settle (plan 0047, section 4)', () => {
           userId: SHOPPER,
           lineId: 'li1',
           outcome: SettlementOutcome.BOUGHT,
+          unit: 'UNIT',
           quantity: 2,
           paid,
         })

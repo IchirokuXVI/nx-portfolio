@@ -1,3 +1,4 @@
+import { LINE_UNITS, type LineUnit } from '@portfolio/luna-shopper/contracts';
 import {
   Column,
   CreateDateColumn,
@@ -94,4 +95,17 @@ export class BasketTripRow {
   /** One row per basket and zone line, however many origins fed it (plan 0094). */
   @Column({ type: 'int' })
   asked!: number;
+
+  /**
+   * What {@link asked} counts, copied from the line when the row is written
+   * (plan 0246, section 3.4). A unit change on the line rewrites both in the
+   * same transaction, so a trip never reads a count against a weight.
+   */
+  @Column({
+    type: 'enum',
+    enum: LINE_UNITS,
+    enumName: 'line_unit',
+    default: 'UNIT',
+  })
+  unit!: LineUnit;
 }

@@ -282,6 +282,32 @@ export class LineAddNeedsChoiceException extends DomainException {
 }
 
 /**
+ * A delta, a settle or a demand named a unit that is not the line's (plan
+ * 0246, section 3.2). Nothing was written.
+ */
+export class LineUnitMismatchException extends DomainException {
+  readonly code = ERROR_CODES.LINE_UNIT_MISMATCH;
+}
+
+/**
+ * A rename would merge two lines of different units (plan 0246, section 3.3).
+ * Nothing was written and the two lines stay.
+ */
+export class LineUnitDiffersException extends DomainException {
+  readonly code = ERROR_CODES.LINE_UNIT_DIFFERS;
+}
+
+/**
+ * The unit is not one the line's products can serve (plan 0246, section 4.2).
+ * It publishes its details: `details.offered` lists the units the line does
+ * offer, which the client needs to draw the choice.
+ */
+export class LineUnitNotOfferedException extends DomainException {
+  readonly code = ERROR_CODES.LINE_UNIT_NOT_OFFERED;
+  override readonly exposesDetails = true;
+}
+
+/**
  * A pending or rejected line was renamed onto an approved one by somebody who
  * holds neither `DECIDE` nor `MANAGE`, on a list that does not auto approve
  * (plan 0112, section 2).

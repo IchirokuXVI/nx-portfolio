@@ -1,5 +1,8 @@
 import { Test } from '@nestjs/testing';
-import { LINE_PATTERNS } from '@portfolio/luna-shopper/contracts';
+import {
+  ITEM_PATTERNS,
+  LINE_PATTERNS,
+} from '@portfolio/luna-shopper/contracts';
 import { createValidationPipe } from '@portfolio/luna-shopper/platform';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
@@ -38,6 +41,11 @@ async function boot() {
           provide: NatsClient,
           useValue: {
             send: async (subject: unknown, payload: unknown) => {
+              // The unit check's catalog read (plan 0246), which knows none
+              // of these products and so leaves `UNIT` offered. Not a write.
+              if (subject === ITEM_PATTERNS.getMany) {
+                return { items: [] };
+              }
               // What the broker carries: JSON, so `undefined` keys are gone.
               sent.push({
                 subject,

@@ -79,16 +79,47 @@ describe('the kind a change is (section 2)', () => {
       contentAfter: 'Whole milk',
       quantityBefore: 2,
       quantityAfter: 3,
+      unitBefore: 'UNIT',
+      unitAfter: 'UNIT',
       approvalBefore: LineApprovalStatus.APPROVED,
       approvalAfter: LineApprovalStatus.PENDING,
     });
   });
 
   it('is QUANTITY_CHANGED when the text did not move and the number did', () => {
+    // The unit pair rides beside the quantity pair (plan 0246, section 3.4).
     expect(movedBetween(snapshot(), snapshot({ quantity: 5 }))).toEqual({
       kind: LineChangeKind.QUANTITY_CHANGED,
       quantityBefore: 2,
       quantityAfter: 5,
+      unitBefore: 'UNIT',
+      unitAfter: 'UNIT',
+    });
+  });
+
+  it('is QUANTITY_CHANGED with both units set and different for a unit change (plan 0246)', () => {
+    expect(
+      movedBetween(
+        snapshot({ quantity: 2, unit: 'UNIT' }),
+        snapshot({ quantity: 1000, unit: 'GRAM' })
+      )
+    ).toEqual({
+      kind: LineChangeKind.QUANTITY_CHANGED,
+      quantityBefore: 2,
+      quantityAfter: 1000,
+      unitBefore: 'UNIT',
+      unitAfter: 'GRAM',
+    });
+    // A unit change at one number is still a change of the amount.
+    expect(
+      movedBetween(
+        snapshot({ quantity: 1000, unit: 'GRAM' }),
+        snapshot({ quantity: 1000, unit: 'MILLILITER' })
+      )
+    ).toMatchObject({
+      kind: LineChangeKind.QUANTITY_CHANGED,
+      unitBefore: 'GRAM',
+      unitAfter: 'MILLILITER',
     });
   });
 
@@ -134,6 +165,8 @@ describe('what the recorder inserts (section 3)', () => {
         contentAfter: 'Milk',
         quantityBefore: null,
         quantityAfter: 2,
+        unitBefore: null,
+        unitAfter: 'UNIT',
         approvalBefore: null,
         approvalAfter: LineApprovalStatus.APPROVED,
         mergedIntoLineId: null,
@@ -257,6 +290,8 @@ describe('snapshotOf', () => {
     expect(snapshotOf(lineFor({ content: 'Bread', quantity: 4 }))).toEqual({
       content: 'Bread',
       quantity: 4,
+      // And the unit since plan 0246, `UNIT` for a line built without one.
+      unit: 'UNIT',
       approvalStatus: LineApprovalStatus.APPROVED,
     });
   });
@@ -288,6 +323,9 @@ describe('a buy and a taken back buy (plan 0203, section 1)', () => {
         contentAfter: null,
         quantityBefore: 3,
         quantityAfter: 1,
+        // No unit was named, which is a caller before plan 0246.
+        unitBefore: null,
+        unitAfter: null,
         approvalBefore: null,
         approvalAfter: null,
         mergedIntoLineId: null,

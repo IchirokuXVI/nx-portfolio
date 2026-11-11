@@ -75,6 +75,8 @@ const PAID = {
   supermarketId: null,
   pricePaidCents: 95,
   pricePaidCurrency: 'EUR',
+  // A pack counted in pieces is an exact cost (plan 0246 M7).
+  estimated: false,
 };
 
 /** What a buy copies of ITEM (plan 0202, section 1). */
@@ -172,6 +174,7 @@ const body = (extra: Partial<SettleBasketRowDto> = {}): SettleBasketRowDto =>
     lineIds: [LINE],
     outcome: SettlementOutcome.BOUGHT,
     quantity: 1,
+    unit: 'UNIT',
     from: 1,
     itemId: ITEM,
     ...extra,
@@ -199,6 +202,8 @@ describe('the row settle route (plan 0143, section 4.2)', () => {
         itemId: ITEM,
         supermarketLocationId: undefined,
         servedLocations: false,
+        // The price of one of the row's unit (plan 0246 M7).
+        unit: 'UNIT',
       },
     ]);
   });
@@ -719,6 +724,7 @@ describe('a settle at a shop (plan 0163)', () => {
     supermarketId: LIDL,
     pricePaidCents: 110,
     pricePaidCurrency: 'EUR',
+    estimated: false,
   };
 
   const resolution = {
@@ -851,6 +857,7 @@ describe('a settle at a shop (plan 0163)', () => {
       supermarketId: null,
       pricePaidCents: 95,
       pricePaidCurrency: 'EUR',
+      estimated: false,
     });
     expect(w.sent.map((call) => call.subject)).not.toContain(
       SUPERMARKET_LOCATION_PATTERNS.shopAvailability
@@ -1128,6 +1135,7 @@ describe('the change of product route (plan 0202, section 3)', () => {
           priceScopeId: FAR_SCOPE,
           pricePaidCents: 110,
           pricePaidCurrency: 'EUR',
+          estimated: false,
         },
       ],
     };
@@ -1228,6 +1236,8 @@ describe('the change of product route (plan 0202, section 3)', () => {
             servedLocations: true,
             priceScopeIds: [SCOPE, FAR_SCOPE],
             unscoped: true,
+            // Core answered no unit, which is a core before plan 0246.
+            unit: 'UNIT',
           },
         ],
       ]);
@@ -1246,6 +1256,7 @@ describe('the change of product route (plan 0202, section 3)', () => {
         servedLocations: true,
         priceScopeIds: [],
         unscoped: false,
+        unit: 'UNIT',
       });
     });
 
@@ -1395,6 +1406,7 @@ describe('the change of product route (plan 0202, section 3)', () => {
             priceScopeId: FAR_SCOPE,
             pricePaidCents: 110,
             pricePaidCurrency: 'EUR',
+            estimated: false,
           },
         ],
         paid: PAID,
@@ -1631,7 +1643,11 @@ describe('the writes on a row name their lines (plan 0201)', () => {
  * (plan 0201, section 4): 1 to 100 uuids, none twice.
  */
 describe.each([
-  ['the settle body', SettleBasketRowDto, { outcome: 'BOUGHT', from: 1 }],
+  [
+    'the settle body',
+    SettleBasketRowDto,
+    { outcome: 'BOUGHT', unit: 'UNIT', from: 1 },
+  ],
   ['the revert body', RevertBasketRowDto, { target: 'CLOSE' }],
   ['the rename body', RenameBasketRowDto, { content: 'Oat milk' }],
   ['the skip body', SkipBasketRowDto, {}],
@@ -1708,7 +1724,11 @@ describe('the unskip query (plan 0201, section 4)', () => {
 describe('the demand body (plan 0201, section 4)', () => {
   it('requires the line', async () => {
     const errors = await validate(
-      plainToInstance(SetBasketRowDemandDto, { quantity: 1, from: 0 })
+      plainToInstance(SetBasketRowDemandDto, {
+        quantity: 1,
+        unit: 'UNIT',
+        from: 0,
+      })
     );
 
     expect(errors.map((error) => error.property)).toEqual(['lineId']);
@@ -1724,8 +1744,12 @@ describe('the demand body (plan 0201, section 4)', () => {
  * writing money into a household's history.
  */
 describe.each([
-  ['the row settle body', SettleBasketRowDto, { from: 1, lineIds: [LINE] }],
-  ['the list settle body', SettleLineDto, {}],
+  [
+    'the row settle body',
+    SettleBasketRowDto,
+    { from: 1, lineIds: [LINE], unit: 'UNIT' },
+  ],
+  ['the list settle body', SettleLineDto, { unit: 'UNIT' }],
 ])('%s', (_name, Dto, required) => {
   const check = (body: Record<string, unknown>) =>
     validate(
