@@ -1,3 +1,5 @@
+> **PR:** [#970](https://github.com/IchirokuXVI/nx-portfolio/pull/970)
+
 # 0266: DEZA reads a size that its name ends with a full stop on
 
 > Found during the all chain scheduled harvest of 2026-11-06 on Luna slot 4, and checked
