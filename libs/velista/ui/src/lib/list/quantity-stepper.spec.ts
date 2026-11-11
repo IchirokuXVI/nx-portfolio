@@ -1,245 +1,478 @@
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  LINE_QUANTITY_MAX,
-  LINE_QUANTITY_MIN,
-} from '@portfolio/velista/models';
+  RokuTranslatorService,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
+import { type QuantityStep } from '@portfolio/velista/models';
 import { QuantityStepper } from './quantity-stepper';
 
 /**
- * The stepper in its two modes (velista `0134`, section 4.1). Uncontrolled, it
- * owns the number. Controlled, the container owns it and a press is only told.
+ * The D3 stepper (velista `0188`, section 7). It draws what it is given, so the
+ * harness plays the caller: every emitted amount is written back as the next value,
+ * the way a page's `quantityRuns` draws its pending run.
  */
-describe('QuantityStepper', () => {
-  async function render(
-    inputs: Record<string, unknown>
-  ): Promise<ComponentFixture<QuantityStepper>> {
-    TestBed.resetTestingModule();
-    await TestBed.configureTestingModule({
-      imports: [QuantityStepper, RokuTranslatorTestingModule.forTesting()],
-    }).compileComponents();
+describe('QuantityStepper (velista 0188)', () => {
+  interface Harness {
+    readonly fixture: ComponentFixture<QuantityStepper>;
+    readonly steps: QuantityStep[];
+    readonly el: HTMLElement;
+    readonly minus: HTMLButtonElement;
+    readonly plus: HTMLButtonElement;
+    set(name: string, value: unknown): void;
+  }
 
+  /** A translator that echoes its key and its values, so names can be asserted. */
+  const echo = {
+    provide: RokuTranslatorService,
+    useValue: {
+      loaded: signal(true),
+      locale: signal('en'),
+      getLocale: () => 'en',
+      t: (key: string, _ns?: unknown, _l?: unknown, values?: unknown) => {
+        const args =
+          typeof _ns === 'object' && _ns !== null ? _ns : (values ?? undefined);
+        return args === undefined ? key : `${key}:${JSON.stringify(args)}`;
+      },
+    },
+  };
+
+  function render(
+    inputs: Record<string, unknown>,
+    options: { readonly follow?: boolean } = {}
+  ): Harness {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [QuantityStepper, RokuTranslatorTestingModule.forTesting()],
+      providers: [echo],
+    });
     const fixture = TestBed.createComponent(QuantityStepper);
+    const set = (name: string, value: unknown) => {
+      fixture.componentRef.setInput(name, value);
+      fixture.detectChanges();
+    };
+    fixture.componentRef.setInput('name', 'Plátano');
     for (const [name, value] of Object.entries(inputs)) {
       fixture.componentRef.setInput(name, value);
     }
     fixture.detectChanges();
-    await fixture.whenStable();
-    return fixture;
-  }
-
-  function host(fixture: ComponentFixture<QuantityStepper>): HTMLElement {
-    return fixture.nativeElement as HTMLElement;
-  }
-
-  /** The two buttons: the minus, then the plus. */
-  function steps(
-    fixture: ComponentFixture<QuantityStepper>
-  ): HTMLButtonElement[] {
-    return [...host(fixture).querySelectorAll<HTMLButtonElement>('button')];
-  }
-
-  /** The number as drawn, and as a screen reader hears it. */
-  function drawn(fixture: ComponentFixture<QuantityStepper>): {
-    text: string | null | undefined;
-    now: string | null | undefined;
-  } {
+    const steps: QuantityStep[] = [];
+    fixture.componentInstance.stepped.subscribe((step) => {
+      steps.push(step);
+      if (options.follow !== false) {
+        set('value', step.to);
+      }
+    });
+    const el = fixture.nativeElement as HTMLElement;
     return {
-      text: host(fixture).querySelector('.value')?.textContent,
-      now: host(fixture)
-        .querySelector('[role="spinbutton"]')
-        ?.getAttribute('aria-valuenow'),
+      fixture,
+      steps,
+      el,
+      get minus() {
+        return el.querySelector('button.minus') as HTMLButtonElement;
+      },
+      get plus() {
+        return el.querySelector('button.plus') as HTMLButtonElement;
+      },
+      set,
     };
   }
 
-  function record(fixture: ComponentFixture<QuantityStepper>): {
-    stepped: number[];
-    values: number[];
-  } {
-    const heard = { stepped: [] as number[], values: [] as number[] };
-    fixture.componentInstance.stepped.subscribe((by) => heard.stepped.push(by));
-    fixture.componentInstance.value.subscribe((value) =>
-      heard.values.push(value)
-    );
-    return heard;
-  }
+  const fire = (target: EventTarget, type: string) =>
+    target.dispatchEvent(new Event(type, { bubbles: true }));
 
-  describe('uncontrolled', () => {
-    it('changes the value on a press on the plus, and says one more', async () => {
-      const fixture = await render({ value: 2 });
-      const heard = record(fixture);
+  const tos = (h: Harness) => h.steps.map((step) => step.to);
 
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    TestBed.resetTestingModule();
+  });
 
-      expect(fixture.componentInstance.value()).toBe(3);
-      expect(drawn(fixture)).toEqual({ text: '3', now: '3' });
-      expect(heard.values).toEqual([3]);
-      expect(heard.stepped).toEqual([1]);
+  describe('a press', () => {
+    it('emits on click and not on pointerdown', () => {
+      const h = render({ value: 750, unit: 'GRAM' });
+      fire(h.plus, 'pointerdown');
+      expect(h.steps).toEqual([]);
+      fire(h.plus, 'pointerup');
+      h.plus.click();
+      expect(h.steps).toEqual([{ from: 750, to: 775, repeat: false }]);
     });
 
-    it('changes the value on a press on the minus, and says one fewer', async () => {
-      const fixture = await render({ value: 2 });
-      const heard = record(fixture);
+    it('emits valueChange with the same amount, and never sets its own value', () => {
+      const h = render({ value: 3 }, { follow: false });
+      const values: number[] = [];
+      h.fixture.componentInstance.valueChange.subscribe((v) => values.push(v));
+      h.plus.click();
+      h.plus.click();
+      expect(values).toEqual([4, 4]);
+      expect(h.el.getAttribute('data-value')).toBe('3');
+    });
 
-      steps(fixture)[0]?.click();
-      fixture.detectChanges();
+    it('takes a minus under one step to the floor', () => {
+      const h = render({ value: 10, unit: 'GRAM' });
+      h.minus.click();
+      expect(tos(h)).toEqual([0]);
+    });
 
-      expect(fixture.componentInstance.value()).toBe(1);
-      expect(drawn(fixture)).toEqual({ text: '1', now: '1' });
-      expect(heard.values).toEqual([1]);
-      expect(heard.stepped).toEqual([-1]);
+    it('steps a count by 10 from 1000 and back by 1 below it (S7b)', () => {
+      const h = render({ value: 999 });
+      h.plus.click();
+      h.plus.click();
+      h.minus.click();
+      h.minus.click();
+      expect(tos(h)).toEqual([1000, 1010, 1000, 999]);
     });
   });
 
-  describe('controlled', () => {
-    it('says the press and keeps the value it was given', async () => {
-      const fixture = await render({ value: 2, controlled: true });
-      const heard = record(fixture);
-
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-
-      expect(heard.stepped).toEqual([1]);
-      expect(heard.values).toEqual([]);
-      expect(fixture.componentInstance.value()).toBe(2);
-      expect(drawn(fixture)).toEqual({ text: '2', now: '2' });
+  describe('the ends (S8, decision D)', () => {
+    it('draws minus at an end at 0 with aria-disabled and keeps focus on it', () => {
+      const h = render({ value: 1 });
+      h.minus.focus();
+      h.minus.click();
+      expect(tos(h)).toEqual([0]);
+      expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+      expect(h.minus.hasAttribute('disabled')).toBe(false);
+      expect(document.activeElement).toBe(h.minus);
+      h.minus.click();
+      expect(tos(h)).toEqual([0]);
     });
 
-    it('says each press in order while the value has not moved', async () => {
-      const fixture = await render({ value: 2, controlled: true });
-      const heard = record(fixture);
-
-      steps(fixture)[0]?.click();
-      fixture.detectChanges();
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-
-      expect(heard.stepped).toEqual([-1, 1]);
-      expect(drawn(fixture)).toEqual({ text: '2', now: '2' });
+    it('turns plus off one step before the most, and never clamps', () => {
+      const h = render({ value: 999_975, unit: 'GRAM', max: 999_999 });
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      h.plus.click();
+      expect(h.steps).toEqual([]);
+      h.set('value', 999_950);
+      expect(h.plus.getAttribute('aria-disabled')).toBeNull();
     });
 
-    it('draws the new value once the container gives it one', async () => {
-      const fixture = await render({ value: 2, controlled: true });
+    it('turns a count plus off where the short reading would not move', () => {
+      const h = render({ value: 999_985, max: 999_999 });
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+    });
 
-      steps(fixture)[1]?.click();
-      fixture.componentRef.setInput('value', 3);
-      fixture.detectChanges();
-
-      expect(drawn(fixture)).toEqual({ text: '3', now: '3' });
+    it('says a write in flight with aria-disabled on both buttons', () => {
+      const h = render({ value: 3, disabled: true });
+      expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      h.plus.click();
+      expect(h.steps).toEqual([]);
     });
   });
 
-  describe('the two ends', () => {
-    it('says nothing at the minimum, in either mode', async () => {
-      for (const controlled of [false, true]) {
-        const fixture = await render({ value: LINE_QUANTITY_MIN, controlled });
-        const heard = record(fixture);
-
-        expect(steps(fixture)[0]?.disabled).toBe(true);
-        steps(fixture)[0]?.click();
-        // A disabled button takes no click, so the guard is asked directly too.
-        fixture.componentInstance.step(-1);
-        fixture.detectChanges();
-
-        expect(heard.stepped).toEqual([]);
-        expect(heard.values).toEqual([]);
-        expect(drawn(fixture).text).toBe(String(LINE_QUANTITY_MIN));
+  describe('the hold (section 3.3)', () => {
+    it('repeats after 400 ms, then every 300, 255, 217, 184, 157, 133, 113 and 100 ms', () => {
+      const h = render({ value: 0 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(399);
+      expect(h.steps).toEqual([]);
+      jest.advanceTimersByTime(1);
+      expect(tos(h)).toEqual([1]);
+      const intervals = [300, 255, 217, 184, 157, 133, 113, 100, 100];
+      for (const [index, interval] of intervals.entries()) {
+        jest.advanceTimersByTime(interval - 1);
+        expect(h.steps).toHaveLength(index + 1);
+        jest.advanceTimersByTime(1);
+        expect(h.steps).toHaveLength(index + 2);
       }
+      expect(h.steps.every((step) => step.repeat)).toBe(true);
     });
 
-    it('says nothing at the maximum, in either mode', async () => {
-      for (const controlled of [false, true]) {
-        const fixture = await render({ value: LINE_QUANTITY_MAX, controlled });
-        const heard = record(fixture);
-
-        expect(steps(fixture)[1]?.disabled).toBe(true);
-        steps(fixture)[1]?.click();
-        fixture.componentInstance.step(1);
-        fixture.detectChanges();
-
-        expect(heard.stepped).toEqual([]);
-        expect(heard.values).toEqual([]);
-        expect(drawn(fixture).text).toBe(String(LINE_QUANTITY_MAX));
-      }
+    it('is an ordinary press when released before 400 ms', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(300);
+      fire(h.plus, 'pointerup');
+      h.plus.click();
+      jest.advanceTimersByTime(2000);
+      expect(h.steps).toEqual([{ from: 2, to: 3, repeat: false }]);
     });
 
-    it('stops at the minimum the caller names', async () => {
-      const fixture = await render({ value: 4, min: 4 });
-      const heard = record(fixture);
+    it('adds nothing on the click that ends a hold that repeated', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.plus, 'pointerup');
+      h.plus.click();
+      expect(tos(h)).toEqual([3]);
+      jest.advanceTimersByTime(1);
+      h.plus.click();
+      expect(tos(h)).toEqual([3, 4]);
+    });
 
-      expect(steps(fixture)[0]?.disabled).toBe(true);
-      fixture.componentInstance.step(-1);
+    it.each(['pointerleave', 'pointercancel'])('stops on %s', (type) => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(700);
+      fire(h.plus, type);
+      jest.advanceTimersByTime(3000);
+      expect(tos(h)).toEqual([3, 4]);
+    });
 
-      expect(heard.stepped).toEqual([]);
-      expect(fixture.componentInstance.value()).toBe(4);
+    it('stops when the page scrolls', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      window.dispatchEvent(new Event('scroll'));
+      jest.advanceTimersByTime(3000);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('stops when disabled turns true', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      h.set('disabled', true);
+      jest.advanceTimersByTime(3000);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('stops on destroy', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      h.fixture.destroy();
+      jest.advanceTimersByTime(3000);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('never takes an amount to 0: a minus hold from 100 g stops at 25 g (S8b)', () => {
+      const h = render({ value: 100, unit: 'GRAM' });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(5000);
+      expect(tos(h)).toEqual([75, 50, 25]);
+      fire(h.minus, 'pointerup');
+      h.minus.click();
+      jest.advanceTimersByTime(1);
+      h.minus.click();
+      expect(tos(h)).toEqual([75, 50, 25, 0]);
+      expect(h.steps.at(-1)?.repeat).toBe(false);
+    });
+
+    it('stops a minus hold at min when min is above 0', () => {
+      const h = render({ value: 4, min: 1 });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(5000);
+      expect(tos(h)).toEqual([3, 2, 1]);
+    });
+
+    it('stops a plus hold before passing the most', () => {
+      const h = render({ value: 97, max: 100 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(5000);
+      expect(tos(h)).toEqual([98, 99, 100]);
+    });
+
+    it('starts no hold on a button at an end', () => {
+      const h = render({ value: 0 });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(2000);
+      expect(h.steps).toEqual([]);
     });
   });
 
-  describe('the host classes', () => {
-    it('carries neither class by default', async () => {
-      const fixture = await render({ value: 2 });
-
-      expect(host(fixture).classList.contains('is-accent')).toBe(false);
-      expect(host(fixture).classList.contains('is-compact')).toBe(false);
+  describe('the row (section 3.4)', () => {
+    it('is a group named for its subject, with buttons that name their step', () => {
+      const h = render({ value: 750, unit: 'GRAM' });
+      const group = h.el.querySelector('[role="group"]') as HTMLElement;
+      expect(group.getAttribute('aria-label')).toBe(
+        'amount.group:{"name":"Plátano"}'
+      );
+      expect(h.minus.getAttribute('aria-label')).toBe(
+        'amount.less:{"step":"25 g","name":"Plátano"}'
+      );
+      expect(h.plus.getAttribute('aria-label')).toBe(
+        'amount.more:{"step":"25 g","name":"Plátano"}'
+      );
     });
 
-    it('carries is-accent for the quiet action colour', async () => {
-      const fixture = await render({ value: 2, accent: true });
-
-      expect(host(fixture).classList.contains('is-accent')).toBe(true);
-      expect(host(fixture).classList.contains('is-compact')).toBe(false);
+    it('names a count step 1 below 1000 and 10 from it', () => {
+      const h = render({ value: 1000 });
+      expect(h.minus.getAttribute('aria-label')).toContain('"step":"1"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10"');
     });
 
-    it('carries is-compact for the small size', async () => {
-      const fixture = await render({ value: 2, compact: true });
-
-      expect(host(fixture).classList.contains('is-compact')).toBe(true);
-      expect(host(fixture).classList.contains('is-accent')).toBe(false);
-    });
-  });
-
-  /** Velista `0182`: it steps by the unit and emits the signed amount it moved. */
-  describe('a weight', () => {
-    it('steps by 25 g below a kilo and 250 g from it, and says the signed amount', async () => {
-      const fixture = await render({ value: 975, unit: 'GRAM' });
-      const heard = record(fixture);
-
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-      expect(fixture.componentInstance.value()).toBe(1000);
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-      expect(fixture.componentInstance.value()).toBe(1250);
-      steps(fixture)[0]?.click();
-      steps(fixture)[0]?.click();
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.value()).toBe(975);
-      expect(heard.stepped).toEqual([25, 250, -250, -25]);
-    });
-
-    it('draws the amount in words and keeps aria-valuenow the integer', async () => {
-      const fixture = await render({ value: 1500, unit: 'GRAM' });
-      const spin = host(fixture).querySelector('[role="spinbutton"]');
-
-      expect(drawn(fixture)).toEqual({ text: '1.5 kg', now: '1500' });
-      expect(spin?.getAttribute('aria-valuetext')).toBe('1.5 kg');
-    });
-
-    it('keeps a count at one per press with no value text', async () => {
-      const fixture = await render({ value: 2 });
-      const heard = record(fixture);
-
-      steps(fixture)[1]?.click();
-      fixture.detectChanges();
-
-      expect(heard.stepped).toEqual([1]);
+    it('draws the short form with its spoken words, and no focusable cell', () => {
+      const h = render({ value: 1275, unit: 'GRAM' });
+      expect(h.el.querySelector('.number')?.textContent).toBe('1.28');
+      expect(h.el.querySelector('.symbol')?.textContent).toBe('kg');
       expect(
-        host(fixture)
-          .querySelector('[role="spinbutton"]')
-          ?.hasAttribute('aria-valuetext')
-      ).toBe(false);
+        h.el.querySelector('lib-amount-figure .visually-hidden')?.textContent
+      ).toBe('1.275 kilograms');
+      expect(h.el.querySelector('input')).toBeNull();
+      expect(h.el.querySelector('[tabindex]')).toBeNull();
+      expect(h.el.querySelectorAll('button')).toHaveLength(2);
+    });
+
+    it('announces the amount once, 800 ms after the last press (decision E)', () => {
+      const h = render({ value: 750, unit: 'GRAM' });
+      const live = h.el.querySelector('[aria-live="polite"]') as HTMLElement;
+      h.plus.click();
+      h.fixture.detectChanges();
+      jest.advanceTimersByTime(700);
+      h.plus.click();
+      jest.advanceTimersByTime(799);
+      h.fixture.detectChanges();
+      expect(live.textContent?.trim()).toBe('');
+      jest.advanceTimersByTime(1);
+      h.fixture.detectChanges();
+      expect(live.textContent?.trim()).toBe(
+        'amount.settled:{"name":"Plátano","amount":"800 grams"}'
+      );
+      h.plus.click();
+      h.fixture.detectChanges();
+      expect(live.textContent?.trim()).toBe('');
+    });
+
+    it('carries the amount in base units as data-value (decision L)', () => {
+      const h = render({ value: 1275, unit: 'GRAM' });
+      expect(h.el.getAttribute('data-value')).toBe('1275');
+    });
+
+    it('draws the took edge (decision J)', () => {
+      const h = render({ value: 2, took: true });
+      expect(h.el.classList).toContain('is-took');
+    });
+
+    it('draws a reader the amount alone, with no buttons (decision I)', () => {
+      const h = render({ value: 750, unit: 'GRAM', readonly: true });
+      expect(h.el.querySelectorAll('button')).toHaveLength(0);
+      expect(h.el.querySelector('.number')?.textContent).toBe('750');
+      expect(
+        h.el.querySelector('lib-amount-figure .visually-hidden')?.textContent
+      ).toBe('750 grams');
+    });
+  });
+
+  describe('the sheets (section 3.5)', () => {
+    const field = (h: Harness) =>
+      h.el.querySelector('input') as HTMLInputElement;
+    const type = (h: Harness, text: string) => {
+      const input = field(h);
+      input.value = text;
+      fire(input, 'input');
+      h.fixture.detectChanges();
+    };
+    const key = (h: Harness, name: string) => {
+      const event = new KeyboardEvent('keydown', {
+        key: name,
+        bubbles: true,
+        cancelable: true,
+      });
+      field(h).dispatchEvent(event);
+      h.fixture.detectChanges();
+      return event;
+    };
+
+    it('is a spinbutton with its four values and the exact form', () => {
+      const h = render({ value: 1275, unit: 'GRAM', variant: 'sheet' });
+      const input = field(h);
+      expect(input.getAttribute('role')).toBe('spinbutton');
+      expect(input.getAttribute('inputmode')).toBe('decimal');
+      expect(input.getAttribute('aria-valuenow')).toBe('1275');
+      expect(input.getAttribute('aria-valuemin')).toBe('0');
+      expect(input.getAttribute('aria-valuemax')).toBe('100000');
+      expect(input.getAttribute('aria-valuetext')).toBe('1.275 kilograms');
+      expect(input.getAttribute('aria-label')).toBe(
+        'amount.group:{"name":"Plátano"}'
+      );
+      expect(input.value).toBe('1.275');
+      expect(h.el.querySelector('.symbol')?.textContent).toBe('kg');
+      expect(h.el.querySelector('[role="group"]')).toBeNull();
+    });
+
+    it('selects the whole number on focus', () => {
+      const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+      const input = field(h);
+      input.focus();
+      fire(input, 'focus');
+      expect(input.selectionStart).toBe(0);
+      expect(input.selectionEnd).toBe(3);
+    });
+
+    it('steps with the arrows and goes to the ends with Home and End', () => {
+      const h = render({
+        value: 750,
+        unit: 'GRAM',
+        variant: 'sheet',
+        max: 999_999,
+      });
+      expect(key(h, 'ArrowUp').defaultPrevented).toBe(true);
+      key(h, 'ArrowDown');
+      key(h, 'ArrowDown');
+      key(h, 'End');
+      key(h, 'Home');
+      expect(tos(h)).toEqual([775, 750, 725, 999_999, 0]);
+      expect(h.steps.every((step) => !step.repeat)).toBe(true);
+    });
+
+    it('does not fill the live region for the arrow keys', () => {
+      const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+      key(h, 'ArrowUp');
+      jest.advanceTimersByTime(2000);
+      h.fixture.detectChanges();
+      expect(
+        h.el.querySelector('[aria-live="polite"]')?.textContent?.trim()
+      ).toBe('');
+    });
+
+    it('follows the typing with its symbol, and commits on Enter', () => {
+      const h = render({ value: 500, unit: 'MILLILITER', variant: 'sheet' });
+      type(h, '1');
+      expect(h.el.querySelector('.symbol')?.textContent).toBe('ml');
+      type(h, '1,');
+      expect(h.el.querySelector('.symbol')?.textContent).toBe('l');
+      type(h, '1,5');
+      expect(h.steps).toEqual([]);
+      key(h, 'Enter');
+      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false }]);
+      expect(field(h).value).toBe('1.5');
+      expect(h.el.querySelector('.symbol')?.textContent).toBe('l');
+    });
+
+    it('commits on blur, and puts back text that is not a number', () => {
+      const h = render({ value: 2, variant: 'sheet-narrow' });
+      type(h, '12');
+      fire(field(h), 'blur');
+      expect(tos(h)).toEqual([12]);
+      type(h, 'abc');
+      fire(field(h), 'blur');
+      h.fixture.detectChanges();
+      expect(tos(h)).toEqual([12]);
+      expect(field(h).value).toBe('12');
+    });
+
+    it('puts typed text back on Escape and keeps the sheet open', () => {
+      const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+      type(h, '9');
+      const escape = key(h, 'Escape');
+      expect(escape.defaultPrevented).toBe(true);
+      expect(field(h).value).toBe('750');
+      expect(h.steps).toEqual([]);
+    });
+
+    it('leaves Escape to the sheet when nothing is typed', () => {
+      const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+      let reached = false;
+      h.el.addEventListener('keydown', () => (reached = true));
+      const escape = key(h, 'Escape');
+      expect(escape.defaultPrevented).toBe(false);
+      expect(reached).toBe(true);
+    });
+
+    it('keeps typed text when the value changes underneath it', () => {
+      const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+      type(h, '9');
+      h.set('value', 800);
+      expect(field(h).value).toBe('9');
+    });
+
+    it('commits typed text on a button press and takes no step with it', () => {
+      const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+      type(h, '900');
+      h.plus.click();
+      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
     });
   });
 });

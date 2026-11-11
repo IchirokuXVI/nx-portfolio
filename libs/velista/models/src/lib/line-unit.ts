@@ -115,49 +115,56 @@ export function isMeasured(unit: LineUnit | undefined): boolean {
 }
 
 /**
- * Where a weight or a volume moves from its fine step to its coarse one, and
- * where its words switch from grams to kilos (backend `0096`, section 4).
+ * Where the words of an amount move up one name: grams to kilos, millilitres to
+ * litres, a count to thousands (backend `0096`, section 4; velista `0188`, S4).
+ * It is no longer where the step changes for a weight or a volume: from here the
+ * short form reads hundredths of the top name, so {@link stepAt} keeps a count's
+ * step at one of those hundredths.
  */
 export const QUANTITY_COARSE_FROM = 1000;
 
-/** The fine step of each measured unit, below {@link QUANTITY_COARSE_FROM}. Each divides 1000. */
-export const QUANTITY_FINE_STEP: Readonly<Record<LineUnit, number>> = {
+/** The base step of each unit (the owner, 2026-11-11): 25 g, 25 ml, one piece. */
+export const QUANTITY_STEP: Readonly<Record<LineUnit, number>> = {
   UNIT: 1,
   GRAM: 25,
-  MILLILITER: 50,
-};
-
-/** The coarse step, from {@link QUANTITY_COARSE_FROM} on. A multiple of each fine step. */
-export const QUANTITY_COARSE_STEP: Readonly<Record<LineUnit, number>> = {
-  UNIT: 1,
-  GRAM: 250,
-  MILLILITER: 250,
+  MILLILITER: 25,
 };
 
 /**
- * How far one step moves a quantity at `value` (velista `0182`, section 3): 1
- * for a count; the fine step below a thousand and the coarse step from it for a
- * weight or a volume.
+ * The most hundredths the short form reads of its top name (velista `0188`, S4):
+ * "999,99", never "1000" of the top name.
  */
-export function stepAt(value: number, unit: LineUnit): number {
-  if (!isMeasured(unit)) {
-    return 1;
-  }
-  return value >= QUANTITY_COARSE_FROM
-    ? QUANTITY_COARSE_STEP[unit]
-    : QUANTITY_FINE_STEP[unit];
+export const QUANTITY_SHORT_HUNDREDTHS_MAX = 99_999;
+
+/**
+ * The hundredths of the top name the short form reads at `quantity`, from
+ * {@link QUANTITY_COARSE_FROM} on: half up on the integer, held under 1000 of the top
+ * name (velista `0188`, section 2). In integers, so no floating point rounding can
+ * move a digit. `shortAmount` draws this number and {@link canStepUp} compares it.
+ */
+export function shortHundredths(quantity: number): number {
+  return Math.min(
+    QUANTITY_SHORT_HUNDREDTHS_MAX,
+    Math.floor((Math.round(quantity) + 5) / 10)
+  );
 }
 
 /**
- * The value one step up or down from `value`, on the grid of the step that
- * applies there.
- *
- * Going up reads the step at `value`, going down the step just below it, so
- * down from 1000 lands on 975 (grams) and up from 975 on 1000: the boundary is
- * a value both steps reach, by the divisibility rule of backend `0096` section
- * 4. A value off the grid (a typed 1100) snaps onto it in the direction of the
- * step rather than carrying its offset. For a count the grid is every integer,
- * so a step is exactly ±1.
+ * How far plus moves an amount at `value` (velista `0188`, S7b): the base step, but
+ * never less than one hundredth of the name the short form shows there, so a press
+ * always changes what a row reads. A count: 1 below 1000, 10 from 1000. A weight or
+ * a volume: 25 everywhere, already more than the 10 that "1,25 kg" needs.
+ */
+export function stepAt(value: number, unit: LineUnit): number {
+  const base = QUANTITY_STEP[unit] ?? 1;
+  return value >= QUANTITY_COARSE_FROM ? Math.max(base, 10) : base;
+}
+
+/**
+ * One press from `value` (velista `0188`, S7b and decision B). Up adds the step at
+ * `value`. Down takes away the step that plus uses one base step lower, so 1000
+ * minus is 999 for a count and plus then minus always returns. No grid and no
+ * snapping: a typed 1010 g goes to 1035 and back to 1010. Never under 0.
  */
 export function stepFrom(
   value: number,
@@ -165,16 +172,41 @@ export function stepFrom(
   direction: 1 | -1
 ): number {
   if (direction === 1) {
-    const step = stepAt(value, unit);
-    return Math.floor(value / step) * step + step;
+    return value + stepAt(value, unit);
   }
-  const step = stepAt(value - 1, unit);
-  return Math.ceil(value / step) * step - step;
+  const base = QUANTITY_STEP[unit] ?? 1;
+  return Math.max(0, value - stepAt(Math.max(0, value - base), unit));
 }
 
 /**
- * `steps` whole steps from `value`, one at a time so a run that crosses the
- * boundary changes its step there, held inside `[min, max]`.
+ * Whether a plus at `value` stays within `max` and changes the short reading
+ * (velista `0188`, S8). A plus that would pass the most is off and never clamps to
+ * it; a count's plus is also off where the reading would not move (999 985 to
+ * 999 989 read "999,99" before and after).
+ */
+export function canStepUp(value: number, unit: LineUnit, max: number): boolean {
+  const next = stepFrom(value, unit, 1);
+  if (next > max) {
+    return false;
+  }
+  if (isMeasured(unit) || value < QUANTITY_COARSE_FROM) {
+    return true;
+  }
+  return shortHundredths(next) !== shortHundredths(value);
+}
+
+/** One press or one repeat of a stepper, as the stepper drew it (velista `0188`). */
+export interface QuantityStep {
+  readonly from: number;
+  readonly to: number;
+  /** True for a step the hold made, false for a press, a key or a typed amount. */
+  readonly repeat: boolean;
+}
+
+/**
+ * `steps` whole steps from `value`, one press at a time through {@link stepFrom},
+ * held inside `[min, max]`. Only the reel's last two uses on the shopping list read
+ * it; velista `0190` removes it with the reel.
  */
 export function stepsFrom(
   value: number,

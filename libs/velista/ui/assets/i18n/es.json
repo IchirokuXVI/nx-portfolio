@@ -742,6 +742,14 @@
       "copyReference": "Copiar referencia"
     }
   },
+  "amount": {
+    "group": "Cantidad de {{name}}",
+    "less": "Quitar {{step}} de {{name}}",
+    "more": "Añadir {{step}} a {{name}}",
+    "settled": "{{name}}, {{amount}}",
+    "inList": "{{name}} en {{list}}",
+    "newLine": "la nueva línea"
+  },
   "list": {
     "header": {
       "title": "Lista",
