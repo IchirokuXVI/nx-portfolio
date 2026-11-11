@@ -461,7 +461,8 @@
   "productCount": 5,
   "pathEs": "/carnes/pavo-y-conejo/c/L2015",
   "pathEn": "/en/meats/turkey/c/L2015",
-  "menuOrder": 3
+  "menuOrder": 3,
+  "note": "renamed from Pavo, read by plan 0254 from menu-data of 2026-11-11; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category): turkey 5 and rabbit 1 of 6 (store 13835, walk of 2026-11-11), and no other leaf of these 6 maps, so all 6 wait uncategorised for the curator"
  },
  {
   "id": "L2016",
@@ -2287,7 +2288,7 @@
   "pathEs": "/chocolates-y-golosinas/turrones-y-dulces-de-navidad/c/L2353",
   "pathEn": null,
   "menuOrder": 5,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category): turrones, chocolates and Christmas pastries, 62 listed, products only there 0 (store 13835, walk of 2026-11-11)"
  },
  {
   "id": "L116",
@@ -4275,7 +4276,7 @@
   "pathEs": "/navidad/caldos-y-cremas/c/L2355",
   "pathEn": null,
   "menuOrder": 1,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category): broths and cream soups, 14 listed, 8 also under creams-and-purees and 6 under broths-and-soups, products only there 0 (store 13835, walk of 2026-11-11)"
  },
  {
   "id": "L2222",
@@ -4289,7 +4290,7 @@
   "pathEs": "/navidad/ibericos-y-quesos/c/L2222",
   "pathEn": null,
   "menuOrder": 2,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category): cheese 26, ham and paleta 11, lomo, chorizo and salchichón 10 of 47 (store 13835, walk of 2026-11-11), products only there 0"
  },
  {
   "id": "L2230",
@@ -4303,7 +4304,7 @@
   "pathEs": "/navidad/carnes-pescados-y-mariscos/c/L2230",
   "pathEn": null,
   "menuOrder": 3,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category): shellfish 19, fish 9, meat 7 of 35 (store 13835, walk of 2026-11-11); one product, a turkey solomillo, sits only here and under L2015, so it waits uncategorised"
  },
  {
   "id": "L2255",
@@ -4317,7 +4318,7 @@
   "pathEs": "/navidad/platos-especiales/c/L2255",
   "pathEn": null,
   "menuOrder": 4,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category; ready-to-eat-dishes is read as a general category, not a specific one): croquetas, canelones and gratins, 22 listed, products only there 0 (store 13835, walk of 2026-11-11)"
  },
  {
   "id": "L2356",
@@ -4345,6 +4346,6 @@
   "pathEs": "/navidad/mesa-y-hogar/c/L2258",
   "pathEn": null,
   "menuOrder": 12,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose by the owner's rule of 2026-11-11 (a leaf that mixes kinds gets no slug, the curator chooses the category): candles and air fresheners 13, kitchenware 15, foil 8, napkins 5 of 41 (store 13835, walk of 2026-11-11), products only there 0"
  }
 ]

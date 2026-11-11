@@ -854,21 +854,42 @@ describe('DiaCatalogRunner', () => {
     expect(reportOf(ctx)['renamedLeaves']).toEqual([]);
 
     // A leaf with a name and no slug also passes the report, so the report
-    // alone cannot tell a mapped leaf from one left out. Each of the twelve
-    // must file a product it holds under a real category. L2354 (Especial
-    // otoño) is the one leaf known and unmapped: a product listed only there
-    // is uncategorised, and a change to that decision must change this line.
-    const unmapped = ['L2354'];
+    // alone cannot tell a mapped leaf from one left out. Each mapped leaf
+    // must file a product it holds under a real category. A leaf that mixes
+    // kinds is known and unmapped on purpose, by the owner's rule of
+    // 2026-11-11: a product listed only there is uncategorised and waits for
+    // the curator. A change to either list must change these lines.
+    const mapped = ['L2356', 'L2358', 'L2359', 'L2360', 'L2361', 'L2362'];
+    const unmapped = [
+      'L2354',
+      'L2222',
+      'L2230',
+      'L2258',
+      'L2355',
+      'L2353',
+      'L2255',
+      'L2015',
+    ];
     const fileUnder = (id: string) =>
       categorySlugsFor(undefined, null, {
         adapterKey: 'dia-api',
         extra: { diaCategoryIds: [id] },
       });
-    for (const { id } of added.filter(({ id }) => !unmapped.includes(id))) {
+    expect(added).toHaveLength(13);
+    expect(
+      [...added, ...renamed]
+        .map(({ id }) => id)
+        .filter((id) => mapped.includes(id) || unmapped.includes(id))
+    ).toHaveLength(mapped.length + unmapped.length);
+    expect(
+      added.every(({ id }) => mapped.includes(id) || unmapped.includes(id))
+    ).toBe(true);
+    for (const id of mapped) {
       expect([id, fileUnder(id)]).not.toEqual([id, [UNCATEGORISED_SLUG]]);
     }
-    expect(added).toHaveLength(13);
-    expect(fileUnder('L2354')).toEqual([UNCATEGORISED_SLUG]);
+    for (const id of unmapped) {
+      expect([id, fileUnder(id)]).toEqual([id, [UNCATEGORISED_SLUG]]);
+    }
   });
 
   it('walks every page of a leaf, and plans a leaf per store', async () => {
