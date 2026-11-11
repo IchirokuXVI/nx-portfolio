@@ -659,10 +659,108 @@ describe('the new run page, a red probe', () => {
         sentence: 'home: the storefront did not answer within 20 seconds',
       })
     );
-    // The keyboard is on "Start anyway", so Enter goes through with it.
+    // The keyboard is on Cancel (the owner: "Force a read"), so an Enter
+    // pressed out of habit starts nothing. Tab reaches "Start anyway".
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-dismiss]')
+    );
+    dialog?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+    );
     expect(document.activeElement).toBe(
       dialog?.querySelector('[data-confirm]')
     );
+    expect(spawned).toEqual([]);
+  });
+
+  it('starts once when "Start anyway" is pressed twice before the dialog goes', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    startButton(fixture).click();
+    await settled(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    confirm?.click();
+    confirm?.click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('starts at one press when the probe read failed', async () => {
+    const failed = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockRejectedValue(new Error('the probe route did not answer'));
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    failed.mockRestore();
+
+    expect(notice(fixture)).toBe(null);
+    startButton(fixture).click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('draws the refusal of a start made anyway, with no question left open', async () => {
+    const { fixture, spawned } = await render(
+      new GatewayError({
+        correlationId: 'ref-1',
+        code: 'conflict',
+        status: 409,
+      })
+    );
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    startButton(fixture).click();
+    await settled(fixture);
+
+    (
+      question(fixture)?.querySelector('[data-confirm]') as HTMLButtonElement
+    ).click();
+    await settled(fixture);
+
+    const page = fixture.componentInstance;
+    expect(spawned).toHaveLength(1);
+    expect(page.blockedKey()).toBe('harvest.runs.start.alreadyRunning');
+    expect(text(fixture)).toContain('harvest.runs.start.alreadyRunning');
+    expect(TestBed.inject(Router).url).toBe('/');
+    expect(question(fixture)).toBe(null);
+    expect(page.pendingStart()).toBe(null);
+    expect(page.starting()).toBe(false);
+    // The warning is still there, and the start is free to press again.
+    expect(notice(fixture)).not.toBeNull();
+    expect(startButton(fixture).disabled).toBe(false);
+  });
+
+  it('keeps the notice about dropped copies when the question is cancelled', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    const form = formOf(fixture);
+    form.droppedCopies.set([CORUNA]);
+
+    startButton(fixture).click();
+    await settled(fixture);
+    (
+      question(fixture)?.querySelector('[data-dismiss]') as HTMLButtonElement
+    ).click();
+    await settled(fixture);
+    expect(form.droppedCopies()).toEqual([CORUNA]);
+
+    startButton(fixture).click();
+    await settled(fixture);
+    (
+      question(fixture)?.querySelector('[data-confirm]') as HTMLButtonElement
+    ).click();
+    await settled(fixture);
+    expect(form.droppedCopies()).toEqual([]);
   });
 
   it('sends the request of a start with no probe on "Start anyway", once', async () => {

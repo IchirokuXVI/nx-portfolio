@@ -74,6 +74,21 @@ describe('the probe notice', () => {
     expect(notice.message().args['age']).toBe('harvest.probeNotice.justNow');
   });
 
+  it('says how long the warning holds on the source page, which starts no run', () => {
+    const fixture = render('Deza');
+    fixture.componentRef.setInput('variant', 'source');
+    fixture.detectChanges();
+    expect(fixture.componentInstance.message().key).toBe(
+      'harvest.probeNotice.sourceText'
+    );
+
+    fixture.componentRef.setInput('verdict', { ...VERDICT, error: null });
+    fixture.detectChanges();
+    expect(fixture.componentInstance.message().key).toBe(
+      'harvest.probeNotice.sourceTextNoSentence'
+    );
+  });
+
   it('is a status with the warning glyph, and nothing to press', () => {
     const host: HTMLElement = render('Deza').nativeElement;
 
@@ -131,6 +146,15 @@ describe('the probe notice copy', () => {
     expect(harvest.probeNotice.textNoSentence).toBe(
       "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong."
     );
+    // The source record page starts no run, so its sentence says how long
+    // the warning holds (the owner, 2026-11-11: "Show it").
+    expect(harvest.probeNotice.sourceText).toBe(
+      "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. Until a probe passes, a run may store little or mark products wrong."
+    );
+    expect(harvest.probeNotice.sourceTextNoSentence).toBe(
+      "{{chain}}'s last probe, {{age}}, was {{status}}. Until a probe passes, a run may store little or mark products wrong."
+    );
+    expect(harvest.sources.section.probe).toBe('Last probe');
     expect(harvest.probeNotice.justNow).toBe('just now');
     // The question a start asks (owner, 2026-11-11). Its body is the
     // notice's own sentence, and its cancel is the dialog's "Cancel".
@@ -161,6 +185,7 @@ describe('the probe notice copy', () => {
       ...(Object.values(harvest.probeNotice.question) as string[]),
       harvest.schedules.blocked.PROBE_NOT_PASSED,
       harvest.schedules.outcome.SKIPPED_PROBE_FAILED,
+      harvest.sources.section.probe,
     ];
 
     for (const value of words) {

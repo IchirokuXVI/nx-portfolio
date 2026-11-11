@@ -399,6 +399,7 @@ function rememberChain(supermarketId: string): void {
         [bodyKey]="pending.message.key"
         [confirmKey]="question.confirm.action"
         [headingKey]="question.confirm.heading"
+        prefer="dismiss"
         tone="primary"
         data-start-question
       />
@@ -811,6 +812,10 @@ export class PresetsPanel {
     this.supermarketId.set(supermarketId);
     this.editing.set(null);
     this._refusals.set(new Map());
+    // A question about the previous chain's preset is not a question about
+    // this one, and its Start is no longer on the screen.
+    this.pendingStart.set(null);
+    this._startOpener = null;
     void this._readProbe(supermarketId);
     void this.load();
   }
@@ -1009,8 +1014,16 @@ export class PresetsPanel {
     });
   }
 
-  /** "Start anyway": the preset starts as one press started it before. */
+  /**
+   * "Start anyway": the preset starts as one press started it before.
+   *
+   * Only while the question is still open. A second press that reaches the
+   * button before the dialog is taken off the screen starts nothing more.
+   */
   startAnyway(preset: Preset): void {
+    if (this.pendingStart() === null) {
+      return;
+    }
     this.pendingStart.set(null);
     this._startOpener = null;
     void this.start(preset);

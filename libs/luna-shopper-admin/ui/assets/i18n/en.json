@@ -1738,7 +1738,8 @@
       "section": {
         "source": "Source",
         "speed": "How fast",
-        "may": "What it may do"
+        "may": "What it may do",
+        "probe": "Last probe"
       },
       "state": {
         "fetched": "Fetched",
@@ -2011,6 +2012,8 @@
     "probeNotice": {
       "text": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong.",
       "textNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong.",
+      "sourceText": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. Until a probe passes, a run may store little or mark products wrong.",
+      "sourceTextNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. Until a probe passes, a run may store little or mark products wrong.",
       "thisChain": "This chain",
       "justNow": "just now",
       "question": {

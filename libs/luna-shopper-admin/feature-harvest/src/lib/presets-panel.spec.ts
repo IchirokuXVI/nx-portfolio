@@ -7,6 +7,7 @@ import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   DEZA_CATALOG_PRESET,
+  GatewayError,
   HARVEST_SERVICE,
   HarvestMemory,
   MERCADONA_SUNDAY_SCHEDULE,
@@ -655,6 +656,119 @@ describe('the presets panel, a red probe', () => {
     expect(fixture.componentInstance.pendingStart()?.message.args).toEqual(
       expect.objectContaining({ chain: DEZA, sentence: expect.any(String) })
     );
+    // The keyboard is on Cancel, and Tab reaches "Start anyway".
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-dismiss]')
+    );
+    dialog?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+    );
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-confirm]')
+    );
+    expect(recorded.started).toEqual([]);
+  });
+
+  it('starts once when "Start anyway" is pressed twice before the dialog goes', async () => {
+    const { fixture, recorded } = await onDeza();
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    confirm?.click();
+    confirm?.click();
+    await settle(fixture);
+
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('starts at one press when the probe read failed', async () => {
+    const failed = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockRejectedValue(new Error('the probe route did not answer'));
+    const { fixture, recorded } = await onDeza();
+    failed.mockRestore();
+
+    expect(fixture.nativeElement.querySelector('[data-probe-notice]')).toBe(
+      null
+    );
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('starts at one press when the probe read and the source read failed', async () => {
+    const probes = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockRejectedValue(new Error('the probe route did not answer'));
+    const source = jest
+      .spyOn(HarvestMemory.prototype, 'readSource')
+      .mockRejectedValue(new Error('the source route did not answer'));
+    const { fixture, recorded } = await onDeza();
+    probes.mockRestore();
+    source.mockRestore();
+
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('draws the refusal of a start made anyway on the row, with no question left open', async () => {
+    const refused = jest
+      .spyOn(HarvestMemory.prototype, 'startPreset')
+      .mockRejectedValue(
+        new GatewayError({
+          correlationId: 'ref-1',
+          code: 'conflict',
+          status: 409,
+        })
+      );
+    const { fixture, recorded } = await onDeza();
+    const page = fixture.componentInstance;
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    (
+      question(fixture)?.querySelector('[data-confirm]') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+    refused.mockRestore();
+
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+    expect(page.refusalOf(DEZA_CATALOG_PRESET)?.key).toBe(
+      'harvest.presets.alreadyRunning'
+    );
+    expect(text(fixture)).toContain('harvest.presets.alreadyRunning');
+    expect(question(fixture)).toBe(null);
+    expect(page.pendingStart()).toBe(null);
+    expect(page.startingId()).toBe(null);
+    // The warning is still on the row, and Start is free to press again.
+    expect(
+      fixture.nativeElement.querySelector('[data-probe-notice]')
+    ).not.toBeNull();
+    expect(
+      (fixture.nativeElement.querySelector('[data-start]') as HTMLButtonElement)
+        .disabled
+    ).toBe(false);
+  });
+
+  it('closes the question when another chain is chosen', async () => {
+    const { fixture, recorded } = await onDeza();
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+    expect(question(fixture)).not.toBeNull();
+
+    fixture.componentInstance.chooseChain(MERCADONA);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.pendingStart()).toBe(null);
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([]);
   });
 
   it('starts the preset once on "Start anyway", as one press did before', async () => {

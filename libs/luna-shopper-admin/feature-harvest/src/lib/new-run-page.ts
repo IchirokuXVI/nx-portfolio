@@ -92,6 +92,7 @@ interface ChainProbe {
         (changed)="draft.set($event)"
         (submitted)="requestStart($event)"
         [busy]="starting()"
+        [clearsDroppedOnSubmit]="false"
       >
         <!-- Above the start, in the form's own slot for it (admin plan
              0069), so the warning is read before the click. The click then
@@ -151,6 +152,7 @@ interface ChainProbe {
         [bodyKey]="pending.message.key"
         [confirmKey]="question.confirm.action"
         [headingKey]="question.confirm.heading"
+        prefer="dismiss"
         tone="primary"
         data-start-question
       />
@@ -504,8 +506,16 @@ export class NewRunPage {
     });
   }
 
-  /** "Start anyway": the request the form handed up, as it was. */
+  /**
+   * "Start anyway": the request the form handed up, as it was.
+   *
+   * Only while the question is still open. A second press that reaches the
+   * button before the dialog is taken off the screen starts nothing more.
+   */
   startAnyway(request: Wire.SpawnHarvestRunDto): void {
+    if (this.pendingStart() === null) {
+      return;
+    }
     this.pendingStart.set(null);
     void this.start(request);
   }
@@ -525,6 +535,9 @@ export class NewRunPage {
    * A refusal keeps the page, with everything typed, and says why.
    */
   async start(input: Wire.SpawnHarvestRunDto): Promise<void> {
+    // The form's notice about dropped copies has been read once a run is
+    // really asked for, and not before: a Cancel on the question keeps it.
+    this.form()?.clearDroppedCopies();
     this.starting.set(true);
     this._spawnError.set(null);
 

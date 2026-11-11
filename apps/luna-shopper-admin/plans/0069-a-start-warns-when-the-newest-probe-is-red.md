@@ -97,12 +97,14 @@ skills.
    "Cancel". Nothing is sent before "Start anyway". "Start anyway" sends exactly the request a
    start sends today (`spawnRun` with the form's request, `startPreset` with the preset's id).
    Cancel and Escape start nothing and put the keyboard back on the start control. Tab stays
-   inside the question while it is open. A start never waits on the probe read: with no
-   verdict known at the press (a read in flight or a read that failed), the start is one press.
+   inside the question while it is open. The question opens with the keyboard on "Cancel", so
+   an Enter pressed out of habit starts nothing; Tab reaches "Start anyway". A start never
+   waits on the probe read: with no verdict known at the press (a read in flight or a read
+   that failed), the start is one press.
 4. **No notice and no question** for a green probe, for a chain with no finished probe, for a
    probe that is `RUNNING` (the newest finished one behind it decides), for a `FILE_IMPORT`,
    and for a store discovery over OpenStreetMap. The start is one press there, as today.
-5. **The status word** is the person's word, not the enum: "changed shape" for
+5. **The status word** is the person's word, not the enum: "a shape change" for
    `SHAPE_CHANGED`, "refused" for `BLOCKED`, "unreachable" for `UNREACHABLE`, "a fault on our
    side" for `ERROR`. The age is the existing relative format of the harvest feature. A probe
    with no sentence prints the notice without its last clause.
@@ -110,6 +112,14 @@ skills.
    ("{{chain}}'s last probe did not pass. The next slot runs a probe first and is skipped if it
    fails again.") and `harvest.schedules.outcome.SKIPPED_PROBE_FAILED` ("Skipped, the probe did
    not pass").
+7. **The same warning on the source record page** (the owner, 2026-11-11: "Show it"). The
+   record of a source is the generic record page of the `sources` descriptor. It gains a panel,
+   "Last probe", that draws the notice when the chain's newest finished probe is red, in words
+   for a page that starts no run: "{chain}'s last probe, {age}, was {status}: {sentence}. Until
+   a probe passes, a run may store little or mark products wrong." The panel is the warning
+   only: it draws nothing for a pass, for no finished probe, for a `RUNNING` probe over a pass,
+   for a source whose adapter has no probe and for a read that failed, and it has nothing to
+   press.
 
 ### Scope
 
@@ -122,15 +132,20 @@ skills.
 - In, for the question of target 3: `ConfirmDialog` of `ui` takes any translator values as
   `bodyArgs` (the body passes `interpolation`), and the form's start button carries
   `data-submit` so the page can put the keyboard back on it.
+- In, for target 7: a `record.children` panel of the `sources` descriptor (`sources.ts`), the
+  part type the descriptor contract already has (`RecordChildPart` of
+  `models/src/lib/resource/record-block.ts`), drawn by a new `source-probe-panel.ts` in
+  `feature-harvest`. It reads the record's ID from `RECORD_CONTEXT`, which for a source is the
+  chain (`rowId` of `SOURCES`), and the probe route takes the chain, so no contract changes.
 - Out: the gateway, the harvester, `openapi.json`, `wire-types.ts` by hand, the schedule page
   chips, the import upload page.
-- **Decided but not built: the notice on the source record page** (Decisions, question 5). The
-  owner wants it beside the page's probe button, and that page has no probe button yet: the
-  source record page is the generic record page of the `sources` descriptor, its only actions
-  are "Stop fetching" and "Allow fetching", and the admin has no method that starts a probe.
-  The button is the follow up admin plan that backend `0219` section 13 names ("a source shows
-  its latest probe"), which is not written and needs a mock first. The notice lands with that
-  plan or in a plan of its own after it.
+- **Out, and still the follow up plan's: the probe button and the probe history** of the
+  source record page. The page has no probe button (its only actions are "Stop fetching" and
+  "Allow fetching") and the admin has no method that starts a probe. The button and the list
+  of a source's probes are the follow up admin plan that backend `0219` section 13 names ("a
+  source shows its latest probe"), which is not written and needs a mock first. The panel of
+  target 7 is the warning only, drawn without a button, and that plan owns the rest of what the
+  page says about its probes.
 
 ### Constraints
 
@@ -171,10 +186,11 @@ skills.
 Each target with its spec output, `npx nx build luna-shopper-admin`, and one walk on a Luna slot:
 a DEZA source pointed at a closed local port, a manual probe that ends `UNREACHABLE`, the
 notice on the new run page and on the preset row, the question on a press of either start
-(once by keyboard only: Tab to start, Enter, Escape, Enter, confirm), Cancel that starts
-nothing, "Start anyway" that starts, then the base
-URL pointed at the committed fixtures, a probe that passes, and the notice gone. Screenshots at
-1360 px and 390 px.
+(once by keyboard only: Tab to start, Enter, the focus on Cancel, Enter cancels, Enter on
+start again, Tab to "Start anyway", Enter), Cancel that starts nothing, "Start anyway" that
+starts, the warning on the source record page, then the base URL pointed at the committed
+fixtures, a probe that passes, and the notice and the panel gone. Screenshots at 1360 px and
+390 px.
 
 ## 1. Copy
 
@@ -182,6 +198,9 @@ URL pointed at the committed fixtures, a probe that passes, and the notice gone.
 | --- | --- |
 | `harvest.probeNotice.text` | {{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong. |
 | `harvest.probeNotice.textNoSentence` | {{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong. |
+| `harvest.probeNotice.sourceText` | {{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. Until a probe passes, a run may store little or mark products wrong. |
+| `harvest.probeNotice.sourceTextNoSentence` | {{chain}}'s last probe, {{age}}, was {{status}}. Until a probe passes, a run may store little or mark products wrong. |
+| `harvest.sources.section.probe` | Last probe |
 | `harvest.probeNotice.thisChain` | This chain |
 | `harvest.probeNotice.justNow` | just now |
 | `harvest.probeNotice.question.heading` | Start the run anyway? |
@@ -197,6 +216,9 @@ URL pointed at the committed fixtures, a probe that passes, and the notice gone.
 carries no second "ago". The question's body is `text` or `textNoSentence` with the same values
 as the notice, and its cancel is the dialog's own `resource.action.cancel` ("Cancel"). The
 sentence "You can start it anyway." left the notice when the question took over that choice.
+The two `source` keys are the same sentence for the source record page, which starts no run:
+`probeNoticeMessage` takes a variant (`start` or `source`) and picks the pair, so one function
+still builds every form of the sentence.
 
 ## 2. Where it is drawn
 
@@ -220,6 +242,18 @@ it while the question is open. The presets panel does the same with the preset o
 Both draw `ConfirmDialog` with `START_ANYWAY`, and the body is `probeNoticeMessage`, the one
 function the notice draws its sentence from, so the two can never say different things.
 
+**The notice about dropped copies** (`RunRequestForm`) used to go on the form's submit, on the
+premise that a run starts. With the question, a submit can end in Cancel with nothing
+started, so the new run page sets `[clearsDroppedOnSubmit]="false"` and clears it in its own
+`start`, which is the start that really sends. The preset editor keeps the default, so a save
+clears it as before.
+
+On the source record page the warning is a panel of the record (target 7), `SourceProbePanel`,
+declared in `record.children` of `SOURCES` as `{ as: 'panel', name: 'probe', label:
+'harvest.sources.section.probe' }`. The record page draws the panels after the sections, so
+the warning sits under "What it may do". It reads one page of 10 probes for the chain, maps it
+with `redProbe` and names the chain through `ChainNames`, as the two other places do.
+
 ## 3. What is drawn
 
 No new screen and no new section. One paragraph in the warning tone with the warning glyph of
@@ -227,7 +261,15 @@ No new screen and no new section. One paragraph in the warning tone with the war
 its name, never its id. On a 390 px screen it wraps; it never truncates the sentence.
 
 The question is the existing confirm dialog: an opaque cover, one raised panel, the heading,
-the sentence, then "Start anyway" (primary, with the focus) and "Cancel". No new component.
+the sentence, then "Start anyway" (primary) and "Cancel", with the focus on "Cancel"
+(`prefer="dismiss"`, the dialog's own setting for a question whose safe answer is to stay).
+No new component.
+
+On the source record page: one record section headed "Last probe", with the same paragraph
+inside it in the `source` words, and nothing to press. With nothing to warn about the panel
+is absent, and leaves no frame and no gap. The other panels of a record page are
+collections, which say "none" in their own frame; a frame that said "no warning" would read
+as a probe status, which is the follow up plan's to draw.
 
 ## 4. The models
 
@@ -248,13 +290,22 @@ models with a spec that holds it equal to the contracts.
   and of `osm-places`, a file import.
 - The new run page: the notice for a red chain and a catalog discovery, none after switching
   to a file import, none for a green chain. With the notice shown the start is enabled, and
-  its press opens the question with the focus on "Start anyway" and does not call `spawnRun`.
-  "Start anyway" calls `spawnRun` once with the request a start sends for the same chain with
-  no probe. Cancel and Escape call nothing and put the focus back on the start. A green
-  chain, a chain with no probe, a file import, a store discovery over OpenStreetMap and a
-  probe read still in flight at the press all start at one press with no question.
+  its press opens the question with the focus on "Cancel", Tab moves it to "Start anyway",
+  and nothing calls `spawnRun`. "Start anyway" calls `spawnRun` once with the request a start
+  sends for the same chain with no probe, and twice pressed before the dialog goes it still
+  calls it once. Cancel and Escape call nothing and put the focus back on the start. A
+  green chain, a chain with no probe, a file import, a store discovery over OpenStreetMap, a
+  probe read still in flight at the press and a probe read that failed all start at one
+  press with no question. "Start anyway" answered by a 409 draws the page's own refusal, with
+  no question left open and the start free again. A Cancel keeps the notice about dropped
+  copies, and a start made anyway clears it.
 - The presets panel: one probe read for the chain, the notice on the rows whose mode reads the
-  chain, and the same cases for `startPreset` as for `spawnRun` above.
+  chain, and the same cases for `startPreset` as for `spawnRun` above (the failed read also
+  with a failed source read, the refusal on the row). Choosing another chain closes a
+  question that is open.
+- The source record page: the panel for a red chain (the `source` words, nothing to press),
+  and nothing at all for a green chain, a source with no probe, a `RUNNING` probe over a pass
+  and a read that failed. The `sources` descriptor declares the panel as its one child.
 - `action-question-heading.spec.ts` finds `harvest.probeNotice.question.heading` and holds it
   to no placeholder.
 - The memory back end answers the probe list from its seed, with one chain whose newest probe
@@ -272,6 +323,8 @@ models with a spec that holds it equal to the contracts.
       nothing and leave the keyboard on the start.
 - [ ] No notice and no question for a green probe, no probe, a file import, a store discovery
       over OpenStreetMap, or a probe read that has not answered at the press.
+- [ ] The source record page of a chain whose newest finished probe is red shows the warning
+      under "Last probe", and shows nothing of it for a green chain or a chain with no probe.
 - [x] The schedule page shows words, not keys, for `PROBE_NOT_PASSED` and `SKIPPED_PROBE_FAILED`.
       Backend PR #934 shipped the two strings, so this needs no work here.
 - [ ] `npx nx affected -t lint test` is green, and `npx nx build luna-shopper-admin` builds.
@@ -296,7 +349,11 @@ Chosen in this plan, and open to the owner's correction:
 
 - A notice on the form and a question on the press, never a disabled button (question 3).
 - The notice in the new run page and in the preset row, not in the preset editor or the
-  import page (section 2). The source page is question 5.
+  import page (section 2). The source page is question 5, built as target 7.
+- The question opens with the focus on "Cancel" (`prefer="dismiss"`), read from the owner's
+  "Force a read": a question whose Enter goes through is not one that forces a read. The
+  dialog's own doc keeps `prefer="dismiss"` for a question whose safe answer is to stay, and
+  this is one. One attribute on each of the two dialogs reverses it.
 - The notice stays on the form beside the question, so the warning is read before the press
   too. It lost its last clause, "You can start it anyway.", because the question now carries
   that choice.
@@ -321,12 +378,13 @@ run chip needs to be shown".
    finished probe is red, a start asks the person to confirm before the run starts (target 3).
 4. **The summary.** Answered 2026-11-11: yes. A later backend plan adds `error` and `attempt`
    to `HarvestSourceProbeSummary`. Not this plan, which reads the probe route as before.
-5. **The source page.** Answered 2026-11-11: "Show it." The same warning shows on the source
-   record page beside its probe button. Not built in this plan: that page has no probe button
-   yet (Scope). It lands with the follow up admin plan of backend `0219` section 13, or after
-   it. Proposed sentence there, for the owner to correct, since that page starts no run:
-   "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. Until a probe passes, a run
-   may store little or mark products wrong."
+5. **The source page.** Answered 2026-11-11: "Show it", in this PR. Built as target 7: the
+   warning is a panel of the source record page, drawn without a button, since the page has
+   none yet. The probe button and the probe history stay with the follow up admin plan of
+   backend `0219` section 13 (Scope). The sentence there is the builder's, for the owner to
+   correct, since that page starts no run: "{{chain}}'s last probe, {{age}}, was {{status}}:
+   {{sentence}}. Until a probe passes, a run may store little or mark products wrong." The
+   panel draws nothing when there is nothing to warn about (section 3).
 6. **The preset row notice is four lines at 1360 px**, not the "one line high" of section 2,
    because the presets panel is the narrow column of the Runs tab. Answered 2026-11-11: left as
    it is for now; the owner will check it.

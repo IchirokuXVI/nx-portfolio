@@ -660,6 +660,13 @@ export class RunRequestForm {
    * needs a document uploaded at the time.
    */
   readonly offersImport = input(true);
+  /**
+   * Whether a submit takes the notice about dropped copies away. True for the
+   * preset editor, whose submit is the save. False for the new run page, whose
+   * submit can open a question that a Cancel answers with nothing started, so
+   * the page calls {@link clearDroppedCopies} when the run really starts.
+   */
+  readonly clearsDroppedOnSubmit = input(true);
 
   /** The built request, whenever the operator presses submit and it is ready. */
   readonly submitted = output<Wire.SpawnHarvestRunDto>();
@@ -1212,9 +1219,19 @@ export class RunRequestForm {
     if (!this.ready() || this.uploading()) {
       return;
     }
-    // The notice about dropped copies has been read by the time a run starts.
-    this.droppedCopies.set([]);
+    if (this.clearsDroppedOnSubmit()) {
+      this.droppedCopies.set([]);
+    }
     this.submitted.emit(this._input());
+  }
+
+  /**
+   * Take the notice about dropped copies away: it has been read by the time
+   * a run starts. The new run page calls this when it really starts one, and
+   * not when its question over a red probe is cancelled (admin plan 0069).
+   */
+  clearDroppedCopies(): void {
+    this.droppedCopies.set([]);
   }
 
   /** Take a scope that no longer exists out of every place the request names it. */

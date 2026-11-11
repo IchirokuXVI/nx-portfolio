@@ -90,6 +90,8 @@ export class ProbeNotice {
   readonly verdict = input.required<ProbeVerdict>();
   /** The clock the age is read against. A spec fixes it. */
   readonly now = input<number>(Date.now());
+  /** Beside a start, or on the source record page. */
+  readonly variant = input<ProbeNoticeVariant>('start');
 
   /** What is said, as a key and its values. */
   readonly message = computed<ProbeNoticeMessage>(() =>
@@ -97,7 +99,8 @@ export class ProbeNotice {
       this._translator,
       this.chain(),
       this.verdict(),
-      this.now()
+      this.now(),
+      this.variant()
     )
   );
 
@@ -123,6 +126,29 @@ export const START_ANYWAY = {
 } as const;
 
 /**
+ * Where the notice is read. `start` is beside a start, on the new run page and
+ * in a preset's row. `source` is the source record page, which starts no run,
+ * so its sentence says how long the warning holds instead.
+ */
+export type ProbeNoticeVariant = 'start' | 'source';
+
+const NOTICE_KEYS: Readonly<
+  Record<
+    ProbeNoticeVariant,
+    { readonly sentence: string; readonly noSentence: string }
+  >
+> = {
+  start: {
+    sentence: 'harvest.probeNotice.text',
+    noSentence: 'harvest.probeNotice.textNoSentence',
+  },
+  source: {
+    sentence: 'harvest.probeNotice.sourceText',
+    noSentence: 'harvest.probeNotice.sourceTextNoSentence',
+  },
+};
+
+/**
  * The notice's sentence, as a key and its values. The inline notice draws it,
  * and the question of {@link START_ANYWAY} uses it as its body.
  *
@@ -133,16 +159,15 @@ export function probeNoticeMessage(
   translator: RokuTranslatorService,
   chain: string | null,
   verdict: ProbeVerdict,
-  now: number
+  now: number,
+  variant: ProbeNoticeVariant = 'start'
 ): ProbeNoticeMessage {
   const locale = translator.locale();
   translator.loaded();
+  const keys = NOTICE_KEYS[variant];
 
   return {
-    key:
-      verdict.error === null
-        ? 'harvest.probeNotice.textNoSentence'
-        : 'harvest.probeNotice.text',
+    key: verdict.error === null ? keys.noSentence : keys.sentence,
     args: {
       chain: chain ?? translator.t('harvest.probeNotice.thisChain'),
       age: probeAge(
