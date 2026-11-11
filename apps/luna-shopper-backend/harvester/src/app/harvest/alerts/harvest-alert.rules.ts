@@ -521,17 +521,6 @@ export function testAlertFor(input: {
   };
 }
 
-/**
- * Whether a slot outcome can alert at all, so the worker reads the preset's
- * name for those slots only (plan 0255).
- */
-export function slotOutcomeMayAlert(outcome: HarvestScheduleOutcome): boolean {
-  return (
-    outcome === HarvestScheduleOutcome.REFUSED ||
-    outcome === HarvestScheduleOutcome.SKIPPED_PROBE_FAILED
-  );
-}
-
 function countOrNull(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined) {
     return null;

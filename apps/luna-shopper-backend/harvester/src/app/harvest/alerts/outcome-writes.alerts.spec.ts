@@ -14,9 +14,9 @@ import type {
 } from '../../entities';
 import type { HarvestRunService, ScheduledStart } from '../harvest-run.service';
 import { HarvestRunStore } from '../harvest-run.store';
-import type {
-  ClaimedSlot,
+import {
   HarvestScheduleStore,
+  type ClaimedSlot,
 } from '../harvest-schedule.store';
 import { HarvestScheduleWorker } from '../harvest-schedule.worker';
 import type {
@@ -77,7 +77,12 @@ describe('HarvestScheduleWorker and the owner alert', () => {
       claimUndecided: jest.fn(async () => false),
       holdSlot: jest.fn(async () => ({ release: async () => undefined })),
       isUndecided: jest.fn(async () => true),
-    } as unknown as HarvestScheduleStore & { recordOutcome: jest.Mock };
+      // The store's read never throws: a name it cannot read is null.
+      presetNameOf: jest.fn(async () => 'Weekly DEZA'),
+    } as unknown as HarvestScheduleStore & {
+      recordOutcome: jest.Mock;
+      presetNameOf: jest.Mock;
+    };
     const runs = {
       startScheduled: jest.fn(async () => result),
     } as unknown as HarvestRunService;
@@ -114,7 +119,12 @@ describe('HarvestScheduleWorker and the owner alert', () => {
       kind: HarvestAlertKind.SLOT_REFUSED,
       dedupeKey: `slot:schedule-1:${SLOT.toISOString()}`,
       scheduleId: 'schedule-1',
+      payload: expect.objectContaining({
+        presetId: 'preset-1',
+        presetName: 'Weekly DEZA',
+      }),
     });
+    expect(store.presetNameOf).toHaveBeenCalledWith('preset-1');
   });
 
   it('passes none for a refused slot whose last outcome was the same refusal', async () => {
@@ -128,6 +138,8 @@ describe('HarvestScheduleWorker and the owner alert', () => {
     await worker.tick();
 
     expect(store.recordOutcome.mock.calls[0]).toHaveLength(2);
+    // A slot that alerts nobody reads no preset name (plan 0255).
+    expect(store.presetNameOf).not.toHaveBeenCalled();
   });
 
   it('passes none for a busy slot', async () => {
@@ -143,6 +155,7 @@ describe('HarvestScheduleWorker and the owner alert', () => {
     await worker.tick();
 
     expect(store.recordOutcome.mock.calls[0]).toHaveLength(2);
+    expect(store.presetNameOf).not.toHaveBeenCalled();
   });
 
   it('passes a :retry draft for a refused retry', async () => {
@@ -350,5 +363,41 @@ describe('HarvestRunStore.reapStale and the owner alert (answer 5)', () => {
         stopReason: null,
       })
     );
+  });
+});
+
+describe('the preset name read of an alert (plan 0255)', () => {
+  // The worker and the executor call it with no try of their own, so a
+  // failed read must come back as null, never as a rejection.
+  const failing = [
+    jest.fn(async () => {
+      throw new Error('connection lost');
+    }),
+    jest.fn(() => {
+      throw new Error('no connection');
+    }),
+  ];
+
+  it('reads null and never throws when the query fails', async () => {
+    for (const query of failing) {
+      const repository = { query } as never;
+      await expect(
+        new HarvestRunStore(repository).presetNameOf('preset-1')
+      ).resolves.toBeNull();
+      await expect(
+        new HarvestScheduleStore(repository).presetNameOf('preset-1')
+      ).resolves.toBeNull();
+    }
+  });
+
+  it('reads the name, and null for a preset that is gone', async () => {
+    const named = { query: jest.fn(async () => [{ name: 'Weekly DEZA' }]) };
+    const gone = { query: jest.fn(async () => []) };
+    expect(
+      await new HarvestRunStore(named as never).presetNameOf('preset-1')
+    ).toBe('Weekly DEZA');
+    expect(
+      await new HarvestScheduleStore(gone as never).presetNameOf('preset-1')
+    ).toBeNull();
   });
 });

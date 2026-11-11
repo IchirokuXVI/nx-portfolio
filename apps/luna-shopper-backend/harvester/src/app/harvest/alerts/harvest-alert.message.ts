@@ -369,14 +369,14 @@ function stepLines(steps: unknown): string {
 /**
  * `Preset: <name> (<uuid>)`, or `Preset: <uuid>` when the payload holds no
  * name: a preset deleted since, a name that could not be read, or a row
- * written before plan 0255.
+ * written before plan 0255. Each run of whitespace in the name prints as one
+ * space, so a name with a line break cannot break the lines of the mail.
  */
 function presetLine(payload: Record<string, unknown>): string {
   const id = text(payload['presetId']);
-  const name = payload['presetName'];
-  return typeof name === 'string' && name.trim() !== ''
-    ? `Preset: ${name.trim()} (${id})`
-    : `Preset: ${id}`;
+  const raw = payload['presetName'];
+  const name = typeof raw === 'string' ? raw.replace(/\s+/g, ' ').trim() : '';
+  return name !== '' ? `Preset: ${name} (${id})` : `Preset: ${id}`;
 }
 
 /**

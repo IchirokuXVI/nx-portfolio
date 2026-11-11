@@ -14,7 +14,6 @@ import {
   runAlertFor,
   SCHEDULES_STOP_AFTER,
   slotAlertFor,
-  slotOutcomeMayAlert,
   testAlertFor,
   type ProbeAlertProbe,
   type RunAlertRun,
@@ -243,23 +242,6 @@ describe('the preset name of a slot alert (plan 0255)', () => {
       expect(slotAlertFor({ ...base, result })?.payload['presetName']).toBe(
         null
       );
-    }
-  });
-
-  it('asks for a name only for the outcomes that can alert', () => {
-    expect(slotOutcomeMayAlert(HarvestScheduleOutcome.REFUSED)).toBe(true);
-    expect(
-      slotOutcomeMayAlert(HarvestScheduleOutcome.SKIPPED_PROBE_FAILED)
-    ).toBe(true);
-    for (const outcome of Object.values(HarvestScheduleOutcome).filter(
-      (outcome) =>
-        outcome !== HarvestScheduleOutcome.REFUSED &&
-        outcome !== HarvestScheduleOutcome.SKIPPED_PROBE_FAILED
-    )) {
-      expect(slotOutcomeMayAlert(outcome)).toBe(false);
-      expect(
-        slotAlertFor({ ...base, result: { outcome, note: 'x' } })
-      ).toBeNull();
     }
   });
 });

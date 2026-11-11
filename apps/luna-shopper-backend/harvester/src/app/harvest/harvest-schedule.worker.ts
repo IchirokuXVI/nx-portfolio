@@ -16,7 +16,6 @@ import type { HarvesterConfig } from '../config/app-config';
 import type { HarvestSchedule } from '../entities';
 import {
   slotAlertFor,
-  slotOutcomeMayAlert,
   type HarvestAlertDraft,
 } from './alerts/harvest-alert.rules';
 import {
@@ -282,14 +281,7 @@ export class HarvestScheduleWorker
       // A refused slot tells the owner, in the same write (plan 0218,
       // section 2.3). `schedule` is the row before the claim, so its last
       // outcome is the one this slot is compared with.
-      ...alertArgument(
-        schedule,
-        slot,
-        false,
-        result,
-        at,
-        await this.presetNameFor(schedule, result)
-      )
+      ...(await this.namedAlertArgument(schedule, slot, false, result, at))
     );
     this.log(schedule, slot, result, false);
   }
@@ -410,14 +402,7 @@ export class HarvestScheduleWorker
         at,
         attempts: null,
       },
-      ...alertArgument(
-        schedule,
-        slot,
-        retry,
-        result,
-        at,
-        await this.presetNameFor(schedule, result)
-      )
+      ...(await this.namedAlertArgument(schedule, slot, retry, result, at))
     );
     this.log(schedule, slot, result, retry);
   }
@@ -585,22 +570,25 @@ export class HarvestScheduleWorker
   }
 
   /**
-   * The preset's name for a slot that can alert, so its mail names the
-   * preset (plan 0255), and null for any other slot, which reads nothing. A
-   * name that cannot be read leaves the uuid line, never the outcome.
+   * {@link alertArgument}, with the preset's name on a drafted alert (plan
+   * 0255). The draft comes first, so a slot that does not alert, or that
+   * repeats the refusal before it, reads no name. `presetNameOf` never
+   * throws: a name it cannot read is null, and the mail keeps the uuid line.
    */
-  private async presetNameFor(
+  private async namedAlertArgument(
     schedule: HarvestSchedule,
-    result: ScheduledStart
-  ): Promise<string | null> {
-    if (!slotOutcomeMayAlert(result.outcome)) {
-      return null;
+    slot: Date,
+    retry: boolean,
+    result: ScheduledStart,
+    at: Date
+  ): Promise<[] | [HarvestAlertDraft]> {
+    const argument = alertArgument(schedule, slot, retry, result, at);
+    for (const alert of argument) {
+      alert.payload['presetName'] = await this.store.presetNameOf(
+        schedule.presetId
+      );
     }
-    try {
-      return await this.store.presetNameOf(schedule.presetId);
-    } catch {
-      return null;
-    }
+    return argument;
   }
 
   private log(
@@ -648,8 +636,7 @@ function alertArgument(
   slot: Date,
   retry: boolean,
   result: ScheduledStart,
-  at: Date,
-  presetName: string | null
+  at: Date
 ): [] | [HarvestAlertDraft] {
   const alert = slotAlertFor({
     schedule,
@@ -660,7 +647,6 @@ function alertArgument(
     // catalog at send time and falls back to the chain's id.
     adapterKey: null,
     at,
-    presetName,
   });
   return alert ? [alert] : [];
 }

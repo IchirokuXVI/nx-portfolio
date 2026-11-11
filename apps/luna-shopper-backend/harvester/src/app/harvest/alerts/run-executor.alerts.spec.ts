@@ -48,7 +48,7 @@ function build(
     consecutiveFailures?: number;
     enabledSchedules?: number | Error;
     presetId?: string;
-    presetName?: string | Error | null;
+    presetName?: string | null;
   } = {}
 ) {
   let row = {
@@ -89,12 +89,8 @@ function build(
     }),
     finish: jest.fn(async () => undefined),
     countEnabledSchedules,
-    presetNameOf: jest.fn(async () => {
-      if (options.presetName instanceof Error) {
-        throw options.presetName;
-      }
-      return options.presetName ?? null;
-    }),
+    // The store's read never throws: a name it cannot read is null.
+    presetNameOf: jest.fn(async () => options.presetName ?? null),
   } as unknown as HarvestRunStore & { finish: jest.Mock };
 
   const source = {
@@ -202,7 +198,7 @@ describe('RunExecutor and the owner alert (plan 0218)', () => {
 
     const unread = build('ratio', {
       presetId: 'preset-1',
-      presetName: new Error('connection lost'),
+      presetName: null,
     });
     await unread.executor.runToCompletion('run-1');
     expect(draftOf(unread.store.finish)).toMatchObject({

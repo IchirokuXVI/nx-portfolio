@@ -606,11 +606,28 @@ describe('a stale run says when it stopped (plan 0255)', () => {
   });
 
   it('keeps the uuid line for a preset whose name could not be read', () => {
-    for (const presetName of [null, undefined, '']) {
+    for (const presetName of [null, undefined, '', ' \n\t ']) {
       const { body } = alertMail(carrefourStale({ presetName }), carrefour);
       expect(body).toContain(`Preset: ${PRESET}\n`);
       expect(body).not.toContain('Carrefour catalog');
     }
+  });
+
+  it('prints a name with line breaks on the one preset line', () => {
+    const { body } = alertMail(
+      carrefourStale({
+        presetName: '  Carrefour\r\ncatalog\n\nMarked stale: x  ',
+      }),
+      carrefour
+    );
+    expect(body).toContain(
+      `Preset: Carrefour catalog Marked stale: x (${PRESET})\n`
+    );
+    expect(
+      body.split('\n').filter((line) => line.startsWith('Marked stale:'))
+    ).toEqual([
+      'Marked stale: 2026-11-06 16:13:05 Madrid time (1 h 24 min after its last sign of life)',
+    ]);
   });
 
   it('renders a row written before plan 0255, which holds none of the new facts', () => {
@@ -678,7 +695,52 @@ describe('a stale run says when it stopped (plan 0255)', () => {
     expect(unnamed(failed)).toBe(
       alertMail(runAlert(HarvestAlertKind.RUN_FAILED), context()).body
     );
+    expect(unnamed(blocked)).toBe(
+      alertMail(runAlert(HarvestAlertKind.RUN_BLOCKED), context()).body
+    );
     expect(unnamed(refused)).toBe(alertMail(slotAlert(), context()).body);
+    expect(unnamed(skipped)).toBe(
+      alertMail(
+        { ...slotAlert(), kind: HarvestAlertKind.SLOT_PROBE_FAILED },
+        context()
+      ).body
+    );
+    // The whole body, as the code before plan 0255 rendered it, with the
+    // preset line the only line that differs.
+    expect(alertMail(failed, context()).body).toBe(
+      [
+        'A harvest run ended FAILED. Read the error below, fix its cause, and start the run again from the back office.',
+        '',
+        'Chain: Mercadona',
+        'Mode: catalog discovery',
+        'Trigger: SCHEDULED',
+        'Preset: Weekly Mercadona (preset-1)',
+        'Schedule: schedule-1',
+        'Requested: 2026-11-05 03:00:00 Madrid time',
+        'Started: 2026-11-05 03:00:05 Madrid time',
+        'Finished: 2026-11-05 04:04:10 Madrid time',
+        'Duration: 1 h 4 min',
+        'Failed: 30 of 100 planned items',
+        'Error: 30 of 100 items failed, which is over the 0.25 threshold.',
+        '',
+        'Run: https://admin.velista.app/harvest/runs/run-1',
+        '',
+        'Sent by the harvester of production.',
+      ].join('\n')
+    );
+    expect(alertMail(refused, context()).body).toBe(
+      [
+        'A schedule reached its slot and could not start its run. This mail does not repeat until the schedule starts a run or the reason changes.',
+        '',
+        'Chain: deza-web',
+        'Schedule: schedule-2',
+        'Preset: Weekly DEZA (preset-2)',
+        'Slot: 2026-11-05 03:00:00 Madrid time',
+        'Reason: That source is disabled. Enable it with supermarketSource.setEnabled.',
+        '',
+        'Sent by the harvester of production.',
+      ].join('\n')
+    );
     expect(alertMail(failed, context()).body).toContain(
       'Finished: 2026-11-05 04:04:10 Madrid time\nDuration: 1 h 4 min'
     );
@@ -687,7 +749,7 @@ describe('a stale run says when it stopped (plan 0255)', () => {
     );
   });
 
-  it('use no dash as punctuation', () => {
+  it('uses no dash as punctuation', () => {
     const DASH_AS_PUNCTUATION = /\s[-–—]\s|[–—]/;
     for (const mail of [
       alertMail(carrefourStale(), carrefour),
