@@ -401,12 +401,27 @@ export class LinePage {
    * second. The stepper draws the open run, and a page that goes away writes it.
    */
   readonly quantityRuns = quantityRuns<string>((lineId, run) => {
-    void this._lines.addQuantity(lineId, run.to - run.from).then((outcome) => {
-      if (outcome === 'succeeded') {
-        this._unitError.set(null);
-      }
-    });
+    const write = this._lines
+      .addQuantity(lineId, run.to - run.from)
+      .then((outcome) => {
+        if (outcome === 'succeeded') {
+          this._unitError.set(null);
+        }
+      })
+      .finally(() => {
+        if (this._runWrites.get(lineId) === write) {
+          this._runWrites.delete(lineId);
+        }
+      });
+    this._runWrites.set(lineId, write);
   });
+
+  /**
+   * The run write of each line still on its way. A unit change waits for it: a
+   * delta in the old unit that reached the server after the change would be
+   * refused, and the refusal puts the line back in the old unit on screen.
+   */
+  private readonly _runWrites = new Map<string, Promise<void>>();
 
   /** One step of the stepper, a press or a repeat of a hold. */
   step(step: QuantityStep): void {
@@ -424,10 +439,12 @@ export class LinePage {
     if (line === undefined || this.unitPending() || unit === line.unit) {
       return;
     }
-    // The open run is written first, so the unit change reads the amount it left.
+    // The open run is written first, and its answer is waited for, so the unit
+    // change reaches the server after the delta in the old unit.
     this.quantityRuns.flush(line.id);
     this.unitPending.set(true);
     this._unitError.set(null);
+    await this._runWrites.get(line.id);
     const outcome = await this._lines.updateLine(line.id, {
       unit,
       quantity: defaultQuantity(unit),

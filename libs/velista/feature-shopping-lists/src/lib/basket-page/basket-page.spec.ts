@@ -4111,6 +4111,48 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     });
   });
 
+  it('keeps drawing the run’s amount until its demand write answers', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+    let answer: (result: null) => void = () => undefined;
+    store.setDemand.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const shown = () =>
+      page
+        .holdingsOf()(MILK)
+        .find((held) => held.lineId === 'zl-1')?.quantity;
+
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // The run is closed and its write is on its way: still 3, not the stored 2.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(shown()).toBe(3);
+
+    // A refusal leaves the stored amount, which is drawn again.
+    answer(null);
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
+    expect(shown()).toBe(2);
+  });
+
   it('says the line is no longer asked for when the answer no longer holds it', async () => {
     const { fixture } = await render({ lines: [milk()], served: SERVED });
     const page = fixture.componentInstance as unknown as CardSurface;

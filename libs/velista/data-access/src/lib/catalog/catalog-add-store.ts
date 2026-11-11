@@ -336,6 +336,14 @@ export class CatalogAddStore {
       return Promise.resolve();
     }
     const key = keyOf(to, product.itemId);
+    // A stepper's open run on a line of this product is sent first, as a take
+    // back does, so the add lands on top of it and the run does not later write
+    // an amount that left the add out.
+    for (const line of this._held()) {
+      if (line.listId === to && line.itemIds.includes(product.itemId)) {
+        this._flush(line.lineId);
+      }
+    }
     const drawnOn = this._drawAdd(to, product);
     this._adding.set(key, (this._adding.get(key) ?? 0) + 1);
     return this._queued(key, (generation) =>

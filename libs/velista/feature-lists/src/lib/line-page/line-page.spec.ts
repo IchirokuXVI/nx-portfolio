@@ -640,6 +640,33 @@ describe('LinePage', () => {
         kinds.lastIndexOf('update')
       );
     });
+
+    it('sends the unit only after the open run has answered', async () => {
+      // A delta in the old unit that reached the server after the change would be
+      // refused, and the refusal would draw the line in the old unit again.
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      let answer: (outcome: 'succeeded') => void = () => undefined;
+      jest.spyOn(lines, 'addQuantity').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          })
+      );
+
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      segments(fixture)[1].click();
+      await drain(fixture);
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([]);
+
+      answer('succeeded');
+      await drain(fixture);
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+      ]);
+    });
   });
 
   describe('the products', () => {

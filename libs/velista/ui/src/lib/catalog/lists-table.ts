@@ -162,12 +162,15 @@ export class ListsTable {
   /**
    * A step of a list's own stepper. A plus goes through an add wherever the
    * person may add: the server puts it on the line of that name or makes the line,
-   * and an add asks for less than a change of quantity does.
+   * and an add asks for less than a change of quantity does. An add happens
+   * once per press, so a repeat of a held plus that would add sends nothing.
    */
   protected stepMain(list: ProductListRow, step: QuantityStep): void {
     const main = list.main;
     if (step.to > step.from && list.canAdd) {
-      this.added.emit(list.listId);
+      if (!step.repeat) {
+        this.added.emit(list.listId);
+      }
       return;
     }
     if (main !== null && main.editable) {

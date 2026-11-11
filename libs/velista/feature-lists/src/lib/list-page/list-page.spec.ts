@@ -1166,6 +1166,27 @@ describe('ListPage', () => {
           { kind: 'quantity', lineId: 'ln-1', delta: 2 },
         ]);
       });
+
+      it("writes the line's open run before its sheet opens", async () => {
+        const { fixture, lines, router } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 3));
+        fixture.componentInstance.openLine('ln-1');
+
+        // Sent at once, before the sheet reads the line, and not again after.
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 1 },
+        ]);
+        expect(router.navigate).toHaveBeenCalledWith(
+          ['sheet', 'lines', 'ln-1', 'detail'],
+          expect.anything()
+        );
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
     });
 
     it('opens the line rather than repeating a write that failed', async () => {
