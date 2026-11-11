@@ -58,6 +58,7 @@ import type {
 } from '@portfolio/velista/models';
 import {
   DEFAULT_BASKET_VIEW_STATE,
+  QUANTITY_STEP_QUIET_MS,
   SUGGEST_DEBOUNCE_MS,
 } from '@portfolio/velista/models';
 import {
@@ -4007,10 +4008,11 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     }[];
     productLink(): ((itemId: string) => string) | null;
     changeHolding(change: {
-      holding: { lineId: string };
+      holding: { lineId: string; text?: string };
       from: number;
       to: number;
-    }): Promise<void>;
+      repeat: boolean;
+    }): void;
   }
 
   const milk = () =>
@@ -4072,12 +4074,39 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       setDemand: jest.Mock;
     };
 
-    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
+    // Three presses are one run, and one write with the run's first from (velista
+    // `0188`, section 5.6).
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      });
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 3,
+        to: 4,
+        repeat: false,
+      });
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 4,
+        to: 5,
+        repeat: true,
+      });
+      expect(store.setDemand).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
 
     // Sent under its own line (backend `0201`, section 4), whichever row holds it.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
     expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl-1',
-      quantity: 3,
+      quantity: 5,
       from: 2,
     });
   });
@@ -4090,7 +4119,21 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     };
     store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
 
-    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 0 });
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 0,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
     fixture.detectChanges();
 
     expect(text(fixture)).toContain('basket.demand.nothingLeft');

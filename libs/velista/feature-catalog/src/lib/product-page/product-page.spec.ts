@@ -24,10 +24,11 @@ import {
   provideFakeCategoryStore,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
-import type {
-  CatalogItem,
-  CatalogPriceState,
-  CatalogScopeOffer,
+import {
+  QUANTITY_STEP_QUIET_MS,
+  type CatalogItem,
+  type CatalogPriceState,
+  type CatalogScopeOffer,
 } from '@portfolio/velista/models';
 import {
   PageNavigation,
@@ -168,6 +169,16 @@ async function settle(fixture: ComponentFixture<ProductPage>): Promise<void> {
     await Promise.resolve();
   }
   fixture.detectChanges();
+}
+
+/**
+ * The quiet beat after a press, then every write it started (velista `0188`): the
+ * store gathers the presses on a line and writes them once they stop.
+ */
+async function quiet(fixture: ComponentFixture<ProductPage>): Promise<void> {
+  fixture.detectChanges();
+  jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+  await settle(fixture);
 }
 
 async function render(options: Options = {}): Promise<Harness> {
@@ -322,6 +333,7 @@ function listsSection(
 
 /** A stepper as a test reads and presses it. */
 interface DrawnStepper {
+  /** What it draws, in base units (velista 0188, decision L). */
   readonly quantity: string | null;
   readonly minus: HTMLButtonElement | null;
   readonly plus: HTMLButtonElement | null;
@@ -334,10 +346,7 @@ function stepperIn(scope: Element | null | undefined): DrawnStepper | null {
   }
   const steps = stepper.querySelectorAll<HTMLButtonElement>('button.step');
   return {
-    quantity:
-      stepper
-        .querySelector('[role="spinbutton"]')
-        ?.getAttribute('aria-valuenow') ?? null,
+    quantity: stepper.getAttribute('data-value'),
     minus: steps[0] ?? null,
     plus: steps[1] ?? null,
   };
@@ -374,6 +383,14 @@ function addFailed(fixture: ComponentFixture<ProductPage>): string {
 }
 
 describe('ProductPage', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe('its four states (velista 0134, section 5)', () => {
     it('draws bones in the shape of the product and the prices while the read is out', async () => {
       const { fixture } = await render({
@@ -854,7 +871,9 @@ describe('ProductPage', () => {
       // No list holds the oil yet, so every stepper starts at zero.
       for (const listId of ['list-cleaning', 'list-weekly', 'list-party']) {
         expect(listRow(fixture, listId).main?.quantity).toBe('0');
-        expect(listRow(fixture, listId).main?.minus?.disabled).toBe(true);
+        expect(
+          listRow(fixture, listId).main?.minus?.getAttribute('aria-disabled')
+        ).toBe('true');
       }
       // A list the person only reads has no stepper and says so.
       const rota = listRow(fixture, 'list-rota');
@@ -954,7 +973,11 @@ describe('ProductPage', () => {
       });
 
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('2');
-      expect(listRow(fixture, 'list-weekly').main?.minus?.disabled).toBe(false);
+      expect(
+        listRow(fixture, 'list-weekly').main?.minus?.getAttribute(
+          'aria-disabled'
+        )
+      ).toBeNull();
       expect(listRow(fixture, 'list-party').main?.quantity).toBe('0');
     });
 
@@ -1056,12 +1079,12 @@ describe('ProductPage', () => {
       const step = jest.spyOn(store, 'step');
 
       listRow(fixture, 'list-party').main?.minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(step).toHaveBeenCalledWith(
         expect.objectContaining({ listId: 'list-party', itemId: 'item-oil' }),
         'line-list-party-item-oil',
-        -1
+        { from: 1, to: 0, repeat: false }
       );
       expect(lines.deleteLine).toHaveBeenCalledWith('line-list-party-item-oil');
       expect(lines.addQuantity).not.toHaveBeenCalled();
@@ -1075,7 +1098,7 @@ describe('ProductPage', () => {
       });
 
       listRow(fixture, 'list-weekly').main?.minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', -1, 'UNIT');
@@ -1090,7 +1113,7 @@ describe('ProductPage', () => {
       const step = jest.spyOn(store, 'step');
 
       otherLine(fixture, 'line-frying').stepper?.plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(step).toHaveBeenCalledTimes(1);
       expect(step).toHaveBeenCalledWith(
@@ -1101,7 +1124,7 @@ describe('ProductPage', () => {
           imageUrl: null,
         },
         'line-frying',
-        1
+        { from: 1, to: 2, repeat: false }
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
@@ -1114,7 +1137,7 @@ describe('ProductPage', () => {
       ]);
 
       otherLine(fixture, 'line-frying').stepper?.minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(lines.addQuantity).toHaveBeenLastCalledWith(
         'line-frying',
@@ -1284,7 +1307,7 @@ describe('ProductPage', () => {
       expect(stepperIn(line())?.quantity).toBe('2');
 
       stepperIn(line())?.plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(step).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1292,7 +1315,7 @@ describe('ProductPage', () => {
           itemId: 'item-oil-other',
         }),
         'line-carbonell',
-        1
+        { from: 2, to: 3, repeat: false }
       );
       expect(lines.addQuantity).toHaveBeenCalledWith(
         'line-carbonell',

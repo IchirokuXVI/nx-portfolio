@@ -32,6 +32,7 @@ import {
   defaultQuantity,
   LINE_PRICED_PRODUCTS_MAX,
   type LineUnit,
+  type QuantityStep,
 } from '@portfolio/velista/models';
 import {
   AppHistory,
@@ -41,6 +42,7 @@ import {
   PageNavigation,
   productPagePath,
   productsPickPath,
+  quantityRuns,
   sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
@@ -393,14 +395,22 @@ export class LinePage {
     return answer;
   }
 
-  /** One press of the stepper: one more, or one fewer, as a delta (section 2). */
-  /** One press of the stepper, as the signed amount it moved (velista `0182`). */
-  step(by: number): void {
-    void this._lines.addQuantity(this.lineId(), by).then((outcome) => {
+  /**
+   * The stepper's steps, gathered into one write per run (velista `0188`, section
+   * 5.2): a hold that repeats ten times a second would otherwise be ten requests a
+   * second. The stepper draws the open run, and a page that goes away writes it.
+   */
+  readonly quantityRuns = quantityRuns<string>((lineId, run) => {
+    void this._lines.addQuantity(lineId, run.to - run.from).then((outcome) => {
       if (outcome === 'succeeded') {
         this._unitError.set(null);
       }
     });
+  });
+
+  /** One step of the stepper, a press or a repeat of a hold. */
+  step(step: QuantityStep): void {
+    this.quantityRuns.step(this.lineId(), step);
   }
 
   /**
@@ -414,6 +424,8 @@ export class LinePage {
     if (line === undefined || this.unitPending() || unit === line.unit) {
       return;
     }
+    // The open run is written first, so the unit change reads the amount it left.
+    this.quantityRuns.flush(line.id);
     this.unitPending.set(true);
     this._unitError.set(null);
     const outcome = await this._lines.updateLine(line.id, {
