@@ -1,3 +1,5 @@
+> **PR:** [#964](https://github.com/IchirokuXVI/nx-portfolio/pull/964)
+
 # 0254: DIA maps the leaves its menu added
 
 > Found on 2026-11-06 by a scheduled walk of DIA on Luna slot 4 (run
@@ -18,10 +20,11 @@
 
 ### Objective
 
-Map every leaf of the Context table to a category slug of the reference taxonomy, record the five
-renames, regenerate `categories.ts`, and make the walk's report state zero unmapped
-leaves for the menu of the build day. Where no existing slug fits, propose one and stop for the
-owner (D1).
+Make every leaf of the Context table known: map it to a category slug of the reference taxonomy,
+or name it in `category-tree.json` and leave it unmapped on purpose by the owner's rule (D3).
+Record the five renames, regenerate `categories.ts`, and make the walk's report state zero
+unmapped leaves for the menu of the build day. Where no existing slug fits a leaf of one kind,
+propose one and stop for the owner (D1).
 
 ### Context
 
@@ -59,7 +62,8 @@ The Navidad and Especial otoño leaves hold products DIA also sells under a perm
 
 ### Target state
 
-`dia-map.json` maps each leaf of the table, `categories.ts` is regenerated and
+`dia-map.json` maps each leaf of the table that holds one kind of product and that a category of
+ours fits; `category-tree.json` names every leaf, mapped or not; `categories.ts` is regenerated and
 `categories.spec.ts` passes, and one DIA walk on an ephemeral slot reports
 `unmappedLeaves: []` and `renamedLeaves: []`.
 
@@ -97,7 +101,8 @@ that a menu holding the 13 ids reports none unmapped.
 
 ## Acceptance criteria
 
-- [ ] Each of the 13 leaves maps to a slug, or is listed for D1 in the PR.
+- [ ] Each of the 13 leaves maps to a slug, or is named in the tree and unmapped on purpose by
+      D3, or is listed for D1 in the PR.
 - [ ] The five renames are recorded, so the walk reports `renamedLeaves: []`.
 - [ ] One walk reports `unmappedLeaves: []`.
 
@@ -111,7 +116,45 @@ and, for the record only, `movedLeaves`.
 - **D1 (owner): beauty leaves with no slug.** If the taxonomy has no facial care or perfume leaf:
   (a) add the leaves to the catalog in a plan of its own; (b) map them to the nearest existing
   leaf. Recommended: (a) for perfumes, which are a product type of their own.
+  **Did not arise:** the taxonomy already has `facial-care` and `perfumes-and-colognes`, and the
+  five beauty leaves map to them.
 - **D2 (owner): seasonal leaves come back every year with new ids.** (a) map by hand each season,
   as here; (b) let the runner read a product of an unknown seasonal leaf from its other leaf when
   DIA files it twice. Recommended: (a) now, and measure how many Navidad products DIA files under
   a permanent leaf too before (b).
+- **D3 (owner, answered 2026-11-11): a leaf that mixes kinds of product.** The owner's words: "The
+  category will be kept, even though it can't be mapped to our current categories. The curator
+  will then decide which category is the correct one for each product. The category is important
+  because the curator also needs it for context." A leaf that mixes kinds gets no slug: it stays
+  named in `category-tree.json`, so the walk knows it, and it is absent from `dia-map.json`. A
+  leaf of one kind that a category of ours fits keeps its slug. The result:
+
+  | Id | DIA name | Slug |
+  | --- | --- | --- |
+  | L2355 | Caldos y cremas | none, by the owner's rule |
+  | L2222 | Ibéricos y quesos | none, by the owner's rule |
+  | L2230 | Carnes, pescados y mariscos | none, by the owner's rule |
+  | L2255 | Platos especiales | none, by the owner's rule |
+  | L2356 | Bombones, chocolates y trufas | `chocolates-and-bonbons` |
+  | L2353 | Turrones y dulces de Navidad | none, by the owner's rule |
+  | L2354 | Especial otoño | none, by the owner's rule |
+  | L2258 | Mesa y hogar | none, by the owner's rule |
+  | L2358 | Limpieza facial | `facial-care` |
+  | L2359 | Cremas y cuidado facial | `facial-care` |
+  | L2360 | Perfumes y colonias mujer | `perfumes-and-colognes` |
+  | L2361 | Perfumes y colonias hombre | `perfumes-and-colognes` |
+  | L2362 | Colonias infantiles y familiares | `perfumes-and-colognes` |
+  | L2015 | Pavo y conejo (renamed) | none, by the owner's rule |
+
+  L2255 loses its slug because the owner kept one only where "we have a specific category for it
+  already", and `ready-to-eat-dishes` is read as a general category. L2015 was mapped to `turkey`
+  before this plan and now holds rabbit too, so it loses its slug as well; on the walk of
+  2026-11-11 its 6 products sit under no other mapped leaf and resolve to `uncategorised` until
+  the curator files them. The four other renamed leaves keep their slugs.
+
+  A follow up plan, backend 0268 (PR #967), makes an entry carry every leaf for the curator and
+  makes a run name the products that come only from unmapped leaves.
+
+  Correction of 2026-11-11 to the Context: the walk of that day found the reverse of what it
+  says about root L130. The menu names it `Cabello y belleza`, and `category-tree.json` keeps
+  the name `Cabello y perfumería` (see the note on L130 there).

@@ -172,7 +172,7 @@ export const REFERENCE_CATEGORIES: ReferenceCategoryRoot[] = [
         name: { en: 'Pork', es: 'Cerdo' },
       },
       {
-        slug: 'turkey', // L2015
+        slug: 'turkey', // ours, no DIA leaf since plan 0254
         name: { en: 'Turkey', es: 'Pavo' },
       },
       {

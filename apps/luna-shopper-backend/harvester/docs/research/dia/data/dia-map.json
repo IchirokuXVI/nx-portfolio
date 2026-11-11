@@ -38,7 +38,6 @@
  "L2012": "pate-and-sobrasada",
  "L2013": "beef",
  "L2014": "pork",
- "L2015": "turkey",
  "L2016": "rabbit",
  "L2017": "hamburgers-ground-beef-and-meatballs",
  "L2019": "fish-and-seafood-fresh",
@@ -281,5 +280,11 @@
  "L2344": "bacon",
  "L2345": "semi-cured",
  "L2346": "young-mild",
- "L2347": "shredded-grated"
+ "L2347": "shredded-grated",
+ "L2356": "chocolates-and-bonbons",
+ "L2358": "facial-care",
+ "L2359": "facial-care",
+ "L2360": "perfumes-and-colognes",
+ "L2361": "perfumes-and-colognes",
+ "L2362": "perfumes-and-colognes"
 }

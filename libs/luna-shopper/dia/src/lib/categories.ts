@@ -16,7 +16,6 @@ export const DIA_CATEGORY_SLUGS: Readonly<Record<string, string>> = {
   L2012: 'pate-and-sobrasada',
   L2013: 'beef',
   L2014: 'pork',
-  L2015: 'turkey',
   L2016: 'rabbit',
   L2017: 'hamburgers-ground-beef-and-meatballs',
   L2019: 'fish-and-seafood-fresh',
@@ -260,6 +259,12 @@ export const DIA_CATEGORY_SLUGS: Readonly<Record<string, string>> = {
   L2345: 'semi-cured',
   L2346: 'young-mild',
   L2347: 'shredded-grated',
+  L2356: 'chocolates-and-bonbons',
+  L2358: 'facial-care',
+  L2359: 'facial-care',
+  L2360: 'perfumes-and-colognes',
+  L2361: 'perfumes-and-colognes',
+  L2362: 'perfumes-and-colognes',
 };
 
 /**
@@ -270,7 +275,9 @@ export const DIA_CATEGORY_SLUGS: Readonly<Record<string, string>> = {
  * one here was renamed, and DIA reuses an id with a new meaning. A walked
  * leaf that is absent from here and from the table is new, and an operator
  * has to map it. A leaf here and not in the table is unmapped on purpose:
- * its products all sit in leaves that are mapped.
+ * its products also sit in leaves that are mapped, or the leaf mixes kinds
+ * of product and the curator decides the category (plan 0254, D3). A
+ * product whose leaves are all unmapped resolves to `uncategorised`.
  */
 export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L101: 'Quesos',
@@ -295,6 +302,7 @@ export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L120: 'Infantil',
   L122: 'Limpieza y hogar',
   L123: 'Mascotas',
+  L124: 'Navidad',
   L127: 'Zumos y smoothies',
   L128: 'Novedades y recomendados',
   L129: 'Higiene y cuidado del cuerpo',
@@ -314,7 +322,7 @@ export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L2012: 'Paté y sobrasada',
   L2013: 'Vacuno',
   L2014: 'Cerdo',
-  L2015: 'Pavo',
+  L2015: 'Pavo y conejo',
   L2016: 'Conejo',
   L2017: 'Hamburguesas, carne picada y albóndigas',
   L2019: 'Fresco',
@@ -323,12 +331,12 @@ export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L2022: 'Ajos, cebollas y puerros',
   L2023: 'Tomates, pimientos y pepinos',
   L2024: 'Brócoli, coliflor y judías verdes',
-  L2025: 'Verduras congeladas y al vapor',
+  L2025: 'Verduras congeladas',
   L2026: 'Conservas de verduras',
   L2027: 'Lechugas y hojas verdes',
   L2028: 'Patatas y zanahorias',
   L2029: 'Setas y champiñones',
-  L2030: 'Ensaladas y verduras preparadas',
+  L2030: 'Ensaladas',
   L2031: 'Hierbas aromáticas',
   L2032: 'Manzanas y peras',
   L2033: 'Plátanos y bananas',
@@ -413,11 +421,11 @@ export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L2131: 'Pizzas y masas',
   L2132: 'Pescado y marisco',
   L2135: 'Croquetas y rebozados',
-  L2136: 'Tartas y churros',
+  L2136: 'Roscones, tartas y churros',
   L2137: 'Arroces y pasta',
   L2138: 'Leches y papillas',
   L2139: 'Yogures y postres',
-  L2140: 'Bolsitas y snacks',
+  L2140: 'Pouches y snacks',
   L2141: 'Potitos y tarritos',
   L2142: 'Pañales y toallitas',
   L2143: 'Higiene y cuidado',
@@ -469,15 +477,19 @@ export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L2212: 'Naranja, limón y lima-limón',
   L2216: 'Tortitas',
   L2217: 'Bebidas energéticas',
+  L2222: 'Ibéricos y quesos',
   L2226: 'Ambientadores, recambios y velas',
   L2228: 'Cremas de cacao y de untar',
   L2229: 'Postres y batidos de proteínas',
+  L2230: 'Carnes, pescados y mariscos',
   L2246: 'Pizzas congeladas',
   L2247: 'Comida tradicional',
   L2248: 'Yogures líquidos',
   L2249: 'Congelado',
   L2251: 'Rebozado',
   L2253: 'Marisco, gamba y calamar',
+  L2255: 'Platos especiales',
+  L2258: 'Mesa y hogar',
   L2259: 'Chopped y mortadela',
   L2261: 'Leche sin lactosa y enriquecidas',
   L2262: 'Leche infantil',
@@ -554,4 +566,13 @@ export const DIA_CATEGORY_NAMES: Readonly<Record<string, string>> = {
   L2350: 'Selección sin gluten',
   L2351: 'Nutrición deportiva',
   L2352: 'Oktoberfest',
+  L2353: 'Turrones y dulces de Navidad',
+  L2354: 'Especial otoño',
+  L2355: 'Caldos y cremas',
+  L2356: 'Bombones, chocolates y trufas',
+  L2358: 'Limpieza facial',
+  L2359: 'Cremas y cuidado facial',
+  L2360: 'Perfumes y colonias mujer',
+  L2361: 'Perfumes y colonias hombre',
+  L2362: 'Colonias infantiles y familiares',
 };
