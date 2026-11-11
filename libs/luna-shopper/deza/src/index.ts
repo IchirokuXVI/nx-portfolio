@@ -33,11 +33,12 @@ export { leafSections, parseSectionTree } from './lib/sections';
 export {
   DEZA_SIZE_UNITS,
   approxWeightOf,
+  measuresIn,
   packCountIn,
   sizeOf,
   splitSize,
 } from './lib/size';
-export type { SplitDescription } from './lib/size';
+export type { DezaMeasures, SplitDescription } from './lib/size';
 export type {
   DezaClientOptions,
   DezaPage,

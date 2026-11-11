@@ -220,12 +220,54 @@ const GRAMS_IN: Partial<Record<SourceSizeUnit, number>> = {
  * reads: `unitSize` beside a pack count is the whole pack. Stating 100 would
  * be read as the weight of the pack, and stating 200 as the weight of one
  * piece. So the row states the count and leaves the weight to the curator.
+ *
+ * This reads the format alone. A pack phrase before it, `pack de 2 100 g
+ * aprox.`, is in the name, so a row is measured by {@link measuresIn}.
  */
 export function approxWeightOf(
   sizeFormat: string | null | undefined
 ): number | null {
+  return weightOfOnePiece(sizeFormat, null);
+}
+
+/**
+ * The one place that decides that a pack states no weight (plan 0266, D4).
+ *
+ * A weight printed with `aprox` is the weight of one piece only when nothing
+ * says the row holds more than one: neither the `N` of `2x100 g aprox` nor the
+ * count of a `pack de 2` phrase before the size. No size is stated either way,
+ * because {@link sizeOf} answers none for any weight printed with `aprox`.
+ */
+function weightOfOnePiece(
+  sizeFormat: string | null | undefined,
+  phraseCount: number | null
+): number | null {
   const weight = approximateWeight(sizeFormat);
-  return weight === null || weight.count !== 1 ? null : weight.grams;
+  if (weight === null || weight.count !== 1) {
+    return null;
+  }
+  return phraseCount !== null && phraseCount > 1 ? null : weight.grams;
+}
+
+/** What a row states about its size, its weight and its pack. */
+export interface DezaMeasures extends SourceSize {
+  approxWeight: number | null;
+  packCount: number | null;
+}
+
+/**
+ * The size, the approximate weight and the pack count of one description.
+ *
+ * `Fuet ALTEZA pack de 2 100 g aprox.` states a pack of 2, no weight and no
+ * size, as `2x100 g aprox` does: see {@link weightOfOnePiece}.
+ */
+export function measuresIn(description: string): DezaMeasures {
+  const { name, sizeFormat } = splitSize(description);
+  return {
+    ...sizeOf(sizeFormat),
+    approxWeight: weightOfOnePiece(sizeFormat, phraseCountIn(name)),
+    packCount: packCountIn(description),
+  };
 }
 
 /**
@@ -310,4 +352,10 @@ export function packCountIn(description: string): number | null {
     return null;
   }
   return packCountOf(multiplied ?? phrase?.[1] ?? null);
+}
+
+/** The count of a pack phrase at the end of a name, whatever its size. */
+function phraseCountIn(name: string): number | null {
+  const phrase = TRAILING_PACK.exec(name);
+  return phrase ? Number(phrase[1]) : null;
 }

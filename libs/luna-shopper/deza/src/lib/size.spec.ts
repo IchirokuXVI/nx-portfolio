@@ -1,4 +1,10 @@
-import { approxWeightOf, packCountIn, sizeOf, splitSize } from './size';
+import {
+  approxWeightOf,
+  measuresIn,
+  packCountIn,
+  sizeOf,
+  splitSize,
+} from './size';
 
 /**
  * Real descriptions, read off the live listing on 2026-09-05, kept here rather
@@ -427,6 +433,50 @@ describe('packCountIn (plan 0162, section 1)', () => {
     it('still reads a pack phrase in front of a length', () => {
       // The phrase states the count in words, and the length states none.
       expect(packCountIn('Papel aluminio ALTEZA pack de 2 30 m')).toBe(2);
+    });
+  });
+});
+
+describe('measuresIn (plan 0266, D4)', () => {
+  it('states no weight and no size for a pack de N printed with aprox', () => {
+    expect(splitSize('Fuet ALTEZA pack de 2 100 g aprox.').sizeFormat).toBe(
+      '100 g aprox.'
+    );
+    expect(measuresIn('Fuet ALTEZA pack de 2 100 g aprox.')).toEqual({
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: null,
+      packCount: 2,
+    });
+  });
+
+  it('states no weight and no size for a pack N printed with aprox', () => {
+    expect(splitSize('Fuet ALTEZA pack 3 150 g aprox').sizeFormat).toBe(
+      '150 g aprox'
+    );
+    expect(measuresIn('Fuet ALTEZA pack 3 150 g aprox')).toEqual({
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: null,
+      packCount: 3,
+    });
+  });
+
+  it('leaves a pack phrase without aprox a fixed size', () => {
+    expect(measuresIn('Cerveza MAHOU pack 6 33 cl')).toEqual({
+      unitSize: 330,
+      sizeUnit: 'MILLILITER',
+      approxWeight: null,
+      packCount: 6,
+    });
+  });
+
+  it('leaves a single piece printed with aprox its weight', () => {
+    expect(measuresIn('Fuet extra ALTEZA 180 g aprox.')).toEqual({
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: 180,
+      packCount: null,
     });
   });
 });

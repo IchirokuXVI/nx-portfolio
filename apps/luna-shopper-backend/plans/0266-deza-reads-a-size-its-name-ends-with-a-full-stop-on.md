@@ -183,7 +183,9 @@ A multipack printed with `aprox` (`2x100 g aprox`) states no weight and no size.
 plan `0244` is the weight of one piece, and the row has no field that says a weight is of one
 piece out of a pack: beside a pack count, `unitSize` is the whole pack. The row keeps its
 `sizeFormat` verbatim and its `packCount` (2) by the `NxQ` rule of plan `0183`, and the
-curator states the weight. A count of one (`1x500 g aprox`) is one piece of 500 g.
+curator states the weight. A count of one (`1x500 g aprox`) is one piece of 500 g. The same
+holds for a pack phrase before the size, `pack de 2 100 g aprox.` or `pack 3 150 g aprox`: the
+row states its `packCount` and no weight and no size.
 
 This decision supersedes two places of plan `0244` for DEZA, and El Jamón is not touched:
 

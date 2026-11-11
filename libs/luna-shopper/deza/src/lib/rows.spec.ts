@@ -63,6 +63,23 @@ describe('parseProductPage', () => {
     });
   });
 
+  it('states no weight and no size for a pack phrase printed with aprox (plan 0266)', () => {
+    const row = parseProductPage(
+      fixture('landing-page.html').replaceAll(
+        'Vino blanco DON SIMON brik 1 L',
+        'Fuet ALTEZA pack de 2 100 g aprox.'
+      )
+    ).rows[0];
+    expect(row).toMatchObject({
+      name: 'Fuet ALTEZA pack de 2',
+      sizeFormat: '100 g aprox.',
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: null,
+      packCount: 2,
+    });
+  });
+
   it('names every shop a popup lists, by code and by printed name', () => {
     expect(landing.rows[0].shops).toEqual([
       { code: 'T1', printedName: 'Jesús Rescatado' },
