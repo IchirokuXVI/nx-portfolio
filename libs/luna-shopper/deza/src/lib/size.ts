@@ -2,7 +2,9 @@ import {
   measuresContent,
   packCountOf,
   sourceSizeOf,
+  UnitOfMeasure,
   type SourceSize,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 
 /**
@@ -34,11 +36,10 @@ import {
  * answer: a missing size is a weaker key, an invented one is a wrong key.
  *
  * Every entry here was seen in the listing on 2026-09-04 or is the obvious
- * spelling variant of one that was. `u` and `servicios` were added by plan
- * 0266, from the names of the walk of 2026-11-06 that kept their size: `12 u`
- * of eggs, `16 u` of capsules, `300 servicios` of kitchen roll. Both already
- * name a count in the catalog's table of printed units, so the split states a
- * size and not only a printed text.
+ * spelling variant of one that was. `u` was added by plan 0266, from the
+ * names of the walk of 2026-11-06 that kept their size: `12 u` of eggs, `16 u`
+ * of capsules. It already names a count in the catalog's table of printed
+ * units, so the split states a size and not only a printed text.
  */
 export const DEZA_SIZE_UNITS: readonly string[] = [
   // Volume
@@ -88,7 +89,6 @@ export const DEZA_SIZE_UNITS: readonly string[] = [
   'hojas',
   'platos',
   'raciones',
-  'servicios',
 ];
 
 const UNIT_SET = new Set(DEZA_SIZE_UNITS);
@@ -106,7 +106,8 @@ const QUANTITY = String.raw`\d+(?:[.,]\d+)?(?:\s*[x+]\s*\d+(?:[.,]\d+)?)*`;
  * stop, `1 L.`, and the word `aprox`, `250 g aprox`, with its own stop or the
  * slash the chain leaves on it, `170 g aprox/`. `aprox` is the chain saying
  * the weight varies, so it belongs with the size it qualifies and not on the
- * end of a product name, which is how the Carrefour reader keeps it too.
+ * end of a product name. The Carrefour reader keeps `aprox` in its size too,
+ * but it leaves a stop after `aprox` outside the size and takes no slash.
  */
 const SIZE_TAIL = String.raw`\.?(?:\s+[Aa][Pp][Rr][Oo][Xx][./]?)?`;
 
@@ -178,8 +179,55 @@ const STATED_SIZE = new RegExp(
  * pattern does not match it. A length, `30 m`, has no catalog unit, and a
  * number with no unit beside it is what this plan exists to stop writing. The
  * printed text is untouched either way: `sizeFormat` is half of the row's key.
+ *
+ * A weight printed with `aprox`, `8 kg aprox.`, is not a fixed size either
+ * (plan 0266, D4): it answers no size, and {@link approxWeightOf} states it.
  */
 export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
+  return approxWeightOf(sizeFormat) === null
+    ? statedSize(sizeFormat)
+    : { unitSize: null, sizeUnit: null };
+}
+
+/** `aprox` at the end of a size, with the stop or the slash it may carry. */
+const APPROXIMATE = /\saprox[./]?$/i;
+
+/** What one of a weight unit is worth in grams. */
+const GRAMS_IN: Partial<Record<SourceSizeUnit, number>> = {
+  [UnitOfMeasure.GRAM]: 1,
+  [UnitOfMeasure.KILOGRAM]: 1000,
+};
+
+/**
+ * The approximate weight of one piece in grams (plan 0266, D4), or null.
+ *
+ * `600 g aprox` is a piece whose exact weight is known only once it is bought,
+ * as with any product sold by weight, so the chain does not promise the
+ * number. The row states the weight here and no size, the shape plan 0244
+ * gave the DIA and LIDL rows (sections 5.2 and 5.3). DEZA prints no price, so
+ * nothing here says whether the piece is sold by the kilo or priced as one.
+ *
+ * A format without `aprox` promises its number and answers null, the stop
+ * included (`1 L.`). An approximate format that is not a weight answers null
+ * too and keeps its size, as DIA's and LIDL's do, because the weight is in
+ * grams and nothing else.
+ */
+export function approxWeightOf(
+  sizeFormat: string | null | undefined
+): number | null {
+  if (!APPROXIMATE.test((sizeFormat ?? '').trim())) {
+    return null;
+  }
+  const { unitSize, sizeUnit } = statedSize(sizeFormat);
+  const grams = sizeUnit === null ? undefined : GRAMS_IN[sizeUnit];
+  if (unitSize === null || grams === undefined) {
+    return null;
+  }
+  return Math.round(unitSize * grams * 10_000) / 10_000;
+}
+
+/** The size a format states, before an approximate weight is taken out. */
+function statedSize(sizeFormat: string | null | undefined): SourceSize {
   const match = STATED_SIZE.exec((sizeFormat ?? '').trim());
   if (!match) {
     return { unitSize: null, sizeUnit: null };

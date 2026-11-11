@@ -30,7 +30,13 @@ export {
   parseRows,
 } from './lib/rows';
 export { leafSections, parseSectionTree } from './lib/sections';
-export { DEZA_SIZE_UNITS, packCountIn, sizeOf, splitSize } from './lib/size';
+export {
+  DEZA_SIZE_UNITS,
+  approxWeightOf,
+  packCountIn,
+  sizeOf,
+  splitSize,
+} from './lib/size';
 export type { SplitDescription } from './lib/size';
 export type {
   DezaClientOptions,

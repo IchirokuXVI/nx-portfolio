@@ -1,6 +1,6 @@
 import { extractBrand } from './brand';
 import { decodeText, sliceContainer, textOf } from './html';
-import { packCountIn, sizeOf, splitSize } from './size';
+import { approxWeightOf, packCountIn, sizeOf, splitSize } from './size';
 import type { DezaPage, DezaProductRow, DezaShop } from './types';
 
 /**
@@ -83,6 +83,7 @@ function parseRow(html: string): DezaProductRow | null {
     name,
     sizeFormat,
     ...sizeOf(sizeFormat),
+    approxWeight: approxWeightOf(sizeFormat),
     packCount: packCountIn(description),
     brand: extractBrand(name),
     attributes: parseAttributes(

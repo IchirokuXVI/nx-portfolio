@@ -163,3 +163,10 @@ curator, not for the harvester.
 work for the curator. The Carrefour rest is 15 names (glued or two sizes), 22 `pack N` names
 whose noun is not in `CONTAINER`, and `Turron 1000 caja de 300 g`, which reads 300 kg
 (PR #939).
+
+**D4 (owner, answered 2026-11-11):** a weight printed with `aprox` is not a fixed size. The
+`aprox` ending is split off the name as above, and the row states the weight as an
+approximate weight with no `unitSize`, as for a product bought by weight, whose exact weight
+is known only once it is bought. The field is the `approxWeight` of plan `0244`, in the shape
+the DIA and LIDL rows use (sections 5.2 and 5.3), which lifts DEZA out of its section 5.4. A
+size that ends only with a full stop (`1 L.`) stays a fixed size. DEZA still writes no price.

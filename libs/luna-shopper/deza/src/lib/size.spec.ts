@@ -1,4 +1,4 @@
-import { packCountIn, sizeOf, splitSize } from './size';
+import { approxWeightOf, packCountIn, sizeOf, splitSize } from './size';
 
 /**
  * Real descriptions, read off the live listing on 2026-09-05, kept here rather
@@ -118,12 +118,6 @@ const ADDED_UNIT_TABLE: Array<[string, string, string, number]> = [
     12,
   ],
   ['Bastones planta verde MASSÓ 25u', 'Bastones planta verde MASSÓ', '25u', 25],
-  [
-    'Rollo de cocina multiusos SELEX jumbo 138 m 600 servicios',
-    'Rollo de cocina multiusos SELEX jumbo 138 m',
-    '600 servicios',
-    600,
-  ],
 ];
 
 describe('splitSize', () => {
@@ -167,17 +161,17 @@ describe('splitSize', () => {
         name: 'Jamón Gran Reserva Duroc SIERRA MORENA 77.5 kg +16 meses',
         sizeFormat: null,
       });
-      expect(splitSize('Pegatinas navidad G 3D 17 pzas aprox')).toEqual({
-        name: 'Pegatinas navidad G 3D 17 pzas aprox',
-        sizeFormat: null,
-      });
     });
 
-    it('does not take a stop after a word outside the list', () => {
+    it('does not take a stop or aprox after a word outside the list', () => {
       expect(
         splitSize('Calcetín invisible PIERRE CARDIN sra t/3541 3 p.')
       ).toEqual({
         name: 'Calcetín invisible PIERRE CARDIN sra t/3541 3 p.',
+        sizeFormat: null,
+      });
+      expect(splitSize('Pegatinas navidad G 3D 17 pzas aprox')).toEqual({
+        name: 'Pegatinas navidad G 3D 17 pzas aprox',
         sizeFormat: null,
       });
     });
@@ -205,6 +199,8 @@ describe('splitSize', () => {
         'Gafas sol HELLO SUNSHINE señora 18GA',
         'Calcetines caballero GLOKO trabajo 3 pares',
         'Manzanilla ALTEZA 25 bolsitas',
+        // The owner does not accept `servicios` as a unit (plan 0266).
+        'Rollo de cocina multiusos SELEX jumbo 138 m 600 servicios',
       ]) {
         expect(splitSize(description).sizeFormat).toBeNull();
       }
@@ -248,24 +244,58 @@ describe('sizeOf (plan 0177)', () => {
     expect(sizeOf('125x157 cm')).toEqual({ unitSize: null, sizeUnit: null });
   });
 
-  it('reads a size through its full stop and its aprox (plan 0266)', () => {
+  it('reads a size through its full stop (plan 0266)', () => {
     expect(sizeOf('1 L.')).toEqual({ unitSize: 1, sizeUnit: 'LITER' });
-    expect(sizeOf('250 g aprox')).toEqual({ unitSize: 250, sizeUnit: 'GRAM' });
-    expect(sizeOf('8 kg aprox.')).toEqual({
-      unitSize: 8,
-      sizeUnit: 'KILOGRAM',
-    });
-    expect(sizeOf('170 g aprox/')).toEqual({
-      unitSize: 170,
-      sizeUnit: 'GRAM',
-    });
-    expect(sizeOf('500 G. APROX.')).toEqual({
-      unitSize: 500,
-      sizeUnit: 'GRAM',
-    });
     expect(sizeOf('2x100 g.')).toEqual({ unitSize: 200, sizeUnit: 'GRAM' });
     // A length with a stop is still a length.
     expect(sizeOf('1.60 m.')).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('states no size for a weight printed with aprox (plan 0266, D4)', () => {
+    for (const sizeFormat of [
+      '250 g aprox',
+      '8 kg aprox.',
+      '170 g aprox/',
+      '500 G. APROX.',
+    ]) {
+      expect(sizeOf(sizeFormat)).toEqual({ unitSize: null, sizeUnit: null });
+    }
+  });
+});
+
+describe('approxWeightOf (plan 0266, D4)', () => {
+  it.each([
+    ['250 g aprox', 250],
+    ['180 g aprox.', 180],
+    ['8 kg aprox.', 8000],
+    ['170 g aprox/', 170],
+    ['500 G. APROX.', 500],
+    ['1,5 kg aprox', 1500],
+  ])('reads %p as %p grams', (sizeFormat, grams) => {
+    expect(approxWeightOf(sizeFormat)).toBe(grams);
+  });
+
+  it('states no weight for a size the chain promises', () => {
+    expect(approxWeightOf('1 L.')).toBeNull();
+    expect(approxWeightOf('400 g')).toBeNull();
+    expect(approxWeightOf('8 kg')).toBeNull();
+    expect(approxWeightOf(null)).toBeNull();
+  });
+
+  it('keeps the size of an approximate format that is not a weight', () => {
+    // The weight is in grams and nothing else, as for DIA and LIDL.
+    expect(approxWeightOf('1 L aprox.')).toBeNull();
+    expect(sizeOf('1 L aprox.')).toEqual({ unitSize: 1, sizeUnit: 'LITER' });
+    expect(approxWeightOf('2 m aprox')).toBeNull();
+  });
+
+  it('splits the aprox off the name and states the weight, not a size', () => {
+    const { name, sizeFormat } = splitSize(
+      'Jamón Gran Reserva Duroc DEL VALLE +21 meses 8 kg aprox.'
+    );
+    expect(name).toBe('Jamón Gran Reserva Duroc DEL VALLE +21 meses');
+    expect(sizeOf(sizeFormat)).toEqual({ unitSize: null, sizeUnit: null });
+    expect(approxWeightOf(sizeFormat)).toBe(8000);
   });
 
   it('states no size where the row states none', () => {
