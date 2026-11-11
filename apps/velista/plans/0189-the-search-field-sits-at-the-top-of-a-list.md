@@ -1,3 +1,5 @@
+> **PR:** [#979](https://github.com/IchirokuXVI/nx-portfolio/pull/979)
+
 # 0189: the search field sits at the top of a list
 
 > Decided on 2026-11-10 and 2026-11-11. On the zone list page and on the shopping list page the
