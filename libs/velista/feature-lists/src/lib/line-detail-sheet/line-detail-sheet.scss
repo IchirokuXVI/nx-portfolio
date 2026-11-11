@@ -34,6 +34,14 @@
   }
 }
 
+// The unit chip above the reel (velista 0183), both held to the end of the row.
+.amount-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--app-space-3);
+}
+
 // The amount in `content` scope: present, readable, and plainly not a control. It sits
 // where the reel's pill would, at the pill's size, so the sheet keeps its shape.
 .shown {

@@ -76,6 +76,7 @@ function input(overrides: Partial<LineHistoryInput> = {}): LineHistoryInput {
     settlements: [],
     hasMore: false,
     itemNameOf: (itemId) => (itemId === 'normal' ? NORMAL : null),
+    productOf: (itemId) => (itemId === 'normal' ? NORMAL : null),
     nameOf: (userId) => (userId === 'user-marta' ? 'Marta' : null),
     listNameOf: (listId) => (listId === 'list-2' ? 'Party list' : null),
     callerUserId: ME,

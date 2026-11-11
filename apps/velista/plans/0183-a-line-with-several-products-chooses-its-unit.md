@@ -1,3 +1,5 @@
+> **PR:** [#961](https://github.com/IchirokuXVI/nx-portfolio/pull/961)
+
 # 0183: a line with several products chooses its unit
 
 > Decided on 2026-11-05. A line can hold several products: the ones a catalog group gave it,

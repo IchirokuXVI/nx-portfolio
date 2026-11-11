@@ -1,9 +1,155 @@
 import type { CatalogBrowseContext, ProductShopPrice } from './catalog-browse';
 import type { CatalogItem, Line, ProductOffer } from './domain';
-import { lineAmount, type LineAmountProduct } from './line-amount';
-import type { LineUnit } from './line-unit';
-import { compareGroupOffers } from './product-group';
+import {
+  lineAmount,
+  lineAmountProductOf,
+  type LineAmount,
+  type LineAmountProduct,
+} from './line-amount';
+import {
+  LINE_UNIT_FALLBACK,
+  servesLineUnit,
+  type LineUnit,
+  type LineUnitProduct,
+  type LineUnitProductRead,
+} from './line-unit';
 import type { LocalizedName } from './shopping-profile';
+import { amountOfOne } from './sold-as';
+
+/** What a line asks for, as {@link cheaperForLine} compares its products by. */
+export type LineAsk = Pick<Line, 'quantity' | 'unit'>;
+
+/** One product of a line, as {@link cheaperForLine} compares it. */
+export interface LineMember {
+  /** Its size fields, or null when nothing is known about them. */
+  readonly product: LineUnitProduct | null;
+  /** The offer the comparison is made at, or null for none. */
+  readonly offer: Pick<ProductOffer, 'price' | 'piecePrice'> | null;
+}
+
+/**
+ * What one product costs for this line under W3 (backend `0246`, section 4.3;
+ * velista `0183`, section 1), in the figure {@link cheaperForLine} orders by,
+ * or null when it is not a candidate.
+ *
+ * A candidate can serve the line's unit at all: `lineAmount(max(quantity, 1),
+ * …)` is not null, so a loose product never serves a count line, a counted pack
+ * never serves a weight line, and a missing figure is a missing amount. Its
+ * figure is the cents of `lineAmount(quantity, …)` when the line asks for
+ * something, and the price of one (`amountOfOne`) in euros, unrounded, when it
+ * is at 0. Only figures of one line are ever compared with each other, so the
+ * two never meet. Nothing draws this figure: a caption draws `lineAmount`.
+ */
+export function lineMemberCost(
+  line: LineAsk,
+  member: LineMember
+): number | null {
+  if (member.product === null || member.offer === null) {
+    return null;
+  }
+  const product = lineAmountProductOf(member.product);
+  const serves = lineAmount(
+    Math.max(line.quantity, 1),
+    line.unit,
+    product,
+    member.offer
+  );
+  if (serves === null) {
+    return null;
+  }
+  if (line.quantity > 0) {
+    return (
+      lineAmount(line.quantity, line.unit, product, member.offer)?.cents ?? null
+    );
+  }
+  const one = amountOfOne(
+    { price: member.offer.price, piecePrice: member.offer.piecePrice },
+    product.kind
+  );
+  // The raw euros, unrounded, as the server's `priceOfOne` compares them: 1.231
+  // and 1.234 would both round to 123 cents and tie here and not there.
+  return one === null || !Number.isFinite(one) ? null : one;
+}
+
+/**
+ * W3 (backend 0246): the cost of the line's amount, among the members that can
+ * serve the unit; the price of one when the line is at 0. Ascending, null last,
+ * input order on a tie (with a stable sort).
+ *
+ * **What the line costs with each product, not the cheapest kilo.** The price
+ * per kilo or litre (`unitPrice`, and the comparable price of backend `0245`)
+ * answers which product is cheapest by weight, which the catalog tab answers.
+ * A line asks for an amount, and 500 g of bananas is cheapest loose while a
+ * whole melon is cheapest as the piece, so neither figure is read here. The
+ * server's `cheapestOf` (`basket-rules.spec.ts`) is the same rule, and
+ * `line-products.spec.ts` shares its scenario numbers.
+ */
+export function cheaperForLine(
+  line: LineAsk
+): (a: LineMember, b: LineMember) => number {
+  return (a, b) => nullsLast(lineMemberCost(line, a), lineMemberCost(line, b));
+}
+
+/**
+ * Whether another member is cheaper for this line than the product it counts
+ * as now, strictly, under W3 (velista `0183`, section 3; the basket row's
+ * cheaper mark).
+ *
+ * Only members that can serve the line's unit compare, so a loose product never
+ * earns the mark on a count line and a counted pack never on a weight line. A
+ * product with no cost of its own is never marked, because nothing says it is
+ * dearer, and a tie is not a better price.
+ */
+export function cheaperForLineInGroup(
+  line: LineAsk,
+  productId: string,
+  current: LineMember,
+  members: readonly (LineMember & { readonly id: string })[]
+): boolean {
+  const cost = lineMemberCost(line, current);
+  if (cost === null) {
+    return false;
+  }
+  return members.some((member) => {
+    if (member.id === productId) {
+      return false;
+    }
+    const other = lineMemberCost(line, member);
+    return other !== null && other < cost;
+  });
+}
+
+/** A catalog record as {@link cheaperForLine} compares it: its sizes and offer. */
+export function lineMemberOf(product: {
+  readonly unit: string | null;
+  readonly size: number | null;
+  readonly approxWeight: number | null;
+  readonly offer: Pick<ProductOffer, 'price' | 'piecePrice'> | null;
+}): LineMember {
+  return {
+    product: {
+      unit: product.unit,
+      size: product.size,
+      approxWeight: product.approxWeight,
+    },
+    offer: product.offer,
+  };
+}
+
+function nullsLast(a: number | null, b: number | null): number {
+  if (a === null || b === null) {
+    return a === b ? 0 : a === null ? 1 : -1;
+  }
+  return a - b;
+}
+
+/**
+ * How a screen ranks the products of one line (velista `0183`): what the line
+ * asks for, and the size fields of each product.
+ */
+export interface LineRank extends LineAsk {
+  readonly productOf: (itemId: string) => LineUnitProductRead;
+}
 
 /**
  * What the line page knows about the prices of one product (velista `0135`,
@@ -39,6 +185,25 @@ export interface LineProductPrice {
   readonly chain: LocalizedName | null;
   /** The one card that takes the word. Never with fewer than two products. */
   readonly cheapest: boolean;
+  /**
+   * Whether the product can serve the line's unit (velista `0183`, target
+   * state 4), by its size fields alone. Null while they are not known, and
+   * without a {@link LineRank}.
+   */
+  readonly serves: boolean | null;
+  /**
+   * What the line's amount costs with this product at {@link offer}, for the
+   * caption under the price (target state 6). Null with no amount or no price,
+   * and at 0.
+   */
+  readonly amount: LineAmount | null;
+  /** The figure the order compares ({@link lineMemberCost}), or null. */
+  readonly cost: number | null;
+  /**
+   * Whether this card waits on its record before the order can rank it: its
+   * price is in and its size fields are not.
+   */
+  readonly pending: boolean;
 }
 
 /**
@@ -48,29 +213,43 @@ export interface LineProductPrice {
  * With one chosen (section 3.2), it shows the price at that supermarket, and a
  * product the supermarket does not sell says so.
  *
- * **One card is the cheapest**: the lowest price for each kilo or litre, then the
- * lowest price, which is the comparison `similarProducts` makes. A line with one
- * product marks none, because the word compares, and a product with no price
- * never takes it. Two products at the same price leave the word on the first.
+ * **One card is the cheapest** (velista `0183`, target state 5): the lowest
+ * cost of the line's amount among the products that can serve its unit, which
+ * is {@link cheaperForLine}, the price of one at 0. A line with one product
+ * marks none, because the word compares, and so does a line where only one
+ * product can serve its unit: the others are not in the comparison. A product
+ * with no price never takes it. Two products at the same cost leave the word on
+ * the first. Without a `rank` nothing is compared, so nothing is marked, and
+ * nothing is marked either while a record among the first
+ * {@link LINE_PRICED_PRODUCTS_MAX} is still being read.
  */
 export function lineProductPrices(
   itemIds: readonly string[],
   pricesOf: (itemId: string) => LineProductPriceRead,
-  supermarketId: string | null
+  supermarketId: string | null,
+  rank?: LineRank
 ): readonly LineProductPrice[] {
   const prices = itemIds.map((itemId) =>
-    priceOf(itemId, pricesOf(itemId), supermarketId)
+    ranked(priceOf(itemId, pricesOf(itemId), supermarketId), rank)
   );
 
-  if (prices.length < 2) {
+  if (prices.filter((price) => price.serves !== false).length < 2) {
+    return prices;
+  }
+  // A card whose record is still being read may yet serve the unit, or not, so
+  // the word waits for it as the order does (`orderLineCards`): marking the only
+  // costed card now would move the word once the record lands.
+  if (
+    prices.slice(0, LINE_PRICED_PRODUCTS_MAX).some((price) => price.pending)
+  ) {
     return prices;
   }
 
   let best: LineProductPrice | null = null;
   for (const price of prices) {
     if (
-      price.kind === 'priced' &&
-      (best === null || compareGroupOffers(price.offer, best.offer) < 0)
+      price.cost !== null &&
+      (best === null || best.cost === null || price.cost < best.cost)
     ) {
       best = price;
     }
@@ -81,6 +260,42 @@ export function lineProductPrices(
     : prices.map((price) =>
         price === best ? { ...price, cheapest: true } : price
       );
+}
+
+/** A price with what the line's unit and amount say about it. */
+function ranked(
+  price: LineProductPrice,
+  rank: LineRank | undefined
+): LineProductPrice {
+  if (rank === undefined) {
+    return price;
+  }
+  const product = rank.productOf(price.itemId);
+  if (product === undefined || product === null) {
+    return {
+      ...price,
+      pending: product === undefined && price.kind === 'priced',
+    };
+  }
+  const offer =
+    price.offer === null
+      ? null
+      : { price: price.offer.price, piecePrice: price.offer.piecePrice };
+  const cost = lineMemberCost(rank, { product, offer });
+  return {
+    ...price,
+    serves: servesLineUnit(product, rank.unit),
+    cost,
+    amount:
+      cost === null || rank.quantity <= 0 || offer === null
+        ? null
+        : lineAmount(
+            rank.quantity,
+            rank.unit,
+            lineAmountProductOf(product),
+            offer
+          ),
+  };
 }
 
 function priceOf(
@@ -95,6 +310,10 @@ function priceOf(
     supermarketId: null,
     chain: null,
     cheapest: false,
+    serves: null,
+    amount: null,
+    cost: null,
+    pending: false,
   });
 
   if (read === undefined) {
@@ -124,6 +343,10 @@ function priceOf(
     supermarketId: row.supermarketId,
     chain: row.chain,
     cheapest: false,
+    serves: null,
+    amount: null,
+    cost: null,
+    pending: false,
   };
 }
 
@@ -149,14 +372,18 @@ export function favoriteFirst(
 
 /**
  * The cards of a line in the order the page draws them (velista `0137`,
- * section 2): the favourite, then the products with a price from the cheapest
- * up, then the ones with no price.
+ * section 2; velista `0183`, target states 4, 5 and 7): the favourite when it
+ * can serve the line's unit, then the products with a cost for the line's
+ * amount from the cheapest up ({@link cheaperForLine}), then the ones that can
+ * serve the unit with no price, then the ones that cannot serve it at all.
  *
  * It is the order the basket is meant to choose in, so the first card is the
  * product a shopper will be shown. The comparison is the one that gives the word
- * CHEAPEST, and two products at one price keep the order the line holds them in.
+ * CHEAPEST, and two products at one cost keep the order the line holds them in.
+ * A product that cannot serve the unit is kept and drawn last, marked by its
+ * card: the shopper may still want to see it, and nothing ranks it.
  *
- * **The cards move once.** While a price among the first
+ * **The cards move once.** While a price or a record among the first
  * {@link LINE_PRICED_PRODUCTS_MAX} is still being read, only the favourite moves
  * and the rest keep the order of the line. Sorting as each price lands would move
  * a card under a thumb several times in a second. Products after those keep their
@@ -169,25 +396,30 @@ export function orderLineCards(
   const favorite =
     favoriteItemId === null
       ? undefined
-      : prices.find((price) => price.itemId === favoriteItemId);
+      : prices.find(
+          (price) => price.itemId === favoriteItemId && price.serves !== false
+        );
   const others = prices.filter((price) => price !== favorite);
   const head = favorite === undefined ? [] : [favorite];
 
   const counted = prices.slice(0, LINE_PRICED_PRODUCTS_MAX);
-  if (counted.some((price) => price.kind === 'loading')) {
+  if (counted.some((price) => price.kind === 'loading' || price.pending)) {
     return [...head, ...others];
   }
 
   const ranked = new Set(counted);
   const inRange = others.filter((price) => ranked.has(price));
-  const priced = inRange
-    .filter((price) => price.kind === 'priced')
-    // `sort` is stable, so equal prices keep the order of the line.
-    .sort((a, b) => compareGroupOffers(a.offer, b.offer));
-  const unpriced = inRange.filter((price) => price.kind !== 'priced');
+  const costed = inRange
+    .filter((price) => price.cost !== null)
+    // `sort` is stable, so equal costs keep the order of the line.
+    .sort((a, b) => nullsLast(a.cost, b.cost));
+  const uncosted = inRange.filter(
+    (price) => price.cost === null && price.serves !== false
+  );
+  const cannot = inRange.filter((price) => price.serves === false);
   const beyond = others.filter((price) => !ranked.has(price));
 
-  return [...head, ...priced, ...unpriced, ...beyond];
+  return [...head, ...costed, ...uncosted, ...cannot, ...beyond];
 }
 
 /** One row of the supermarket sheet of a line (section 3.2). */
@@ -280,22 +512,31 @@ export const LINE_PRICED_PRODUCTS_MAX = 20;
 /** The fields of a line the order of its products reads. */
 export type LineShowSource = Pick<
   Line,
-  'itemIds' | 'favoriteItemId' | 'preferredSupermarketId'
+  'itemIds' | 'favoriteItemId' | 'preferredSupermarketId' | 'quantity' | 'unit'
 >;
 
 /**
  * The products of a line in the order the line page draws its cards (velista
- * `0137`, section 2), each with its price.
+ * `0137`, section 2; velista `0183`), each with its price and what the line's
+ * amount costs with it.
  *
  * {@link lineProductPrices} and then {@link orderLineCards}, over `itemIds` only:
  * `groupItemIds` is the part of that set a group put there, not a second set.
+ * `productOf` answers each product's size fields, which say whether it can
+ * serve the line's unit.
  */
 export function lineCardOrder(
   line: LineShowSource,
-  pricesOf: (itemId: string) => LineProductPriceRead
+  pricesOf: (itemId: string) => LineProductPriceRead,
+  productOf: (itemId: string) => LineUnitProductRead
 ): readonly LineProductPrice[] {
   return orderLineCards(
-    lineProductPrices(line.itemIds, pricesOf, line.preferredSupermarketId),
+    lineProductPrices(line.itemIds, pricesOf, line.preferredSupermarketId, {
+      quantity: line.quantity,
+      // A line read before velista `0182` carries no unit, and counts pieces.
+      unit: line.unit ?? LINE_UNIT_FALLBACK,
+      productOf,
+    }),
     line.favoriteItemId
   );
 }
@@ -307,21 +548,25 @@ export function lineCardOrder(
  * It is the first card of the line page by definition, so the row of a list and
  * the line page never show two products for one line. That gives the rule:
  *
- * 1. The favourite, when the line holds it, with or without a price.
- * 2. The cheapest product with a price among the first
- *    {@link LINE_PRICED_PRODUCTS_MAX}: at the supermarket of the line when it has
- *    one, else the lowest price near the reader. The price for each kilo or litre
- *    decides, then the price, and a tie keeps the order of the line.
- * 3. The first product of the line when none has a price, and while a price among
- *    those is still being read.
+ * 1. The favourite, when the line holds it and it can serve the line's unit
+ *    (velista `0183`, target state 7), with or without a price.
+ * 2. The cheapest product for the line's amount among the first
+ *    {@link LINE_PRICED_PRODUCTS_MAX} that can serve its unit: at the supermarket
+ *    of the line when it has one, else the lowest price near the reader. The cost
+ *    of the line's amount decides ({@link cheaperForLine}), the price of one at 0,
+ *    and a tie keeps the order of the line.
+ * 3. The first product of the line that can serve its unit when none has a
+ *    price, and the favourite or the first product while a price or a record
+ *    among those is still being read.
  *
  * The price that comes back is the price that made the choice.
  */
 export function lineShownProduct(
   line: LineShowSource,
-  pricesOf: (itemId: string) => LineProductPriceRead
+  pricesOf: (itemId: string) => LineProductPriceRead,
+  productOf: (itemId: string) => LineUnitProductRead
 ): LineProductPrice | null {
-  return lineCardOrder(line, pricesOf)[0] ?? null;
+  return lineCardOrder(line, pricesOf, productOf)[0] ?? null;
 }
 
 /** One line, as {@link listCost} counts it. */

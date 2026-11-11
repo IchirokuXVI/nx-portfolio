@@ -399,7 +399,14 @@ function shownProductOf(
   line: Line,
   catalog: ListStateCatalog
 ): LineProductPrice | null {
-  return lineShownProduct(line, catalog.pricesOf);
+  // The size fields say which products can serve the line's unit (velista
+  // `0183`): the record when held, nothing when the lookup answered without one.
+  return lineShownProduct(
+    line,
+    catalog.pricesOf,
+    (itemId) =>
+      catalog.itemOf(itemId) ?? (catalog.settled(itemId) ? null : undefined)
+  );
 }
 
 /**

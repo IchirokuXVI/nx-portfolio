@@ -77,7 +77,8 @@ const MILK: CatalogItem = {
   unit: 'LITER',
   imageUrl: 'https://img.test/milk.png',
 };
-const SIX = item('item-six', 'Hacendado milk six pack', offer(5.34, 0.89));
+// Cheaper than the milk for each buy, which is what W3 compares (velista 0183).
+const SIX = item('item-six', 'Hacendado milk six pack', offer(0.89, 0.15));
 const PASCUAL = item('item-pascual', 'Pascual milk', offer(1.15, 1.15));
 const PULEVA = item('item-puleva', 'Puleva milk', null);
 const OAT = item('item-oat', 'Oat drink', null, null);
@@ -342,9 +343,9 @@ describe('ChangeSheet', () => {
       expect(
         radios(fixture).map((radio) => radio.getAttribute('aria-label'))
       ).toEqual([
-        'Hacendado milk, Hacendado, €0.92, basket.change.chosenNow',
-        'Hacendado milk six pack, €5.34, basket.change.cheaper',
-        'Pascual milk, €1.15',
+        'Hacendado milk, Hacendado, €0.92, basket.change.chosenNow, line.unit.cost',
+        'Hacendado milk six pack, €0.89, basket.change.cheaper, line.unit.cost',
+        'Pascual milk, €1.15, line.unit.cost',
         'Puleva milk, catalog.row.noPrice',
       ]);
     });

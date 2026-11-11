@@ -435,8 +435,9 @@ export class BasketRow {
   readonly canChange = input(false);
 
   /**
-   * Another product of this product's group is cheaper, by the price per litre
-   * or kilo at the basket's scopes. Words beside the price, never colour alone.
+   * Another product of this product's group is cheaper for what the row asks,
+   * at the basket's scopes (velista `0183`, W3: the cost of its amount among the
+   * products that can serve its unit). Words beside the price, never colour alone.
    */
   readonly groupCheaper = input(false);
 

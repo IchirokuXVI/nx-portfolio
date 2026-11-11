@@ -5,7 +5,58 @@ import type {
   ProductShopPrice,
   ShoppingListSummary,
 } from '@portfolio/velista/models';
-import { selectLinePage, type LinePageInput } from './select-line-page';
+import {
+  offeredUnits,
+  selectLinePage,
+  type LinePageInput,
+} from './select-line-page';
+
+describe('offeredUnits (velista 0183; backend 0246 W1 and W2)', () => {
+  const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const PIECE = { unit: 'KILOGRAM', size: null, approxWeight: 700 };
+
+  it('offers pieces and weight on a line of a loose product and a kilo piece', () => {
+    expect(
+      offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>
+        itemId === 'loose' ? LOOSE : PIECE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('offers no choice on a line of one product, even a kilo piece', () => {
+    expect(
+      offeredUnits({ itemIds: ['piece'], unit: 'UNIT' }, () => PIECE)
+    ).toEqual(['UNIT']);
+  });
+
+  it('keeps the stored unit on offer when no product serves it, so the chip has a way out', () => {
+    // A legacy line stored in pieces whose readable products are all loose.
+    expect(
+      offeredUnits(
+        { itemIds: ['loose-a', 'loose-b'], unit: 'UNIT' },
+        () => LOOSE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('reads a gone record as answered, not as still loading', () => {
+    expect(
+      offeredUnits(
+        { itemIds: ['gone', 'loose', 'piece'], unit: 'UNIT' },
+        (itemId) =>
+          itemId === 'gone' ? null : itemId === 'loose' ? LOOSE : PIECE
+      )
+    ).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('offers the line unit alone while a record is still being read', () => {
+    expect(
+      offeredUnits({ itemIds: ['loose', 'piece'], unit: 'UNIT' }, (itemId) =>
+        itemId === 'loose' ? LOOSE : undefined
+      )
+    ).toEqual(['UNIT']);
+  });
+});
 
 /**
  * What the line page says, asserted against the function that decides it
@@ -23,6 +74,7 @@ function line(overrides: Partial<Line> = {}): Line {
     listId: LIST_ID,
     content: 'Shampoo',
     quantity: 3,
+    unit: 'UNIT',
     itemIds: ['normal', 'classic'],
     productGroupId: null,
     groupItemIds: [],
@@ -107,11 +159,15 @@ const PRICES: Record<string, LineProductPriceRead> = {
 };
 
 function input(overrides: Partial<LinePageInput> = {}): LinePageInput {
+  const itemNameOf =
+    overrides.itemNameOf ?? ((itemId: string) => CATALOG[itemId] ?? null);
   return {
     line: line(),
     list: list(),
     zoneName: 'Home',
-    itemNameOf: (itemId) => CATALOG[itemId] ?? null,
+    itemNameOf,
+    // The size fields come with the record, as `ItemNames.sizingOf` answers.
+    productOf: (itemId) => itemNameOf(itemId),
     namesUnavailable: false,
     nameOf: (userId) => (userId === 'user-marta' ? 'Marta' : null),
     callerUserId: ME,

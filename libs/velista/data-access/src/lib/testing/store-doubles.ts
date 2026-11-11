@@ -42,6 +42,7 @@ import {
   itemShopPrices,
   type CategoryNode,
   type LineProductPriceRead,
+  type LineUnitProductRead,
 } from '@portfolio/velista/models';
 import { ProfileStore } from '../account/profile-store';
 import { AccountNotice } from '../auth/account-notice';
@@ -832,6 +833,8 @@ export type LineWriteCall =
        */
       readonly adoptItemIds?: readonly string[];
       readonly quantity?: number;
+      /** What {@link quantity} counts, on a unit change (velista `0183`). */
+      readonly unit?: LineUnit;
       /** Whether the edit confirmed a merge (velista plan 0083, section 5). */
       readonly confirmMerge?: boolean;
     }
@@ -1117,6 +1120,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         content?: string;
         named?: false;
         quantity?: number;
+        unit?: LineUnit;
         itemIds?: readonly string[];
         adoptItemIds?: readonly string[];
         favoriteItemId?: string | null;
@@ -1199,6 +1203,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
                   ...(patch.quantity === undefined
                     ? {}
                     : { quantity: patch.quantity }),
+                  // What the quantity counts (velista `0183`), sent with it.
+                  ...(patch.unit === undefined ? {} : { unit: patch.unit }),
                   ...(patch.itemIds === undefined
                     ? {}
                     : { itemIds: patch.itemIds }),
@@ -1543,6 +1549,14 @@ export function fakeItemNames(options: FakeItemNamesOptions = {}) {
         return null;
       }
       return pending.has(itemId) ? undefined : [];
+    },
+    /** The record's size fields (velista `0183`), as `ItemNames.sizingOf`. */
+    sizingOf: (itemId: string): LineUnitProductRead => {
+      const item = itemOf(itemId);
+      if (item !== null) {
+        return item;
+      }
+      return pending.has(itemId) ? undefined : null;
     },
     ensure: async (itemIds: readonly string[]) => {
       asked.push([...itemIds]);

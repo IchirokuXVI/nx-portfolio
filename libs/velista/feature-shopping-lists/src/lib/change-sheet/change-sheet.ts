@@ -36,6 +36,8 @@ import {
 import {
   CheckField,
   ChevronRightIcon,
+  lineAmountWords,
+  lineUnitCannotWords,
   ProductRow,
   ProductRowSkeleton,
   productRowView,
@@ -257,8 +259,22 @@ export class ChangeSheet {
       memberIds: this._choices.memberIds(),
       pickedId: this._picked(),
       priceOf: this._choices.priceOf,
+      line: this._ask(),
+      productOf: (itemId) => this._choices.itemOf(itemId) ?? undefined,
     });
   });
+
+  /**
+   * What the row asks for, which orders the products and marks the cheaper
+   * ones (velista `0183`): its amount and the unit it counts in.
+   */
+  private readonly _ask = computed(
+    () => {
+      const row = this.row();
+      return { quantity: row?.asked ?? 0, unit: row?.unit ?? 'UNIT' } as const;
+    },
+    { equal: (a, b) => a.quantity === b.quantity && a.unit === b.unit }
+  );
 
   protected readonly choices = computed<readonly ChoiceRow[]>(() => {
     const locale = this._locale();
@@ -292,9 +308,26 @@ export class ChangeSheet {
           }
         );
         const captionText = caption === null ? null : translate(caption);
+        // The cost of the row's amount with it, or that it cannot serve the
+        // row's unit (velista `0183`, section 3).
+        const ask = this._ask();
+        const lineCost =
+          choice.serves === false
+            ? lineUnitCannotWords(ask.unit, translate)
+            : choice.offer === null
+              ? null
+              : lineAmountWords(
+                  choice.amount,
+                  ask,
+                  source,
+                  choice.offer.currency,
+                  locale,
+                  translate
+                );
         return {
           ...view,
           caption: captionText,
+          lineCost,
           // The radio is named by the whole card, as the row was read before
           // the card: the brand and size, the price and what the list says.
           label: [
@@ -304,6 +337,7 @@ export class ChangeSheet {
               ? translate('catalog.row.noPrice')
               : priceWordsText(view.price),
             captionText,
+            lineCost,
           ]
             .filter((part): part is string => part !== null && part !== '')
             .join(', '),

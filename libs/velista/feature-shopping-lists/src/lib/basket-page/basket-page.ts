@@ -48,9 +48,10 @@ import {
   type BasketViewState,
   catalogName,
   type CatalogSuggestion,
-  cheaperInGroup,
+  cheaperForLineInGroup,
   countableBasketRows,
   isLinkVisitor,
+  lineMemberOf,
   type LineUnit,
   LINK_VISIT_HOURS,
   productSuggestions,
@@ -1238,7 +1239,11 @@ export class BasketPage {
     );
   }
 
-  /** Whether another product of the row's group is cheaper at this basket's scopes. */
+  /**
+   * Whether another product of the row's group is cheaper at this basket's
+   * scopes, for what the row asks (velista `0183`, section 3): the cost of its
+   * amount among the members that can serve its unit, the price of one at 0.
+   */
   protected groupCheaper(row: BasketRowModel): boolean {
     const product = this._rowProduct(row);
     const groupId = product?.productGroupId ?? null;
@@ -1247,7 +1252,13 @@ export class BasketPage {
     }
     const members = this._groupMembers.membersOf(groupId, this._groupScope());
     return (
-      members !== null && cheaperInGroup(product.id, product.offer, members)
+      members !== null &&
+      cheaperForLineInGroup(
+        { quantity: row.asked, unit: row.unit },
+        product.id,
+        lineMemberOf(product),
+        members.map((member) => ({ id: member.id, ...lineMemberOf(member) }))
+      )
     );
   }
 

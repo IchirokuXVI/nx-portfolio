@@ -15,10 +15,12 @@ import {
   type LineProductPriceRead,
   type LineSettlement,
   type LineUnit,
+  type LineUnitProductRead,
   type PriceWords,
   type ProductOffer,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
+import { offeredUnits } from '../line-page/select-line-page';
 
 import {
   priceWords,
@@ -67,6 +69,13 @@ export interface LineDetailInput {
   readonly itemNameOf: (itemId: string) => CatalogItem | null;
   /** The prices of a product, for the product the line shows (velista `0145`). */
   readonly pricesOf?: (itemId: string) => LineProductPriceRead;
+  /**
+   * The size fields of a product, as `ItemNames.sizingOf` reads them (velista
+   * `0183`): `undefined` while its record is not read, `null` once the lookup
+   * answered nothing. Not `itemNameOf`, whose null means both, so a gone record
+   * would read as still loading and the sheet would never draw the chip.
+   */
+  readonly productOf: (itemId: string) => LineUnitProductRead;
   /**
    * Whether the name lookup failed, as opposed to answering with nothing.
    *
@@ -125,10 +134,12 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
       input.locale,
-      input.pricesOf
+      input.pricesOf,
+      input.productOf
     ).text,
     quantity: line.quantity,
     unit: line.unit,
+    units: offeredUnits(line, input.productOf),
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     lastPurchase: rows.find((row) => row.outcome === 'BOUGHT') ?? null,

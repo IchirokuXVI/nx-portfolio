@@ -80,6 +80,12 @@ export interface ProductRowView {
    * Absent is a count.
    */
   readonly lineUnit?: LineUnit;
+  /**
+   * What a line's amount costs with this product, "2 × ~700 g · ≈ 2,78 €", or
+   * the words for a product that cannot serve the line's unit (velista `0183`).
+   * Drawn under the caption. Absent or null draws nothing.
+   */
+  readonly lineCost?: string | null;
 }
 
 /** One line under a card that holds its product, with its own stepper. */
@@ -290,6 +296,9 @@ export type ProductRowExpanded = 'shops' | 'members';
         }
         @if (row().caption; as caption) {
           <span class="caption">{{ caption }}</span>
+        }
+        @if (row().lineCost; as lineCost) {
+          <span class="line-cost">{{ lineCost }}</span>
         }
         @if (row().chains !== null && !chainsPress()) {
           <span class="chains">

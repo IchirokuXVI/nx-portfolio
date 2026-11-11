@@ -131,6 +131,21 @@
       "notAvailable": "No había la última vez",
       "claimed": "Alguien lo está comprando",
       "claimedBy": "{{name}} lo está comprando"
+    },
+    "unit": {
+      "label": "Contar por",
+      "UNIT": "unidades",
+      "GRAM": "peso",
+      "MILLILITER": "volumen",
+      "cannot": {
+        "UNIT": "no se vende por unidades",
+        "GRAM": "no se vende a peso",
+        "MILLILITER": "no se vende por volumen"
+      },
+      "pieces": "{{count}} × {{size}}",
+      "cost": "{{amount}} · {{price}}",
+      "costAbout": "{{amount}} · ≈ {{price}}",
+      "notOffered": "Ninguno de sus productos se vende así, así que la línea sigue contando igual."
     }
   },
   "connection": {

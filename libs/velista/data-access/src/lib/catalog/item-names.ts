@@ -4,6 +4,7 @@ import {
   itemShopPrices,
   type CatalogItem,
   type LineProductPriceRead,
+  type LineUnitProductRead,
 } from '@portfolio/velista/models';
 import { CATALOG_SERVICE, type CatalogServiceI } from './catalog-service';
 
@@ -136,6 +137,19 @@ export class ItemNames {
       return null;
     }
     return priced ? [] : undefined;
+  };
+
+  /**
+   * The size fields of one product, as the order of a line's products reads
+   * them (velista `0183`): the record when it is held, `null` when the lookup
+   * answered nothing (gone, or failed), `undefined` while it has not answered.
+   */
+  readonly sizingOf = (itemId: string): LineUnitProductRead => {
+    const item = this._byId().get(itemId);
+    if (item !== undefined) {
+      return item;
+    }
+    return this.settled(itemId) ? null : undefined;
   };
 
   /**

@@ -14,6 +14,7 @@ import {
   type LineHistoryRowVm,
   type LineProductPriceRead,
   type LineSettlement,
+  type LineUnitProductRead,
 } from '@portfolio/velista/models';
 import {
   estimateFrom,
@@ -40,6 +41,11 @@ export interface LineHistoryInput {
   readonly itemNameOf: (itemId: string) => CatalogItem | null;
   /** The prices of a product, for the product the line shows (velista `0145`). */
   readonly pricesOf?: (itemId: string) => LineProductPriceRead;
+  /**
+   * The size fields of a product, as `ItemNames.sizingOf` reads them (velista
+   * `0183`), so the header names the product the line page names.
+   */
+  readonly productOf: (itemId: string) => LineUnitProductRead;
   readonly nameOf: (userId: string) => string | null;
   /** The name of another list, for a row of "everywhere". Null when not held. */
   readonly listNameOf: (listId: string) => string | null;
@@ -92,7 +98,8 @@ export function selectLineHistory(
       line,
       (itemId) => input.itemNameOf(itemId)?.name ?? null,
       input.locale,
-      input.pricesOf
+      input.pricesOf,
+      input.productOf
     ).text,
     listName: input.listName,
     scopes,

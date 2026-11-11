@@ -1,5 +1,5 @@
 import type { ProductOffer } from './domain';
-import { soldAsOf, type SoldAs } from './sold-as';
+import { soldAs, soldAsOf, type SoldAs } from './sold-as';
 
 /**
  * What a line's quantity counts (velista `0182`, backend `0246` section 1).
@@ -196,4 +196,106 @@ export function stepsFrom(
     at = next;
   }
   return Math.min(max, Math.max(min, at));
+}
+
+/**
+ * A product as {@link lineUnits} reads it (velista `0183`, section 1): the
+ * fields `soldAs` reads, plus the size. `unit` is the unit the product was
+ * created in, `size` its size in that unit, `approxWeight` one piece in grams.
+ */
+export interface LineUnitProduct {
+  readonly unit: string | null;
+  readonly size: number | null;
+  readonly approxWeight: number | null;
+}
+
+/**
+ * What a screen knows about the size fields of one product of a line:
+ * `undefined` while its record is not read, `null` when the read answered
+ * nothing (gone, or failed), the fields when it answered.
+ */
+export type LineUnitProductRead = LineUnitProduct | null | undefined;
+
+/**
+ * The units one product can serve a line in: its own unit, and the units its
+ * weight or its size bridges to (backend `0246` section 1, "can also serve").
+ *
+ * velista's mirror of the contracts' `unitsServedBy`, kept by rule D4 as its
+ * own copy. A sized pack serves grams or millilitres through its size, and a
+ * piece with a weight serves grams. A legacy `LITER` or `KILOGRAM` size is read
+ * in its base unit, as `lineAmount` reads it.
+ */
+export function unitsServedBy(product: LineUnitProduct): LineUnit[] {
+  switch (soldAs(product.unit, product.size, product.approxWeight)) {
+    case 'BY_THE_KILO':
+      return ['GRAM'];
+    case 'BY_THE_LITRE':
+      return ['MILLILITER'];
+    case 'KILO_PIECE':
+      return ['UNIT', 'GRAM'];
+    case 'PACK': {
+      const bridge = packBridgeUnit(product);
+      return bridge === null ? ['UNIT'] : ['UNIT', bridge];
+    }
+  }
+}
+
+/**
+ * The units a line can count in, in the chip's order (`UNIT`, `GRAM`,
+ * `MILLILITER`), for the products it holds (velista `0183`, target state 1;
+ * backend `0246` W1, `lineUnitsOf`).
+ *
+ * The union of what each product serves. An empty set is a free text line,
+ * which counts pieces, so it answers `UNIT` alone. Two entries or more is what
+ * draws the chip.
+ */
+export function lineUnits(products: readonly LineUnitProduct[]): LineUnit[] {
+  if (products.length === 0) {
+    return ['UNIT'];
+  }
+  const served = new Set<LineUnit>();
+  for (const product of products) {
+    for (const unit of unitsServedBy(product)) {
+      served.add(unit);
+    }
+  }
+  return LINE_UNITS.filter((unit) => served.has(unit));
+}
+
+/** Whether this product can serve a line counted in `unit`. */
+export function servesLineUnit(
+  product: LineUnitProduct,
+  unit: LineUnit
+): boolean {
+  return unitsServedBy(product).includes(unit);
+}
+
+/**
+ * The line unit a `PACK` bridges to, or null: a size in grams or millilitres
+ * (a `KILOGRAM` or `LITER` size read in its base unit), or a weight on a
+ * counted product with no size. The same bridge `lineAmount` reads.
+ */
+function packBridgeUnit(
+  product: LineUnitProduct
+): 'GRAM' | 'MILLILITER' | null {
+  const { size, unit, approxWeight } = product;
+  if (size !== null) {
+    if (!Number.isFinite(size) || size <= 0) {
+      return null;
+    }
+    if (unit === 'GRAM' || unit === 'KILOGRAM') {
+      return 'GRAM';
+    }
+    if (unit === 'MILLILITER' || unit === 'LITER') {
+      return 'MILLILITER';
+    }
+    return null;
+  }
+  const counted = unit === 'UNIT' || unit === 'PACK';
+  return counted &&
+    approxWeight !== null &&
+    Number.isFinite(approxWeight) &&
+    approxWeight > 0
+    ? 'GRAM'
+    : null;
 }

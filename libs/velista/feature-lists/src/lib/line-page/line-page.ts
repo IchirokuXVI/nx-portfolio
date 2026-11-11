@@ -29,7 +29,9 @@ import {
   type AlsoOnVm,
   APP_BASE_PATH,
   catalogName,
+  defaultQuantity,
   LINE_PRICED_PRODUCTS_MAX,
+  type LineUnit,
 } from '@portfolio/velista/models';
 import {
   AppHistory,
@@ -47,10 +49,12 @@ import {
   EllipsisIcon,
   InfoIcon,
   LineProductRail,
+  LineUnitChip,
   PageHeader,
   PageHeaderAction,
   QuantityStepper,
 } from '@portfolio/velista/ui';
+import { listErrorKey } from '../list-error-copy';
 import {
   actionsFor,
   editScopeFor,
@@ -96,6 +100,7 @@ const CARDS_READ_AHEAD = 2;
     InfoIcon,
     QuantityStepper,
     LineProductRail,
+    LineUnitChip,
   ],
   // One for the visit, and for the sheets over this page, which are drawn in its
   // outlet and so resolve it from here.
@@ -133,9 +138,32 @@ export class LinePage {
   /** A write of the favourite is out, so the stars wait. */
   readonly busy = signal(false);
 
+  /** A unit change is out, so the chip and the stepper wait (velista `0183`). */
+  readonly unitPending = signal(false);
+
+  /** The last refused unit change, with the version of the line it was refused at. */
+  private readonly _unitError = signal<{
+    readonly key: string;
+    readonly version: number | null;
+  } | null>(null);
+
   private readonly _line = computed(() =>
     this._lines.linesIn(this.listId()).find((line) => line.id === this.lineId())
   );
+
+  /**
+   * Why the last unit change was refused, drawn under the amount. Only while the
+   * line is the one it was refused on: a step that lands, or any other write
+   * that moves the line's version, takes the line away, so the words would
+   * describe a line that is no longer drawn.
+   */
+  readonly unitErrorKey = computed(() => {
+    const error = this._unitError();
+    if (error === null) {
+      return null;
+    }
+    return (this._line()?.version ?? null) === error.version ? error.key : null;
+  });
 
   private readonly _list = computed(() =>
     this._lists.listsIn(this.zoneId()).find((list) => list.id === this.listId())
@@ -214,6 +242,7 @@ export class LinePage {
       callerUserId: this._session.userId(),
       locale,
       priceOf: this._prices.priceOf,
+      productOf: this._itemNames.sizingOf,
       supermarketNameOf: (supermarketId) => {
         const name =
           context?.chains.find((chain) => chain.supermarketId === supermarketId)
@@ -367,7 +396,37 @@ export class LinePage {
   /** One press of the stepper: one more, or one fewer, as a delta (section 2). */
   /** One press of the stepper, as the signed amount it moved (velista `0182`). */
   step(by: number): void {
-    void this._lines.addQuantity(this.lineId(), by);
+    void this._lines.addQuantity(this.lineId(), by).then((outcome) => {
+      if (outcome === 'succeeded') {
+        this._unitError.set(null);
+      }
+    });
+  }
+
+  /**
+   * A segment of the unit chip (velista `0183`, target state 3): one write of
+   * the unit with the amount that unit starts at, which backend `0246` requires
+   * with every unit change. The store moves the line at once and puts it back on
+   * a refusal, and the chip and the stepper read the line, so both follow it.
+   */
+  async chooseUnit(unit: LineUnit): Promise<void> {
+    const line = this._line();
+    if (line === undefined || this.unitPending() || unit === line.unit) {
+      return;
+    }
+    this.unitPending.set(true);
+    this._unitError.set(null);
+    const outcome = await this._lines.updateLine(line.id, {
+      unit,
+      quantity: defaultQuantity(unit),
+    });
+    this.unitPending.set(false);
+    if (outcome.state === 'failed') {
+      this._unitError.set({
+        key: listErrorKey(outcome.error, 'lines.write') ?? 'list.detail.failed',
+        version: this._line()?.version ?? null,
+      });
+    }
   }
 
   /** The rail scrolled: how many cards it has reached. */

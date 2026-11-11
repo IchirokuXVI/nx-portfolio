@@ -1,11 +1,103 @@
 import {
   legacyLineUnit,
   lineUnitOfProduct,
+  lineUnits,
+  servesLineUnit,
   shownLineUnit,
   stepAt,
   stepFrom,
   stepsFrom,
+  unitsServedBy,
+  type LineUnitProduct,
 } from './line-unit';
+
+/*
+ * velista's mirror of backend `0246` section 1, "can also serve", row for row:
+ * `libs/luna-shopper/contracts/src/lib/units/line-unit.spec.ts` holds the same
+ * table for `lineUnitsOf`, with the same products under the same names.
+ */
+const product = (
+  unit: string,
+  size: number | null,
+  approxWeight: number | null = null
+): LineUnitProduct => ({ unit, size, approxWeight });
+
+const RICE_500_G = product('GRAM', 500);
+const HAM_1_KG_SIZED = product('KILOGRAM', 1);
+const MILK_1000_ML = product('MILLILITER', 1000);
+const OIL_LEGACY_1_5_L = product('LITER', 1.5);
+const EGGS_6 = product('UNIT', 6);
+const YOGURT_PACK = product('PACK', null);
+const MELON_PIECE = product('UNIT', null, 1800);
+const LOOSE_BANANAS = product('KILOGRAM', null);
+const LOOSE_OLIVE_OIL = product('LITER', null);
+const CHEESE_PIECE = product('KILOGRAM', null, 700);
+
+describe('lineUnits (velista 0183, section 1; backend 0246 lineUnitsOf)', () => {
+  it.each([
+    ['a pack sized in grams', RICE_500_G, ['UNIT', 'GRAM']],
+    [
+      'a pack sized in kilograms, read as grams',
+      HAM_1_KG_SIZED,
+      ['UNIT', 'GRAM'],
+    ],
+    ['a pack sized in millilitres', MILK_1000_ML, ['UNIT', 'MILLILITER']],
+    [
+      'a legacy LITER size, read as millilitres',
+      OIL_LEGACY_1_5_L,
+      ['UNIT', 'MILLILITER'],
+    ],
+    ['a counted UNIT with a size', EGGS_6, ['UNIT']],
+    ['a counted PACK with no size', YOGURT_PACK, ['UNIT']],
+    ['a piece priced as one', MELON_PIECE, ['UNIT', 'GRAM']],
+    ['a product by the kilo', LOOSE_BANANAS, ['GRAM']],
+    ['a product by the litre', LOOSE_OLIVE_OIL, ['MILLILITER']],
+    ['a kilo piece', CHEESE_PIECE, ['UNIT', 'GRAM']],
+  ] as const)(
+    '%s serves what the backend table says',
+    (_name, item, served) => {
+      expect(unitsServedBy(item)).toEqual(served);
+      expect(lineUnits([item])).toEqual(served);
+    }
+  );
+
+  it('reads a zero or missing weight as no weight', () => {
+    expect(lineUnits([{ ...LOOSE_BANANAS, approxWeight: 0 }])).toEqual([
+      'GRAM',
+    ]);
+    expect(lineUnits([{ ...YOGURT_PACK, approxWeight: 0 }])).toEqual(['UNIT']);
+  });
+
+  it('answers UNIT alone for an empty set, which is a free text line (W1)', () => {
+    expect(lineUnits([])).toEqual(['UNIT']);
+  });
+
+  it('answers the union over a set of all kinds, in the order UNIT, GRAM, MILLILITER', () => {
+    expect(
+      lineUnits([LOOSE_OLIVE_OIL, CHEESE_PIECE, LOOSE_BANANAS, YOGURT_PACK])
+    ).toEqual(['UNIT', 'GRAM', 'MILLILITER']);
+  });
+
+  it('answers only what some product serves: two loose products never offer a count', () => {
+    expect(lineUnits([LOOSE_BANANAS, LOOSE_BANANAS])).toEqual(['GRAM']);
+    expect(lineUnits([LOOSE_BANANAS, MILK_1000_ML])).toEqual([
+      'UNIT',
+      'GRAM',
+      'MILLILITER',
+    ]);
+  });
+
+  it('offers the chip on the walk line: a loose product and a kilo piece', () => {
+    expect(lineUnits([LOOSE_BANANAS, CHEESE_PIECE])).toEqual(['UNIT', 'GRAM']);
+  });
+
+  it('says which units one product can serve', () => {
+    expect(servesLineUnit(LOOSE_BANANAS, 'UNIT')).toBe(false);
+    expect(servesLineUnit(LOOSE_BANANAS, 'GRAM')).toBe(true);
+    expect(servesLineUnit(EGGS_6, 'GRAM')).toBe(false);
+    expect(servesLineUnit(OIL_LEGACY_1_5_L, 'MILLILITER')).toBe(true);
+  });
+});
 
 describe('stepAt (velista 0182, section 3)', () => {
   it('steps a count by one at any value', () => {

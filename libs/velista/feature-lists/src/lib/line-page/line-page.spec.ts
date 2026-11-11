@@ -181,6 +181,8 @@ interface Options {
   /** What the read of the lines failed with, beside `linesState: 'failed'`. */
   readonly linesError?: unknown;
   readonly alsoOn?: AlsoOnVm;
+  /** The catalog's records, in place of the two shampoos. */
+  readonly items?: readonly CatalogItem[];
 }
 
 async function render(options: Options = {}): Promise<{
@@ -298,7 +300,7 @@ function pageProviders(
     provideFakeMemberNames(fakeMemberNames({})),
     provideFakeItemNames(
       fakeItemNames({
-        items: [
+        items: options.items ?? [
           item('normal', 'Shampoo for normal hair'),
           item('classic', 'Classic care shampoo'),
         ],
@@ -452,6 +454,135 @@ describe('LinePage', () => {
       expect(
         fixture.nativeElement.querySelector('.quantity')?.textContent
       ).toContain('3');
+    });
+  });
+
+  describe('the unit chip (velista 0183)', () => {
+    // A line of bananas: loose by the kilo, and a bunch sold as a kilo piece.
+    const LOOSE = {
+      ...item('normal', 'Loose bananas'),
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: null,
+    } as CatalogItem;
+    const PIECE = {
+      ...item('classic', 'Banana bunch'),
+      size: null,
+      unit: 'KILOGRAM',
+      approxWeight: 700,
+    } as CatalogItem;
+    const segments = (fixture: ComponentFixture<LinePage>) =>
+      [
+        ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+          'lib-line-unit-chip [role="radio"]'
+        ),
+      ] as HTMLButtonElement[];
+
+    it('draws no chip on a line whose products offer one unit', async () => {
+      // Two counted packs: six eggs and a dozen, which serve a count alone.
+      const { fixture } = await render({
+        items: [
+          {
+            ...item('normal', 'Six eggs'),
+            size: 6,
+            unit: 'UNIT',
+          } as CatalogItem,
+          {
+            ...item('classic', 'A dozen'),
+            size: 12,
+            unit: 'UNIT',
+          } as CatalogItem,
+        ],
+      });
+      expect(segments(fixture)).toEqual([]);
+    });
+
+    it('draws pieces and volume for two bottles sized in millilitres', async () => {
+      const { fixture } = await render();
+      expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+        'line.unit.UNIT',
+        'line.unit.MILLILITER',
+      ]);
+    });
+
+    it('draws pieces and weight on a line of a loose product and a kilo piece', async () => {
+      const { fixture } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+        'line.unit.UNIT',
+        'line.unit.GRAM',
+      ]);
+      expect(
+        segments(fixture).map((s) => s.getAttribute('aria-checked'))
+      ).toEqual(['true', 'false']);
+      // The loose product cannot serve a count, so its card says so.
+      expect(textOf(fixture)).toContain('line.unit.cannot.UNIT');
+    });
+
+    it('sends one updateLine with the unit and the amount it starts at', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+
+      segments(fixture)[1].click();
+      await drain(fixture);
+
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+      ]);
+      expect(segments(fixture)[1].getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('puts the segment back and says why on line_unit_not_offered', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      lines.answerNextUpdate({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_not_offered',
+          status: 422,
+          correlationId: 'cid-422',
+        }),
+      });
+
+      segments(fixture)[1].click();
+      await drain(fixture);
+
+      expect(
+        segments(fixture).map((s) => s.getAttribute('aria-checked'))
+      ).toEqual(['true', 'false']);
+      expect(
+        fixture.nativeElement.querySelector('.unit-error')?.textContent
+      ).toContain('line.unit.notOffered');
+    });
+
+    it('takes the refusal away once a step lands', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      lines.answerNextUpdate({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_not_offered',
+          status: 422,
+          correlationId: 'cid-422',
+        }),
+      });
+      segments(fixture)[1].click();
+      await drain(fixture);
+      expect(fixture.nativeElement.querySelector('.unit-error')).not.toBeNull();
+
+      fixture.componentInstance.step(1);
+      await drain(fixture);
+
+      expect(lines.calls.at(-1)).toMatchObject({ kind: 'quantity', delta: 1 });
+      expect(fixture.nativeElement.querySelector('.unit-error')).toBeNull();
     });
   });
 

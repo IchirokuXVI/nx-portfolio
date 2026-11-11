@@ -95,6 +95,17 @@ import { ProductPicture } from './product-picture';
               </span>
             }
 
+            <!--
+              What the line's amount costs with this product, or that it cannot
+              serve the line's unit (velista 0183). CHEAPEST below is always the
+              card with the lowest number here.
+            -->
+            @if (card.lineCost; as lineCost) {
+              <span [class.is-cannot]="card.cannotServe" class="line-cost">{{
+                lineCost
+              }}</span>
+            }
+
             @if (card.cheapest) {
               <span class="word">{{ 'list.page.card.cheapest' | rokuT }}</span>
             }

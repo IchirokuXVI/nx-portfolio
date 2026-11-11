@@ -31,6 +31,7 @@ import {
 import {
   APP_BASE_PATH,
   catalogName,
+  defaultQuantity,
   LINE_CONTENT_MAX_LENGTH,
   LINE_QUANTITY_MAX,
   lineName,
@@ -57,6 +58,7 @@ import {
   ChevronRightIcon,
   CloseIcon,
   CommentIcon,
+  LineUnitChip,
   ProductRow,
   QuantityReel,
   QuantityStepper,
@@ -139,6 +141,7 @@ type Step = 'summary' | 'howMany' | 'shop';
     SheetShell,
     QuantityStepper,
     QuantityReel,
+    LineUnitChip,
     SpinnerIcon,
     CheckIcon,
     ChevronRightIcon,
@@ -189,8 +192,13 @@ export class LineDetailSheet {
   /** A save is out. Everything else on the sheet waits for it (section 7). */
   readonly saving = signal(false);
 
-  /** Either write is out, which is what keeps the sheet from closing under it. */
-  readonly submitting = computed(() => this._settling() || this.saving());
+  /** A unit change is out (velista `0183`): the chip and the reel wait. */
+  readonly unitPending = signal(false);
+
+  /** Any write is out, which is what keeps the sheet from closing under it. */
+  readonly submitting = computed(
+    () => this._settling() || this.saving() || this.unitPending()
+  );
 
   readonly maxLength = LINE_CONTENT_MAX_LENGTH;
 
@@ -380,7 +388,8 @@ export class LineDetailSheet {
           line,
           (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
           this._localeStore.locale(),
-          this._itemNames.pricesOf
+          this._itemNames.pricesOf,
+          this._itemNames.sizingOf
         );
   });
 
@@ -501,6 +510,7 @@ export class LineDetailSheet {
       // missed, and this sheet told the reader their line had no products.
       itemNameOf: (itemId) => this._itemNames.nameOf(itemId),
       pricesOf: this._itemNames.pricesOf,
+      productOf: this._itemNames.sizingOf,
       namesUnavailable: this._itemNames.anyFailed(line?.itemIds ?? []),
       nameOf: (userId) => this._names.nameOf(this.zoneId(), userId),
       callerUserId: this._session.userId(),
@@ -752,6 +762,51 @@ export class LineDetailSheet {
     }
   }
 
+  /**
+   * A segment of the unit chip (velista `0183`, target state 3): one write of
+   * the unit with the amount it starts at (one piece, a kilo, a litre), which
+   * backend `0246` requires with every unit change. Written at once, not held for
+   * Save: it changes what the reel counts, and the reel moves to that amount and
+   * steps by the new unit. A refusal puts the line back in the store, which puts
+   * the chip back, and the amount follows it with the sheet's error line.
+   */
+  async chooseUnit(unit: LineUnit): Promise<void> {
+    const line = this._line();
+    if (
+      line === undefined ||
+      this.saving() ||
+      this.unitPending() ||
+      unit === line.unit
+    ) {
+      return;
+    }
+    const before = this.amount();
+    const quantity = defaultQuantity(unit);
+    this.unitPending.set(true);
+    this._clearError();
+    this.amount.set(quantity);
+    this.saved.set(false);
+
+    const outcome = await this._lines.updateLine(this.lineId(), {
+      unit,
+      quantity,
+    });
+    this.unitPending.set(false);
+
+    if (outcome.state === 'failed') {
+      this.amount.set(before);
+      this.saveErrorKey.set(
+        listErrorKey(outcome.error, 'lines.write') ?? 'list.detail.failed'
+      );
+      return;
+    }
+    this.amount.set(outcome.line.quantity);
+    this._shown = {
+      field: this._shown?.field ?? this.name(),
+      quantity: outcome.line.quantity,
+    };
+  }
+
   /** Save the name and the amount (section 4). */
   async save(): Promise<void> {
     if (!this.canSave()) {
@@ -842,7 +897,8 @@ export class LineDetailSheet {
       line,
       (itemId) => this._itemNames.nameOf(itemId)?.name ?? null,
       this._localeStore.locale(),
-      this._itemNames.pricesOf
+      this._itemNames.pricesOf,
+      this._itemNames.sizingOf
     ).field;
   }
 

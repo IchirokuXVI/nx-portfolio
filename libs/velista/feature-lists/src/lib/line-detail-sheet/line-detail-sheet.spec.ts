@@ -1096,3 +1096,129 @@ describe('LineDetailSheet', () => {
     });
   });
 });
+
+describe('LineDetailSheet: the unit chip (velista 0183)', () => {
+  // Loose bananas by the kilo, and a bunch sold as a kilo piece of 700 g.
+  const LOOSE: CatalogItem = {
+    ...MILK,
+    id: 'item-loose',
+    name: { es: 'Plátano a granel', en: 'Loose bananas' },
+    size: null,
+    unit: 'KILOGRAM',
+  };
+  const PIECE: CatalogItem = {
+    ...MILK,
+    id: 'item-piece',
+    name: { es: 'Plátano en racimo', en: 'Banana bunch' },
+    size: null,
+    unit: 'KILOGRAM',
+    approxWeight: 700,
+  };
+  const bananas = () =>
+    render({
+      lines: [
+        line({ itemIds: [LOOSE.id, PIECE.id], quantity: 2, unit: 'UNIT' }),
+      ],
+      itemNames: fakeItemNames({ items: [LOOSE, PIECE] }),
+    });
+  const segments = (fixture: ComponentFixture<LineDetailSheet>) =>
+    [
+      ...(fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-unit-chip [role="radio"]'
+      ),
+    ] as HTMLButtonElement[];
+
+  it('draws no chip on a line of one product of one unit', async () => {
+    const { fixture } = await render({
+      lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 500 })],
+      itemNames: fakeItemNames({ items: [LOOSE] }),
+    });
+    expect(segments(fixture)).toEqual([]);
+  });
+
+  it('draws pieces and weight above the reel, the line unit chosen', async () => {
+    const { fixture } = await bananas();
+    expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+      'line.unit.UNIT',
+      'line.unit.GRAM',
+    ]);
+    expect(segments(fixture)[0].getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('still draws the chip when a third record is gone from the catalog', async () => {
+    // `item-gone` is neither held nor pending: its lookup answered nothing, which
+    // `sizingOf` reads as null and not as "still loading".
+    const { fixture } = await render({
+      lines: [
+        line({
+          itemIds: ['item-gone', LOOSE.id, PIECE.id],
+          quantity: 2,
+          unit: 'UNIT',
+        }),
+      ],
+      itemNames: fakeItemNames({ items: [LOOSE, PIECE] }),
+    });
+    expect(segments(fixture).map((s) => s.textContent?.trim())).toEqual([
+      'line.unit.UNIT',
+      'line.unit.GRAM',
+    ]);
+  });
+
+  it('sends one updateLine with the unit and its default amount, and moves the reel there', async () => {
+    const { fixture, lines } = await bananas();
+
+    segments(fixture)[1].click();
+    await settle(fixture);
+
+    expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+      { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+    ]);
+    expect(fixture.componentInstance.amount()).toBe(1000);
+    expect(fixture.componentInstance.unit()).toBe('GRAM');
+    expect(segments(fixture)[1].getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('disables the chip while the write is out', async () => {
+    const { fixture, lines } = await bananas();
+    lines.holdWrites();
+
+    segments(fixture)[1].click();
+    await settle(fixture);
+    expect(
+      segments(fixture).every(
+        (segment) => segment.getAttribute('aria-disabled') === 'true'
+      )
+    ).toBe(true);
+
+    lines.releaseWrites();
+    await settle(fixture);
+    expect(
+      segments(fixture).some((segment) => segment.hasAttribute('aria-disabled'))
+    ).toBe(false);
+  });
+
+  it('puts the segment and the amount back on line_unit_not_offered, with the error line', async () => {
+    const { fixture, lines } = await bananas();
+    lines.answerNextUpdate({
+      state: 'failed',
+      error: new GatewayError({
+        code: 'line_unit_not_offered',
+        status: 422,
+        correlationId: 'cid-422',
+        details: { offered: ['UNIT'] },
+      }),
+    });
+
+    segments(fixture)[1].click();
+    await settle(fixture);
+
+    expect(
+      segments(fixture).map((s) => s.getAttribute('aria-checked'))
+    ).toEqual(['true', 'false']);
+    expect(fixture.componentInstance.amount()).toBe(2);
+    expect(
+      (fixture.nativeElement as HTMLElement).querySelector('.error')
+        ?.textContent
+    ).toContain('line.unit.notOffered');
+  });
+});
