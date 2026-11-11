@@ -21,6 +21,7 @@ import { readDelistCountsCrawl } from './delisting';
 import { photoOf } from './photo-address';
 import { listingWarning, type RunContext } from './run-context';
 import type { RunReport } from './run-report';
+import type { SourceObservation } from './source-ingest';
 
 /**
  * `CATALOG_DISCOVERY` against the `carrefour-web` adapter (plan 0090).
@@ -37,7 +38,9 @@ import type { RunReport } from './run-report';
  * 2. Page every category in the frontier, 756 loads for 17,135 category
  *    memberships, which deduplicate on the chain's product id as the run goes.
  * 3. Hand every product to {@link SourceIngest} as an observation carrying the
- *    price the card printed.
+ *    price the card printed, at its first sighting (plan 0267). The sink writes
+ *    a chunk each time `PRODUCT_CHUNK` products wait, so a walk that dies part
+ *    way keeps the rows it read, less at most the chunk that was not full.
  *
  * **851 page loads, about 62 minutes.** The run is politeness bound and not
  * latency bound: the storefront tolerates one page every two seconds and
@@ -90,7 +93,13 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         'ENUMERATE',
         `Paging ${frontier.categories.length} category(ies)`
       );
-      const products = new Map<string, CarrefourProduct>();
+      /**
+       * The id of every product the walk reported, in the order it was first
+       * seen. The product itself went to the sink at that moment (plan 0267),
+       * so this holds only what {@link declareListing} and {@link describeRun}
+       * read at the end.
+       */
+      const products = new Set<string>();
       const unreadable = [...frontier.unreadable];
       /**
        * Every frontier category that failed, by its url, in the order they
@@ -107,7 +116,14 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         }
         const cursor = { page: 0 };
         try {
-          await this.pageCategory(context, client, category, products, cursor);
+          await this.pageCategory(
+            context,
+            client,
+            report,
+            category,
+            products,
+            cursor
+          );
         } catch (error) {
           // **The block is the one failure a category may not swallow** (plan
           // 0090, section 13). Refusals that have stopped being isolated say
@@ -150,15 +166,17 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         blocked = await this.askAgain(
           context,
           client,
+          report,
           products,
           unreadable,
           lost
         );
       }
 
-      // --- 3. Report what was read -----------------------------------------
+      // --- 3. What only the whole walk can say -----------------------------
+      // Every product was reported at its first sighting (plan 0267). The sink
+      // writes what is left of the last chunk when the run drains.
       await context.setStage('INGEST', `Recording ${products.size} product(s)`);
-      this.reportProducts(report, products);
       if (!context.signal.aborted) {
         warnUnread(context, unreadable, lost);
       }
@@ -220,7 +238,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   }
 
   /**
-   * One category, every page of it, into the run's own map.
+   * One category, every page of it, each product reported at its first
+   * sighting (plan 0267).
    *
    * **17,135 is a count of category memberships and not of distinct products**
    * (plan 0090, section 7). A product filed in two frontier categories is
@@ -231,8 +250,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   private async pageCategory(
     context: RunContext,
     client: CarrefourClient,
+    report: RunReport,
     category: CarrefourCategory,
-    products: Map<string, CarrefourProduct>,
+    products: Set<string>,
     cursor: { page: number }
   ): Promise<void> {
     let seen = 0;
@@ -244,9 +264,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
     try {
       for await (const product of walk) {
         seen += 1;
-        if (!products.has(product.externalId)) {
-          products.set(product.externalId, product);
-        }
+        reportFirstSighting(report, products, product);
       }
     } finally {
       // **Progress, and a heartbeat with it.** The first crawl reported
@@ -269,7 +287,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
    * refusal deepens into a block. This is one request per refused category,
    * minutes later, through the same guard and pacing as every other page. A
    * category is paged from the page that failed, and the products it gives
-   * are added to the run's map.
+   * are reported as the walk reports them.
    *
    * **A retry must never deepen a block** (plan 0090, section 13), and the
    * pass keeps two rules so that it cannot:
@@ -296,7 +314,8 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   private async askAgain(
     context: RunContext,
     client: CarrefourClient,
-    products: Map<string, CarrefourProduct>,
+    report: RunReport,
+    products: Set<string>,
     unreadable: string[],
     lost: ReadonlyMap<string, LostCategory>
   ): Promise<unknown> {
@@ -324,7 +343,7 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       }
       entry.askedAgain = true;
       try {
-        await this.pageFrom(context, client, entry, products);
+        await this.pageFrom(context, client, report, entry, products);
       } catch (error) {
         if (error instanceof SourceBlockedError) {
           this.logger.warn(`Run ${context.runId}: ${String(error)}`);
@@ -365,8 +384,9 @@ export class CarrefourCatalogRunner implements CatalogRunner {
   private async pageFrom(
     context: RunContext,
     client: CarrefourClient,
+    report: RunReport,
     entry: LostCategory,
-    products: Map<string, CarrefourProduct>
+    products: Set<string>
   ): Promise<void> {
     const { category } = entry;
     const pages = pagesFor(category.totalResults);
@@ -382,80 +402,99 @@ export class CarrefourCatalogRunner implements CatalogRunner {
         }
         for (const product of readCards(listing.cards, category.path)) {
           seen += 1;
-          if (!products.has(product.externalId)) {
-            products.set(product.externalId, product);
-          }
+          reportFirstSighting(report, products, product);
         }
       }
     } finally {
       await context.report({ processed: seen });
     }
   }
+}
 
-  /**
-   * Step 3: every product the crawl read, and the price each card printed.
-   *
-   * **A card with no readable price reports no price** (plan 0090, section 12).
-   * Some products are priced by weight and print no figure, and a zero there is
-   * a lie about a real product.
-   *
-   * The EAN is null on every observation, because the listing card carries
-   * none. Until the backfill has run, every row resolves through the fuzzy rung
-   * of plan 0086 and waits for a person, which is where DEZA sits today.
-   *
-   * It states no completeness here. A Carrefour crawl walks a frontier of
-   * categories, and a product filed nowhere in it is unseen for a reason that
-   * says nothing about stock. The crawl is handed over as a whole listing only
-   * under the five conditions of {@link declareListing}.
-   */
-  private reportProducts(
-    report: RunReport,
-    products: Map<string, CarrefourProduct>
-  ): void {
-    const observedAt = new Date();
-    for (const product of products.values()) {
-      report.product({
-        externalId: product.externalId,
-        name: product.name,
-        brand: product.brand,
-        // The listing card has none. The detail pass fills it, keyed on the
-        // product, and never from here.
-        ean: null,
-        unitSize: product.unitSize,
-        sizeUnit: product.sizeUnit,
-        sizeFormat: product.sizeFormat,
-        packCount: product.packCount,
-        categoryPath: product.categoryPath,
-        url: product.path,
-        // The card's `images.desktop`, else `images.mobile` (plan 0198).
-        imageUrl: photoOf(photoAddressRead(product), product.externalId),
-        observedAt,
-        extra: null,
-        // An empty array is a card with no readable price. Carrefour names no
-        // scope of its own, so the one price it states falls to the run's
-        // default (plan 0103, section 3.2).
-        prices:
-          product.priceCents === null && product.unitPriceCents === null
-            ? []
-            : [
-                {
-                  scopeKey: null,
-                  price: centsToUnits(product.priceCents),
-                  currency: 'EUR',
-                  // Stored as printed and never recomputed. The field exists so
-                  // a shopper can compare, and a derivation that disagrees with
-                  // the chain in the last cent is worse than useless.
-                  unitPrice: centsToUnits(product.unitPriceCents),
-                  unitPriceLabel: product.unitPriceLabel,
-                  // A storefront price has no window: it is what the till
-                  // charges until the storefront says otherwise.
-                  validFrom: null,
-                  validUntil: null,
-                },
-              ],
-      });
-    }
+/**
+ * A product at its first sighting, to the sink, and its id kept for the end of
+ * the walk (plan 0267). A later sighting reports nothing.
+ *
+ * **17,135 is a count of category memberships and not of distinct products**
+ * (plan 0090, section 7). The first sighting is the one kept, which is the
+ * category path the walk reported when it reported at the end.
+ */
+function reportFirstSighting(
+  report: RunReport,
+  products: Set<string>,
+  product: CarrefourProduct
+): void {
+  if (products.has(product.externalId)) {
+    return;
   }
+  products.add(product.externalId);
+  report.product(observationOf(product, new Date()));
+}
+
+/**
+ * One product as its card describes it, and the price the card printed.
+ *
+ * **A card with no readable price reports no price** (plan 0090, section 12).
+ * Some products are priced by weight and print no figure, and a zero there is
+ * a lie about a real product.
+ *
+ * The EAN is null on every observation, because the listing card carries
+ * none. Until the backfill has run, every row resolves through the fuzzy rung
+ * of plan 0086 and waits for a person, which is where DEZA sits today.
+ *
+ * It states no completeness here. A Carrefour crawl walks a frontier of
+ * categories, and a product filed nowhere in it is unseen for a reason that
+ * says nothing about stock. The crawl is handed over as a whole listing only
+ * under the five conditions of {@link declareListing}.
+ *
+ * `observedAt` is the time the card was read (plan 0267). The price writer
+ * needs no one value per run: it compares the values, and moves the clock of
+ * a confirmed row only forward.
+ */
+function observationOf(
+  product: CarrefourProduct,
+  observedAt: Date
+): SourceObservation {
+  return {
+    externalId: product.externalId,
+    name: product.name,
+    brand: product.brand,
+    // The listing card has none. The detail pass fills it, keyed on the
+    // product, and never from here.
+    ean: null,
+    unitSize: product.unitSize,
+    sizeUnit: product.sizeUnit,
+    sizeFormat: product.sizeFormat,
+    packCount: product.packCount,
+    categoryPath: product.categoryPath,
+    url: product.path,
+    // The card's `images.desktop`, else `images.mobile` (plan 0198).
+    imageUrl: photoOf(photoAddressRead(product), product.externalId),
+    observedAt,
+    extra: null,
+    // An empty array is a card with no readable price. Carrefour names no
+    // scope of its own, so the one price it states falls to the run's
+    // default (plan 0103, section 3.2).
+    prices:
+      product.priceCents === null && product.unitPriceCents === null
+        ? []
+        : [
+            {
+              scopeKey: null,
+              price: centsToUnits(product.priceCents),
+              currency: 'EUR',
+              // Stored as printed and never recomputed. The field exists so
+              // a shopper can compare, and a derivation that disagrees with
+              // the chain in the last cent is worse than useless.
+              unitPrice: centsToUnits(product.unitPriceCents),
+              unitPriceLabel: product.unitPriceLabel,
+              // A storefront price has no window: it is what the till
+              // charges until the storefront says otherwise.
+              validFrom: null,
+              validUntil: null,
+            },
+          ],
+  };
 }
 
 /** A frontier category the crawl did not finish, and what cost it. */
@@ -528,7 +567,7 @@ function warnUnread(
  */
 function declareListing(
   report: RunReport,
-  products: ReadonlyMap<string, CarrefourProduct>,
+  products: ReadonlySet<string>,
   crawl: {
     switchOn: boolean;
     seedPath: boolean;
@@ -556,7 +595,7 @@ function declareListing(
     report.listingNotWhole(null, reason);
     return;
   }
-  report.listingWhole(null, products.keys());
+  report.listingWhole(null, products);
 }
 
 /** What a run has to say about itself beyond its counters. */

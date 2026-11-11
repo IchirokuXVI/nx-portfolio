@@ -1123,4 +1123,153 @@ describe('ElJamonCatalogRunner', () => {
       }
     });
   });
+
+  describe('a walk reports what it has read as it goes (plan 0267)', () => {
+    /** The storefront with a whole listing, and a product page `onPage` may answer instead. */
+    function site(onPage?: (code: string) => Response | undefined) {
+      return (url: URL): Response => {
+        if (url.pathname === '/categorias/bebidas/06' && url.search !== '') {
+          return new Response(listing([], 25, '06'));
+        }
+        const code = /\/detalle\/.*\/(\d+)$/.exec(url.pathname)?.[1];
+        return (code && onPage?.(code)) || storefront(url);
+      };
+    }
+
+    /** The stages the run had set when each product came, by its code. */
+    function watch(report: RecordingRunReport, ctx: RunContext) {
+      const at = new Map<string, string[]>();
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        expect(at.has(observation.externalId)).toBe(false);
+        at.set(
+          observation.externalId,
+          (ctx.setStage as jest.Mock).mock.calls.map(
+            ([stage]) => stage as string
+          )
+        );
+        product(observation);
+      };
+      return at;
+    }
+
+    it('reports a known product as it is listed, and a new one as its page answers or fails', async () => {
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const at = watch(report, ctx);
+      const runner = new TestRunner(site());
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, externalIdsWithoutEan: new Set(['200']) },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+
+      // 200 is known: it read no page and came while the listing was read.
+      expect(at.get('200')).toEqual(['LIST']);
+      expect(report.partialProducts.map((p) => p.externalId)).toEqual(['200']);
+      // 101 came when its page answered, with what the page said.
+      expect(at.get('101')).toEqual(['LIST', 'DETAIL']);
+      expect(
+        report.products.find((product) => product.externalId === '101')
+      ).toMatchObject({
+        categoryPath: ['Frescos', 'Arroz'],
+        // The listing price, read before any page, and not the page's 3.59.
+        prices: [expect.objectContaining({ price: 3.49 })],
+      });
+      // 102's page carried no product: it came when the page failed, with
+      // its top level category and the mark for the next walk.
+      expect(at.get('102')).toEqual(['LIST', 'DETAIL']);
+      expect(
+        report.products.find((product) => product.externalId === '102')
+      ).toMatchObject({
+        categoryPath: ['FRESCOS'],
+        imageUrl: null,
+        extra: { [DETAIL_FAILED_KEY]: true },
+      });
+      // Every one of the 22 listed products came once, and none waited for
+      // the end of the walk.
+      expect(at.size).toBe(22);
+      for (const stages of at.values()) {
+        expect(stages).not.toContain('INGEST');
+      }
+      // What needs the whole walk is still decided at its end: BEBIDAS
+      // printed 25 and listed 20, so the listing is not whole.
+      expect(report.notWhole).toEqual([
+        expect.objectContaining({ reason: 'short-category' }),
+      ]);
+      expect(ctx.setReport).toHaveBeenCalledTimes(1);
+    });
+
+    it('has reported what it read while the pages are still asked, and never a held row whose page it has not read', async () => {
+      const controller = new AbortController();
+      const ctx = context(controller.signal);
+      const report = new RecordingRunReport();
+      let reached!: () => void;
+      const stalled = new Promise<void>((resolve) => (reached = resolve));
+      let cut!: (error: Error) => void;
+      const page205 = new Promise<Response>((_resolve, reject) => {
+        cut = reject;
+      });
+      page205.catch(() => undefined);
+      // One worker, so the pages are asked in the listing's order: 101, 102,
+      // 200 to 204, then 205, which never answers, as on a pod that dies.
+      const runner = new TestRunner(
+        site((code) => {
+          if (code !== '205') {
+            return undefined;
+          }
+          reached();
+          return page205 as unknown as Response;
+        })
+      );
+      const walk = runner.run(
+        ctx,
+        report,
+        {
+          ...input,
+          // 209 was written from a page that failed on an earlier walk, so
+          // its page is asked again and the chain holds a row for it.
+          externalIdsWithoutEan: new Set(['209']),
+          externalIdsWithFailedDetail: new Set(['209']),
+        },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+      await stalled;
+
+      // Half way: what was read is with the sink.
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        '101',
+        '102',
+        '200',
+        '201',
+        '202',
+        '203',
+        '204',
+      ]);
+      // A held row whose page is not read yet is reported not at all, so a
+      // walk that dies here clears nothing it holds.
+      expect(report.partialProducts).toEqual([]);
+      // Nothing that needs the whole walk was decided.
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+      expect(ctx.setReport).not.toHaveBeenCalled();
+
+      // A person aborts, and the page in flight fails with it.
+      controller.abort();
+      cut(new Error('aborted'));
+      await walk;
+
+      // The end reports what is left by the rule of plan 0215: the held row
+      // from the listing alone, never with a full observation.
+      expect(report.partialProducts.map((p) => p.externalId)).toEqual(['209']);
+      expect(
+        report.products.some((product) => product.externalId === '209')
+      ).toBe(false);
+      expect(report.products).toHaveLength(21);
+      // An aborted walk declares nothing whole.
+      expect(report.wholeListings).toEqual([]);
+    });
+  });
 });

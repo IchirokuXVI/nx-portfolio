@@ -1019,4 +1019,165 @@ describe('CarrefourCatalogRunner', () => {
     expect(report.products).toHaveLength(1);
     expect(report.products[0].categoryPath).toEqual(['Bebidas']);
   });
+
+  describe('a walk reports what it has read as it goes (plan 0267)', () => {
+    const one = link('cat1', 'Bebidas');
+    const two = link('cat2', 'Ofertas');
+    const shared = card('p1', 'Agua CARREFOUR 1,5 l.', '0,39 €');
+    /** Two frontier categories under the default seed, sharing one product. */
+    const states = () => ({
+      '/supermercado/la-despensa/cat20001/c': page({ firstLevel: [one, two] }),
+      [one.url]: page({ totalResults: 2 }),
+      [two.url]: page({ totalResults: 2 }),
+      '/supermercado/x/cat1/c?offset=0': page({
+        totalResults: 2,
+        cards: [shared, card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+      }),
+      '/supermercado/x/cat2/c?offset=0': page({
+        totalResults: 2,
+        cards: [shared, card('p3', 'Leche CARREFOUR 1 l.', '0,89 €')],
+      }),
+    });
+
+    /**
+     * A recording report that notes, for each product, how many pages the
+     * walk had asked for and which stages it had set when the product came.
+     */
+    function watchedReport(runner: TestRunner, runContext: RunContext) {
+      const at: Record<string, { asked: number; stages: string[] }> = {};
+      const product = report.product.bind(report);
+      report.product = (observation) => {
+        at[observation.externalId] = {
+          asked: runner.asked.length,
+          stages: (runContext.setStage as jest.Mock).mock.calls.map(
+            ([stage]) => stage as string
+          ),
+        };
+        product(observation);
+      };
+      return at;
+    }
+
+    it('reports each product once, at its first sighting, before the end of the walk', async () => {
+      const runner = new TestRunner(states());
+      const runContext = context();
+      const at = watchedReport(runner, runContext);
+
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p1',
+        'p2',
+        'p3',
+      ]);
+      // The first sighting keeps its category path, as it did at the end.
+      expect(report.products[0].categoryPath).toEqual(['Bebidas']);
+      const secondPage = runner.asked.indexOf(
+        '/supermercado/x/cat2/c?offset=0'
+      );
+      // p1 and p2 came while the first category was paged, before the second
+      // category's page was asked for.
+      expect(at['p1'].asked).toBeLessThanOrEqual(secondPage);
+      expect(at['p2'].asked).toBeLessThanOrEqual(secondPage);
+      // None of them waited for the end of the walk.
+      for (const id of ['p1', 'p2', 'p3']) {
+        expect(at[id].stages).toEqual(['FRONTIER', 'ENUMERATE']);
+      }
+      // The whole listing is still decided at the end, from every id read.
+      expect(report.wholeListings).toEqual([
+        { scopeKey: null, listed: ['p1', 'p2', 'p3'] },
+      ]);
+    });
+
+    it('has reported what it read while the walk is still going, and has declared no listing', async () => {
+      let reached!: () => void;
+      const stalled = new Promise<void>((resolve) => (reached = resolve));
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      /** A walk that stops answering on the second category, as a dying pod. */
+      class StallingRunner extends TestRunner {
+        protected override createClient(): CarrefourClient {
+          return new CarrefourClient({
+            userAgent: 'LunaShopperBot/1.0',
+            sleepImpl: async () => undefined,
+            openSession: async () => ({
+              goto: async (url: string) => {
+                const path = url.replace('https://www.carrefour.es', '');
+                this.asked.push(path);
+                if (path === '/supermercado/x/cat2/c?offset=0') {
+                  reached();
+                  await released;
+                  throw new Error('The browser stopped answering.');
+                }
+                const state = this.states[path];
+                return state
+                  ? { status: 200, state }
+                  : { status: 404, state: null };
+              },
+              close: async () => undefined,
+            }),
+          });
+        }
+      }
+      const runner = new StallingRunner(states());
+      const runContext = context();
+
+      const run = runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+      await stalled;
+
+      // Half way: the first category's products are with the sink, and
+      // nothing whole was declared, so a walk that dies here states no
+      // negative and keeps every row it had reported.
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p1',
+        'p2',
+      ]);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([]);
+      expect(runContext.setReport).not.toHaveBeenCalled();
+
+      release();
+      await run;
+      // The category that did not answer makes the crawl not whole, and the
+      // products are not reported a second time at the end.
+      expect(report.products).toHaveLength(2);
+      expect(report.wholeListings).toEqual([]);
+      expect(report.notWhole).toEqual([
+        expect.objectContaining({ scopeKey: null, reason: 'unreadable' }),
+      ]);
+    });
+
+    it('reports what the end pass reads as it reads it, and nothing twice', async () => {
+      const runner = new RefusingRunner(states(), {
+        '/supermercado/x/cat2/c?offset=0': 1,
+      });
+      const runContext = context();
+      const at = watchedReport(runner, runContext);
+
+      await runner.run(
+        runContext,
+        report,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+
+      expect(report.products.map((product) => product.externalId)).toEqual([
+        'p1',
+        'p2',
+        'p3',
+      ]);
+      // p3 came from the end pass, which runs under ENUMERATE too.
+      expect(at['p3'].stages).toEqual(['FRONTIER', 'ENUMERATE', 'ENUMERATE']);
+    });
+  });
 });
