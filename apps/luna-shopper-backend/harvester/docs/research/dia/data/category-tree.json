@@ -103,7 +103,7 @@
   "pathEs": "/novedades-y-recomendados/especial-otono/c/L2354",
   "pathEn": null,
   "menuOrder": 1,
-  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read"
+  "note": "added by plan 0254 from menu-data of 2026-11-11; productCount is store 7745 on 2026-11-06; English names not read; unmapped on purpose: products only there 0 of 70 (store 13835, walk of 2026-11-11), every one also sits under a copied leaf, so no redirect slug"
  },
  {
   "id": "L105",
@@ -3359,7 +3359,8 @@
   "pathEn": "/en/hair-and-perfumery/c/L130",
   "todoEntryEs": "Todo cabello y perfumería",
   "todoEntryEn": "All hair and perfumery",
-  "menuOrder": 25
+  "menuOrder": 25,
+  "note": "the menu-data of 2026-11-11 names this root Cabello y belleza, path /cabello-y-belleza/c/L130; the name here is kept, so the leaves plan 0254 added carry the menu's path"
  },
  {
   "id": "L2144",

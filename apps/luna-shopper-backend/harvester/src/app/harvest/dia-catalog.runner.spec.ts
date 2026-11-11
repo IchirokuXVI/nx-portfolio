@@ -6,6 +6,7 @@ import {
 import type { HarvestRun, SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import type { CatalogDiscoveryInput } from './catalog-runner';
+import { categorySlugsFor, UNCATEGORISED_SLUG } from './category-resolution';
 import { DiaCatalogRunner } from './dia-catalog.runner';
 import {
   fakeDiaSite,
@@ -851,6 +852,23 @@ describe('DiaCatalogRunner', () => {
 
     expect(reportOf(ctx)['unmappedLeaves']).toEqual([]);
     expect(reportOf(ctx)['renamedLeaves']).toEqual([]);
+
+    // A leaf with a name and no slug also passes the report, so the report
+    // alone cannot tell a mapped leaf from one left out. Each of the twelve
+    // must file a product it holds under a real category. L2354 (Especial
+    // otoño) is the one leaf known and unmapped: a product listed only there
+    // is uncategorised, and a change to that decision must change this line.
+    const unmapped = ['L2354'];
+    const fileUnder = (id: string) =>
+      categorySlugsFor(undefined, null, {
+        adapterKey: 'dia-api',
+        extra: { diaCategoryIds: [id] },
+      });
+    for (const { id } of added.filter(({ id }) => !unmapped.includes(id))) {
+      expect([id, fileUnder(id)]).not.toEqual([id, [UNCATEGORISED_SLUG]]);
+    }
+    expect(added).toHaveLength(13);
+    expect(fileUnder('L2354')).toEqual([UNCATEGORISED_SLUG]);
   });
 
   it('walks every page of a leaf, and plans a leaf per store', async () => {
