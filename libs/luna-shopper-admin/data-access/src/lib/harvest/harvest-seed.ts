@@ -324,7 +324,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     unchanged: 2361,
     notFound: 0,
     skipped: 0,
-    failed: 0,
+    failed: 1,
     stage: null,
     stageLabel: null,
     warnings: [
@@ -335,6 +335,13 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
         name: null,
         message:
           'Section 04 Bebidas spent its 25 queries with a term still left.',
+      },
+      {
+        code: 'LISTING_UNREAD',
+        offerId: null,
+        page: null,
+        name: 'Mascotas',
+        message: 'Section 07 Mascotas failed: Error: socket hang up',
       },
     ],
     documentSha256: null,
@@ -351,6 +358,17 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
           openQueries: ['agua', 'refresco'],
           narrowing: 'zumo',
           termsTried: 9,
+        },
+        // A section that threw, as the runner records one: no queries, no
+        // stop word, and the error where the open queries would be.
+        {
+          code: '07',
+          name: 'Mascotas',
+          queries: null,
+          stoppedBy: null,
+          openQueries: ['Error: socket hang up'],
+          narrowing: null,
+          termsTried: null,
         },
       ],
       sections: [
@@ -381,8 +399,8 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
           name: 'Mascotas',
           products: 259,
           firstSeen: 259,
-          queries: 1,
-          stoppedBy: 'COMPLETE',
+          queries: null,
+          stoppedBy: null,
           coverageOnce: null,
           growthAtStop: null,
           openQueries: [],

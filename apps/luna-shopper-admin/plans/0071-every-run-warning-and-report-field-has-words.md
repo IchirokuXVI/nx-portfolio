@@ -160,7 +160,8 @@ In the report section, after the facts of today:
 - The new spec: every code of `openapi.json` has a label, and the spec fails for a made up code.
 - `run-report.spec.ts`: each field from a valid bag, from a bag with the wrong shapes, and from
   an empty bag.
-- `run-page.spec.ts`: one run of each chain draws its part, and an import draws none of it.
+- `run-page.spec.ts`: one run of each chain draws its part. An import draws only the size
+  doubts its report holds (D5), and an import with an empty report draws none of it.
 
 ## Acceptance criteria
 
@@ -191,3 +192,12 @@ list and two tables in a section that exists.
 
 **D4 (owner, answered 2026-11-11):** this plan draws `sizesDisproved`. This plan owns every
 report field, and admin `0072` draws the doubt on an entry only.
+
+**D5 (owner, answered 2026-11-11):** an import run shows its size doubts. The harvester writes
+`sizesDisproved` and `probablePackCounts` for an imported run, with no examples, and the run
+page draws the sizes part for it and none of the chain parts.
+
+**D6 (owner, answered 2026-11-11):** a DEZA section that threw reads "Failed" in the "Why it
+stopped" cell (`harvest.run.report.stoppedBy.FAILED`). The runner names such a section in
+`incompleteSections` with a null `stoppedBy`. An unknown stop word on a finished section stays
+an empty cell.

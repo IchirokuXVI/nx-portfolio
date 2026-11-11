@@ -364,7 +364,9 @@ import {
                         <td class="number">{{ section.products }}</td>
                         <td class="number">{{ section.queries ?? '' }}</td>
                         <td>
-                          @if (section.stoppedBy; as stop) {
+                          @if (section.failed) {
+                            {{ 'harvest.run.report.stoppedBy.FAILED' | rokuT }}
+                          } @else if (section.stoppedBy; as stop) {
                             {{ 'harvest.run.report.stoppedBy.' + stop | rokuT }}
                           }
                         </td>

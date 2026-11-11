@@ -61,6 +61,11 @@ export interface RunReportSection {
   readonly openQueries: readonly string[];
   /** Whether `incompleteSections` names it. */
   readonly unfinished: boolean;
+  /**
+   * Whether the section threw: `incompleteSections` names it with a null
+   * `stoppedBy`, where a section the budget stopped names its word.
+   */
+  readonly failed: boolean;
 }
 
 /** An El Jamón category whose rows read differ from its printed count. */
@@ -208,13 +213,24 @@ export const COPY_TARGETS_SHOWN = 5;
 /**
  * The DEZA sections: the ones `incompleteSections` names first, and otherwise
  * in the order the run began them.
+ *
+ * The runner records a section that threw in `incompleteSections` with
+ * `queries` and `stoppedBy` both null and the error in `openQueries`, while a
+ * section it stopped names `BUDGET` or `NO_TERM` there. Only that explicit
+ * null marks a failure: an entry with no `stoppedBy` at all says nothing.
  */
 function readSections(bag: Record<string, unknown>): RunReportSection[] {
-  const incomplete = new Set(
-    records(bag['incompleteSections']).flatMap((entry) =>
-      typeof entry['code'] === 'string' ? [entry['code']] : []
-    )
-  );
+  const incomplete = new Set<string>();
+  const failed = new Set<string>();
+  for (const entry of records(bag['incompleteSections'])) {
+    if (typeof entry['code'] !== 'string') {
+      continue;
+    }
+    incomplete.add(entry['code']);
+    if (entry['stoppedBy'] === null) {
+      failed.add(entry['code']);
+    }
+  }
 
   const sections = records(bag['sections']).flatMap(
     (entry): RunReportSection[] => {
@@ -235,6 +251,7 @@ function readSections(bag: Record<string, unknown>): RunReportSection[] {
           stoppedBy: sectionStop(entry['stoppedBy']),
           openQueries: strings(entry['openQueries']),
           unfinished: incomplete.has(entry['code']),
+          failed: failed.has(entry['code']),
         },
       ];
     }

@@ -798,6 +798,69 @@ describe('RunPage, what a walk did not read', () => {
     fixture.componentInstance.watch.stop();
   });
 
+  it('draws a DEZA section that threw as failed, and keeps the other words', async () => {
+    const fixture = await render(
+      walk({
+        // As `deza-catalog.runner.ts` records a section that threw: null
+        // queries and stop, the error in its `incompleteSections` entry.
+        incompleteSections: [
+          {
+            code: 'S2',
+            name: 'Bebidas',
+            queries: 25,
+            stoppedBy: 'BUDGET',
+            openQueries: [],
+          },
+          {
+            code: 'S3',
+            name: 'Congelados',
+            queries: null,
+            stoppedBy: null,
+            openQueries: ['Error: socket hang up'],
+          },
+        ],
+        sections: [
+          {
+            code: 'S1',
+            name: 'Droguería',
+            products: 412,
+            queries: 14,
+            stoppedBy: 'LATER',
+            openQueries: [],
+          },
+          {
+            code: 'S2',
+            name: 'Bebidas',
+            products: 900,
+            queries: 25,
+            stoppedBy: 'BUDGET',
+            openQueries: [],
+          },
+          {
+            code: 'S3',
+            name: 'Congelados',
+            products: 0,
+            queries: null,
+            stoppedBy: null,
+            openQueries: [],
+          },
+        ],
+      })
+    );
+
+    const rows = drawn(fixture, '[data-sections]').querySelectorAll('tbody tr');
+    const stops = [...rows].map((row) =>
+      row.querySelectorAll('td')[2].textContent?.trim()
+    );
+    expect(rows[1].textContent).toContain('Congelados');
+    expect(stops).toEqual([
+      'harvest.run.report.stoppedBy.BUDGET',
+      'harvest.run.report.stoppedBy.FAILED',
+      '',
+    ]);
+    fixture.componentInstance.watch.stop();
+  });
+
   it('draws an El Jamón run: the categories that read short, and the detail sentence', async () => {
     const fixture = await render(
       walk({
@@ -862,7 +925,35 @@ describe('RunPage, what a walk did not read', () => {
     fixture.componentInstance.watch.stop();
   });
 
-  it('draws none of it for an import', async () => {
+  it('draws the size doubts of an import, and none of the chain parts', async () => {
+    // The harvester writes the two counts for an imported run, with no
+    // examples (run-executor.service.ts, plan 0249). The owner chose on
+    // 2026-11-11 that an import shows them.
+    const fixture = await render(
+      importRun({ report: { sizesDisproved: 3, probablePackCounts: 1 } })
+    );
+
+    expect(fixture.componentInstance.hasReport()).toBe(true);
+    const sizes = drawn(fixture, '[data-sizes]');
+    expect(sizes.textContent).toContain('harvest.run.report.sizesDisproved');
+    expect(sizes.textContent).toContain(
+      'harvest.run.report.probablePackCounts'
+    );
+    expect(part(fixture, '[data-sizes] tbody tr')).toBeNull();
+    for (const selector of [
+      '[data-unreadable]',
+      '[data-asked-again]',
+      '[data-blocked-after]',
+      '[data-sections]',
+      '[data-categories]',
+      '[data-detail-stage]',
+    ]) {
+      expect(part(fixture, selector)).toBeNull();
+    }
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws none of it for an import with an empty report', async () => {
     const fixture = await render(importRun());
 
     expect(fixture.componentInstance.hasReport()).toBe(false);
