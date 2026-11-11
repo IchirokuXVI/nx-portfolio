@@ -31,6 +31,9 @@ import { ScopeMark } from '../page/scope-mark';
       <span [class.flag]="cell().flag === true" class="word">{{
         key | rokuT: cell().args ?? {}
       }}</span>
+    } @else if (cell().empty) {
+      <!-- An empty value in the field's own words, muted as "None" is. -->
+      <span class="word">{{ cell().text }}</span>
     } @else if (cell().link; as link) {
       <!-- A reference with somewhere to go (admin plan 0023, section 2.3): a
            real anchor, in its own tab stop, named by the text it shows and

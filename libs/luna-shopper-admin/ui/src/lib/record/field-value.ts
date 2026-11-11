@@ -115,7 +115,19 @@ interface ReferenceLine {
 
     @switch (shown.kind) {
       @case ('none') {
-        <span class="none" data-none>{{ 'resource.value.none' | rokuT }}</span>
+        <!-- In the field's own words where it has them: a step left empty
+             reads "Default: 25 g", greyed as "None" is. -->
+        @if (shown.said; as said) {
+          <span class="none" data-none>{{
+            said.kind === 'text'
+              ? said.text
+              : (said.key | rokuT: said.args ?? {})
+          }}</span>
+        } @else {
+          <span class="none" data-none>{{
+            'resource.value.none' | rokuT
+          }}</span>
+        }
       }
 
       @case ('text') {
