@@ -1,3 +1,5 @@
+> **PR:** [#978](https://github.com/IchirokuXVI/nx-portfolio/pull/978)
+
 # 0188: an amount is stepped with two buttons
 
 > Decided on 2026-11-10 and 2026-11-11. The owner finds the quantity reel "confusing for most
