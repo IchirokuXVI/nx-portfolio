@@ -6,13 +6,14 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
+  DEZA_CATALOG_PRESET,
   HARVEST_SERVICE,
   HarvestMemory,
+  MERCADONA_SUNDAY_SCHEDULE,
+  MERCADONA_WEEKDAYS_SCHEDULE,
   MERCADONA_WEEKLY_PRESET,
   RESOURCE_GATEWAYS,
   ServerReachability,
-  MERCADONA_SUNDAY_SCHEDULE,
-  MERCADONA_WEEKDAYS_SCHEDULE,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
@@ -20,8 +21,8 @@ import {
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { PRESETS_CHAIN_KEY, PresetsPanel } from './presets-panel';
-import { SCHEDULES } from './schedules';
 import { RunRequestForm } from './run-request-form';
+import { SCHEDULES } from './schedules';
 
 /**
  * The presets (admin plan 0030, section 3), over the memory back end. A panel
@@ -73,6 +74,8 @@ interface Recorded {
   readonly updated: unknown[];
   readonly created: unknown[];
   readonly started: string[];
+  /** The chains whose probes were read, once per read. */
+  readonly probeReads: string[];
 }
 
 /** A second chain, which the seed holds no preset for. */
@@ -95,7 +98,13 @@ async function render(options: RenderOptions = {}): Promise<{
   recorded: Recorded;
 }> {
   const memory = new HarvestMemory();
-  const recorded: Recorded = { memory, updated: [], created: [], started: [] };
+  const recorded: Recorded = {
+    memory,
+    updated: [],
+    created: [],
+    started: [],
+    probeReads: [],
+  };
 
   const service = {
     ...({} as HarvestServiceI),
@@ -112,6 +121,10 @@ async function render(options: RenderOptions = {}): Promise<{
     },
     deletePreset: (id: string) => memory.deletePreset(id),
     listSchedules: (query: never) => memory.listSchedules(query),
+    listProbes: (chain: string, query: never) => {
+      recorded.probeReads.push(chain);
+      return memory.listProbes(chain, query);
+    },
     startPreset: (id: string) => {
       recorded.started.push(id);
       return memory.startPreset(id);
@@ -264,7 +277,9 @@ describe('the presets panel, the chain it opens on', () => {
     expect(fixture.componentInstance.highlighted()).toBe(
       MERCADONA_WEEKLY_PRESET
     );
-    expect(fixture.nativeElement.querySelector('li.highlighted')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('li.highlighted')
+    ).not.toBeNull();
   });
 
   it('forgets the chain when the picker is cleared', async () => {
@@ -354,7 +369,7 @@ describe('the presets panel, "Edit presets"', () => {
     expect(query(fixture, '[data-delete]')).toBeNull();
   });
 
-  it('opens the editor from a row\'s edit button', async () => {
+  it("opens the editor from a row's edit button", async () => {
     const { fixture } = await render();
 
     (query(fixture, '[data-edit-presets]') as HTMLButtonElement).click();
@@ -541,5 +556,97 @@ describe('the presets panel, schedules', () => {
     expect(
       fixture.componentInstance.schedulesOf(MERCADONA_WEEKLY_PRESET)
     ).toEqual([]);
+  });
+});
+
+/**
+ * The notice on a preset's row (admin plan 0069, target 2). The seed's DEZA
+ * probe is red behind nothing and Mercadona's is green, so the two chains are
+ * the two cases.
+ */
+describe('the presets panel, a red probe', () => {
+  const DEZA = '33333333-3333-4333-8333-333333333333';
+
+  async function onDeza() {
+    const rendered = await render({ choose: false });
+    rendered.fixture.componentInstance.chooseChain(DEZA);
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  it('reads the chain probes once, for every row', async () => {
+    const { fixture, recorded } = await onDeza();
+    await recorded.memory.createPreset(DEZA, 'Shops', {
+      mode: 'STORE_DISCOVERY',
+    });
+    await fixture.componentInstance.load();
+    await settle(fixture);
+
+    expect(fixture.componentInstance.presets()).toHaveLength(2);
+    expect(recorded.probeReads).toEqual([DEZA]);
+  });
+
+  it('draws the notice on each row whose run reads the chain', async () => {
+    const { fixture, recorded } = await onDeza();
+    await recorded.memory.createPreset(DEZA, 'Shops', {
+      mode: 'STORE_DISCOVERY',
+    });
+    await fixture.componentInstance.load();
+    await settle(fixture);
+
+    const rows: HTMLElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('.presets li')
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(
+        row.querySelector('[data-probe-notice="UNREACHABLE"]')
+      ).not.toBeNull();
+    }
+    expect(
+      fixture.componentInstance.probeNoticeOf(
+        fixture.componentInstance.presets()[0]
+      )
+    ).toEqual({
+      chain: DEZA,
+      verdict: expect.objectContaining({ status: 'UNREACHABLE' }),
+    });
+  });
+
+  it('draws no notice for a run that reads no storefront', async () => {
+    const { fixture } = await onDeza();
+    const preset = fixture.componentInstance.presets()[0];
+
+    expect(
+      fixture.componentInstance.probeNoticeOf({
+        ...preset,
+        input: { ...preset.input, mode: 'FILE_IMPORT' },
+      })
+    ).toBe(null);
+  });
+
+  it('keeps Start enabled with the notice shown, and starts the preset', async () => {
+    const { fixture, recorded } = await onDeza();
+    const button: HTMLButtonElement =
+      fixture.nativeElement.querySelector('[data-start]');
+
+    expect(
+      fixture.nativeElement.querySelector('[data-probe-notice]')
+    ).not.toBeNull();
+    expect(button.disabled).toBe(false);
+
+    button.click();
+    await settle(fixture);
+
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('draws no notice for a chain whose newest probe passed', async () => {
+    const { fixture } = await render();
+
+    expect(fixture.componentInstance.presets()).toHaveLength(1);
+    expect(fixture.nativeElement.querySelector('[data-probe-notice]')).toBe(
+      null
+    );
   });
 });

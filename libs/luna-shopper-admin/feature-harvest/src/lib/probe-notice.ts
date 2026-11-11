@@ -1,0 +1,136 @@
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  inject,
+  input,
+} from '@angular/core';
+import { RokuTranslatorService } from '@portfolio/localization/rokutranslator-angular';
+import type { ProbeVerdict } from '@portfolio/luna-shopper-admin/models';
+import { WarningIcon } from '@portfolio/shared/ui';
+import { formatSince } from './format-instant';
+
+/**
+ * How many probes a start reads to find the newest finished one (admin plan
+ * 0069, constraints). A probe in flight and an abort are read past, and ten
+ * rows is more of them than a chain has in a row.
+ */
+export const PROBE_PAGE = 10;
+
+/** A key and the values it is filled with, which a spec can assert on. */
+export interface ProbeNoticeMessage {
+  readonly key: string;
+  readonly args: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * The notice before a start whose chain's newest finished probe did not pass
+ * (admin plan 0069, section 3).
+ *
+ * **A notice, not a question.** The owner's rule is a warning and a free start,
+ * so this draws one sentence and nothing to press. The start control beside it
+ * stays as it is.
+ *
+ * In the quiet warning tone of "Will not run" on a schedule: the warning ink and
+ * glyph on the surface the form already stands on, with no tinted box, no alert
+ * role and no motion. `role="status"`, because it appears when the person picks
+ * a chain or a mode, and a screen reader should hear it once they are free.
+ *
+ * Presentational: the page reads the probes and the chain's name and hands
+ * them in. A chain the reference could not name is "This chain", never its id.
+ */
+@Component({
+  selector: 'lib-probe-notice',
+  imports: [WarningIcon],
+  template: `
+    <span class="mark"><lib-warning-icon /></span>
+    <span class="text">{{ text() }}</span>
+  `,
+  host: {
+    role: 'status',
+    '[attr.data-probe-notice]': 'verdict().status',
+  },
+  styles: `
+    :host {
+      display: flex;
+      gap: var(--admin-space-2);
+      align-items: flex-start;
+      max-inline-size: 72ch;
+      font-size: 0.8125rem;
+      color: var(--admin-waiting-on-wash);
+    }
+
+    /* The glyph sits on the first line of text and keeps its size when the
+       sentence wraps on a narrow screen. */
+    .mark {
+      flex: none;
+      inline-size: 1rem;
+      block-size: 1rem;
+      margin-block-start: 0.0625rem;
+    }
+
+    .text {
+      min-inline-size: 0;
+      overflow-wrap: anywhere;
+    }
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ProbeNotice {
+  private readonly _translator = inject(RokuTranslatorService);
+
+  /** The chain's name, or null where the reference could not name it. */
+  readonly chain = input<string | null>(null);
+  /** The red probe. */
+  readonly verdict = input.required<ProbeVerdict>();
+  /** The clock the age is read against. A spec fixes it. */
+  readonly now = input<number>(Date.now());
+
+  /** What is said, as a key and its values. */
+  readonly message = computed<ProbeNoticeMessage>(() => {
+    // Read so that the words follow the language.
+    const locale = this._translator.locale();
+    this._translator.loaded();
+    const verdict = this.verdict();
+
+    return {
+      key:
+        verdict.error === null
+          ? 'harvest.probeNotice.textNoSentence'
+          : 'harvest.probeNotice.text',
+      args: {
+        chain:
+          this.chain() ?? this._translator.t('harvest.probeNotice.thisChain'),
+        age: probeAge(verdict.startedAt, this.now(), locale),
+        status: this._translator.t(
+          `harvest.probeNotice.status.${verdict.status}`
+        ),
+        sentence: verdict.error ?? '',
+        // The template escapes what it draws. Escaping here as well would put
+        // `&#x2F;` in place of every slash of a URL the probe names.
+        interpolation: { escapeValue: false },
+      },
+    };
+  });
+
+  readonly text = computed(() => {
+    const { key, args } = this.message();
+    return this._translator.t(key, undefined, undefined, { ...args });
+  });
+}
+
+/**
+ * How long ago the probe started, in the harvest feature's relative format:
+ * "3 days ago", "yesterday". A start a skewed clock puts in the future reads
+ * as "now", so the sentence never has a hole in it.
+ */
+export function probeAge(
+  startedAt: string,
+  now: number,
+  locale?: string
+): string {
+  return (
+    formatSince(startedAt, now, locale) ||
+    new Intl.RelativeTimeFormat(locale, { numeric: 'auto' }).format(0, 'second')
+  );
+}

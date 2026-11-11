@@ -425,6 +425,11 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
 
     <p class="attribution">{{ 'harvest.runs.start.attribution' | rokuT }}</p>
 
+    <!-- What the screen says just above the start (admin plan 0069): the new
+         run page puts the probe notice here. The form knows nothing of probes,
+         and the preset editor puts nothing in it. -->
+    <ng-content select="[runNotice]" />
+
     @if (uploading()) {
       <p class="attribution">{{ 'harvest.runs.start.fileImport' | rokuT }}</p>
       <a [routerLink]="uploadLink()" class="primary">{{

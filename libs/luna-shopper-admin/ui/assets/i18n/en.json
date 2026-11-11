@@ -2007,6 +2007,17 @@
         "deleteRefused_one": "A schedule runs this preset: {{when}}. Delete the schedule first, then the preset.",
         "deleteRefused_other": "{{count}} schedules run this preset: {{when}}. Delete the schedules first, then the preset."
       }
+    },
+    "probeNotice": {
+      "text": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong. You can start it anyway.",
+      "textNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong. You can start it anyway.",
+      "thisChain": "This chain",
+      "status": {
+        "SHAPE_CHANGED": "a shape change",
+        "BLOCKED": "refused",
+        "UNREACHABLE": "unreachable",
+        "ERROR": "a fault on our side"
+      }
     }
   },
   "people": {

@@ -31,6 +31,7 @@ import {
   POSTAL_CODE_DISCOVERY_SEED,
   SOURCE_ENTRY_SEED,
   SOURCE_LOCATION_SEED,
+  SOURCE_PROBE_SEED,
   SUPERMARKET_SOURCE_SEED,
   type StoredSchedule,
 } from './harvest-seed';
@@ -108,6 +109,8 @@ export class HarvestMemory implements HarvestServiceI {
   );
   private readonly _shops: Wire.HarvestSourceLocationView[] =
     clone(SOURCE_LOCATION_SEED);
+  private readonly _probes: Wire.HarvestSourceProbeView[] =
+    clone(SOURCE_PROBE_SEED);
   private readonly _postalCodes: Wire.HarvestPostalCodeDiscoveryRequestView[] =
     clone(POSTAL_CODE_DISCOVERY_SEED);
   private readonly _presets: StoredPreset[] = HARVEST_RUN_PRESET_SEED.map(
@@ -1289,6 +1292,25 @@ export class HarvestMemory implements HarvestServiceI {
     }
 
     return { ...source };
+  }
+
+  /**
+   * The seeded probes of a chain, newest first, as the route orders them. A
+   * chain with no source row is a 404, as the route answers it.
+   */
+  async listProbes(
+    supermarketId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestSourceProbePage> {
+    if (
+      !this._sources.some((source) => source.supermarketId === supermarketId)
+    ) {
+      throw notFound();
+    }
+    const rows = this._probes
+      .filter((probe) => probe.supermarketId === supermarketId)
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return page(rows, query);
   }
 
   async upsertSource(

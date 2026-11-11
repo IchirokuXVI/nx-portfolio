@@ -1347,6 +1347,88 @@ export const SUPERMARKET_SOURCE_SEED: readonly Wire.HarvestSupermarketSourceView
     },
   ];
 
+/** One seeded probe, with the fields every row shares filled in. */
+function probe(
+  fields: Pick<
+    Wire.HarvestSourceProbeView,
+    | 'id'
+    | 'sourceId'
+    | 'supermarketId'
+    | 'adapterKey'
+    | 'status'
+    | 'startedAt'
+    | 'error'
+  > &
+    Partial<Wire.HarvestSourceProbeView>
+): Wire.HarvestSourceProbeView {
+  return {
+    trigger: 'SCHEDULED',
+    previousStatus: null,
+    changed: false,
+    attempt: 1,
+    finishedAt: fields.startedAt,
+    durationMs: 1800,
+    requests: 3,
+    steps: [],
+    requestedByUserId: null,
+    scheduleId: null,
+    ...fields,
+  };
+}
+
+/**
+ * The probes of each storefront (backend plan 0219), in no order: the route
+ * answers them newest first and the memory sorts them the same way.
+ *
+ * DEZA's newest finished probe is red, behind nothing, so a start of a DEZA
+ * walk draws the notice of admin plan 0069 with no backend. Mercadona's newest
+ * is green over an older red one, which is the case the notice must stay away
+ * from. The Carrefour row is a manual source and has none.
+ */
+export const SOURCE_PROBE_SEED: readonly Wire.HarvestSourceProbeView[] = [
+  probe({
+    id: '88888888-8888-4888-8888-888888888881',
+    sourceId: 'source-deza',
+    supermarketId: DEZA,
+    adapterKey: 'deza-web',
+    status: 'UNREACHABLE',
+    previousStatus: 'PASSED',
+    changed: true,
+    startedAt: '2026-09-02T06:00:00.000Z',
+    requests: 1,
+    error: 'home: the storefront did not answer within 20 seconds',
+  }),
+  probe({
+    id: '88888888-8888-4888-8888-888888888882',
+    sourceId: 'source-deza',
+    supermarketId: DEZA,
+    adapterKey: 'deza-web',
+    status: 'PASSED',
+    startedAt: '2026-09-01T06:00:00.000Z',
+    error: null,
+  }),
+  probe({
+    id: '88888888-8888-4888-8888-888888888883',
+    sourceId: 'source-mercadona',
+    supermarketId: MERCADONA,
+    adapterKey: 'mercadona-api',
+    status: 'PASSED',
+    previousStatus: 'SHAPE_CHANGED',
+    changed: true,
+    startedAt: '2026-09-02T06:10:00.000Z',
+    error: null,
+  }),
+  probe({
+    id: '88888888-8888-4888-8888-888888888884',
+    sourceId: 'source-mercadona',
+    supermarketId: MERCADONA,
+    adapterKey: 'mercadona-api',
+    status: 'SHAPE_CHANGED',
+    startedAt: '2026-09-01T06:10:00.000Z',
+    error: 'categories: 0 of 26 sections carried a product',
+  }),
+];
+
 /**
  * How many places a code has to show for itself, in one line.
  *

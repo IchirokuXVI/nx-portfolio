@@ -110,6 +110,7 @@ function spawnRecorder(refusal?: unknown): {
       return memory.createPreset(supermarketId, name, input as never);
     },
     readSource: (id: string) => memory.readSource(id),
+    listProbes: (id: string, query: never) => memory.listProbes(id, query),
     spawnRun: async (input: unknown) => {
       spawned.push(input);
       if (refusal !== undefined) {
@@ -515,5 +516,101 @@ describe('the new run page, saving the form as a preset', () => {
     fixture.detectChanges();
 
     expect(page.saveOpen()).toBe(false);
+  });
+});
+
+/**
+ * The notice above the start (admin plan 0069, target 1). The seed's DEZA
+ * probe is red and Mercadona's is green. A notice never holds the start.
+ */
+describe('the new run page, a red probe', () => {
+  const notice = (fixture: ComponentFixture<NewRunPage>): HTMLElement | null =>
+    fixture.nativeElement.querySelector('[data-probe-notice]');
+
+  async function settled(fixture: ComponentFixture<NewRunPage>) {
+    await drain();
+    fixture.detectChanges();
+    await drain();
+    fixture.detectChanges();
+  }
+
+  it('warns before a catalog discovery of a chain whose probe is red', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    expect(notice(fixture)?.getAttribute('data-probe-notice')).toBe(
+      'UNREACHABLE'
+    );
+    expect(fixture.componentInstance.probeNotice()).toEqual({
+      chain: 'Deza',
+      verdict: expect.objectContaining({
+        status: 'UNREACHABLE',
+        error: 'home: the storefront did not answer within 20 seconds',
+      }),
+    });
+    // Inside the form, just above its start.
+    const actions: HTMLElement = fixture.nativeElement.querySelector(
+      'lib-run-request-form .actions'
+    );
+    expect(notice(fixture)?.compareDocumentPosition(actions) ?? 0).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it('takes the notice away for a file import', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    formOf(fixture).mode.set('FILE_IMPORT');
+    await settled(fixture);
+
+    expect(notice(fixture)).toBe(null);
+  });
+
+  it('draws no notice for a chain whose newest probe passed', async () => {
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    await settled(fixture);
+
+    expect(fixture.componentInstance.probeNotice()).toBe(null);
+    expect(notice(fixture)).toBe(null);
+  });
+
+  it('keeps the start enabled and sends the same request with the notice shown', async () => {
+    // The same chain with no probe at all, for the request a start sent
+    // before this plan.
+    const noProbes = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockResolvedValue({ items: [], nextCursor: null });
+    const withoutNotice = await render();
+    await chain(withoutNotice.fixture, DEZA);
+    await settled(withoutNotice.fixture);
+    expect(notice(withoutNotice.fixture)).toBe(null);
+    formOf(withoutNotice.fixture).submit();
+    await drain();
+    noProbes.mockRestore();
+
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    const start: HTMLButtonElement = fixture.nativeElement.querySelector(
+      'lib-run-request-form .actions button.primary'
+    );
+
+    expect(notice(fixture)).not.toBeNull();
+    expect(start.disabled).toBe(false);
+
+    start.click();
+    await drain();
+
+    expect(spawned).toEqual(withoutNotice.spawned);
+    expect(spawned).toEqual([
+      expect.objectContaining({
+        mode: 'CATALOG_DISCOVERY',
+        supermarketId: DEZA,
+      }),
+    ]);
   });
 });

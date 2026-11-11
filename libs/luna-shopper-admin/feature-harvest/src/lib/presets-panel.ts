@@ -21,16 +21,21 @@ import {
 import { ResourceRegistry } from '@portfolio/luna-shopper-admin/feature-resource';
 import {
   harvestRunPath,
+  readsTheChain,
+  redProbe,
   scheduleCadence,
   spawnBlockReason,
   type HarvestRun,
   type HarvestSchedule,
+  type ProbeVerdict,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog, HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
+import { ChainNames } from './chain-names';
 import { ChainSelect } from './chain-select';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
+import { PROBE_PAGE, ProbeNotice } from './probe-notice';
 import { RunRequestForm } from './run-request-form';
 
 type Preset = Wire.HarvestHarvestRunPresetView;
@@ -61,6 +66,16 @@ export interface PresetScheduleLine {
   /** Where the schedule's page is, or `null` where the app did not mount it. */
   readonly link: readonly string[] | null;
   readonly enabled: boolean;
+}
+
+/**
+ * What the panel knows about the storefront of the chain it is on: the adapter
+ * that fetches it and its newest red probe (admin plan 0069, target 2).
+ */
+interface ChainProbe {
+  readonly chain: string;
+  readonly adapterKey: string;
+  readonly verdict: ProbeVerdict | null;
 }
 
 /** A delete the harvester refused because schedules name the preset. */
@@ -132,6 +147,7 @@ function rememberChain(supermarketId: string): void {
     ConfirmDialog,
     HarvestNotice,
     ChainSelect,
+    ProbeNotice,
     RunRequestForm,
   ],
   template: `
@@ -215,6 +231,16 @@ function rememberChain(supermarketId: string): void {
           <li [class.highlighted]="preset.id === highlighted()">
             <div class="what">
               <span class="preset-name">{{ preset.name }}</span>
+              <!-- The chain's newest finished probe did not pass, and this
+                   preset reads the chain (admin plan 0069, target 2). Start
+                   stays as it is. -->
+              @if (probeNoticeOf(preset); as notice) {
+                <lib-probe-notice
+                  [chain]="notice.chain"
+                  [verdict]="notice.verdict"
+                  class="probe"
+                />
+              }
               <!-- One line: the kind of run, then what it is set to do. -->
               <span class="summary">
                 <span class="mode">{{
@@ -505,6 +531,10 @@ function rememberChain(supermarketId: string): void {
       overflow-wrap: anywhere;
     }
 
+    .probe {
+      margin-block: var(--admin-space-1);
+    }
+
     .summary,
     .last {
       font-size: 0.8125rem;
@@ -623,6 +653,12 @@ export class PresetsPanel {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _registry = inject(ResourceRegistry);
   private readonly _translator = inject(RokuTranslatorService);
+  private readonly _chainNames = inject(ChainNames);
+
+  /** The storefront of the chain the panel is on, read once per chain. */
+  private readonly _chainProbe = signal<ChainProbe | null>(null);
+  /** Bumped per chain choice, so a probe read for the previous one is dropped. */
+  private _probeRead = 0;
 
   /** The schedules of the chain, read beside its presets. */
   private readonly _schedules = signal<readonly HarvestSchedule[]>([]);
@@ -735,7 +771,62 @@ export class PresetsPanel {
     this.supermarketId.set(supermarketId);
     this.editing.set(null);
     this._refusals.set(new Map());
+    void this._readProbe(supermarketId);
     void this.load();
+  }
+
+  /**
+   * The notice on one preset's row, or null (admin plan 0069, target 2): the
+   * chain's newest finished probe did not pass and this preset's run reads
+   * the chain's storefront.
+   */
+  probeNoticeOf(
+    preset: Preset
+  ): { readonly chain: string | null; readonly verdict: ProbeVerdict } | null {
+    const held = this._chainProbe();
+    if (
+      held === null ||
+      held.verdict === null ||
+      held.chain !== preset.supermarketId ||
+      !readsTheChain(preset.input.mode, held.adapterKey)
+    ) {
+      return null;
+    }
+    return { chain: this._chainNames.known(held.chain), verdict: held.verdict };
+  }
+
+  /**
+   * The chain's adapter and newest red probe, once per chain and shared by
+   * every row (admin plan 0069, constraints). Not read again after a start,
+   * which changes the runs and not the probes.
+   *
+   * A failure is no notice. A source read that fails leaves the adapter
+   * unknown, so only a catalog discovery, which always reads the chain, can
+   * still be warned about.
+   */
+  private async _readProbe(chain: string): Promise<void> {
+    const generation = ++this._probeRead;
+    this._chainProbe.set(null);
+    if (chain === '') {
+      return;
+    }
+    void this._chainNames.resolve([chain]).catch(() => undefined);
+
+    const [source, page] = await Promise.all([
+      Promise.resolve()
+        .then(() => this._service.readSource(chain))
+        .catch(() => null),
+      Promise.resolve()
+        .then(() => this._service.listProbes(chain, { limit: PROBE_PAGE }))
+        .catch(() => null),
+    ]);
+    if (generation === this._probeRead) {
+      this._chainProbe.set({
+        chain,
+        adapterKey: source?.adapterKey ?? '',
+        verdict: page === null ? null : redProbe(page),
+      });
+    }
   }
 
   /** The chain's first page, ordered by name as the route orders it. */

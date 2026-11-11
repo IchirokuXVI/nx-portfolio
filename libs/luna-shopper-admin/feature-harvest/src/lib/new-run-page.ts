@@ -2,8 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  effect,
   inject,
   signal,
+  untracked,
   viewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -16,12 +18,23 @@ import {
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
   harvestRunsPath,
+  readsTheChain,
+  redProbe,
   spawnBlockReason,
+  type ProbeVerdict,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { keepTabInside, PageHeader } from '@portfolio/luna-shopper-admin/ui';
+import { ChainNames } from './chain-names';
 import { HarvestShell } from './harvest-shell';
+import { PROBE_PAGE, ProbeNotice } from './probe-notice';
 import { RunRequestForm } from './run-request-form';
+
+/** The newest red probe of one chain, as last read. */
+interface ChainProbe {
+  readonly chain: string;
+  readonly verdict: ProbeVerdict | null;
+}
 
 /**
  * A new run: what to run, for which chain, and how (admin plan 0044, target
@@ -49,6 +62,7 @@ import { RunRequestForm } from './run-request-form';
     FormsModule,
     RouterLink,
     RokuTranslatorPipe,
+    ProbeNotice,
     RunRequestForm,
   ],
   template: `
@@ -64,6 +78,16 @@ import { RunRequestForm } from './run-request-form';
         (submitted)="start($event)"
         [busy]="starting()"
       >
+        <!-- Above the start, in the form's own slot for it (admin plan
+             0069). It never holds the start: the button below stays as it
+             is, and starts the same request. -->
+        @if (probeNotice(); as notice) {
+          <lib-probe-notice
+            [chain]="notice.chain"
+            [verdict]="notice.verdict"
+            runNotice
+          />
+        }
         <button
           (click)="openSave()"
           [disabled]="!canSave()"
@@ -274,6 +298,7 @@ import { RunRequestForm } from './run-request-form';
 export class NewRunPage {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _router = inject(Router);
+  private readonly _chainNames = inject(ChainNames);
 
   readonly shell = inject(HarvestShell);
 
@@ -298,6 +323,53 @@ export class NewRunPage {
     readonly name: string;
     readonly query: Readonly<Record<string, string>>;
   } | null>(null);
+
+  /** The chain the form is on, which is what the probes are read for. */
+  readonly probeChain = computed(() =>
+    (this.draft()?.supermarketId ?? '').trim()
+  );
+
+  /** The last probe read, for the chain it was read for. */
+  private readonly _chainProbe = signal<ChainProbe | null>(null);
+  /** Bumped per chain, so an answer for the previous chain is dropped. */
+  private _probeRead = 0;
+
+  /**
+   * The notice above the start (admin plan 0069, target 1), or null.
+   *
+   * Drawn when the chain's newest finished probe did not pass and the mode
+   * reads the chain's storefront. It follows the form: another chain reads
+   * that chain's probes, and a mode that reads nothing takes it away.
+   */
+  readonly probeNotice = computed(() => {
+    const draft = this.draft();
+    const held = this._chainProbe();
+    const form = this.form();
+    if (
+      draft === null ||
+      held === null ||
+      held.verdict === null ||
+      held.chain !== this.probeChain() ||
+      form === undefined ||
+      !readsTheChain(draft.mode, form.adapterKey())
+    ) {
+      return null;
+    }
+    return {
+      chain: this._chainNames.known(held.chain),
+      verdict: held.verdict,
+    };
+  });
+
+  constructor() {
+    // One read per chain the form is pointed at, not one per keystroke: the
+    // chain is a computed string, so a draft that changed only its mode or
+    // its scopes does not read again.
+    effect(() => {
+      const chain = this.probeChain();
+      untracked(() => void this._readProbe(chain));
+    });
+  }
 
   /**
    * Whether the form can be saved as a preset (admin plan 0030, section 4).
@@ -384,6 +456,33 @@ export class NewRunPage {
       this.shell.observeSpawnRefusal(spawnBlockReason(failure));
     } finally {
       this.starting.set(false);
+    }
+  }
+
+  /**
+   * The chain's newest red probe, from one page of its probes.
+   *
+   * A failure is no notice, never a refusal: the probe is a warning beside a
+   * start the owner keeps free, and a route that did not answer has nothing
+   * to warn about.
+   */
+  private async _readProbe(chain: string): Promise<void> {
+    const generation = ++this._probeRead;
+    this._chainProbe.set(null);
+    if (chain === '') {
+      return;
+    }
+    void this._chainNames.resolve([chain]).catch(() => undefined);
+
+    try {
+      const page = await this._service.listProbes(chain, {
+        limit: PROBE_PAGE,
+      });
+      if (generation === this._probeRead) {
+        this._chainProbe.set({ chain, verdict: redProbe(page) });
+      }
+    } catch {
+      // No notice. The start is the same with or without one.
     }
   }
 

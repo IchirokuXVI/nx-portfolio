@@ -91,6 +91,11 @@ export {
   harvesterDeployed,
 } from './lib/harvest/harvest-switches';
 export {
+  readsTheChain,
+  redProbe,
+  type ProbeVerdict,
+} from './lib/harvest/probe-verdict';
+export {
   isFileImportRun,
   queuedByRun,
   runWarningRows,
