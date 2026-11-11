@@ -329,12 +329,13 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
-            (quantityChanged)="changeQuantity($event)"
+            (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
             [announcement]="announcement()"
             [highlight]="highlight()"
             [lines]="drawnLines()"
             [markedId]="markedLine()"
+            [pending]="quantityRuns.pending()"
             [tookId]="tookLine()"
           />
         }
@@ -415,12 +416,13 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
-            (quantityChanged)="changeQuantity($event)"
+            (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
             [announcement]="announcement()"
             [highlight]="highlight()"
             [lines]="wantedLines()"
             [markedId]="markedLine()"
+            [pending]="quantityRuns.pending()"
             [tookId]="tookLine()"
           />
 
@@ -457,11 +459,12 @@
               (chooseProduct)="chooseProduct($event)"
               (dismiss)="dismissNote($event)"
               (opened)="openLine($event)"
-              (quantityChanged)="changeQuantity($event)"
+              (quantityStepped)="stepQuantity($event)"
               (retry)="retry($event)"
               [highlight]="highlight()"
               [lines]="restLines()"
               [markedId]="markedLine()"
+              [pending]="quantityRuns.pending()"
               [tookId]="tookLine()"
             />
           }
@@ -471,12 +474,22 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
+<<<<<<< HEAD
             (quantityChanged)="changeQuantity($event)"
+=======
+            (quantityStepped)="stepQuantity($event)"
+            (reorderTo)="moveTo($event)"
+>>>>>>> origin/feat/velista-0188-stepper
             (retry)="retry($event)"
             [announcement]="announcement()"
             [highlight]="highlight()"
             [lines]="drawnLines()"
             [markedId]="markedLine()"
+<<<<<<< HEAD
+=======
+            [pending]="quantityRuns.pending()"
+            [reordering]="reordering()"
+>>>>>>> origin/feat/velista-0188-stepper
             [tookId]="tookLine()"
           />
         }

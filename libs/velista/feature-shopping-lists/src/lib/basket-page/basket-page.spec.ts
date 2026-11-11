@@ -58,6 +58,7 @@ import type {
 } from '@portfolio/velista/models';
 import {
   DEFAULT_BASKET_VIEW_STATE,
+  QUANTITY_STEP_QUIET_MS,
   SUGGEST_DEBOUNCE_MS,
 } from '@portfolio/velista/models';
 import {
@@ -4066,10 +4067,11 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     }[];
     productLink(): ((itemId: string) => string) | null;
     changeHolding(change: {
-      holding: { lineId: string };
+      holding: { lineId: string; text?: string };
       from: number;
       to: number;
-    }): Promise<void>;
+      repeat: boolean;
+    }): void;
   }
 
   const milk = () =>
@@ -4131,14 +4133,83 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       setDemand: jest.Mock;
     };
 
-    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
+    // Three presses are one run, and one write with the run's first from (velista
+    // `0188`, section 5.6).
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      });
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 3,
+        to: 4,
+        repeat: false,
+      });
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 4,
+        to: 5,
+        repeat: true,
+      });
+      expect(store.setDemand).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
 
     // Sent under its own line (backend `0201`, section 4), whichever row holds it.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
     expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl-1',
-      quantity: 3,
+      quantity: 5,
       from: 2,
     });
+  });
+
+  it('keeps drawing the run’s amount until its demand write answers', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+    let answer: (result: null) => void = () => undefined;
+    store.setDemand.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const shown = () =>
+      page
+        .holdingsOf()(MILK)
+        .find((held) => held.lineId === 'zl-1')?.quantity;
+
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // The run is closed and its write is on its way: still 3, not the stored 2.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(shown()).toBe(3);
+
+    // A refusal leaves the stored amount, which is drawn again.
+    answer(null);
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
+    expect(shown()).toBe(2);
   });
 
   it('says the line is no longer asked for when the answer no longer holds it', async () => {
@@ -4149,7 +4220,21 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     };
     store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
 
-    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 0 });
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 0,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
     fixture.detectChanges();
 
     expect(text(fixture)).toContain('basket.demand.nothingLeft');

@@ -203,17 +203,16 @@
   <!--
     **The quantity, on every row, zero included** (velista 0043, section 3.2).
   -->
-  <lib-quantity-reel
-    (autoClosed)="onReelAutoClosed()"
+  <lib-quantity-stepper
     (click)="$event.stopPropagation()"
-    (committed)="quantityChanged.emit({ lineId: line().id, delta: $event })"
     (pointerdown)="$event.stopPropagation()"
-    [label]="'list.line.quantityFor' | rokuT: { name: line().content }"
+    (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
+    [name]="line().content"
     [readonly]="!line().adjustable"
     [took]="took()"
     [unit]="line().unit"
-    [value]="line().quantity"
-    #reel
+    [value]="amount()"
+    variant="row"
   />
 </div>
 

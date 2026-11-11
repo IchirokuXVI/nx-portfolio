@@ -1,64 +1,240 @@
-.stepper {
+// The owner's D3 Outline (velista 0188, section 3.2): minus, the amount cell and plus
+// in one raised capsule with the strong border, the weakest border token that reaches
+// 3 to 1 against the page. One geometry in every variant; only the cell's width
+// changes, and nothing it holds can change it.
+:host {
+  --stepper-cell: var(--app-stepper-cell-row);
   display: inline-flex;
-  align-items: center;
-  gap: var(--app-space-hair);
-  background: var(--app-surface-sunken);
-  border: 1px solid var(--app-border-subtle);
-  border-radius: var(--app-radius-full);
+  flex: none;
+  align-self: center;
+  font-family: var(--app-font-sans);
+  line-height: 1;
+  color: var(--app-text-primary);
+  -webkit-tap-highlight-color: transparent;
 }
 
-// 44 square, like every other target on this screen.
+:host(.variant-sheet) {
+  --stepper-cell: var(--app-stepper-cell-sheet);
+}
+
+:host(.variant-sheet-narrow) {
+  --stepper-cell: var(--app-stepper-cell-sheet-narrow);
+}
+
+.stepper {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: var(--app-stepper-button) var(--stepper-cell) var(
+      --app-stepper-button
+    );
+  block-size: var(--app-stepper-button);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-raised);
+  box-shadow: inset 0 0 0 1px var(--app-border-strong);
+}
+
+// A reader sees the amount alone in the same box, so a list it may only read keeps
+// its column (decision I).
+.stepper.is-reader {
+  grid-template-columns: calc(
+    var(--app-stepper-button) * 2 + var(--stepper-cell)
+  );
+  background: none;
+  box-shadow: none;
+}
+
 .step {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--app-touch-target);
-  height: var(--app-touch-target);
+  box-sizing: border-box;
+  inline-size: var(--app-stepper-button);
+  block-size: var(--app-stepper-button);
+  margin: 0;
   padding: 0;
-  background: none;
   border: 0;
   border-radius: var(--app-radius-full);
-  font: inherit;
-  font-size: var(--app-text-lg);
+  background: transparent;
   color: var(--app-text-primary);
+  font: inherit;
   cursor: pointer;
+  // A long press repeats: no text selection, no callout menu, no double tap zoom.
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    transform var(--app-motion-fast) var(--app-motion-ease),
+    background-color var(--app-motion-fast) var(--app-motion-ease);
 
-  &:disabled {
+  &:active:not([aria-disabled='true']) {
+    background: var(--app-surface-sunken);
+    transform: scale(0.96);
+  }
+
+  // An end is drawn and stays focusable (decision D).
+  &[aria-disabled='true'] {
     opacity: 0.35;
     cursor: default;
   }
 
+  // Inside the shape, so no capsule, cell or sheet edge can clip it.
   &:focus-visible {
     outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: calc(var(--app-focus-ring-offset) * -1);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
   }
 }
 
-// Tabular and a fixed minimum, so stepping from 9 to 10 does not shove the buttons.
-.value {
-  min-width: 2ch;
-  font-size: var(--app-text-sm);
+// Two bars with round caps, drawn in CSS: no icon file and no raw svg.
+.glyph {
+  position: relative;
+  display: block;
+  flex: none;
+  inline-size: var(--app-stepper-glyph);
+  block-size: var(--app-stepper-glyph);
+  pointer-events: none;
+
+  &::before,
+  &::after {
+    content: '';
+    position: absolute;
+    border-radius: 1px;
+    background: currentColor;
+  }
+
+  &::before {
+    inset-inline-start: 0;
+    inset-block-start: calc(
+      (var(--app-stepper-glyph) - var(--app-stepper-glyph-bar)) / 2
+    );
+    inline-size: var(--app-stepper-glyph);
+    block-size: var(--app-stepper-glyph-bar);
+  }
+
+  &::after {
+    display: none;
+    inset-inline-start: calc(
+      (var(--app-stepper-glyph) - var(--app-stepper-glyph-bar)) / 2
+    );
+    inset-block-start: 0;
+    inline-size: var(--app-stepper-glyph-bar);
+    block-size: var(--app-stepper-glyph);
+  }
+}
+
+.plus .glyph::after {
+  display: block;
+}
+
+.cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-stepper-figure-gap);
+  box-sizing: border-box;
+  min-inline-size: 0;
+  block-size: var(--app-stepper-button);
+  padding-inline: var(--app-space-2);
+  border-radius: var(--app-radius-sm);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+:host(.variant-sheet) .cell {
+  padding-inline: var(--app-stepper-cell-pad-sheet);
+}
+
+// The amber edge of an amount an add just raised (velista 0170, decision J).
+:host(.is-took) .cell {
+  box-shadow: inset 0 0 0 var(--app-stepper-took-ring) var(--app-action-bg);
+  color: var(--app-action-quiet-fg);
+}
+
+// The sheets' field: the input lies over a hidden copy of its text, so the field
+// takes the width of what it holds and the cell never grows.
+.field {
+  position: relative;
+  display: inline-block;
+  min-inline-size: 1ch;
+  max-inline-size: 100%;
+  font-size: var(--app-stepper-figure);
+  font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--app-text-primary);
+  line-height: 1;
+
+  &::after {
+    content: attr(data-text);
+    display: block;
+    overflow: hidden;
+    visibility: hidden;
+    white-space: pre;
+  }
+}
+
+.field-cell.is-bare .field {
+  font-size: var(--app-stepper-figure-count);
+}
+
+.number {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  inline-size: 100%;
+  block-size: 100%;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
   text-align: center;
-}
+  caret-color: var(--app-focus-ring);
+  -webkit-appearance: none;
+  appearance: none;
 
-// A count that says the product is on a list (velista 0134, section 4.1).
-:host(.is-accent) {
-  .stepper {
-    border-color: var(--app-action-bg);
-    background: var(--app-action-quiet-bg);
-  }
-
-  .value {
-    font-size: var(--app-text-base);
-    font-weight: 700;
-    color: var(--app-action-quiet-fg);
+  &.is-zero {
+    color: var(--app-text-secondary);
   }
 }
 
-// Beside a name and a price, where 44 a button would leave the name two words.
-:host(.is-compact) .step {
-  width: var(--app-space-9);
-  height: var(--app-space-9);
+// The field's ring is drawn around the whole cell (the input draws none of its own).
+.field-cell:focus-within {
+  z-index: 1;
+  outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+  outline-offset: calc(var(--app-focus-ring-width) * -1);
+}
+
+.symbol {
+  font-size: var(--app-stepper-symbol);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--app-text-secondary);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step {
+    transition: none;
+  }
+
+  .step:active:not([aria-disabled='true']) {
+    transform: none;
+  }
 }

@@ -8,6 +8,7 @@ import type {
   CatalogProduct,
   HoldingRow,
   ProductOffer,
+  QuantityStep,
 } from '@portfolio/velista/models';
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -778,11 +779,25 @@ describe('ProductRow', () => {
       ];
     }
 
-    function spinbutton(
+    /** A line's stepper, whose host carries the amount it draws (velista 0188, L). */
+    function stepper(
       fixture: ComponentFixture<ProductRow>,
       lineId: string
     ): Element | null {
-      return heldLine(fixture, lineId).querySelector('[role="spinbutton"]');
+      return heldLine(fixture, lineId).querySelector('lib-quantity-stepper');
+    }
+
+    /** What a line's stepper draws, in base units. */
+    function amountOf(
+      fixture: ComponentFixture<ProductRow>,
+      lineId: string
+    ): string | null | undefined {
+      return stepper(fixture, lineId)?.getAttribute('data-value');
+    }
+
+    /** Whether a stepper button is at an end or off: drawn, focusable, and deaf. */
+    function off(button: HTMLButtonElement | undefined): boolean {
+      return button?.getAttribute('aria-disabled') === 'true';
     }
 
     function record(fixture: ComponentFixture<ProductRow>): {
@@ -906,14 +921,12 @@ describe('ProductRow', () => {
       ).toEqual(['Extra virgin olive oil', 'Oil for the fryer']);
       expect(
         heldLines(fixture).map(
-          (one) => one.querySelector('.value')?.textContent
+          (one) => one.querySelector('lib-amount-figure .number')?.textContent
         )
       ).toEqual(['2', '5']);
       expect(
         heldLines(fixture).map((one) =>
-          one
-            .querySelector('[role="spinbutton"]')
-            ?.getAttribute('aria-valuenow')
+          one.querySelector('lib-quantity-stepper')?.getAttribute('data-value')
         )
       ).toEqual(['2', '5']);
     });
@@ -931,37 +944,46 @@ describe('ProductRow', () => {
       );
     });
 
-    it('names each stepper for its line and the list', async () => {
+    it('names the amount of each stepper for its line and the list', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
         adding([OWN, TYPED])
       );
 
-      expect(spinbutton(fixture, 'line-oil')?.getAttribute('aria-label')).toBe(
-        'catalog.held.stepper'
-      );
-      expect(valuesOf('catalog.held.stepper')).toEqual([
-        { line: 'Extra virgin olive oil', list: LIST },
-        { line: 'Oil for the fryer', list: LIST },
+      expect(
+        stepper(fixture, 'line-oil')
+          ?.querySelector('[role="group"]')
+          ?.getAttribute('aria-label')
+      ).toBe('amount.group');
+      expect(valuesOf('amount.inList')).toEqual([
+        { name: 'Extra virgin olive oil', list: LIST },
+        { name: 'Oil for the fryer', list: LIST },
       ]);
     });
 
-    it('draws each stepper small, and in the quiet colour while the line holds some', async () => {
+    it('names the amount as the host words it', async () => {
+      await render(productRowView(OIL, options()), {
+        list: LIST,
+        lines: [{ ...held(), stepperName: 'Oil on Weekly, Home' }],
+      });
+
+      expect(valuesOf('amount.group')).toEqual([
+        { name: 'Oil on Weekly, Home' },
+      ]);
+      expect(valuesOf('amount.inList')).toEqual([]);
+    });
+
+    it('draws each stepper as a row, with no tint while the line holds some', async () => {
       const fixture = await render(
         productRowView(OIL, options()),
         adding([OWN, held({ lineId: 'line-zero', quantity: 0 })])
       );
 
-      const some = heldLine(fixture, 'line-oil').querySelector(
-        'lib-quantity-stepper'
-      );
-      const none = heldLine(fixture, 'line-zero').querySelector(
-        'lib-quantity-stepper'
-      );
-      expect(some?.classList.contains('is-compact')).toBe(true);
-      expect(some?.classList.contains('is-accent')).toBe(true);
-      expect(none?.classList.contains('is-compact')).toBe(true);
-      expect(none?.classList.contains('is-accent')).toBe(false);
+      for (const lineId of ['line-oil', 'line-zero']) {
+        const one = stepper(fixture, lineId);
+        expect(one?.classList.contains('variant-row')).toBe(true);
+        expect(one?.classList.contains('is-accent')).toBe(false);
+      }
     });
 
     it('says one more for the line whose plus was pressed', async () => {
@@ -973,7 +995,9 @@ describe('ProductRow', () => {
 
       steps(fixture, 'line-fry')[1]?.click();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-fry', by: 1 }]);
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-fry', step: { from: 5, to: 6, repeat: false } },
+      ]);
       // A step on a line is not an add, and it does not open the product.
       expect(heard.added).toEqual([]);
       expect(heard.opened).toEqual([]);
@@ -988,7 +1012,9 @@ describe('ProductRow', () => {
 
       steps(fixture, 'line-oil')[0]?.click();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: -1 }]);
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 2, to: 1, repeat: false } },
+      ]);
     });
 
     it('says one fewer at one too, which is how a line goes to zero', async () => {
@@ -998,13 +1024,12 @@ describe('ProductRow', () => {
       );
       const heard = record(fixture);
 
-      expect(
-        spinbutton(fixture, 'line-oil')?.getAttribute('aria-valuemin')
-      ).toBe('0');
-      expect(steps(fixture, 'line-oil')[0]?.disabled).toBe(false);
+      expect(off(steps(fixture, 'line-oil')[0])).toBe(false);
       steps(fixture, 'line-oil')[0]?.click();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: -1 }]);
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 1, to: 0, repeat: false } },
+      ]);
     });
 
     it('has no minus to press on a line at zero', async () => {
@@ -1014,8 +1039,8 @@ describe('ProductRow', () => {
       );
       const heard = record(fixture);
 
-      expect(steps(fixture, 'line-oil')[0]?.disabled).toBe(true);
-      expect(steps(fixture, 'line-oil')[1]?.disabled).toBe(false);
+      expect(off(steps(fixture, 'line-oil')[0])).toBe(true);
+      expect(off(steps(fixture, 'line-oil')[1])).toBe(false);
       steps(fixture, 'line-oil')[0]?.click();
 
       expect(heard.lineStepped).toEqual([]);
@@ -1034,8 +1059,8 @@ describe('ProductRow', () => {
       fixture.detectChanges();
 
       expect(heard.lineStepped).toEqual([
-        { lineId: 'line-oil', by: -1 },
-        { lineId: 'line-oil', by: 1 },
+        { lineId: 'line-oil', step: { from: 2, to: 1, repeat: false } },
+        { lineId: 'line-oil', step: { from: 2, to: 3, repeat: false } },
       ]);
     });
 
@@ -1050,13 +1075,10 @@ describe('ProductRow', () => {
       steps(fixture, 'line-oil')[1]?.click();
       fixture.detectChanges();
 
-      expect(heard.lineStepped).toEqual([{ lineId: 'line-oil', by: 1 }]);
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
-      expect(
-        spinbutton(fixture, 'line-oil')?.getAttribute('aria-valuenow')
-      ).toBe('2');
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 2, to: 3, repeat: false } },
+      ]);
+      expect(amountOf(fixture, 'line-oil')).toBe('2');
     });
 
     it('draws the new quantity only once the list has taken the press', async () => {
@@ -1067,9 +1089,7 @@ describe('ProductRow', () => {
 
       steps(fixture, 'line-oil')[1]?.click();
       fixture.detectChanges();
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
+      expect(amountOf(fixture, 'line-oil')).toBe('2');
 
       fixture.componentRef.setInput(
         'add',
@@ -1077,13 +1097,9 @@ describe('ProductRow', () => {
       );
       fixture.detectChanges();
 
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('3');
+      expect(amountOf(fixture, 'line-oil')).toBe('3');
       // The other line did not move.
-      expect(
-        heldLine(fixture, 'line-fry').querySelector('.value')?.textContent
-      ).toBe('5');
+      expect(amountOf(fixture, 'line-fry')).toBe('5');
     });
 
     it('disables the stepper of a line the person may not change, and still shows how many', async () => {
@@ -1093,18 +1109,10 @@ describe('ProductRow', () => {
       );
       const heard = record(fixture);
 
-      expect(steps(fixture, 'line-oil').map((one) => one.disabled)).toEqual([
-        true,
-        true,
-      ]);
-      expect(
-        heldLine(fixture, 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
+      expect(steps(fixture, 'line-oil').map(off)).toEqual([true, true]);
+      expect(amountOf(fixture, 'line-oil')).toBe('2');
       // The line beside it is the person's to change.
-      expect(steps(fixture, 'line-fry').map((one) => one.disabled)).toEqual([
-        false,
-        false,
-      ]);
+      expect(steps(fixture, 'line-fry').map(off)).toEqual([false, false]);
 
       for (const button of steps(fixture, 'line-oil')) {
         button.click();
@@ -1264,7 +1272,7 @@ describe('ProductRow, the one card', () => {
   });
 
   describe('one control in the slot, by precedence', () => {
-    const STEPPER = { value: 1, label: 'How many of oil' };
+    const STEPPER = { value: 1, name: 'Extra virgin olive oil' };
     const ADD = { list: 'Weekly', lines: [] };
 
     it('draws the radio alone when a choice and a stepper are both set', async () => {
@@ -1325,16 +1333,17 @@ describe('ProductRow, the one card', () => {
     it('draws a stepper in the slot, and says each press', async () => {
       const fixture = await card({
         compact: true,
-        stepper: { value: 2, label: 'How many of oil', min: 1 },
+        stepper: { value: 2, name: 'Extra virgin olive oil', min: 1 },
       });
-      const stepped: number[] = [];
-      fixture.componentInstance.stepped.subscribe((by) => stepped.push(by));
+      const stepped: QuantityStep[] = [];
+      fixture.componentInstance.stepped.subscribe((step) => stepped.push(step));
 
-      const spin = el(fixture).querySelector(
-        '.cell > lib-quantity-stepper [role="spinbutton"]'
-      );
-      expect(spin?.getAttribute('aria-label')).toBe('How many of oil');
-      expect(spin?.getAttribute('aria-valuemin')).toBe('1');
+      const control = el(fixture).querySelector('.cell > lib-quantity-stepper');
+      expect(control?.classList.contains('variant-row')).toBe(true);
+      expect(control?.getAttribute('data-value')).toBe('2');
+      expect(
+        control?.querySelector('[role="group"]')?.getAttribute('aria-label')
+      ).toBe('amount.group');
       expect(
         el(fixture).querySelector('.row')?.classList.contains('has-control')
       ).toBe(true);
@@ -1346,7 +1355,10 @@ describe('ProductRow, the one card', () => {
       plus?.click();
       minus?.click();
 
-      expect(stepped).toEqual([1, -1]);
+      expect(stepped).toEqual([
+        { from: 2, to: 3, repeat: false },
+        { from: 2, to: 1, repeat: false },
+      ]);
       expect(el(fixture).querySelector('button.add')).toBeNull();
     });
 
@@ -1365,7 +1377,7 @@ describe('ProductRow, the one card', () => {
       const fixture = await card({
         compact: true,
         openable: false,
-        stepper: { value: 1, label: 'How many of oil' },
+        stepper: { value: 1, name: 'Extra virgin olive oil' },
       });
 
       expect(el(fixture).querySelector('button.open')).toBeNull();

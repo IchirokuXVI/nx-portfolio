@@ -79,7 +79,10 @@ import type {
   TripRow,
   ZoneRole,
 } from '@portfolio/velista/models';
-import { DEFAULT_LIST_VIEW_STATE } from '@portfolio/velista/models';
+import {
+  DEFAULT_LIST_VIEW_STATE,
+  QUANTITY_STEP_QUIET_MS,
+} from '@portfolio/velista/models';
 import {
   AppResumed,
   NOTIFICATION_TONE,
@@ -1113,21 +1116,99 @@ describe('ListPage', () => {
       });
     });
 
-    it('announces the settled result once, rather than per step', async () => {
-      // Section 7. The drag is a pointer gesture, so nothing else says out loud that
-      // the number moved; what must not happen is a run of announcements as it moves.
-      const { fixture } = await render({
-        lines: [line('ln-1', { quantity: 2 })],
-      });
-
-      await fixture.componentInstance.changeQuantity({
+    describe('a run of presses (velista 0188, section 4)', () => {
+      const press = (from: number, to: number) => ({
         lineId: 'ln-1',
-        delta: 3,
+        step: { from, to, repeat: false },
+      });
+      const writes = (calls: readonly unknown[]) =>
+        calls.filter((call) => (call as { kind?: string }).kind === 'quantity');
+
+      afterEach(() => jest.useRealTimers());
+
+      it('sends three presses as one write of 75 after the quiet beat', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 750, unit: 'GRAM' })],
+        });
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(press(750, 775));
+        page.stepQuantity(press(775, 800));
+        page.stepQuantity(press(800, 825));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
+        expect(writes(lines.calls)).toEqual([]);
+
+        jest.advanceTimersByTime(1);
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 75 },
+        ]);
       });
 
-      expect(fixture.componentInstance.announcement()).toContain(
-        'list.line.quantityChanged'
-      );
+      it('draws the run on the row while the stored line has not moved', async () => {
+        const { fixture } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 3));
+        fixture.detectChanges();
+
+        const stepper = (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-quantity-stepper'
+        );
+        expect(stepper?.getAttribute('data-value')).toBe('3');
+      });
+
+      it('says nothing of its own after a write: the stepper says the amount', async () => {
+        const { fixture } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 3));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('writes its open run when the page goes away', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 3));
+        fixture.componentInstance.stepQuantity(press(3, 4));
+        fixture.destroy();
+
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 2 },
+        ]);
+      });
+
+      it("writes the line's open run before its sheet opens", async () => {
+        const { fixture, lines, router } = await render({
+          lines: [line('ln-1', { quantity: 2 })],
+        });
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(press(2, 3));
+        fixture.componentInstance.openLine('ln-1');
+
+        // Sent at once, before the sheet reads the line, and not again after.
+        expect(writes(lines.calls)).toEqual([
+          { kind: 'quantity', lineId: 'ln-1', delta: 1 },
+        ]);
+        expect(router.navigate).toHaveBeenCalledWith(
+          ['sheet', 'lines', 'ln-1', 'detail'],
+          expect.anything()
+        );
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        expect(writes(lines.calls)).toHaveLength(1);
+      });
     });
 
     it('opens the line rather than repeating a write that failed', async () => {
@@ -1364,9 +1445,9 @@ describe('ListPage', () => {
       ]);
       const raised = query(
         fixture,
-        '[data-line-id="ln-bread"] lib-quantity-reel'
+        '[data-line-id="ln-bread"] lib-quantity-stepper'
       ) as HTMLElement;
-      expect(raised.classList.contains('took')).toBe(true);
+      expect(raised.classList.contains('is-took')).toBe(true);
       expect(page.announcement()).toBe('list.addChoice.merged');
       expect(field(fixture).value).toBe('');
 
@@ -1374,7 +1455,7 @@ describe('ListPage', () => {
       fixture.detectChanges();
 
       expect(page.tookLine()).toBeNull();
-      expect(raised.classList.contains('took')).toBe(false);
+      expect(raised.classList.contains('is-took')).toBe(false);
     });
 
     it('keeps the words in the field while the answer is out, for a name the list holds', async () => {
@@ -3239,7 +3320,9 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
   it('adds the amount chosen on the stepper', async () => {
     const { fixture, lines } = await suggested();
 
+    // The stepper draws what the row hands it, so each press waits for the render.
     plus(fixture, 'coffee').click();
+    fixture.detectChanges();
     plus(fixture, 'coffee').click();
     fixture.detectChanges();
     addButton(fixture, 'coffee').click();
@@ -3430,7 +3513,7 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     );
   });
 
-  it('steps a line through the reel’s own write, as a delta', async () => {
+  it('steps a line through the row’s own run, as one delta (velista 0188)', async () => {
     const { fixture, lines } = await render({
       permissions: DECIDER,
       lines: [line('ln-oat', { quantity: 2, itemIds: ['item-oat'] })],
@@ -3440,12 +3523,26 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
       throw new Error('no holding');
     }
 
-    await fixture.componentInstance.changeHolding({ holding, from: 2, to: 3 });
+    jest.useFakeTimers();
+    fixture.componentInstance.changeHolding({
+      holding,
+      from: 2,
+      to: 3,
+      repeat: false,
+    });
+    fixture.componentInstance.changeHolding({
+      holding,
+      from: 3,
+      to: 4,
+      repeat: true,
+    });
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    jest.useRealTimers();
 
     expect(lines.calls).toContainEqual({
       kind: 'quantity',
       lineId: 'ln-oat',
-      delta: 1,
+      delta: 2,
     });
   });
 

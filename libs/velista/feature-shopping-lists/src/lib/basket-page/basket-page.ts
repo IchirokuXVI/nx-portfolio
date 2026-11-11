@@ -68,6 +68,8 @@ import {
   ListSearchNavigation,
   PageReturn,
   productPagePath,
+  type QuantityRun,
+  quantityRuns,
   searchOpenOf,
   sheetSegments,
   shopMapPath,
@@ -2450,7 +2452,12 @@ export class BasketPage {
               entry.listId === null
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
-            quantity: entry.left,
+            // The open run's amount while presses gather, then the amount of
+            // its write until that answers (velista `0188`).
+            quantity: this._holdingRuns.shown(
+              entry.lineId,
+              this._sending().get(entry.lineId)?.to ?? entry.left
+            ),
             unit: entry.unit,
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
@@ -2474,20 +2481,66 @@ export class BasketPage {
       productPagePath(locale, this._basePath, itemId);
   });
 
+  /** The amount of each run whose demand write has not answered, by line. */
+  private readonly _sending = signal<
+    ReadonlyMap<string, { readonly to: number }>
+  >(new Map());
+
+  /** The holding each open run belongs to, for the sentence after its write. */
+  private readonly _runHoldings = new Map<string, SuggestionHolding>();
+
   /**
-   * A card's stepper moved one list's demand (velista `0101`, section 2): the write
-   * the settle sheet makes, `POST rows/{lineId}/demand`, and the same sentences
-   * after it. It is sent under the line itself (backend `0201`), because a row's key
-   * can change under the panel while somebody else adds or settles.
+   * A card's steps on one line, gathered into one demand write per run (velista
+   * `0188`, section 5.6): a hold repeats ten times a second, which would otherwise be
+   * ten writes a second. The card draws the run's amount while it is open.
    */
-  protected async changeHolding(
-    change: SuggestionHoldingChange
-  ): Promise<void> {
-    const result = await this._store.setDemand({
-      lineId: change.holding.lineId,
-      quantity: change.to,
+  private readonly _holdingRuns = quantityRuns<string>((lineId, run) => {
+    const holding = this._runHoldings.get(lineId);
+    this._runHoldings.delete(lineId);
+    if (holding !== undefined) {
+      void this._sendHolding(holding, run);
+    }
+  });
+
+  /** A card's stepper stepped one list's demand. */
+  protected changeHolding(change: SuggestionHoldingChange): void {
+    this._runHoldings.set(change.holding.lineId, change.holding);
+    this._holdingRuns.step(change.holding.lineId, {
       from: change.from,
+      to: change.to,
+      repeat: change.repeat,
     });
+  }
+
+  /**
+   * One run of a card's stepper, as one list's demand (velista `0101`, section 2):
+   * the write the settle sheet makes, `POST rows/{lineId}/demand`, with the run's
+   * `from` and its last `to`, and the same sentences after it. It is sent under the
+   * line itself (backend `0201`), because a row's key can change under the panel
+   * while somebody else adds or settles.
+   */
+  private async _sendHolding(
+    holding: SuggestionHolding,
+    run: QuantityRun
+  ): Promise<void> {
+    const change = { holding, from: run.from, to: run.to };
+    // The demand write is not optimistic, so the run's amount stays drawn until
+    // it answers: the card does not jump back to the old amount and then forward.
+    const sending = { to: run.to };
+    const lineId = holding.lineId;
+    this._sending.update((all) => new Map(all).set(lineId, sending));
+    const result = await this._store
+      .setDemand({ lineId, quantity: run.to, from: run.from })
+      .finally(() =>
+        this._sending.update((all) => {
+          if (all.get(lineId) !== sending) {
+            return all;
+          }
+          const next = new Map(all);
+          next.delete(lineId);
+          return next;
+        })
+      );
 
     if (result === null) {
       this._say(

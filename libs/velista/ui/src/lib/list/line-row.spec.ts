@@ -1,10 +1,9 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  QUANTITY_REEL_CLICK_SHIELD_MS,
-  QUANTITY_REEL_IDLE_MS,
   type LineRowShownProduct,
   type LineRowVm,
+  type QuantityStep,
 } from '@portfolio/velista/models';
 import { LineRow } from './line-row';
 
@@ -38,7 +37,14 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
   };
 }
 
+<<<<<<< HEAD
 async function render(line: LineRowVm): Promise<ComponentFixture<LineRow>> {
+=======
+async function render(
+  line: LineRowVm,
+  inputs: { reordering?: boolean; pending?: number | null } = {}
+): Promise<ComponentFixture<LineRow>> {
+>>>>>>> origin/feat/velista-0188-stepper
   TestBed.resetTestingModule();
 
   await TestBed.configureTestingModule({
@@ -47,6 +53,15 @@ async function render(line: LineRowVm): Promise<ComponentFixture<LineRow>> {
 
   const fixture = TestBed.createComponent(LineRow);
   fixture.componentRef.setInput('line', line);
+<<<<<<< HEAD
+=======
+  if (inputs.reordering !== undefined) {
+    fixture.componentRef.setInput('reordering', inputs.reordering);
+  }
+  if (inputs.pending !== undefined) {
+    fixture.componentRef.setInput('pending', inputs.pending);
+  }
+>>>>>>> origin/feat/velista-0188-stepper
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
@@ -93,51 +108,21 @@ function statusWords(fixture: ComponentFixture<LineRow>): string[] {
   ].map((word) => word.textContent?.trim() ?? '');
 }
 
-function reel(fixture: ComponentFixture<LineRow>): HTMLElement | null {
-  return fixture.nativeElement.querySelector('lib-quantity-reel');
+/** The row's stepper (velista `0188`). */
+function stepper(fixture: ComponentFixture<LineRow>): HTMLElement | null {
+  return fixture.nativeElement.querySelector('lib-quantity-stepper');
 }
 
-/**
- * A pointer going down, as the reel reads it.
- *
- * jsdom has no `PointerEvent`, so this is a `MouseEvent` carrying the two fields the
- * reel looks at, exactly as `quantity-reel.spec.ts` does it.
- */
-function down(target: EventTarget): void {
-  const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 0 });
-  Object.defineProperty(event, 'pointerId', { value: 1 });
-  Object.defineProperty(event, 'isPrimary', { value: true });
-  target.dispatchEvent(event);
+function plus(fixture: ComponentFixture<LineRow>): HTMLButtonElement {
+  return fixture.nativeElement.querySelector(
+    'lib-quantity-stepper button.plus'
+  ) as HTMLButtonElement;
 }
 
-function up(target: EventTarget): void {
-  const event = new MouseEvent('pointerup', { bubbles: true, clientX: 0 });
-  Object.defineProperty(event, 'pointerId', { value: 1 });
-  target.dispatchEvent(event);
-}
-
-/**
- * A whole tap, press included.
- *
- * The press is the part that matters here: the row decides whether it is listening at
- * `pointerdown`, because focus leaves the reel between the press and the click and the
- * overlay the tap was dismissing is gone by then.
- */
+/** A whole tap, press included. */
 function tap(target: HTMLElement): void {
-  down(target);
+  target.dispatchEvent(new Event('pointerdown', { bubbles: true }));
   target.click();
-}
-
-/** Open the reel by tapping it, and leave it up. */
-function openReel(fixture: ComponentFixture<LineRow>): void {
-  const el = reel(fixture) as HTMLElement;
-  down(el);
-  up(el);
-  fixture.detectChanges();
-}
-
-function overlay(fixture: ComponentFixture<LineRow>): HTMLElement | null {
-  return fixture.nativeElement.querySelector('.overlay');
 }
 
 describe('LineRow', () => {
@@ -579,7 +564,7 @@ describe('LineRow', () => {
     });
   });
 
-  describe('the quantity', () => {
+  describe('the quantity (velista 0188)', () => {
     it('is drawn on every row, zero included', async () => {
       // `0012` drew it only above one, because it was an annotation. It is the
       // control now, and a control that is only sometimes there is not one anybody
@@ -587,23 +572,62 @@ describe('LineRow', () => {
       const one = await render(vm({ quantity: 1 }));
       const zero = await render(vm({ quantity: 0 }));
 
-      expect(reel(one)).not.toBeNull();
-      expect(reel(zero)).not.toBeNull();
+      expect(stepper(one)).not.toBeNull();
+      expect(stepper(zero)?.getAttribute('data-value')).toBe('0');
     });
 
-    it('is read only for a caller who may not decide', async () => {
+    it('draws the amount alone, with no buttons, for a caller who may not decide', async () => {
       const fixture = await render(vm({ adjustable: false }));
 
-      expect(reel(fixture)?.getAttribute('aria-readonly')).toBe('true');
+      expect(stepper(fixture)?.classList).toContain('is-readonly');
+      expect(stepper(fixture)?.querySelectorAll('button')).toHaveLength(0);
     });
 
-    it('is a spinbutton naming the line, with a floor of zero', async () => {
+    it('is a row stepper naming the line', async () => {
       const fixture = await render(vm({ quantity: 3 }));
 
-      expect(reel(fixture)?.getAttribute('role')).toBe('spinbutton');
-      expect(reel(fixture)?.getAttribute('aria-valuenow')).toBe('3');
-      expect(reel(fixture)?.getAttribute('aria-valuemin')).toBe('0');
+      expect(stepper(fixture)?.classList).toContain('variant-row');
+      expect(
+        stepper(fixture)
+          ?.querySelector('[role="group"]')
+          ?.getAttribute('aria-label')
+      ).toBe('amount.group');
+      expect(stepper(fixture)?.getAttribute('data-value')).toBe('3');
     });
+
+    it('emits every press as a step, and does not open the line', async () => {
+      const fixture = await render(vm({ quantity: 3 }));
+      const steps: Array<{ lineId: string; step: QuantityStep }> = [];
+      const opened: string[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((s) => steps.push(s));
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      plus(fixture).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      plus(fixture).dispatchEvent(new Event('pointerup', { bubbles: true }));
+      plus(fixture).click();
+
+      expect(steps).toEqual([
+        { lineId: 'ln-1', step: { from: 3, to: 4, repeat: false } },
+      ]);
+      expect(opened).toEqual([]);
+    });
+
+    it('draws the open run while the stored line has not moved (decision H)', async () => {
+      const fixture = await render(vm({ quantity: 3 }), { pending: 6 });
+
+      expect(stepper(fixture)?.getAttribute('data-value')).toBe('6');
+    });
+<<<<<<< HEAD
+=======
+
+    it('goes away in reorder mode', async () => {
+      // A second gesture living inside a row being dragged would fight the first for
+      // the same finger.
+      const fixture = await render(vm(), { reordering: true });
+
+      expect(stepper(fixture)).toBeNull();
+    });
+>>>>>>> origin/feat/velista-0188-stepper
   });
 
   describe('what a tap does', () => {
@@ -639,96 +663,6 @@ describe('LineRow', () => {
       row(fixture).click();
 
       expect(opened).toEqual([]);
-    });
-  });
-
-  /**
-   * The overlay stands over the row it belongs to, so the tap that dismisses it lands
-   * on the row underneath. It closes the reel and stops there: it was aimed at the
-   * thing on top, and opening the detail sheet on the way out answers a question
-   * nobody asked.
-   */
-  describe('a tap on a line whose reel is up', () => {
-    it('closes the reel and does not open the line', async () => {
-      const fixture = await render(vm());
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      openReel(fixture);
-      expect(overlay(fixture)).not.toBeNull();
-
-      tap(row(fixture));
-      fixture.detectChanges();
-
-      expect(overlay(fixture)).toBeNull();
-      expect(opened).toEqual([]);
-    });
-
-    it('hears the very next tap, which is the one that was meant for the row', async () => {
-      const fixture = await render(vm());
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      openReel(fixture);
-      tap(row(fixture));
-      fixture.detectChanges();
-      tap(row(fixture));
-
-      expect(opened).toEqual(['ln-1']);
-    });
-
-    it('still hears a tap on the reel itself', async () => {
-      // "Somewhere else on the line" is the rule. The reel is not somewhere else.
-      const fixture = await render(vm({ quantity: 2 }));
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      openReel(fixture);
-      const three = fixture.nativeElement.querySelector(
-        '[data-reel-value="3"]'
-      ) as HTMLElement;
-      down(three);
-      up(three);
-      fixture.detectChanges();
-
-      // The reel moved, the overlay is still up, and the row heard nothing.
-      expect(
-        (fixture.nativeElement.querySelector('.current') as HTMLElement)
-          .textContent
-      ).toContain('3');
-      expect(overlay(fixture)).not.toBeNull();
-      expect(opened).toEqual([]);
-    });
-  });
-
-  describe('the beat after the reel closes on its own', () => {
-    it('swallows a tap for a moment, then goes back to opening the line', async () => {
-      // A finger already falling towards a number does not stop when the thing it was
-      // falling towards disappears.
-      const fixture = await render(vm());
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      // Fake timers only from here: `render` awaits `whenStable`, which never
-      // resolves under them.
-      jest.useFakeTimers();
-      try {
-        openReel(fixture);
-        jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
-        fixture.detectChanges();
-
-        // Closed by itself, and nobody spent a tap doing it.
-        expect(overlay(fixture)).toBeNull();
-
-        tap(row(fixture));
-        expect(opened).toEqual([]);
-
-        jest.advanceTimersByTime(QUANTITY_REEL_CLICK_SHIELD_MS + 1);
-        tap(row(fixture));
-        expect(opened).toEqual(['ln-1']);
-      } finally {
-        jest.useRealTimers();
-      }
     });
   });
 
