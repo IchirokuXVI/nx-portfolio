@@ -402,7 +402,13 @@ const upsertLines: AssistantTool = {
         wrote = true;
         runtime.link.list(list);
         results[entry.index] = describeLine(
-          mode === 'add' ? 'increased' : 'updated',
+          // The server deleted a line it lowered to 0 with nothing to keep
+          // (plan 0263), and the answer says so.
+          line.deleted === true
+            ? 'removed'
+            : mode === 'add'
+              ? 'increased'
+              : 'updated',
           line
         );
       } catch (error) {
@@ -1131,7 +1137,11 @@ function outOfScope(scoped: ContextList): unknown {
 /** What one item of an `upsert_lines` call ended up doing. */
 interface ItemResult {
   product: string;
-  action?: 'added' | 'updated' | 'increased' | 'unchanged';
+  /**
+   * `removed` when a set to 0 deleted a line that kept nothing a person wrote
+   * (plan 0263): the list no longer holds it.
+   */
+  action?: 'added' | 'updated' | 'increased' | 'unchanged' | 'removed';
   quantity?: number;
   /** What `quantity` counts, when it is not pieces (plan 0246). */
   unit?: LineUnit;

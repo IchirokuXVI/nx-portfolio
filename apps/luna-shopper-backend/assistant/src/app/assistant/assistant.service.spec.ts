@@ -3491,3 +3491,65 @@ describe('the words of a turn in its record (k8s plan 0018, D3)', () => {
     expect(record).not.toHaveProperty('repliedChars');
   });
 });
+
+// ---------------------------------------------------------------------------
+
+/**
+ * An edit the server answers with `deleted` (plan 0263, section 4).
+ *
+ * The tool never sends a quantity below one (`readQuantity` drops it, and a
+ * "set to 0" asks nothing), so today no turn of its own lowers a line to 0.
+ * What this pins is the reading of the answer: whenever the gateway says the
+ * line was deleted, the item reports `removed` and never `updated`.
+ */
+describe('an edit the server answered with deleted (plan 0263)', () => {
+  /** A gateway that says every edit deleted its line. */
+  class DeletingApi extends RecordingApi {
+    override async updateLine(
+      caller: ApiCaller,
+      lineId: string,
+      body: { content?: string; quantity?: number }
+    ): Promise<LineView> {
+      const answer = await super.updateLine(caller, lineId, body);
+      return { ...answer, quantity: 0, deleted: true } as LineView;
+    }
+  }
+
+  const setTo = (quantity: number) =>
+    new FakeModelProvider([
+      FakeModelProvider.calls('upsert_lines', {
+        items: [{ product: 'leche', quantity, mode: 'set' }],
+      }),
+      FakeModelProvider.says('Hecho.'),
+    ]);
+
+  it('reports the item as removed', async () => {
+    const api = new DeletingApi();
+    api.linesByList.set('list-flat', [
+      line('line-existing', 'list-flat', 'leche', 2),
+    ]);
+    const provider = setTo(1);
+
+    await build(provider, api).turn(turnRequest('deja una leche'));
+
+    expect(api.of('updateLine')).toHaveLength(1);
+    expect(
+      JSON.stringify(provider.requests[1].turns.at(-1)?.toolResults)
+    ).toContain('"action":"removed"');
+  });
+
+  it('sends nothing for a set to 0, as before', async () => {
+    const api = new DeletingApi();
+    api.linesByList.set('list-flat', [
+      line('line-existing', 'list-flat', 'leche', 2),
+    ]);
+    const provider = setTo(0);
+
+    await build(provider, api).turn(turnRequest('pon la leche a cero'));
+
+    expect(api.of('updateLine')).toHaveLength(0);
+    expect(
+      JSON.stringify(provider.requests[1].turns.at(-1)?.toolResults)
+    ).toContain('"action":"unchanged"');
+  });
+});

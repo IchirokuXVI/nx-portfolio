@@ -5536,6 +5536,37 @@ export type ListLinePage = {
 };
 
 /**
+ * `list.LineQuantityResult` in the gateway's OpenAPI document.
+ */
+export type ListLineQuantityResult = {
+  id: string;
+  listId: string;
+  content: string;
+  quantity: number;
+  unit: EnumsLineUnit;
+  itemIds: string[];
+  itemSetHash: string | null;
+  productGroupId: string | null;
+  groupItemIds: string[];
+  favoriteItemId: string | null;
+  preferredSupermarketId: string | null;
+  named: boolean;
+  position: number;
+  approvalStatus: EnumsLineApprovalStatus;
+  createdByUserId: string;
+  approvedByUserId: string | null;
+  version: number;
+  boughtCount: number;
+  lastSettlementOutcome: EnumsSettlementOutcome | null;
+  claimed: boolean;
+  claimedByUserId: string | null;
+  commentCount: number | null;
+  createdAt: string;
+  updatedAt: string;
+  deleted?: true;
+};
+
+/**
  * `list.LineSettlementHistoryView` in the gateway's OpenAPI document.
  */
 export type ListLineSettlementHistoryView = {
@@ -5796,6 +5827,7 @@ export type ListUpdateLineResult = {
   createdAt: string;
   updatedAt: string;
   absorbedLineId?: string;
+  deleted?: true;
 };
 
 /**

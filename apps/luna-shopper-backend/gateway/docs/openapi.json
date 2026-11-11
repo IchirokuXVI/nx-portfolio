@@ -8491,7 +8491,7 @@
         },
         "responses": {
           "200": {
-            "description": "The `line.update` contract response.",
+            "description": "The line as it now stands. After a merge it is the surviving line and `absorbedLineId` names the line that went. `deleted` is true when the edit lowered the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write (plan 0263); the body is then the line as it stood at 0, and `line.deleted` with `emptied` follows on the socket.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8699,11 +8699,11 @@
         },
         "responses": {
           "201": {
-            "description": "The `line.addQuantity` contract response.",
+            "description": "The line as it now stands. `deleted` is true when the delta took the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write (plan 0263); the body is then the line as it stood at 0, with the products it held, and `line.deleted` with `emptied` follows on the socket. Absent on every other answer.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/list.LineView"
+                  "$ref": "#/components/schemas/list.LineQuantityResult"
                 }
               }
             }
@@ -47514,6 +47514,160 @@
           }
         }
       },
+      "list.LineQuantityResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "listId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
+          "itemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "itemSetHash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "productGroupId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "groupItemIds": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "favoriteItemId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferredSupermarketId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "named": {
+            "type": "boolean"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "approvalStatus": {
+            "$ref": "#/components/schemas/enums.LineApprovalStatus"
+          },
+          "createdByUserId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "approvedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "boughtCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "lastSettlementOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/enums.SettlementOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "claimed": {
+            "type": "boolean"
+          },
+          "claimedByUserId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "commentCount": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "deleted": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Present and true when the write lowered the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write. The rest is the line as it stood at 0. Absent on every other answer."
+          }
+        },
+        "required": [
+          "id",
+          "listId",
+          "content",
+          "quantity",
+          "unit",
+          "itemIds",
+          "itemSetHash",
+          "productGroupId",
+          "groupItemIds",
+          "favoriteItemId",
+          "preferredSupermarketId",
+          "named",
+          "position",
+          "approvalStatus",
+          "createdByUserId",
+          "approvedByUserId",
+          "version",
+          "boughtCount",
+          "lastSettlementOutcome",
+          "claimed",
+          "claimedByUserId",
+          "commentCount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false
+      },
       "list.LineSettlementHistoryView": {
         "type": "object",
         "properties": {
@@ -48459,6 +48613,13 @@
           "absorbedLineId": {
             "type": "string",
             "minLength": 1
+          },
+          "deleted": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Present and true when the write lowered the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write. The rest is the line as it stood at 0. Absent on every other answer."
           }
         },
         "required": [

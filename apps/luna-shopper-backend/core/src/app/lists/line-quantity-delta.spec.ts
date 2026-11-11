@@ -19,6 +19,7 @@ import { fakeLineClaims } from '../baskets/line-claims.fake';
 import type { ListAccess, ListLine, ShoppingList } from '../entities';
 import {
   BasketTripRow,
+  LineComment,
   LineSettlement,
   ListLineGroupRemoval,
   ListLineItem,
@@ -33,11 +34,10 @@ import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 
 /**
- * Plan 0139 gave this service a basket announcer. Every write here is asserted
- * through the events it publishes, and the announcement is not one of them: it
- * is a nudge the basket rooms hear, tested in `basket-announcer.spec.ts`.
+ * Plan 0139 gave this service a basket announcer. It is built per harness, so
+ * a spec can read what one write told the baskets (plan 0263); the nudge
+ * itself is tested in `basket-announcer.spec.ts`.
  */
-const announcer = fakeBasketAnnouncer();
 
 /**
  * Adding units to a line without reading it first (plan 0040, section 3).
@@ -66,6 +66,13 @@ interface Harness {
   events: { event: RealtimeEvent; line: LineView }[];
   /** What the trip rows of the line were rewritten to (plan 0246). */
   tripRows: { where: unknown; set: unknown }[];
+  /** The soft deletes the service asked for (plan 0263). */
+  softDeleted: unknown[];
+  /** The calls of `lineKeeps`'s one statement (plan 0263). */
+  keepsQueries: unknown[][];
+  /** Every basket told that lines changed (plan 0263). */
+  linesChanged: { listId: string; lineIds: readonly string[] }[];
+  recorded: ReturnType<typeof fakeLineChanges>['recorded'];
 }
 
 function build(options: {
@@ -88,6 +95,13 @@ function build(options: {
   existing?: ListLine[];
   /** What the line counts in (plan 0246). `UNIT` when absent. */
   unit?: LineUnit;
+  /**
+   * A product line from a card with nothing to keep (plan 0263): not named,
+   * no chain, no favourite. Absent, the line is free text and named.
+   */
+  bare?: boolean;
+  /** What `lineKeeps`'s statement over buys and comments answers. */
+  keepsInTables?: boolean;
 }): Harness {
   const list = {
     id: LIST_ID,
@@ -116,14 +130,31 @@ function build(options: {
     version: 4,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+    ...(options.bare
+      ? {
+          content: 'Oat drink',
+          named: false,
+          itemSetHash: 'item-oat',
+          favoriteItemId: null,
+          preferredSupermarketId: null,
+        }
+      : { named: true, favoriteItemId: null, preferredSupermarketId: null }),
   } as ListLine;
 
   const saved: Partial<ListLine>[] = [];
+  const softDeleted: unknown[] = [];
+  const keepsQueries: unknown[][] = [];
   const tripRows: { where: unknown; set: unknown }[] = [];
   const events: { event: RealtimeEvent; line: LineView }[] = [];
 
   const lineRepo = {
     findOne: async () => line,
+    // The deletion at 0 (plan 0263): the mark, then the columns it clears.
+    softDelete: async (where: unknown) => {
+      softDeleted.push(where);
+      return { affected: 1 };
+    },
+    update: async () => ({ affected: 1 }),
     // Plan 0091: every add reads the list's lines under the list's lock, folds
     // their content and merges into a match rather than creating a second line
     // of one name.
@@ -191,7 +222,9 @@ function build(options: {
 
   // Plan 0048: the line's product set. Nothing in this file is about the set,
   // but every write path now touches one, so it has to work.
-  const lineItems = fakeLineItems();
+  const lineItems = fakeLineItems(
+    options.bare ? [{ lineId: 'li1', itemId: 'item-oat', position: 0 }] : []
+  );
   // Plan 0070: a write to a subscribed line's set can leave a tombstone. No line
   // here is subscribed, so nothing lands in it, but the repository has to exist.
   const groupRemovals = fakeGroupRemovals();
@@ -200,7 +233,15 @@ function build(options: {
   const dataSource = {
     transaction: async <T>(run: (m: EntityManager) => Promise<T>) =>
       run({
+        // `lineKeeps`'s one statement over buys and comments (plan 0263).
+        query: async (_sql: string, params: unknown[]) => {
+          keepsQueries.push(params);
+          return [{ keeps: options.keepsInTables ?? false }];
+        },
         getRepository: (entity: unknown) => {
+          if (entity === LineComment) {
+            return { delete: async () => ({ affected: 0 }) };
+          }
           if (entity === ListLineGroupRemoval) {
             return groupRemovals.repo;
           }
@@ -233,6 +274,7 @@ function build(options: {
   } as unknown as CoreEventsPublisher;
 
   const changes = fakeLineChanges();
+  const basketAnnouncer = fakeBasketAnnouncer();
   const service = new LineService(
     dataSource,
     lineRepo as never,
@@ -244,16 +286,34 @@ function build(options: {
     listAccess,
     fakeLineClaims().service,
     publisher,
-    // No operator write here, so nothing reaches the trail.
-    {} as never,
+    // An operator's edit runs in the same fake transaction, and its trail
+    // records nothing here (plan 0263 asks only that it never deletes).
+    {
+      write: async <T>(
+        _actorId: string,
+        work: (tx: unknown) => Promise<T>
+      ): Promise<T> =>
+        dataSource.transaction((manager) =>
+          work({ manager, recordUpdate: async () => undefined })
+        ),
+    } as never,
     new LineMergeService(changes.recorder),
     // A delta records a `QUANTITY_CHANGED` change (plan 0138). A stand in, since
     // what this file asserts is the arithmetic and the lock.
     changes.recorder,
-    announcer
+    basketAnnouncer
   );
 
-  return { service, saved, events, tripRows, recorded: changes.recorded };
+  return {
+    service,
+    saved,
+    events,
+    tripRows,
+    softDeleted,
+    keepsQueries,
+    linesChanged: basketAnnouncer.calls.linesChanged,
+    recorded: changes.recorded,
+  };
 }
 
 const WRITER = [ListPermission.READ, ListPermission.WRITE];
@@ -805,6 +865,227 @@ describe('line.addMany (plan 0040, section 6)', () => {
 
       expect(results[0].line.approvalStatus).toBe(LineApprovalStatus.APPROVED);
       expect(results[0].line.approvedByUserId).toBeNull();
+    });
+  });
+});
+
+/**
+ * A line with nothing to keep is deleted at 0 (plan 0263, section 6, items 5
+ * and 6). The rule itself is `line-keeps.spec.ts`; here it is where it sits:
+ * only a member's lowering from above 0 to 0, by a caller who may delete the
+ * line by hand.
+ */
+describe('a line with nothing to keep is deleted at zero (plan 0263)', () => {
+  const MANAGER = [
+    ListPermission.READ,
+    ListPermission.WRITE,
+    ListPermission.DECIDE,
+    ListPermission.MANAGE,
+  ];
+  const lowered = (w: Harness, delta: number, unit: LineUnit = 'GRAM') =>
+    w.service.addQuantity({ userId: SHOPPER, lineId: 'li1', delta, unit });
+
+  function expectDeleted(w: Harness): void {
+    expect(w.softDeleted).toEqual([{ id: 'li1' }]);
+    // No line.updated before it, and the event says why the line went.
+    expect(w.events.map((entry) => entry.event)).toEqual([
+      RealtimeEvent.LineDeleted,
+    ]);
+    expect(w.events[0].line).toEqual({
+      id: 'li1',
+      listId: LIST_ID,
+      emptied: true,
+    });
+    // One change row, the line as it stood before the write (D9).
+    expect(w.recorded.map((change) => change.kind)).toEqual(['deleted']);
+    expect(w.linesChanged).toEqual([{ listId: LIST_ID, lineIds: ['li1'] }]);
+  }
+
+  function expectKept(w: Harness): void {
+    expect(w.softDeleted).toEqual([]);
+    expect(w.events.map((entry) => entry.event)).not.toContain(
+      RealtimeEvent.LineDeleted
+    );
+  }
+
+  describe('line.addQuantity', () => {
+    it('soft deletes a bare product line at 25 g lowered by 25, and answers deleted', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 25,
+        unit: 'GRAM',
+        bare: true,
+      });
+
+      const answer = await lowered(w, -25);
+
+      expect(answer).toMatchObject({
+        id: 'li1',
+        quantity: 0,
+        itemIds: ['item-oat'],
+        deleted: true,
+      });
+      expect(w.keepsQueries).toEqual([['li1']]);
+      // Nothing saved the row at 0: the deletion replaced the write.
+      expect(w.saved).toHaveLength(0);
+      expectDeleted(w);
+    });
+
+    it('leaves a bare line at 50 lowered by 25 at 25, and asks nothing', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 50,
+        unit: 'GRAM',
+        bare: true,
+      });
+
+      const answer = await lowered(w, -25);
+
+      expect(answer.quantity).toBe(25);
+      expect(answer.deleted).toBeUndefined();
+      expect(w.keepsQueries).toEqual([]);
+      expectKept(w);
+    });
+
+    it('keeps a bare line with a buy or a comment at 0', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 25,
+        unit: 'GRAM',
+        bare: true,
+        keepsInTables: true,
+      });
+
+      const answer = await lowered(w, -25);
+
+      expect(answer.quantity).toBe(0);
+      expect(answer.deleted).toBeUndefined();
+      expect(w.saved[0].quantity).toBe(0);
+      expectKept(w);
+    });
+
+    it('keeps a free text line at 0, which is always named (D3)', async () => {
+      const w = build({ permissions: MANAGER, quantity: 1 });
+
+      const answer = await lowered(w, -1, 'UNIT');
+
+      expect(answer.quantity).toBe(0);
+      expect(answer.deleted).toBeUndefined();
+      expect(w.keepsQueries).toEqual([]);
+      expectKept(w);
+    });
+
+    it('leaves it at 0 for a caller who may not delete it by hand (D6)', async () => {
+      // DECIDE moves an approved quantity, and only MANAGE deletes an approved
+      // line on a list that asks for approval.
+      const w = build({
+        permissions: DECIDER,
+        quantity: 25,
+        unit: 'GRAM',
+        bare: true,
+      });
+
+      const answer = await lowered(w, -25);
+
+      expect(answer.quantity).toBe(0);
+      expect(answer.deleted).toBeUndefined();
+      expect(w.keepsQueries).toEqual([]);
+      expectKept(w);
+    });
+
+    it('deletes for a writer on a line still waiting for approval', async () => {
+      const w = build({
+        permissions: WRITER,
+        quantity: 1,
+        unit: 'UNIT',
+        approvalStatus: LineApprovalStatus.PENDING,
+        bare: true,
+      });
+
+      const answer = await lowered(w, -1, 'UNIT');
+
+      expect(answer.deleted).toBe(true);
+      expectDeleted(w);
+    });
+  });
+
+  describe('line.update', () => {
+    it('deletes a bare line a member sets to 0', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 2,
+        unit: 'UNIT',
+        bare: true,
+      });
+
+      const answer = await w.service.update({
+        userId: SHOPPER,
+        lineId: 'li1',
+        quantity: 0,
+      });
+
+      expect(answer).toMatchObject({ quantity: 0, deleted: true });
+      expectDeleted(w);
+    });
+
+    it('deletes nothing when an edit clears the chain of a line already at 0', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 0,
+        unit: 'UNIT',
+        bare: true,
+      });
+
+      const answer = await w.service.update({
+        userId: SHOPPER,
+        lineId: 'li1',
+        preferredSupermarketId: null,
+      });
+
+      expect(answer.deleted).toBeUndefined();
+      expect(w.keepsQueries).toEqual([]);
+      expectKept(w);
+    });
+
+    it('never deletes on a rename to 0, which names the line (D5)', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 2,
+        unit: 'UNIT',
+        bare: true,
+      });
+
+      const answer = await w.service.update({
+        userId: SHOPPER,
+        lineId: 'li1',
+        content: 'Oat milk',
+        quantity: 0,
+      });
+
+      expect(answer.quantity).toBe(0);
+      expect(answer.deleted).toBeUndefined();
+      expect(w.keepsQueries).toEqual([]);
+      expectKept(w);
+    });
+
+    it('never deletes on an operator edit to 0 (D5)', async () => {
+      const w = build({
+        permissions: MANAGER,
+        quantity: 2,
+        unit: 'UNIT',
+        bare: true,
+      });
+
+      const answer = await w.service.updateAsOperator(
+        LIST_ID,
+        'li1',
+        { quantity: 0 },
+        'u-operator'
+      );
+
+      expect(answer.quantity).toBe(0);
+      expect(w.keepsQueries).toEqual([]);
+      expectKept(w);
     });
   });
 });

@@ -60,3 +60,28 @@ export function canChangeDemand(
   }
   return permissions.has(ListPermission.WRITE);
 }
+
+/**
+ * Whether a holder of these permissions can delete a line by hand (plan 0036,
+ * section 4.1; plan 0196, section 4).
+ *
+ * `MANAGE` deletes any line. `WRITE` deletes a `PENDING` or `REJECTED` line on
+ * every list, and an `APPROVED` line on a list that approves lines by itself.
+ * `DECIDE` alone deletes nothing. The refusal protects an agreement: a writer
+ * cannot quietly remove a line that somebody with `DECIDE` approved.
+ *
+ * Read by `LineService.delete` and by the deletion of a line lowered to 0 with
+ * nothing to keep (plan 0263, D6), so stepping a line down never goes around a
+ * refusal the delete would give.
+ */
+export function canDeleteLine(
+  permissions: ReadonlySet<ListPermission>,
+  approvalStatus: LineApprovalStatus,
+  autoApproveLines: boolean
+): boolean {
+  if (permissions.has(ListPermission.MANAGE)) return true;
+  if (approvalStatus === LineApprovalStatus.APPROVED && !autoApproveLines) {
+    return false;
+  }
+  return permissions.has(ListPermission.WRITE);
+}
