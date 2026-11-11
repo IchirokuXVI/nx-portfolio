@@ -442,6 +442,7 @@ export function capabilitiesOf(adapterKey: string): AdapterCapabilities {
           [disabled]="busy() || !ready()"
           class="primary"
           type="button"
+          data-submit
         >
           {{ (busy() ? busyLabel() : submitLabel()) | rokuT }}
         </button>

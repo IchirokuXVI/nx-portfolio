@@ -155,7 +155,13 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 export class ConfirmDialog implements AfterViewInit {
   readonly headingKey = input.required<string>();
   readonly bodyKey = input.required<string>();
-  readonly bodyArgs = input<Record<string, string | number>>({});
+  /**
+   * What to put into the body. Mostly names and counts; the question before a
+   * start over a red probe (admin plan 0069) also passes the translator's
+   * `interpolation` options, so a URL in the probe's sentence keeps its
+   * slashes.
+   */
+  readonly bodyArgs = input<Readonly<Record<string, unknown>>>({});
   readonly confirmKey = input('resource.action.confirm');
   readonly busyKey = input('resource.action.working');
   readonly busy = input(false);

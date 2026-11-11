@@ -126,12 +126,18 @@ describe('the probe notice copy', () => {
 
   it('holds every key of section 1', () => {
     expect(harvest.probeNotice.text).toBe(
-      "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong. You can start it anyway."
+      "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong."
     );
     expect(harvest.probeNotice.textNoSentence).toBe(
-      "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong. You can start it anyway."
+      "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong."
     );
     expect(harvest.probeNotice.justNow).toBe('just now');
+    // The question a start asks (owner, 2026-11-11). Its body is the
+    // notice's own sentence, and its cancel is the dialog's "Cancel".
+    expect(harvest.probeNotice.question).toEqual({
+      heading: 'Start the run anyway?',
+      confirm: 'Start anyway',
+    });
     expect(harvest.probeNotice.status).toEqual({
       SHAPE_CHANGED: 'a shape change',
       BLOCKED: 'refused',
@@ -152,6 +158,7 @@ describe('the probe notice copy', () => {
         (value): value is string => typeof value === 'string'
       ),
       ...(Object.values(harvest.probeNotice.status) as string[]),
+      ...(Object.values(harvest.probeNotice.question) as string[]),
       harvest.schedules.blocked.PROBE_NOT_PASSED,
       harvest.schedules.outcome.SKIPPED_PROBE_FAILED,
     ];

@@ -3,6 +3,7 @@ import {
   Component,
   computed,
   effect,
+  ElementRef,
   inject,
   signal,
   untracked,
@@ -10,7 +11,10 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   HARVEST_SERVICE,
   toGatewayError,
@@ -24,10 +28,20 @@ import {
   type ProbeVerdict,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { keepTabInside, PageHeader } from '@portfolio/luna-shopper-admin/ui';
+import {
+  ConfirmDialog,
+  keepTabInside,
+  PageHeader,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
 import { HarvestShell } from './harvest-shell';
-import { PROBE_PAGE, ProbeNotice } from './probe-notice';
+import {
+  PROBE_PAGE,
+  ProbeNotice,
+  probeNoticeMessage,
+  START_ANYWAY,
+  type ProbeNoticeMessage,
+} from './probe-notice';
 import { RunRequestForm } from './run-request-form';
 
 /** The newest red probe of one chain, as last read. */
@@ -58,6 +72,7 @@ interface ChainProbe {
 @Component({
   selector: 'lib-new-run-page',
   imports: [
+    ConfirmDialog,
     PageHeader,
     FormsModule,
     RouterLink,
@@ -75,12 +90,12 @@ interface ChainProbe {
     <section class="start">
       <lib-run-request-form
         (changed)="draft.set($event)"
-        (submitted)="start($event)"
+        (submitted)="requestStart($event)"
         [busy]="starting()"
       >
         <!-- Above the start, in the form's own slot for it (admin plan
-             0069). It never holds the start: the button below stays as it
-             is, and starts the same request. -->
+             0069), so the warning is read before the click. The click then
+             asks the same sentence as a question. -->
         @if (probeNotice(); as notice) {
           <lib-probe-notice
             [chain]="notice.chain"
@@ -124,6 +139,22 @@ interface ChainProbe {
         </p>
       }
     </section>
+
+    <!-- A start over a red probe asks first (admin plan 0069, target 3).
+         "Start anyway" sends the request the form handed up, unchanged. -->
+    @if (pendingStart(); as pending) {
+      <lib-confirm-dialog
+        (confirm)="startAnyway(pending.request)"
+        (dismiss)="cancelStart()"
+        (keydown)="keepInside($event)"
+        [bodyArgs]="pending.message.args"
+        [bodyKey]="pending.message.key"
+        [confirmKey]="question.confirm.action"
+        [headingKey]="question.confirm.heading"
+        tone="primary"
+        data-start-question
+      />
+    }
 
     <!-- Save as preset (admin plan 0030, section 4). A small dialog, because
          the only new fact is the name: the request is the form as it is. -->
@@ -299,8 +330,22 @@ export class NewRunPage {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _router = inject(Router);
   private readonly _chainNames = inject(ChainNames);
+  private readonly _translator = inject(RokuTranslatorService);
+  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
 
   readonly shell = inject(HarvestShell);
+
+  /** The words of the question a start over a red probe asks. */
+  readonly question = START_ANYWAY;
+
+  /**
+   * The request a start is waiting on while the question is open, and the
+   * sentence the question says. Null when no question is open.
+   */
+  readonly pendingStart = signal<{
+    readonly request: Wire.SpawnHarvestRunDto;
+    readonly message: ProbeNoticeMessage;
+  } | null>(null);
 
   /** The form, for the readiness "Save as preset" depends on. */
   readonly form = viewChild(RunRequestForm);
@@ -433,6 +478,45 @@ export class NewRunPage {
     }
     return error.detail === '' ? [] : [error.detail];
   });
+
+  /**
+   * What a press of the start does (admin plan 0069, target 3): ask first
+   * when the probe notice shows, else start at once.
+   *
+   * **A start never waits on the probe read.** The question is asked on what
+   * is known at the press. A read still in flight, or one that failed, knows
+   * of no red probe, so the start is one press as it was before this plan.
+   */
+  requestStart(request: Wire.SpawnHarvestRunDto): void {
+    const notice = this.probeNotice();
+    if (notice === null) {
+      void this.start(request);
+      return;
+    }
+    this.pendingStart.set({
+      request,
+      message: probeNoticeMessage(
+        this._translator,
+        notice.chain,
+        notice.verdict,
+        Date.now()
+      ),
+    });
+  }
+
+  /** "Start anyway": the request the form handed up, as it was. */
+  startAnyway(request: Wire.SpawnHarvestRunDto): void {
+    this.pendingStart.set(null);
+    void this.start(request);
+  }
+
+  /** Cancel or Escape: nothing starts, and the keyboard is back on the start. */
+  cancelStart(): void {
+    this.pendingStart.set(null);
+    this._host.nativeElement
+      .querySelector<HTMLElement>('lib-run-request-form [data-submit]')
+      ?.focus();
+  }
 
   /**
    * Spawn what the form handed up, and go to the Runs tab with that run

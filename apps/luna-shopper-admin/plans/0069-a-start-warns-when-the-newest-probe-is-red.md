@@ -23,8 +23,10 @@
 
 Before a person starts a run that reads a chain's storefront, show a quiet notice on the same
 form when the newest finished probe of that chain is not `PASSED`. The notice names the chain,
-the status, the age of the probe and its one sentence. The start control stays enabled and
-starts the run as today. Follow the "Angular conventions" section of `CLAUDE.md`, and use the
+the status, the age of the probe and its one sentence. The start control stays enabled, and a
+press of it asks "Start the run anyway?" with the same sentence before anything starts. "Start
+anyway" starts the run with the same request as today (the owner, 2026-11-11: "Force a
+read"). Follow the "Angular conventions" section of `CLAUDE.md`, and use the
 `design-taste-frontend`, `antislop`, `antislop-ui`, `antislop-human` and `antislop-copywriting`
 skills.
 
@@ -83,18 +85,23 @@ skills.
 
 1. **A notice on the new run page.** When the chain and the mode chosen in `RunRequestForm`
    read the chain's storefront and the chain's newest finished probe that is not `ABORTED` is
-   not `PASSED`, a notice shows above the form's actions: "{chain}'s last probe, {age} ago,
-   was {status}: {sentence}. A run may store little or mark products wrong. You can start it
-   anyway." It updates when the chain or the mode changes, and it goes away for a mode that
-   reads nothing.
-2. **The same notice on a preset's Start.** In the presets panel, a preset whose run reads the
+   not `PASSED`, a notice shows above the form's actions: "{chain}'s last probe, {age}, was
+   {status}: {sentence}. A run may store little or mark products wrong." It updates when the
+   chain or the mode changes, and it goes away for a mode that reads nothing.
+2. **The same notice on a preset's row.** In the presets panel, a preset whose run reads the
    chain shows the notice in its row, under the name, when the chain's newest finished probe is
-   red. The Start button stays as it is.
-3. **The start control stays enabled** in both places, whatever the probe says, and starts the
-   run with the same request as today. No dialog, no second click, no confirmation.
-4. **No notice** for a green probe, for a chain with no finished probe, for a probe that is
-   `RUNNING` (the newest finished one behind it decides), for a `FILE_IMPORT`, and for a store
-   discovery over OpenStreetMap.
+   red.
+3. **A start over the notice asks first**, in both places. The start control stays enabled. A
+   press of it opens the admin's confirm dialog (`ConfirmDialog` of `ui`) with the heading
+   "Start the run anyway?", the notice's sentence as its body, "Start anyway" and the dialog's
+   "Cancel". Nothing is sent before "Start anyway". "Start anyway" sends exactly the request a
+   start sends today (`spawnRun` with the form's request, `startPreset` with the preset's id).
+   Cancel and Escape start nothing and put the keyboard back on the start control. Tab stays
+   inside the question while it is open. A start never waits on the probe read: with no
+   verdict known at the press (a read in flight or a read that failed), the start is one press.
+4. **No notice and no question** for a green probe, for a chain with no finished probe, for a
+   probe that is `RUNNING` (the newest finished one behind it decides), for a `FILE_IMPORT`,
+   and for a store discovery over OpenStreetMap. The start is one press there, as today.
 5. **The status word** is the person's word, not the enum: "changed shape" for
    `SHAPE_CHANGED`, "refused" for `BLOCKED`, "unreachable" for `UNREACHABLE`, "a fault on our
    side" for `ERROR`. The age is the existing relative format of the harvest feature. A probe
@@ -112,13 +119,24 @@ skills.
   `harvest-memory.ts`) and the seed, a mapping into an admin model in
   `libs/luna-shopper-admin/models` (rule D4: map from the wire type, never pass it through),
   `en.json`, and their specs.
+- In, for the question of target 3: `ConfirmDialog` of `ui` takes any translator values as
+  `bodyArgs` (the body passes `interpolation`), and the form's start button carries
+  `data-submit` so the page can put the keyboard back on it.
 - Out: the gateway, the harvester, `openapi.json`, `wire-types.ts` by hand, the schedule page
-  chips, the import upload page, the source record page.
+  chips, the import upload page.
+- **Decided but not built: the notice on the source record page** (Decisions, question 5). The
+  owner wants it beside the page's probe button, and that page has no probe button yet: the
+  source record page is the generic record page of the `sources` descriptor, its only actions
+  are "Stop fetching" and "Allow fetching", and the admin has no method that starts a probe.
+  The button is the follow up admin plan that backend `0219` section 13 names ("a source shows
+  its latest probe"), which is not written and needs a mock first. The notice lands with that
+  plan or in a plan of its own after it.
 
 ### Constraints
 
-- The notice never disables, hides or delays the start, and never asks a question. The owner's
-  rule is a warning and a free start.
+- The notice never disables or hides the start. A press over the notice asks one question,
+  and "Start anyway" always starts (the owner, 2026-11-11: a warning that is read, then a free
+  start). The question never waits on the probe read.
 - One read per chain, not one per preset: the presets panel shows one chain at a time, so it
   reads that chain's probes once and shares the answer with every row.
 - The newest finished probe is read past `RUNNING` and `ABORTED` rows. Read
@@ -130,11 +148,14 @@ skills.
 - If the notice is drawn as an info button, `ui/src/lib/info/info-copy.spec.ts` holds it to a
   title, at most four points of at most 25 words and one caution. It is a notice, not an info
   panel, so prefer a plain `role="status"` paragraph that the spec does not read.
-- No named action is added, so `ui/src/lib/action-question-heading.spec.ts` changes nothing.
-  If the owner asks for a question instead of a notice (Decisions, question 3), its heading
-  holds no placeholder, as that spec requires.
-- The tone is the quiet warning tone the harvest feature already uses for "Will not run" on a
-  schedule (admin `0067`, target 2): no tinted container, no alert role, nothing that moves.
+- The question is not a named action of a descriptor, but its words are written in the same
+  `confirm: { heading, ... }` shape (`START_ANYWAY` in `probe-notice.ts`), so
+  `ui/src/lib/action-question-heading.spec.ts` reads it and holds its heading to no
+  placeholder. The body names the chain.
+- The tone of the notice is the quiet warning tone the harvest feature already uses for "Will
+  not run" on a schedule (admin `0067`, target 2): no tinted container, no alert role, nothing
+  that moves. The question is the existing `ConfirmDialog` in its `primary` tone, because a
+  start is not a deletion.
 
 ### Action boundaries
 
@@ -149,7 +170,9 @@ skills.
 
 Each target with its spec output, `npx nx build luna-shopper-admin`, and one walk on a Luna slot:
 a DEZA source pointed at a closed local port, a manual probe that ends `UNREACHABLE`, the
-notice on the new run page and on the preset row, a start that still starts, then the base
+notice on the new run page and on the preset row, the question on a press of either start
+(once by keyboard only: Tab to start, Enter, Escape, Enter, confirm), Cancel that starts
+nothing, "Start anyway" that starts, then the base
 URL pointed at the committed fixtures, a probe that passes, and the notice gone. Screenshots at
 1360 px and 390 px.
 
@@ -157,14 +180,23 @@ URL pointed at the committed fixtures, a probe that passes, and the notice gone.
 
 | Key | English |
 | --- | --- |
-| `harvest.probeNotice.text` | {{chain}}'s last probe, {{age}} ago, was {{status}}: {{sentence}}. A run may store little or mark products wrong. You can start it anyway. |
-| `harvest.probeNotice.textNoSentence` | {{chain}}'s last probe, {{age}} ago, was {{status}}. A run may store little or mark products wrong. You can start it anyway. |
-| `harvest.probeNotice.status.SHAPE_CHANGED` | changed shape |
+| `harvest.probeNotice.text` | {{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong. |
+| `harvest.probeNotice.textNoSentence` | {{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong. |
+| `harvest.probeNotice.thisChain` | This chain |
+| `harvest.probeNotice.justNow` | just now |
+| `harvest.probeNotice.question.heading` | Start the run anyway? |
+| `harvest.probeNotice.question.confirm` | Start anyway |
+| `harvest.probeNotice.status.SHAPE_CHANGED` | a shape change |
 | `harvest.probeNotice.status.BLOCKED` | refused |
 | `harvest.probeNotice.status.UNREACHABLE` | unreachable |
 | `harvest.probeNotice.status.ERROR` | a fault on our side |
 | `harvest.schedules.blocked.PROBE_NOT_PASSED` | {{chain}}'s last probe did not pass. The next slot runs a probe first and is skipped if it fails again. |
 | `harvest.schedules.outcome.SKIPPED_PROBE_FAILED` | Skipped, the probe did not pass |
+
+`{{age}}` is the harvest feature's relative format ("3 days ago", "yesterday"), so the sentence
+carries no second "ago". The question's body is `text` or `textNoSentence` with the same values
+as the notice, and its cancel is the dialog's own `resource.action.cancel` ("Cancel"). The
+sentence "You can start it anyway." left the notice when the question took over that choice.
 
 ## 2. Where it is drawn
 
@@ -177,14 +209,25 @@ start, not to the form, so the builder chooses one of two places and says which 
 - **In `RunRequestForm`** behind an input that only the new run page sets. Choose it only if
   the draft does not carry the chain and the mode.
 
+Built: in `new-run-page.ts`, in the form's `[runNotice]` content slot just above its actions.
+
 In the presets panel the notice sits in the row of each preset whose mode reads the chain,
 under the name and above the actions, one line high on a wide screen.
+
+**The question belongs to the page that holds the start**, not to the form and not to the
+notice. The new run page receives the form's `submitted` request and either starts it or holds
+it while the question is open. The presets panel does the same with the preset of the row.
+Both draw `ConfirmDialog` with `START_ANYWAY`, and the body is `probeNoticeMessage`, the one
+function the notice draws its sentence from, so the two can never say different things.
 
 ## 3. What is drawn
 
 No new screen and no new section. One paragraph in the warning tone with the warning glyph of
 `libs/shared/ui` before it, in the font size of the form's help text. It names the chain by
 its name, never its id. On a 390 px screen it wraps; it never truncates the sentence.
+
+The question is the existing confirm dialog: an opaque cover, one raised panel, the heading,
+the sentence, then "Start anyway" (primary, with the focus) and "Cancel". No new component.
 
 ## 4. The models
 
@@ -204,10 +247,16 @@ models with a spec that holds it equal to the contracts.
 - `readsTheChain`: a catalog discovery of each probed adapter, a store discovery of `deza-web`
   and of `osm-places`, a file import.
 - The new run page: the notice for a red chain and a catalog discovery, none after switching
-  to a file import, none for a green chain; the start button is enabled with the notice shown,
-  and its click sends the same `spawnRun` request as without it.
+  to a file import, none for a green chain. With the notice shown the start is enabled, and
+  its press opens the question with the focus on "Start anyway" and does not call `spawnRun`.
+  "Start anyway" calls `spawnRun` once with the request a start sends for the same chain with
+  no probe. Cancel and Escape call nothing and put the focus back on the start. A green
+  chain, a chain with no probe, a file import, a store discovery over OpenStreetMap and a
+  probe read still in flight at the press all start at one press with no question.
 - The presets panel: one probe read for the chain, the notice on the rows whose mode reads the
-  chain, and Start calls `startPreset` with the notice shown.
+  chain, and the same cases for `startPreset` as for `spawnRun` above.
+- `action-question-heading.spec.ts` finds `harvest.probeNotice.question.heading` and holds it
+  to no placeholder.
 - The memory back end answers the probe list from its seed, with one chain whose newest probe
   is `UNREACHABLE`.
 - `en.json` holds every key of section 1, and no string has a dash as punctuation.
@@ -217,9 +266,12 @@ models with a spec that holds it equal to the contracts.
 - [ ] A person who starts a catalog discovery, or a store discovery of a chain that lists its
       own stores, sees the notice when the chain's newest finished probe is not `PASSED`.
 - [ ] The notice names the chain, the status word, the age and the sentence.
-- [ ] The start control is enabled with the notice shown and starts the run unchanged.
-- [ ] No notice for a green probe, no probe, a file import or a store discovery over
-      OpenStreetMap.
+- [ ] The start control is enabled with the notice shown. Its press asks "Start the run
+      anyway?" with the notice's sentence, and starts nothing until "Start anyway".
+- [ ] "Start anyway" starts the run with the request of today. Cancel and Escape start
+      nothing and leave the keyboard on the start.
+- [ ] No notice and no question for a green probe, no probe, a file import, a store discovery
+      over OpenStreetMap, or a probe read that has not answered at the press.
 - [x] The schedule page shows words, not keys, for `PROBE_NOT_PASSED` and `SKIPPED_PROBE_FAILED`.
       Backend PR #934 shipped the two strings, so this needs no work here.
 - [ ] `npx nx affected -t lint test` is green, and `npx nx build luna-shopper-admin` builds.
@@ -242,9 +294,14 @@ with every probe against a closed local port or a local server of the committed 
 
 Chosen in this plan, and open to the owner's correction:
 
-- A notice on the form, not a dialog and not a disabled button (the owner's words).
-- The notice in the new run page and in the preset row, not in the preset editor, the import
-  page or the source page (section 2).
+- A notice on the form and a question on the press, never a disabled button (question 3).
+- The notice in the new run page and in the preset row, not in the preset editor or the
+  import page (section 2). The source page is question 5.
+- The notice stays on the form beside the question, so the warning is read before the press
+  too. It lost its last clause, "You can start it anyway.", because the question now carries
+  that choice.
+- A start never waits on the probe read. With no verdict known at the press, it starts at one
+  press, as before this plan.
 - The probe list route, read once per chain with a page of 10, rather than a backend change to
   the summary (Context). The summary has no `error`, and it can be `RUNNING`.
 - The two schedule page strings ride in this plan because they are the same warning
@@ -258,12 +315,20 @@ run chip needs to be shown".
    state chip for a schedule whose block is `PROBE_NOT_PASSED`. `scheduleState` already answers
    `blocked` for it, so it needs no change for this block, and this plan changes nothing there.
 
-**Owner**: still open, ask, do not choose.
+**Owner** (answered 2026-11-11, on PR #966).
 
-3. **Notice or question.** The owner asked for a warning and a free start. A notice keeps the
-   start one click. A question ("Start anyway?") makes the person read it. Keep the notice?
-4. **The summary.** Should a later backend plan add `error` and `attempt` to
-   `HarvestSourceProbeSummary`, so the sources list can show the same sentence without the
-   probe route? This plan does not need it.
-5. **The source page.** Show the same notice on the source record page beside its probe
-   button, or leave that page to backend `0219` section 13?
+3. **Notice or question.** Answered 2026-11-11: "Force a read." When the chain's newest
+   finished probe is red, a start asks the person to confirm before the run starts (target 3).
+4. **The summary.** Answered 2026-11-11: yes. A later backend plan adds `error` and `attempt`
+   to `HarvestSourceProbeSummary`. Not this plan, which reads the probe route as before.
+5. **The source page.** Answered 2026-11-11: "Show it." The same warning shows on the source
+   record page beside its probe button. Not built in this plan: that page has no probe button
+   yet (Scope). It lands with the follow up admin plan of backend `0219` section 13, or after
+   it. Proposed sentence there, for the owner to correct, since that page starts no run:
+   "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. Until a probe passes, a run
+   may store little or mark products wrong."
+6. **The preset row notice is four lines at 1360 px**, not the "one line high" of section 2,
+   because the presets panel is the narrow column of the Runs tab. Answered 2026-11-11: left as
+   it is for now; the owner will check it.
+7. **The words "a shape change" and "just now"** (the builder's, in PR #966). Answered
+   2026-11-11: accepted.

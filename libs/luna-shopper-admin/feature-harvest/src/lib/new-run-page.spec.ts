@@ -197,8 +197,25 @@ async function chain(fixture: ComponentFixture<NewRunPage>, id: string) {
 const text = (fixture: ComponentFixture<NewRunPage>): string =>
   fixture.nativeElement.textContent;
 
+/**
+ * Every chain answers no probe, for the cases about the request and its
+ * refusal. The seed's DEZA probe is red, and a start over it asks first
+ * (admin plan 0069); that question has its own cases below.
+ */
+function withNoProbes(): void {
+  let spy: jest.SpyInstance | undefined;
+  beforeEach(() => {
+    spy = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockResolvedValue({ items: [], nextCursor: null });
+  });
+  afterEach(() => spy?.mockRestore());
+}
+
 /** A page under the Runs tab (admin plan 0044, target 5). */
 describe('the new run page, under the Runs tab', () => {
+  withNoProbes();
+
   it('goes back to the Runs tab', async () => {
     const { fixture } = await render();
 
@@ -276,6 +293,8 @@ describe('the new run page, under the Runs tab', () => {
  * to answer every one of them with "the server did not say why".
  */
 describe('the run form, a refusal the server explained', () => {
+  withNoProbes();
+
   const refusal = (init: {
     code: string;
     status: number;
@@ -584,39 +603,183 @@ describe('the new run page, a red probe', () => {
     expect(notice(fixture)).toBe(null);
   });
 
-  it('keeps the start enabled and sends the same request with the notice shown', async () => {
-    // The same chain with no probe at all, for the request a start sent
-    // before this plan.
+  const question = (
+    fixture: ComponentFixture<NewRunPage>
+  ): HTMLElement | null =>
+    fixture.nativeElement.querySelector('[data-start-question]');
+
+  const startButton = (
+    fixture: ComponentFixture<NewRunPage>
+  ): HTMLButtonElement =>
+    fixture.nativeElement.querySelector('lib-run-request-form [data-submit]');
+
+  /** The request a press of start sends for DEZA with no probe at all. */
+  async function requestWithoutProbe(): Promise<unknown[]> {
     const noProbes = jest
       .spyOn(HarvestMemory.prototype, 'listProbes')
       .mockResolvedValue({ items: [], nextCursor: null });
-    const withoutNotice = await render();
-    await chain(withoutNotice.fixture, DEZA);
-    await settled(withoutNotice.fixture);
-    expect(notice(withoutNotice.fixture)).toBe(null);
-    formOf(withoutNotice.fixture).submit();
-    await drain();
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
     noProbes.mockRestore();
+
+    expect(notice(fixture)).toBe(null);
+    startButton(fixture).click();
+    await drain();
+
+    // One press, no question: the start as it was before this plan.
+    expect(question(fixture)).toBe(null);
+    return spawned;
+  }
+
+  it('asks before it starts, with the start enabled and the notice shown', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    expect(notice(fixture)).not.toBeNull();
+    expect(startButton(fixture).disabled).toBe(false);
+
+    startButton(fixture).click();
+    await settled(fixture);
+
+    expect(spawned).toEqual([]);
+    const dialog = question(fixture);
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+    expect(dialog?.querySelector('h2')?.textContent?.trim()).toBe(
+      'harvest.probeNotice.question.heading'
+    );
+    expect(dialog?.querySelector('p')?.textContent?.trim()).toBe(
+      'harvest.probeNotice.text'
+    );
+    expect(fixture.componentInstance.pendingStart()?.message.args).toEqual(
+      expect.objectContaining({
+        chain: 'Deza',
+        sentence: 'home: the storefront did not answer within 20 seconds',
+      })
+    );
+    // The keyboard is on "Start anyway", so Enter goes through with it.
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-confirm]')
+    );
+  });
+
+  it('sends the request of a start with no probe on "Start anyway", once', async () => {
+    const withoutNotice = await requestWithoutProbe();
 
     const { fixture, spawned } = await render();
     await chain(fixture, DEZA);
     await settled(fixture);
-    const start: HTMLButtonElement = fixture.nativeElement.querySelector(
-      'lib-run-request-form .actions button.primary'
+    startButton(fixture).click();
+    await settled(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    expect(confirm?.textContent?.trim()).toBe(
+      'harvest.probeNotice.question.confirm'
     );
-
-    expect(notice(fixture)).not.toBeNull();
-    expect(start.disabled).toBe(false);
-
-    start.click();
+    confirm?.click();
     await drain();
+    fixture.detectChanges();
 
-    expect(spawned).toEqual(withoutNotice.spawned);
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toEqual(withoutNotice);
     expect(spawned).toEqual([
       expect.objectContaining({
         mode: 'CATALOG_DISCOVERY',
         supermarketId: DEZA,
       }),
     ]);
+  });
+
+  it('starts nothing on Cancel or Escape, and puts the keyboard back on the start', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    startButton(fixture).click();
+    await settled(fixture);
+    const cancel: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-dismiss]') ?? null;
+    expect(cancel?.textContent?.trim()).toBe('resource.action.cancel');
+    cancel?.click();
+    await settled(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(document.activeElement).toBe(startButton(fixture));
+
+    startButton(fixture).click();
+    await settled(fixture);
+    question(fixture)?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape' })
+    );
+    await settled(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(document.activeElement).toBe(startButton(fixture));
+    expect(spawned).toEqual([]);
+  });
+
+  it('starts at one press for a chain whose newest probe passed', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    formOf(fixture).toggleScope(CORDOBA, ticked(true));
+    await settled(fixture);
+
+    startButton(fixture).click();
+    await drain();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('starts at one press for a chain with no probe', async () => {
+    expect(await requestWithoutProbe()).toHaveLength(1);
+  });
+
+  it('starts at one press a file import or a store discovery over OpenStreetMap', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    const page = fixture.componentInstance;
+    const start = jest.spyOn(page, 'start').mockResolvedValue(undefined);
+
+    formOf(fixture).mode.set('FILE_IMPORT');
+    await settled(fixture);
+    page.requestStart({ mode: 'FILE_IMPORT', supermarketId: DEZA });
+
+    formOf(fixture).mode.set('STORE_DISCOVERY');
+    formOf(fixture).adapterKey.set('osm-places');
+    await settled(fixture);
+    expect(page.probeNotice()).toBe(null);
+    page.requestStart({ mode: 'STORE_DISCOVERY', supermarketId: DEZA });
+
+    expect(question(fixture)).toBe(null);
+    expect(page.pendingStart()).toBe(null);
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts at one press while the probe read is still in flight', async () => {
+    let answer: (page: { items: never[]; nextCursor: null }) => void = () =>
+      undefined;
+    const pending = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        })
+      );
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    startButton(fixture).click();
+    await drain();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toEqual([expect.objectContaining({ supermarketId: DEZA })]);
+    answer({ items: [], nextCursor: null });
+    pending.mockRestore();
   });
 });

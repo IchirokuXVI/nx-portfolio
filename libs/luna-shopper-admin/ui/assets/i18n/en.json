@@ -2009,10 +2009,14 @@
       }
     },
     "probeNotice": {
-      "text": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong. You can start it anyway.",
-      "textNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong. You can start it anyway.",
+      "text": "{{chain}}'s last probe, {{age}}, was {{status}}: {{sentence}}. A run may store little or mark products wrong.",
+      "textNoSentence": "{{chain}}'s last probe, {{age}}, was {{status}}. A run may store little or mark products wrong.",
       "thisChain": "This chain",
       "justNow": "just now",
+      "question": {
+        "heading": "Start the run anyway?",
+        "confirm": "Start anyway"
+      },
       "status": {
         "SHAPE_CHANGED": "a shape change",
         "BLOCKED": "refused",

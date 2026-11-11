@@ -30,12 +30,22 @@ import {
   type ProbeVerdict,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
-import { ConfirmDialog, HarvestNotice } from '@portfolio/luna-shopper-admin/ui';
+import {
+  ConfirmDialog,
+  HarvestNotice,
+  keepTabInside,
+} from '@portfolio/luna-shopper-admin/ui';
 import { ChainNames } from './chain-names';
 import { ChainSelect } from './chain-select';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
-import { PROBE_PAGE, ProbeNotice } from './probe-notice';
+import {
+  PROBE_PAGE,
+  ProbeNotice,
+  probeNoticeMessage,
+  START_ANYWAY,
+  type ProbeNoticeMessage,
+} from './probe-notice';
 import { RunRequestForm } from './run-request-form';
 
 type Preset = Wire.HarvestHarvestRunPresetView;
@@ -233,7 +243,7 @@ function rememberChain(supermarketId: string): void {
               <span class="preset-name">{{ preset.name }}</span>
               <!-- The chain's newest finished probe did not pass, and this
                    preset reads the chain (admin plan 0069, target 2). Start
-                   stays as it is. -->
+                   asks the same sentence as a question first. -->
               @if (probeNoticeOf(preset); as notice) {
                 <lib-probe-notice
                   [chain]="notice.chain"
@@ -299,7 +309,7 @@ function rememberChain(supermarketId: string): void {
             </span>
             <div class="actions">
               <button
-                (click)="start(preset)"
+                (click)="requestStart(preset, $event)"
                 [disabled]="busyId() !== null"
                 class="start"
                 type="button"
@@ -377,6 +387,22 @@ function rememberChain(supermarketId: string): void {
         }}
       </button>
     </div>
+
+    <!-- A start over a red probe asks first (admin plan 0069, target 3).
+         "Start anyway" starts the preset as one press did before. -->
+    @if (pendingStart(); as pending) {
+      <lib-confirm-dialog
+        (confirm)="startAnyway(pending.preset)"
+        (dismiss)="cancelStart()"
+        (keydown)="keepInside($event)"
+        [bodyArgs]="pending.message.args"
+        [bodyKey]="pending.message.key"
+        [confirmKey]="question.confirm.action"
+        [headingKey]="question.confirm.heading"
+        tone="primary"
+        data-start-question
+      />
+    }
 
     @if (pendingDelete(); as target) {
       <lib-confirm-dialog
@@ -731,6 +757,20 @@ export class PresetsPanel {
   readonly nameTaken = signal(false);
   readonly saveFailure = signal<{ readonly detail: string } | null>(null);
 
+  /** The words of the question a start over a red probe asks. */
+  readonly question = START_ANYWAY;
+
+  /**
+   * The preset a start is waiting on while the question is open, and the
+   * sentence the question says. Null when no question is open.
+   */
+  readonly pendingStart = signal<{
+    readonly preset: Preset;
+    readonly message: ProbeNoticeMessage;
+  } | null>(null);
+  /** The Start that opened the question, where Cancel puts the keyboard back. */
+  private _startOpener: HTMLElement | null = null;
+
   readonly pendingDelete = signal<Preset | null>(null);
   /** The server's sentence about a failed delete. */
   readonly deleteFailure = signal<string | null>(null);
@@ -941,6 +981,54 @@ export class PresetsPanel {
 
   instant(value: string): string {
     return formatInstant(value);
+  }
+
+  /**
+   * What a press of Start does (admin plan 0069, target 3): ask first when
+   * the row shows the probe notice, else start at once.
+   *
+   * A start never waits on the probe read. A read still in flight, or one
+   * that failed, knows of no red probe, so the start is one press as before.
+   */
+  requestStart(preset: Preset, event?: Event): void {
+    const notice = this.probeNoticeOf(preset);
+    if (notice === null) {
+      void this.start(preset);
+      return;
+    }
+    this._startOpener =
+      event?.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    this.pendingStart.set({
+      preset,
+      message: probeNoticeMessage(
+        this._translator,
+        notice.chain,
+        notice.verdict,
+        Date.now()
+      ),
+    });
+  }
+
+  /** "Start anyway": the preset starts as one press started it before. */
+  startAnyway(preset: Preset): void {
+    this.pendingStart.set(null);
+    this._startOpener = null;
+    void this.start(preset);
+  }
+
+  /** Cancel or Escape: nothing starts, and the keyboard is back on Start. */
+  cancelStart(): void {
+    this.pendingStart.set(null);
+    const opener = this._startOpener;
+    this._startOpener = null;
+    if (opener?.isConnected === true) {
+      opener.focus();
+    }
+  }
+
+  /** Tab stays inside the question while it is open. */
+  keepInside(event: KeyboardEvent): void {
+    keepTabInside(event, event.currentTarget as HTMLElement);
   }
 
   /**

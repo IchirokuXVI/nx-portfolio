@@ -27,9 +27,11 @@ export interface ProbeNoticeMessage {
  * The notice before a start whose chain's newest finished probe did not pass
  * (admin plan 0069, section 3).
  *
- * **A notice, not a question.** The owner's rule is a warning and a free start,
- * so this draws one sentence and nothing to press. The start control beside it
- * stays as it is.
+ * **A notice, and the question is the page's.** It draws one sentence and
+ * nothing to press. The owner answered on 2026-11-11 that a start over a red
+ * probe asks first ("Force a read"), so the page that holds the start asks
+ * {@link START_ANYWAY} with this same sentence as its body. The notice stays
+ * on the form so that the warning is read before the click as well.
  *
  * In the quiet warning tone of "Will not run" on a schedule: the warning ink and
  * glyph on the surface the form already stands on, with no tinted box, no alert
@@ -90,41 +92,72 @@ export class ProbeNotice {
   readonly now = input<number>(Date.now());
 
   /** What is said, as a key and its values. */
-  readonly message = computed<ProbeNoticeMessage>(() => {
-    // Read so that the words follow the language.
-    const locale = this._translator.locale();
-    this._translator.loaded();
-    const verdict = this.verdict();
-
-    return {
-      key:
-        verdict.error === null
-          ? 'harvest.probeNotice.textNoSentence'
-          : 'harvest.probeNotice.text',
-      args: {
-        chain:
-          this.chain() ?? this._translator.t('harvest.probeNotice.thisChain'),
-        age: probeAge(
-          verdict.startedAt,
-          this.now(),
-          this._translator.t('harvest.probeNotice.justNow'),
-          locale
-        ),
-        status: this._translator.t(
-          `harvest.probeNotice.status.${verdict.status}`
-        ),
-        sentence: verdict.error ?? '',
-        // The template escapes what it draws. Escaping here as well would put
-        // `&#x2F;` in place of every slash of a URL the probe names.
-        interpolation: { escapeValue: false },
-      },
-    };
-  });
+  readonly message = computed<ProbeNoticeMessage>(() =>
+    probeNoticeMessage(
+      this._translator,
+      this.chain(),
+      this.verdict(),
+      this.now()
+    )
+  );
 
   readonly text = computed(() => {
     const { key, args } = this.message();
     return this._translator.t(key, undefined, undefined, { ...args });
   });
+}
+
+/**
+ * The question a start asks when the notice shows (admin plan 0069, target 3).
+ *
+ * The heading holds no placeholder: the body is the notice's own sentence,
+ * which names the chain. Written in the shape of a named action's `confirm`,
+ * so `action-question-heading.spec.ts` in `ui` holds it to the same rules.
+ * The dismissing button is the dialog's own "Cancel".
+ */
+export const START_ANYWAY = {
+  confirm: {
+    heading: 'harvest.probeNotice.question.heading',
+    action: 'harvest.probeNotice.question.confirm',
+  },
+} as const;
+
+/**
+ * The notice's sentence, as a key and its values. The inline notice draws it,
+ * and the question of {@link START_ANYWAY} uses it as its body.
+ *
+ * It reads the translator's language and load state, so a `computed` that
+ * calls it follows both.
+ */
+export function probeNoticeMessage(
+  translator: RokuTranslatorService,
+  chain: string | null,
+  verdict: ProbeVerdict,
+  now: number
+): ProbeNoticeMessage {
+  const locale = translator.locale();
+  translator.loaded();
+
+  return {
+    key:
+      verdict.error === null
+        ? 'harvest.probeNotice.textNoSentence'
+        : 'harvest.probeNotice.text',
+    args: {
+      chain: chain ?? translator.t('harvest.probeNotice.thisChain'),
+      age: probeAge(
+        verdict.startedAt,
+        now,
+        translator.t('harvest.probeNotice.justNow'),
+        locale
+      ),
+      status: translator.t(`harvest.probeNotice.status.${verdict.status}`),
+      sentence: verdict.error ?? '',
+      // The template escapes what it draws. Escaping here as well would put
+      // `&#x2F;` in place of every slash of a URL the probe names.
+      interpolation: { escapeValue: false },
+    },
+  };
 }
 
 /**
