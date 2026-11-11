@@ -5,9 +5,9 @@ import { lineKeeps } from './line-keeps';
  * What a line keeps at 0 (plan 0263, section 1, and section 6 item 4).
  *
  * The two tables are read in one statement, which only a real database can
- * answer for (`line-keeps.integration.spec.ts`). Here the statement is answered
- * by hand, so what is asserted is which facts the function reads and that the
- * three columns of the row decide without a query.
+ * answer for (`settle-keeps-line.integration.spec.ts`). Here the statement
+ * is answered by hand, so what is asserted is which facts the function reads
+ * and that the three columns of the row decide without a query.
  */
 
 const BARE = {
