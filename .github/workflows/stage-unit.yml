@@ -297,7 +297,9 @@ jobs:
   gate:
     needs: [setup, build]
     if: needs.setup.outputs.gates != '[]' && needs.setup.outputs.gates != ''
-    # Pinned: ubuntu-latest became 26.04, where Playwright 1.59 installs no Chromium.
+    # Pinned, so a new image arrives as a Renovate pull request that this job tests
+    # (group "runner images"). ubuntu-latest moved to 26.04 by itself and Playwright
+    # 1.59 had no Chromium for it.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
