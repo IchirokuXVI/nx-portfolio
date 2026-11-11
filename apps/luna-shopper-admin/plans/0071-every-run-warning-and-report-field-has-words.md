@@ -10,7 +10,9 @@
 > completed run did not read), `0253` (the El Jamón detail stage), `0257` and `0258` (the
 > DEZA sections), admin plan `0029` section 6 (the report section of the run page), admin plan
 > `0067` (the voice of the harvest strings), and
-> `libs/luna-shopper/contracts/src/lib/enums/harvest.enums.ts` (`HarvestWarningCode`).
+> `libs/luna-shopper/contracts/src/lib/enums/harvest.enums.ts` (`HarvestWarningCode`). Backend
+> plan `0268` (same PR) adds one DIA report block, `unslottedOnly`, and its copy. Section 2 of
+> this plan draws it.
 >
 > Mock: none. The owner decided this on 2026-11-11 (D3).
 
@@ -145,6 +147,11 @@ In the report section, after the facts of today:
   the detail sentence.
 - Any walk with `sizesDisproved` above 0: the two counts, and the examples as a short table of
   name, stated, implied, unit and label, with a link to the entry when `entryId` is set.
+- A DIA run whose report holds `unslottedOnly` (backend plan `0268`, section 2): the count, one
+  line a leaf, and its examples, with the four `harvest.run.report.unslottedOnly.*` keys that
+  backend plan `0268` section 2 states. Backend plan `0268` is in the same PR as this plan and
+  is not built on 2026-11-11. If the field is not on `origin/dev` when this plan is built, this
+  part waits for a short follow up, and the builder says so in the PR.
 
 ## Tests
 
