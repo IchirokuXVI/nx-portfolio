@@ -1,8 +1,12 @@
 # 0070: A product carries the step a shopper counts in
 
-> Decided on 2026-11-09. A shopper steps a line of a product sold by the kilo by 25 g below a
-> kilo and by 250 g from a kilo, and a line of a product sold by the litre by 50 ml and then
-> 250 ml (backend `0246` section 0, velista `0182` section 3). That is one ladder for saffron
+> Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no
+> larger step from a kilo or a litre, and a count steps by 1 below 1000 and by 10 from 1000
+> (owner, 2026-11-11); the most an amount can be is 999 999 (backend `0262`). The default
+> line of the form and its copy follow. Nothing else changed.
+>
+> Decided on 2026-11-09. A shopper steps a line of a product sold by the kilo by 25 g, and a
+> line of a product sold by the litre by 25 ml, at every amount (amended 2026-11-11). That is one ladder for saffron
 > and for a whole chicken. The owner decided (U4) that the curator sets the step of each such
 > product in the back office, and that a product with no step keeps today's ladder. Backend
 > `0261` (the curator sets the step of a product) gives the catalog item the field
@@ -95,7 +99,7 @@ the wire whose words depend on the unit ("250 g" or "250 ml").
 1. In the "sold" section, a "Step" field sits after the size and the weight, only while the
    product as the form holds it is sold by the kilo or the litre (`0261` S3).
 2. While the page reads, a set step reads "250 g", "1 kg", "50 ml" or "1 L". A product with no
-   step reads, greyed: "Default: 25 g, then 250 g from 1 kg" (or the millilitre line).
+   step reads, greyed: "Default: 25 g" (or "Default: 25 ml").
 3. While the page is a form, the field is a select. Its first option is the default line,
    which saves `null`. The ten steps of `0261` S2 follow, drawn in grams or millilitres
    ("1 g" to "1 kg", "1 ml" to "1 L") after the product's unit (writer decision B).
@@ -196,7 +200,7 @@ press is needed beside it (writer decision D).
 | State | Read | Form |
 | --- | --- | --- |
 | A step is set | "250 g", "1 kg", "50 ml", "1 L" | The select on "250 g". Under it: "Set for this product. A run does not give it a weight while it has a step." |
-| No step | Greyed: "Default: 25 g, then 250 g from 1 kg" | The select on its first option, "Default: 25 g, then 250 g from 1 kg". No line under it |
+| No step | Greyed: "Default: 25 g" | The select on its first option, "Default: 25 g". No line under it |
 
 The read value goes through `formatGrams` (`product-format.ts:30` to `34`) for grams and a
 millilitre twin for millilitres, so the step reads as a shopper reads an amount. The line
@@ -258,8 +262,8 @@ English only, as the rest of the back office (`product-format.ts:17` to `21`).
 | --- | --- |
 | `catalog.items.quantityStep` | Step |
 | `catalog.items.quantityStepHelp` | How far one press moves a shopper's amount of this product, at every amount |
-| `catalog.items.quantityStepDefault.gram` | Default: 25 g, then 250 g from 1 kg |
-| `catalog.items.quantityStepDefault.milliliter` | Default: 50 ml, then 250 ml from 1 L |
+| `catalog.items.quantityStepDefault.gram` | Default: 25 g |
+| `catalog.items.quantityStepDefault.milliliter` | Default: 25 ml |
 | `catalog.items.quantityStepSet` | Set for this product. A run does not give it a weight while it has a step. |
 | `resource.error.itemQuantityStepNotAllowed` | Only a product sold by the kilo or by the litre has a step. Choose the default, or sell it by the kilo or the litre. |
 
@@ -270,7 +274,7 @@ On a Luna slot with backend `0261` (point at a gateway that already listens if i
 admin app only), signed in through the dev autologin:
 
 1. A product sold by the kilo with no weight (seed one on the slot, or use one from a copied
-   catalog) reads "Default: 25 g, then 250 g from 1 kg", greyed.
+   catalog) reads "Default: 25 g", greyed.
 2. Edit: the select offers the default and "1 g" to "1 kg". Choose "100 g", save. It reads
    "100 g", and a reread of the item over the gateway answers `quantityStep: 100`.
 3. Edit: choose "1 kg", save. It reads "1 kg".
@@ -372,5 +376,5 @@ here. The values, the kinds, the meaning of null, the refusals and the run's beh
 1. Does a mock come first? `0068` drew none for a field in the same section.
 2. Do you want a list filter "sold by weight or volume, no step set", so a curator can work
    through the loose products? It needs a query parameter on the gateway item list.
-3. Should the default option spell out the ladder ("25 g, then 250 g from 1 kg") or say only
-   "Default"? This plan draws the ladder, so the curator sees what a null means.
+3. Should the default option spell out the default step ("Default: 25 g") or say only
+   "Default"? This plan draws the step, so the curator sees what a null means.

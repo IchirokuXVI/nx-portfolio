@@ -1,8 +1,12 @@
 # 0261: the curator sets the step of a product
 
+> Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no
+> larger step from 1000, and a count steps by 1 below 1000 and by 10 from 1000 (owner,
+> 2026-11-11); the most an amount can be is 999 999 (backend `0262`). Nothing else changed.
+>
 > Written on 2026-11-09 from the owner's decision U4 of that day (section 0). Velista steps
-> every weight or volume line by one fixed rule: 25 g or 50 ml below a thousand, 250 from a
-> thousand. Saffron needs a much smaller step, and a whole chicken a bigger one: nobody buys
+> every weight or volume line by one fixed rule: 25 g or 25 ml at every amount (amended
+> 2026-11-11). Saffron needs a much smaller step, and a whole chicken a bigger one: nobody buys
 > 1,425 kg of chicken rather than 1,4 kg, and nobody buys 75 g of it. This plan gives a product
 > sold by the kilo or the litre a step, written by a curator in the back office and served on
 > every product view velista reads for a line. A product with no step keeps today's rule.
@@ -47,9 +51,10 @@ current rule.
 
 ### Context
 
-- Velista's rule is fixed and per unit: `QUANTITY_FINE_STEP` 25 g and 50 ml below
-  `QUANTITY_COARSE_FROM` (1000), `QUANTITY_COARSE_STEP` 250 from there (`line-unit.ts:121` to
-  `:136`). `stepAt` reads only the value and the unit; no product reaches it (`:142`).
+- Velista's rule is fixed and per unit. On the branch it is `QUANTITY_FINE_STEP` 25 g and
+  50 ml below `QUANTITY_COARSE_FROM` (1000), `QUANTITY_COARSE_STEP` 250 from there
+  (`line-unit.ts:121` to `:136`); since 2026-11-11 the default is 25 g and 25 ml at every
+  amount (velista `0188`). `stepAt` reads only the value and the unit; no product reaches it (`:142`).
 - The catalog item carries no step (`item.entity.ts`). The nearest precedent is
   `approxWeight` (plan `0244`): a nullable numeric column, two checks, a write rule run at
   create, create many, update and batch update (`item.service.ts:537`, `:658`, `:4062`), a
@@ -61,7 +66,8 @@ current rule.
   `ItemView` thus reaches all three with no gateway code. Unverified: that no gateway route
   narrows `ItemView` to named fields; section 4 says how the builder checks.
 - No server code steps a line. Core stores any integer amount from 0 to
-  `LINE_QUANTITY_MAX` (`0246` section 3.1), and the step is velista's alone.
+  `LINE_QUANTITY_MAX` (`0246` section 3.1; 999 999 since backend `0262`), and the step is
+  velista's alone.
 - A run writes `approxWeight` onto a product with no size (`0244` section 3.4,
   `setApproxWeights`), which turns a product sold by the kilo into a kilo piece.
 
@@ -130,9 +136,9 @@ The writer's, open to the owner:
   saffron by 1 g. A pair doubles the field, the checks and the form for no product the owner
   named.
 - **S2. The allowed steps are a closed list of divisors of 1000:** 1, 5, 10, 25, 50, 100, 200,
-  250, 500 and 1000. A divisor of 1000 keeps a new line's start, `defaultQuantityOf` 1000
-  (`0246` M4), and every whole kilo on the grid of the step, so a line never has to snap off
-  its first value. A list rather than "any divisor" keeps the back office a choice of ten and
+  250, 500 and 1000. A divisor of 1000 keeps every whole kilo on the grid of the step. Since
+  the amendment of 2026-11-11 a new line starts at one step and not at 1000 (backend `0260`,
+  which replaces `0246` M4), so its first value is on the grid of any step. A list rather than "any divisor" keeps the back office a choice of ten and
   leaves out steps nobody asks for at a counter (2, 4, 8, 20, 40, 125). The maximum is 1000:
   a product bought by the several kilos is still asked for in kilos.
 - **S3. Only a product sold by the kilo or the litre carries a step** (`BY_THE_KILO` and
@@ -142,7 +148,7 @@ The writer's, open to the owner:
   (`stepAt` reads no product, `line-unit.ts:142`), and whole packs and pieces appear only in
   the cost (`lineAmountOf`'s `pieces`); a step on a pack would thus be a second rule for one
   line.
-- **S4. Null means today's rule**, unchanged: 25 g or 50 ml below 1000, 250 from 1000. A step
+- **S4. Null means the default rule**: 25 g or 25 ml at every amount (amended 2026-11-11). A step
   that is set applies at every value; there is no change of grain at a kilo.
 - **S5. A line with several products takes the smallest step among its members that serve
   the line's unit and carry one, and today's rule when none does.** This departs from the
@@ -278,10 +284,10 @@ Stated here, built in velista `0186`; no server code reads it.
 
 | The line | Its step |
 | --- | --- |
-| `UNIT` | 1, as today |
+| `UNIT` | 1 below 1000 and 10 from 1000 (amended 2026-11-11) |
 | `GRAM` or `MILLILITER`, one product with a step `s` | `s` at every value |
 | `GRAM` or `MILLILITER`, several products, some serving the unit with a step | the smallest of those steps (S5) |
-| `GRAM` or `MILLILITER`, no product serving the unit with a step | today's rule: 25 or 50 below 1000, 250 from 1000 (S4) |
+| `GRAM` or `MILLILITER`, no product serving the unit with a step | the default: 25 at every amount (S4) |
 
 An amount off the grid of its step (a legacy 975 on a step of 100) snaps onto it in the
 direction of the step, as `stepFrom` does today (`line-unit.ts:162`). The server never refuses
