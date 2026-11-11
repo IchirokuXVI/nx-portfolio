@@ -1,3 +1,5 @@
+> **PR:** [#974](https://github.com/IchirokuXVI/nx-portfolio/pull/974)
+
 # 0264: a Carrefour unit price label names its basis, and a wash names none
 
 > Found during the all chain scheduled harvest of 2026-11-06 on Luna slot 4, and checked
