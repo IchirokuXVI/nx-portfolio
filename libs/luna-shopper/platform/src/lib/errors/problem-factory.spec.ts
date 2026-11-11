@@ -1,3 +1,4 @@
+import { LineUnitDiffersException } from './domain-exception';
 import { ERROR_CODES } from './error-codes';
 import { buildProblemDetails } from './problem-factory';
 
@@ -77,5 +78,44 @@ describe('buildProblemDetails', () => {
       correlationId: 'c',
     });
     expect('details' in notFound).toBe(false);
+  });
+
+  it('exposes the details of line_unit_differs from an add, and none from a merge (plan 0260)', () => {
+    const details = {
+      line: {
+        lineId: 'l1',
+        content: 'Leche',
+        unit: 'MILLILITER',
+        quantity: 1500,
+      },
+      unit: 'UNIT',
+      index: null,
+    };
+    const fromAdd = new LineUnitDiffersException('another unit', {
+      details,
+      messageArgs: { content: 'Leche' },
+    });
+    const fromMerge = new LineUnitDiffersException('another unit', {
+      messageArgs: { content: 'Leche' },
+    });
+
+    expect(fromAdd.exposesDetails).toBe(true);
+    const problem = buildProblemDetails({
+      code: fromAdd.code,
+      correlationId: 'c',
+      messageArgs: fromAdd.messageArgs,
+      details: fromAdd.exposesDetails ? fromAdd.details : undefined,
+    });
+    expect(problem.status).toBe(409);
+    expect(problem.code).toBe('line_unit_differs');
+    expect(problem.details).toEqual(details);
+
+    const merged = buildProblemDetails({
+      code: fromMerge.code,
+      correlationId: 'c',
+      messageArgs: fromMerge.messageArgs,
+      details: fromMerge.exposesDetails ? fromMerge.details : undefined,
+    });
+    expect('details' in merged).toBe(false);
   });
 });

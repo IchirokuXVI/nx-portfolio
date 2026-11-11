@@ -458,11 +458,12 @@ describe('LineService.addMany writes the flag of each item (plan 0207, section 1
       ],
     });
 
+    // At the first item's amount: a batch never sums (plan 0260 R6).
     expect(w.saved).toHaveLength(1);
     expect(results.map((result) => result.line.named)).toEqual([false, false]);
     expect(results[0].line).toMatchObject({
       content: 'Oat drink',
-      quantity: 2,
+      quantity: 1,
     });
   });
 

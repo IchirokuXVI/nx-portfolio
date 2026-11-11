@@ -7,6 +7,7 @@ import {
   MembershipStatus,
   SettlementOutcome,
   UsernamePropagation,
+  type AddLineResult,
   type AssistantTurnRequest,
   type AssistantVoiceRequest,
   type LineSettlementResult,
@@ -85,6 +86,15 @@ class RecordingApi {
   /** Thrown by the next write, to exercise the refusal path. */
   failNextWriteWith: Error | undefined;
 
+  /**
+   * What the next batch answers per item, in place of a created line (plan
+   * 0260): an outcome, or a slot of a core of before that plan, which carries
+   * `merged` alone.
+   */
+  nextBatchAnswer:
+    | Partial<Pick<AddLineResult, 'outcome' | 'merged'>>[]
+    | undefined;
+
   async listZones(caller: ApiCaller): Promise<MyZoneView[]> {
     this.record('listZones', caller, {});
     return this.zones;
@@ -114,12 +124,34 @@ class RecordingApi {
     caller: ApiCaller,
     listId: string,
     items: { content: string; quantity?: number }[]
-  ): Promise<LineView[]> {
+  ): Promise<AddLineResult[]> {
     this.record('addLines', caller, { listId, items });
     this.throwIfArmed();
-    return items.map((item, index) =>
-      line(`line-new-${index}`, listId, item.content, item.quantity ?? 1)
-    );
+    const answers = this.nextBatchAnswer;
+    this.nextBatchAnswer = undefined;
+    // The batch's own shape, one result per item (plan 0040; plan 0260).
+    return items.map((item, index) => {
+      const answer = answers?.[index] ?? {
+        merged: false,
+        outcome: 'CREATED' as const,
+      };
+      const view = line(
+        `line-new-${index}`,
+        listId,
+        item.content,
+        item.quantity ?? 1
+      );
+      return {
+        line: view,
+        merged: answer.merged ?? answer.outcome !== 'CREATED',
+        ...(answer.outcome === undefined
+          ? {}
+          : {
+              outcome: answer.outcome,
+              alreadyOnList: answer.outcome === 'ALREADY_ON_LIST' ? [view] : [],
+            }),
+      } as AddLineResult;
+    });
   }
 
   async addLineQuantity(
@@ -1236,6 +1268,88 @@ describe('AssistantService', () => {
       );
       expect(result).toContain('unchanged');
       expect(result).toContain('4');
+    });
+
+    it('reads what each slot of the batch did, from its outcome (plan 0260, section 5)', async () => {
+      const api = new RecordingApi();
+      api.nextBatchAnswer = [
+        { outcome: 'CREATED' },
+        { outcome: 'RAISED' },
+        { outcome: 'ALREADY_ON_LIST' },
+      ];
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'pan' },
+            { product: 'leche' },
+            { product: 'huevos' },
+          ],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pan, leche y huevos'));
+
+      const items = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        ?.result as { items?: { product: string; action?: string }[] };
+      expect(
+        (items.items ?? []).map((item) => [item.product, item.action])
+      ).toEqual([
+        ['pan', 'added'],
+        ['leche', 'increased'],
+        ['huevos', 'unchanged'],
+      ]);
+    });
+
+    it('reads a slot with no outcome from merged, as a core of before plan 0260 answers', async () => {
+      const api = new RecordingApi();
+      api.nextBatchAnswer = [{ merged: false }, { merged: true }];
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'pan' }, { product: 'leche' }],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pan y leche'));
+
+      const items = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        ?.result as { items?: { product: string; action?: string }[] };
+      expect((items.items ?? []).map((item) => item.action)).toEqual([
+        'added',
+        'increased',
+      ]);
+    });
+
+    it('reports a refused batch as a refusal of the call (plan 0260 R7)', async () => {
+      const api = new RecordingApi();
+      api.failNextWriteWith = new GatewayApiError(
+        409,
+        '"Leche" counts in another unit',
+        'line_unit_differs'
+      );
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'pan' }, { product: 'leche' }],
+        }),
+        FakeModelProvider.says('No pude.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pan y leche'));
+
+      // Nothing was written, so the call refused whole, in the API's words.
+      expect(api.of('addLines')).toHaveLength(1);
+      expect(
+        provider.requests[1].turns.at(-1)?.toolResults?.[0]?.result
+      ).toEqual({
+        ok: false,
+        refused: true,
+        attempted: 'add that to the list',
+        reason: '"Leche" counts in another unit',
+      });
     });
 
     it('reports the items in the order they were said, however they were written', async () => {

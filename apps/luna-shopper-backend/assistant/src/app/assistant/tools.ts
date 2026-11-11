@@ -8,6 +8,7 @@ import {
   ListResolutionBranch,
   SettlementOutcome,
   UsernamePropagation,
+  type AddLineResult,
   type LineUnit,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
@@ -340,18 +341,17 @@ const upsertLines: AssistantTool = {
         // The batch answers in request order, which is what lets a line be put
         // back against the item that asked for it.
         //
-        // It answers whether each item created a line or raised one already on
-        // the list (plan 0091). Everything here was resolved as new against a
-        // read of the list, so a merge means that read was stale or the person
-        // named one thing twice in one sentence, and either way "one more of
-        // those" is the true report and "added" would not be.
-        //
-        // A batch raises only a line of the item's unit and creates one beside
-        // a line of another unit (plan 0246 M5), so a merge is always a raise.
+        // It answers what each item did (plan 0260, section 2). Everything here
+        // was resolved as new against a read of the list, so a line met means
+        // that read was stale or the person named one thing twice in one
+        // sentence. A line already wanted is left as it was, which is what
+        // this tool reports for a line it found itself: `unchanged`. A line at
+        // zero is raised: `increased`. An answer with no `outcome`, from a core
+        // of before that plan during a deploy, is read from `merged`.
         added.forEach((result, position) => {
           runtime.link.list(list);
           results[fresh[position].index] = describeLine(
-            result.merged ? 'increased' : 'added',
+            batchAction(result),
             result.line
           );
         });
@@ -1173,6 +1173,28 @@ function describeLine(
     // find out in the shop.
     awaitingApproval: line.approvalStatus === LineApprovalStatus.PENDING,
   };
+}
+
+/**
+ * What one slot of a batch add did, as the person is told it (plan 0260,
+ * section 5): `CREATED` is `added`, `RAISED` is `increased` and
+ * `ALREADY_ON_LIST` is `unchanged`. A slot with no `outcome`, from a core of
+ * before that plan, is read from `merged`.
+ */
+function batchAction(
+  result: Pick<AddLineResult, 'merged'> &
+    Partial<Pick<AddLineResult, 'outcome'>>
+): 'added' | 'increased' | 'unchanged' {
+  switch (result.outcome) {
+    case 'CREATED':
+      return 'added';
+    case 'RAISED':
+      return 'increased';
+    case 'ALREADY_ON_LIST':
+      return 'unchanged';
+    default:
+      return result.merged ? 'increased' : 'added';
+  }
 }
 
 function itemRefused(
