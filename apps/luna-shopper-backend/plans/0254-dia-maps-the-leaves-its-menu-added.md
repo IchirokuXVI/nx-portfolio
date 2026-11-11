@@ -154,3 +154,7 @@ and, for the record only, `movedLeaves`.
 
   A follow up plan, backend 0268 (PR #967), makes an entry carry every leaf for the curator and
   makes a run name the products that come only from unmapped leaves.
+
+  Correction of 2026-11-11 to the Context: the walk of that day found the reverse of what it
+  says about root L130. The menu names it `Cabello y belleza`, and `category-tree.json` keeps
+  the name `Cabello y perfumería` (see the note on L130 there).
