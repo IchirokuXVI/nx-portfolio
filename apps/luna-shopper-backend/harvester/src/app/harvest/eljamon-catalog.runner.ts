@@ -210,7 +210,11 @@ export class ElJamonCatalogRunner implements CatalogRunner {
     // the walk did not read, because of an abort or the stop of plan 0253.
     // It is reported here, by the rule below, and a walk that dies before
     // this point reports it not at all, which clears nothing.
-    await context.setStage('INGEST', `Recording ${walk.rows.size} product(s)`);
+    await context.setStage(
+      'INGEST',
+      `Finishing the walk: ${walk.rows.size - walk.reported.size} of ` +
+        `${walk.rows.size} product(s) left to record`
+    );
     const observedAt = new Date();
     const failed = new Set(walk.failedProducts.map((product) => product.code));
     const holdsRow = rowsHeld(input);

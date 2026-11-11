@@ -1202,6 +1202,80 @@ describe('ElJamonCatalogRunner', () => {
       expect(ctx.setReport).toHaveBeenCalledTimes(1);
     });
 
+    it('reports a product listed in two categories once, at its first sighting, with the first category', async () => {
+      // 101 and 102 are new, 300 is known, and BEBIDAS lists all three again
+      // after FRESCOS, with one product of its own.
+      const known: Row = {
+        code: '300',
+        description: 'leche entera, 1l',
+        brand: 'PASCUAL',
+        price: '1,09',
+        unit: '1,09 €/Litro',
+      };
+      const fresh: Row = { ...BEBIDAS_PAGE_1[0], code: '301' };
+      const frescos = [...FRESCOS, known];
+      const bebidas = [FRESCOS[0], FRESCOS[1], known, fresh];
+      const twice = (url: URL): Response => {
+        if (url.pathname === '/categorias/frescos/04') {
+          return new Response(listing(frescos, frescos.length, '04'));
+        }
+        if (url.pathname === '/categorias/bebidas/06') {
+          return new Response(
+            url.search === ''
+              ? listing(bebidas, bebidas.length, '06')
+              : listing([], bebidas.length, '06')
+          );
+        }
+        return storefront(url);
+      };
+      const ctx = context();
+      const report = new RecordingRunReport();
+      const at = watch(report, ctx);
+      const runner = new TestRunner(twice);
+
+      await runner.run(
+        ctx,
+        report,
+        { ...input, externalIdsWithoutEan: new Set(['300']) },
+        { ...source, workers: 1 } as SupermarketSource
+      );
+
+      // `watch` fails on a second report of one code: each came once.
+      expect([...at.keys()].sort()).toEqual(['101', '102', '300', '301']);
+      expect(report.products.map((p) => p.externalId).sort()).toEqual([
+        '101',
+        '102',
+        '301',
+      ]);
+      // The known product came from its first listing, in FRESCOS.
+      expect(report.partialProducts.map((p) => p.externalId)).toEqual(['300']);
+      expect(at.get('300')).toEqual(['LIST']);
+      // One page per new product, however often it is listed.
+      const pages = runner.sent
+        .map((sent) => /\/detalle\/.*\/(\d+)$/.exec(sent.url)?.[1])
+        .filter((code): code is string => code !== undefined)
+        .sort();
+      expect(pages).toEqual(['101', '102', '301']);
+      // The second sighting adds no category: 102's page failed, so it keeps
+      // the top level category of its first sighting, FRESCOS, and not BEBIDAS.
+      expect(
+        report.products.find((product) => product.externalId === '102')
+      ).toMatchObject({
+        categoryPath: ['FRESCOS'],
+        extra: { [DETAIL_FAILED_KEY]: true },
+      });
+      // The repeats still count as rows each category read, so the listing
+      // is whole, and it names each product once.
+      expect(report.notWhole).toEqual([]);
+      expect(report.wholeListings).toHaveLength(1);
+      expect([...report.wholeListings[0].listed].sort()).toEqual([
+        '101',
+        '102',
+        '300',
+        '301',
+      ]);
+    });
+
     it('has reported what it read while the pages are still asked, and never a held row whose page it has not read', async () => {
       const controller = new AbortController();
       const ctx = context(controller.signal);

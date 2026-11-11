@@ -176,7 +176,10 @@ export class CarrefourCatalogRunner implements CatalogRunner {
       // --- 3. What only the whole walk can say -----------------------------
       // Every product was reported at its first sighting (plan 0267). The sink
       // writes what is left of the last chunk when the run drains.
-      await context.setStage('INGEST', `Recording ${products.size} product(s)`);
+      await context.setStage(
+        'INGEST',
+        `Finishing the walk: ${products.size} product(s) recorded as they were read`
+      );
       if (!context.signal.aborted) {
         warnUnread(context, unreadable, lost);
       }
