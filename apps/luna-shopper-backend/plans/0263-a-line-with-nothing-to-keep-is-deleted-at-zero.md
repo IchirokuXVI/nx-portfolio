@@ -1,3 +1,5 @@
+> **PR:** [#977](https://github.com/IchirokuXVI/nx-portfolio/pull/977)
+
 # 0263: a line with nothing to keep is deleted at zero
 
 > Written on 2026-11-11 from the owner's decision of that day (section 7 of the batch
