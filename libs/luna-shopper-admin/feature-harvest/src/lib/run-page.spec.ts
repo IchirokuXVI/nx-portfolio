@@ -710,3 +710,173 @@ describe('RunPage, who started it', () => {
     fixture.componentInstance.watch.stop();
   });
 });
+
+/** What a walk did not read, by the runner that says so (admin plan 0071). */
+describe('RunPage, what a walk did not read', () => {
+  function walk(report: Record<string, unknown>): HarvestRun {
+    return run({
+      status: 'COMPLETED',
+      finishedAt: '2026-09-03T09:30:00.000Z',
+      report,
+    });
+  }
+
+  const part = (fixture: ComponentFixture<RunPage>, selector: string) =>
+    fixture.nativeElement.querySelector(selector) as HTMLElement | null;
+
+  /** A part the case expects drawn, so a missing one fails by its selector. */
+  function drawn(fixture: ComponentFixture<RunPage>, selector: string) {
+    const found = part(fixture, selector);
+    if (found === null) {
+      throw new Error(`Nothing drawn at ${selector}`);
+    }
+    return found;
+  }
+
+  it('draws a Carrefour run: the unread, the asked again and the stop', async () => {
+    const fixture = await render(
+      walk({
+        unreadableCategories: ['/supermercado/congelados/cat21449123/c'],
+        askedAgain: [
+          { id: 'cat1', name: 'Lácteos', read: true },
+          { id: 'cat2', name: 'Congelados', read: false },
+        ],
+        blockedAfter: 'HTTP 403 on 4 categories in a row',
+      })
+    );
+
+    expect(part(fixture, '[data-unreadable]')?.textContent).toContain(
+      '/supermercado/congelados/cat21449123/c'
+    );
+    const asked = drawn(fixture, '[data-asked-again]');
+    expect(asked.querySelectorAll('li')[0].textContent).toContain(
+      'harvest.run.report.askedAgainRead'
+    );
+    expect(asked.querySelector('li.lost')?.textContent).toContain(
+      'harvest.run.report.askedAgainLost'
+    );
+    expect(part(fixture, '[data-blocked-after]')?.textContent).toContain(
+      'HTTP 403 on 4 categories in a row'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws a DEZA run: its sections, the unfinished first, and the open queries of a GROWTH one', async () => {
+    const fixture = await render(
+      walk({
+        incompleteSections: [{ code: 'S2', name: 'Bebidas' }],
+        sections: [
+          {
+            code: 'S1',
+            name: 'Droguería',
+            products: 412,
+            queries: 14,
+            stoppedBy: 'GROWTH',
+            openQueries: ['champú', 'gel'],
+          },
+          {
+            code: 'S2',
+            name: 'Bebidas',
+            products: 900,
+            queries: 25,
+            stoppedBy: 'BUDGET',
+            openQueries: [],
+          },
+        ],
+      })
+    );
+
+    const rows = drawn(fixture, '[data-sections]').querySelectorAll('tbody tr');
+    expect(rows[0].textContent).toContain('Bebidas');
+    expect(rows[0].textContent).toContain(
+      'harvest.run.report.stoppedBy.BUDGET'
+    );
+    expect(rows[1].textContent).toContain(
+      'harvest.run.report.stoppedBy.GROWTH'
+    );
+    expect(rows[1].textContent).toContain('champú, gel');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws an El Jamón run: the categories that read short, and the detail sentence', async () => {
+    const fixture = await render(
+      walk({
+        categories: [
+          {
+            code: '01',
+            name: 'DESPENSA',
+            printedCount: 1200,
+            rowsRead: 1188,
+            rowsRepeated: 12,
+          },
+          {
+            code: '02',
+            name: 'BEBIDAS',
+            printedCount: 300,
+            rowsRead: 300,
+            rowsRepeated: 0,
+          },
+        ],
+        detail: { pages: 800, failed: 3, timeouts: 2, silentAttempts: 1 },
+      })
+    );
+
+    const rows = drawn(fixture, '[data-categories]').querySelectorAll(
+      'tbody tr'
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('1188');
+    expect(part(fixture, '[data-detail-stage]')?.textContent).toContain(
+      'harvest.run.report.detail'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the sizes a walk found disproved, the pack count as a guess', async () => {
+    const fixture = await render(
+      walk({
+        sizesDisproved: 2,
+        probablePackCounts: 1,
+        sizesDisprovedExamples: [
+          {
+            entryId: 'entry-1',
+            name: 'Yogur natural',
+            stated: 125,
+            implied: 333.333,
+            unit: 'GRAM',
+            label: '1,20 €/kg',
+          },
+        ],
+      })
+    );
+
+    const sizes = drawn(fixture, '[data-sizes]');
+    expect(sizes.textContent).toContain('harvest.run.report.sizesDisproved');
+    expect(sizes.textContent).toContain(
+      'harvest.run.report.probablePackCounts'
+    );
+    const row = drawn(fixture, '[data-sizes] tbody tr');
+    expect(row.textContent).toContain('Yogur natural');
+    expect(row.textContent).toContain('333.3');
+    expect(row.textContent).toContain('harvest.unit.GRAM');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws none of it for an import', async () => {
+    const fixture = await render(importRun());
+
+    expect(fixture.componentInstance.hasReport()).toBe(false);
+    for (const selector of [
+      '[data-unreadable]',
+      '[data-asked-again]',
+      '[data-blocked-after]',
+      '[data-sections]',
+      '[data-categories]',
+      '[data-detail-stage]',
+      '[data-sizes]',
+    ]) {
+      expect(part(fixture, selector)).toBeNull();
+    }
+    fixture.componentInstance.watch.stop();
+  });
+});
