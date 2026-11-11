@@ -361,6 +361,36 @@ describe('DiscoveredPlaceService.observe, the trusted path (plan 0107)', () => {
     expect(harness.stored[0].supermarketLocationId).toBeFalsy();
   });
 
+  it('leaves a place in the queue on an uncertain address (plan 0265, D5)', async () => {
+    // Two numbers on each side, so the street key meets shop 40 for place 12.
+    // That is a hint, and the run with nobody watching waits on it.
+    const harness = build({
+      locations: [
+        {
+          id: 'loc-seeded',
+          supermarketId: 'chain-lidl',
+          latitude: null,
+          longitude: null,
+          address: 'Avenida 28 de Febrero, 40',
+          postalCode: '14013',
+          externalRef: null,
+          externalProvider: null,
+        } as SupermarketLocationView,
+      ],
+    });
+
+    const result = await harness.service.observe(
+      [observed({ street: 'Avenida 28 de Febrero, 12' })],
+      options()
+    );
+
+    expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+    expect(result.imported).toBe(0);
+    expect(result.blocked).toEqual([]);
+    expect(harness.stored[0].status).toBe(DiscoveredPlaceStatus.NEW);
+    expect(harness.stored[0].supermarketLocationId).toBeFalsy();
+  });
+
   it('imports a place 300 metres from the nearest shop of its chain', async () => {
     // Beyond the hint, so it is another shop and the trusted path creates it.
     const harness = build({

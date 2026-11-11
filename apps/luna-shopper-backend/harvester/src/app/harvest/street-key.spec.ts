@@ -1,4 +1,9 @@
-import { hasHouseNumber, NO_NUMBER, streetKey } from './street-key';
+import {
+  hasHouseNumber,
+  isCertainAddress,
+  NO_NUMBER,
+  streetKey,
+} from './street-key';
 
 /** Plan 0265, section 1: every row of the table that a real address used. */
 describe('streetKey, the abbreviation table', () => {
@@ -85,5 +90,34 @@ describe('hasHouseNumber', () => {
     );
     expect(hasHouseNumber(streetKey('Calle Mayor s/n'))).toBe(false);
     expect(hasHouseNumber(streetKey('Avenida de Libia'))).toBe(false);
+  });
+});
+
+/** Plan 0265, D5: the one rule that decides a key can be trusted. */
+describe('isCertainAddress', () => {
+  it.each([
+    'Calle Mayor 5',
+    'Avda. de Cádiz, 68',
+    'Calle Mayor 7B',
+    'Calle Mayor 7 B',
+    'Calle Mayor 5, bajo',
+    'Avenida de Cádiz, s/n',
+    'Avenida de Cádiz',
+    '',
+  ])('trusts %s', (address) => {
+    expect(isCertainAddress(address)).toBe(true);
+  });
+
+  it.each([
+    'Avenida 28 de Febrero, 12',
+    'Calle 1º de Mayo 3',
+    'Ctra. A-431, km 3',
+    'Ctra. N-340 km 12',
+    'C/ Mayor 5 local 3',
+    'Calle Mayor 5, 14001 Córdoba',
+    '14001 Córdoba, Calle Mayor 5',
+    '5, Calle Mayor',
+  ])('does not trust %s', (address) => {
+    expect(isCertainAddress(address)).toBe(false);
   });
 });

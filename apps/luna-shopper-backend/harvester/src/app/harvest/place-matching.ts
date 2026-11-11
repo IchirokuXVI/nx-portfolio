@@ -6,7 +6,7 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import { distanceMetres } from '@portfolio/luna-shopper/osm-places';
 import { normalizeName } from './matching';
-import { hasHouseNumber, streetKey } from './street-key';
+import { hasHouseNumber, isCertainAddress, streetKey } from './street-key';
 
 /**
  * How near a shop of the same chain has to be to count as the same shop (plan
@@ -131,7 +131,9 @@ export function matchReference(
  * 2. A shop within {@link SAME_SHOP_METRES}. An OSM element changes id when
  *    somebody maps the building, and a seeded shop has no ref at all.
  * 3. A shop with no coordinates on the same street, which is how a seeded shop
- *    looks ({@link matchAddress}).
+ *    looks ({@link matchAddress}). Only when both addresses are certain
+ *    ({@link isCertainAddress}): a pair with an uncertain side is a hint of
+ *    {@link suggestLocations} instead (plan 0265, D5).
  *
  * Pure, so the caller lists the chain's shops once and asks for each place.
  * Nothing here decides: a candidate is shown to a person, never linked.
@@ -157,10 +159,18 @@ export function matchLocations(
   }
 
   const byAddress = matchAddress(place, locations)
-    .filter((location) => !found.has(location.id))
+    .certain.filter((location) => !found.has(location.id))
     .map((l) => toPlaceCandidate(place, l, PlaceMatchRung.ADDRESS));
 
   return [...byRef, ...nearby, ...byAddress];
+}
+
+/** The shops of {@link matchAddress}, split by whether the pair is certain. */
+interface AddressMatches {
+  /** Both addresses are certain: rung 3, a strict candidate. */
+  certain: SupermarketLocationView[];
+  /** One side is uncertain: a hint, which stops no import (plan 0265, D5). */
+  uncertain: SupermarketLocationView[];
 }
 
 /**
@@ -175,22 +185,34 @@ export function matchLocations(
  *   either side never matches. Nor does a street with no house number or with
  *   `s/n`, because one city holds many shops on one avenue.
  * - **Any other place** needs the same trimmed postal code, as it always did.
+ *
+ * A shop found here is strict only when both addresses are certain
+ * ({@link isCertainAddress}). The key cuts at the first number, so an address
+ * with two numbers, or one that starts with a number, can meet another shop of
+ * the same street. Such a pair is answered under `uncertain`.
  */
 function matchAddress(
   place: PlaceMatchSubject,
   locations: readonly SupermarketLocationView[]
-): SupermarketLocationView[] {
+): AddressMatches {
+  const matches: AddressMatches = { certain: [], uncertain: [] };
   const street = streetKey(place.street ?? '');
   const inArea = street ? areaTest(place, street) : null;
   if (!inArea) {
-    return [];
+    return matches;
   }
-  return locations.filter(
-    (location) =>
+  const placeCertain = isCertainAddress(place.street ?? '');
+  for (const location of locations) {
+    if (
       (location.latitude === null || location.longitude === null) &&
       inArea(location) &&
       streetKey(location.address ?? '') === street
-  );
+    ) {
+      const certain = placeCertain && isCertainAddress(location.address ?? '');
+      (certain ? matches.certain : matches.uncertain).push(location);
+    }
+  }
+  return matches;
 }
 
 /** How rung 3 tells a shop in the place's area, or null when none can be. */
@@ -216,13 +238,17 @@ function areaTest(
  * The shops of a chain that a person should look at before deciding a place
  * (plan 0193): what {@link matchLocations} answers, then the shops of the
  * chain farther than {@link SAME_SHOP_METRES} and within
- * {@link NEAR_SHOP_METRES}. Best first: the strict rungs in their order,
- * then the near shops, the nearest first.
+ * {@link NEAR_SHOP_METRES}, then the shops of rung 3 whose pair is uncertain
+ * ({@link isCertainAddress}, plan 0265, D5). Best first: the strict rungs in
+ * their order, then the near shops, the nearest first, then the uncertain
+ * addresses, which have no position.
  *
  * **The fourth rung is a hint and nothing else.** The places list shows it,
  * and a trusted import waits on it, because a person who looks costs nothing.
  * The 409 of a hand import does not read it, and no code path links on a
- * distance.
+ * distance or on an uncertain address. An uncertain address is labelled
+ * `SAME_CHAIN_NEAR` with no metres, the hint shape the back office already
+ * draws as a hint, so the wire does not change.
  *
  * Pure, like the function it extends.
  */
@@ -243,7 +269,13 @@ export function suggestLocations(
       );
     })
     .map((l) => toPlaceCandidate(place, l, PlaceMatchRung.SAME_CHAIN_NEAR));
-  return [...strict, ...near.sort(nearestFirst)];
+  for (const held of near) {
+    found.add(held.supermarketLocationId);
+  }
+  const uncertain = matchAddress(place, locations)
+    .uncertain.filter((location) => !found.has(location.id))
+    .map((l) => toPlaceCandidate(place, l, PlaceMatchRung.SAME_CHAIN_NEAR));
+  return [...strict, ...near.sort(nearestFirst), ...uncertain];
 }
 
 /** Nearest first, and a shop with no position after every shop that has one. */

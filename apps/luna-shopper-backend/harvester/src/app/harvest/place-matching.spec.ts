@@ -430,3 +430,55 @@ describe('matchReference and locationsCarryingRef', () => {
     ]);
   });
 });
+
+/**
+ * An address whose street key cannot be trusted makes no strict match: it is
+ * a hint, the shape of rung 4 (plan 0265, D5).
+ */
+describe('rung 3 for an uncertain address', () => {
+  it.each([
+    ['Avenida 28 de Febrero, 12', 'Avenida 28 de Febrero, 40'],
+    ['Calle 1º de Mayo 3', 'Calle 1º de Mayo 9'],
+    ['Ctra. A-431, km 3', 'Ctra. A-431, km 8'],
+    ['Ctra. N-340 km 12', 'Ctra. N-340 km 45'],
+    ['14001 Córdoba, Calle Mayor 5', '14001 Córdoba, Avenida de Cádiz 68'],
+    ['5, Calle Mayor', '5, Avenida de Cádiz'],
+    ['Calle Mayor 5', 'Calle Mayor 5, 14010 Córdoba'],
+  ])('offers %s against %s as a hint and not a match', (street, address) => {
+    const subject = place({ street });
+    const shops = [seeded('other', { postalCode: '14010', address })];
+
+    expect(matchLocations(subject, shops)).toEqual([]);
+    expect(rungs(suggestLocations(subject, shops))).toEqual([
+      ['other', PlaceMatchRung.SAME_CHAIN_NEAR, null],
+    ]);
+  });
+
+  it('still matches a certain pair on rung 3', () => {
+    const shops = [
+      seeded('same', { postalCode: '14010', address: 'Avda. de Cádiz, 68' }),
+    ];
+
+    expect(rungs(matchLocations(place(), shops))).toEqual([
+      ['same', PlaceMatchRung.ADDRESS, null],
+    ]);
+    expect(rungs(suggestLocations(place(), shops))).toEqual([
+      ['same', PlaceMatchRung.ADDRESS, null],
+    ]);
+  });
+
+  it('lists the uncertain address after the near shops', () => {
+    const found = suggestLocations(place({ street: 'Calle Mayor 5' }), [
+      seeded('uncertain', {
+        postalCode: '14010',
+        address: 'Calle Mayor 5, local 2',
+      }),
+      at('near-70', 70),
+    ]);
+
+    expect(rungs(found)).toEqual([
+      ['near-70', PlaceMatchRung.SAME_CHAIN_NEAR, 70],
+      ['uncertain', PlaceMatchRung.SAME_CHAIN_NEAR, null],
+    ]);
+  });
+});

@@ -154,7 +154,8 @@ where the table says: `c` and `p` as the first word, `n` directly before a numbe
 letter elsewhere can be part of a name.
 
 Extra text after the number (`local 3`, `bajo`, `esquina ...`) is cut at the first number:
-the key keeps the words before it and the number itself.
+the key keeps the words before it and the number itself. An address that holds a second number,
+or whose first word is a number, is uncertain, and on rung 3 it is a hint only (D5).
 
 ## 2. The detection query
 
@@ -244,3 +245,12 @@ places that production holds today. The detection query of section 2 is that ana
 builder of this plan runs it read only on a slot and on the data of production, and quotes the
 counts. The merge and its release task are a plan of their own, written after those numbers.
 That plan is out of scope here.
+
+**D5 (owner, answered 2026-11-11):** no more reading rules go into the street key. The more
+rules a name gets, the more finicky it is, and it must stay easy to understand and adapt. A
+key can still meet two shops of one street: `Avenida 28 de Febrero, 12` and `, 40`, or two
+kilometre points of one road. Such a place is flagged for a person. An address is uncertain when
+it holds more than one number, or when its first word is a number. A pair with an uncertain side
+is not a strict match on rung 3. `matchLocations`, and so the 409 of a hand import, does not
+return it. `suggestLocations` returns it as a hint, in the shape of rung 4, so an auto import
+waits and nothing links.

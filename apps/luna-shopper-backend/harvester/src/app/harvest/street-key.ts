@@ -90,6 +90,22 @@ export function streetKey(value: string): string {
 }
 
 /**
+ * Whether the {@link streetKey} of an address can be trusted for a strict
+ * match on rung 3 (plan 0265, D5).
+ *
+ * **One rule, and no reading of the name.** An address is uncertain when it
+ * holds more than one number, or when its first word is a number. The key cuts
+ * at the first number, so `Avenida 28 de Febrero, 12` and `Ctra. A-431, km 3`
+ * keep a number that is not the house, and `14001 Córdoba, Calle Mayor 5`
+ * keeps the postal code. An uncertain address is still compared, and a shop it
+ * meets is offered to a person as a hint and never stops an import.
+ */
+export function isCertainAddress(value: string): boolean {
+  const tokens = normalizeName(value).split(' ').filter(Boolean);
+  return !isNumber(tokens[0]) && tokens.filter(isNumber).length <= 1;
+}
+
+/**
  * Whether a {@link streetKey} ends on a house number that tells one shop of
  * the street from another: a number, and neither `s/n` nor none at all.
  */

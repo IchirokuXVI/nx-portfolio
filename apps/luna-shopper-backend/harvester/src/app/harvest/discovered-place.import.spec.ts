@@ -762,6 +762,33 @@ describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', 
     expect(harness.catalog.createLocation).not.toHaveBeenCalled();
   });
 
+  it('imports past a shop whose address is uncertain (plan 0265, D5)', async () => {
+    // The key cuts at the first number, so both read `avenida 28`. Two
+    // numbers make the pair uncertain: a hint, which stops no hand import.
+    const harness = build({
+      known: [LIDL],
+      locations: [
+        shop({
+          latitude: null,
+          longitude: null,
+          address: 'Avenida 28 de Febrero, 40',
+        }),
+      ],
+    });
+    harness.add(
+      place({
+        id: 'p1',
+        street: 'Avenida 28 de Febrero, 12',
+        postalCode: '14013',
+      })
+    );
+
+    const view = await harness.service.import({ userId: ADMIN, placeId: 'p1' });
+
+    expect(harness.catalog.createLocation).toHaveBeenCalled();
+    expect(view.status).toBe(DiscoveredPlaceStatus.IMPORTED);
+  });
+
   it('does not match an address in another postal code', async () => {
     const harness = build({
       known: [LIDL],
