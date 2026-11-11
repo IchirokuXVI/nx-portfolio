@@ -289,6 +289,55 @@ describe('approxWeightOf (plan 0266, D4)', () => {
     expect(approxWeightOf('2 m aprox')).toBeNull();
   });
 
+  describe('a multipack printed with aprox', () => {
+    const description = 'Salchichón extra ALTEZA 2x100 g aprox.';
+
+    it('splits the whole multipack off the name, aprox included', () => {
+      expect(splitSize(description)).toEqual({
+        name: 'Salchichón extra ALTEZA',
+        sizeFormat: '2x100 g aprox.',
+      });
+    });
+
+    it('states no weight, never the total as the weight of one piece', () => {
+      for (const sizeFormat of [
+        '2x100 g aprox',
+        '2x100 g aprox.',
+        '3 x 1,5 kg aprox/',
+      ]) {
+        expect(approxWeightOf(sizeFormat)).toBeNull();
+      }
+    });
+
+    it('states no fixed size for the total either', () => {
+      expect(sizeOf('2x100 g aprox.')).toEqual({
+        unitSize: null,
+        sizeUnit: null,
+      });
+      expect(sizeOf('3 x 1,5 kg aprox/')).toEqual({
+        unitSize: null,
+        sizeUnit: null,
+      });
+    });
+
+    it('still reads the pack count the way the NxQ rule does', () => {
+      expect(packCountIn(description)).toBe(2);
+    });
+
+    it('reads a count of one as one piece', () => {
+      expect(approxWeightOf('1x500 g aprox')).toBe(500);
+      expect(sizeOf('1x500 g aprox')).toEqual({
+        unitSize: null,
+        sizeUnit: null,
+      });
+    });
+
+    it('leaves a multipack without aprox a fixed size of the whole pack', () => {
+      expect(approxWeightOf('2x100 g.')).toBeNull();
+      expect(sizeOf('2x100 g.')).toEqual({ unitSize: 200, sizeUnit: 'GRAM' });
+    });
+  });
+
   it('splits the aprox off the name and states the weight, not a size', () => {
     const { name, sizeFormat } = splitSize(
       'Jamón Gran Reserva Duroc DEL VALLE +21 meses 8 kg aprox.'

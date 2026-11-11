@@ -170,3 +170,25 @@ approximate weight with no `unitSize`, as for a product bought by weight, whose 
 is known only once it is bought. The field is the `approxWeight` of plan `0244`, in the shape
 the DIA and LIDL rows use (sections 5.2 and 5.3), which lifts DEZA out of its section 5.4. A
 size that ends only with a full stop (`1 L.`) stays a fixed size. DEZA still writes no price.
+
+The kind of a product made from such a row (owner, decided 2026-11-11): the default stays. A
+row that states an approximate weight and no size becomes a piece priced as one (`UNIT`) with
+the weight attached, as a LIDL row does (plan `0244` section 5.6), and the curator corrects
+the ones that are kilo pieces. The known risk: DEZA prints no price, so the harvester cannot
+tell a kilo piece from a piece priced as one. If a leaflet later offers that product per kilo
+and its row binds to the `UNIT` product, the price per kilo is read as the price of the whole
+piece, until a curator changes the kind.
+
+A multipack printed with `aprox` (`2x100 g aprox`) states no weight and no size. The weight of
+plan `0244` is the weight of one piece, and the row has no field that says a weight is of one
+piece out of a pack: beside a pack count, `unitSize` is the whole pack. The row keeps its
+`sizeFormat` verbatim and its `packCount` (2) by the `NxQ` rule of plan `0183`, and the
+curator states the weight. A count of one (`1x500 g aprox`) is one piece of 500 g.
+
+This decision supersedes two places of plan `0244` for DEZA, and El Jamón is not touched:
+
+- Section 5.4, second bullet: "nothing is written" for a DEZA name that prints `750 g aprox.`.
+  The row now states `approxWeight` and no `unitSize`, as above.
+- Section 8, the bullet "A weight printed inside a name is not read", where it says that
+  DEZA's "750 g aprox." stays in the name. The `aprox` ending is now split off the name with
+  its size and read as an approximate weight. The bullet still holds for El Jamón.

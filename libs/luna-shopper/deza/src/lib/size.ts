@@ -182,9 +182,11 @@ const STATED_SIZE = new RegExp(
  *
  * A weight printed with `aprox`, `8 kg aprox.`, is not a fixed size either
  * (plan 0266, D4): it answers no size, and {@link approxWeightOf} states it.
+ * That holds for a multipack too, `2x100 g aprox`: it is no fixed size of
+ * 200 g, whatever {@link approxWeightOf} answers for it.
  */
 export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
-  return approxWeightOf(sizeFormat) === null
+  return approximateWeight(sizeFormat) === null
     ? statedSize(sizeFormat)
     : { unitSize: null, sizeUnit: null };
 }
@@ -211,19 +213,39 @@ const GRAMS_IN: Partial<Record<SourceSizeUnit, number>> = {
  * included (`1 L.`). An approximate format that is not a weight answers null
  * too and keeps its size, as DIA's and LIDL's do, because the weight is in
  * grams and nothing else.
+ *
+ * A multipack, `2x100 g aprox`, answers null as well, and {@link sizeOf}
+ * answers no size for it. The weight is of one piece, and the row has no field
+ * that says a weight is of one piece out of the `N` that {@link packCountIn}
+ * reads: `unitSize` beside a pack count is the whole pack. Stating 100 would
+ * be read as the weight of the pack, and stating 200 as the weight of one
+ * piece. So the row states the count and leaves the weight to the curator.
  */
 export function approxWeightOf(
   sizeFormat: string | null | undefined
 ): number | null {
-  if (!APPROXIMATE.test((sizeFormat ?? '').trim())) {
+  const weight = approximateWeight(sizeFormat);
+  return weight === null || weight.count !== 1 ? null : weight.grams;
+}
+
+/**
+ * The grams and the count of a weight printed with `aprox`, or null for any
+ * other format. `grams` is the whole of what the format states, every piece.
+ */
+function approximateWeight(
+  sizeFormat: string | null | undefined
+): { grams: number; count: number } | null {
+  const trimmed = (sizeFormat ?? '').trim();
+  if (!APPROXIMATE.test(trimmed)) {
     return null;
   }
-  const { unitSize, sizeUnit } = statedSize(sizeFormat);
+  const { unitSize, sizeUnit } = statedSize(trimmed);
   const grams = sizeUnit === null ? undefined : GRAMS_IN[sizeUnit];
   if (unitSize === null || grams === undefined) {
     return null;
   }
-  return Math.round(unitSize * grams * 10_000) / 10_000;
+  const count = Number(STATED_SIZE.exec(trimmed)?.[1] ?? 1);
+  return { grams: Math.round(unitSize * grams * 10_000) / 10_000, count };
 }
 
 /** The size a format states, before an approximate weight is taken out. */
