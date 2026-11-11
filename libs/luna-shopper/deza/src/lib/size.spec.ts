@@ -81,6 +81,51 @@ const TABLE: Array<[string, string, string | null]> = [
   ['Porta embutido TATAY fresh', 'Porta embutido TATAY fresh', null],
 ];
 
+/**
+ * Real descriptions from the walk of 2026-11-06 on Luna slot 4 that kept their
+ * size in the name (plan 0266, step 1), with the two the plan names. The tail
+ * after the unit word stays in the size verbatim, the stop included.
+ */
+const TAIL_TABLE: Array<[string, string, string]> = [
+  ['Leche entera 1 L.', 'Leche entera', '1 L.'],
+  ['Queso curado 250 g aprox', 'Queso curado', '250 g aprox'],
+  ['Fuet extra ALTEZA 180 g aprox.', 'Fuet extra ALTEZA', '180 g aprox.'],
+  [
+    'Jamón Gran Reserva Duroc DEL VALLE +21 meses 8 kg aprox.',
+    'Jamón Gran Reserva Duroc DEL VALLE +21 meses',
+    '8 kg aprox.',
+  ],
+  [
+    'Chorizo de bellota ibérico ESENCIA ÚNICA Covap 170 g aprox/',
+    'Chorizo de bellota ibérico ESENCIA ÚNICA Covap',
+    '170 g aprox/',
+  ],
+  ['ZANAHORIA BANDEJA 500 G. APROX.', 'ZANAHORIA BANDEJA', '500 G. APROX.'],
+  [
+    'Velas perfumadas AROMATIUM Fragances chai latte 2x100 g.',
+    'Velas perfumadas AROMATIUM Fragances chai latte',
+    '2x100 g.',
+  ],
+  ['Banda FELIZ CUMPLEAÑOS 1.60 m.', 'Banda FELIZ CUMPLEAÑOS', '1.60 m.'],
+];
+
+/** Units the walk of 2026-11-06 printed outside the list (plan 0266). */
+const ADDED_UNIT_TABLE: Array<[string, string, string, number]> = [
+  [
+    'Huevos clase M >53/<63 g ALTEZA gallinas sueltas gallinero 12 u',
+    'Huevos clase M >53/<63 g ALTEZA gallinas sueltas gallinero',
+    '12 u',
+    12,
+  ],
+  ['Bastones planta verde MASSÓ 25u', 'Bastones planta verde MASSÓ', '25u', 25],
+  [
+    'Rollo de cocina multiusos SELEX jumbo 138 m 600 servicios',
+    'Rollo de cocina multiusos SELEX jumbo 138 m',
+    '600 servicios',
+    600,
+  ],
+];
+
 describe('splitSize', () => {
   it.each(TABLE)('splits %s', (description, name, sizeFormat) => {
     expect(splitSize(description)).toEqual({ name, sizeFormat });
@@ -103,6 +148,66 @@ describe('splitSize', () => {
     expect(splitSize('Leche ALTEZA 1 Kg')).toEqual({
       name: 'Leche ALTEZA',
       sizeFormat: '1 Kg',
+    });
+  });
+
+  describe('a full stop or aprox after the unit (plan 0266)', () => {
+    it.each(TAIL_TABLE)('splits %s', (description, name, sizeFormat) => {
+      expect(splitSize(description)).toEqual({ name, sizeFormat });
+    });
+
+    it('still leaves a size in the middle of a name alone (D2)', () => {
+      expect(splitSize('Hermético azul TATAY 0.5 l ovalado')).toEqual({
+        name: 'Hermético azul TATAY 0.5 l ovalado',
+        sizeFormat: null,
+      });
+      expect(
+        splitSize('Jamón Gran Reserva Duroc SIERRA MORENA 77.5 kg +16 meses')
+      ).toEqual({
+        name: 'Jamón Gran Reserva Duroc SIERRA MORENA 77.5 kg +16 meses',
+        sizeFormat: null,
+      });
+      expect(splitSize('Pegatinas navidad G 3D 17 pzas aprox')).toEqual({
+        name: 'Pegatinas navidad G 3D 17 pzas aprox',
+        sizeFormat: null,
+      });
+    });
+
+    it('does not take a stop after a word outside the list', () => {
+      expect(
+        splitSize('Calcetín invisible PIERRE CARDIN sra t/3541 3 p.')
+      ).toEqual({
+        name: 'Calcetín invisible PIERRE CARDIN sra t/3541 3 p.',
+        sizeFormat: null,
+      });
+    });
+
+    it('keeps a description that is nothing but a size and its tail', () => {
+      expect(splitSize('500 g aprox.')).toEqual({
+        name: '500 g aprox.',
+        sizeFormat: null,
+      });
+    });
+  });
+
+  describe('the units plan 0266 adds', () => {
+    it.each(ADDED_UNIT_TABLE)(
+      'splits %s',
+      (description, name, sizeFormat, unitSize) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(sizeOf(sizeFormat)).toEqual({ unitSize, sizeUnit: 'UNIT' });
+      }
+    );
+
+    it('still refuses the words that state no amount of the product', () => {
+      for (const description of [
+        'Pila botón JUPITER lr44 1.5 v',
+        'Gafas sol HELLO SUNSHINE señora 18GA',
+        'Calcetines caballero GLOKO trabajo 3 pares',
+        'Manzanilla ALTEZA 25 bolsitas',
+      ]) {
+        expect(splitSize(description).sizeFormat).toBeNull();
+      }
     });
   });
 });
@@ -141,6 +246,26 @@ describe('sizeOf (plan 0177)', () => {
   it('states no size for a length, which the catalog has no unit for', () => {
     expect(sizeOf('30 m')).toEqual({ unitSize: null, sizeUnit: null });
     expect(sizeOf('125x157 cm')).toEqual({ unitSize: null, sizeUnit: null });
+  });
+
+  it('reads a size through its full stop and its aprox (plan 0266)', () => {
+    expect(sizeOf('1 L.')).toEqual({ unitSize: 1, sizeUnit: 'LITER' });
+    expect(sizeOf('250 g aprox')).toEqual({ unitSize: 250, sizeUnit: 'GRAM' });
+    expect(sizeOf('8 kg aprox.')).toEqual({
+      unitSize: 8,
+      sizeUnit: 'KILOGRAM',
+    });
+    expect(sizeOf('170 g aprox/')).toEqual({
+      unitSize: 170,
+      sizeUnit: 'GRAM',
+    });
+    expect(sizeOf('500 G. APROX.')).toEqual({
+      unitSize: 500,
+      sizeUnit: 'GRAM',
+    });
+    expect(sizeOf('2x100 g.')).toEqual({ unitSize: 200, sizeUnit: 'GRAM' });
+    // A length with a stop is still a length.
+    expect(sizeOf('1.60 m.')).toEqual({ unitSize: null, sizeUnit: null });
   });
 
   it('states no size where the row states none', () => {
@@ -189,6 +314,12 @@ describe('packCountIn (plan 0162, section 1)', () => {
     expect(packCountIn('Zumo ALTEZA 1x200 ml')).toBeNull();
     expect(packCountIn('Palillos ALTEZA 1500x1 ud')).toBeNull();
     expect(packCountIn('Zumo ALTEZA pack de 2 3x200 ml')).toBeNull();
+  });
+
+  it('reads the N of a trailing NxQ with a full stop (plan 0266)', () => {
+    expect(
+      packCountIn('Velas perfumadas AROMATIUM Fragances chai latte 2x100 g.')
+    ).toBe(2);
   });
 
   it('reads nothing into a pack phrase in the middle of a name', () => {

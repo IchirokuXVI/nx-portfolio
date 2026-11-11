@@ -34,7 +34,11 @@ import {
  * answer: a missing size is a weaker key, an invented one is a wrong key.
  *
  * Every entry here was seen in the listing on 2026-09-04 or is the obvious
- * spelling variant of one that was.
+ * spelling variant of one that was. `u` and `servicios` were added by plan
+ * 0266, from the names of the walk of 2026-11-06 that kept their size: `12 u`
+ * of eggs, `16 u` of capsules, `300 servicios` of kitchen roll. Both already
+ * name a count in the catalog's table of printed units, so the split states a
+ * size and not only a printed text.
  */
 export const DEZA_SIZE_UNITS: readonly string[] = [
   // Volume
@@ -57,6 +61,7 @@ export const DEZA_SIZE_UNITS: readonly string[] = [
   'kilos',
   'mg',
   // Count
+  'u',
   'ud',
   'uds',
   'unid',
@@ -83,6 +88,7 @@ export const DEZA_SIZE_UNITS: readonly string[] = [
   'hojas',
   'platos',
   'raciones',
+  'servicios',
 ];
 
 const UNIT_SET = new Set(DEZA_SIZE_UNITS);
@@ -95,9 +101,22 @@ const UNIT_SET = new Set(DEZA_SIZE_UNITS);
  */
 const QUANTITY = String.raw`\d+(?:[.,]\d+)?(?:\s*[x+]\s*\d+(?:[.,]\d+)?)*`;
 
-/** A quantity, optional space, then one word, anchored at the end. */
+/**
+ * What the chain may print after the unit word of a size (plan 0266): a full
+ * stop, `1 L.`, and the word `aprox`, `250 g aprox`, with its own stop or the
+ * slash the chain leaves on it, `170 g aprox/`. `aprox` is the chain saying
+ * the weight varies, so it belongs with the size it qualifies and not on the
+ * end of a product name, which is how the Carrefour reader keeps it too.
+ */
+const SIZE_TAIL = String.raw`\.?(?:\s+[Aa][Pp][Rr][Oo][Xx][./]?)?`;
+
+/**
+ * A quantity, optional space, one word and its tail, anchored at the end.
+ *
+ * The tail is part of the printed size, so `sizeFormat` keeps it verbatim.
+ */
 const TRAILING_SIZE = new RegExp(
-  String.raw`(^|\s)(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10})\s*$`
+  String.raw`(^|\s)(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10})${SIZE_TAIL}\s*$`
 );
 
 export interface SplitDescription {
@@ -137,9 +156,14 @@ export function splitSize(description: string): SplitDescription {
   return { name, sizeFormat: trimmed.slice(start).trim() };
 }
 
-/** `75 cl`, `1.5 L`, `3x187 ml`: one optional count, one number, one word. */
-const STATED_SIZE =
-  /^(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*([A-Za-zÀ-ſ]{1,10})$/i;
+/**
+ * `75 cl`, `1.5 L`, `3x187 ml`, `400 g aprox.`: one optional count, one
+ * number, one word and its tail.
+ */
+const STATED_SIZE = new RegExp(
+  String.raw`^(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*([A-Za-zÀ-ſ]{1,10})${SIZE_TAIL}$`,
+  'i'
+);
 
 /**
  * The number a trailing size states and the catalog unit it is in (plan 0177).
@@ -169,8 +193,10 @@ export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
 }
 
 /** One count times one quantity and a unit, `3x187 ml`, and nothing else. */
-const COUNT_TIMES_QUANTITY =
-  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ſ]{1,10})$/i;
+const COUNT_TIMES_QUANTITY = new RegExp(
+  String.raw`^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ſ]{1,10})${SIZE_TAIL}$`,
+  'i'
+);
 
 /**
  * The `N` of a trailing `NxQ`, when `Q` measures what is inside (plan 0183).
