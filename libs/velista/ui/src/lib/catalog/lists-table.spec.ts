@@ -25,6 +25,7 @@ function held(overrides: Partial<HoldingRow> = {}): HoldingRow {
     lineId: 'line-coffee',
     name: 'Ground coffee',
     quantity: 2,
+    unit: 'UNIT',
     editable: true,
     pending: false,
     ...overrides,
@@ -142,6 +143,16 @@ function amountOf(within: HTMLElement): string | null | undefined {
 /** Whether a stepper button is at an end or off: drawn, focusable, and deaf. */
 function off(button: HTMLButtonElement | undefined): boolean {
   return button?.getAttribute('aria-disabled') === 'true';
+}
+
+/** The stepper of a list's own row, to emit what a hold would. */
+function stepperOf(
+  fixture: ComponentFixture<ListsTable>,
+  listId: string
+): QuantityStepper {
+  return fixture.debugElement.query(
+    By.css(`li.list[data-list="${listId}"] .row lib-quantity-stepper`)
+  ).componentInstance as QuantityStepper;
 }
 
 /** The accessible name of the first stepper within. */
@@ -263,10 +274,33 @@ describe('ListsTable', () => {
       expect(off(steps(stepper)[1])).toBe(false);
     });
 
-    it('starts at zero on a list that holds the product under another name only', async () => {
+    it('is not drawn on a list that holds the product under another name only (decision B)', async () => {
       const fixture = await render();
 
-      expect(amountOf(rowOf(fixture, 'l3'))).toBe('0');
+      // Its line has a row of its own, with a stepper that works.
+      expect(
+        rowOf(fixture, 'l3').querySelector('lib-quantity-stepper')
+      ).toBeNull();
+      expect(amountOf(otherOf(fixture, 'line-machine'))).toBe('1');
+      expect(steps(otherOf(fixture, 'line-machine')).map(off)).toEqual([
+        false,
+        false,
+      ]);
+    });
+
+    it('is not drawn either where the only line of the product is stocked at zero', async () => {
+      const fixture = await render(
+        only(
+          list('l1', 'Weekly shop', {
+            others: [held({ lineId: 'line-zero', quantity: 0 })],
+          })
+        )
+      );
+
+      expect(
+        rowOf(fixture, 'l1').querySelector('lib-quantity-stepper')
+      ).toBeNull();
+      expect(amountOf(otherOf(fixture, 'line-zero'))).toBe('0');
     });
 
     it('says its amount is of the product on its list', async () => {
@@ -277,19 +311,42 @@ describe('ListsTable', () => {
         expect.arrayContaining([
           { name: 'Café molido', list: 'Weekly shop' },
           { name: 'Café molido', list: 'Barbecue' },
-          { name: 'Café molido', list: 'Office' },
         ])
       );
+      expect(valuesOf('amount.inList')).not.toContainEqual({
+        name: 'Café molido',
+        list: 'Office',
+      });
     });
 
-    it('is the row stepper, with no tint while the list holds some', async () => {
+    it('is the row stepper, with no tint on any row', async () => {
       const fixture = await render();
 
-      for (const id of ['l1', 'l2']) {
-        const one = rowOf(fixture, id).querySelector('lib-quantity-stepper');
-        expect(one?.classList.contains('variant-row')).toBe(true);
-        expect(one?.classList.contains('is-accent')).toBe(false);
+      const all = host(fixture).querySelectorAll('lib-quantity-stepper');
+      expect(all.length).toBeGreaterThan(0);
+      for (const one of all) {
+        expect(one.classList.contains('variant-row')).toBe(true);
+        expect(one.classList.contains('is-accent')).toBe(false);
+        expect(one.classList.contains('is-took')).toBe(false);
       }
+    });
+
+    it('draws a weight as its amount over its unit: "750" over "g"', async () => {
+      const fixture = await render(
+        only(
+          list('l1', 'Weekly shop', {
+            main: held({ quantity: 750, unit: 'GRAM' }),
+          })
+        )
+      );
+
+      const figure = rowOf(fixture, 'l1').querySelector('lib-amount-figure');
+      expect(figure?.querySelector('.number')?.textContent).toBe('750');
+      expect(figure?.querySelector('.symbol')?.textContent).toBe('g');
+      // The number comes first, and the symbol is drawn under it.
+      expect(figure?.firstElementChild?.classList.contains('number')).toBe(
+        true
+      );
     });
 
     it('makes the line on a plus from zero: an add, with the list', async () => {
@@ -302,29 +359,67 @@ describe('ListsTable', () => {
       expect(heard.lineStepped).toEqual([]);
     });
 
-    it('goes through an add on a plus too when the line is there, where the person may add', async () => {
+    it('steps the line on a plus when the line is there, never an add (U5)', async () => {
       const fixture = await render();
       const heard = record(fixture);
 
       steps(rowOf(fixture, 'l1'))[1]?.click();
 
-      // The server puts one more on the line of that name, and an add asks for
-      // less than a change of quantity does.
-      expect(heard.added).toEqual(['l1']);
-      expect(heard.lineStepped).toEqual([]);
+      expect(heard.lineStepped).toEqual([
+        {
+          listId: 'l1',
+          lineId: 'line-coffee',
+          step: { from: 2, to: 3, repeat: false },
+        },
+      ]);
+      expect(heard.added).toEqual([]);
     });
 
-    it('adds once per press: a repeat of a held plus sends no add', async () => {
+    it('steps a weight line by one step, as the list page does', async () => {
+      const fixture = await render(
+        only(
+          list('l1', 'Weekly shop', {
+            main: held({ lineId: 'line-milk', quantity: 2000, unit: 'MILLILITER' }),
+          })
+        )
+      );
+      const heard = record(fixture);
+
+      steps(rowOf(fixture, 'l1'))[1]?.click();
+
+      expect(heard.lineStepped).toEqual([
+        {
+          listId: 'l1',
+          lineId: 'line-milk',
+          step: { from: 2000, to: 2025, repeat: false },
+        },
+      ]);
+      expect(heard.added).toEqual([]);
+    });
+
+    it('passes every repeat of a held plus on to the line', async () => {
       const fixture = await render();
       const heard = record(fixture);
-      const stepper = fixture.debugElement.query(
-        By.css('.row lib-quantity-stepper')
-      ).componentInstance as QuantityStepper;
 
-      stepper.stepped.emit({ from: 2, to: 3, repeat: true });
-      stepper.stepped.emit({ from: 3, to: 4, repeat: true });
+      stepperOf(fixture, 'l1').stepped.emit({ from: 2, to: 3, repeat: true });
+      stepperOf(fixture, 'l1').stepped.emit({ from: 3, to: 4, repeat: true });
 
+      expect(heard.lineStepped.map((one) => one.step)).toEqual([
+        { from: 2, to: 3, repeat: true },
+        { from: 3, to: 4, repeat: true },
+      ]);
       expect(heard.added).toEqual([]);
+    });
+
+    it('adds once per press from zero: a repeat of a held plus sends no add', async () => {
+      const fixture = await render();
+      const heard = record(fixture);
+
+      stepperOf(fixture, 'l2').stepped.emit({ from: 0, to: 1, repeat: false });
+      stepperOf(fixture, 'l2').stepped.emit({ from: 1, to: 2, repeat: true });
+      stepperOf(fixture, 'l2').stepped.emit({ from: 2, to: 3, repeat: true });
+
+      expect(heard.added).toEqual(['l2']);
       expect(heard.lineStepped).toEqual([]);
     });
 
@@ -362,21 +457,26 @@ describe('ListsTable', () => {
       ]);
     });
 
-    it('gives a plus and no minus to a person who may add and may not change the quantity', async () => {
+    it('draws the amount and no buttons for a person who may add and may not change the quantity (decision C)', async () => {
       const fixture = await render(
-        only(list('l1', 'Weekly shop', { main: held({ editable: false }) }))
+        only(
+          list('l1', 'Weekly shop', { main: held({ editable: false }) }),
+          BARBECUE
+        )
       );
-      const heard = record(fixture);
 
-      const stepper = rowOf(fixture, 'l1');
-      expect(off(steps(stepper)[0])).toBe(true);
-      expect(off(steps(stepper)[1])).toBe(false);
-
-      steps(stepper)[0]?.click();
-      steps(stepper)[1]?.click();
-
-      expect(heard.added).toEqual(['l1']);
-      expect(heard.lineStepped).toEqual([]);
+      const row = rowOf(fixture, 'l1');
+      expect(
+        row
+          .querySelector('lib-quantity-stepper')
+          ?.classList.contains('is-readonly')
+      ).toBe(true);
+      expect(amountOf(row)).toBe('2');
+      expect(steps(row)).toEqual([]);
+      // And no switched off plus, and no words in its place.
+      expect(row.querySelector('.sub')).toBeNull();
+      // A list that does not hold it keeps its add control.
+      expect(steps(rowOf(fixture, 'l2'))).toHaveLength(2);
     });
 
     it('moves the line both ways for a person who may change it and may not add', async () => {
@@ -461,10 +561,10 @@ describe('ListsTable', () => {
         'catalog.inLists.other'
       );
       expect(amountOf(row)).toBe('1');
-      // Beside the list's own stepper, which stays at zero.
+      // The list draws no stepper of its own beside it (decision B).
       expect(
         listOf(fixture, 'l3').querySelectorAll('lib-quantity-stepper')
-      ).toHaveLength(2);
+      ).toHaveLength(1);
     });
 
     it('draws no such row on a list with none', async () => {

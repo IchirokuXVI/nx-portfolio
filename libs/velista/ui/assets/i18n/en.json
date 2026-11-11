@@ -579,7 +579,14 @@
     },
     "similar": {
       "title": "Similar products",
-      "failed": "Similar products did not load."
+      "failed": "Similar products did not load.",
+      "aboutLabel": "How these are sorted",
+      "about": {
+        "title": "How these are sorted",
+        "order": "Similar products are sorted by price per kilo or litre, so a big pack and a small one are compared fairly.",
+        "line": "On a list, the product marked cheapest is the one that costs least for the amount you asked for. For 300 g, a small pack can cost less than a big pack that is cheaper per kilo.",
+        "close": "Close"
+      }
     },
     "categories": {
       "title": "Categories",

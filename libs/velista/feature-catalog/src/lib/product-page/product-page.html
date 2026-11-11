@@ -198,6 +198,18 @@
             <div class="similar-head">
               <h2 class="heading" id="product-similar-title">
                 {{ 'catalog.similar.title' | rokuT }}
+                <!--
+                  Why this order and a list's cheapest mark can differ (velista
+                  0187, U6), drawn as the line page draws its info button.
+                -->
+                <button
+                  (click)="openOrderInfo()"
+                  [attr.aria-label]="'catalog.similar.aboutLabel' | rokuT"
+                  class="info"
+                  type="button"
+                >
+                  <lib-info-icon />
+                </button>
               </h2>
               <!--
                 Which list the plus below adds to. The same sheet as the catalog's

@@ -19,6 +19,12 @@ export const CATALOG_PATHS = {
    * adds to. Over the tab and over a product's page.
    */
   addListSheet: 'add-list',
+  /**
+   * `catalog/products/:itemId/sheet/about-order`: the sheet that says why Similar
+   * products are sorted per kilo or litre while a list marks the cheapest by its
+   * amount (velista `0187`, U6). Over a product's page only.
+   */
+  orderInfoSheet: 'about-order',
   /** `catalog/sheet/added`: the sheet of what this visit added. Over the tab. */
   addedSheet: 'added',
   /**

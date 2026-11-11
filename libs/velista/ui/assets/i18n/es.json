@@ -579,7 +579,14 @@
     },
     "similar": {
       "title": "Productos similares",
-      "failed": "No se han podido cargar los productos similares."
+      "failed": "No se han podido cargar los productos similares.",
+      "aboutLabel": "Cómo se ordenan",
+      "about": {
+        "title": "Cómo se ordenan",
+        "order": "Los productos similares se ordenan por precio por kilo o litro, para comparar bien un paquete grande con uno pequeño.",
+        "line": "En una lista, el producto marcado como el más barato es el que menos cuesta para la cantidad que pides. Para 300 g, un paquete pequeño puede costar menos que uno grande que sale más barato por kilo.",
+        "close": "Cerrar"
+      }
     },
     "categories": {
       "title": "Categorías",

@@ -61,6 +61,7 @@ import {
 import {
   AddingBar,
   ChevronRightIcon,
+  InfoIcon,
   ListsTable,
   PageHeader,
   PriceHistory,
@@ -127,7 +128,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * The other products of its group, each with the plus of the catalog's rows. The
  * heading says which list the plus adds to and opens the same sheet of lists as
  * the catalog: the choice is one value for both pages. A press on a row opens
- * that product's page.
+ * that product's page. An info button on the heading opens a sheet that says
+ * why they are sorted per kilo or litre while a list marks as cheapest what
+ * costs least for its amount (velista `0187`, U6).
  *
  * ## Back never leaves the app
  *
@@ -140,6 +143,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   imports: [
     AddingBar,
     ChevronRightIcon,
+    InfoIcon,
     ListsTable,
     PageHeader,
     PriceHistory,
@@ -460,7 +464,10 @@ export class ProductPage {
     );
   }
 
-  /** The plus of a list in the table: one of this product on that list. */
+  /**
+   * The plus of a list in the table that holds no line of this product: one of
+   * it on that list. A list that holds it steps that line (velista `0187`).
+   */
   protected addToList(listId: string): void {
     this.addFailed.set(false);
     void this._adds.add(
@@ -476,7 +483,7 @@ export class ProductPage {
     );
   }
 
-  /** A press on the stepper of a line in the table. */
+  /** A press on the stepper of a line in the table, a plus as much as a minus. */
   protected stepListLine(step: ListsTableStep): void {
     this.addFailed.set(false);
     this._adds.step(
@@ -513,6 +520,14 @@ export class ProductPage {
   /** The heading of Similar products: the sheet of lists, over this page. */
   protected openLists(): void {
     const segments = sheetSegments(CATALOG_PATHS.addListSheet).join('/');
+    void this._router.navigateByUrl(
+      `${productPagePath(this._locale(), this._basePath, this.itemId())}/${segments}`
+    );
+  }
+
+  /** The info button of Similar products: why they are sorted that way. */
+  protected openOrderInfo(): void {
+    const segments = sheetSegments(CATALOG_PATHS.orderInfoSheet).join('/');
     void this._router.navigateByUrl(
       `${productPagePath(this._locale(), this._basePath, this.itemId())}/${segments}`
     );

@@ -1049,21 +1049,25 @@ describe('ProductPage', () => {
       expect(store.target()?.listId).toBe('list-weekly');
     });
 
-    it('raises the line that is there with the plus, and records how many it held before', async () => {
+    it('steps the line that is there with the plus, not an add, and records how many it held before (velista 0187)', async () => {
       const { fixture, lines, store } = await render({ lines: [OIL_LINE] });
+      const add = jest.spyOn(store, 'add');
+      const step = jest.spyOn(store, 'step');
 
       listRow(fixture, 'list-weekly').main?.plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
-      expect(lines.addLineResult).toHaveBeenCalledWith(
-        'list-weekly',
-        'Extra virgin olive oil',
-        1,
-        ['item-oil'],
-        false,
-        undefined,
-        'UNIT'
+      expect(add).not.toHaveBeenCalled();
+      expect(step).toHaveBeenCalledTimes(1);
+      expect(step).toHaveBeenCalledWith(
+        expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
+        'line-oil',
+        { from: 2, to: 3, repeat: false }
       );
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+      // One write, once the presses stop.
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1, 'UNIT');
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('3');
       expect(store.visit()).toMatchObject([
         { lineId: 'line-oil', quantity: 3, before: 2, created: false },
@@ -1354,12 +1358,31 @@ describe('ProductPage', () => {
       );
     });
 
+    it('carries an info button in its heading that opens the sheet about the order (velista 0187)', async () => {
+      const { fixture } = await render(group);
+      const navigate = navigateSpy();
+
+      const info = host(fixture).querySelector<HTMLButtonElement>(
+        '.similar-head h2 button.info'
+      );
+      expect(info?.querySelector('lib-info-icon')).not.toBeNull();
+      expect(info?.getAttribute('aria-label')).toBe(
+        'catalog.similar.aboutLabel'
+      );
+      info?.click();
+
+      expect(navigate).toHaveBeenCalledWith(
+        '/velista/en/catalog/products/item-oil/sheet/about-order'
+      );
+    });
+
     it('draws nothing for a product with no group', async () => {
       const { fixture } = await render();
 
       expect(similar(fixture)).toHaveLength(0);
       expect(text(fixture)).not.toContain('catalog.similar.title');
       expect(host(fixture).querySelector('lib-adding-bar')).toBeNull();
+      expect(host(fixture).querySelector('button.info')).toBeNull();
     });
 
     it('draws no heading for a group with nothing else in it', async () => {
@@ -1370,6 +1393,7 @@ describe('ProductPage', () => {
 
       expect(similar(fixture)).toHaveLength(0);
       expect(text(fixture)).not.toContain('catalog.similar.title');
+      expect(host(fixture).querySelector('button.info')).toBeNull();
     });
   });
 

@@ -27,7 +27,13 @@ export interface ListsTableStep {
  *
  * It shows the line that has the product under exactly the product's name, and
  * zero when the list has no such line. From zero the plus makes that line. After
- * that it moves it.
+ * that it moves it, by one step, as the list page does (velista `0187`, U5): a
+ * plus on a list that holds a litre of milk asks for 1025 ml, not another litre.
+ *
+ * A list whose lines of the product are all under another name, or stocked at
+ * zero, draws no stepper of its own. Those lines have their rows below, each with
+ * a working stepper, and an add of a product the list already holds would add
+ * nothing (decision B).
  *
  * ## A line under another name has its own row
  *
@@ -75,14 +81,14 @@ export interface ListsTableStep {
                   <span class="sub">{{ 'catalog.added.pending' | rokuT }}</span>
                 }
               </span>
-              @if (usable(list)) {
+              @if (ownStepper(list)) {
                 <lib-quantity-stepper
                   (stepped)="stepMain(list, $event)"
-                  [min]="floorOf(list)"
                   [name]="
                     'amount.inList'
                       | rokuT: { name: product(), list: list.name }
                   "
+                  [readonly]="list.main !== null && !list.main.editable"
                   [unit]="list.main?.unit ?? 'UNIT'"
                   [value]="quantityOf(list)"
                   variant="row"
@@ -147,34 +153,50 @@ export class ListsTable {
     return list.canAdd || list.main?.editable === true;
   }
 
+  /**
+   * Whether the list's own row draws a stepper: a list the person can use, unless
+   * every line of the product on it is under another name (decision B).
+   */
+  protected ownStepper(list: ProductListRow): boolean {
+    return (
+      this.usable(list) && (list.main !== null || list.others.length === 0)
+    );
+  }
+
   protected quantityOf(list: ProductListRow): number {
     return list.main?.quantity ?? 0;
   }
 
   /**
-   * The lowest value the list's stepper reaches. A person who may add and may not
-   * change a quantity gets a plus and no minus, so the floor is where it stands.
-   */
-  protected floorOf(list: ProductListRow): number {
-    return list.main?.editable === true ? 0 : this.quantityOf(list);
-  }
-
-  /**
-   * A step of a list's own stepper. A plus goes through an add wherever the
-   * person may add: the server puts it on the line of that name or makes the line,
-   * and an add asks for less than a change of quantity does. An add happens
-   * once per press, so a repeat of a held plus that would add sends nothing.
+   * A step of a list's own stepper (velista `0187`, decisions A to C).
+   *
+   * - A list that holds the product under its name steps that line, a count as
+   *   much as a weight, both ways, when the person may edit it (A). The store
+   *   records it in the visit as it records a merged add.
+   * - A person who may add and may not edit sees the amount and no buttons there,
+   *   because an add on a list that holds the product adds nothing (C).
+   * - A list with no line of the product adds on a plus, once per press: a repeat
+   *   of a held plus at zero sends nothing. Every stepper's floor is zero.
    */
   protected stepMain(list: ProductListRow, step: QuantityStep): void {
     const main = list.main;
-    if (step.to > step.from && list.canAdd) {
-      if (!step.repeat) {
-        this.added.emit(list.listId);
+    if (main !== null) {
+      if (main.editable) {
+        this.lineStepped.emit({
+          listId: list.listId,
+          lineId: main.lineId,
+          step,
+        });
       }
       return;
     }
-    if (main !== null && main.editable) {
-      this.lineStepped.emit({ listId: list.listId, lineId: main.lineId, step });
+    if (
+      step.to > step.from &&
+      !step.repeat &&
+      list.canAdd &&
+      list.others.length === 0
+    ) {
+      this.added.emit(list.listId);
     }
   }
 }
