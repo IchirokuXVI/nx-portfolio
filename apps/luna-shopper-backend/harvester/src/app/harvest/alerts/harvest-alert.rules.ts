@@ -44,6 +44,11 @@ export interface RunAlertPayload {
   mode: HarvestRunMode;
   trigger: HarvestRunTrigger;
   presetId: string | null;
+  /**
+   * The preset's name when the alert was drafted, or null when it could not
+   * be read (plan 0255). Absent from a row written before that plan.
+   */
+  presetName?: string | null;
   scheduleId: string | null;
   adapterKey: string | null;
   requestedAt: string | null;
@@ -56,11 +61,22 @@ export interface RunAlertPayload {
   schedulesStopped: number | null;
   /** The reaper's window, for a `RUN_STALE` alert only. */
   staleAfterSeconds: number | null;
+  /**
+   * The run's last heartbeat as the reaper read it, before `finish` writes
+   * the reap time over it (plan 0255). Absent from a row written before.
+   */
+  heartbeatAt?: string | null;
+  /** The run's counters when the alert was drafted (plan 0255). */
+  processed?: number | null;
+  created?: number | null;
+  updated?: number | null;
 }
 
 /** The facts of a refused slot, or of a slot its probe skipped. */
 export interface SlotAlertPayload {
   presetId: string;
+  /** The preset's name, or null (plan 0255). Absent from an older row. */
+  presetName?: string | null;
   scheduleId: string;
   adapterKey: string | null;
   slot: string;
@@ -129,6 +145,15 @@ export interface RunAlertRun {
   startedAt: Date | null;
   failed: number;
   totalPlanned: number | null;
+  /**
+   * The facts plan 0255 adds. Each one is optional, so a caller that does
+   * not know it leaves a null in the payload and the mail says so.
+   */
+  presetName?: string | null;
+  heartbeatAt?: Date | null;
+  processed?: number | null;
+  created?: number | null;
+  updated?: number | null;
 }
 
 /**
@@ -198,6 +223,7 @@ export function runAlertFor(input: {
     mode: run.mode,
     trigger: run.trigger,
     presetId: run.presetId ?? null,
+    presetName: run.presetName ?? null,
     scheduleId: run.scheduleId ?? null,
     adapterKey: input.adapterKey,
     requestedAt: isoOrNull(run.requestedAt),
@@ -211,6 +237,10 @@ export function runAlertFor(input: {
       kind === HarvestAlertKind.RUN_STALE
         ? (input.staleAfterSeconds ?? null)
         : null,
+    heartbeatAt: isoOrNull(run.heartbeatAt),
+    processed: countOrNull(run.processed),
+    created: countOrNull(run.created),
+    updated: countOrNull(run.updated),
   };
   return {
     kind,
@@ -254,6 +284,8 @@ export function slotAlertFor(input: {
   result: { outcome: HarvestScheduleOutcome; note: string | null };
   adapterKey: string | null;
   at: Date;
+  /** The preset's name, or null when it could not be read (plan 0255). */
+  presetName?: string | null;
 }): HarvestAlertDraft | null {
   const { schedule, result } = input;
   if (result.outcome === HarvestScheduleOutcome.SKIPPED_PROBE_FAILED) {
@@ -272,6 +304,7 @@ export function slotAlertFor(input: {
   const slot = input.slot.toISOString();
   const payload: SlotAlertPayload = {
     presetId: schedule.presetId,
+    presetName: input.presetName ?? null,
     scheduleId: schedule.id,
     adapterKey: input.adapterKey,
     slot,
@@ -297,6 +330,7 @@ function probeSkipAlertFor(input: {
   result: { outcome: HarvestScheduleOutcome; note: string | null };
   adapterKey: string | null;
   at: Date;
+  presetName?: string | null;
 }): HarvestAlertDraft | null {
   const { schedule, result } = input;
   const now = readGateNote(result.note);
@@ -311,6 +345,7 @@ function probeSkipAlertFor(input: {
   const slot = input.slot.toISOString();
   const payload: SlotAlertPayload = {
     presetId: schedule.presetId,
+    presetName: input.presetName ?? null,
     scheduleId: schedule.id,
     adapterKey: input.adapterKey,
     slot,
@@ -484,6 +519,14 @@ export function testAlertFor(input: {
     scheduleId: null,
     payload: { ...payload },
   };
+}
+
+function countOrNull(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 function isoOrNull(value: Date | string | null | undefined): string | null {

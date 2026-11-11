@@ -1,3 +1,5 @@
+> **PR:** [#965](https://github.com/IchirokuXVI/nx-portfolio/pull/965)
+
 # 0255: a stale run alert says when the run stopped
 
 > Found on 2026-11-06 when a power outage stopped Luna slot 4 in the middle of a scheduled

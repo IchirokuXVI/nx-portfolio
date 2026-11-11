@@ -123,6 +123,8 @@ function build(
     }),
     // The advisory hold, free here; the integration spec contends for it.
     holdSlot: jest.fn(async () => ({ release: async () => undefined })),
+    // The store's read never throws: a name it cannot read is null.
+    presetNameOf: jest.fn(async () => null),
     isUndecided: jest.fn(async () => true),
   } as unknown as HarvestScheduleStore;
 

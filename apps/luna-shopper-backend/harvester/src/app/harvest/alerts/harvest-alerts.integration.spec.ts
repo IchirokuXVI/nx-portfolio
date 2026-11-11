@@ -252,6 +252,69 @@ describeIntegration('harvest alerts (real Postgres)', () => {
     expect(after[0].kind).toBe(HarvestAlertKind.RUN_STALE);
   });
 
+  it('keeps the last heartbeat, the counters and the preset name a reap writes over (plan 0255)', async () => {
+    const PRESET = '02550255-0000-4000-8000-000000000001';
+    const GONE = '02550255-0000-4000-8000-000000000002';
+    await one.query(`DELETE FROM "harvest_run_presets" WHERE "id" = $1`, [
+      PRESET,
+    ]);
+    await one.query(
+      `INSERT INTO "harvest_run_presets"
+         ("id", "supermarketId", "name", "input", "createdByUserId", "updatedByUserId")
+       VALUES ($1, $2, 'Plan 0255 preset', '{}'::jsonb, $3, $3)`,
+      [PRESET, CHAIN, ADMIN]
+    );
+    // One chain holds one active run, so the two runs go stale in turn.
+    const staleRun = async (presetId: string): Promise<HarvestRun> => {
+      const run = await runningRun();
+      await one.query(
+        `UPDATE "harvest_runs"
+            SET "heartbeatAt" = '2026-11-06T13:49:05Z',
+                "presetId" = $2, "processed" = 10279, "totalPlanned" = 18280,
+                "created" = 3, "updated" = 4
+          WHERE "id" = $1`,
+        [run.id, presetId]
+      );
+      await runs.reapStale(900);
+      return run;
+    };
+    try {
+      const named = await staleRun(PRESET);
+      const deleted = await staleRun(GONE);
+
+      const payloadOf = async (runId: string) => {
+        const [row]: HarvestAlert[] = await one.query(
+          `SELECT * FROM "harvest_alerts" WHERE "dedupeKey" = $1`,
+          [`run:${runId}`]
+        );
+        return row.payload;
+      };
+      const payload = await payloadOf(named.id);
+      expect(payload).toMatchObject({
+        presetId: PRESET,
+        presetName: 'Plan 0255 preset',
+        heartbeatAt: '2026-11-06T13:49:05.000Z',
+        processed: 10279,
+        totalPlanned: 18280,
+        created: 3,
+        updated: 4,
+      });
+      // The row itself no longer shows that heartbeat: the reap wrote over it.
+      expect((await runs.load(named.id)).heartbeatAt?.toISOString()).not.toBe(
+        '2026-11-06T13:49:05.000Z'
+      );
+      expect(await payloadOf(deleted.id)).toMatchObject({
+        presetId: GONE,
+        presetName: null,
+        heartbeatAt: '2026-11-06T13:49:05.000Z',
+      });
+    } finally {
+      await one.query(`DELETE FROM "harvest_run_presets" WHERE "id" = $1`, [
+        PRESET,
+      ]);
+    }
+  });
+
   it('leaves one row for two inserts with one key', async () => {
     const first = await alertsOne.queue(draft('twice'));
     const second = await alertsTwo.queue(draft('twice', { payload: { n: 2 } }));

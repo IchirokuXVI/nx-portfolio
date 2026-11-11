@@ -92,6 +92,8 @@ function build(
     // can contend for. Here it is always free.
     holdSlot: jest.fn(async () => ({ release: async () => undefined })),
     isUndecided: jest.fn(async () => true),
+    // The store's read never throws: a name it cannot read is null.
+    presetNameOf: jest.fn(async () => null),
     claimRetry: jest.fn(async (_id: string, runId: string) => {
       if (row.lastSlotAttempts !== 1 || row.lastRunId !== runId) {
         return false;

@@ -281,7 +281,7 @@ export class HarvestScheduleWorker
       // A refused slot tells the owner, in the same write (plan 0218,
       // section 2.3). `schedule` is the row before the claim, so its last
       // outcome is the one this slot is compared with.
-      ...alertArgument(schedule, slot, false, result, at)
+      ...(await this.namedAlertArgument(schedule, slot, false, result, at))
     );
     this.log(schedule, slot, result, false);
   }
@@ -402,7 +402,7 @@ export class HarvestScheduleWorker
         at,
         attempts: null,
       },
-      ...alertArgument(schedule, slot, retry, result, at)
+      ...(await this.namedAlertArgument(schedule, slot, retry, result, at))
     );
     this.log(schedule, slot, result, retry);
   }
@@ -567,6 +567,28 @@ export class HarvestScheduleWorker
           ? 'Its one retry is spent.'
           : 'A retry on a later tick decides it one time.')
     );
+  }
+
+  /**
+   * {@link alertArgument}, with the preset's name on a drafted alert (plan
+   * 0255). The draft comes first, so a slot that does not alert, or that
+   * repeats the refusal before it, reads no name. `presetNameOf` never
+   * throws: a name it cannot read is null, and the mail keeps the uuid line.
+   */
+  private async namedAlertArgument(
+    schedule: HarvestSchedule,
+    slot: Date,
+    retry: boolean,
+    result: ScheduledStart,
+    at: Date
+  ): Promise<[] | [HarvestAlertDraft]> {
+    const argument = alertArgument(schedule, slot, retry, result, at);
+    for (const alert of argument) {
+      alert.payload['presetName'] = await this.store.presetNameOf(
+        schedule.presetId
+      );
+    }
+    return argument;
   }
 
   private log(

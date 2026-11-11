@@ -798,6 +798,11 @@ export class RunExecutor implements OnApplicationShutdown {
         run.supermarketId && needsScheduleCount(status, failuresBefore)
           ? await this.store.countEnabledSchedules(run.supermarketId)
           : 0;
+      // `presetNameOf` never throws: a name it cannot read is null, and the
+      // mail keeps the uuid line (plan 0255).
+      const presetName = run.presetId
+        ? await this.store.presetNameOf(run.presetId)
+        : null;
       return runAlertFor({
         run: {
           id: run.id,
@@ -805,6 +810,7 @@ export class RunExecutor implements OnApplicationShutdown {
           trigger: run.trigger,
           supermarketId: run.supermarketId,
           presetId: run.presetId,
+          presetName,
           scheduleId: run.scheduleId,
           requestedAt: run.requestedAt,
           startedAt: row.startedAt ?? run.startedAt,

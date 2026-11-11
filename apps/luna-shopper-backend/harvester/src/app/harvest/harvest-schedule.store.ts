@@ -84,6 +84,22 @@ export class HarvestScheduleStore {
     return this.schedules.save(row);
   }
 
+  /**
+   * The name of a schedule's preset, for the preset line of a slot alert
+   * (plan 0255), or null when the preset is gone or the read failed.
+   */
+  async presetNameOf(presetId: string): Promise<string | null> {
+    try {
+      const [row]: { name: string }[] = await this.schedules.query(
+        `SELECT "name" FROM "harvest_run_presets" WHERE "id" = $1`,
+        [presetId]
+      );
+      return row?.name ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   create(input: Partial<HarvestSchedule>): HarvestSchedule {
     return this.schedules.create(input);
   }
