@@ -32,8 +32,18 @@ function place(over: Partial<PlaceMatchSubject> = {}): PlaceMatchSubject {
     longitude: LON,
     street: 'Avenida de Cádiz 68',
     postalCode: '14010',
+    postalCodeSource: PostalCodeSource.SOURCE,
+    city: 'Córdoba',
     ...over,
   };
+}
+
+/** A shop with no position, which is all rung 3 compares. */
+function seeded(
+  id: string,
+  over: Partial<SupermarketLocationView> = {}
+): SupermarketLocationView {
+  return shop(id, { latitude: null, longitude: null, ...over });
 }
 
 /** A shop of the chain, 2 km north of the place unless a case moves it. */
@@ -88,10 +98,9 @@ describe('the bounds', () => {
  * the 409 of a hand import reads these and nothing more.
  */
 describe('matchLocations, the three strict rungs', () => {
-  it('answers the shop that carries the reference, alone', () => {
+  it('answers the shop that carries the reference', () => {
     const found = matchLocations(place(), [
       shop('by-ref', { externalRef: 'node/1', externalProvider: 'OSM' }),
-      at('near', 30),
     ]);
 
     expect(rungs(found)).toEqual([
@@ -138,6 +147,138 @@ describe('matchLocations, the three strict rungs', () => {
     ]);
 
     expect(rungs(found)).toEqual([['seeded', PlaceMatchRung.ADDRESS, null]]);
+  });
+
+  it('answers Avda. de Cádiz, 68 for Avenida de Cádiz 68, and not number 70 (plan 0265)', () => {
+    const found = matchLocations(place(), [
+      seeded('same', { postalCode: '14010', address: 'Avda. de Cádiz, 68' }),
+      seeded('next', { postalCode: '14010', address: 'Avenida de Cádiz 70' }),
+    ]);
+
+    expect(rungs(found)).toEqual([['same', PlaceMatchRung.ADDRESS, null]]);
+  });
+
+  it('answers nothing on rung 3 for a code that is not DERIVED and another postal code', () => {
+    for (const postalCodeSource of [
+      PostalCodeSource.SOURCE,
+      PostalCodeSource.MANUAL,
+      null,
+    ]) {
+      expect(
+        matchLocations(place({ postalCodeSource }), [
+          seeded('other-code', {
+            postalCode: '14013',
+            address: 'Avda. de Cádiz, 68',
+          }),
+        ])
+      ).toEqual([]);
+    }
+  });
+});
+
+/** A guessed postal code is compared on the city instead (plan 0265, D1). */
+describe('matchLocations, rung 3 for a DERIVED code', () => {
+  const derived = place({
+    postalCode: '14001',
+    postalCodeSource: PostalCodeSource.DERIVED,
+  });
+
+  it('answers a shop with another postal code, the same city and the same street', () => {
+    const found = matchLocations(derived, [
+      seeded('real', {
+        postalCode: '14010',
+        city: 'CORDOBA',
+        address: 'Avda. de Cádiz, 68',
+      }),
+    ]);
+
+    expect(rungs(found)).toEqual([['real', PlaceMatchRung.ADDRESS, null]]);
+  });
+
+  it('answers no shop in another city, or whose city is blank', () => {
+    expect(
+      matchLocations(derived, [
+        seeded('sevilla', { city: 'Sevilla', address: 'Avda. de Cádiz, 68' }),
+        seeded('blank', { city: '  ', address: 'Avda. de Cádiz, 68' }),
+        seeded('none', { city: null, address: 'Avda. de Cádiz, 68' }),
+      ])
+    ).toEqual([]);
+  });
+
+  it('answers nothing when the place has no city', () => {
+    expect(
+      matchLocations({ ...derived, city: null }, [
+        seeded('real', { address: 'Avda. de Cádiz, 68' }),
+      ])
+    ).toEqual([]);
+  });
+
+  it('does not meet two shops at s/n, or with no number, on city and street alone', () => {
+    const shops = [
+      seeded('sn', { address: 'Avenida de Cádiz, s/n' }),
+      seeded('bare', { address: 'Avenida de Cádiz' }),
+    ];
+
+    expect(
+      matchLocations({ ...derived, street: 'Avda. de Cádiz s/n' }, shops)
+    ).toEqual([]);
+    expect(
+      matchLocations({ ...derived, street: 'Avda. de Cádiz' }, shops)
+    ).toEqual([]);
+  });
+
+  it('still meets s/n on the same postal code when the code is the source’s', () => {
+    expect(
+      rungs(
+        matchLocations(place({ street: 'Avda. de Cádiz s/n' }), [
+          seeded('sn', {
+            postalCode: '14010',
+            address: 'Avenida de Cádiz, s/n',
+          }),
+        ])
+      )
+    ).toEqual([['sn', PlaceMatchRung.ADDRESS, null]]);
+  });
+});
+
+/** Every strict candidate, not the first rung's alone (plan 0265, D2). */
+describe('matchLocations, the union of the strict rungs', () => {
+  it('answers the candidates of rung 1 and rung 2, and a shop both find once, under rung 1', () => {
+    const found = matchLocations(place(), [
+      at('near-40', 40),
+      shop('both', {
+        externalRef: 'node/1',
+        externalProvider: 'OSM',
+        latitude: north(20),
+      }),
+      at('near-10', 10),
+    ]);
+
+    expect(rungs(found)).toEqual([
+      ['both', PlaceMatchRung.EXTERNAL_REF, 20],
+      ['near-10', PlaceMatchRung.NEARBY, 10],
+      ['near-40', PlaceMatchRung.NEARBY, 40],
+    ]);
+  });
+
+  it('orders by rung, then the nearest first', () => {
+    const found = matchLocations(place(), [
+      seeded('by-address', { postalCode: '14010', address: 'Avda. Cádiz 68' }),
+      at('near-30', 30),
+      shop('ref-far', { externalRef: 'node/1', externalProvider: 'OSM' }),
+      shop('ref-close', {
+        externalRef: 'node/1',
+        externalProvider: null,
+        latitude: north(500),
+      }),
+    ]);
+
+    expect(rungs(found)).toEqual([
+      ['ref-close', PlaceMatchRung.EXTERNAL_REF, 500],
+      ['ref-far', PlaceMatchRung.EXTERNAL_REF, 2000],
+      ['near-30', PlaceMatchRung.NEARBY, 30],
+      ['by-address', PlaceMatchRung.ADDRESS, null],
+    ]);
   });
 
   it('carries the chain and the city of the shop on a candidate', () => {
@@ -211,6 +352,24 @@ describe('suggestLocations, the four rungs', () => {
     expect(rungs(found)).toEqual([
       ['by-ref', PlaceMatchRung.EXTERNAL_REF, 2000],
       ['near-100', PlaceMatchRung.SAME_CHAIN_NEAR, 100],
+    ]);
+  });
+
+  it('answers the union of the strict rungs, then rung 4 (plan 0265)', () => {
+    const found = suggestLocations(place(), [
+      at('near-120', 120),
+      seeded('by-address', { postalCode: '14010', address: 'Avda. Cádiz, 68' }),
+      at('strict-20', 20),
+      shop('by-ref', { externalRef: 'node/1', externalProvider: 'OSM' }),
+      at('near-70', 70),
+    ]);
+
+    expect(rungs(found)).toEqual([
+      ['by-ref', PlaceMatchRung.EXTERNAL_REF, 2000],
+      ['strict-20', PlaceMatchRung.NEARBY, 20],
+      ['by-address', PlaceMatchRung.ADDRESS, null],
+      ['near-70', PlaceMatchRung.SAME_CHAIN_NEAR, 70],
+      ['near-120', PlaceMatchRung.SAME_CHAIN_NEAR, 120],
     ]);
   });
 
