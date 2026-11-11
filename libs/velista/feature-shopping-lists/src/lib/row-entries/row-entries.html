@@ -1,12 +1,14 @@
 <!--
   The lists that ask (velista 0139, section 3). A small heading in the secondary
   colour on a hairline, then one row per list: the list, then "zone · line" under
-  it, Change (velista 0140, section 1), then what it asks for. "Change for all
-  lists" closes the heading's row when two lists or more can change.
+  it, Change (velista 0140, section 1) as the swap icon, then what it asks for
+  in the stepper of velista 0188 (velista 0190). "Change for all lists" closes
+  the heading's row when two lists or more can change.
 
-  A polite live region, so a quantity that a write moved is read out once.
+  Not a live region: the stepper changes its value on every step, and it says
+  the amount once by itself when the presses stop.
 -->
-<section aria-live="polite" class="entries" role="status">
+<section class="entries">
   <div class="head">
     <h3 class="heading">{{ heading() }}</h3>
     @if (changesAll()) {
@@ -39,30 +41,38 @@
             class="change"
             type="button"
           >
-            {{ 'basket.change.one' | rokuT }}
+            <lib-swap-icon class="change-glyph" />
           </button>
         }
 
         @if (entry.editable) {
-          <lib-quantity-reel
-            (committedTo)="onAsked(entry.lineId, $event)"
-            [label]="entry.label"
+          <lib-quantity-stepper
+            (stepped)="onAsked(entry.lineId, $event)"
+            [disabled]="busy()"
             [min]="0"
-            [readonly]="busy()"
+            [name]="entry.label"
             [unit]="unit()"
-            [value]="entry.asks"
-            class="ask-reel"
+            [value]="entry.shown"
+            class="ask-amount"
+            variant="sheet-narrow"
           />
         } @else {
           <!--
             The number, and no control: the server does not allow this list's ask
-            to change from here, or it is a list this reader was not served.
+            to change from here, or it is a list this reader was not served. The
+            exact form, end aligned in the stepper's width, so the numbers of one
+            sheet line up with the controls above them (velista 0190, decision I).
           -->
           <span class="row-number">
             <span class="visually-hidden">
               {{ 'basket.entries.asks' | rokuT: { count: entry.asks } }}
             </span>
-            <span aria-hidden="true">{{ wordsOf(entry.asks) }}</span>
+            <lib-amount-figure
+              [quantity]="entry.asks"
+              [speak]="false"
+              [unit]="unit()"
+              form="exact"
+            />
           </span>
         }
       </li>
@@ -108,14 +118,15 @@
                     <span class="row-name">{{ other.list.listName }}</span>
                     <span class="row-where">{{ other.where }}</span>
                   </span>
-                  <lib-quantity-reel
-                    (committedTo)="onRaised(other.list, $event)"
-                    [label]="other.label"
+                  <lib-quantity-stepper
+                    (stepped)="onRaised(other.list, $event)"
+                    [disabled]="busy()"
                     [min]="0"
-                    [readonly]="busy()"
+                    [name]="other.label"
                     [unit]="unit()"
-                    [value]="other.list.quantity ?? 0"
-                    class="ask-reel"
+                    [value]="other.shown"
+                    class="ask-amount"
+                    variant="sheet-narrow"
                   />
                 </li>
               }

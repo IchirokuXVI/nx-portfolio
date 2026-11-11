@@ -9,7 +9,6 @@ import {
   shownLineUnit,
   stepAt,
   stepFrom,
-  stepsFrom,
   unitsServedBy,
   type LineUnitProduct,
 } from './line-unit';
@@ -196,16 +195,6 @@ describe('shortHundredths', () => {
     expect(shortHundredths(2010)).toBe(201);
     expect(shortHundredths(999_994)).toBe(99_999);
     expect(shortHundredths(999_999)).toBe(99_999);
-  });
-});
-
-describe('stepsFrom (kept for the reel until velista 0190)', () => {
-  it('takes whole presses held inside the range', () => {
-    expect(stepsFrom(950, 'GRAM', 4, 0, 100000)).toBe(1050);
-    expect(stepsFrom(25, 'GRAM', -5, 0, 100000)).toBe(0);
-    expect(stepsFrom(99, 'UNIT', 5, 0, 100)).toBe(100);
-    expect(stepsFrom(2, 'UNIT', -5, 1, 100)).toBe(1);
-    expect(stepsFrom(3, 'UNIT', 5, 0, 100000)).toBe(8);
   });
 });
 

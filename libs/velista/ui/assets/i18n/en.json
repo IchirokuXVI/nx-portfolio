@@ -1642,20 +1642,10 @@
       "open": "Settle {{name}}",
       "wanted": "×{{count}}",
       "busy": "Saving",
-      "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back",
       "removed": "No longer on the list",
       "boughtFromAnotherList": "Bought from another shopping list",
       "boughtFromTheList": "Bought from the list",
-      "alreadyBought": "Already bought",
-      "takenBackAmount": "{{amount}} taken back"
-    },
-    "outstanding": {
-      "label": "{{name}}, still to get",
-      "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought",
-      "listLabel": "{{list}}, {{name}}, still to get",
-      "boughtAmount": "{{amount}} bought"
+      "alreadyBought": "Already bought"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -2082,9 +2072,12 @@
       "unavailable": "Not available at this shop",
       "instead": "Instead of {{name}}, not available at this shop"
     },
+    "amount": {
+      "label": "Amount of {{name}}: {{amount}}",
+      "listLabel": "{{list}}, amount of {{name}}: {{amount}}"
+    },
     "change": {
-      "one": "Change",
-      "oneLabel": "Change the product for {{name}}",
+      "oneLabel": "Change the product on {{name}}",
       "all": "Change for all lists",
       "openLabel": "There is a cheaper option than {{name}}. Change the product",
       "cheaper": "cheaper option",

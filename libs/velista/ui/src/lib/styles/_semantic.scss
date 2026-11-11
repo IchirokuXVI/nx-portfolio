@@ -360,10 +360,8 @@ $app-landing-short: 700px;
   // roughly seven units in the ~280px of comfortable travel on a 390px phone, which
   // is what makes two to five a single gesture rather than three.
   //
-  // It is duplicated in `@portfolio/velista/models` as `QUANTITY_REEL_PX_PER_UNIT`,
-  // which is the copy the gesture arithmetic reads; this one only draws the tape.
-  // They have to agree, and the component asserts nothing about it: a drift shows up
-  // as a reel whose highlighted number is not the one under the thumb.
+  // The reel is gone since velista 0190 and nothing reads these four tokens now.
+  // They are kept until the owner decides to remove them.
   --app-reel-unit: 40px;
   --app-reel-height: 56px;
   --app-reel-radius: 14px;

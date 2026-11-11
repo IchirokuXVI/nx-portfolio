@@ -4,7 +4,7 @@ import {
   ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import { ALICE_EMAIL } from './support/api';
-import { signIn } from './support/app';
+import { generateBasket, openSettleSheet, signIn } from './support/app';
 
 /**
  * Velista 0188, S3 and S10: the longest amount and a four letter symbol always fit.
@@ -19,7 +19,8 @@ import { signIn } from './support/app';
  * reads more than three whole digits and two decimals, so it can never draw
  * "999,999"), with the one step smaller size a six character figure takes. The
  * sheet is given "999,999" and "125,25", the longest exact forms (S5). Velista 0190
- * adds the shopping list sheet's `sheet-narrow` variant here.
+ * adds the shopping list sheet's `sheet-narrow` variant, 168 by 48, with the same
+ * exact forms, on a settle sheet of a generated basket.
  */
 
 /** Half a pixel, for subpixel layout. */
@@ -150,6 +151,27 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
         const fit = await writeAndMeasure(stepper, figure, SYMBOL);
         expect.soft(fit.problems).toEqual([]);
         expect.soft(Math.round(fit.width)).toBe(191);
+        expect.soft(Math.round(fit.height)).toBe(48);
+      });
+    }
+  });
+
+  test('the settle sheet stepper holds "999,999", "125,25" and a four letter symbol', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await generateBasket(page, ['Groceries'], `Fit ${Date.now()}`);
+    const dialog = await openSettleSheet(page, 'Milk');
+    const stepper = dialog
+      .locator('lib-row-entries lib-quantity-stepper.variant-sheet-narrow')
+      .first();
+    await expect(stepper).toBeVisible();
+
+    for (const figure of ['999,999', '125,25', '0']) {
+      await test.step(`settle sheet ${figure} ${SYMBOL}`, async () => {
+        const fit = await writeAndMeasure(stepper, figure, SYMBOL);
+        expect.soft(fit.problems).toEqual([]);
+        expect.soft(Math.round(fit.width)).toBe(168);
         expect.soft(Math.round(fit.height)).toBe(48);
       });
     }

@@ -17,9 +17,14 @@ import {
   type BasketProductList,
   type BasketRow,
   type BasketRowEntry,
+  type QuantityStep,
 } from '@portfolio/velista/models';
-import { formatAmount } from '@portfolio/velista/platform';
-import { ChevronDownIcon, QuantityReel } from '@portfolio/velista/ui';
+import {
+  AmountFigure,
+  ChevronDownIcon,
+  QuantityStepper,
+  SwapIcon,
+} from '@portfolio/velista/ui';
 
 /** One list that asks for the row, as it is drawn. */
 interface DrawnEntry {
@@ -33,6 +38,8 @@ interface DrawnEntry {
   readonly where: string | null;
   /** What the list asks for, which is the entry's `left`. */
   readonly asks: number;
+  /** What the stepper draws: the sheet's open run on this line, else {@link asks}. */
+  readonly shown: number;
   /** Whether the quantity is a control, by the server's `demandEditable`. */
   readonly editable: boolean;
   readonly label: string;
@@ -48,6 +55,8 @@ interface DrawnOther {
   /** "zone · line name" for a list that holds the product at zero, else the zone. */
   readonly where: string;
   readonly label: string;
+  /** What the stepper draws: the sheet's open run on this list, else what it holds. */
+  readonly shown: number;
 }
 
 /**
@@ -70,28 +79,39 @@ export type OtherListsState =
  * households asked for it and how many. A list this reader was not served reads
  * "Another list", with its quantity and no control.
  *
- * ## The quantity is the reel the list page uses
+ * ## The amount is the typed stepper of velista `0188`
  *
- * A tap opens it, and it commits on release. It is drawn only where the server's
- * `demandEditable` allows it, and for a list the reader may not name only when it
- * is the whole row (velista `0092`'s rule for a guest). Elsewhere it is the number.
+ * One per list that holds the row, at `sheet-narrow` (velista `0190`). It is
+ * drawn only where the server's `demandEditable` allows it, and for a list the
+ * reader may not name only when it is the whole row (velista `0092`'s rule for a
+ * guest). Elsewhere it is the number in the exact form. Every step is emitted;
+ * the sheet gathers them and saves once the presses stop, and hands back what
+ * each stepper draws while a run is open.
  *
  * ## Change
  *
- * Before the quantity, on each entry the sheet names as changeable (velista
- * `0140`, section 1), and "Change for all lists" at the end of the heading's row
- * once two entries or more have it. Both only say so: the sheet opens the change.
+ * Before the amount, on each entry the sheet names as changeable (velista
+ * `0140`, section 1): the swap icon, with no word, named after the list. "Change
+ * for all lists" closes the heading's row once two entries or more have it. Both
+ * only say so: the sheet opens the change.
  *
  * ## Add it to another list
  *
  * Last, closed, and drawn only when the sheet hands it a read: never for a guest,
  * never for a row with no product, and not once the read answered no list. Open,
  * it draws the read's loading row, its failed row with a retry, or one row per
- * list at a quantity of 0. Moving one above zero is the sheet's to send.
+ * list at a quantity of 0, each with the same stepper (decision H). Stepping one
+ * above zero is the sheet's to send.
  */
 @Component({
   selector: 'lib-row-entries',
-  imports: [ChevronDownIcon, QuantityReel, RokuTranslatorPipe],
+  imports: [
+    AmountFigure,
+    ChevronDownIcon,
+    QuantityStepper,
+    RokuTranslatorPipe,
+    SwapIcon,
+  ],
   templateUrl: './row-entries.html',
   styleUrl: './row-entries.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -102,13 +122,17 @@ export class RowEntries {
 
   readonly row = input.required<BasketRow>();
 
-  /** What the row counts, which every reel here steps and draws by (velista `0182`). */
+  /** What the row counts, which every stepper here steps and draws by (velista `0182`). */
   protected readonly unit = computed(() => this.row().unit);
 
-  /** An ask as the sheet draws it: "3", or "750 g" for a weight. */
-  protected wordsOf(quantity: number): string {
-    return formatAmount(quantity, this.unit(), this._locale());
-  }
+  /**
+   * The amount of each line with an open run in the sheet, by line id, so a
+   * stepper draws where the presses got to before the save (velista `0190`).
+   */
+  readonly pending = input<ReadonlyMap<string, number>>(new Map());
+
+  /** The same for the lists that do not ask yet, by list id. */
+  readonly pendingRaises = input<ReadonlyMap<string, number>>(new Map());
 
   /** The covered lists this reader was served, by id, for the names. */
   readonly lists = input<ReadonlyMap<string, BasketListRef>>(new Map());
@@ -116,7 +140,7 @@ export class RowEntries {
   /** The whole trip is over, which takes every control away (velista `0057`). */
   readonly finished = input(false);
 
-  /** A write from the sheet is out. The reels are read only meanwhile. */
+  /** A settle or a rename from the sheet is out. The steppers are off meanwhile. */
   readonly busy = input(false);
 
   /**
@@ -137,17 +161,16 @@ export class RowEntries {
   /** "Change for all lists". */
   readonly changedAll = output<void>();
 
-  /** One list's ask was moved. */
+  /** One step of one list's ask, on every press, key and typed commit. */
   readonly demanded = output<{
     readonly lineId: string;
-    readonly from: number;
-    readonly to: number;
+    readonly step: QuantityStep;
   }>();
 
-  /** A list that did not ask was given a quantity above zero. */
+  /** One step of a list that does not ask yet, on every press, key and typed commit. */
   readonly raised = output<{
     readonly list: BasketProductList;
-    readonly to: number;
+    readonly step: QuantityStep;
   }>();
 
   /** The read failed and the reader asked again. */
@@ -194,8 +217,10 @@ export class RowEntries {
       return [];
     }
     const locale = this._locale();
+    const pending = this.pendingRaises();
     return others.lists.map((list) => ({
       list,
+      shown: pending.get(list.listId) ?? list.quantity ?? 0,
       where:
         list.lineId === null || list.lineName === null || list.lineName === ''
           ? list.zoneName
@@ -214,22 +239,12 @@ export class RowEntries {
     this.open.update((open) => !open);
   }
 
-  protected onAsked(
-    lineId: string,
-    change: { from: number; to: number }
-  ): void {
-    if (change.to !== change.from) {
-      this.demanded.emit({ lineId, from: change.from, to: change.to });
-    }
+  protected onAsked(lineId: string, step: QuantityStep): void {
+    this.demanded.emit({ lineId, step });
   }
 
-  protected onRaised(
-    list: BasketProductList,
-    change: { from: number; to: number }
-  ): void {
-    if (change.to > 0 && change.to !== change.from) {
-      this.raised.emit({ list, to: change.to });
-    }
+  protected onRaised(list: BasketProductList, step: QuantityStep): void {
+    this.raised.emit({ list, step });
   }
 
   private _mayDemand(entry: BasketRowEntry): boolean {
@@ -276,8 +291,9 @@ export class RowEntries {
       list,
       where,
       asks: entry.left,
+      shown: this.pending().get(entry.lineId) ?? entry.left,
       editable: this._mayDemand(entry),
-      // The list's own name, so two reels on one sheet are told apart by somebody
+      // The list's own name, so two steppers on one sheet are told apart by somebody
       // who hears them. A single unserved entry takes the plain label: there is one
       // list in the row and nothing to tell apart.
       label:

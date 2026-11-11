@@ -7,8 +7,6 @@ import {
   inject,
   input,
   output,
-  signal,
-  viewChild,
 } from '@angular/core';
 import {
   RokuLocaleStore,
@@ -20,9 +18,9 @@ import {
   basketRowProduct,
   isCrossedOutRow,
   priceWordsText,
-  QUANTITY_REEL_CLICK_SHIELD_MS,
   shownOffer,
   soldAs,
+  STATUS_FLIP_SHIELD_MS,
   type BasketListRef,
   type BasketParticipant,
   type BasketPriceMark,
@@ -33,15 +31,15 @@ import {
   type BasketShelfMark,
   type PriceWords,
 } from '@portfolio/velista/models';
-import { formatAmount, formatMoney } from '@portfolio/velista/platform';
+import { exactAmount, formatMoney } from '@portfolio/velista/platform';
 import {
+  AmountFigure,
   CheckFilledIcon,
   CircleIcon,
   ClockIcon,
   HalfCircleIcon,
   priceWords,
   ProductPicture,
-  QuantityReel,
   SlashCircleIcon,
   SwapIcon,
 } from '@portfolio/velista/ui';
@@ -49,7 +47,6 @@ import {
   basketRowName,
   crossedOutNoteKey,
   listsCaption,
-  outstandingCaption,
   quantityCaption,
   skipCaption,
   touchedCaption,
@@ -166,23 +163,18 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
  * control, whose accessible name is the act it performs, and the body, which is the
  * control this component always was, with the composed label it always had.
  *
- * ## The number is the control (plan 0054, amended by `0073`)
+ * ## The amount opens the sheet (velista `0190`)
  *
- * The trailing number stopped being a readout and became a `QuantityReel` bound to
- * what is still to get. Dragging it **down** records that many bought; dragging it
- * **up** takes that many back. It runs from zero to what the lists asked for, so a
- * basket can no longer be raised above that, and a line of six dragged to zero and
- * brought back to four is two bought and four still to get.
+ * The trailing number is one amount cell, the same size on every row, and a
+ * button: a press opens the settle sheet, as a press on the words does. It is
+ * not a control for the amount. The amount is changed in the sheet, one
+ * stepper per list that holds the row, and a household lowers what a list asks
+ * for there or buys all of it with the status control. Buying part of a row has
+ * no gesture for now (the owner's answer to question 1 of `0190`).
  *
- * `0054` section 5 read the raise as "this basket will buy more" and is retired
- * rather than worked around: nobody standing in a shop read it that way. One call
- * still carries both directions, because the client never decides which of the two a
- * gesture was: two phones moving one line is exactly when it would decide wrongly.
- *
- * The row still opens the sheet on a tap. The reel is a separate target inside it
- * and takes the drag, the words take the tap, and `line-row` on the list page has
- * lived with that arrangement since `0043`, so it is an interaction somebody has
- * already met.
+ * The cell shows what is still to get on a row that is open, and what was asked
+ * on a row that is bought or that the shop had none of, because a tick beside
+ * "0" says nothing (decision B).
  *
  * The status control is drawn for **everybody**. Every participant may settle and
  * every participant may reopen (luna `0054`, section 3.5), so there is no reader for
@@ -210,13 +202,13 @@ const STATES_ON_STATUS: Readonly<Record<BasketStatusGlyph, string>> = {
 @Component({
   selector: 'lib-basket-row',
   imports: [
+    AmountFigure,
     CheckFilledIcon,
     CircleIcon,
     ClockIcon,
     HalfCircleIcon,
     NgTemplateOutlet,
     ProductPicture,
-    QuantityReel,
     RokuTranslatorPipe,
     SlashCircleIcon,
     SwapIcon,
@@ -252,8 +244,8 @@ export class BasketRow {
    *
    * Set only under the list grouping, where a row two households asked for is drawn
    * twice, once under each heading. It changes **what the numbers and the state on
-   * this row mean** and nothing about what the row says: the ceiling, the value, the
-   * glyph and the progress caption all become this household's.
+   * this row mean** and nothing about what the row says: the amount, the glyph and
+   * the progress caption all become this household's.
    *
    * The glyph moves with them, which is the change from velista `0077`. There it
    * read the line while the number read the origin, because only the line had a
@@ -355,8 +347,8 @@ export class BasketRow {
    * the store, and a component constructed once per line has no business asking the
    * same question a dozen times.
    *
-   * What it removes is every control: the status glyph stops being a button and the
-   * reel goes back to being the readout it was before plan 0054. What it keeps is
+   * What it removes is every control that writes: the status glyph stops being a
+   * button. The amount cell still opens the sheet, as the body does. What it keeps is
    * everything the row **says** — the words, the product, who settled it, which
    * household it came from — because a finished basket is the receipt for a trip
    * somebody took, and the most likely reason to open one is to see what was bought.
@@ -481,17 +473,6 @@ export class BasketRow {
   readonly revert = output<void>();
 
   /**
-   * The reel was let go somewhere other than where it started (plan 0054).
-   *
-   * Absolute numbers in both halves rather than a delta, and `from` is not
-   * decoration: a stale gesture would invert its own meaning, so the server refuses
-   * a write whose origin no longer matches instead of applying it as the opposite
-   * act. What the move **means** is the server's to decide and never this row's,
-   * which is what `BasketStore.setLeft` turns it into.
-   */
-  readonly left = output<{ from: number; to: number }>();
-
-  /**
    * The state this row draws, which is **the entry's under a list heading**.
    *
    * Read and never derived (backend `0130`, section 4). `basketLineState` used to
@@ -508,7 +489,7 @@ export class BasketRow {
   );
 
   /**
-   * How many are still to get, which is what the reel is bound to.
+   * How many are still to get, which the amount cell shows on an open row.
    *
    * **The entry's, on a row drawn under one** (velista `0077`, section 4.1): a
    * household that asked for six and got two has four still to get, whatever the
@@ -522,99 +503,45 @@ export class BasketRow {
     () => this.entry()?.left ?? this.row().left
   );
 
-  /** What the row counts, which the reel steps and draws by (velista `0182`). */
+  /** What the row counts, which the amount cell draws by (velista `0182`). */
   protected readonly unit = computed(() => this.row().unit);
 
-  /** {@link stillToGet} in words for the settled count: "3", or "750 g". */
-  protected readonly stillToGetWords = computed(() =>
-    formatAmount(this.stillToGet(), this.unit(), this._locale())
-  );
-
   /**
-   * What the reel shows while a write is out.
-   *
-   * The basket is not optimistic (plan 0053, section 7), so the line still says the
-   * old number until the server answers. Showing it would snap the reel back to
-   * where the gesture started for as long as the request takes, which on a shop's
-   * connection is long enough to be read as the gesture having failed. Consulted
-   * only while {@link busy}, so a value left behind by a refused write is never
-   * drawn: the row goes back to what the line now says, which is what section 4.1
-   * asks for.
+   * The amount the cell draws (velista `0190`, decision B): what is still to get,
+   * and what was asked on a row that is bought or that the shop had none of. The
+   * entry's under a list heading, the row's everywhere else.
    */
-  private readonly _sent = signal<number | null>(null);
-
-  protected readonly shownOutstanding = computed(() =>
-    this.busy() ? (this._sent() ?? this.stillToGet()) : this.stillToGet()
-  );
-
-  /**
-   * The ceiling: **what was asked for**, and nothing above it (velista `0073`).
-   *
-   * `asked`, read and never computed, which is `bought + left` on an open basket
-   * and the frozen number on a finished one. A row of six bought to zero offers a
-   * reel from zero to six, so the shopper who puts a tin back reaches for the same
-   * number expecting to undo what they just did.
-   */
-  protected readonly ceiling = computed(
-    () => this.entry()?.asked ?? this.row().asked
-  );
-
-  /**
-   * What the reel is counting: how many are still to get, not how many to buy.
-   *
-   * **Under a list heading it names the list first**, "Flat, Eggs, still to get",
-   * which is the shape `0073` gave the settle sheet's per list reels and is the only
-   * thing that tells two identically named reels apart for somebody who hears the
-   * row rather than seeing which heading it sits under.
-   *
-   * A list with no name falls back to the reel's ordinary name rather than drawing a
-   * leading comma, which is the rule `listsCaption` and the filter sheet's rows
-   * already follow for the same data. The pipeline heads no section for such a list,
-   * so this is a guard and not a case anybody meets.
-   */
-  protected readonly reelLabel = computed(() => {
-    const name = this.name();
-    const listId = this.entry()?.listId ?? null;
-    const list = listId === null ? '' : (this.lists().get(listId)?.name ?? '');
-
-    return this._translator.t(
-      list === '' ? 'basket.outstanding.label' : 'basket.outstanding.listLabel',
-      undefined,
-      this._locale(),
-      { list, name }
-    );
+  protected readonly shownAmount = computed(() => {
+    const state = this.state();
+    return state === 'DONE' || state === 'NOT_AVAILABLE'
+      ? (this.entry()?.asked ?? this.row().asked)
+      : this.stillToGet();
   });
 
-  /** Where the thumb is, while it is down. Null the moment the overlay closes. */
-  private readonly _preview = signal<number | null>(null);
-
   /**
-   * What the gesture is about to do, said while the thumb is still down.
+   * The cell's accessible name (velista `0190`, decision D): "Amount of Milk: 2",
+   * with the amount in the exact form, because a screen reader is told the
+   * 1.275 kg the line holds and not the rounded figure drawn.
    *
-   * The confirmation is this caption and letting go is the commit, which is section
-   * 3 and is not negotiable into a dialog: a dialog on a gesture done one handed
-   * over a trolley is the thing `0043` took off the list page.
+   * **Under a list heading the list leads**, so two cells of one product under
+   * two headings are told apart by somebody who hears them. A list with no name
+   * takes the plain name rather than a leading comma.
    */
-  protected readonly caption = computed(() =>
-    outstandingCaption(
-      this.stillToGet(),
-      this._preview(),
-      this._translator,
-      this._locale(),
-      this.row().unit
-    )
-  );
-
-  private readonly _reel = viewChild(QuantityReel);
-
-  /**
-   * Until when a tap on the words is the end of a reel gesture rather than a tap.
-   *
-   * The same beat `line-row` keeps for the same reason: the overlay closes on its
-   * own after an idle window, and a finger already falling towards the row does not
-   * stop when the thing under it disappears.
-   */
-  private _deafUntil = 0;
+  protected readonly amountLabel = computed(() => {
+    const locale = this._locale();
+    const listId = this.entry()?.listId ?? null;
+    const list = listId === null ? '' : (this.lists().get(listId)?.name ?? '');
+    return this._translator.t(
+      list === '' ? 'basket.amount.label' : 'basket.amount.listLabel',
+      undefined,
+      locale,
+      {
+        list,
+        name: this.name(),
+        amount: exactAmount(this.shownAmount(), this.unit(), locale).spoken,
+      }
+    );
+  });
 
   /**
    * Who stands behind the state the control is drawn from: the entry's last act
@@ -663,7 +590,7 @@ export class BasketRow {
 
   /**
    * A change somebody else made that turns the control into another act holds
-   * it deaf for the reel's beat (velista `0151`): a finger already on its way
+   * it deaf for a beat (velista `0151`): a finger already on its way
    * lands on nothing rather than on the act the change just put under it. The
    * person's own press moves the control too, and holds nothing, also when it
    * was an undo that leaves somebody else's act standing.
@@ -682,54 +609,20 @@ export class BasketRow {
       return;
     }
     if (this._actor() !== this.meId()) {
-      this._flipDeafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
+      this._flipDeafUntil = Date.now() + STATUS_FLIP_SHIELD_MS;
     }
   }
 
-  protected onReelAutoClosed(): void {
-    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
-  }
-
-  protected onPreview(next: number | null): void {
-    this._preview.set(next);
-  }
-
-  /**
-   * The reel was let go. Report it, and hold the number it landed on.
-   *
-   * The preview is cleared here rather than waited for: the reel emits its own null
-   * a beat later, and a caption that outlived the gesture by a frame would flicker
-   * under the number the request is already about.
-   */
-  protected onCommitted(change: { from: number; to: number }): void {
-    this._preview.set(null);
-    this._sent.set(change.to);
-    this.left.emit(change);
-  }
-
-  /**
-   * A tap on the words, which opens the sheet, unless it was really about the reel.
-   *
-   * Two cases and both are `line-row`'s. An open overlay is dismissed by the tap
-   * that lands beside it rather than opening a screen over the number somebody was
-   * reading; and a tap inside the beat after the overlay closed itself is the tail
-   * of that gesture, so it does nothing at all.
-   */
+  /** A press on the words, which opens the sheet. */
   protected onBody(): void {
-    const reel = this._reel();
-    if (reel?.open()) {
-      // Closed here rather than left to the blur. A tap on a span that cannot take
-      // focus moves focus nowhere, which is the ordinary case on a touch screen.
-      reel.close();
-      return;
-    }
-
-    if (Date.now() < this._deafUntil) {
-      return;
-    }
-
     this.open.emit();
   }
+
+  /** A press on the amount cell, which opens the same sheet (decision A). */
+  protected onAmount(): void {
+    this.open.emit();
+  }
+
 
   /**
    * Whether this row is one whose lines all left the coverage (velista `0093`,
@@ -737,7 +630,7 @@ export class BasketRow {
    *
    * **A whole second shape of row**, and that is why it is asked here rather
    * than folded into the controls one by one. Nothing on it is a control: no
-   * reel, no status glyph, no price, no sheet. It is a `li` with text, read in
+   * amount, no status glyph, no price, no sheet. It is a `li` with text, read in
    * document order by a screen reader and skipped by the Tab key, because there
    * is nothing on it to do and somebody still has to be told it happened.
    *
@@ -752,7 +645,7 @@ export class BasketRow {
    * heading**, as everything else the row draws, so a household whose share
    * somebody else bought is crossed out under its own heading.
    *
-   * A row bought elsewhere has no circle and no reel, because nothing on it buys
+   * A row bought elsewhere has no circle and no amount, because nothing on it buys
    * or takes back: this shopping list bought none of it, and the server refuses
    * to let it undo a buy of another. It still opens its sheet, where a list can
    * ask for the product again.
@@ -831,25 +724,6 @@ export class BasketRow {
     }
     return 'wanted';
   });
-
-  /**
-   * Whether the reel is drawn at all (velista `0092`, section 4).
-   *
-   * **The shape that tells a closed row from a wanted one at arm's length.** A
-   * skip and a close are both "nothing more is happening to this row today", and
-   * neither was reached by a number: a skip has no number, and a close is an
-   * outcome rather than a quantity. So a reel on either would be the one control
-   * that could be dragged to zero and mean something the state does not.
-   *
-   * A row bought to zero keeps its reel, at zero, because that is the gesture
-   * that put it there and the one that takes it back.
-   *
-   * Undoing a close is the status glyph beside it, unchanged since velista
-   * `0044`: press it, and the reel comes back with the row.
-   */
-  protected readonly showsReel = computed(
-    () => this.state() !== 'SKIPPED' && this.state() !== 'NOT_AVAILABLE'
-  );
 
   /**
    * The quiet line under the name about this row having been put off, or null.
@@ -1123,7 +997,9 @@ export class BasketRow {
   });
 
   /**
-   * The sentence under the number: the row's, or this household's share of it.
+   * What was got of what was asked: the row's, or this household's share of it.
+   * Said in the body's accessible name, and no longer drawn under the amount
+   * (velista `0190`, decision C).
    *
    * One slot and not two, because they answer the same question about the same
    * number and a row that drew both would say it twice. Under a list heading the

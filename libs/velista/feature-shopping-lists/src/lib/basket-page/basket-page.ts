@@ -112,7 +112,6 @@ import { basketErrorKey, type BasketOperation } from '../basket-error-copy';
 import {
   basketRowName,
   listPickerRows,
-  outstandingCaption,
   participantInitials,
   visitTime,
 } from '../basket-labels';
@@ -1416,72 +1415,6 @@ export class BasketPage {
   }
 
   /**
-   * The row's reel was let go: one call, whichever direction it went (plan 0054).
-   *
-   * **The client never decides whether the drag was a purchase or a take back.**
-   * `BasketStore.setLeft` turns the pair of numbers into a settle or a revert, and it
-   * is the one place that decision lives, so the row, the entries pane and this
-   * cannot disagree. What this page owns is the sentence a refusal leaves behind.
-   *
-   * Under a list heading the row is drawn for one entry, and moving its reel is
-   * still a write on the **row**: the units it settles are allocated to that
-   * household through `allocations`, which is velista `0092`'s to draw from the
-   * entries pane. Until then the reel under a heading commits against the row and
-   * the server divides oldest entry first, which is what it did before a heading
-   * existed.
-   */
-  protected setRowLeft(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): void {
-    // Only the settling direction is a buy. Taking units back names no shop, so
-    // it never asks (velista `0141`).
-    if (change.to < change.from) {
-      this._buy(() => this._writeRowLeft(row, change));
-      return;
-    }
-    void this._writeRowLeft(row, change);
-  }
-
-  private async _writeRowLeft(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): Promise<void> {
-    // Whatever the last move of any row came to, gone before this one starts: one
-    // sentence at a time across the whole basket, and a stale refusal sitting under
-    // a row somebody has since moved again would be a lie about the present.
-    this._notice.set(null);
-
-    const result = await this._store.setLeft(
-      row.row.rowKey,
-      change.to,
-      change.from,
-      this._settleAt(row.row)
-    );
-
-    if (result === null) {
-      this._reportLeft(row.row);
-      return;
-    }
-
-    // The same sentence the caption showed under the thumb, so a reader who could
-    // not see it still learns which of the two happened (section 7).
-    this._say(
-      outstandingCaption(
-        change.from,
-        change.to,
-        this._translator,
-        this._locale(),
-        row.row.unit
-      ) ?? ''
-    );
-
-    if (result.skippedCount > 0) {
-      this.openRow(row.row);
-    }
-  }
-
-  /**
    * A section's count as the heading draws it, or empty where it has none.
    *
    * "1 of 3 got", in the same words and from the same function as the sentence in
@@ -1549,33 +1482,11 @@ export class BasketPage {
   }
 
   /**
-   * Say what went wrong, once, on the row it went wrong on.
-   *
-   * The count is read back off the store rather than off the row this was called
-   * with, and that is the whole of the stale answer: `BasketStore.setLeft`
-   * refetches before it returns null, so by now the row's number is the true one and
-   * "it says 3 now" is a sentence worth saying. Every other failure gets its own
-   * sentence the same way, because a failure with no sentence is the defect
-   * `basket-error-copy.ts` exists to close (plan 0052, section 7).
-   */
-  private _reportLeft(row: BasketRowModel): void {
-    const key = basketErrorKey(this._store.error(), 'basket.outstanding');
-    // Found again rather than trusted: a `stale_quantity` refetch can land a
-    // re-keyed row, and the number to report is that row's as it now stands.
-    const found = this._store.rowFor(row.rowKey);
-    const count = (found ?? row).left;
-
-    // On the row as it now stands, so a re-keyed row draws it (velista `0141`).
-    this._notice.set({ rowKey: (found ?? row).rowKey, key, count });
-    this._say(this._translator.t(key, undefined, this._locale(), { count }));
-  }
-
-  /**
    * Say that a held buy was refused, on its row (velista `0141`).
    *
    * The settle sheet drew this sentence before the hold. A held buy outlives the
    * sheet, which the question replaced, so the row says it instead, as it does for
-   * a refused reel. The row is found again by the key of the press, because a
+   * a refused circle. The row is found again by the key of the press, because a
    * patch can have re-keyed it while the question was open.
    */
   private _reportSettle(

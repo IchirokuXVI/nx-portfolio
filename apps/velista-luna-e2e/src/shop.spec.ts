@@ -22,7 +22,8 @@ import {
 } from './support/api';
 import {
   addInTheAisle,
-  askReel,
+  amountCell,
+  askAmount,
   chip,
   clearBasketSearch,
   closeSettleSheet,
@@ -30,11 +31,9 @@ import {
   expectBasketUrl,
   filterTool,
   generateBasket,
-  nudge,
   openFilterSheet,
   openSettleSheet,
   pressBasketMenuRow,
-  reel,
   row,
   rows,
   searchBasket,
@@ -49,7 +48,7 @@ import {
  * would meet them on a single shop: generate (0045), search (0074), filter and
  * group (0075, 0077), prices from one shop (0078), the row's status control
  * (0052), the settle sheet (0044, as velista 0139 drew it around the lists
- * that ask), the reel that settles and then reverts (0073 test 13), a row
+ * that ask), the amount cell that opens it (0190), a settle and its undo, a row
  * bought whole as its product (0139), the composer in the aisle (0053, 0110),
  * finishing
  * (0057), and what the next basket remembers (0076).
@@ -230,19 +229,19 @@ test.describe('one trip, by the owner', () => {
       );
     });
 
-    await test.step('6. the settle sheet names the product, its price and the list that asks, and the reel buys one', async () => {
+    await test.step('6. the settle sheet names the product, its price and the list that asks, and the amount cell opens it', async () => {
       const dialog = await openSettleSheet(page, 'Milk');
       // Under the product: the price of one at the shop, and what is left
       // (velista `0139`, section 3).
       await expect(dialog.locator('.subtitle')).toHaveText(
         /€1\.15 each\s*·\s*2 to get/
       );
-      // One list asks, with its quantity as a reel the owner may move.
+      // One list asks, with its amount in a stepper the owner may change.
       const entries = dialog.locator('lib-row-entries');
       await expect(
         entries.getByRole('heading', { name: 'Asked for on 1 list' })
       ).toBeVisible();
-      await expect(askReel(dialog, 'Groceries')).toHaveAttribute(
+      await expect(askAmount(dialog, 'Groceries')).toHaveAttribute(
         'aria-valuenow',
         '2'
       );
@@ -251,23 +250,20 @@ test.describe('one trip, by the owner', () => {
       ).toBeVisible();
       await closeSettleSheet(page, dialog, basketId);
 
-      // Part of a row is bought with the row's own reel.
-      await nudge(reel(row(page, 'Milk'), 'Milk, still to get'), -1);
-      await expect(
-        reel(row(page, 'Milk'), 'Milk, still to get')
-      ).toHaveAttribute('aria-valuenow', '1');
-      await expect(
-        row(page, 'Milk').getByRole('button', {
-          name: 'Mark the rest of Milk as got',
-        })
-      ).toBeVisible();
+      // The row shows only its amount, and a press on it opens the same sheet
+      // (velista 0190). The amount is changed in the sheet, not on the row.
+      const cell = amountCell(row(page, 'Milk'));
+      await expect(cell).toHaveAccessibleName('Amount of Milk: 2');
+      await expect(cell.locator('.number')).toHaveText('2');
+      await cell.click();
+      await expect(page).toHaveURL(/\/sheet\/rows\/[0-9a-f-]{36}\/settle$/);
+      await closeSettleSheet(page, sheet(page, 'Milk'), basketId);
     });
 
-    await test.step('7. settle Milk to zero with the reel, raise it to two, and the zone line asks for the rest again', async () => {
-      const milk = reel(row(page, 'Milk'), 'Milk, still to get');
-
-      await nudge(milk, -1);
-      await expect(milk).toHaveAttribute('aria-valuenow', '0');
+    await test.step('7. settle Milk with its status control, undo it, and the zone line asks for two again', async () => {
+      await row(page, 'Milk')
+        .getByRole('button', { name: 'Mark Milk as got' })
+        .click();
       await expect(
         row(page, 'Milk').getByRole('button', { name: 'Milk is got. Undo it' })
       ).toBeVisible();
@@ -278,11 +274,16 @@ test.describe('one trip, by the owner', () => {
         )
         .toBe(0);
 
-      await nudge(milk, 2);
-      await expect(milk).toHaveAttribute('aria-valuenow', '2');
+      await row(page, 'Milk')
+        .getByRole('button', { name: 'Milk is got. Undo it' })
+        .click();
+      await expect(amountCell(row(page, 'Milk'))).toHaveAccessibleName(
+        'Amount of Milk: 2'
+      );
 
-      // Plan 0073 test 13: raising the reel walks the settlements back, so the
-      // household's own line asks for both again rather than for extra.
+      // The undo takes the buy back, so the household's own line asks for both
+      // again. Plan 0073 test 13 (raising the reel walks the settlements back)
+      // has no gesture left since velista 0190 took the reel off the row.
       await expect
         .poll(
           async () =>
@@ -396,9 +397,10 @@ test.describe('one trip, by the owner', () => {
  * A loose product is asked for by weight (velista plan 0182, section 4).
  *
  * One product sold by the kilo, with a price, on the Groceries list: added at
- * 1000 g, the row's reel nudged from 1000 to 750, which buys 250 g, and what was
- * bought reads 250 g. `aria-valuenow` stays the integer in grams, as every reel
- * of this suite asserts, and `aria-valuetext` carries the words.
+ * 1000 g, its row's amount cell reads 1 over kg, and the sheet's field is typed
+ * down to 0.75 (a kilo figure, so 750 g, velista 0188 decision K). The line then
+ * asks for 750 g and nothing was bought (velista 0190). `aria-valuenow` stays
+ * the integer in grams.
  *
  * The product is made through the back office and kept across runs, as
  * `aisles.spec.ts` makes its own; the line is made per run and deleted after,
@@ -442,36 +444,45 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     await admin?.dispose();
   });
 
-  test('is added at a kilo, nudged to 750 g, and 250 g is what was bought', async ({
+  test('is added at a kilo and typed down to 750 g in the sheet', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
-    await generateBasket(page, ['Groceries'], `Weighed ${Date.now()}`);
-
-    const bananas = reel(row(page, NAME.en), `${NAME.en}, still to get`);
-    await expect(bananas).toHaveAttribute('aria-valuenow', '1000');
-    await expect(bananas).toHaveAttribute('aria-valuetext', '1 kg');
-
-    // Ten steps of 25 g down from a kilo: 975, 950, ... 750. Down is bought.
-    await nudge(bananas, -10);
-    await expect(bananas).toHaveAttribute('aria-valuenow', '750');
-    await expect(bananas).toHaveAttribute('aria-valuetext', '750 g');
-    await expect(row(page, NAME.en).locator('.progress')).toHaveText(
-      '250 g of 1 kg'
+    const basketId = await generateBasket(
+      page,
+      ['Groceries'],
+      `Weighed ${Date.now()}`
     );
 
-    // Bought, as the backend records it: 250 in grams, not 250 of something.
-    await expect
-      .poll(async () =>
-        (await lineSettlements(alice, lineId))
-          .filter((s) => s.outcome === 'BOUGHT' && !s.revertedAt)
-          .map((s) => ({ quantity: s.quantity, unit: s.unit }))
-      )
-      .toEqual([{ quantity: 250, unit: 'GRAM' }]);
+    const cell = amountCell(row(page, NAME.en));
+    await expect(cell.locator('.number')).toHaveText('1');
+    await expect(cell.locator('.symbol')).toHaveText('kg');
+
+    const dialog = await openSettleSheet(page, NAME.en);
+    const field = askAmount(dialog, 'Groceries');
+    await expect(field).toHaveAttribute('aria-valuenow', '1000');
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname)
+    );
+    await field.fill('0.75');
+    await field.press('Enter');
+    await saved;
+    await expect(field).toHaveAttribute('aria-valuenow', '750');
+    await closeSettleSheet(page, dialog, basketId);
+
+    await expect(cell.locator('.number')).toHaveText('750');
+    await expect(cell.locator('.symbol')).toHaveText('g');
+
+    // Asked for, as the backend records it: 750 in grams, and nothing bought.
     expect(await readLine(alice, LIST_GROCERIES_ID, lineId)).toMatchObject({
       quantity: 750,
       unit: 'GRAM',
     });
+    expect(
+      (await lineSettlements(alice, lineId)).filter((s) => !s.revertedAt)
+    ).toEqual([]);
   });
 });
 

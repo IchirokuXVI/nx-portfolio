@@ -555,6 +555,10 @@ version for "no partial buy from the row":
    (which records no buy and no price) or buy all 6. Is that what you want, or should the
    sheet gain a "got" amount beside the lists (a second plan, using `BasketStore.setLeft`,
    which this plan keeps)? The build waits for this answer.
+
+   Answered by the owner on 2026-11-11: build as written. No partial buy from the row for
+   now: a person lowers what the list asks for, or buys all. `BasketStore.setLeft` stays
+   with no caller (decision F), and a "got some" amount in the sheet is a later plan.
 2. On a bought or "No había" row the cell shows what was asked, not 0 (decision B). Is that
    the number you want there?
 3. The cell is a second button beside the row's text, both opening the same sheet, so a

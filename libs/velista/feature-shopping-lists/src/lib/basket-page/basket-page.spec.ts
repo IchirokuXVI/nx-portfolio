@@ -128,11 +128,8 @@ interface FakeStore {
   /** What the store last failed with, which is where the row's sentence comes from. */
   readonly error: WritableSignal<unknown>;
   /**
-   * Every move of a row's reel, and what it answered.
-   *
-   * One mock and not two, because `setLeft` is the one call the reel makes: the
-   * client never decides whether a drag was a purchase or a take back (velista
-   * `0090`, section 6).
+   * The store's write of a partial buy, which no control on the page calls since
+   * velista `0190` took the reel off the row. Kept so a spec can say so.
    */
   readonly setLeft: jest.Mock;
   /** Every settle the page sent from a row's status control. */
@@ -486,12 +483,7 @@ async function render(options: Options = {}): Promise<{
     leave: jest.fn(),
     rows: signal<readonly BasketRow[]>(options.lines ?? []),
     error: signal<unknown>(null),
-    /**
-     * The reel's one call, in both directions.
-     *
-     * It answers the row as the server would, which is what the page draws: the
-     * row on screen is the answer's and never the number that was sent.
-     */
+    /** A partial buy, which nothing on the page sends (velista `0190`). */
     setLeft: jest.fn(
       (rowKey: string): Promise<BasketRowResult | null> =>
         Promise.resolve(rowResult(line(rowKey)))
@@ -1200,14 +1192,11 @@ describe('the basket header, live', () => {
 });
 
 /**
- * The number on the row, once it has been let go (plan 0054).
- *
- * The page is where the gesture becomes a request, and there are only three things
- * it has to get right: it sends both numbers, it opens the sheet when the write had
- * something to report that a row cannot draw, and it says one sentence when the
- * write was refused. The gesture itself is the row's spec and the reel's.
+ * A row's controls on the page (velista `0190`): the status control writes, and
+ * the amount cell opens the settle sheet, as the words do. The amount is changed
+ * in that sheet, and the row has no write of its own for it.
  */
-describe('the number on a row', () => {
+describe('the controls on a row', () => {
   /** The row component, which is what a gesture reaches the page through. */
   function row(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
     return fixture.debugElement.query(By.directive(BasketRowComponent))
@@ -1225,16 +1214,21 @@ describe('the number on a row', () => {
 
   const milk = () => line('Milk', { left: 5 });
 
-  it('sends where the gesture ended and where it believed it began', async () => {
-    // `from` is not decoration: without it a stale gesture is applied as the
-    // opposite act, which is the one thing this message must never do (backend
-    // `0056`, section 3.2).
+  it('opens the settle sheet from the amount, as the words do', async () => {
     const { fixture, store } = await render({ lines: [milk()] });
+    const host = fixture.nativeElement as HTMLElement;
 
-    row(fixture).left.emit({ from: 5, to: 3 });
+    host.querySelector<HTMLButtonElement>('lib-basket-row .body')?.click();
+    host.querySelector<HTMLButtonElement>('lib-basket-row .amount')?.click();
     await settleWrites(fixture);
 
-    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {});
+    expect(store.navigate).toHaveBeenCalledTimes(2);
+    expect(store.navigate.mock.calls[1]).toEqual(store.navigate.mock.calls[0]);
+    expect(store.navigate).toHaveBeenLastCalledWith(
+      ['sheet', 'rows', 'row-Milk', 'settle'],
+      expect.objectContaining({ queryParams: expect.anything() })
+    );
+    expect(store.setLeft).not.toHaveBeenCalled();
   });
 
   describe('the price scope (velista 0095, section 6)', () => {
@@ -1276,22 +1270,6 @@ describe('the number on a row', () => {
       ],
     ]);
     const pricedMilk = () => line('Milk', { left: 5, productId: 'item-milk' });
-
-    it('the reel names the scope of the price the row draws', async () => {
-      const { fixture, store } = await render({
-        lines: [pricedMilk()],
-        products: priced,
-      });
-
-      row(fixture).left.emit({ from: 5, to: 3 });
-      await settleWrites(fixture);
-
-      // The row's product travels with the buy (velista `0139`, section 4).
-      expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {
-        itemId: 'item-milk',
-        priceScopeId: 's-dia',
-      });
-    });
 
     it('the status control names it too, and never an amount', async () => {
       const { fixture, store } = await render({
@@ -1354,114 +1332,6 @@ describe('the number on a row', () => {
 
       expect(store.settle.mock.calls[0][1]).not.toHaveProperty('priceScopeId');
     });
-  });
-
-  it('says which of the two happened, once, in the live region', async () => {
-    // The same sentence the caption showed under the thumb, so a reader who could
-    // not see it still learns whether they recorded a purchase or raised a target
-    // (section 7).
-    const { fixture } = await render({ lines: [milk()] });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(query(fixture, '.said')?.textContent).toContain(
-      'basket.outstanding.bought'
-    );
-  });
-
-  it('opens the sheet when an origin was missed', async () => {
-    // A skipped origin report is a paragraph and a row is three short lines, so it
-    // goes where the sentence for it already lives (plan 0052, section 6.4). A raise
-    // answers `skippedCount: 0`, so this needs no branch on direction.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockResolvedValue({
-      ...rowResult(milk()),
-      skippedCount: 1,
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(store.navigate).toHaveBeenCalledWith(
-      ['sheet', 'rows', 'row-Milk', 'settle'],
-      expect.anything()
-    );
-  });
-
-  it('tells the row what the line says now when somebody else moved it', async () => {
-    // Section 4.1. The store refetches before it answers, so the count in the
-    // sentence is the true one; a refusal that only said "that did not work" would
-    // send somebody dragging again into the same race.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockImplementation(() => {
-      store.error.set(
-        new GatewayError({
-          code: 'stale_quantity' as ErrorCode,
-          status: 409,
-          correlationId: 'ref-1',
-        })
-      );
-      store.rows.set([line('Milk', { left: 3 })]);
-      return Promise.resolve(null);
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(row(fixture).notice()?.key).toBe('basket.error.staleLine');
-    expect(row(fixture).notice()?.count).toBe(3);
-    expect(query(fixture, '.said')?.textContent).toContain(
-      'basket.error.staleLine'
-    );
-  });
-
-  it('gives every other failure a sentence of its own', async () => {
-    // A failure with no sentence is the defect `basket-error-copy.ts` exists to
-    // close: somebody in a shop performed this on purpose and is waiting on it.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockImplementation(() => {
-      store.error.set(
-        new GatewayError({
-          code: 'forbidden',
-          status: 403,
-          correlationId: 'ref-2',
-        })
-      );
-      return Promise.resolve(null);
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(row(fixture).notice()?.key).toBe('basket.error.accessChanged');
-  });
-
-  it('clears the last refusal before the next move goes out', async () => {
-    // One sentence at a time across the whole basket. A refusal left under a row
-    // somebody has since moved again is a claim about the present that nothing is
-    // checking.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockImplementation(() => {
-      store.error.set(
-        new GatewayError({
-          code: 'forbidden',
-          status: 403,
-          correlationId: 'ref-3',
-        })
-      );
-      return Promise.resolve(null);
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-    expect(row(fixture).notice()).not.toBeNull();
-
-    store.setLeft.mockResolvedValue({ line: milk(), skippedCount: 0 });
-    row(fixture).left.emit({ from: 5, to: 4 });
-    await settleWrites(fixture);
-
-    expect(row(fixture).notice()).toBeNull();
   });
 });
 
@@ -2556,39 +2426,6 @@ describe('searching the basket', () => {
     });
 
     /**
-     * **One call, under a heading and everywhere else** (velista `0090`,
-     * section 6). `setLeft` is what the reel emits into, and it turns the pair of
-     * numbers into a settle or a revert: the client never decides which.
-     *
-     * The units a reel under a heading commits are allocated to that household by
-     * velista `0092`, from the entries pane. Until then the reel commits against
-     * the row and the server divides oldest entry first, which is what it did
-     * before a heading existed.
-     */
-    it('commits a row under a list heading through the row’s own write', async () => {
-      const { fixture, store } = await renderGrouped('list');
-
-      // Four asked for and none got, so the reel runs from four and lands on one.
-      rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
-      await settleWrites(fixture);
-
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {
-        itemId: 'i-milk',
-      });
-    });
-
-    it('commits an ungrouped row through the same call', async () => {
-      const { fixture, store } = await render({ lines: grouped });
-
-      rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
-      await settleWrites(fixture);
-
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {
-        itemId: 'i-milk',
-      });
-    });
-
-    /**
      * The "List" radio is the filter sheet's, and it is offered on the same test
      * the store uses to drop a remembered one: a reader served no list has nothing
      * to group by, and a sheet that offered it would draw "Nothing" over a basket
@@ -3004,9 +2841,9 @@ describe('another basket at the same route', () => {
       const row = () =>
         fixture.debugElement.query(By.directive(BasketRowComponent))
           .componentInstance as BasketRowComponent;
-      store.setLeft.mockResolvedValue(null);
+      store.settle.mockResolvedValue(null);
 
-      row().left.emit({ from: 5, to: 3 });
+      row().settle.emit();
       await Promise.resolve();
       await Promise.resolve();
       fixture.detectChanges();
@@ -3183,7 +3020,7 @@ describe('the basket that is always there', () => {
   });
 
   it('keeps every row a generated basket would draw', async () => {
-    // The rows, the reels and the settle sheet are the same screen. Only the
+    // The rows, the amounts and the settle sheet are the same screen. Only the
     // header and the two sentences differ.
     const { fixture } = await render({ kind: 'LIVE', lines: someLines });
 
@@ -3757,7 +3594,7 @@ describe('the composer and the list it adds to', () => {
 
         expect(
           (fixture.nativeElement as HTMLElement).querySelector(
-            'lib-quantity-reel.took'
+            'lib-basket-row .amount.took'
           )
         ).not.toBeNull();
         expect(query(fixture, '.said')?.textContent).toContain(
@@ -5008,7 +4845,7 @@ describe('a row bought outside this shopping list (velista 0142)', () => {
     expect(last.querySelector('.row.is-removed')).not.toBeNull();
     expect(last.textContent).toContain('basket.line.boughtFromAnotherList');
     expect(last.querySelector('.status')).toBeNull();
-    expect(last.querySelector('lib-quantity-reel')).toBeNull();
+    expect(last.querySelector('.amount')).toBeNull();
     expect(store.revert).not.toHaveBeenCalled();
   });
 
@@ -5020,9 +4857,7 @@ describe('a row bought outside this shopping list (velista 0142)', () => {
 
     expect(page.querySelector('lib-basket-row .row.is-removed')).toBeNull();
     expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
-    expect(
-      page.querySelector('lib-basket-row lib-quantity-reel')
-    ).not.toBeNull();
+    expect(page.querySelector('lib-basket-row .amount')).not.toBeNull();
     expect(text(fixture)).not.toContain('basket.line.alreadyBought');
   });
 });
@@ -5375,21 +5210,6 @@ describe('the first buy asks where you are', () => {
     );
   });
 
-  it('holds the reel when it buys, and never when it takes units back', async () => {
-    const { fixture, store } = await render({
-      lines: [line('Milk', { left: 3, bought: 2, state: 'PARTLY' })],
-      storage: new Map(),
-    });
-
-    firstRow(fixture).left.emit({ from: 3, to: 1 });
-    await settleWrites(fixture);
-    expect(store.setLeft).not.toHaveBeenCalled();
-
-    firstRow(fixture).left.emit({ from: 3, to: 4 });
-    await settleWrites(fixture);
-    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 4, 3, {});
-  });
-
   /**
    * A held buy keeps the `from` and the row key of the press. A patch that moves
    * or re-keys the row while the question is open makes the server refuse it, and
@@ -5435,22 +5255,6 @@ describe('the first buy asks where you are', () => {
         key: 'basket.error.staleLine',
         count: 3,
       });
-    });
-
-    it('says so on the row after the reel', async () => {
-      const { fixture, store } = await render({
-        lines: [milk()],
-        storage: new Map(),
-      });
-      refuseWith(store, store.setLeft);
-
-      firstRow(fixture).left.emit({ from: 5, to: 2 });
-      await settleWrites(fixture);
-      await fixture.debugElement.injector.get(HeldBuy).release();
-      fixture.detectChanges();
-
-      expect(firstRow(fixture).row().rowKey).toBe('row-Milk-2');
-      expect(firstRow(fixture).notice()?.key).toBe('basket.error.staleLine');
     });
 
     it('says so on the row for a buy the settle sheet held', async () => {

@@ -169,64 +169,14 @@ export const LINE_ITEM_SET_MAX = 100;
 export const ITEM_LOOKUP_MAX_IDS = 500;
 
 /**
- * How far the thumb travels per unit on the quantity reel (velista plan 0043,
- * section 4).
+ * How long the basket row's status control ignores a press after another person
+ * flipped the row, in milliseconds (velista `0151`).
  *
- * The reel is **positional**: it follows the finger one to one, with no
- * acceleration and no auto repeat, so this number is the whole of its feel. At
- * 40px a 390px phone leaves roughly 280px of comfortable travel, which covers
- * about seven units in one uninterrupted drag. That is what makes two to five a
- * single gesture rather than three, which is the difference between a control
- * somebody uses and one they avoid.
+ * The control turns into another act when somebody else settles or reverts the
+ * row, and a finger already on its way down was aimed at the old state. For this
+ * beat the press is swallowed, so it does not undo what the other person just did.
  */
-export const QUANTITY_REEL_PX_PER_UNIT = 40;
-
-/**
- * How long the reel's overlay stays up after the thumb lifts, in milliseconds.
- *
- * The gesture does not end at the release. The overlay lingers so a second drag
- * continues from the snapped number, and **the close is what commits**: one
- * signed delta for the whole adjustment, however many times the thumb went back
- * for more inside the window (section 4.1). Long enough to reach for again,
- * short enough not to sit over the row.
- */
-export const QUANTITY_REEL_IDLE_MS = 1600;
-
-/** How far a page key moves the quantity, for the reel's keyboard equivalent. */
-export const QUANTITY_REEL_PAGE_STEP = 5;
-
-/**
- * How far a pointer may wander and still count as a tap on the reel, in pixels.
- *
- * The reel answers two gestures at once: a drag that carries the number along, and
- * a tap on one of the numbers on show that goes straight to it. Six pixels is
- * about the tremor a thumb has while standing still, and it is far short of the
- * forty a single unit of travel takes, so nothing that reads as a tap can also
- * have moved the number under it.
- */
-export const QUANTITY_REEL_TAP_SLOP_PX = 6;
-
-/**
- * How long a press may last and still count as a tap on the reel, in milliseconds.
- *
- * A tap goes to the number under the finger. A hold does not, because a hold is
- * how a drag begins, and somebody who pressed, thought better of it and lifted
- * without moving did not ask for the number they happened to be resting on.
- */
-export const QUANTITY_REEL_TAP_MAX_MS = 350;
-
-/**
- * How long a line stays deaf to a tap after the reel closes on its own, in
- * milliseconds.
- *
- * The overlay sits over the row it belongs to, so a finger already on its way down
- * when {@link QUANTITY_REEL_IDLE_MS} runs out lands on a row that was covered a
- * frame ago. For this beat the line behaves exactly as it does while the reel is
- * up: the tap is swallowed rather than opening the detail sheet. It does not apply
- * when somebody closed the reel themselves by tapping elsewhere on the line, since
- * then they were aiming at the row and they get the row, minus that one tap.
- */
-export const QUANTITY_REEL_CLICK_SHIELD_MS = 250;
+export const STATUS_FLIP_SHIELD_MS = 250;
 
 /**
  * How many characters the composer waits for before asking the catalog, and how

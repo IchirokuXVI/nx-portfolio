@@ -406,7 +406,7 @@ describe('BasketRowComponent: prices from one shop', () => {
   });
 
   /** The settle controls never leave a row, listed or not (section 5). */
-  it('keeps the status control and the reel on a line the shop does not list', async () => {
+  it('keeps the status control and the amount on a line the shop does not list', async () => {
     const fixture = await render({
       atShop: true,
       mark: { kind: 'unlisted', chain: 'Mercadona', elsewhere: null },
@@ -414,7 +414,7 @@ describe('BasketRowComponent: prices from one shop', () => {
 
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('button.status')).not.toBeNull();
-    expect(element.querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(element.querySelector('.amount')).not.toBeNull();
   });
 });
 
@@ -439,7 +439,7 @@ describe('BasketRowComponent: what the shop does not have', () => {
     // Still a line to buy: the shelf may be restocked.
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('button.status')).not.toBeNull();
-    expect(element.querySelector('lib-quantity-reel')).not.toBeNull();
+    expect(element.querySelector('.amount')).not.toBeNull();
   });
 
   it('draws no shelf line on a row the shop said nothing about', async () => {

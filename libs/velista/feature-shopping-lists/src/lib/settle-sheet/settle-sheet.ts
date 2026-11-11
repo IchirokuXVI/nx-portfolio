@@ -39,6 +39,7 @@ import {
   priceWordsText,
   shownOffer,
   soldAs,
+  stepFrom,
   toSettlementRow,
   type BasketParticipant,
   type BasketProduct,
@@ -46,14 +47,17 @@ import {
   type BasketRow as BasketRowModel,
   type BasketRowResult,
   type LineUnit,
+  type QuantityStep,
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
 import {
   formatAmount,
   formatMoney,
+  quantityRuns,
   rowKeyOf,
   SheetNavigation,
+  type QuantityRun,
 } from '@portfolio/velista/platform';
 import { CheckIcon, SheetShell, SpinnerIcon } from '@portfolio/velista/ui';
 import {
@@ -122,12 +126,21 @@ interface FrozenFailure {
  * One line of the basket: its product, what each household asked for and got, and
  * the ways to close it without buying (plan 0044, section 4.2).
  *
- * ## No "Got all" and no "Got some"
+ * ## No "Got some"
  *
- * The sheet had both, and they are gone. Buying the whole row is the row's own
- * control on the basket page, and buying part of it is the "got" reel below. Both
- * reels commit on release and **leave the sheet open**, because somebody moving
- * a number wants to see where it landed.
+ * Buying the whole row is the row's own control on the basket page, or "Got all"
+ * here. Buying part of a row has no control for now (velista `0190`, the owner's
+ * answer to its question 1): a household lowers what its list asks for instead.
+ *
+ * ## Each list's amount is saved after the presses stop (velista `0190`)
+ *
+ * Every list that holds the row draws the typed stepper of velista `0188`, which
+ * emits every step and saves nothing. This sheet is the logic layer for those
+ * amounts: {@link demandRuns} and {@link raiseRuns} gather the steps of one line
+ * or one list into a run and send it `QUANTITY_STEP_QUIET_MS` after the last
+ * press, and a typed amount at once. One write per line is out at a time, and a
+ * settle button sends the waiting runs before it settles (decision J). The sheet
+ * stays open, because somebody moving a number wants to see where it landed.
  *
  * ## What every list asked for and got, under the product (velista `0073`)
  *
@@ -274,6 +287,38 @@ export class SettleSheet {
    * settle controls are disabled and the sheet cannot be dismissed.
    */
   protected readonly busy = computed(() => this._settling() || this.saving());
+
+  /**
+   * The waiting saves of each list's ask, by line id (velista `0190`, section 4).
+   * The stepper of a line stays live while its save is out.
+   */
+  protected readonly demandRuns = quantityRuns<string>((lineId, run) => {
+    void this._write(`line:${lineId}`, (waited) =>
+      this.demand(lineId, waited ? this._fromNow(lineId, run) : run)
+    );
+  });
+
+  /** The waiting saves of the lists that do not ask yet, by list id (decision H). */
+  protected readonly raiseRuns = quantityRuns<string>((listId, run) => {
+    void this._write(`list:${listId}`, (waited) =>
+      this.raise(listId, run, waited)
+    );
+  });
+
+  /**
+   * The write in flight for each line or list, so a run sent while one is out
+   * waits for it. Each answers whether it landed.
+   */
+  private readonly _writes = new Map<string, Promise<boolean>>();
+  private readonly _writesOut = signal(0);
+
+  /** Whether a step waits for its save, or a save of an amount is out. */
+  protected readonly amountSaving = computed(
+    () =>
+      this.demandRuns.pending().size > 0 ||
+      this.raiseRuns.pending().size > 0 ||
+      this._writesOut() > 0
+  );
   protected readonly result = this._result.asReadonly();
 
   /**
@@ -526,7 +571,7 @@ export class SettleSheet {
    * What the amount still to get comes to, for a weight or a volume: "≈ 1,49 €"
    * for 750 g at 1,99 € a kilo (velista `0182`, section 3). Null for a count,
    * whose price of one already says it, and for a row with nothing left or no
-   * price. Read off the row's `left`, so it moves with the reel's commit.
+   * price. Read off the row's `left`, so it moves when a saved amount lands.
    */
   protected readonly amountToGet = computed<string | null>(() => {
     const row = this.row();
@@ -800,18 +845,34 @@ export class SettleSheet {
    * not hold it gets a line named by the product, with that one product. Either
    * way the list then joins the lists that ask, and it leaves this read.
    */
-  protected async raise(change: {
-    readonly list: BasketProductList;
-    readonly to: number;
-  }): Promise<void> {
+  protected async raise(
+    listId: string,
+    run: QuantityRun,
+    waited = false
+  ): Promise<boolean> {
     const product = this._product();
     const row = this.row();
-    if (product === null || row === null || this.busy()) {
-      return;
+    // A run that ends at 0 sends nothing: the list still does not ask.
+    if (product === null || row === null || run.to === 0) {
+      return true;
     }
-    const { list, to } = change;
+    const read = this._others();
+    const list =
+      read !== null && read.state.state === 'ready'
+        ? read.state.lists.find((held) => held.listId === listId)
+        : undefined;
+    if (list === undefined) {
+      // A run that waited for the first raise of this list: that one landed, so
+      // the list now asks through a line of the row, and this run moves it.
+      const entry = waited
+        ? row.entries.find((held) => held.listId === listId)
+        : undefined;
+      return entry === undefined
+        ? true
+        : this.demand(entry.lineId, { from: entry.left, to: run.to });
+    }
+    const to = run.to;
 
-    this._settling.set(true);
     this._failedOp.set(null);
     const result =
       list.lineId === null
@@ -831,25 +892,119 @@ export class SettleSheet {
             from: list.quantity ?? 0,
             unit: row.unit,
           });
-    this._settling.set(false);
 
     if (result === null) {
       this._failedOp.set(
         list.lineId === null ? 'basket.addLine' : 'basket.demand'
       );
-      return;
+      return false;
     }
 
-    const read = this._others();
-    if (read !== null && read.state.state === 'ready') {
+    const now = this._others();
+    if (now !== null && now.state.state === 'ready') {
       this._others.set({
-        itemId: read.itemId,
+        itemId: now.itemId,
         state: {
           state: 'ready',
-          lists: read.state.lists.filter((held) => held.listId !== list.listId),
+          lists: now.state.lists.filter((held) => held.listId !== listId),
         },
       });
     }
+    return true;
+  }
+
+  /** One step of one list's ask (velista `0190`, section 4). */
+  protected stepDemand(change: {
+    readonly lineId: string;
+    readonly step: QuantityStep;
+  }): void {
+    this.demandRuns.step(change.lineId, change.step);
+    if (this._typed(change.step)) {
+      this.demandRuns.flush(change.lineId);
+    }
+  }
+
+  /** One step of a list that does not ask yet (decision H). */
+  protected stepRaise(change: {
+    readonly list: BasketProductList;
+    readonly step: QuantityStep;
+  }): void {
+    this.raiseRuns.step(change.list.listId, change.step);
+    if (this._typed(change.step)) {
+      this.raiseRuns.flush(change.list.listId);
+    }
+  }
+
+  /**
+   * Whether a step is a typed amount rather than a press: a press or an arrow
+   * moves exactly one step, so anything else is an amount somebody committed
+   * with Enter or a blur (or Home and End), and it is sent at once. Only presses
+   * wait.
+   */
+  private _typed(step: QuantityStep): boolean {
+    if (step.repeat) {
+      return false;
+    }
+    const unit = this.row()?.unit ?? 'UNIT';
+    return step.to !== stepFrom(step.from, unit, step.to > step.from ? 1 : -1);
+  }
+
+  /** A run that waited for a write of its line starts from the line's answer. */
+  private _fromNow(lineId: string, run: QuantityRun): QuantityRun {
+    const entry = this.row()?.entries.find((held) => held.lineId === lineId);
+    return { from: entry?.left ?? run.from, to: run.to };
+  }
+
+  /**
+   * One write per line or list at a time (section 4): a write queued while one
+   * of the same key is out runs after it, and is told that it waited.
+   */
+  private _write(
+    key: string,
+    send: (waited: boolean) => Promise<boolean>
+  ): Promise<boolean> {
+    const before = this._writes.get(key);
+    const next = (before ?? Promise.resolve(true)).then(
+      () => send(before !== undefined),
+      () => send(true)
+    );
+    this._writes.set(key, next);
+    this._writesOut.update((count) => count + 1);
+    void next.finally(() => {
+      this._writesOut.update((count) => count - 1);
+      if (this._writes.get(key) === next) {
+        this._writes.delete(key);
+      }
+    });
+    return next;
+  }
+
+  /**
+   * Send every waiting run now, and answer once every write is back whether all
+   * of them landed.
+   */
+  private _flushAll(): Promise<boolean> {
+    for (const lineId of [...this.demandRuns.pending().keys()]) {
+      this.demandRuns.flush(lineId);
+    }
+    for (const listId of [...this.raiseRuns.pending().keys()]) {
+      this.raiseRuns.flush(listId);
+    }
+    return Promise.all([...this._writes.values()]).then((landed) =>
+      landed.every(Boolean)
+    );
+  }
+
+  /**
+   * Before a settle, the amounts the sheet shows are saved (decision J): "Got all
+   * (1.25 kg)" buys what the steppers now say. Answers false when a save was
+   * refused, whose sentence is then drawn, or when the row left the basket.
+   */
+  private async _sendSteps(): Promise<boolean> {
+    this._settling.set(true);
+    const landed = await this._flushAll();
+    this._settling.set(false);
+    return landed && !this._left;
   }
 
   /**
@@ -858,6 +1013,9 @@ export class SettleSheet {
    * section 4), so the two gestures cannot record different things.
    */
   protected async settleAll(): Promise<void> {
+    if (this.amountSaving() && !(await this._sendSteps())) {
+      return;
+    }
     const left = this.outstanding();
     const got = this._got();
     await this._buy(() => ({
@@ -1232,6 +1390,9 @@ export class SettleSheet {
    * which every participant already may.
    */
   protected async skip(): Promise<void> {
+    if (this.amountSaving() && !(await this._sendSteps())) {
+      return;
+    }
     await this._run(() => this._store.skip(this._rowKey));
   }
 
@@ -1275,6 +1436,9 @@ export class SettleSheet {
    * bought. It carries `from` like every other write on a row.
    */
   protected async settleNone(): Promise<void> {
+    if (this.amountSaving() && !(await this._sendSteps())) {
+      return;
+    }
     // **No `itemId`**, and that is not an omission: a close buys nothing, so
     // there is no product to record against it. Naming one would put a product
     // in a purchase history that has no purchase in it.
@@ -1300,11 +1464,14 @@ export class SettleSheet {
    * household's list for everybody. So it has its own failures, its own sentence
    * and its own ending.
    *
+   * It is the send of {@link demandRuns}: one run of steps, after the presses
+   * stopped. It does not mark the sheet busy, so the line's stepper stays live
+   * while its save is out (velista `0190`, section 4).
+   *
    * Three endings:
    *
-   * - the row came back, and the sheet **stays open** on it, as it does for the
-   *   "got" reel beside it: the reel commits on release with no confirmation,
-   *   and the person moving it wants to see where it landed;
+   * - the row came back, and the sheet **stays open** on it: the person who
+   *   stepped the amount wants to see where it landed;
    * - the row is **gone**, which is a demand taken to zero on a row nothing was
    *   bought of. The list now asks for nothing, which is what was asked for, so
    *   the page is handed a sentence and the sheet closes over a row that is no
@@ -1312,22 +1479,20 @@ export class SettleSheet {
    * - it was refused, and the store has already read the basket again. The
    *   sentence is then about the row as it now stands.
    */
-  protected async demand(change: {
-    lineId: string;
-    from: number;
-    to: number;
-  }): Promise<void> {
+  protected async demand(lineId: string, run: QuantityRun): Promise<boolean> {
+    if (run.to === run.from) {
+      return true;
+    }
+    const change = { lineId, from: run.from, to: run.to };
     // The name the sheet is titled with, taken before the row can leave.
     const name = this.title();
 
-    this._settling.set(true);
     this._failedOp.set(null);
     const result = await this._store.setDemand({
       lineId: change.lineId,
       quantity: change.to,
       from: change.from,
     });
-    this._settling.set(false);
 
     if (result === null) {
       // `stale_quantity` and `forbidden` each get their own sentence, keyed on
@@ -1346,7 +1511,7 @@ export class SettleSheet {
         count: line?.asked ?? row?.asked ?? change.to,
         correlationId: correlationIdOf(error),
       });
-      return;
+      return false;
     }
 
     if (
@@ -1366,8 +1531,11 @@ export class SettleSheet {
           }
         )
       );
-      this.close();
+      if (!this._left) {
+        this.close();
+      }
     }
+    return true;
   }
 
   protected openPane(pane: Pane): void {
@@ -1395,6 +1563,10 @@ export class SettleSheet {
    * person was looking at before, and never reopens a spent sheet.
    */
   protected close(): void {
+    // Nothing a person stepped is dropped (velista `0190`, section 4): the waiting
+    // runs are sent and not awaited. A refusal after the sheet closed shows on the
+    // row through the store's re-read.
+    void this._flushAll();
     // Marked before the navigation and not after, so the effect above cannot
     // dismiss a second time for a line that went away as this sheet was leaving.
     this._left = true;
@@ -1647,8 +1819,7 @@ export class SettleSheet {
    * them do the same three things: mark the sheet busy, fold or report, and get out
    * of the way when there is nothing to say.
    *
-   * `stayOpen` is the entries pane's reels, which keep the sheet up after a write
-   * that landed. The buttons close it.
+   * `stayOpen` keeps the sheet up after a write that landed. The buttons close it.
    */
   private async _run(
     send: () => Promise<BasketRowResult | null>,
