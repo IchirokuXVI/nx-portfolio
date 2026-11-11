@@ -6,13 +6,15 @@ import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutransla
 import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
+  DEZA_CATALOG_PRESET,
+  GatewayError,
   HARVEST_SERVICE,
   HarvestMemory,
+  MERCADONA_SUNDAY_SCHEDULE,
+  MERCADONA_WEEKDAYS_SCHEDULE,
   MERCADONA_WEEKLY_PRESET,
   RESOURCE_GATEWAYS,
   ServerReachability,
-  MERCADONA_SUNDAY_SCHEDULE,
-  MERCADONA_WEEKDAYS_SCHEDULE,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import {
@@ -20,8 +22,8 @@ import {
   ResourceReferences,
 } from '@portfolio/luna-shopper-admin/feature-resource';
 import { PRESETS_CHAIN_KEY, PresetsPanel } from './presets-panel';
-import { SCHEDULES } from './schedules';
 import { RunRequestForm } from './run-request-form';
+import { SCHEDULES } from './schedules';
 
 /**
  * The presets (admin plan 0030, section 3), over the memory back end. A panel
@@ -73,6 +75,8 @@ interface Recorded {
   readonly updated: unknown[];
   readonly created: unknown[];
   readonly started: string[];
+  /** The chains whose probes were read, once per read. */
+  readonly probeReads: string[];
 }
 
 /** A second chain, which the seed holds no preset for. */
@@ -95,7 +99,13 @@ async function render(options: RenderOptions = {}): Promise<{
   recorded: Recorded;
 }> {
   const memory = new HarvestMemory();
-  const recorded: Recorded = { memory, updated: [], created: [], started: [] };
+  const recorded: Recorded = {
+    memory,
+    updated: [],
+    created: [],
+    started: [],
+    probeReads: [],
+  };
 
   const service = {
     ...({} as HarvestServiceI),
@@ -112,6 +122,10 @@ async function render(options: RenderOptions = {}): Promise<{
     },
     deletePreset: (id: string) => memory.deletePreset(id),
     listSchedules: (query: never) => memory.listSchedules(query),
+    listProbes: (chain: string, query: never) => {
+      recorded.probeReads.push(chain);
+      return memory.listProbes(chain, query);
+    },
     startPreset: (id: string) => {
       recorded.started.push(id);
       return memory.startPreset(id);
@@ -264,7 +278,9 @@ describe('the presets panel, the chain it opens on', () => {
     expect(fixture.componentInstance.highlighted()).toBe(
       MERCADONA_WEEKLY_PRESET
     );
-    expect(fixture.nativeElement.querySelector('li.highlighted')).not.toBeNull();
+    expect(
+      fixture.nativeElement.querySelector('li.highlighted')
+    ).not.toBeNull();
   });
 
   it('forgets the chain when the picker is cleared', async () => {
@@ -354,7 +370,7 @@ describe('the presets panel, "Edit presets"', () => {
     expect(query(fixture, '[data-delete]')).toBeNull();
   });
 
-  it('opens the editor from a row\'s edit button', async () => {
+  it("opens the editor from a row's edit button", async () => {
     const { fixture } = await render();
 
     (query(fixture, '[data-edit-presets]') as HTMLButtonElement).click();
@@ -541,5 +557,345 @@ describe('the presets panel, schedules', () => {
     expect(
       fixture.componentInstance.schedulesOf(MERCADONA_WEEKLY_PRESET)
     ).toEqual([]);
+  });
+});
+
+/**
+ * The notice on a preset's row (admin plan 0069, target 2). The seed's DEZA
+ * probe is red behind nothing and Mercadona's is green, so the two chains are
+ * the two cases.
+ */
+describe('the presets panel, a red probe', () => {
+  const DEZA = '33333333-3333-4333-8333-333333333333';
+
+  async function onDeza() {
+    const rendered = await render({ choose: false });
+    rendered.fixture.componentInstance.chooseChain(DEZA);
+    await settle(rendered.fixture);
+    return rendered;
+  }
+
+  it('reads the chain probes once, for every row', async () => {
+    const { fixture, recorded } = await onDeza();
+    await recorded.memory.createPreset(DEZA, 'Shops', {
+      mode: 'STORE_DISCOVERY',
+    });
+    await fixture.componentInstance.load();
+    await settle(fixture);
+
+    expect(fixture.componentInstance.presets()).toHaveLength(2);
+    expect(recorded.probeReads).toEqual([DEZA]);
+  });
+
+  it('draws the notice on each row whose run reads the chain', async () => {
+    const { fixture, recorded } = await onDeza();
+    await recorded.memory.createPreset(DEZA, 'Shops', {
+      mode: 'STORE_DISCOVERY',
+    });
+    await fixture.componentInstance.load();
+    await settle(fixture);
+
+    const rows: HTMLElement[] = Array.from(
+      fixture.nativeElement.querySelectorAll('.presets li')
+    );
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      expect(
+        row.querySelector('[data-probe-notice="UNREACHABLE"]')
+      ).not.toBeNull();
+    }
+    expect(
+      fixture.componentInstance.probeNoticeOf(
+        fixture.componentInstance.presets()[0]
+      )
+    ).toEqual({
+      chain: DEZA,
+      verdict: expect.objectContaining({ status: 'UNREACHABLE' }),
+    });
+  });
+
+  it('draws no notice for a run that reads no storefront', async () => {
+    const { fixture } = await onDeza();
+    const preset = fixture.componentInstance.presets()[0];
+
+    expect(
+      fixture.componentInstance.probeNoticeOf({
+        ...preset,
+        input: { ...preset.input, mode: 'FILE_IMPORT' },
+      })
+    ).toBe(null);
+  });
+
+  const question = (
+    fixture: ComponentFixture<PresetsPanel>
+  ): HTMLElement | null =>
+    fixture.nativeElement.querySelector('[data-start-question]');
+
+  it('asks before it starts, with Start enabled and the notice shown', async () => {
+    const { fixture, recorded } = await onDeza();
+    const button: HTMLButtonElement =
+      fixture.nativeElement.querySelector('[data-start]');
+
+    expect(
+      fixture.nativeElement.querySelector('[data-probe-notice]')
+    ).not.toBeNull();
+    expect(button.disabled).toBe(false);
+
+    button.click();
+    await settle(fixture);
+
+    expect(recorded.started).toEqual([]);
+    const dialog = question(fixture);
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.querySelector('h2')?.textContent?.trim()).toBe(
+      'harvest.probeNotice.question.heading'
+    );
+    expect(dialog?.querySelector('p')?.textContent?.trim()).toBe(
+      'harvest.probeNotice.text'
+    );
+    expect(fixture.componentInstance.pendingStart()?.message.args).toEqual(
+      expect.objectContaining({ chain: DEZA, sentence: expect.any(String) })
+    );
+    // The keyboard is on Cancel, and Tab reaches "Start anyway".
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-dismiss]')
+    );
+    dialog?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+    );
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-confirm]')
+    );
+    expect(recorded.started).toEqual([]);
+  });
+
+  it('starts once when "Start anyway" is pressed twice before the dialog goes', async () => {
+    const { fixture, recorded } = await onDeza();
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    confirm?.click();
+    confirm?.click();
+    await settle(fixture);
+
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('starts at one press when the probe read failed', async () => {
+    const failed = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockRejectedValue(new Error('the probe route did not answer'));
+    const { fixture, recorded } = await onDeza();
+    failed.mockRestore();
+
+    expect(fixture.nativeElement.querySelector('[data-probe-notice]')).toBe(
+      null
+    );
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('starts at one press when the probe read and the source read failed', async () => {
+    const probes = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockRejectedValue(new Error('the probe route did not answer'));
+    const source = jest
+      .spyOn(HarvestMemory.prototype, 'readSource')
+      .mockRejectedValue(new Error('the source route did not answer'));
+    const { fixture, recorded } = await onDeza();
+    probes.mockRestore();
+    source.mockRestore();
+
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('draws the refusal of a start made anyway on the row, with no question left open', async () => {
+    const refused = jest
+      .spyOn(HarvestMemory.prototype, 'startPreset')
+      .mockRejectedValue(
+        new GatewayError({
+          correlationId: 'ref-1',
+          code: 'conflict',
+          status: 409,
+        })
+      );
+    const { fixture, recorded } = await onDeza();
+    const page = fixture.componentInstance;
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    (
+      question(fixture)?.querySelector('[data-confirm]') as HTMLButtonElement
+    ).click();
+    await settle(fixture);
+    refused.mockRestore();
+
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+    expect(page.refusalOf(DEZA_CATALOG_PRESET)?.key).toBe(
+      'harvest.presets.alreadyRunning'
+    );
+    expect(text(fixture)).toContain('harvest.presets.alreadyRunning');
+    expect(question(fixture)).toBe(null);
+    expect(page.pendingStart()).toBe(null);
+    expect(page.startingId()).toBe(null);
+    // The warning is still on the row, and Start is free to press again.
+    expect(
+      fixture.nativeElement.querySelector('[data-probe-notice]')
+    ).not.toBeNull();
+    expect(
+      (fixture.nativeElement.querySelector('[data-start]') as HTMLButtonElement)
+        .disabled
+    ).toBe(false);
+  });
+
+  it('closes the question when another chain is chosen', async () => {
+    const { fixture, recorded } = await onDeza();
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+    expect(question(fixture)).not.toBeNull();
+
+    fixture.componentInstance.chooseChain(MERCADONA);
+    await settle(fixture);
+
+    expect(fixture.componentInstance.pendingStart()).toBe(null);
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([]);
+  });
+
+  it('starts the preset once on "Start anyway", as one press did before', async () => {
+    const { fixture, recorded } = await onDeza();
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    expect(confirm?.textContent?.trim()).toBe(
+      'harvest.probeNotice.question.confirm'
+    );
+    confirm?.click();
+    await settle(fixture);
+
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+    expect(question(fixture)).toBe(null);
+  });
+
+  it('starts nothing on Cancel or Escape, and puts the keyboard back on Start', async () => {
+    const { fixture, recorded } = await onDeza();
+    const button: HTMLButtonElement =
+      fixture.nativeElement.querySelector('[data-start]');
+
+    button.click();
+    await settle(fixture);
+    const cancel: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-dismiss]') ?? null;
+    expect(cancel?.textContent?.trim()).toBe('resource.action.cancel');
+    cancel?.click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(document.activeElement).toBe(button);
+
+    button.click();
+    await settle(fixture);
+    question(fixture)?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape' })
+    );
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(document.activeElement).toBe(button);
+    expect(recorded.started).toEqual([]);
+  });
+
+  it('starts at one press for a chain whose newest probe passed', async () => {
+    const { fixture, recorded } = await render();
+
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toHaveLength(1);
+  });
+
+  it('starts at one press for a chain with no probe', async () => {
+    const noProbes = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockResolvedValue({ items: [], nextCursor: null });
+    const { fixture, recorded } = await onDeza();
+    noProbes.mockRestore();
+
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+  });
+
+  it('starts at one press a store discovery over OpenStreetMap', async () => {
+    const memory = new HarvestMemory();
+    const deza = await memory.readSource(DEZA);
+    const osm = jest
+      .spyOn(HarvestMemory.prototype, 'readSource')
+      .mockResolvedValue({ ...deza, adapterKey: 'osm-places' });
+    const { fixture, recorded } = await onDeza();
+    osm.mockRestore();
+    await recorded.memory.createPreset(DEZA, 'Shops', {
+      mode: 'STORE_DISCOVERY',
+    });
+    await fixture.componentInstance.load();
+    await settle(fixture);
+    const shops = fixture.componentInstance
+      .presets()
+      .find((preset) => preset.name === 'Shops');
+    expect(shops).toBeDefined();
+    if (shops === undefined) {
+      return;
+    }
+
+    fixture.componentInstance.requestStart(shops);
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([shops.id]);
+  });
+
+  it('starts at one press while the probe read is still in flight', async () => {
+    let answer: (page: { items: never[]; nextCursor: null }) => void = () =>
+      undefined;
+    const pending = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        })
+      );
+    const { fixture, recorded } = await onDeza();
+
+    fixture.nativeElement.querySelector('[data-start]').click();
+    await settle(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(recorded.started).toEqual([DEZA_CATALOG_PRESET]);
+    answer({ items: [], nextCursor: null });
+    pending.mockRestore();
+  });
+
+  it('draws no notice for a chain whose newest probe passed', async () => {
+    const { fixture, recorded } = await render();
+
+    expect(fixture.componentInstance.presets()).toHaveLength(1);
+    expect(recorded.probeReads).toEqual([MERCADONA]);
+    expect(fixture.nativeElement.querySelector('[data-probe-notice]')).toBe(
+      null
+    );
   });
 });

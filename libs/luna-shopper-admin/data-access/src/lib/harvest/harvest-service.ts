@@ -315,6 +315,15 @@ export interface HarvestServiceI {
    * flight, which reads as `resource.error.conflict`.
    */
   deleteSource(supermarketId: string): Promise<{ id: string }>;
+  /**
+   * The probes of a chain's storefront, newest first (backend plan 0219,
+   * section 8). A start of a run reads one page of them to warn when the
+   * newest finished one did not pass (admin plan 0069).
+   */
+  listProbes(
+    supermarketId: string,
+    query: PageQuery
+  ): Promise<Wire.HarvestSourceProbePage>;
 
   /**
    * The schedules of the harvester, ordered by the next slot, the ones that

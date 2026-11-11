@@ -101,6 +101,8 @@ describe('the question a named action asks', () => {
         'harvest.sources.confirm.stop.heading',
         'harvest.sources.confirm.allow.heading',
         'harvest.postalCodes.confirm.discoverAgain.heading',
+        // The question a start over a red probe asks (admin plan 0069).
+        'harvest.probeNotice.question.heading',
       ])
     );
   });

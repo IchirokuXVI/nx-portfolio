@@ -110,6 +110,7 @@ function spawnRecorder(refusal?: unknown): {
       return memory.createPreset(supermarketId, name, input as never);
     },
     readSource: (id: string) => memory.readSource(id),
+    listProbes: (id: string, query: never) => memory.listProbes(id, query),
     spawnRun: async (input: unknown) => {
       spawned.push(input);
       if (refusal !== undefined) {
@@ -196,8 +197,25 @@ async function chain(fixture: ComponentFixture<NewRunPage>, id: string) {
 const text = (fixture: ComponentFixture<NewRunPage>): string =>
   fixture.nativeElement.textContent;
 
+/**
+ * Every chain answers no probe, for the cases about the request and its
+ * refusal. The seed's DEZA probe is red, and a start over it asks first
+ * (admin plan 0069); that question has its own cases below.
+ */
+function withNoProbes(): void {
+  let spy: jest.SpyInstance | undefined;
+  beforeEach(() => {
+    spy = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockResolvedValue({ items: [], nextCursor: null });
+  });
+  afterEach(() => spy?.mockRestore());
+}
+
 /** A page under the Runs tab (admin plan 0044, target 5). */
 describe('the new run page, under the Runs tab', () => {
+  withNoProbes();
+
   it('goes back to the Runs tab', async () => {
     const { fixture } = await render();
 
@@ -275,6 +293,8 @@ describe('the new run page, under the Runs tab', () => {
  * to answer every one of them with "the server did not say why".
  */
 describe('the run form, a refusal the server explained', () => {
+  withNoProbes();
+
   const refusal = (init: {
     code: string;
     status: number;
@@ -515,5 +535,353 @@ describe('the new run page, saving the form as a preset', () => {
     fixture.detectChanges();
 
     expect(page.saveOpen()).toBe(false);
+  });
+});
+
+/**
+ * The notice above the start (admin plan 0069, target 1). The seed's DEZA
+ * probe is red and Mercadona's is green. A notice never holds the start.
+ */
+describe('the new run page, a red probe', () => {
+  const notice = (fixture: ComponentFixture<NewRunPage>): HTMLElement | null =>
+    fixture.nativeElement.querySelector('[data-probe-notice]');
+
+  async function settled(fixture: ComponentFixture<NewRunPage>) {
+    await drain();
+    fixture.detectChanges();
+    await drain();
+    fixture.detectChanges();
+  }
+
+  it('warns before a catalog discovery of a chain whose probe is red', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    expect(notice(fixture)?.getAttribute('data-probe-notice')).toBe(
+      'UNREACHABLE'
+    );
+    expect(fixture.componentInstance.probeNotice()).toEqual({
+      chain: 'Deza',
+      verdict: expect.objectContaining({
+        status: 'UNREACHABLE',
+        error: 'home: the storefront did not answer within 20 seconds',
+      }),
+    });
+    // Inside the form, just above its start.
+    const actions: HTMLElement = fixture.nativeElement.querySelector(
+      'lib-run-request-form .actions'
+    );
+    expect(notice(fixture)?.compareDocumentPosition(actions) ?? 0).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    );
+  });
+
+  it('takes the notice away for a file import', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    expect(notice(fixture)).not.toBeNull();
+
+    formOf(fixture).mode.set('FILE_IMPORT');
+    await settled(fixture);
+
+    expect(notice(fixture)).toBe(null);
+  });
+
+  it('draws no notice for a chain whose newest probe passed', async () => {
+    const reads = jest.spyOn(HarvestMemory.prototype, 'listProbes');
+    const { fixture } = await render();
+    await chain(fixture, MERCADONA);
+    await settled(fixture);
+
+    // The probes were read, so the absence is the green verdict and not a
+    // read that never happened.
+    expect(reads).toHaveBeenCalledWith(MERCADONA, expect.anything());
+    reads.mockRestore();
+    expect(fixture.componentInstance.probeNotice()).toBe(null);
+    expect(notice(fixture)).toBe(null);
+  });
+
+  const question = (
+    fixture: ComponentFixture<NewRunPage>
+  ): HTMLElement | null =>
+    fixture.nativeElement.querySelector('[data-start-question]');
+
+  const startButton = (
+    fixture: ComponentFixture<NewRunPage>
+  ): HTMLButtonElement =>
+    fixture.nativeElement.querySelector('lib-run-request-form [data-submit]');
+
+  /** The request a press of start sends for DEZA with no probe at all. */
+  async function requestWithoutProbe(): Promise<unknown[]> {
+    const noProbes = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockResolvedValue({ items: [], nextCursor: null });
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    noProbes.mockRestore();
+
+    expect(notice(fixture)).toBe(null);
+    startButton(fixture).click();
+    await drain();
+
+    // One press, no question: the start as it was before this plan.
+    expect(question(fixture)).toBe(null);
+    return spawned;
+  }
+
+  it('asks before it starts, with the start enabled and the notice shown', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    expect(notice(fixture)).not.toBeNull();
+    expect(startButton(fixture).disabled).toBe(false);
+
+    startButton(fixture).click();
+    await settled(fixture);
+
+    expect(spawned).toEqual([]);
+    const dialog = question(fixture);
+    expect(dialog?.getAttribute('role')).toBe('dialog');
+    expect(dialog?.getAttribute('aria-modal')).toBe('true');
+    expect(dialog?.querySelector('h2')?.textContent?.trim()).toBe(
+      'harvest.probeNotice.question.heading'
+    );
+    expect(dialog?.querySelector('p')?.textContent?.trim()).toBe(
+      'harvest.probeNotice.text'
+    );
+    expect(fixture.componentInstance.pendingStart()?.message.args).toEqual(
+      expect.objectContaining({
+        chain: 'Deza',
+        sentence: 'home: the storefront did not answer within 20 seconds',
+      })
+    );
+    // The keyboard is on Cancel (the owner: "Force a read"), so an Enter
+    // pressed out of habit starts nothing. Tab reaches "Start anyway".
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-dismiss]')
+    );
+    dialog?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', bubbles: true })
+    );
+    expect(document.activeElement).toBe(
+      dialog?.querySelector('[data-confirm]')
+    );
+    expect(spawned).toEqual([]);
+  });
+
+  it('starts once when "Start anyway" is pressed twice before the dialog goes', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    startButton(fixture).click();
+    await settled(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    confirm?.click();
+    confirm?.click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('starts at one press when the probe read failed', async () => {
+    const failed = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockRejectedValue(new Error('the probe route did not answer'));
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    failed.mockRestore();
+
+    expect(notice(fixture)).toBe(null);
+    startButton(fixture).click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toHaveLength(1);
+  });
+
+  it('draws the refusal of a start made anyway, with no question left open', async () => {
+    const { fixture, spawned } = await render(
+      new GatewayError({
+        correlationId: 'ref-1',
+        code: 'conflict',
+        status: 409,
+      })
+    );
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    startButton(fixture).click();
+    await settled(fixture);
+
+    (
+      question(fixture)?.querySelector('[data-confirm]') as HTMLButtonElement
+    ).click();
+    await settled(fixture);
+
+    const page = fixture.componentInstance;
+    expect(spawned).toHaveLength(1);
+    expect(page.blockedKey()).toBe('harvest.runs.start.alreadyRunning');
+    expect(text(fixture)).toContain('harvest.runs.start.alreadyRunning');
+    expect(TestBed.inject(Router).url).toBe('/');
+    expect(question(fixture)).toBe(null);
+    expect(page.pendingStart()).toBe(null);
+    expect(page.starting()).toBe(false);
+    // The warning is still there, and the start is free to press again.
+    expect(notice(fixture)).not.toBeNull();
+    expect(startButton(fixture).disabled).toBe(false);
+  });
+
+  it('keeps the notice about dropped copies when the question is cancelled', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    const form = formOf(fixture);
+    form.droppedCopies.set([CORUNA]);
+
+    startButton(fixture).click();
+    await settled(fixture);
+    (
+      question(fixture)?.querySelector('[data-dismiss]') as HTMLButtonElement
+    ).click();
+    await settled(fixture);
+    expect(form.droppedCopies()).toEqual([CORUNA]);
+
+    startButton(fixture).click();
+    await settled(fixture);
+    (
+      question(fixture)?.querySelector('[data-confirm]') as HTMLButtonElement
+    ).click();
+    await settled(fixture);
+    expect(form.droppedCopies()).toEqual([]);
+  });
+
+  it('sends the request of a start with no probe on "Start anyway", once', async () => {
+    const withoutNotice = await requestWithoutProbe();
+
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    startButton(fixture).click();
+    await settled(fixture);
+
+    const confirm: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-confirm]') ?? null;
+    expect(confirm?.textContent?.trim()).toBe(
+      'harvest.probeNotice.question.confirm'
+    );
+    confirm?.click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toEqual(withoutNotice);
+    expect(spawned).toEqual([
+      expect.objectContaining({
+        mode: 'CATALOG_DISCOVERY',
+        supermarketId: DEZA,
+      }),
+    ]);
+  });
+
+  it('starts nothing on Cancel or Escape, and puts the keyboard back on the start', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    startButton(fixture).click();
+    await settled(fixture);
+    const cancel: HTMLButtonElement | null =
+      question(fixture)?.querySelector('[data-dismiss]') ?? null;
+    expect(cancel?.textContent?.trim()).toBe('resource.action.cancel');
+    cancel?.click();
+    await settled(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(document.activeElement).toBe(startButton(fixture));
+
+    startButton(fixture).click();
+    await settled(fixture);
+    question(fixture)?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Escape' })
+    );
+    await settled(fixture);
+
+    expect(question(fixture)).toBe(null);
+    expect(document.activeElement).toBe(startButton(fixture));
+    expect(spawned).toEqual([]);
+  });
+
+  it('starts at one press for a chain whose newest probe passed', async () => {
+    const { fixture, spawned } = await render();
+    await chain(fixture, MERCADONA);
+    formOf(fixture).toggleScope(CORDOBA, ticked(true));
+    await settled(fixture);
+    const form = formOf(fixture);
+    form.droppedCopies.set([CORUNA]);
+
+    startButton(fixture).click();
+    await drain();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toHaveLength(1);
+    // A start with no question is a start really asked for.
+    expect(form.droppedCopies()).toEqual([]);
+  });
+
+  it('starts at one press for a chain with no probe', async () => {
+    expect(await requestWithoutProbe()).toHaveLength(1);
+  });
+
+  it('starts at one press a file import or a store discovery over OpenStreetMap', async () => {
+    const { fixture } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+    const page = fixture.componentInstance;
+    const start = jest.spyOn(page, 'start').mockResolvedValue(undefined);
+
+    formOf(fixture).mode.set('FILE_IMPORT');
+    await settled(fixture);
+    page.requestStart({ mode: 'FILE_IMPORT', supermarketId: DEZA });
+
+    formOf(fixture).mode.set('STORE_DISCOVERY');
+    formOf(fixture).adapterKey.set('osm-places');
+    await settled(fixture);
+    expect(page.probeNotice()).toBe(null);
+    page.requestStart({ mode: 'STORE_DISCOVERY', supermarketId: DEZA });
+
+    expect(question(fixture)).toBe(null);
+    expect(page.pendingStart()).toBe(null);
+    expect(start).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts at one press while the probe read is still in flight', async () => {
+    let answer: (page: { items: never[]; nextCursor: null }) => void = () =>
+      undefined;
+    const pending = jest
+      .spyOn(HarvestMemory.prototype, 'listProbes')
+      .mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        })
+      );
+    const { fixture, spawned } = await render();
+    await chain(fixture, DEZA);
+    await settled(fixture);
+
+    startButton(fixture).click();
+    await drain();
+
+    expect(question(fixture)).toBe(null);
+    expect(spawned).toEqual([expect.objectContaining({ supermarketId: DEZA })]);
+    answer({ items: [], nextCursor: null });
+    pending.mockRestore();
   });
 });
