@@ -28,8 +28,8 @@
 
 Make `unitBasisOf` name a basis for the three labels Carrefour builds, `€/kg`, `€/l` and
 `€/ud`, so that a Carrefour offer carries a `unitBasis`. Remove the keys `lv` and `lavado`
-from `UNIT_BASIS_BY_LABEL`, so that no label names the basis `WASH`. Change no stored value
-and no contract type.
+from `UNIT_BASIS_BY_LABEL`, so that no label names the basis `WASH`, and remove the value
+`WASH` itself from the contract and from every reader of it (D4). Change no stored value.
 
 ### Context
 
@@ -39,7 +39,7 @@ and no contract type.
   does not map the plural `lavados`, which thus answers null today. The comment of the table
   (near lines 17 to 20) says that `lv` on liquid detergent sits on a price per litre.
 - `'WASH'` is the last value of `UNIT_BASES` (`catalog.messages.ts`, near lines 1149 to 1157),
-  and the type `UnitBasis` is read from that array. This plan keeps the value (D4).
+  and the type `UnitBasis` is read from that array. This plan removes the value (D4).
 - `unitPriceLabel` (`carrefour/src/lib/price.ts`, near line 54) answers `€/${unit}` for a
   card that states a `measure_unit`. `readCard` (`listing.ts`, near line 455) calls it.
   `MEASURE_BASE` (`listing.ts`, near lines 156 to 161) knows `l`, `kg`, `ud` and `m`.
@@ -81,36 +81,53 @@ and no contract type.
 2. `unitBasisOf('lv')`, `unitBasisOf('lavado')` and `unitBasisOf('€/lavado')` are null. No
    label answers `WASH`.
 3. Every other label answers what it answers today.
-4. The PR lists every reader of the wash basis (section 2), as the input of D4.
+4. The PR lists every reader of the wash basis (section 2).
+5. No contract, document or client names the value `WASH` (D4). A client that receives it
+   from an older backend reads it as no basis and does not fail.
 
 ### Scope
 
 `libs/luna-shopper/contracts/src/lib/units/unit-basis.ts` and
 `apps/luna-shopper-backend/catalog/src/app/catalog/unit-basis.spec.ts`, and the fixture proof
-spec in `libs/luna-shopper/carrefour`. Nothing in the Carrefour adapter (D1). Not in scope: the
-value `'WASH'` of `UNIT_BASES`, the gateway, `openapi.json`, `wire-types.ts`, velista, the back
-office and the Mercadona normalizer (D4).
+spec in `libs/luna-shopper/carrefour`. For D4: the value `'WASH'` of `UNIT_BASES` and the type
+`UnitBasis` (`catalog.messages.ts`, and the schemas that read the array), `openapi.json` and
+`wire-types.ts` (regenerated, never edited), velista (`PriceUnitBasis`, `PRICE_UNIT_BASES`, the
+mappers and the `WASH` keys of `en.json` and `es.json`), the back office (`WASH: 'wash'` in
+`money.ts`), and each other reader that section 2 finds, with their specs. Nothing in the
+Carrefour adapter (D1) and nothing in the Mercadona normalizer.
 
 ### Constraints
 
 - The table names a basis only for a label whose figure is per that unit. Before you change
-  the table, prove it with every `kg`, `l` and `ud` card of the Carrefour fixtures: price
-  divided by the size the name prints must equal `price_per_unit` within one cent. If one
-  fixture disagrees, stop and report it.
+  the table, prove it with the Carrefour fixtures. **The proof tests the basis, not the
+  cent** (owner, 2026-11-11). For each priced card whose `measure_unit` is `kg`, `l` or `ud`,
+  price divided by `price_per_unit` must be within 10% of the size the name prints, read
+  with the adapter's own `splitCardName`. A wrong basis is off by a factor of 10, 100 or the
+  pack count, so it still fails. A card whose name gives no size in the family of its
+  `measure_unit` is left out by that rule, and never by product id or name: no card is named
+  as an exception. The spec asserts how many cards it measured, so the rule cannot silently
+  skip all of them. The PR states how many cards agree to the cent. If a card fails the 10%
+  rule, stop and report it.
 - `bulk_price`, `unitPrice` and `unitPriceLabel` stay verbatim. The fix is on read only.
 - The reader removes a leading `€/` (with optional spaces around the slash) and nothing more.
   A label it does not know after that still answers null, never a guess.
 - A wash is not a unit of measure (D2). No label maps to `WASH`, and no new wash key is added
   in any spelling.
 - `unitBasisOf` stays browser reachable. It names no `process`.
-- `UNIT_BASES`, the type `UnitBasis` and the OpenAPI document do not change. If a change makes
-  `npx nx run luna-shopper-backend-gateway:openapi` write a diff, stop and report it.
+- `UNIT_BASES` and the type `UnitBasis` lose the value `'WASH'` and nothing else (D4). The
+  OpenAPI document and `wire-types.ts` change only by that value, and only through
+  `npx nx run luna-shopper-backend-gateway:openapi` and
+  `npx nx run luna-shopper-admin/models:wire-types`. If the regenerated document differs in
+  anything else, stop and report it.
+- The basis is derived on read from the stored label. No stored column, migration, seed,
+  database enum type or fixture row may hold the value `WASH`. If one does, stop and report it
+  before you touch it: no migration rewrites rows.
+- A velista client that is already installed must not break. Its mapper reads an unknown
+  basis from `unknown` as no basis, never as a throw.
 
 ### Action boundaries
 
-- Before you change anything beyond the two wash keys, write the list of section 2 in the PR.
-- Stop and ask before you remove `'WASH'` from `UNIT_BASES` or change any reader of section 2
-  (D4).
+- Before you remove the value, write the list of section 2 for the PR.
 - Stop and ask before you change a stored label or the Carrefour adapter.
 
 ### Progress evidence
@@ -175,8 +192,12 @@ The builder adds each reader that a search of the branch finds and this list doe
 - [ ] No label answers `WASH`.
 - [ ] Every other label of the existing table answers what it answered before.
 - [ ] The PR lists every reader of the wash basis.
-- [ ] No stored row changes, no migration is added, and `openapi.json` does not change.
-- [ ] The fixture proof passes for every `kg`, `l` and `ud` card.
+- [ ] No stored row changes and no migration is added.
+- [ ] `WASH` is gone from `UNIT_BASES`, `openapi.json`, `wire-types.ts`, velista and the back
+      office, and the two generated files differ only by that value.
+- [ ] velista and the back office read a `WASH` from an older backend as no basis.
+- [ ] Every priced `kg`, `l` and `ud` card whose name gives a size in its family is within
+      10% of that size, and the spec asserts how many cards it measured.
 
 ## Verification
 
@@ -185,9 +206,16 @@ npx nx test luna-shopper/contracts
 npx nx test luna-shopper-backend-catalog -t "unitBasisOf"
 npx nx test luna-shopper/carrefour
 npx nx run luna-shopper-backend-gateway:openapi
-git diff --exit-code apps/luna-shopper-backend/gateway/docs/openapi.json
+npx nx run luna-shopper-admin/models:wire-types
+git diff apps/luna-shopper-backend/gateway/docs/openapi.json libs/luna-shopper-admin/models/src/lib/wire/wire-types.ts
+npx nx test luna-shopper-backend-gateway
+npx nx test luna-shopper-admin/models
+npx nx build velista
+npx nx build luna-shopper-admin
 npx nx affected -t lint test
 ```
+
+The diff of the two generated files removes `WASH` and nothing else.
 
 Then one Carrefour product on a Luna slot, as Progress evidence says.
 
@@ -205,12 +233,8 @@ it is a bad basis to compare prices on. This plan thus also removes the existing
 `size-check.ts` is a plan of its own. The two tables answer different questions (a basis, and
 an amount the figure is per), so only the key rule is shared.
 
-**D4. The value `WASH` itself. Open.** After this plan no label answers `WASH`, but the value
-stays in `UNIT_BASES`, in the OpenAPI document, in `wire-types.ts`, in velista and in the back
-office. To remove it changes the OpenAPI document and the contract of every client that reads a
-`unitBasis`. The input is the list of section 2, which the PR of this plan writes.
-
-- (a) A later plan removes the value and every reader of section 2.
-- (b) Keep the value, unused, as a value a client must still accept.
-
-Recommended: (a), a later plan, after the list of this PR.
+**D4 (owner, answered 2026-11-11): removed in this plan.** The value `WASH` leaves
+`UNIT_BASES`, the OpenAPI document, `wire-types.ts`, velista and the back office, together
+with every other reader that section 2 finds. The PR writes the list of section 2 first. The
+change removes a value from the wire, and a client that still receives it from an older
+backend reads it as no basis.
