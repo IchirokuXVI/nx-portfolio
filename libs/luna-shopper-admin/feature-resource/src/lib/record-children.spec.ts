@@ -21,6 +21,7 @@ import {
 } from '@portfolio/luna-shopper-admin/models';
 import { ConfirmDialog, Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { provideSections } from './admin-section';
+import { RecordChildren } from './record-children';
 import { RECORD_CONTEXT } from './record-context';
 import { RecordPage } from './record-page';
 import { ResourceChanges } from './resource-changes';
@@ -782,5 +783,100 @@ describe('a record that does not exist yet', () => {
 
     expect(url()).toBe('/chains/c_new/details');
     expect(one(harness, '[data-added]')).not.toBeNull();
+  });
+});
+
+/**
+ * The selector after `:host` of the rule in `record-children.ts` that hides
+ * the children when every part in them is empty. It is written as
+ * `:host:not(…)` and not `:host(:not(…))`, because Angular's style scoping
+ * closes a nested `:host(…)` with one parenthesis too many, and a browser
+ * drops the whole rule. The test runner drops
+ * component styles, so what is asked here is whether the selector matches
+ * the nodes Angular really renders, not what the browser draws.
+ */
+const HIDES_THE_CHILDREN = ':not(:has(> :not(:empty)))';
+
+/** Whether the quiet part below has something to say. */
+const quietSays = signal(false);
+
+/** A part that draws nothing at all when it has nothing to say. */
+@Component({
+  selector: 'lib-test-quiet-panel',
+  template: `
+    @if (says()) {
+      <p data-quiet>a warning</p>
+    }
+  `,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+class QuietPanel {
+  readonly says = quietSays;
+}
+
+describe('a record whose only part has nothing to say', () => {
+  async function children() {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [RokuTranslatorTestingModule.forTesting()],
+      providers: [
+        ContentLocaleStore,
+        provideSections({ key: 'catalog', label: '', resources: [] }),
+        {
+          provide: Viewport,
+          useValue: { compact: signal(false), split: signal(false) },
+        },
+        {
+          provide: RECORD_CONTEXT,
+          useValue: {
+            descriptor: {
+              record: {
+                children: [
+                  {
+                    as: 'panel',
+                    name: 'quiet',
+                    label: 'chains.panel.quiet',
+                    component: QuietPanel,
+                  },
+                ],
+              },
+            },
+            id: 'c1',
+            row: signal(null),
+            mode: signal('view'),
+            reload: async () => undefined,
+            countOf: () => null,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(RecordChildren);
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  afterEach(() => quietSays.set(false));
+
+  it('matches the rule that hides it, so the page adds no gap for it', async () => {
+    const fixture = await children();
+    const host = fixture.nativeElement as HTMLElement;
+
+    // The part is an element, so `:empty` alone does not hide the host. Its
+    // own anchor is a comment, which leaves it empty.
+    expect(host.matches(':empty')).toBe(false);
+    expect(host.querySelector('lib-test-quiet-panel')?.matches(':empty')).toBe(
+      true
+    );
+    expect(host.matches(HIDES_THE_CHILDREN)).toBe(true);
+  });
+
+  it('does not match it once the part says something', async () => {
+    quietSays.set(true);
+    const fixture = await children();
+    const host = fixture.nativeElement as HTMLElement;
+
+    expect(host.querySelector('[data-quiet]')).not.toBeNull();
+    expect(host.matches(HIDES_THE_CHILDREN)).toBe(false);
   });
 });

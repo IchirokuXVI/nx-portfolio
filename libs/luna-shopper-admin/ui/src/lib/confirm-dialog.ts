@@ -63,7 +63,7 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
         <button
           (click)="confirm.emit()"
           [class.danger]="tone() === 'danger'"
-          [class.primary]="tone() === 'primary'"
+          [class.primary]="tone() === 'primary' && prefer() !== 'dismiss'"
           [disabled]="busy()"
           #confirmButton
           type="button"
@@ -172,6 +172,11 @@ export class ConfirmDialog implements AfterViewInit {
    * row or discarding a form. Admin plan 0011 brought the first one that is
    * neither: mapping a source's shop to one of ours is undone by unmapping it,
    * and a red button on a reversible act teaches an operator to ignore red.
+   *
+   * `primary` under `prefer="dismiss"` draws the button plain: the filled
+   * button is the one that dismisses, and two filled buttons say nothing about
+   * which one is safe. The start over a red probe of admin plan 0069 is that
+   * case, with "Start anyway" plain and "Cancel" filled.
    */
   readonly tone = input<'danger' | 'primary'>('danger');
   /** What to put into the heading: "Delete the brand Hdo.?" */
@@ -186,7 +191,8 @@ export class ConfirmDialog implements AfterViewInit {
   readonly dismissKey = input<string | null>('resource.action.cancel');
   /**
    * The button the operator is led to. It has the focus, and `dismiss` also
-   * draws the dismissing button as the primary one.
+   * draws the dismissing button as the primary one, and a `primary` tone of
+   * the other button as a plain one.
    *
    * `dismiss` is for a question whose safe answer is to stay: leaving a form
    * with changes in it.

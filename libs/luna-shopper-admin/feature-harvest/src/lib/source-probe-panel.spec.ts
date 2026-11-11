@@ -106,6 +106,9 @@ describe('the source record page, its last probe', () => {
     expect(reads).toHaveBeenCalledTimes(1);
     expect(fixture.componentInstance.verdict()).toBe(null);
     expect(host(fixture).children).toHaveLength(0);
+    // Truly empty, no text either, so the record page hides its children
+    // (`lib-record-children`) and adds no gap for this panel.
+    expect(host(fixture).matches(':empty')).toBe(true);
   });
 
   it('draws nothing for a source with no probe at all', async () => {

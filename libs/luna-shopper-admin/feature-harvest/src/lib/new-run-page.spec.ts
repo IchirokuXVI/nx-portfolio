@@ -824,12 +824,16 @@ describe('the new run page, a red probe', () => {
     await chain(fixture, MERCADONA);
     formOf(fixture).toggleScope(CORDOBA, ticked(true));
     await settled(fixture);
+    const form = formOf(fixture);
+    form.droppedCopies.set([CORUNA]);
 
     startButton(fixture).click();
     await drain();
 
     expect(question(fixture)).toBe(null);
     expect(spawned).toHaveLength(1);
+    // A start with no question is a start really asked for.
+    expect(form.droppedCopies()).toEqual([]);
   });
 
   it('starts at one press for a chain with no probe', async () => {

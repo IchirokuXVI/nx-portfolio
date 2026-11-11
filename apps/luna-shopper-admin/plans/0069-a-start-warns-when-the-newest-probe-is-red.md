@@ -261,9 +261,10 @@ No new screen and no new section. One paragraph in the warning tone with the war
 its name, never its id. On a 390 px screen it wraps; it never truncates the sentence.
 
 The question is the existing confirm dialog: an opaque cover, one raised panel, the heading,
-the sentence, then "Start anyway" (primary) and "Cancel", with the focus on "Cancel"
+the sentence, then "Start anyway" and "Cancel", with the focus on "Cancel"
 (`prefer="dismiss"`, the dialog's own setting for a question whose safe answer is to stay).
-No new component.
+"Cancel" is the filled button. "Start anyway" is plain: the dialog draws its `primary` tone
+plain under `prefer="dismiss"`, so only one button is filled. No new component.
 
 On the source record page: one record section headed "Last probe", with the same paragraph
 inside it in the `source` words, and nothing to press. With nothing to warn about the panel
@@ -298,7 +299,7 @@ models with a spec that holds it equal to the contracts.
   probe read still in flight at the press and a probe read that failed all start at one
   press with no question. "Start anyway" answered by a 409 draws the page's own refusal, with
   no question left open and the start free again. A Cancel keeps the notice about dropped
-  copies, and a start made anyway clears it.
+  copies, and a start made anyway clears it, even when the start is refused.
 - The presets panel: one probe read for the chain, the notice on the rows whose mode reads the
   chain, and the same cases for `startPreset` as for `spawnRun` above (the failed read also
   with a failed source read, the refusal on the row). Choosing another chain closes a
