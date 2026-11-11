@@ -95,7 +95,9 @@ describe('the list composers submit the line, not the page', () => {
 
       const notPrevented = submitForm(fixture);
 
-      expect(emitted).toEqual([{ content: 'Sourdough loaf', quantity: 1 }]);
+      expect(emitted).toEqual([
+        { content: 'Sourdough loaf', quantity: 1, unit: 'UNIT' },
+      ]);
       expect(notPrevented).toBe(false);
     });
 

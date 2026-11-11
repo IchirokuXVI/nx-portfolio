@@ -49,6 +49,7 @@ describe('the basket room, off the wire', () => {
     const PATCH = {
       lineId: 'zl-1',
       version: 4,
+      unit: 'UNIT',
       left: 1,
       bought: 1,
       boughtElsewhere: 0,
@@ -78,6 +79,7 @@ describe('the basket room, off the wire', () => {
           {
             lineId: 'zl-1',
             version: 4,
+            unit: 'UNIT',
             left: 1,
             bought: 1,
             boughtElsewhere: 0,
@@ -93,6 +95,16 @@ describe('the basket room, off the wire', () => {
       });
     });
 
+    it('reads the unit of a weight patch (velista 0182, criterion 1)', () => {
+      const event = toRealtimeEvent('basket.linesChanged', {
+        lineIds: ['zl-1'],
+        entries: [{ ...PATCH, unit: 'GRAM', left: 750, bought: 250 }],
+      });
+      expect(event).toMatchObject({
+        entries: [{ unit: 'GRAM', left: 750, bought: 250 }],
+      });
+    });
+
     it('reads a patch with no act and no product', () => {
       const event = toRealtimeEvent('basket.linesChanged', {
         lineIds: ['zl-1'],
@@ -105,6 +117,9 @@ describe('the basket room, off the wire', () => {
 
     it.each([
       ['a missing version', { version: undefined }],
+      // What the patch counts is required since backend 0246 (velista 0182).
+      ['a missing unit', { unit: undefined }],
+      ['an unknown unit', { unit: 'KILOGRAM' }],
       ['a version that is not a whole number', { version: 1.5 }],
       ['a negative count', { left: -1 }],
       ['an unknown state', { state: 'LOST' }],

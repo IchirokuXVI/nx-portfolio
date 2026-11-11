@@ -34,6 +34,7 @@ import {
   catalogName,
   categoryName,
   chainPriceHistories,
+  lineUnitOfProduct,
   PRICE_HISTORY_DEFAULT_RANGE,
   PRICE_HISTORY_READ_DAYS,
   priceHistoryStart,
@@ -435,6 +436,8 @@ export class ProductPage {
       name: row.name,
       detail: row.summary,
       imageUrl: row.imageUrl,
+      // A product sold by the kilo is asked for by weight (velista `0182`).
+      unit: row.lineUnit,
     });
   }
 
@@ -466,6 +469,8 @@ export class ProductPage {
         name: this.name(),
         detail: this.detail(),
         imageUrl: this.imageUrl(),
+        // A product sold by the kilo is asked for by weight (velista `0182`).
+        unit: lineUnitOfProduct(this._item()?.offer ?? null, this._item()),
       },
       listId
     );

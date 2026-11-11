@@ -33,6 +33,7 @@ export * from './lib/ota-manifest';
 export * from './lib/page-navigation';
 export * from './lib/page-return';
 export * from './lib/platform-providers';
+export * from './lib/quantity';
 export * from './lib/reload-blocker';
 export * from './lib/retry-clock';
 export * from './lib/route-params';

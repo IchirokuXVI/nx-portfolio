@@ -965,7 +965,9 @@ describe('CatalogPage', () => {
         1,
         ['item-oil'],
         // Not named: the words are the product's (velista 0144).
-        false
+        false,
+        undefined,
+        'UNIT'
       );
       // The plus stays a plus. The line it made is under the row, with one.
       expect(plusOf(fixture, OIL)?.classList.contains('has-count')).toBe(false);
@@ -1063,7 +1065,7 @@ describe('CatalogPage', () => {
         1
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
       expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
         '2',
         '2',
@@ -1079,7 +1081,11 @@ describe('CatalogPage', () => {
         'line-oil',
         -1
       );
-      expect(lines.addQuantity).toHaveBeenLastCalledWith('line-oil', -1);
+      expect(lines.addQuantity).toHaveBeenLastCalledWith(
+        'line-oil',
+        -1,
+        'UNIT'
+      );
       expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
         '1',
         '2',
@@ -1108,7 +1114,8 @@ describe('CatalogPage', () => {
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith(
         'line-list-weekly-item-rice',
-        1
+        1,
+        'UNIT'
       );
       expect(heldLines(fixture, RICE)[0]?.quantity).toBe('2');
       expect(heldLines(fixture, OIL)[0]?.quantity).toBe('1');
@@ -1134,7 +1141,7 @@ describe('CatalogPage', () => {
       // The oil for frying was there before: it goes to zero and stays.
       heldLines(fixture, OIL)[0]?.minus?.click();
       await settle(fixture);
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1, 'UNIT');
       expect(lines.deleteLine).toHaveBeenCalledTimes(1);
       expect(heldLines(fixture, OIL)).toMatchObject([
         { lineId: 'line-frying', quantity: '0' },
@@ -1231,7 +1238,7 @@ describe('CatalogPage', () => {
       heldLines(fixture, OIL)[0]?.plus?.click();
       await settle(fixture);
 
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1, 'UNIT');
       expect(addFailed(fixture)).toBe('catalog.add.failed');
       expect(heldLines(fixture, OIL)[0]?.quantity).toBe('2');
       expect(TestBed.inject(CatalogAddStore).count()).toBe(0);

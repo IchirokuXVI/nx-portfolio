@@ -118,6 +118,7 @@
                 (stepped)="step($event)"
                 [controlled]="true"
                 [label]="'list.page.quantityLabel' | rokuT"
+                [unit]="line.unit"
                 [value]="line.quantity"
               />
             } @else {
@@ -126,7 +127,7 @@
                 <span class="visually-hidden">{{
                   'list.page.quantityLabel' | rokuT
                 }}</span>
-                {{ line.quantity }}
+                {{ line.quantityWords }}
               </p>
             }
           </div>

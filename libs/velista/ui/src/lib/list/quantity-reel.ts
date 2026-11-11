@@ -11,14 +11,19 @@ import {
   signal,
   untracked,
 } from '@angular/core';
+import { RokuLocaleStore } from '@portfolio/localization/rokutranslator-angular';
 import {
+  isMeasured,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
   QUANTITY_REEL_IDLE_MS,
   QUANTITY_REEL_PAGE_STEP,
   QUANTITY_REEL_PX_PER_UNIT,
+  stepFrom,
+  stepsFrom,
+  type LineUnit,
 } from '@portfolio/velista/models';
-import { handleBackWhile } from '@portfolio/velista/platform';
+import { formatAmount, handleBackWhile } from '@portfolio/velista/platform';
 import { classifyReelGesture } from './quantity-reel-gesture';
 
 /**
@@ -98,6 +103,16 @@ export const TOOK_DURATION_MS = 2500;
  * That is the reason this component holds a value of its own rather than writing
  * through on every frame. A run of increments from a moving control races itself over
  * the wire, and one delta at the end cannot.
+ *
+ * ## It steps by the unit (velista `0182`, section 3)
+ *
+ * A count moves by one, as it always has. A weight moves by 25 g below a kilo and by
+ * 250 g from it, and a volume by 50 ml and 250 ml ({@link stepFrom}). Every place
+ * that moves the number reads that step: the neighbours, the drag (one step per
+ * {@link QUANTITY_REEL_PX_PER_UNIT}, so a swipe across ham travels as far as one
+ * across cartons), the arrow and page keys, the buttons, the pill's words and the
+ * ARIA value text. The value itself, and the delta it commits, stay integers in base
+ * units: 750 g is 750.
  */
 @Component({
   selector: 'lib-quantity-reel',
@@ -113,6 +128,9 @@ export const TOOK_DURATION_MS = 2500;
     '[attr.tabindex]': '0',
     '[attr.aria-label]': 'label()',
     '[attr.aria-valuenow]': 'shown()',
+    // The words of a weight or a volume ("750 g"), where the raw number would read
+    // as grams nobody can picture. Absent for a count, whose number is its words.
+    '[attr.aria-valuetext]': 'valueText()',
     '[attr.aria-valuemin]': 'min()',
     '[attr.aria-valuemax]': 'max()',
     // `readonly` rather than `disabled`: the number is real and worth reading, and
@@ -145,6 +163,13 @@ export class QuantityReel {
 
   /** Names the line, so the spinbutton announces what it is counting. */
   readonly label = input.required<string>();
+
+  /**
+   * What {@link value} counts (velista `0182`). `UNIT` steps by one and draws the
+   * bare number, exactly as before; a weight or a volume steps by its unit's steps
+   * and draws "750 g" or "1,5 kg".
+   */
+  readonly unit = input<LineUnit>('UNIT');
 
   /**
    * Whether the number may actually be changed.
@@ -242,6 +267,8 @@ export class QuantityReel {
 
   private readonly _destroyRef = inject(DestroyRef);
   private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
+  /** Optional, so a count drawn where no translator is provided still draws. */
+  private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
 
   /** What the control is showing, which is the settled value unless a gesture is on. */
   private readonly _pending = signal<number | null>(null);
@@ -288,6 +315,14 @@ export class QuantityReel {
   /** What to draw and what to announce. */
   readonly shown = computed(() => this._pending() ?? this.value());
 
+  /** The number as the pill draws it: bare for a count, "750 g" for a weight. */
+  readonly words = computed(() => this.wordsFor(this.shown()));
+
+  /** `aria-valuetext`: the words of a weight or a volume, and nothing for a count. */
+  readonly valueText = computed(() =>
+    !isMeasured(this.unit()) ? null : this.words()
+  );
+
   /**
    * The number to the left of the current one, or null at zero.
    *
@@ -296,12 +331,19 @@ export class QuantityReel {
    * a bounce to explain it (section 4).
    */
   readonly previous = computed(() =>
-    this.shown() > this.min() ? this.shown() - 1 : null
+    this.shown() > this.min() ? this._neighbour(this.shown(), -1) : null
   );
 
   readonly next = computed(() =>
-    this.shown() < this.max() ? this.shown() + 1 : null
+    this.shown() < this.max() ? this._neighbour(this.shown(), 1) : null
   );
+
+  /** A number of the tape as the overlay draws it, in the reel's unit. */
+  wordsFor(value: number): string {
+    return !isMeasured(this.unit())
+      ? String(value)
+      : formatAmount(value, this.unit(), this._localeStore?.locale() ?? 'en');
+  }
 
   /**
    * Whether each button has anywhere to go. Disabled at the end rather than clamping
@@ -520,8 +562,10 @@ export class QuantityReel {
     // window over it does not move, so pulling the tape left brings the higher ones
     // into the middle, which is what the overlay is a picture of.
     const travelled = this._originX - clientX;
+    // Whole steps of the unit, one per stretch of travel, so the feel is the same
+    // for a count and a weight (velista `0182`).
     const moved = Math.round(travelled / QUANTITY_REEL_PX_PER_UNIT);
-    this._pending.set(this._clamp(this._originValue + moved));
+    this._pending.set(this._walk(this._originValue, moved));
   }
 
   /**
@@ -573,7 +617,7 @@ export class QuantityReel {
    * land somewhere. The commit is unchanged, one delta after the idle beat, so a run
    * of presses does not become a request per press.
    */
-  onStepButton(step: number): void {
+  onStepButton(step: 1 | -1): void {
     if (this.readonly()) {
       return;
     }
@@ -584,7 +628,7 @@ export class QuantityReel {
     }
 
     this._clearTimer();
-    this._pending.set(this._clamp(this.shown() + step));
+    this._pending.set(this._walk(this.shown(), step));
     this._restartIdle();
   }
 
@@ -614,7 +658,7 @@ export class QuantityReel {
       this._startedFrom = this.value();
     }
     this._clearTimer();
-    this._pending.set(this._clamp(this.shown() + step));
+    this._pending.set(this._walk(this.shown(), step));
     this._restartIdle();
   }
 
@@ -647,6 +691,7 @@ export class QuantityReel {
     this._flush();
   }
 
+  /** How many steps of the unit a key moves the number, signed, or null for none. */
   private _stepFor(key: string): number | null {
     switch (key) {
       case 'ArrowUp':
@@ -717,5 +762,17 @@ export class QuantityReel {
 
   private _clamp(value: number): number {
     return Math.min(this.max(), Math.max(this.min(), value));
+  }
+
+  /** `steps` whole steps of the unit from `value`, inside the range. */
+  private _walk(value: number, steps: number): number {
+    return steps === 0
+      ? this._clamp(value)
+      : stepsFrom(value, this.unit(), steps, this.min(), this.max());
+  }
+
+  /** One step of the unit away, held inside the range. */
+  private _neighbour(value: number, direction: 1 | -1): number {
+    return this._clamp(stepFrom(value, this.unit(), direction));
   }
 }

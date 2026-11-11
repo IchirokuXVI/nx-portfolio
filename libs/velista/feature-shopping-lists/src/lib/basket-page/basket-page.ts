@@ -51,6 +51,7 @@ import {
   cheaperInGroup,
   countableBasketRows,
   isLinkVisitor,
+  type LineUnit,
   LINK_VISIT_HOURS,
   productSuggestions,
   selectBasketSurface,
@@ -62,6 +63,7 @@ import {
   appPath,
   BrowserFacade,
   ColumnScroll,
+  formatAmount,
   ListSearchNavigation,
   NavChrome,
   PageReturn,
@@ -1456,7 +1458,8 @@ export class BasketPage {
         change.from,
         change.to,
         this._translator,
-        this._locale()
+        this._locale(),
+        row.row.unit
       ) ?? ''
     );
 
@@ -2212,13 +2215,18 @@ export class BasketPage {
       name: addChoiceName(asked.choice, asked.entry.content),
       listName: asked.listName,
       added: asked.entry.quantity,
-      rows: addChoiceRows(asked.choice, asked.entry.quantity, {
-        itemOf: (itemId) => this._itemNames.nameOf(itemId),
-        // The basket holds no favourite, so a row shows the line's first product.
-        favoriteOf: () => null,
-        locale,
-        brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
-      }),
+      rows: addChoiceRows(
+        asked.choice,
+        asked.entry.quantity,
+        {
+          itemOf: (itemId) => this._itemNames.nameOf(itemId),
+          // The basket holds no favourite, so a row shows the line's first product.
+          favoriteOf: () => null,
+          locale,
+          brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+        },
+        asked.entry.unit
+      ),
     };
   });
 
@@ -2340,9 +2348,11 @@ export class BasketPage {
    * row's everywhere else. The rows the basket draws first, then the store's for a
    * row a filter hides. Null when no row holds the line.
    */
-  private _shownRow(
-    lineId: string
-  ): { readonly name: string; readonly quantity: number } | null {
+  private _shownRow(lineId: string): {
+    readonly name: string;
+    readonly quantity: number;
+    readonly unit: LineUnit;
+  } | null {
     const drawn = this.resultRows().find((each) =>
       each.entry === null
         ? each.row.entries.some((held) => held.lineId === lineId)
@@ -2364,6 +2374,7 @@ export class BasketPage {
         this._locale()
       ),
       quantity: drawn?.entry?.left ?? row.left,
+      unit: drawn?.entry?.unit ?? row.unit,
     };
   }
 
@@ -2433,6 +2444,7 @@ export class BasketPage {
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
             quantity: entry.left,
+            unit: entry.unit,
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
           }))
@@ -2608,6 +2620,8 @@ export class BasketPage {
       targetListId: listId,
       content: entry.content,
       quantity: entry.quantity,
+      // The composer's unit: grams for one product sold by the kilo (velista `0182`).
+      unit: entry.unit,
       ...(itemIds.length > 0 ? { itemIds } : {}),
       // A chosen card is not named (velista `0144`, section 3).
       ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
@@ -2698,8 +2712,11 @@ export class BasketPage {
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name:
             shown?.name ?? (line.content === '' ? entry.content : line.content),
-          quantity: new Intl.NumberFormat(this._locale()).format(
-            shown?.quantity ?? line.left
+          // In the row's unit: "750 g", not "750" (velista `0182`).
+          quantity: formatAmount(
+            shown?.quantity ?? line.left,
+            shown?.unit ?? line.unit,
+            this._locale()
           ),
         })
       );

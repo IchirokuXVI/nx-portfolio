@@ -18,6 +18,7 @@ import {
   type BasketRow,
   type BasketRowEntry,
 } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 import { ChevronDownIcon, QuantityReel } from '@portfolio/velista/ui';
 
 /** One list that asks for the row, as it is drawn. */
@@ -100,6 +101,14 @@ export class RowEntries {
   private readonly _locale = inject(RokuLocaleStore).locale;
 
   readonly row = input.required<BasketRow>();
+
+  /** What the row counts, which every reel here steps and draws by (velista `0182`). */
+  protected readonly unit = computed(() => this.row().unit);
+
+  /** An ask as the sheet draws it: "3", or "750 g" for a weight. */
+  protected wordsOf(quantity: number): string {
+    return formatAmount(quantity, this.unit(), this._locale());
+  }
 
   /** The covered lists this reader was served, by id, for the names. */
   readonly lists = input<ReadonlyMap<string, BasketListRef>>(new Map());

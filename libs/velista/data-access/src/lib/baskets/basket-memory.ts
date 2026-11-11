@@ -39,6 +39,7 @@ import {
   type CatalogSuggestion,
   type ErrorCode,
   type LineApprovalStatus,
+  type LineUnit,
   type LiveBasketSummary,
   type ProductOffer,
 } from '@portfolio/velista/models';
@@ -436,6 +437,8 @@ interface StoredLine {
   content: string;
   /** What the household asks for now, which is the entry's `left`. */
   quantity: number;
+  /** What `quantity` counts (velista `0182`). Absent is a count. */
+  unit?: LineUnit;
   /** The products this line names, first one first. */
   itemIds: readonly string[];
   /** The favourite of the line (backend `0199`), or null. */
@@ -1237,6 +1240,7 @@ export class BasketMemory implements BasketServiceI {
   ): Promise<BasketRowResult> {
     this._requireLive();
     const row = this._requireLines(target);
+    this._requireUnit(body.unit, row.unit);
     this._requireFrom(body.from, row.left);
 
     if (body.outcome === 'NOT_AVAILABLE') {
@@ -1418,6 +1422,7 @@ export class BasketMemory implements BasketServiceI {
       throw this._refuse('not_found', 404, 'No such row on this basket');
     }
     const entry = this._entry(line);
+    this._requireUnit(body.unit, entry.unit);
     if (!entry.demandEditable) {
       throw this._refuse(
         'forbidden',
@@ -1576,6 +1581,7 @@ export class BasketMemory implements BasketServiceI {
     }
 
     const quantity = Math.max(1, Math.trunc(body.quantity));
+    const unit = body.unit ?? 'UNIT';
     const key = normalizeContent(content);
     const wanted = productSetKey(body.itemIds ?? []);
     const held =
@@ -1589,6 +1595,11 @@ export class BasketMemory implements BasketServiceI {
               productSetKey(line.itemIds) === wanted
           );
 
+    if (held !== undefined && (held.unit ?? 'UNIT') !== unit) {
+      // Grams are not added to pieces (backend `0246` M5): the line is answered as
+      // it stands.
+      return this._result([held.id]);
+    }
     if (held !== undefined) {
       // Capped as `raiseForAdd` caps it, and as `LineMemory` does.
       held.quantity = Math.min(LINE_QUANTITY_MAX, held.quantity + quantity);
@@ -1602,6 +1613,7 @@ export class BasketMemory implements BasketServiceI {
       listId: body.targetListId,
       content,
       quantity,
+      unit,
       itemIds: body.itemIds === undefined ? [] : [...body.itemIds],
       // Every list this fake serves auto approves, which is the ordinary case.
       // The `zl-2` fixture is where a screen meets a line waiting for one.
@@ -1987,6 +1999,7 @@ export class BasketMemory implements BasketServiceI {
         rowKey: anchor.id,
         content: anchor.content,
         productId: live.length === 0 ? null : this._lineProduct(anchor),
+        unit: anchor.unit ?? 'UNIT',
         left,
         bought,
         asked: bought + left,
@@ -2265,6 +2278,7 @@ export class BasketMemory implements BasketServiceI {
       closed: newest?.outcome === 'NOT_AVAILABLE',
       act: this._actOf(line, newest),
       version: this._versions.get(line.id) ?? 1,
+      unit: line.unit ?? 'UNIT',
       left: line.quantity,
       bought,
       asked: bought + line.quantity,
@@ -2627,6 +2641,24 @@ export class BasketMemory implements BasketServiceI {
    * whose meaning depends on where it started must be refused rather than
    * reinterpreted (velista `0054`).
    */
+  /**
+   * Refuse a write made in another unit than the row's or the line's (velista
+   * `0182`, backend `0246` section 3.2), as the server does.
+   */
+  private _requireUnit(
+    unit: LineUnit | undefined,
+    actual: LineUnit | undefined
+  ): void {
+    // Absent is a count on both sides, as a caller from before velista `0182` reads.
+    if ((unit ?? 'UNIT') !== (actual ?? 'UNIT')) {
+      throw this._refuse(
+        'line_unit_mismatch',
+        409,
+        'This line counts in another unit'
+      );
+    }
+  }
+
   private _requireFrom(from: number, actual: number): void {
     if (from !== actual) {
       throw this._refuse(

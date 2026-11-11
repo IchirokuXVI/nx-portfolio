@@ -3506,6 +3506,7 @@ describe('the composer and the list it adds to', () => {
         targetListId: 'l-parents',
         content: 'Batteries',
         quantity: 2,
+        unit: 'UNIT',
         // Typed words say the page can ask which line (velista 0170).
         askIfAmbiguous: true,
       });
@@ -3706,6 +3707,7 @@ describe('the composer and the list it adds to', () => {
           targetListId: 'l-weekly',
           content: 'Leche entera',
           quantity: 1,
+          unit: 'UNIT',
           intoLineId: 'zl-b',
         });
         expect(document.querySelector('.pop')).toBeNull();
@@ -3722,6 +3724,7 @@ describe('the composer and the list it adds to', () => {
           targetListId: 'l-weekly',
           content: 'Leche entera',
           quantity: 1,
+          unit: 'UNIT',
           newLine: true,
         });
       });

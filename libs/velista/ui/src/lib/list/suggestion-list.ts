@@ -16,7 +16,11 @@ import {
   RokuTranslatorPipe,
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
-import type { CatalogSuggestion } from '@portfolio/velista/models';
+import {
+  stepFrom,
+  type CatalogSuggestion,
+  type LineUnit,
+} from '@portfolio/velista/models';
 import {
   ProductRow,
   ProductRowSkeleton,
@@ -51,6 +55,11 @@ export interface SuggestionHolding {
    */
   readonly listName: string | null;
   readonly quantity: number;
+  /**
+   * What {@link quantity} counts (velista `0182`), which the stepper draws and
+   * steps by: 25 g or 250 g for a weight, one for a count. Absent is a count.
+   */
+  readonly unit?: LineUnit;
   /** Whether the stepper may move. A caller who may not change it sees it disabled. */
   readonly editable: boolean;
   /**
@@ -361,10 +370,14 @@ export class SuggestionList {
     if (holding === undefined || holding.busy === true) {
       return;
     }
+    // One step of the line's unit, not one gram (velista `0182`).
     this.holdingChanged.emit({
       holding,
       from: holding.quantity,
-      to: holding.quantity + step.by,
+      to: Math.max(
+        0,
+        stepFrom(holding.quantity, holding.unit ?? 'UNIT', step.by)
+      ),
     });
   }
 }
@@ -394,6 +407,7 @@ function addOf(
       lineId: holding.lineId,
       name: holding.text,
       quantity: holding.quantity,
+      unit: holding.unit,
       editable: holding.editable && holding.busy !== true,
       pending: false,
       list: list === null ? holding.listName : null,

@@ -20,6 +20,7 @@ import type {
   CatalogSuggestion,
   LiveBasketSummary,
 } from '@portfolio/velista/models';
+import { isMeasured } from '@portfolio/velista/models';
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { anonymous, operation } from '../auth/http-context';
@@ -247,6 +248,8 @@ export class BasketApi implements BasketServiceI {
       lineIds: [...target.lineIds],
       outcome: body.outcome,
       from: body.from,
+      // The row's unit, always (velista `0182`): required by the server.
+      unit: body.unit,
     };
     if (body.quantity !== undefined) {
       request['quantity'] = body.quantity;
@@ -374,7 +377,13 @@ export class BasketApi implements BasketServiceI {
     const answer = await firstValueFrom(
       this._http.post<unknown>(
         `${this._row(basketId, body.lineId)}/demand`,
-        { lineId: body.lineId, quantity: body.quantity, from: body.from },
+        {
+          lineId: body.lineId,
+          quantity: body.quantity,
+          from: body.from,
+          // The line's unit, always (velista `0182`).
+          unit: body.unit,
+        },
         this._participantOptions(basketId, 'basket.demand')
       )
     );
@@ -442,6 +451,9 @@ export class BasketApi implements BasketServiceI {
       targetListId: body.targetListId,
       content: body.content,
       quantity: body.quantity,
+      // A weight or a volume only (velista `0182`). A count is the server's default,
+      // and every add before backend `0246` named none.
+      ...(isMeasured(body.unit) ? { unit: body.unit } : {}),
     };
     if (body.itemIds !== undefined && body.itemIds.length > 0) {
       request['itemIds'] = [...body.itemIds];

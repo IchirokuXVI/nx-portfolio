@@ -40,6 +40,7 @@ describe('toAddChoice', () => {
           content: 'Leche entera',
           named: true,
           quantity: 2,
+          unit: 'UNIT',
           itemIds: ['item-a'],
           productGroupId: null,
           approvalStatus: 'APPROVED',
@@ -51,6 +52,19 @@ describe('toAddChoice', () => {
         }),
       ],
     });
+  });
+
+  it('reads the unit of a line, a count when it is absent or unknown (velista 0182)', () => {
+    const choice = toAddChoice(
+      refusal({
+        lines: [
+          { ...ENTRY, unit: 'GRAM' },
+          { ...ENTRY, lineId: 'line-b', unit: 'POUND' },
+        ],
+      })
+    );
+
+    expect(choice?.lines.map((line) => line.unit)).toEqual(['GRAM', 'UNIT']);
   });
 
   it('is null for any other failure', () => {

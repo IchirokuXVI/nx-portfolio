@@ -22,7 +22,7 @@ import {
   type BasketAccessEnded,
   type BasketAddLineRequest,
   type BasketAddress,
-  type BasketDemandRequest,
+  type BasketDemandInput,
   type BasketEntryPatch,
   type BasketListRef,
   type BasketLoad,
@@ -37,7 +37,7 @@ import {
   type BasketRow,
   type BasketRowResult,
   type BasketRowTarget,
-  type BasketSettleRequest,
+  type BasketSettleInput,
   type BasketShareLink,
   type CatalogSuggestion,
 } from '@portfolio/velista/models';
@@ -1122,10 +1122,12 @@ export class BasketStore {
    */
   async settle(
     rowKey: string,
-    body: BasketSettleRequest
+    body: BasketSettleInput
   ): Promise<BasketRowResult | null> {
+    // In the row's unit (velista `0182`): a row is one unit, and the store holds it.
+    const unit = this.rowFor(rowKey)?.unit ?? 'UNIT';
     return this._rowWrite(rowKey, (id, target) =>
-      this._service.settle(id, target, body)
+      this._service.settle(id, target, { ...body, unit })
     );
   }
 
@@ -1170,7 +1172,7 @@ export class BasketStore {
     next: number,
     from: number,
     at: Pick<
-      BasketSettleRequest,
+      BasketSettleInput,
       'priceScopeId' | 'supermarketLocationId' | 'itemId'
     > = {}
   ): Promise<BasketRowResult | null> {
@@ -1262,10 +1264,14 @@ export class BasketStore {
    * of this basket: a list that holds the product at zero is raised this way,
    * and its line then joins the row of the product.
    */
-  async setDemand(body: BasketDemandRequest): Promise<BasketRowResult | null> {
-    const busyKey = this.rowFor(body.lineId)?.rowKey ?? body.lineId;
+  async setDemand(body: BasketDemandInput): Promise<BasketRowResult | null> {
+    const row = this.rowFor(body.lineId);
+    const busyKey = row?.rowKey ?? body.lineId;
+    // The unit of the entry that holds the line, else what the caller knows of a
+    // line the basket does not hold yet (velista `0182`).
+    const unit = row?.unit ?? body.unit ?? 'UNIT';
     return this._write(busyKey, async (id) => {
-      const result = await this._service.setDemand(id, body);
+      const result = await this._service.setDemand(id, { ...body, unit });
       this._fold(result, [body.lineId]);
       return result;
     });
@@ -1497,7 +1503,7 @@ export class BasketStore {
    *   patch does not carry: a rename and an add.
    */
   private _fold(
-    result: BasketRowResult,
+    answer: BasketRowResult,
     named: readonly string[],
     patchable = true
   ): void {
@@ -1505,6 +1511,7 @@ export class BasketStore {
     if (held === null) {
       return;
     }
+    const result = this._inRowUnits(answer);
 
     // The answer of a write that only moves numbers is applied with the same
     // function as an event, so the row and the count are right before the event
@@ -1527,6 +1534,24 @@ export class BasketStore {
     this._pruneHeld(stored);
     this._changed();
     this._eventReads.ask();
+  }
+
+  /**
+   * A write's entries in the unit of the row that holds each line (velista
+   * `0182`). The entry view names no unit, because a row is one unit (backend
+   * `0246` M6), so an entry of a write answer counts in its row's. A line no
+   * row holds keeps what it was read with, and the read that follows places it.
+   */
+  private _inRowUnits(result: BasketRowResult): BasketRowResult {
+    return {
+      ...result,
+      entries: result.entries.map((entry) => {
+        const unit = this.rowFor(entry.lineId)?.unit;
+        return unit === undefined || unit === entry.unit
+          ? entry
+          : { ...entry, unit };
+      }),
+    };
   }
 
   /**
@@ -1729,6 +1754,14 @@ export class BasketStore {
     ) {
       await this.refresh();
       this._error.set(error);
+    }
+    if (error instanceof GatewayError && error.code === 'line_unit_mismatch') {
+      // The line counts in another unit now (velista `0182`, backend `0246`
+      // section 3.2). Read again as for `stale_quantity`, so the server's row
+      // replaces the preview, and **no error is kept**: the person did nothing
+      // wrong, and the row they see is already the true one.
+      await this.refresh();
+      this._error.set(null);
     }
   }
 

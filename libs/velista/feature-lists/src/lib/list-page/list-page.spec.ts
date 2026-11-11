@@ -9,6 +9,7 @@ import {
 } from '@angular/router';
 import {
   RokuLocaleStore,
+  RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
@@ -1295,6 +1296,30 @@ describe('ListPage', () => {
       // The question lives in the top layer, next to its anchor.
       TestBed.resetTestingModule();
       jest.useRealTimers();
+    });
+
+    it('says a raised weight line in its unit: 1.25 kg, not 1250 (velista 0182)', async () => {
+      const { fixture, lines } = await render({
+        lines: [
+          line('ln-bread', {
+            content: 'Pan',
+            position: 3,
+            quantity: 1250,
+            unit: 'GRAM',
+          }),
+        ],
+      });
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-bread' });
+      const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+      await typeAndAdd(fixture, 'Pan');
+
+      const call = t.mock.calls.find(
+        ([key]) => key === 'list.addChoice.merged'
+      );
+      expect(call?.[3]).toEqual(
+        expect.objectContaining({ quantity: expect.stringMatching(/ kg$/) })
+      );
     });
 
     it('marks the raised row where it stands, for 2.5 s, and says where the units went', async () => {
@@ -3598,6 +3623,84 @@ describe('ListPage: a write the network dropped (velista 0159)', () => {
     expect(entries(fixture)).toBe(0);
   });
 
+  /**
+   * The values the notice's sentence was asked for. The testing translator echoes the
+   * key, so the words are read off the call: the spy is set after the first draw, and
+   * a dismiss of an id nobody holds makes the notices read again.
+   */
+  function noticeValues(fixture: ComponentFixture<ListPage>) {
+    const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+    fixture.componentInstance.dismissDropped('none');
+    fixture.detectChanges();
+    const call = t.mock.calls.find(([key]) =>
+      key.startsWith('list.dropped.quantity.')
+    );
+    return call?.[3];
+  }
+
+  it('names a change to a weight line with its unit: +250 g, not +250 (velista 0182)', async () => {
+    const { fixture } = await render({
+      lines: [
+        line('ln-1', { content: 'Plátanos', quantity: 750, unit: 'GRAM' }),
+      ],
+      dropped: [
+        dropped({
+          args: { name: 'Plátanos', delta: '+250', unit: 'GRAM' },
+          replay: {
+            kind: 'line-quantity',
+            lineId: 'ln-1',
+            delta: 250,
+            unit: 'GRAM',
+          },
+        }),
+      ],
+    });
+
+    expect(noticeValues(fixture)).toEqual(
+      expect.objectContaining({ delta: '+250 g' })
+    );
+    expect(action(fixture, 'list.dropped.resend')).toBeDefined();
+  });
+
+  it('offers no resend once the line counts in another unit (velista 0182)', async () => {
+    // A minus 250 g sent again after the line moved to pieces would take 250
+    // pieces off, so the notice says the change may not have been saved.
+    const { fixture, lines } = await render({
+      lines: [line('ln-1', { content: 'Plátanos', quantity: 3, unit: 'UNIT' })],
+      dropped: [
+        dropped({
+          args: { name: 'Plátanos', delta: '-250', unit: 'GRAM' },
+          replay: {
+            kind: 'line-quantity',
+            lineId: 'ln-1',
+            delta: -250,
+            unit: 'GRAM',
+          },
+        }),
+      ],
+    });
+
+    expect(notice(fixture)?.textContent).toContain(
+      'list.dropped.quantity.unsure'
+    );
+    expect(action(fixture, 'list.dropped.resend')).toBeUndefined();
+    await fixture.componentInstance.resendDropped(
+      fixture.componentInstance.droppedNotices()[0].id
+    );
+    expect(lines.calls.some((call) => call.kind === 'quantity')).toBe(false);
+  });
+
+  it('keeps a count change a bare number, also from an entry with no unit', async () => {
+    const { fixture } = await render({
+      lines: [line('ln-1', { content: 'Pan de pueblo', quantity: 1 })],
+      dropped: [dropped()],
+    });
+
+    expect(noticeValues(fixture)).toEqual(
+      expect.objectContaining({ delta: '+1' })
+    );
+  });
+
   it('keeps the live region on the page before it has anything to say', async () => {
     // A region inserted already filled is often not announced, so it is there
     // empty and the sentence arrives into it.
@@ -3812,4 +3915,24 @@ describe('every key the list and line page templates name exists in both locales
     expect(keys).toContain('list.header.back');
     expect(keys).toContain('list.readOnly.banner');
   });
+});
+
+/**
+ * Velista 0182: the history's "250 g at €1.99 / kg" was read out as
+ * "&#x2F; kg", because the translator escapes a value and the template escapes
+ * again. The "per" words are app copy with a slash in them, so the key takes
+ * them unescaped.
+ */
+describe('the history names a price per kilo with its slash', () => {
+  const I18N = join(__dirname, '..', '..', '..', '..', 'ui', 'assets', 'i18n');
+
+  for (const locale of ['en', 'es']) {
+    it(`takes the per words unescaped in ${locale}.json`, () => {
+      const json = JSON.parse(
+        readFileSync(join(I18N, `${locale}.json`), 'utf8')
+      ) as { list: { history: { atPer: string } } };
+
+      expect(json.list.history.atPer).toContain('{{- per}}');
+    });
+  }
 });

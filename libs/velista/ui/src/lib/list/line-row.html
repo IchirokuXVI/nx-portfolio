@@ -272,6 +272,7 @@
       [label]="'list.line.quantityFor' | rokuT: { name: line().content }"
       [readonly]="!line().adjustable"
       [took]="took()"
+      [unit]="line().unit"
       [value]="line().quantity"
       #reel
     />

@@ -33,7 +33,7 @@ import {
   type BasketShelfMark,
   type PriceWords,
 } from '@portfolio/velista/models';
-import { formatMoney } from '@portfolio/velista/platform';
+import { formatAmount, formatMoney } from '@portfolio/velista/platform';
 import {
   CheckFilledIcon,
   CircleIcon,
@@ -521,6 +521,14 @@ export class BasketRow {
     () => this.entry()?.left ?? this.row().left
   );
 
+  /** What the row counts, which the reel steps and draws by (velista `0182`). */
+  protected readonly unit = computed(() => this.row().unit);
+
+  /** {@link stillToGet} in words for the settled count: "3", or "750 g". */
+  protected readonly stillToGetWords = computed(() =>
+    formatAmount(this.stillToGet(), this.unit(), this._locale())
+  );
+
   /**
    * What the reel shows while a write is out.
    *
@@ -591,7 +599,8 @@ export class BasketRow {
       this.stillToGet(),
       this._preview(),
       this._translator,
-      this._locale()
+      this._locale(),
+      this.row().unit
     )
   );
 

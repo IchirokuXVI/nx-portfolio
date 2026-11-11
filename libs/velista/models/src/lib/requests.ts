@@ -4,6 +4,7 @@ import type {
   SettlementOutcome,
   ZoneRole,
 } from './enums';
+import type { LineUnit } from './line-unit';
 
 /**
  * Request bodies, declared explicitly rather than derived from a model.
@@ -116,6 +117,11 @@ export interface AddLineRequest {
   readonly content: string;
   readonly quantity?: number;
   /**
+   * What {@link quantity} counts (velista `0182`, backend `0246` section 3.2).
+   * Absent is `UNIT`, which is what a free text add means.
+   */
+  readonly unit?: LineUnit;
+  /**
    * The catalog products this line stands for (backend plan 0048, section 1.1).
    *
    * A **set**, where this was a single optional `itemId` that nothing ever sent,
@@ -149,6 +155,11 @@ export interface UpdateLineRequest {
    */
   readonly named?: false;
   readonly quantity?: number;
+  /**
+   * What {@link quantity} counts, sent with it on every absolute write (velista
+   * `0182`). A unit change must name the quantity it starts from.
+   */
+  readonly unit?: LineUnit;
   /**
    * Replace the whole product set. An empty array clears it back to free text.
    *
@@ -194,6 +205,11 @@ export interface UpdateLineRequest {
  */
 export interface AddLineQuantityRequest {
   readonly delta: number;
+  /**
+   * The unit the delta was made in, which is the line's (velista `0182`).
+   * Required: a delta in another unit is refused with `line_unit_mismatch`.
+   */
+  readonly unit: LineUnit;
 }
 
 /**
@@ -214,6 +230,11 @@ export interface SettleLineRequest {
    * though it satisfies no demand.
    */
   readonly quantity?: number;
+  /**
+   * The unit {@link quantity} is in, the line's (velista `0182`). Required by the
+   * server, and refused with `line_unit_mismatch` when it is not the line's.
+   */
+  readonly unit: LineUnit;
   /**
    * Which of the line's products was bought, on a line carrying more than one.
    *

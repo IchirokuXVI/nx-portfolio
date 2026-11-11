@@ -86,6 +86,10 @@ export class AddedSheet {
   /** The record, one section for each list, the chosen list first. */
   protected readonly sections = computed<readonly VisitAddedSection[]>(() => {
     const lists = this._adds.lists();
+    // What each line counts, off the store's held lines (velista `0182`).
+    const units = new Map(
+      this._adds.held().map((line) => [line.lineId, line.unit])
+    );
     return visitSections(
       this._adds.visit(),
       this._adds.target()?.listId ?? null
@@ -99,7 +103,8 @@ export class AddedSheet {
         detail: entry.detail,
         imageUrl: entry.imageUrl,
         quantity: entry.quantity,
-        floor: visitFloor(entry),
+        unit: units.get(entry.lineId) ?? 'UNIT',
+        floor: visitFloor(entry, units.get(entry.lineId) ?? 'UNIT'),
         pending: entry.pending,
       })),
     }));

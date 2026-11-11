@@ -4,6 +4,7 @@ import {
   QUANTITY_REEL_PX_PER_UNIT,
   QUANTITY_REEL_TAP_MAX_MS,
   QUANTITY_REEL_TAP_SLOP_PX,
+  type LineUnit,
 } from '@portfolio/velista/models';
 import { QuantityReel } from './quantity-reel';
 
@@ -35,6 +36,7 @@ async function render(
     min?: number;
     max?: number;
     hideButtons?: boolean;
+    unit?: LineUnit;
   } = {}
 ): Promise<{
   fixture: ComponentFixture<QuantityReel>;
@@ -64,6 +66,9 @@ async function render(
   }
   if (options.hideButtons !== undefined) {
     fixture.componentRef.setInput('hideButtons', options.hideButtons);
+  }
+  if (options.unit !== undefined) {
+    fixture.componentRef.setInput('unit', options.unit);
   }
   fixture.detectChanges();
 
@@ -961,6 +966,121 @@ describe('QuantityReel', () => {
       expect(fixture.componentInstance.shown()).toBe(3);
       jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
       expect(deltas).toEqual([]);
+    });
+  });
+
+  /**
+   * Velista `0182`, criterion 4: the reel steps by the unit. Every one of the six
+   * places that moved the number by one reads the step, the step changes at a
+   * thousand in both directions, the words change with it, and a count is what it
+   * always was.
+   */
+  describe('the step of a weight (velista 0182)', () => {
+    const grams = (value: number, more: Parameters<typeof render>[1] = {}) =>
+      render(value, { ...more, unit: 'GRAM' });
+
+    it('1. draws its neighbours one step away, and the step changes at a thousand', async () => {
+      const { fixture } = await grams(1000);
+
+      expect(fixture.componentInstance.previous()).toBe(975);
+      expect(fixture.componentInstance.next()).toBe(1250);
+
+      const below = await grams(975);
+      expect(below.fixture.componentInstance.previous()).toBe(950);
+      expect(below.fixture.componentInstance.next()).toBe(1000);
+    });
+
+    it('2. drags one step per stretch of travel, across the thousand', async () => {
+      const { fixture, host, deltas } = await grams(950);
+
+      drag(host, 4);
+      fixture.detectChanges();
+      // 950, 975, 1000, then 1250 and 1500: the step grew at the thousand.
+      expect(fixture.componentInstance.shown()).toBe(1500);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([550]);
+    });
+
+    it('3. moves by one step on an arrow and five on a page key, both ways', async () => {
+      const { fixture, host, deltas } = await grams(1000);
+
+      key(host, 'ArrowDown');
+      expect(fixture.componentInstance.shown()).toBe(975);
+      key(host, 'ArrowUp');
+      key(host, 'ArrowUp');
+      expect(fixture.componentInstance.shown()).toBe(1250);
+      key(host, 'PageDown');
+      // 1250, 1000, 975, 950, 925, 900.
+      expect(fixture.componentInstance.shown()).toBe(900);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([-100]);
+    });
+
+    it('4. steps the buttons by the unit', async () => {
+      const { fixture, deltas } = await grams(750, { hideButtons: false });
+
+      fixture.componentInstance.onStepButton(1);
+      expect(fixture.componentInstance.shown()).toBe(775);
+      fixture.componentInstance.onStepButton(-1);
+      fixture.componentInstance.onStepButton(-1);
+      expect(fixture.componentInstance.shown()).toBe(725);
+
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([-25]);
+    });
+
+    it('5. draws the pill and the tape in words, grams below a kilo and kilos from it', async () => {
+      const { fixture, host } = await grams(1000);
+      expect(host.querySelector('.pill')?.textContent?.trim()).toBe('1 kg');
+
+      key(host, 'ArrowDown');
+      fixture.detectChanges();
+      expect(host.querySelector('.pill')?.textContent?.trim()).toBe('975 g');
+
+      host.dispatchEvent(pointer('pointerdown', 0));
+      host.dispatchEvent(pointer('pointermove', -QUANTITY_REEL_PX_PER_UNIT));
+      fixture.detectChanges();
+      expect(host.querySelector('.current')?.textContent?.trim()).toBe('1 kg');
+      expect(number(host, 975).textContent?.trim()).toBe('975 g');
+      expect(number(host, 1250).textContent?.trim()).toBe('1.25 kg');
+    });
+
+    it('6. keeps aria-valuenow the raw integer and says the words in aria-valuetext', async () => {
+      const { fixture, host } = await grams(750);
+
+      expect(host.getAttribute('aria-valuenow')).toBe('750');
+      expect(host.getAttribute('aria-valuetext')).toBe('750 g');
+
+      key(host, 'PageUp');
+      fixture.detectChanges();
+      // 750, 775, 800, 825, 850, 875.
+      expect(host.getAttribute('aria-valuenow')).toBe('875');
+      expect(host.getAttribute('aria-valuetext')).toBe('875 g');
+    });
+
+    it('steps millilitres by 50 below a litre and 250 from it', async () => {
+      const { fixture, host } = await render(950, { unit: 'MILLILITER' });
+
+      key(host, 'ArrowUp');
+      expect(fixture.componentInstance.shown()).toBe(1000);
+      key(host, 'ArrowUp');
+      expect(fixture.componentInstance.shown()).toBe(1250);
+    });
+
+    it('leaves a count exactly as it was: one per step, the bare number, no value text', async () => {
+      const { fixture, host, deltas } = await render(2);
+
+      expect(fixture.componentInstance.previous()).toBe(1);
+      expect(fixture.componentInstance.next()).toBe(3);
+      expect(host.querySelector('.pill')?.textContent?.trim()).toBe('2');
+      expect(host.getAttribute('aria-valuenow')).toBe('2');
+      expect(host.hasAttribute('aria-valuetext')).toBe(false);
+
+      key(host, 'PageUp');
+      jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+      expect(deltas).toEqual([5]);
     });
   });
 

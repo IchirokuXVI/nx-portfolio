@@ -44,6 +44,7 @@ import {
   ProductPickStore,
   REALTIME_CLIENT,
   type RealtimeClientI,
+  replayInUnit,
   SessionStore,
   ShoppingProfileStore,
   toAddChoice,
@@ -60,6 +61,7 @@ import {
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
   type Line,
+  LINE_UNITS,
   LINE_VOICE_MAX_SECONDS,
   lineName,
   type LineName,
@@ -82,7 +84,9 @@ import {
   AudioRecorder,
   BrowserFacade,
   ColumnScroll,
+  formatAmount,
   formatMoney,
+  formatQuantityChange,
   lineQueryOf,
   listIdOf,
   ListSearchNavigation,
@@ -1224,10 +1228,12 @@ export class ListPage {
     this._translator.loaded();
     const lines = this._lineById();
     return this._dropped().map((entry) => {
-      const replay = entry.replay;
       // Off the entry, not the replay, so an unsure entry is named as the row names
       // the line too.
       const line = lines.get(entry.lineId);
+      // No resend once the line counts in another unit (velista `0182`): the
+      // sentence then says the change may not have been saved.
+      const replay = replayInUnit(entry.replay, line?.unit);
       const name =
         line === undefined ? entry.args['name'] : this._lineName(line);
       return {
@@ -1236,7 +1242,7 @@ export class ListPage {
           `${entry.key}.${replay === null ? 'unsure' : 'lost'}`,
           undefined,
           locale,
-          { ...entry.args, name }
+          { ...entry.args, name, delta: droppedDelta(entry.args, locale) }
         ),
         canResend: replay !== null,
       };
@@ -1251,7 +1257,11 @@ export class ListPage {
 
   /** "Send it again": the same delta, through the same path as a turn of the reel. */
   async resendDropped(id: string): Promise<void> {
-    const replay = this._dropped().find((entry) => entry.id === id)?.replay;
+    const entry = this._dropped().find((dropped) => dropped.id === id);
+    const replay = replayInUnit(
+      entry?.replay ?? null,
+      entry === undefined ? undefined : this._lineById().get(entry.lineId)?.unit
+    );
     this.dismissDropped(id);
     if (replay !== null && replay !== undefined) {
       await this.changeQuantity({ lineId: replay.lineId, delta: replay.delta });
@@ -1772,7 +1782,8 @@ export class ListPage {
             undefined,
             {
               name: this._lineName(line),
-              quantity: line.quantity,
+              // "3", or "750 g" for a weight (velista `0182`).
+              quantity: formatAmount(line.quantity, line.unit, this._locale()),
             }
           )
         );
@@ -1881,7 +1892,9 @@ export class ListPage {
       entry.itemIds,
       // A chosen card is not named (velista `0144`, section 3).
       entry.named,
-      options
+      options,
+      // A product sold by the kilo is asked for by weight (velista `0182`).
+      entry.unit
     );
 
     this._typedBusy.set(false);
@@ -1939,8 +1952,11 @@ export class ListPage {
       this.announcement.set(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
-          quantity: new Intl.NumberFormat(this._locale()).format(
-            outcome.line.quantity
+          // In the line's unit: "1,25 kg", not "1250" (velista `0182`).
+          quantity: formatAmount(
+            outcome.line.quantity,
+            outcome.line.unit,
+            this._locale()
           ),
         })
       );
@@ -1991,13 +2007,18 @@ export class ListPage {
     }
     const facts = this._catalogFacts();
     const lines = this._lines.linesIn(asked.listId);
-    return addChoiceRows(asked.choice, asked.entry.quantity, {
-      itemOf: (itemId) => this._itemNames.nameOf(itemId),
-      favoriteOf: (lineId) =>
-        lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
-      locale: facts.locale,
-      brandSizeOf: facts.brandSizeOf,
-    });
+    return addChoiceRows(
+      asked.choice,
+      asked.entry.quantity,
+      {
+        itemOf: (itemId) => this._itemNames.nameOf(itemId),
+        favoriteOf: (lineId) =>
+          lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
+        locale: facts.locale,
+        brandSizeOf: facts.brandSizeOf,
+      },
+      asked.entry.unit
+    );
   });
 
   /** A line of the question was chosen: the same add, into that line. */
@@ -2232,6 +2253,7 @@ export class ListPage {
           text: line.content,
           listName: null,
           quantity: line.quantity,
+          unit: line.unit,
           editable,
         }));
   });
@@ -2711,3 +2733,20 @@ function rowInView(row: HTMLElement, column: HTMLElement): boolean {
 type ListCategoryHeading =
   | { readonly kind: 'key'; readonly key: string }
   | { readonly kind: 'text'; readonly text: string };
+
+/**
+ * The change a dropped note names, in the line's unit: "+250 g", not "+250"
+ * (velista `0182`). An entry written before the unit rode along, or with one this
+ * build cannot read, keeps the bare number it was written with.
+ */
+function droppedDelta(
+  args: Readonly<Record<string, string>>,
+  locale: string
+): string {
+  const written = args['delta'] ?? '';
+  const unit = LINE_UNITS.find((one) => one === args['unit']);
+  const delta = Number(written);
+  return unit === undefined || !Number.isInteger(delta) || delta === 0
+    ? written
+    : formatQuantityChange(delta, unit, locale);
+}

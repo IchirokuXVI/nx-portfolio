@@ -8,6 +8,7 @@ import type {
   LineApprovalStatus,
   LineOrder,
   LineSettlement,
+  LineUnit,
   Page,
   SettleLineOptions,
   SettlementOutcome,
@@ -81,6 +82,9 @@ export interface LineServiceI {
    * `options` is what a free text add says about a name the list already holds
    * (backend `0228`): that the caller can ask, or which answer the person gave. It is
    * ignored on an add that carries products, and is not sent there.
+   *
+   * `unit` is what `quantity` counts (velista `0182`): the unit of the product
+   * added, `lineUnitOf(soldAsOf(offer, product))`. Absent is `UNIT`.
    */
   addLine(
     listId: string,
@@ -88,7 +92,8 @@ export interface LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<Line>;
 
   /**
@@ -110,7 +115,8 @@ export interface LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<LineAddResult>;
 
   /**
@@ -135,6 +141,9 @@ export interface LineServiceI {
    * A rename onto a name another line of the list holds is refused with
    * `line_merge_required` unless `confirmMerge` is true, and then the two lines merge
    * into the earlier one (backend plan 0112).
+   *
+   * `unit` is sent with `quantity` and never alone (velista `0182`): every
+   * absolute write states what its number counts.
    */
   updateLine(
     lineId: string,
@@ -142,6 +151,7 @@ export interface LineServiceI {
       content?: string;
       named?: false;
       quantity?: number;
+      unit?: LineUnit;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
       favoriteItemId?: string | null;
@@ -160,8 +170,11 @@ export interface LineServiceI {
    * else until now.
    *
    * `DECIDE`, like settling, because both say what the household now has.
+   *
+   * `unit` is the line's (velista `0182`), required: a delta in another unit is
+   * refused with `line_unit_mismatch` and changes nothing.
    */
-  addQuantity(lineId: string, delta: number): Promise<Line>;
+  addQuantity(lineId: string, delta: number, unit: LineUnit): Promise<Line>;
 
   /**
    * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).
@@ -180,7 +193,7 @@ export interface LineServiceI {
   settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: SettleLineOptions
+    options: SettleLineOptions & { readonly unit: LineUnit }
   ): Promise<{ line: Line; settlement: LineSettlement }>;
 
   /**

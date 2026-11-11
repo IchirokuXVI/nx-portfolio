@@ -17,9 +17,13 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   catalogName,
+  defaultQuantity,
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
+  LINE_QUANTITY_MAX,
+  lineUnitOfProduct,
   type CatalogSuggestion,
+  type LineUnit,
   type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
@@ -44,7 +48,14 @@ export type LineComposerButton = 'add' | 'record';
 /** One line sent from the composer. */
 export interface LineComposerSubmit {
   readonly content: string;
+  /** In {@link unit}: a count, or grams for a product sold by the kilo. */
   readonly quantity: number;
+  /**
+   * What `quantity` counts (velista `0182`): `GRAM` for one product sold by the
+   * kilo, `MILLILITER` for one sold by the litre, and `UNIT` for everything else,
+   * typed text included.
+   */
+  readonly unit: LineUnit;
   readonly itemIds?: readonly string[];
   /**
    * `false` for a card that was chosen: `content` is then the name of the product
@@ -421,10 +432,16 @@ export class LineComposer {
         : catalogName(suggestion.item.name, this._locale());
     const itemIds =
       suggestion.kind === 'group' ? suggestion.itemIds : [suggestion.item.id];
+    // One product decides its own unit (backend `0246` W2). A group's members can
+    // differ, and choosing among them is velista `0183`, so a group is counted.
+    const unit =
+      suggestion.kind === 'group'
+        ? 'UNIT'
+        : lineUnitOfProduct(suggestion.item.offer, suggestion.item);
 
     // The card's name is still sent, because the server needs a name and the
     // catalog reads it, but the line is not named after it.
-    this._send(content, itemIds, anchor, false);
+    this._send(content, itemIds, anchor, false, unit);
   }
 
   /** The one button, pressed. */
@@ -709,13 +726,22 @@ export class LineComposer {
     content: string,
     itemIds: readonly string[] | undefined,
     anchor: HTMLElement | undefined,
-    named?: false
+    named?: false,
+    unit: LineUnit = 'UNIT'
   ): void {
     const hold = this.holdOnSend();
     const products = itemIds !== undefined && itemIds.length > 0;
     this.submitted.emit({
       content,
-      quantity: this.quantity(),
+      // The stepper counts what the person asks for. For a product sold by the
+      // kilo or the litre each one is a kilo or a litre, so the line starts at
+      // `defaultQuantity` of its unit, "1 kg", and the reel then weighs it. The
+      // unit is known only once the product is chosen, so the count is capped
+      // here, at 100 kilos or litres, which the server still takes.
+      quantity:
+        Math.min(this.quantity(), LINE_QUANTITY_MAX / defaultQuantity(unit)) *
+        defaultQuantity(unit),
+      unit,
       ...(products ? { itemIds } : {}),
       ...(products && named === false ? { named } : {}),
       ...(hold && anchor !== undefined ? { anchor } : {}),

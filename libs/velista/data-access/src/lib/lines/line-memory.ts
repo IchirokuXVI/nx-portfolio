@@ -16,6 +16,7 @@ import {
   type LineApprovalStatus,
   type LineOrder,
   type LineSettlement,
+  type LineUnit,
   type ListPermission,
   type Page,
   type SettleLineOptions,
@@ -147,7 +148,8 @@ export class LineMemory implements LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<LineAddResult> {
     this._require(listId, 'WRITE');
 
@@ -157,12 +159,25 @@ export class LineMemory implements LineServiceI {
       : this._typedAddTarget(listId, content, options);
     if (existing === null) {
       return {
-        line: await this.addLine(listId, content, quantity, itemIds, named),
+        line: await this.addLine(
+          listId,
+          content,
+          quantity,
+          itemIds,
+          named,
+          options,
+          unit
+        ),
         merged: false,
       };
     }
 
     this._maybeFail();
+    if ((existing.unit ?? 'UNIT') !== (unit ?? 'UNIT')) {
+      // Grams are not added to pieces (backend `0246` M5): the line that is
+      // there is answered as the duplicate, and nothing is summed.
+      return { line: existing, merged: true };
+    }
     const raised: Line = {
       ...existing,
       // Capped as `raiseForAdd` caps it, so a raise never answers a number the
@@ -280,7 +295,8 @@ export class LineMemory implements LineServiceI {
     named?: false,
     // Read by `addLineResult`, the add that models where a line lands. This one
     // always makes a line, as it always has.
-    _options?: AddLineOptions
+    _options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<Line> {
     const permissions = this._require(listId, 'WRITE');
     this._maybeFail();
@@ -298,6 +314,8 @@ export class LineMemory implements LineServiceI {
       // named whatever the add says, and an add with no flag names the line.
       named: named !== false || (itemIds ?? []).length === 0,
       quantity: quantity ?? 1,
+      // Absent is a count, as on the server (backend `0246`, section 3.2).
+      unit: unit ?? 'UNIT',
       itemIds: [...(itemIds ?? [])],
       // A hand made set. The composer sends the products a group offered rather
       // than the group itself, and this fake does not model the binding a real
@@ -352,6 +370,7 @@ export class LineMemory implements LineServiceI {
       content?: string;
       named?: false;
       quantity?: number;
+      unit?: LineUnit;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
       favoriteItemId?: string | null;
@@ -445,6 +464,11 @@ export class LineMemory implements LineServiceI {
       content: changes.content ?? current.content,
       named: namedAfter(current, changes),
       quantity: changes.quantity ?? current.quantity,
+      // A unit comes with the quantity it starts from (backend `0246`, 3.2).
+      unit:
+        changes.quantity !== undefined && changes.unit !== undefined
+          ? changes.unit
+          : current.unit,
       // Undefined leaves the set alone; an empty array clears it to free text.
       itemIds:
         changes.itemIds === undefined ? current.itemIds : [...changes.itemIds],
@@ -550,9 +574,18 @@ export class LineMemory implements LineServiceI {
    * delta: two adjustments in flight at once both land, where two absolute writes
    * would have silently lost one.
    */
-  async addQuantity(lineId: string, delta: number): Promise<Line> {
+  async addQuantity(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<Line> {
     const line = this._lineOrThrow(lineId);
     this._require(line.listId, 'DECIDE');
+
+    // A delta made in another unit changes nothing (backend `0246`, 3.2).
+    if ((unit ?? 'UNIT') !== (line.unit ?? 'UNIT')) {
+      throw memoryFailure('line_unit_mismatch', 409);
+    }
 
     // Never zero, which the server refuses too. A gesture that ended where it
     // started is not an adjustment to send.
@@ -588,7 +621,7 @@ export class LineMemory implements LineServiceI {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: SettleLineOptions
+    options: SettleLineOptions & { readonly unit: LineUnit }
   ): Promise<{ line: Line; settlement: LineSettlement }> {
     const line = this._lineOrThrow(lineId);
     // `WRITE` or `MANAGE`, which is `canSettle` on the server since backend plan
@@ -598,6 +631,9 @@ export class LineMemory implements LineServiceI {
 
     if (outcome === 'NOT_AVAILABLE' && options?.quantity !== undefined) {
       throw memoryFailure('validation_failed', 400);
+    }
+    if ((options?.unit ?? 'UNIT') !== (line.unit ?? 'UNIT')) {
+      throw memoryFailure('line_unit_mismatch', 409);
     }
 
     const bought = outcome === 'BOUGHT' ? (options?.quantity ?? 1) : 0;
@@ -617,6 +653,9 @@ export class LineMemory implements LineServiceI {
         options?.itemId ?? (line.itemIds.length === 1 ? line.itemIds[0] : null),
       outcome,
       quantity: bought,
+      unit: line.unit ?? 'UNIT',
+      // Unpriced, so nothing to estimate.
+      estimated: false,
       settledByUserId: this._lists.callerUserId(),
       settledAt: new Date(),
       // A settle that has just happened has not been taken back. Reopening is a
@@ -779,6 +818,7 @@ export class LineMemory implements LineServiceI {
               listId: list.id,
               name: line.content,
               quantity: line.quantity,
+              unit: line.unit,
               pending: line.approvalStatus === 'PENDING',
               itemIds: line.itemIds,
             });

@@ -6,7 +6,7 @@ import {
   type BasketProduct,
   type BasketRow,
 } from './basket-view';
-import { amountOfOne, soldAs } from './sold-as';
+import { lineAmount, lineAmountProductOf } from './line-amount';
 
 /**
  * What the visible lines of a basket come to (velista `0132`, section 2).
@@ -31,6 +31,12 @@ export interface BasketTotal {
    * which draws as `formatMoney` draws any amount with no currency.
    */
   readonly currency: string | null;
+  /**
+   * Whether any priced row is an estimate (velista `0182`, section 3): a weight,
+   * a volume or a kilo piece. False when every priced row is a count at a pack
+   * price, and then the total bar draws no estimate mark.
+   */
+  readonly estimated: boolean;
 }
 
 /** What the sum reads beside the rows, which is what the page hands each row. */
@@ -52,6 +58,7 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
   leftCents: 0,
   totalCents: 0,
   currency: null,
+  estimated: false,
 };
 
 /**
@@ -80,8 +87,10 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
  *   kilo piece whose offer has a price and no piece price is unpriced too
  *   (velista `0179`, section 3): velista never derives a piece price.
  *
- * The amount of one unit is the piece price for a kilo piece and the price for
- * every other product ({@link amountOfOne}).
+ * The amount of a row is {@link lineAmount} of its quantity in its unit
+ * (velista `0182`): a count at the price of one, a weight at the price per kilo
+ * times its grams, a kilo piece at its piece price. Each side is rounded once
+ * by that table, and a row the table cannot price adds none.
  *
  * ## The quantity
  *
@@ -100,8 +109,8 @@ export const EMPTY_BASKET_TOTAL: BasketTotal = {
  *
  * ## Money
  *
- * Every price becomes integer cents before it is multiplied, so 0.1 and 0.2 come
- * to 30 and never to 30.000000000000004. **The first priced row that names a
+ * Every amount is integer cents, rounded half up once by {@link lineAmount}, so
+ * 0.1 and 0.2 come to 30 and never to 30.000000000000004. **The first priced row that names a
  * currency names the total's.** A row priced in another currency adds no price,
  * because two currencies have no sum. A price with no currency is counted under
  * whichever one the others name.
@@ -118,6 +127,7 @@ export function basketTotal(
   let boughtCents = 0;
   let totalCents = 0;
   let currency: string | null = null;
+  let estimated = false;
 
   for (const row of countableBasketRows(rows)) {
     lines += 1;
@@ -137,11 +147,11 @@ export function basketTotal(
     if (offer === null) {
       continue;
     }
-    const amount = amountOfOne(
-      offer,
-      soldAs(product.unit, product.size, product.approxWeight)
-    );
-    if (amount === null) {
+    const sized = lineAmountProductOf(product);
+    const figures = { price: offer.price, piecePrice: offer.piecePrice };
+    const total = lineAmount(row.bought + row.left, row.unit, sized, figures);
+    const bought = lineAmount(row.bought, row.unit, sized, figures);
+    if (total === null || bought === null) {
       continue;
     }
     if (offer.currency !== null) {
@@ -152,9 +162,9 @@ export function basketTotal(
     }
     withPrice += 1;
 
-    const cents = Math.round(amount * 100);
-    boughtCents += cents * row.bought;
-    totalCents += cents * (row.bought + row.left);
+    boughtCents += bought.cents;
+    totalCents += total.cents;
+    estimated ||= total.estimated;
   }
 
   return lines === 0
@@ -167,5 +177,6 @@ export function basketTotal(
         leftCents: totalCents - boughtCents,
         totalCents,
         currency,
+        estimated,
       };
 }

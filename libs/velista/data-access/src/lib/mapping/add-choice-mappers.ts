@@ -2,6 +2,8 @@ import {
   ADD_CHOICE_MAX,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
+  LINE_UNIT_FALLBACK,
+  LINE_UNITS,
   type AddChoice,
   type AddChoiceLine,
 } from '@portfolio/velista/models';
@@ -58,6 +60,8 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
     // reading that never shows a product's name over somebody's typing.
     named: raw['named'] !== false,
     quantity,
+    // Backend `0246`: a line of another unit is named alone. Absent is a count.
+    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
     itemIds: mapArray(raw['itemIds'], str),
     productGroupId: nullableStr(raw['productGroupId']),
     approvalStatus: oneOf(

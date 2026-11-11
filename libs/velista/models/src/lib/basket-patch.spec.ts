@@ -39,6 +39,7 @@ function entry(
     closed: false,
     act: null,
     version: 3,
+    unit: 'UNIT',
     left,
     bought,
     asked: left + bought,
@@ -61,6 +62,7 @@ function row(
     rowKey,
     content: entries[0]?.content ?? 'Leche',
     productId: 'p-milk',
+    unit: 'UNIT',
     left,
     bought,
     asked: left + bought,
@@ -113,6 +115,7 @@ function patch(
   return {
     lineId: held.lineId,
     version: held.version,
+    unit: held.unit,
     left: held.left,
     bought: held.bought,
     boughtElsewhere: held.boughtElsewhere,
@@ -140,6 +143,17 @@ describe('applyBasketPatch', () => {
   const milk = row('a', [milkA, milkB]);
   const breadRow = row('c', [bread], { content: 'Pan', productId: null });
   const held = basket([milk, breadRow]);
+
+  it('reads when the line counts in another unit than its row (velista 0182)', () => {
+    // A row is one unit (backend 0246 M6), so the line now belongs to another row.
+    expect(
+      applyBasketPatch(
+        held,
+        ['a'],
+        [patch(milkA, { version: 4, unit: 'GRAM', left: 1000 })]
+      )
+    ).toBe(BASKET_PATCH_READ);
+  });
 
   describe('the table of section 2', () => {
     it('a line with a patch that an entry holds takes the fields of the patch', () => {

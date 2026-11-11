@@ -533,6 +533,73 @@ describe('BasketApi, the writes on a row', () => {
     await reverted;
   });
 
+  describe('every write states its unit (velista 0182, criterion 7)', () => {
+    it('sends the row’s unit on a settle', async () => {
+      const settled = api.settle(BASKET, TARGET, {
+        outcome: 'BOUGHT',
+        quantity: 250,
+        from: 750,
+        unit: 'GRAM',
+      });
+      const settle = httpMock.expectOne(`${rowUrl}/settle`);
+      expect(settle.request.body).toMatchObject({
+        quantity: 250,
+        from: 750,
+        unit: 'GRAM',
+      });
+      settle.flush(ANSWER);
+      await settled;
+    });
+
+    it('sends the line’s unit on a demand', async () => {
+      const done = api.setDemand(BASKET, {
+        lineId: 'zl-8',
+        quantity: 1000,
+        from: 750,
+        unit: 'GRAM',
+      });
+      const req = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/rows/zl-8/demand`
+      );
+      expect(req.request.body).toEqual({
+        lineId: 'zl-8',
+        quantity: 1000,
+        from: 750,
+        unit: 'GRAM',
+      });
+      req.flush({ entries: [] });
+      await done;
+    });
+
+    it('sends a weight on an add, and no unit for a count', async () => {
+      const weighed = api.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Plátanos',
+        quantity: 1000,
+        unit: 'GRAM',
+        itemIds: ['item-bananas'],
+        named: false,
+      });
+      const req = httpMock.expectOne(`${GATEWAY}/v1/baskets/${BASKET}/lines`);
+      expect(req.request.body).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+      req.flush(ANSWER);
+      await weighed;
+
+      const counted = api.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        quantity: 2,
+        unit: 'UNIT',
+      });
+      const second = httpMock.expectOne(
+        `${GATEWAY}/v1/baskets/${BASKET}/lines`
+      );
+      expect('unit' in second.request.body).toBe(false);
+      second.flush(ANSWER);
+      await counted;
+    });
+  });
+
   describe('a settle names a scope and never money (velista 0095, test 9)', () => {
     /** Every key of a body, nested ones included. */
     function keysOf(value: unknown): string[] {

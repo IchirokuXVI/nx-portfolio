@@ -1,5 +1,6 @@
 import type { SettlementOutcome } from './enums';
 import type { LineProductPriceKind } from './line-products';
+import { isMeasured, type LineUnit } from './line-unit';
 import type { LineIndicator } from './list-view';
 import { formatMinorMoney } from './purchases';
 import type { PriceWords } from './sold-as';
@@ -56,8 +57,16 @@ export const ESTIMATE_ROUGH_TO = 6;
 export interface SettlementRowVm {
   readonly id: string;
   readonly outcome: SettlementOutcome;
-  /** Units bought. Zero for a trip that found nothing, which the row draws as words. */
+  /** What was bought, in {@link unit}. Zero for a trip that found nothing, which the row draws as words. */
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). */
+  readonly unit: LineUnit;
+  /**
+   * {@link quantity} as a sentence says it: "3" for a count, "750 g" or "1,5 kg"
+   * for a weight (velista `0182`, section 3). Formatted by the caller's
+   * `formatAmount`, in the reader's language.
+   */
+  readonly amount: string;
   /**
    * Who did it, already resolved: their name, `you` for the reader, or null.
    *
@@ -104,10 +113,18 @@ export interface SettlementRowVm {
    */
   readonly price: string | null;
   /**
+   * Whether {@link price} is an estimate (backend `0246` M7): the screen draws the
+   * estimate mark before it.
+   */
+  readonly estimated: boolean;
+  /**
    * One unit's price, formatted, for the accessible "3 at 1,15 € each". Null when the
-   * row bought one unit or has no price.
+   * row bought one unit or has no price. For a weight or a volume it is the price of
+   * a kilo or a litre, and {@link unitPricePer} names which.
    */
   readonly unitPrice: string | null;
+  /** What {@link unitPrice} is per for a weight or a volume, or null for a count. */
+  readonly unitPricePer: 'KILOGRAM' | 'LITER' | null;
 }
 
 /** One product on a line, as a removable chip. */
@@ -185,6 +202,8 @@ export interface LineDetailVm {
   readonly lineId: string;
   readonly content: string;
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). */
+  readonly unit: LineUnit;
   /**
    * What the line stands for, in one phrase: the product, or how many of them.
    *
@@ -372,6 +391,10 @@ export interface LinePageVm {
    */
   readonly canAddName: boolean;
   readonly quantity: number;
+  /** What {@link quantity} counts (velista `0182`). */
+  readonly unit: LineUnit;
+  /** {@link quantity} in words for a reader who may not move it: "3", "750 g". */
+  readonly quantityWords: string;
   /** "On Weekly shop, in Home", as parts, so the copy can order them. */
   readonly listName: string | null;
   readonly zoneName: string | null;
@@ -453,6 +476,10 @@ export function toSettlementRow(
     readonly id: string;
     readonly outcome: SettlementOutcome;
     readonly quantity: number;
+    /** What the quantity counts. Absent for a caller that holds counts only. */
+    readonly unit?: LineUnit;
+    /** Whether its price is an estimate. Absent reads the unit's answer. */
+    readonly estimated?: boolean;
     readonly settledByUserId: string | null;
     readonly settledAt: Date;
     /** When it was taken back, if it was. Absent for a caller that cannot revert. */
@@ -465,6 +492,8 @@ export function toSettlementRow(
     nameOf: (userId: string) => string | null;
     callerUserId: string | null;
     locale: string;
+    /** A quantity in its unit as a sentence says it ("3", "750 g"), from `platform`. */
+    formatAmount: (quantity: number, unit: LineUnit) => string;
   },
   listName: string | null
 ): SettlementRowVm {
@@ -476,11 +505,25 @@ export function toSettlementRow(
   const currency = settlement.currency ?? null;
   const priced =
     settlement.outcome === 'BOUGHT' && cents !== null && currency !== null;
+  const unit = settlement.unit ?? 'UNIT';
+  const measured = isMeasured(unit);
+  // A weight or a volume is priced per kilo or litre (backend `0246` M7), so the
+  // amount is that price times the grams over a thousand, rounded once.
+  const spentCents =
+    cents === null
+      ? null
+      : measured
+        ? Math.floor(
+            Number(((cents * settlement.quantity) / 1000).toFixed(6)) + 0.5
+          )
+        : cents * settlement.quantity;
 
   return {
     id: settlement.id,
     outcome: settlement.outcome,
     quantity: settlement.quantity,
+    unit,
+    amount: input.formatAmount(settlement.quantity, unit),
     who: mine
       ? null
       : settlement.settledByUserId === null
@@ -493,12 +536,15 @@ export function toSettlementRow(
     // Optional on the argument rather than required, so the two callers that build a
     // settlement shaped object by hand are not made to state a fact they do not have.
     reverted: (settlement.revertedAt ?? null) !== null,
-    price: priced
-      ? formatMinorMoney(cents * settlement.quantity, currency, input.locale)
-      : null,
+    price:
+      priced && spentCents !== null
+        ? formatMinorMoney(spentCents, currency, input.locale)
+        : null,
+    estimated: settlement.estimated ?? measured,
     unitPrice:
-      priced && settlement.quantity > 1
+      priced && (measured || settlement.quantity > 1)
         ? formatMinorMoney(cents, currency, input.locale)
         : null,
+    unitPricePer: !measured ? null : unit === 'GRAM' ? 'KILOGRAM' : 'LITER',
   };
 }

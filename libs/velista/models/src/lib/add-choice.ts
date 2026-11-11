@@ -2,6 +2,7 @@ import type { CatalogItem, Line } from './domain';
 import type { LineApprovalStatus } from './enums';
 import { LINE_QUANTITY_MAX } from './limits';
 import { foldName, lineName } from './line-name';
+import type { LineUnit } from './line-unit';
 
 /**
  * The most lines a `line_add_needs_choice` refusal names (backend `0228`, section 5).
@@ -33,6 +34,8 @@ export interface AddChoiceLine {
   readonly content: string;
   readonly named: boolean;
   readonly quantity: number;
+  /** What {@link quantity} counts (backend `0246`, velista `0182`). */
+  readonly unit: LineUnit;
   readonly itemIds: readonly string[];
   readonly productGroupId: string | null;
   readonly approvalStatus: LineApprovalStatus;
@@ -54,9 +57,15 @@ export interface AddChoiceRow {
   /** "Hacendado · 1 L", or null while the product is not loaded or has neither. */
   readonly product: string | null;
   readonly imageUrl: string | null;
-  /** The line's quantity now, and what the add takes it to. */
+  /**
+   * The line's quantity now, and what the add takes it to. `to` is null for a
+   * line that counts in another unit than the add (backend `0246` M5): the two
+   * amounts cannot be summed, so the row says what the line holds and no more.
+   */
   readonly from: number;
-  readonly to: number;
+  readonly to: number | null;
+  /** What `from` and `to` count (velista `0182`). */
+  readonly unit: LineUnit;
 }
 
 /** What {@link addChoiceRows} reads of the catalog and of the lines already held. */
@@ -77,7 +86,8 @@ export interface AddChoiceFacts {
 export function addChoiceRows(
   choice: AddChoice,
   added: number,
-  facts: AddChoiceFacts
+  facts: AddChoiceFacts,
+  addedUnit: LineUnit = 'UNIT'
 ): readonly AddChoiceRow[] {
   return choice.lines.map((line) => {
     const name = lineName(
@@ -97,7 +107,11 @@ export function addChoiceRows(
       product: item === null ? null : facts.brandSizeOf(item),
       imageUrl: item?.imageUrl ?? null,
       from: line.quantity,
-      to: Math.min(LINE_QUANTITY_MAX, line.quantity + added),
+      to:
+        line.unit === addedUnit
+          ? Math.min(LINE_QUANTITY_MAX, line.quantity + added)
+          : null,
+      unit: line.unit,
     };
   });
 }

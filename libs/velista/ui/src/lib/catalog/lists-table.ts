@@ -75,13 +75,14 @@ export interface ListsTableStep {
               </span>
               @if (usable(list)) {
                 <lib-quantity-stepper
-                  (stepped)="stepMain(list, $event)"
+                  (stepped)="stepMain(list, $event > 0 ? 1 : -1)"
                   [accent]="quantityOf(list) > 0"
                   [controlled]="true"
                   [label]="
                     'catalog.inLists.stepper' | rokuT: { list: list.name }
                   "
                   [min]="floorOf(list)"
+                  [unit]="list.main?.unit ?? 'UNIT'"
                   [value]="quantityOf(list)"
                 />
               }
@@ -102,7 +103,7 @@ export interface ListsTableStep {
                     lineStepped.emit({
                       listId: list.listId,
                       lineId: line.lineId,
-                      by: $event,
+                      by: $event > 0 ? 1 : -1,
                     })
                   "
                   [accent]="line.quantity > 0"
@@ -113,6 +114,7 @@ export interface ListsTableStep {
                     'catalog.held.stepper'
                       | rokuT: { line: line.name, list: list.name }
                   "
+                  [unit]="line.unit"
                   [value]="line.quantity"
                 />
               </div>

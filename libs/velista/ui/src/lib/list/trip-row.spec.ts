@@ -94,6 +94,22 @@ describe('TripRow (velista 0088)', () => {
       );
     });
 
+    it('draws a weight line in its unit: 750 g left of 1 kg (velista 0182)', async () => {
+      const fixture = await render(
+        row({ unit: 'GRAM', left: 750, bought: 250, asked: 1000 })
+      );
+
+      expect(button(fixture).querySelector('.left')?.textContent?.trim()).toBe(
+        '750 g'
+      );
+      const args = (
+        fixture.componentInstance as unknown as {
+          numbersArgs: () => Record<string, string>;
+        }
+      ).numbersArgs();
+      expect(args).toEqual({ bought: '250 g', asked: '1 kg' });
+    });
+
     it('draws a loose row as bought alone, with a muted zero', async () => {
       const fixture = await render(
         row({ mark: 'bought', asked: null, left: null, bought: 2 })

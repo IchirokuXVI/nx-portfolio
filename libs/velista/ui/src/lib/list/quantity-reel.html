@@ -30,7 +30,7 @@
   spinbutton above it and repeating the number here would read it out twice.
 -->
 <span [class.zero]="current === min()" aria-hidden="true" class="pill">
-  {{ current }}
+  {{ words() }}
 </span>
 
 @if (!hideButtons()) {
@@ -67,16 +67,18 @@
       the range carries none: there is nothing there to tap to.
     -->
     <span [attr.data-reel-value]="previous()" class="neighbour">
-      @if (previous() !== null) {
-        {{ previous() }}
+      @let below = previous();
+      @if (below !== null) {
+        {{ wordsFor(below) }}
       }
     </span>
 
-    <span [attr.data-reel-value]="current" class="current">{{ current }}</span>
+    <span [attr.data-reel-value]="current" class="current">{{ words() }}</span>
 
     <span [attr.data-reel-value]="next()" class="neighbour">
-      @if (next() !== null) {
-        {{ next() }}
+      @let above = next();
+      @if (above !== null) {
+        {{ wordsFor(above) }}
       }
     </span>
   </span>

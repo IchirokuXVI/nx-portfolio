@@ -10,6 +10,10 @@ describe('soldAs', () => {
     expect(soldAs('KILOGRAM', null, 0)).toBe('BY_THE_KILO');
   });
 
+  it('names a product sold by the litre: by the litre, no size (velista 0182)', () => {
+    expect(soldAs('LITER', null, null)).toBe('BY_THE_LITRE');
+  });
+
   it('names a fixed pack', () => {
     expect(soldAs('LITER', 1, null)).toBe('PACK');
     expect(soldAs('KILOGRAM', 0.25, null)).toBe('PACK');

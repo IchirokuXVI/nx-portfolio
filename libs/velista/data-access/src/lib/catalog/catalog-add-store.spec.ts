@@ -15,6 +15,7 @@ import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { CatalogAddStore } from './catalog-add-store';
+import { ItemNames } from './item-names';
 
 const MILK = {
   itemId: 'milk',
@@ -89,6 +90,17 @@ interface World {
   readonly lastList?: string;
   /** How many lines one page of a list answers. A hundred, as the store asks. */
   readonly linePageSize?: number;
+  /** The products' records the session read, for a legacy line (backend 0246 M2). */
+  readonly items?: Readonly<
+    Record<
+      string,
+      {
+        readonly unit: string | null;
+        readonly size: number | null;
+        readonly approxWeight: number | null;
+      }
+    >
+  >;
 }
 
 /** After every promise that is already on its way has answered. */
@@ -112,6 +124,8 @@ function setup(world: World) {
   const calls: string[] = [];
   /** The `named` of every add, in order (velista `0144`). */
   const addedNamed: (false | undefined)[] = [];
+  /** The unit every add and every step named (velista `0182`). */
+  const units: (string | undefined)[] = [];
   const storage = new Map<string, string>();
   if (world.lastList !== undefined) {
     storage.set(StorageKeys.lastList, world.lastList);
@@ -236,9 +250,18 @@ function setup(world: World) {
         hasMore: false,
       });
     },
-    addLineResult: async (listId, content, quantity, itemIds, named) => {
+    addLineResult: async (
+      listId,
+      content,
+      quantity,
+      itemIds,
+      named,
+      _options,
+      unit
+    ) => {
       calls.push(`add:${listId}:${content}:${quantity}:${itemIds?.join(',')}`);
       addedNamed.push(named);
+      units.push(unit);
       await written();
       const existing = linesOf(listId).find(
         (held) =>
@@ -257,6 +280,7 @@ function setup(world: World) {
       const made = line(`line-${++nextId}`, listId, {
         content,
         quantity: quantity ?? 1,
+        unit: unit ?? 'UNIT',
         itemIds: [...(itemIds ?? [])],
         approvalStatus: pendingNext ? 'PENDING' : 'APPROVED',
       });
@@ -264,13 +288,22 @@ function setup(world: World) {
       server.set(made.id, made);
       return { line: made, merged: false };
     },
-    addQuantity: async (lineId, delta) => {
+    addQuantity: async (lineId, delta, unit) => {
       calls.push(`quantity:${lineId}:${delta}`);
+      units.push(unit);
       await written();
       const current = server.get(lineId) as Line;
       const moved = { ...current, quantity: current.quantity + delta };
       server.set(lineId, moved);
       return moved;
+    },
+    updateLine: async (lineId, changes) => {
+      calls.push(`update:${lineId}:${changes.quantity}:${changes.unit}`);
+      await written();
+      const current = server.get(lineId) as Line;
+      const updated = { ...current, ...changes } as Line;
+      server.set(lineId, updated);
+      return { line: updated, absorbedLineId: null };
     },
     deleteLine: async (lineId) => {
       calls.push(`delete:${lineId}`);
@@ -286,6 +319,16 @@ function setup(world: World) {
       { provide: ZONE_SERVICE, useValue: zones },
       { provide: LIST_SERVICE, useValue: lists },
       { provide: LINE_SERVICE, useValue: lines },
+      ...(world.items === undefined
+        ? []
+        : [
+            {
+              provide: ItemNames,
+              useValue: {
+                nameOf: (itemId: string) => world.items?.[itemId] ?? null,
+              },
+            },
+          ]),
       {
         provide: SessionStore,
         useValue: { isGuest: () => world.guest === true },
@@ -308,6 +351,7 @@ function setup(world: World) {
     store,
     calls,
     addedNamed,
+    units,
     storage,
     /** The lines as the server holds them. */
     server,
@@ -687,6 +731,170 @@ describe('CatalogAddStore', () => {
 
       expect(store.linesStatus()).toBe('ready');
       expect(store.held().map((held) => held.lineId)).toContain('m-milk');
+    });
+  });
+
+  describe('a product sold by the kilo (velista 0182, criterion 7)', () => {
+    const BANANAS = {
+      itemId: 'bananas',
+      name: 'Plátanos',
+      detail: null,
+      imageUrl: null,
+      unit: 'GRAM' as const,
+    };
+
+    it('adds a kilo, in grams, and says so', async () => {
+      const { store, calls, units } = setup(HOME);
+      await store.ensure();
+
+      await store.add(BANANAS);
+
+      expect(calls).toContain('add:weekly:Plátanos:1000:bananas');
+      expect(units).toEqual(['GRAM']);
+      expect(store.visit()[0]?.quantity).toBe(1000);
+    });
+
+    it('steps by the unit, in the line’s unit', async () => {
+      const { store, calls, units } = setup(HOME);
+      await store.ensure();
+      await store.add(BANANAS);
+
+      await store.step(on('weekly', BANANAS), 'line-1', 1);
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+
+      expect(calls).toContain('quantity:line-1:250');
+      expect(calls).toContain('quantity:line-1:-250');
+      expect(units).toEqual(['GRAM', 'GRAM', 'GRAM']);
+    });
+
+    it('takes a kilo line the visit made back with one minus at its kilo', async () => {
+      const { store, calls } = setup(HOME);
+      await store.ensure();
+      await store.add(BANANAS);
+
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+
+      // Taken back whole: to nothing here, where the reader may not delete the
+      // line, and never one 25 g step.
+      expect(calls).toContain('quantity:line-1:-1000');
+      expect(calls).not.toContain('quantity:line-1:-25');
+      expect(store.visit()).toEqual([]);
+    });
+
+    it('steps a weight line the visit made down from under its kilo, never taking it back', async () => {
+      const { store, calls, server } = setup(HOME);
+      await store.ensure();
+      await store.add(BANANAS);
+      // Lowered to 525 g on the list page while the visit is open.
+      server.set('line-1', {
+        ...(server.get('line-1') as Line),
+        quantity: 525,
+      });
+      await store.step(on('weekly', BANANAS), 'line-1', 1);
+      expect(store.held()[0]?.quantity).toBe(775);
+
+      await store.step(on('weekly', BANANAS), 'line-1', -1);
+
+      expect(calls).toContain('quantity:line-1:-25');
+      expect(calls).not.toContain('delete:line-1');
+      expect(store.held()[0]?.quantity).toBe(750);
+    });
+
+    it('takes a count line the visit made back at nothing, as before', async () => {
+      const { store, calls } = setup(HOME);
+      await store.ensure();
+      await store.add(MILK);
+
+      await store.step(on('weekly', MILK), 'line-1', -1);
+
+      // Taken back: lowered to nothing, where the reader may not delete it.
+      expect(calls).toContain('quantity:line-1:-1');
+      expect(store.visit()).toEqual([]);
+    });
+
+    describe('a line the migration left in UNIT (backend 0246 M2)', () => {
+      const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+      const legacy = (quantity: number): World => ({
+        ...HOME,
+        items: { bananas: LOOSE },
+        lines: [
+          line('old', 'weekly', {
+            content: 'Plátanos',
+            quantity,
+            unit: 'UNIT',
+            itemIds: ['bananas'],
+          }),
+        ],
+      });
+
+      it('draws it as the list page does: as stored above nothing, in grams at nothing', async () => {
+        const above = setup(legacy(3));
+        await above.store.ensure();
+        expect(above.store.held()[0]).toMatchObject({
+          quantity: 3,
+          unit: 'UNIT',
+        });
+
+        TestBed.resetTestingModule();
+        const empty = setup(legacy(0));
+        await empty.store.ensure();
+        expect(empty.store.held()[0]).toMatchObject({
+          quantity: 0,
+          unit: 'GRAM',
+        });
+      });
+
+      it('asks for a kilo on its first plus, with an absolute update that states the unit', async () => {
+        const { store, calls } = setup(legacy(3));
+        await store.ensure();
+
+        await store.step(on('weekly', BANANAS), 'old', 1);
+
+        expect(calls).toContain('update:old:1000:GRAM');
+        expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+        expect(store.held()[0]).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+      });
+
+      it('steps in grams once corrected, a second press waiting for the first', async () => {
+        const { store, calls, holdWrites, releaseNext } = setup(legacy(0));
+        await store.ensure();
+        holdWrites();
+
+        const first = store.step(on('weekly', BANANAS), 'old', 1);
+        const second = store.step(on('weekly', BANANAS), 'old', 1);
+        await settled();
+        expect(calls.filter((call) => call.startsWith('quantity:'))).toEqual(
+          []
+        );
+
+        releaseNext();
+        await first;
+        await settled();
+        releaseNext();
+        await second;
+
+        expect(calls).toContain('update:old:1000:GRAM');
+        expect(calls).toContain('quantity:old:250');
+      });
+
+      it('sends nothing for a minus at nothing', async () => {
+        const { store, calls } = setup(legacy(0));
+        await store.ensure();
+
+        await store.step(on('weekly', BANANAS), 'old', -1);
+
+        expect(calls.some((call) => call.startsWith('update:'))).toBe(false);
+        expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+      });
+    });
+
+    it('counts a product with no unit named, as before', async () => {
+      const { store, units } = setup(HOME);
+      await store.ensure();
+
+      await store.add(MILK);
+
+      expect(units).toEqual(['UNIT']);
     });
   });
 

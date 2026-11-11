@@ -735,7 +735,8 @@
       "done": "Nothing left",
       "notLive": "Not updating right now",
       "back": "Back to the group",
-      "cost": "About {{cost}} for the lines that have a price"
+      "cost": "About {{cost}} for the lines that have a price",
+      "costExact": "{{cost}} for the lines that have a price"
     },
     "presence": {
       "one": "{{name}} is on the list",
@@ -841,6 +842,8 @@
       "newLine": "A new line",
       "row": "Add {{added}} to {{name}}, {{product}}: {{from}} to {{to}}",
       "rowNoProduct": "Add {{added}} to {{name}}: {{from}} to {{to}}",
+      "rowHolds": "{{name}}, {{product}}: {{from}}, counted in another unit",
+      "rowHoldsNoProduct": "{{name}}: {{from}}, counted in another unit",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {
@@ -987,7 +990,8 @@
       "tooFast": "Slow down for a moment and try again",
       "failed": "That did not work. Try again in a moment",
       "mergeNeedsApproval": "That name belongs to an approved line, and this line is not approved yet.",
-      "mergeTooManyProducts": "Together they have more than {{max}} products."
+      "mergeTooManyProducts": "Together they have more than {{max}} products.",
+      "unitDiffers": "These two lines count in different units, so they stay apart."
     },
     "detail": {
       "title": "About this line",
@@ -1129,7 +1133,9 @@
       "each": "{{count}} at {{price}} each",
       "older": "Show older",
       "empty": "Nothing bought yet.",
-      "loading": "Loading the buy history"
+      "loading": "Loading the buy history",
+      "about": "About {{price}}",
+      "atPer": "{{amount}} at {{price}} {{- per}}"
     },
     "confirmDelete": {
       "title": "Delete “{{name}}”?",
@@ -1627,13 +1633,15 @@
       "removed": "No longer on the list",
       "boughtFromAnotherList": "Bought from another shopping list",
       "boughtFromTheList": "Bought from the list",
-      "alreadyBought": "Already bought"
+      "alreadyBought": "Already bought",
+      "takenBackAmount": "{{amount}} taken back"
     },
     "outstanding": {
       "label": "{{name}}, still to get",
       "bought_one": "{{count}} bought",
       "bought_other": "{{count}} bought",
-      "listLabel": "{{list}}, {{name}}, still to get"
+      "listLabel": "{{list}}, {{name}}, still to get",
+      "boughtAmount": "{{amount}} bought"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1989,12 +1997,15 @@
       "changedLabel": "{{name}}, changed"
     },
     "total": {
-      "amount": "~{{amount}}",
+      "amount": "≈{{amount}}",
       "open": "Estimated total, about {{amount}}. See what is behind it.",
+      "openExact": "Total, {{amount}}. See what is behind it.",
       "barLabel": "About {{bought}} bought of about {{total}}",
+      "barLabelExact": "{{bought}} bought of {{total}}",
       "boughtEnd": "{{amount}} bought",
       "leftEnd": "{{amount}} left",
       "title": "Estimated total",
+      "titleExact": "Total",
       "bought": "Bought",
       "left": "Still to buy",
       "total": "Total",
@@ -2013,7 +2024,8 @@
         "shop": "With a shop chosen, only the prices of that shop count.",
         "unpriced": "We have no price for these products yet. Shops change what they publish, so a price can show later.",
         "otherShop": "Choose another shop in the filter to see its prices."
-      }
+      },
+      "amountExact": "{{amount}}"
     },
     "changes": {
       "banner_one": "{{count}} change on your lists",
@@ -2102,7 +2114,14 @@
       "gotAll_one": "Got it",
       "gotAll_other": "Got all {{count}}",
       "gotOther_one": "Got the last one",
-      "gotOther_other": "Got the other {{count}}"
+      "gotOther_other": "Got the other {{count}}",
+      "toGetAmount": "{{amount}} to get",
+      "about": "≈ {{price}}",
+      "gotAmount": "Got {{amount}} today.",
+      "gotAtAmount": "Got {{amount}} today at {{price}}.",
+      "gotAtShopAmount": "Got {{amount}} today at {{price}}, at {{shop}}.",
+      "gotAllAmount": "Got all {{amount}}",
+      "gotOtherAmount": "Got the other {{amount}}"
     }
   },
   "getList": {

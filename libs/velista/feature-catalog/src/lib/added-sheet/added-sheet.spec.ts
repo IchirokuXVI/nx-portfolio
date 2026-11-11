@@ -396,7 +396,7 @@ describe('AddedSheet', () => {
       lineIdOf(RICE),
       1
     );
-    expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(RICE), 1);
+    expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(RICE), 1, 'UNIT');
     expect(quantityOf(fixture, 'item-rice')).toBe('2');
     expect(quantityOf(fixture, 'item-oil')).toBe('1');
 
@@ -414,7 +414,11 @@ describe('AddedSheet', () => {
       lineIdOf(RICE),
       -1
     );
-    expect(lines.addQuantity).toHaveBeenLastCalledWith(lineIdOf(RICE), -1);
+    expect(lines.addQuantity).toHaveBeenLastCalledWith(
+      lineIdOf(RICE),
+      -1,
+      'UNIT'
+    );
     expect(lines.deleteLine).not.toHaveBeenCalled();
     expect(quantityOf(fixture, 'item-rice')).toBe('1');
   });
@@ -489,7 +493,7 @@ describe('AddedSheet', () => {
         1
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
       expect(quantityIn(lineRow(fixture, 'line-frying'))).toBe('3');
       expect(quantityIn(lineRow(fixture, lineIdOf(OIL)))).toBe('1');
     });
@@ -502,7 +506,7 @@ describe('AddedSheet', () => {
       await settle(fixture);
 
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1, 'UNIT');
       expect(lines.deleteLine).not.toHaveBeenCalled();
       expect(lineRow(fixture, 'line-frying')).toBeNull();
       expect(lineRow(fixture, lineIdOf(OIL))).not.toBeNull();
@@ -552,7 +556,7 @@ describe('AddedSheet', () => {
 
     expect(lines.deleteLine).not.toHaveBeenCalled();
     expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-    expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(OIL), -1);
+    expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(OIL), -1, 'UNIT');
     expect(row(fixture, 'item-oil')).toBeNull();
   });
 

@@ -993,6 +993,7 @@ describe('ProductPage', () => {
           name: 'Extra virgin olive oil',
           detail: expect.stringContaining('Hacendado'),
           imageUrl: null,
+          unit: 'UNIT',
         },
         'list-party'
       );
@@ -1003,7 +1004,9 @@ describe('ProductPage', () => {
         'Extra virgin olive oil',
         1,
         ['item-oil'],
-        false
+        false,
+        undefined,
+        'UNIT'
       );
       expect(listRow(fixture, 'list-party').main?.quantity).toBe('1');
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('0');
@@ -1034,7 +1037,9 @@ describe('ProductPage', () => {
         'Extra virgin olive oil',
         1,
         ['item-oil'],
-        false
+        false,
+        undefined,
+        'UNIT'
       );
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('3');
       expect(store.visit()).toMatchObject([
@@ -1073,7 +1078,7 @@ describe('ProductPage', () => {
       await settle(fixture);
 
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', -1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', -1, 'UNIT');
       expect(lines.deleteLine).not.toHaveBeenCalled();
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('0');
     });
@@ -1099,7 +1104,7 @@ describe('ProductPage', () => {
         1
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
       expect(lines.addLineResult).not.toHaveBeenCalled();
       expect(otherLine(fixture, 'line-frying').stepper?.quantity).toBe('2');
       expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('2');
@@ -1111,7 +1116,11 @@ describe('ProductPage', () => {
       otherLine(fixture, 'line-frying').stepper?.minus?.click();
       await settle(fixture);
 
-      expect(lines.addQuantity).toHaveBeenLastCalledWith('line-frying', -1);
+      expect(lines.addQuantity).toHaveBeenLastCalledWith(
+        'line-frying',
+        -1,
+        'UNIT'
+      );
       expect(otherLine(fixture, 'line-frying').stepper?.quantity).toBe('1');
       expect(lines.deleteLine).not.toHaveBeenCalled();
       expect(store.count()).toBe(0);
@@ -1234,7 +1243,9 @@ describe('ProductPage', () => {
         'Carbonell olive oil',
         1,
         ['item-oil-other'],
-        false
+        false,
+        undefined,
+        'UNIT'
       );
       // What this page adds joins the record of the visit.
       expect(store.count()).toBe(1);
@@ -1283,7 +1294,11 @@ describe('ProductPage', () => {
         'line-carbonell',
         1
       );
-      expect(lines.addQuantity).toHaveBeenCalledWith('line-carbonell', 1);
+      expect(lines.addQuantity).toHaveBeenCalledWith(
+        'line-carbonell',
+        1,
+        'UNIT'
+      );
       expect(stepperIn(line())?.quantity).toBe('3');
     });
 

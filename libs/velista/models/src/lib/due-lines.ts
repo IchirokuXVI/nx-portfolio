@@ -1,4 +1,5 @@
 import { QUANTITY_REEL_IDLE_MS } from './limits';
+import type { LineUnit } from './line-unit';
 
 /**
  * The lines a zone list suggests (velista `0089`, backend `0123`).
@@ -76,4 +77,6 @@ export interface DueLineRowVm {
   readonly reasonArgs: Readonly<Record<string, string | number>>;
   /** The amount the stepper starts at. */
   readonly quantity: number;
+  /** What {@link quantity} counts, the line's (velista `0182`). */
+  readonly unit: LineUnit;
 }

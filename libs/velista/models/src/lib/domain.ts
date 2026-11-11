@@ -11,6 +11,7 @@ import type {
   ZoneRole,
   ZoneStatus,
 } from './enums';
+import type { LineUnit } from './line-unit';
 import type { ProductCategory } from './product-category';
 import type { AccountPermission } from './shop-walks';
 import type { LocalizedName, Supermarket } from './shopping-profile';
@@ -252,8 +253,18 @@ export interface Line {
    * deleting what you knew about the thing or resetting it by hand every week.
    * Buying decrements this instead, zero means stocked, and the line stays
    * exactly where it is holding everything it knows about itself.
+   *
+   * Counted in {@link unit} since velista `0182`: pieces or packs, grams or
+   * millilitres, always an integer.
    */
   readonly quantity: number;
+  /**
+   * What {@link quantity} counts (velista `0182`, backend `0246` section 3.1).
+   * A line for a product sold by the kilo is weighed in grams and one sold by
+   * the litre measured in millilitres; everything else, a free text line
+   * included, is counted.
+   */
+  readonly unit: LineUnit;
   /**
    * The catalog products this line stands for, in the order they were attached
    * (backend plan 0048, section 1.1). Empty is a free text line, which stays
@@ -389,8 +400,15 @@ export interface LineSettlement {
    */
   readonly itemId: string | null;
   readonly outcome: SettlementOutcome;
-  /** Units bought. Zero for a trip that found nothing. */
+  /** What was bought, in {@link unit}. Zero for a trip that found nothing. */
   readonly quantity: number;
+  /** What {@link quantity} counts: the line's unit when it was settled (velista `0182`). */
+  readonly unit: LineUnit;
+  /**
+   * Whether what this settlement cost is an estimate (backend `0246` M7): false
+   * only for a count of pieces or packs at a piece or pack price.
+   */
+  readonly estimated: boolean;
   /**
    * Who settled it, or null when a shared basket did (backend plan 0051).
    *
@@ -415,7 +433,9 @@ export interface LineSettlement {
    */
   readonly revertedAt: Date | null;
   /**
-   * What **one unit** cost, in the minor unit of {@link currency}, or null when nobody
+   * What **one** of {@link unit} cost (one piece or pack, or one kilo or one litre
+   * for a weight or a volume, backend `0246` M7), in the minor unit of
+   * {@link currency}, or null when nobody
    * knew (backend `0143`, velista `0095` section 7). Every `NOT_AVAILABLE`, every
    * settlement from before the price was recorded, and every hand settle on a zone
    * list, which names no scope.

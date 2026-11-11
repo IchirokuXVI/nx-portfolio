@@ -45,6 +45,7 @@ export function rowAdds(
       lineId: line.lineId,
       name: line.name,
       quantity: line.quantity,
+      unit: line.unit,
       editable:
         !isUnsavedLine(line.lineId) &&
         canStepLine(target.permissions, line.pending),

@@ -2,15 +2,23 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   model,
   output,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuLocaleStore,
+  RokuTranslatorPipe,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  isMeasured,
+  stepFrom,
+  type LineUnit,
 } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 
 /**
  * How many of something, as two buttons and a number.
@@ -23,6 +31,9 @@ import {
  * clamping silently, so the limit is visible before it is hit rather than being a
  * correction after it. `AddLineDto` caps quantity at 100000 and the client's copy of
  * that is never the authority: the gateway validates it again.
+ *
+ * **It steps by the unit** (velista `0182`, section 3): one for a count, 25 g or
+ * 250 g for a weight, and draws a weight as "750 g". A count is unchanged.
  */
 @Component({
   selector: 'lib-quantity-stepper',
@@ -34,6 +45,7 @@ import {
       [attr.aria-valuemax]="max"
       [attr.aria-valuemin]="min()"
       [attr.aria-valuenow]="value()"
+      [attr.aria-valuetext]="valueText()"
       class="stepper"
       role="spinbutton"
     >
@@ -47,7 +59,7 @@ import {
         <span aria-hidden="true">&minus;</span>
       </button>
 
-      <span aria-hidden="true" class="value">{{ value() }}</span>
+      <span aria-hidden="true" class="value">{{ words() }}</span>
 
       <button
         (click)="step(1)"
@@ -105,8 +117,16 @@ export class QuantityStepper {
    */
   readonly controlled = input(false);
 
-  /** A press: one more, or one fewer. Emitted in both modes. */
-  readonly stepped = output<1 | -1>();
+  /** What {@link value} counts (velista `0182`). A count steps by one. */
+  readonly unit = input<LineUnit>('UNIT');
+
+  /**
+   * A press, as the signed amount it moves the number: ±1 for a count, ±25 or ±250
+   * for grams (velista `0182`). Emitted in both modes.
+   */
+  readonly stepped = output<number>();
+
+  private readonly _localeStore = inject(RokuLocaleStore, { optional: true });
 
   readonly canDecrease = computed(
     () => !this.disabled() && this.value() > this.min()
@@ -115,15 +135,35 @@ export class QuantityStepper {
     () => !this.disabled() && this.value() < this.max
   );
 
-  step(by: number): void {
-    const next = this.value() + by;
-    if (next < this.min() || next > this.max) {
+  /** The number as the control draws it: bare for a count, "750 g" for a weight. */
+  readonly words = computed(() =>
+    !isMeasured(this.unit())
+      ? String(this.value())
+      : formatAmount(
+          this.value(),
+          this.unit(),
+          this._localeStore?.locale() ?? 'en'
+        )
+  );
+
+  /** `aria-valuetext`: the words of a weight, and nothing for a count. */
+  readonly valueText = computed(() =>
+    !isMeasured(this.unit()) ? null : this.words()
+  );
+
+  step(direction: 1 | -1): void {
+    const next = Math.min(
+      this.max,
+      Math.max(this.min(), stepFrom(this.value(), this.unit(), direction))
+    );
+    const delta = next - this.value();
+    if (delta === 0) {
       return;
     }
 
     if (!this.controlled()) {
       this.value.set(next);
     }
-    this.stepped.emit(by > 0 ? 1 : -1);
+    this.stepped.emit(delta);
   }
 }

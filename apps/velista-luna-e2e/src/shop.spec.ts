@@ -4,13 +4,20 @@ import {
   ITEM_MILK_ID,
   LINE_MILK_ID,
   LIST_GROCERIES_ID,
+  PRICE_SCOPE_MERCADONA_VALENCIA_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
+  addProductLine,
+  adminLogin,
   ALICE_EMAIL,
+  categoryIdBySlug,
+  deleteLine,
+  ensureItem,
   lineSettlements,
   login,
   readLine,
   resetAliceWorld,
+  setAdminPrice,
   type Session,
 } from './support/api';
 import {
@@ -200,8 +207,10 @@ test.describe('one trip, by the owner', () => {
       await expect(row(page, 'Bread').locator('.caption-price')).toHaveText(
         '€0.95'
       );
+      // The demo world's Milk is a litre with no size, so it is sold by the
+      // litre and its price says so (velista `0179`).
       await expect(row(page, 'Milk').locator('.caption-price')).toHaveText(
-        '€1.15'
+        '€1.15/ L'
       );
       await expect(row(page, 'Milk').locator('.caption-lists')).toHaveText(
         'Groceries'
@@ -379,6 +388,89 @@ test.describe('one trip, by the owner', () => {
       await expect(chip(page, 'Only Groceries')).toHaveCount(0);
       await expect(composerField(page)).toHaveValue('');
       await expect(page.locator('#basket-results')).toHaveCount(0);
+    });
+  });
+});
+
+/**
+ * A loose product is asked for by weight (velista plan 0182, section 4).
+ *
+ * One product sold by the kilo, with a price, on the Groceries list: added at
+ * 1000 g, the row's reel nudged from 1000 to 750, which buys 250 g, and what was
+ * bought reads 250 g. `aria-valuenow` stays the integer in grams, as every reel
+ * of this suite asserts, and `aria-valuetext` carries the words.
+ *
+ * The product is made through the back office and kept across runs, as
+ * `aisles.spec.ts` makes its own; the line is made per run and deleted after,
+ * so the owner's trip above meets the four lines it counts.
+ */
+test.describe('a loose product, by weight (velista 0182)', () => {
+  const NAME = { en: 'Loose bananas e2e', es: 'Plátanos a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 1.99);
+
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('is added at a kilo, nudged to 750 g, and 250 g is what was bought', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await generateBasket(page, ['Groceries'], `Weighed ${Date.now()}`);
+
+    const bananas = reel(row(page, NAME.en), `${NAME.en}, still to get`);
+    await expect(bananas).toHaveAttribute('aria-valuenow', '1000');
+    await expect(bananas).toHaveAttribute('aria-valuetext', '1 kg');
+
+    // Ten steps of 25 g down from a kilo: 975, 950, ... 750. Down is bought.
+    await nudge(bananas, -10);
+    await expect(bananas).toHaveAttribute('aria-valuenow', '750');
+    await expect(bananas).toHaveAttribute('aria-valuetext', '750 g');
+    await expect(row(page, NAME.en).locator('.progress')).toHaveText(
+      '250 g of 1 kg'
+    );
+
+    // Bought, as the backend records it: 250 in grams, not 250 of something.
+    await expect
+      .poll(async () =>
+        (await lineSettlements(alice, lineId))
+          .filter((s) => s.outcome === 'BOUGHT' && !s.revertedAt)
+          .map((s) => ({ quantity: s.quantity, unit: s.unit }))
+      )
+      .toEqual([{ quantity: 250, unit: 'GRAM' }]);
+    expect(await readLine(alice, LIST_GROCERIES_ID, lineId)).toMatchObject({
+      quantity: 750,
+      unit: 'GRAM',
     });
   });
 });

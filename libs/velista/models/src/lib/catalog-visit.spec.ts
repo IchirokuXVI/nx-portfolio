@@ -249,6 +249,14 @@ describe('the floor of the stepper', () => {
       3
     );
   });
+
+  it('is the kilo a weight line the visit made starts at (velista 0182)', () => {
+    expect(visitFloor(entry({ quantity: 1000 }), 'GRAM')).toBe(1000);
+    expect(visitFloor(entry({ quantity: 1000 }), 'MILLILITER')).toBe(1000);
+    expect(
+      visitFloor(entry({ before: 500, created: false, quantity: 1500 }), 'GRAM')
+    ).toBe(501);
+  });
 });
 
 describe('taking a product back', () => {

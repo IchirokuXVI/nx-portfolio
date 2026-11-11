@@ -21,6 +21,7 @@ import {
   type LineRowVm,
   type LineStatus,
 } from '@portfolio/velista/models';
+import { formatAmount } from '@portfolio/velista/platform';
 import {
   CommentIcon,
   GripIcon,
@@ -370,7 +371,10 @@ export class LineRow {
         );
       }
     }
-    parts.push(String(line.quantity));
+    // The quantity in its words: "3" for a count, "750 g" for a weight (velista `0182`).
+    parts.push(
+      formatAmount(line.quantity, line.unit, this._translator.locale())
+    );
     return parts
       .filter((part): part is string => part != null && part !== '')
       .join(', ');

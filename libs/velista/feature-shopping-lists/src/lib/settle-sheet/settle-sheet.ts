@@ -32,7 +32,11 @@ import {
   APP_BASE_PATH,
   basketRowProduct,
   catalogName,
+  isMeasured,
   LINE_CONTENT_MAX_LENGTH,
+  lineAmount,
+  lineAmountProductOf,
+  priceWordsText,
   shownOffer,
   soldAs,
   toSettlementRow,
@@ -41,10 +45,12 @@ import {
   type BasketProductList,
   type BasketRow as BasketRowModel,
   type BasketRowResult,
+  type LineUnit,
   type SettlementOutcome,
   type SettlementRowVm,
 } from '@portfolio/velista/models';
 import {
+  formatAmount,
   formatMoney,
   rowKeyOf,
   SheetNavigation,
@@ -492,19 +498,71 @@ export class SettleSheet {
     }
     const locale = this._locale();
     const price = this._onePrice();
+    // A weight or a volume is quoted per kilo or litre and counted in its words:
+    // "1,99 € / kg · 750 g to get" (velista `0182`, section 3).
+    const measured = isMeasured(row.unit);
     const parts = [
       price === null
         ? null
-        : this._translator.t('basket.sheet.each', undefined, locale, {
-            price,
-          }),
+        : measured
+          ? price
+          : this._translator.t('basket.sheet.each', undefined, locale, {
+              price,
+            }),
       this.finished()
         ? null
-        : this._translator.t('basket.sheet.toGet', undefined, locale, {
-            count: row.left,
-          }),
+        : measured
+          ? this._translator.t('basket.sheet.toGetAmount', undefined, locale, {
+              amount: formatAmount(row.left, row.unit, locale),
+            })
+          : this._translator.t('basket.sheet.toGet', undefined, locale, {
+              count: row.left,
+            }),
     ].filter((part): part is string => part !== null);
     return parts.length === 0 ? null : parts.join(' · ');
+  });
+
+  /**
+   * What the amount still to get comes to, for a weight or a volume: "≈ 1,49 €"
+   * for 750 g at 1,99 € a kilo (velista `0182`, section 3). Null for a count,
+   * whose price of one already says it, and for a row with nothing left or no
+   * price. Read off the row's `left`, so it moves with the reel's commit.
+   */
+  protected readonly amountToGet = computed<string | null>(() => {
+    const row = this.row();
+    const product = this._product();
+    if (
+      row === null ||
+      product === null ||
+      !isMeasured(row.unit) ||
+      row.left === 0 ||
+      this.finished()
+    ) {
+      return null;
+    }
+    const offer = shownOffer(product, this._view.readAtShop());
+    if (offer === null) {
+      return null;
+    }
+    const amount = lineAmount(
+      row.left,
+      row.unit,
+      lineAmountProductOf(product),
+      {
+        price: offer.price,
+        piecePrice: offer.piecePrice,
+      }
+    );
+    if (amount === null) {
+      return null;
+    }
+    const locale = this._locale();
+    const money = formatMoney(amount.cents / 100, offer.currency, locale);
+    return amount.estimated
+      ? this._translator.t('basket.sheet.about', undefined, locale, {
+          price: money,
+        })
+      : money;
   });
 
   /**
@@ -535,11 +593,20 @@ export class SettleSheet {
         : where === null
           ? 'basket.sheet.gotAt'
           : 'basket.sheet.gotAtShop';
-    return this._translator.t(key, undefined, locale, {
-      count: row.bought,
-      price: price ?? '',
-      shop: where ?? '',
-    });
+    // A weight says what was got in its words: "Got 250 g today" (velista `0182`).
+    const measured = isMeasured(row.unit);
+    return this._translator.t(
+      measured ? `${key}Amount` : key,
+      undefined,
+      locale,
+      measured
+        ? {
+            amount: formatAmount(row.bought, row.unit, locale),
+            price: price ?? '',
+            shop: where ?? '',
+          }
+        : { count: row.bought, price: price ?? '', shop: where ?? '' }
+    );
   });
 
   /**
@@ -557,9 +624,24 @@ export class SettleSheet {
       offer,
       soldAs(product.unit, product.size, product.approxWeight)
     );
-    return amount === null
-      ? null
-      : formatMoney(amount, offer.currency, this._locale());
+    if (amount === null) {
+      return null;
+    }
+    const locale = this._locale();
+    const money = formatMoney(amount, offer.currency, locale);
+    const unit = this.row()?.unit ?? 'UNIT';
+    // A weight's price of one is a kilo, a volume's a litre (backend `0246` M7), and
+    // it says so: "1,99 € / kg".
+    return isMeasured(unit)
+      ? priceWordsText({
+          amount: money,
+          per: this._translator.t(
+            unit === 'GRAM' ? 'catalog.per.KILOGRAM' : 'catalog.per.LITER',
+            undefined,
+            locale
+          ),
+        })
+      : money;
   }
 
   /**
@@ -568,14 +650,18 @@ export class SettleSheet {
    */
   protected readonly gotAllLabel = computed(() => {
     const row = this.row();
-    return this._translator.t(
+    const key =
       row !== null && row.bought > 0
         ? 'basket.sheet.gotOther'
-        : 'basket.sheet.gotAll',
-      undefined,
-      this._locale(),
-      { count: row?.left ?? 0 }
-    );
+        : 'basket.sheet.gotAll';
+    // "Got all 750 g" for a weight (velista `0182`).
+    return row !== null && isMeasured(row.unit)
+      ? this._translator.t(`${key}Amount`, undefined, this._locale(), {
+          amount: formatAmount(row.left, row.unit, this._locale()),
+        })
+      : this._translator.t(key, undefined, this._locale(), {
+          count: row?.left ?? 0,
+        });
   });
 
   /**
@@ -733,6 +819,8 @@ export class SettleSheet {
             targetListId: list.listId,
             content: catalogName(product.name, this._locale()),
             quantity: to,
+            // The row's unit, which the amount was chosen in (velista `0182`).
+            unit: row.unit,
             itemIds: [product.id],
             // Made from the product, so not named (velista `0144`).
             named: false,
@@ -741,6 +829,7 @@ export class SettleSheet {
             lineId: list.lineId,
             quantity: to,
             from: list.quantity ?? 0,
+            unit: row.unit,
           });
     this._settling.set(false);
 
@@ -1462,6 +1551,7 @@ export class SettleSheet {
     id: string;
     outcome: SettlementOutcome;
     quantity: number;
+    unit?: LineUnit;
     settledByUserId: string | null;
     settledAt: Date;
   }): SettlementRowVm {
@@ -1469,7 +1559,8 @@ export class SettleSheet {
     const byUserId = this._byUserId();
 
     const row = toSettlementRow(
-      settlement,
+      // In the row's unit when the settlement does not name one (velista `0182`).
+      { ...settlement, unit: settlement.unit ?? this.row()?.unit ?? 'UNIT' },
       {
         nameOf: (userId) => {
           const person = byUserId.get(userId);
@@ -1479,6 +1570,7 @@ export class SettleSheet {
         },
         callerUserId: this._store.me()?.userId ?? null,
         locale,
+        formatAmount: (quantity, unit) => formatAmount(quantity, unit, locale),
       },
       null
     );

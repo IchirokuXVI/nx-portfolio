@@ -90,6 +90,11 @@ export function listErrorKey(
         ? 'list.error.mergeTooManyProducts'
         : GENERIC;
 
+    case 'line_unit_differs':
+      // A rename onto a line that counts in another unit (backend `0246`, 3.3). The
+      // two lines stay as they are, and the sentence says why.
+      return 'list.error.unitDiffers';
+
     case 'rate_limited':
       // A run of quick adds hitting a bucket. The composer keeps its text, which is the
       // composer's business; this is only the sentence.

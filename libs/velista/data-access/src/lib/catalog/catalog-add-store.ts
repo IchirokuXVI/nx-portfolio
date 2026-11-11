@@ -1,14 +1,20 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
   addedToLine,
+  defaultQuantity,
   firstAddTarget,
   isCatalogUrl,
+  isMeasured,
   isUnsavedLine,
+  legacyLineUnit,
   sameLineName,
+  shownLineUnit,
+  stepFrom,
   unsavedLineId,
   visitAddition,
   visitAfterAdd,
   visitAfterStep,
+  visitFloor,
   visitTakeBack,
   visitWithout,
   type AddTargetList,
@@ -16,6 +22,7 @@ import {
   type HeldLine,
   type ItemList,
   type Line,
+  type LineUnit,
   type MyZone,
   type ShoppingListSummary,
   type VisitList,
@@ -26,6 +33,7 @@ import { SessionStore } from '../auth/session-store';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
+import { ItemNames } from './item-names';
 
 /** A product, as the row that offers the plus knows it. */
 export interface CatalogAddProduct {
@@ -36,6 +44,12 @@ export interface CatalogAddProduct {
   readonly detail: string | null;
   /** The photo of the row, which the sheet of the visit draws, or null. */
   readonly imageUrl: string | null;
+  /**
+   * What a line of this product counts in (velista `0182`):
+   * `lineUnitOf(soldAsOf(offer, product))`. Absent is a count. An add starts at
+   * `defaultQuantity` of it, one piece or one kilo.
+   */
+  readonly unit?: LineUnit;
 }
 
 /** Where a read is: not asked for, on its way, answered, or not answered. */
@@ -95,6 +109,11 @@ export class CatalogAddStore {
   private readonly _lines = inject<LineServiceI>(LINE_SERVICE);
   private readonly _session = inject(SessionStore);
   private readonly _browser = inject(BrowserFacade);
+  /**
+   * The products' records, to read a held line the migration left in `UNIT`
+   * the way `LineStore` reads it (backend `0246` M2). Optional, like there.
+   */
+  private readonly _items = inject(ItemNames, { optional: true });
 
   private readonly _status = signal<CatalogAddStatus>('idle');
   private readonly _lists = signal<readonly AddTargetList[]>([]);
@@ -152,8 +171,28 @@ export class CatalogAddStore {
     return id === null ? 'idle' : (this._lineReads().get(id) ?? 'idle');
   });
 
-  /** Every line the store knows to hold a product, over every list. */
-  readonly held = this._held.asReadonly();
+  /**
+   * Every line the store knows to hold a product, over every list, in the unit
+   * a list page draws it in: a legacy line at nothing in its product's unit
+   * (backend `0246` M2, {@link shownLineUnit}).
+   */
+  readonly held = computed<readonly HeldLine[]>(() => {
+    const held = this._held();
+    const items = this._items;
+    if (items === null) {
+      return held;
+    }
+    let changed = false;
+    const shown = held.map((line) => {
+      const unit = shownLineUnit(line, (itemId) => items.nameOf(itemId));
+      if (unit === line.unit) {
+        return line;
+      }
+      changed = true;
+      return { ...line, unit };
+    });
+    return changed ? shown : held;
+  });
 
   /** What this visit added, in the order it was added. */
   readonly visit = this._visit.asReadonly();
@@ -357,8 +396,9 @@ export class CatalogAddStore {
       ),
       product.name
     );
+    const unit = product.unit ?? 'UNIT';
     if (own !== null) {
-      this._move(own.lineId, 1);
+      this._move(own.lineId, defaultQuantity(own.unit));
       return own.lineId;
     }
     const lineId = unsavedLineId(listId, product.itemId);
@@ -368,7 +408,8 @@ export class CatalogAddStore {
         lineId,
         listId,
         name: product.name,
-        quantity: 1,
+        quantity: defaultQuantity(unit),
+        unit,
         pending: false,
         itemIds: [product.itemId],
       },
@@ -389,6 +430,9 @@ export class CatalogAddStore {
     generation: number
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
+    // One piece or one kilo, in the product's unit (velista `0182`).
+    const unit = product.unit ?? 'UNIT';
+    const amount = defaultQuantity(unit);
     try {
       // Not named: the words are the product's (velista `0144`, section 3), and
       // they are still sent, because the server needs them and `sameLineName`
@@ -396,9 +440,11 @@ export class CatalogAddStore {
       const result = await this._lines.addLineResult(
         listId,
         product.name,
-        1,
+        amount,
         [product.itemId],
-        false
+        false,
+        undefined,
+        unit
       );
       if (generation !== this._generation) {
         return;
@@ -410,7 +456,7 @@ export class CatalogAddStore {
       // and each add still on its way corrects itself the same way.
       const elsewhere = drawnOn !== result.line.id && !isUnsavedLine(drawnOn);
       if (elsewhere) {
-        this._move(drawnOn, -1);
+        this._move(drawnOn, -amount);
       }
       this._held.update((held) =>
         upsert(
@@ -428,7 +474,8 @@ export class CatalogAddStore {
             imageUrl: product.imageUrl,
           },
           stateOf(result.line),
-          result.merged
+          result.merged,
+          amount
         )
       );
     } catch {
@@ -447,10 +494,10 @@ export class CatalogAddStore {
             sameLineName(line.name, product.name)
         );
       if (drawn !== undefined) {
-        if (isUnsavedLine(drawn.lineId) && drawn.quantity <= 1) {
+        if (isUnsavedLine(drawn.lineId) && drawn.quantity <= amount) {
           this._drop(drawn.lineId);
         } else {
-          this._move(drawn.lineId, -1);
+          this._move(drawn.lineId, -amount);
         }
       }
       this._failures.update((count) => count + 1);
@@ -467,33 +514,118 @@ export class CatalogAddStore {
     if (line === undefined || isUnsavedLine(lineId)) {
       return;
     }
-    const next = line.quantity + by;
-    if (next < 0) {
+    const legacy = this._legacyUnit(line);
+    if (legacy !== null) {
+      await this._correctUnit(product, line, legacy, by, generation);
+      return;
+    }
+    // One step of the line's unit, so a weight moves by 25 g or 250 g and a count
+    // by one (velista `0182`, section 3).
+    const next = stepFrom(line.quantity, line.unit, by);
+    const delta = next - line.quantity;
+    if (next < 0 || delta === 0) {
       return;
     }
     const entry = visitAddition(this._visit(), lineId);
-    if (by === -1 && next === 0 && entry !== null && entry.created) {
+    // The minus at the floor takes a product the visit added back: at nothing,
+    // as a count always did, or exactly at the kilo a weight line the visit made
+    // started at (velista `0182`). A weight line lowered under its kilo
+    // elsewhere steps down like any other.
+    if (
+      by === -1 &&
+      entry !== null &&
+      entry.created &&
+      (next === 0 ||
+        (isMeasured(line.unit) &&
+          line.quantity === visitFloor(entry, line.unit)))
+    ) {
       await this._takeBack(lineId);
       return;
     }
 
-    this._move(lineId, by);
+    this._move(lineId, delta);
     try {
-      const answer = await this._lines.addQuantity(lineId, by);
+      const answer = await this._lines.addQuantity(
+        lineId,
+        delta,
+        line.unit ?? 'UNIT'
+      );
       if (generation !== this._generation) {
         return;
       }
       const ahead = this._adding.get(keyOf(product.listId, product.itemId));
       this._held.update((held) => upsert(held, heldOf(answer, ahead ?? 0)));
       this._visit.update((visit) =>
-        visitAfterStep(visit, product, stateOf(answer), answer.quantity - by)
+        visitAfterStep(visit, product, stateOf(answer), answer.quantity - delta)
       );
     } catch {
       if (generation === this._generation) {
-        this._move(lineId, by === 1 ? -1 : 1);
+        this._move(lineId, -delta);
         this._failures.update((count) => count + 1);
       }
     }
+  }
+
+  /**
+   * A step on a legacy line, as `LineStore` corrects one on the list page
+   * (backend `0246` section 3.2): an absolute update to the default amount in
+   * the product's unit, whatever the step, and nothing for a minus at nothing.
+   * The next press waits for it in {@link _queued}, so it reads the corrected
+   * line and is a delta again.
+   */
+  private async _correctUnit(
+    product: VisitProduct,
+    line: HeldLine,
+    unit: LineUnit,
+    by: 1 | -1,
+    generation: number
+  ): Promise<void> {
+    if (by === -1 && line.quantity === 0) {
+      return;
+    }
+    const quantity = defaultQuantity(unit);
+    const replace = (to: HeldLine) =>
+      this._held.update((held) =>
+        held.map((one) => (one.lineId === line.lineId ? to : one))
+      );
+    replace({ ...line, quantity, unit });
+    try {
+      const answer = await this._lines.updateLine(line.lineId, {
+        quantity,
+        unit,
+      });
+      if (generation !== this._generation) {
+        return;
+      }
+      const ahead = this._adding.get(keyOf(product.listId, product.itemId));
+      this._held.update((held) =>
+        upsert(held, heldOf(answer.line, ahead ?? 0))
+      );
+      // From nothing the visit added the kilo, which taking back lowers again.
+      // Over pieces there is no amount in the new unit to go back to, so the
+      // correction joins no record.
+      this._visit.update((visit) =>
+        visitAfterStep(
+          visit,
+          product,
+          stateOf(answer.line),
+          line.quantity === 0 ? 0 : answer.line.quantity
+        )
+      );
+    } catch {
+      if (generation === this._generation) {
+        replace(line);
+        this._failures.update((count) => count + 1);
+      }
+    }
+  }
+
+  /** {@link legacyLineUnit} of a held line, over the products this session read. */
+  private _legacyUnit(line: HeldLine): LineUnit | null {
+    const items = this._items;
+    return items === null
+      ? null
+      : legacyLineUnit(line, (itemId) => items.nameOf(itemId));
   }
 
   private async _takeBack(lineId: string): Promise<void> {
@@ -508,6 +640,7 @@ export class CatalogAddStore {
     );
     const at = this._visit().indexOf(entry);
     const before = this._held();
+    const unit = before.find((line) => line.lineId === lineId)?.unit ?? 'UNIT';
     this._visit.update((visit) => visitWithout(visit, lineId));
     if (undo.kind === 'delete') {
       this._drop(lineId);
@@ -519,7 +652,11 @@ export class CatalogAddStore {
       if (undo.kind === 'delete') {
         await this._lines.deleteLine(undo.lineId);
       } else {
-        const answer = await this._lines.addQuantity(undo.lineId, -undo.by);
+        const answer = await this._lines.addQuantity(
+          undo.lineId,
+          -undo.by,
+          unit
+        );
         if (generation === this._generation) {
           this._held.update((held) => upsert(held, heldOf(answer, 0)));
         }
@@ -742,7 +879,9 @@ function heldOf(line: Line, ahead: number): HeldLine {
     lineId: line.id,
     listId: line.listId,
     name: line.content,
-    quantity: line.quantity + ahead,
+    // Each add on its way is one piece or one kilo of the line's unit.
+    quantity: line.quantity + ahead * defaultQuantity(line.unit),
+    unit: line.unit,
     pending: line.approvalStatus === 'PENDING',
     itemIds: line.itemIds,
   };

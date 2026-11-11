@@ -10,6 +10,7 @@ import type {
   LineApprovalStatus,
   LineOrder,
   LineSettlement,
+  LineUnit,
   Page,
   ReorderLinesRequest,
   SetLineApprovalRequest,
@@ -104,7 +105,8 @@ export class LineApi implements LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<Line> {
     const result = await this.addLineResult(
       listId,
@@ -112,7 +114,8 @@ export class LineApi implements LineServiceI {
       quantity,
       itemIds,
       named,
-      options
+      options,
+      unit
     );
     return result.line;
   }
@@ -123,7 +126,8 @@ export class LineApi implements LineServiceI {
     quantity?: number,
     itemIds?: readonly string[],
     named?: false,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    unit?: LineUnit
   ): Promise<LineAddResult> {
     // Built as the request type rather than spread from anything, because the
     // gateway's pipe runs with `forbidNonWhitelisted` and an unexpected property is a
@@ -137,6 +141,9 @@ export class LineApi implements LineServiceI {
     const request: AddLineRequest = {
       content,
       ...(quantity === undefined ? {} : { quantity }),
+      // Sent whenever the caller names it, which every add of a product does
+      // (velista `0182`). Absent is `UNIT` on the server, a free text add.
+      ...(unit === undefined ? {} : { unit }),
       ...(products ? { itemIds } : {}),
       // Only ever `false` on the wire, and only with a product: typed text says
       // nothing, and the server's default names it (backend `0207`).
@@ -168,6 +175,7 @@ export class LineApi implements LineServiceI {
       content?: string;
       named?: false;
       quantity?: number;
+      unit?: LineUnit;
       itemIds?: readonly string[];
       adoptItemIds?: readonly string[];
       favoriteItemId?: string | null;
@@ -186,6 +194,11 @@ export class LineApi implements LineServiceI {
     }
     if (changes.quantity !== undefined) {
       (request as { quantity?: number }).quantity = changes.quantity;
+    }
+    // With the quantity it counts and never alone (velista `0182`): the server
+    // refuses a unit with no quantity to start from.
+    if (changes.quantity !== undefined && changes.unit !== undefined) {
+      (request as { unit?: LineUnit }).unit = changes.unit;
     }
     // An empty array is **sent**, unlike on an add: there it means "say nothing
     // about products", here it means "clear the set back to free text", and the
@@ -231,8 +244,12 @@ export class LineApi implements LineServiceI {
     };
   }
 
-  async addQuantity(lineId: string, delta: number): Promise<Line> {
-    const request: AddLineQuantityRequest = { delta };
+  async addQuantity(
+    lineId: string,
+    delta: number,
+    unit: LineUnit
+  ): Promise<Line> {
+    const request: AddLineQuantityRequest = { delta, unit };
 
     const body = await firstValueFrom(
       this._http.post<unknown>(`${this._line(lineId)}/quantity`, request, {
@@ -246,13 +263,15 @@ export class LineApi implements LineServiceI {
   async settle(
     lineId: string,
     outcome: SettlementOutcome,
-    options?: SettleLineOptions
+    options: SettleLineOptions & { readonly unit: LineUnit }
   ): Promise<{ line: Line; settlement: LineSettlement }> {
     // `quantity` is refused outright on a trip that found nothing, so it is
     // dropped here rather than sent and rejected: the whitelist would answer 400
     // for a field the caller never meant to set.
     const request: SettleLineRequest = {
       outcome,
+      // The line's unit, always (velista `0182`): required by the server.
+      unit: options.unit,
       ...(outcome === 'NOT_AVAILABLE' || options?.quantity === undefined
         ? {}
         : { quantity: options.quantity }),

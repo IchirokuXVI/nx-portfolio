@@ -13,6 +13,8 @@ const MOCK: BasketTotal = {
   leftCents: 1247,
   totalCents: 2407,
   currency: 'EUR',
+  // A weighed line among them, so the amounts carry the estimate mark (velista 0182).
+  estimated: true,
 };
 
 async function render(
@@ -80,6 +82,26 @@ describe('BasketTotalNumber', () => {
 
     expect(host.querySelector('svg, [class*="icon"]')).toBeNull();
     expect(host.querySelector('[role="status"], [aria-live]')).toBeNull();
+  });
+
+  it('draws an exact total of counts with no estimate mark (velista 0182)', async () => {
+    const fixture = await render({ total: { ...MOCK, estimated: false } });
+
+    expect(number(fixture).textContent?.trim()).toBe(
+      'basket.total.amountExact'
+    );
+    // The name says "Total" and not "about", as the number drops its mark.
+    expect(number(fixture).getAttribute('aria-label')).toBe(
+      'basket.total.openExact'
+    );
+  });
+
+  it('titles the popover of an exact total "Total", with no estimate (velista 0182)', async () => {
+    await opened({ total: { ...MOCK, estimated: false } });
+
+    expect(
+      popover()?.querySelector('#basket-total-title')?.textContent?.trim()
+    ).toBe('basket.total.titleExact');
   });
 
   it('opens the popover from the number, and closes it on a second press', async () => {

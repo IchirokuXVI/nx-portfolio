@@ -230,6 +230,7 @@ function rowOfOne(entry: BasketRowEntry, productId: string | null): BasketRow {
       rowKey: entry.lineId,
       content: entry.content,
       productId,
+      unit: entry.unit,
       left: 0,
       bought: 0,
       asked: 0,
