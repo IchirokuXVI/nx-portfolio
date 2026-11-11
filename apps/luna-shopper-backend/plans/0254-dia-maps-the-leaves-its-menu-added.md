@@ -1,3 +1,5 @@
+> **PR:** [#964](https://github.com/IchirokuXVI/nx-portfolio/pull/964)
+
 # 0254: DIA maps the leaves its menu added
 
 > Found on 2026-11-06 by a scheduled walk of DIA on Luna slot 4 (run
