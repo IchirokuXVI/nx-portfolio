@@ -1,24 +1,61 @@
 @use '../list-page';
 
-// Exactly as tall as the app's page slot, so the composer at the end of it is at the
-// foot of the slot, directly above the bar, rather than under the last line of a two
-// item list. The slot has a definite height in both run modes, because the app is a
-// frame one viewport tall that never scrolls (velista 0106), so the percentage resolves
-// standalone and mounted alike.
+// Exactly as tall as the app's page slot, so the column between the head block and the
+// bar takes whatever the two leave. The slot has a definite height in both run modes,
+// because the app is a frame one viewport tall that never scrolls (velista 0106), so
+// the percentage resolves standalone and mounted alike.
+//
+// The host's column is the page header, the head block, then the scroller (velista
+// 0189).
 :host {
   display: flex;
   flex-direction: column;
   block-size: 100%;
 }
 
-// The one scroll container on this screen, in both run modes. The page header is the
-// item of the host before it and the composer is the item after it, rather than rows
-// inside it, so the header never scrolls away (velista 0130) and the last line can
-// always be scrolled to just above the field.
+// The one scroll container on this screen, in both run modes. The page header and the
+// head block are the items of the host before it, rather than rows inside it, so
+// neither ever scrolls away (velista 0130, velista 0189).
+//
+// Its top padding is the 12px the mock draws between the field and the first row.
 .page {
   @include list-page.page;
 
   min-block-size: 0;
+  padding-block-start: var(--app-space-4);
+}
+
+// The head block (velista 0189, decisions B and C): "en Casa", the viewers and the stale
+// band, then the field. An item of the host's column and not a row of the scroller, so
+// the field is reachable whatever the scroll, which is the one thing the foot gave it.
+// The column's inline padding and its top padding, so the block and the rows line up,
+// and the column's gap between the group line and the field: the mock's 12px.
+.page-top {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--app-space-4);
+  padding: var(--app-space-5) var(--app-space-5) 0;
+  background: var(--app-surface-ground);
+
+  // Nothing to hold, on a list that is gone or failed: no padding over the message.
+  &:empty {
+    display: none;
+  }
+
+  // The add choice's host draws nothing of its own (its popover goes to the top
+  // layer), so it is taken out of the flow and adds no gap under the field.
+  > lib-anchored-popover {
+    position: absolute;
+  }
+}
+
+// The dropped notices' live region, the column's first item, is drawn empty on every
+// ordinary visit so that a notice filled into it later is announced. Empty, it is out
+// of the flex flow, so it adds no second gap between the field and the first row, and
+// it stays in the accessibility tree, which `display: none` would take it out of.
+.dropped:empty {
+  position: absolute;
 }
 
 // The one category on screen, a step below the list's name (section 10).
@@ -30,16 +67,11 @@
   color: var(--app-text-secondary);
 }
 
-// Always at the bottom of the screen, which is what makes the field reachable with a
-// thumb no matter how long the list is.
+// The field and the voice strip under it, pinned in the head block (velista 0189). It
+// was the item after the scroller, at the foot of the screen (velista 0106); it is now
+// in the block before it, so the list scrolls under it and nothing can be over it.
 //
-// An ordinary item of the host's column, after `.page` (velista 0106). It used to be
-// `position: sticky` at the bottom of the document, which is exactly the strip the bar
-// covered. As the item after the scroller it cannot be over a line and nothing can be
-// over it: the list scrolls above it and ends where it begins.
-//
-// The pin is on the dock rather than on the composer because the voice strip has to
-// travel with it: one container, one row after the column.
+// One container rather than two, because the voice strip travels with the field.
 .composer-dock {
   display: block;
   flex: none;
@@ -52,20 +84,20 @@ lib-line-composer {
   display: block;
 }
 
-// What was heard and what was done, on the composer's own surface and directly above
-// the field (plan 0038, section 5, whose markup shipped without any of this). The
-// composer draws its own `border-block-start`, so that hairline becomes the rule
-// between the two and the pair reads as one container rather than as loose text
-// floating over the list.
+// What was heard and what was done, directly under the field (plan 0038, section 5;
+// velista 0189, decision E). Under rather than above, so the field never moves when
+// a strip appears. Its hairline is the rule between the field and the strip, so the
+// pair reads as one container rather than as loose text over the list.
 //
-// The inline padding is the composer's, so a sentence here lines up with the field
-// under it.
+// No inline padding: the field lies at the content's width with none of its own, so a
+// sentence here lines up with the field over it. It lies on the ground with the field.
 .voice-strip {
   display: flex;
   align-items: flex-start;
   gap: var(--app-space-2);
-  padding: var(--app-space-3) var(--app-space-3) var(--app-space-2);
-  background: var(--app-surface-raised);
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-3) 0 var(--app-space-2);
+  background: var(--app-surface-ground);
   border-block-start: 1px solid var(--app-border-subtle);
   font-size: var(--app-text-xs);
   line-height: var(--app-leading-body);
@@ -78,14 +110,17 @@ lib-line-composer {
 // version stays quiet on purpose: a confirmation that shouts is a confirmation people
 // learn to dismiss unread.
 //
-// The tint is laid over the strip's own opaque surface rather than painted alone
-// (velista 0079, section 6). `--app-status-danger-bg` is translucent, so on its own the
-// rows scrolling under the pinned dock showed through the sentence. A colour can only
-// be the last background layer, which is why the tint is written as a flat gradient.
+// The tint is laid over the ground rather than painted alone (velista 0079, section
+// 6): `--app-status-danger-bg` is translucent. A colour can only be the last background
+// layer, which is why the tint is written as a flat gradient. The tint reaches a step
+// past the field on each side, into the head block's own padding, so the sentence keeps
+// its place under the field and still has room inside the tint.
 .voice-strip.failed {
+  margin-inline: calc(var(--app-space-3) * -1);
+  padding-inline: var(--app-space-3);
   background:
     linear-gradient(var(--app-status-danger-bg), var(--app-status-danger-bg)),
-    var(--app-surface-raised);
+    var(--app-surface-ground);
   border-block-start-color: var(--app-status-danger-border);
   color: var(--app-status-danger-fg);
 }
@@ -249,18 +284,10 @@ lib-line-composer {
   align-self: center;
 }
 
-// Ends the mode. Full width and prominent, because while it is on screen it is the
-// only thing the person is trying to do.
-.reorder-done {
-  @include list-page.primary-action;
-
-  align-self: stretch;
-}
-
 // What the composer's field found (velista 0117, rule F1), in place of the list. It
-// scrolls with the page from the top, and it is at least as tall as the column, so
-// the column can always scroll its heading up under the header however few lines
-// matched: the page head goes above the fold while somebody types.
+// scrolls with the page from the top. At least as tall as the column only so the
+// catalog's surface reaches the foot of the column however few lines matched (velista
+// 0189): the head block is pinned now, and nothing has to scroll above the fold.
 .results {
   display: flex;
   flex-direction: column;

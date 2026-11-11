@@ -20,8 +20,6 @@ export type ListOperation =
   | 'lines.write'
   /** Approving or turning down. */
   | 'lines.decide'
-  /** Rewriting the order. */
-  | 'lines.reorder'
   /** Reading or adding a comment. */
   | 'comments'
   /** Renaming, sharing, deleting the list itself. */
@@ -33,11 +31,8 @@ const GENERIC = 'list.error.failed';
 /**
  * The key to render, or `null` for a failure that must be **silent**.
  *
- * `null` is a designed outcome and there is exactly one: a `validation_failed` on a
- * reorder. It means the order named a line the server no longer has, which is somebody
- * deleting one mid drag. Two people editing one list is the normal case rather than the
- * exotic one, and the person who dragged has done nothing wrong, so the list rereads and
- * says nothing.
+ * No failure is silent today. The one that was, a refused reorder, left with the reorder
+ * mode (velista `0189`), and the callers keep their branch for the null.
  */
 export function listErrorKey(
   error: unknown,
@@ -74,9 +69,9 @@ export function listErrorKey(
       }
 
     case 'validation_failed':
-      // Caught in the field before the request in every other case, so reaching here on
-      // a write is the belt on top of the braces. On a reorder it is silent.
-      return operation === 'lines.reorder' ? null : GENERIC;
+      // Caught in the field before the request, so reaching here on a write is the belt
+      // on top of the braces.
+      return GENERIC;
 
     case 'line_merge_needs_approval':
       // A pending line renamed onto an approved one, by somebody who cannot approve
@@ -119,9 +114,7 @@ export function listErrorKey(
  * sentence is only the visible half of that:
  *
  * - `gone` is the list being deleted, or the caller's access to it withdrawn, which are
- *   indistinguishable and get the same treatment.
- * - `reread` is the silent reorder recovery.
- *
+ *   indistinguishable and get the same treatment. *
  * `read-only` was a third, and it is **deleted** rather than kept and made inert (plan
  * 0030, section 3). It existed because a refused write was the only way the client could
  * learn the caller was a reader, and it did two things: it set `_knownReader` on the
@@ -131,7 +124,7 @@ export function listErrorKey(
  * through to `none` gives the sentence back: {@link listErrorKey} still answers
  * `list.error.readOnly` for those two operations, and the page announces it.
  */
-export type ListErrorEffect = 'none' | 'gone' | 'reread';
+export type ListErrorEffect = 'none' | 'gone';
 
 export function listErrorEffect(
   error: unknown,
@@ -139,10 +132,6 @@ export function listErrorEffect(
 ): ListErrorEffect {
   if (!(error instanceof GatewayError)) {
     return 'none';
-  }
-
-  if (error.code === 'validation_failed' && operation === 'lines.reorder') {
-    return 'reread';
   }
 
   if (error.code === 'not_found' && operation === 'lines.read') {

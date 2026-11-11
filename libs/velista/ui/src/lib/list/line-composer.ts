@@ -259,12 +259,6 @@ export class LineComposer {
   readonly escapeClears = input(true);
 
   /**
-   * The field gained or lost focus. The page hides the bottom bar while it has focus
-   * (velista `0117`, rule F3), so the results get the room.
-   */
-  readonly fieldFocused = output<boolean>();
-
-  /**
    * What has been typed, raw and on every keystroke.
    *
    * The **container** debounces it and decides when three characters have been
@@ -598,6 +592,21 @@ export class LineComposer {
   restore(content: string): void {
     this.content.set(content);
     this._field()?.nativeElement.focus();
+  }
+
+  /**
+   * Take the focus off the field, so a phone puts its keyboard away (velista `0189`,
+   * section 3). The page calls it on the first drag of its column.
+   *
+   * Nothing else changes: the words, the results they found and the history entry
+   * that holds them all stay. A field without focus is left alone, so the call never
+   * moves focus that is somewhere else.
+   */
+  releaseFocus(): void {
+    const field = this._field()?.nativeElement;
+    if (field !== undefined && field.ownerDocument.activeElement === field) {
+      field.blur();
+    }
   }
 
   /**

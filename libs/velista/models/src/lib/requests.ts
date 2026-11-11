@@ -275,10 +275,6 @@ export interface SetLineApprovalRequest {
   readonly approvalStatus: LineApprovalStatus;
 }
 
-export interface ReorderLinesRequest {
-  readonly orderedLineIds: readonly string[];
-}
-
 export interface AddCommentRequest {
   readonly body: string;
 }

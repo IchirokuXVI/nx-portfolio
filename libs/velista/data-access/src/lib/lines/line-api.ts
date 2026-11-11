@@ -12,7 +12,6 @@ import type {
   LineSettlement,
   LineUnit,
   Page,
-  ReorderLinesRequest,
   SetLineApprovalRequest,
   SettleLineOptions,
   SettleLineRequest,
@@ -404,19 +403,6 @@ export class LineApi implements LineServiceI {
     );
 
     return required(toLine(body), 'lines.setApproval');
-  }
-
-  async reorder(
-    listId: string,
-    orderedLineIds: readonly string[]
-  ): Promise<void> {
-    const request: ReorderLinesRequest = { orderedLineIds };
-
-    await firstValueFrom(
-      this._http.post<unknown>(`${this._list(listId)}/lines/reorder`, request, {
-        context: operation('lines.reorder'),
-      })
-    );
   }
 
   async deleteLine(lineId: string): Promise<string> {

@@ -31,14 +31,14 @@ import { FilterIcon } from '../icons/icons';
  * the trip is got. A projected element marked `listToolsTrail` sits at the trailing
  * edge, before the filter button, which is where the basket's estimated total goes
  * (velista `0132`, section 3). A projected element marked `listToolsBelow` is drawn
- * under the row, which is where the basket's chips and the bar of that total go. The
- * zone list page projects none of the three.
+ * under the row, which is where the basket's chips go. The zone list page projects
+ * none of the three.
  *
- * ## Sticky on its own host
+ * ## Pinned by the page
  *
- * The host carries `tools-bar` and the sticky position (velista `0079`, section 2).
- * A sticky box sticks within its parent, so it has to be the host that is the child
- * of the scrolling page, not a box inside the host that is only as tall as itself.
+ * The host carries `tools-bar`. It was sticky inside the basket's scroller (velista
+ * `0079`, section 2) until velista `0189` moved it into the page's head block, which
+ * sits outside the scroller and so stays without a position of its own.
  */
 @Component({
   selector: 'lib-list-tools',

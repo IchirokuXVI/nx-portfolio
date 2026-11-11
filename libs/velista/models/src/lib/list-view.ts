@@ -451,11 +451,6 @@ export type ListPageState =
       /** Nothing on the list yet. The composer is focused, per section 3.1. */
       readonly empty: boolean;
       /**
-       * Whether dragging is available (rule L4). False while `nextCursor` is non null,
-       * because `line.reorder` renumbers only the lines it names.
-       */
-      readonly canReorder: boolean;
-      /**
        * Whether this list approves new lines by itself (backend plan 0037, section 3).
        *
        * A list fact rather than an ability, so it sits beside `abilities` and not inside

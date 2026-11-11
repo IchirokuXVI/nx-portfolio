@@ -78,8 +78,6 @@
         suggestions above it.
       -->
       <input
-        (blur)="fieldFocused.emit(false)"
-        (focus)="fieldFocused.emit(true)"
         (input)="onInput($event)"
         (keydown.escape)="onEscape($event)"
         [attr.aria-controls]="resultsId()"

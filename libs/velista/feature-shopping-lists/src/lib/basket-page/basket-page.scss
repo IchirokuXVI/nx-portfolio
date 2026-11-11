@@ -1,10 +1,12 @@
 @use '../basket-shared' as shared;
 
-// Exactly as tall as the app's page slot, so the composer at the end of it is at the
-// foot of the slot, directly above the bar, rather than under the last line of a two
-// line basket (plan 0053, section 6). The slot has a definite height in both run modes,
-// because the app is a frame one viewport tall that never scrolls (velista 0106). The
-// list page's host says the same thing for the same reason.
+// Exactly as tall as the app's page slot, so the column between the head block and the
+// bar takes whatever the two leave (plan 0053, section 6). The slot has a definite
+// height in both run modes, because the app is a frame one viewport tall that never
+// scrolls (velista 0106). The list page's host says the same thing for the same reason.
+//
+// The host's column is the page header, the head block, then the scroller (velista
+// 0189).
 :host {
   display: flex;
   flex-direction: column;
@@ -16,36 +18,43 @@
 
   gap: var(--app-space-3);
   padding-inline: 0;
-  // The header is `PageHeader`, the item before this column and outside its scroll
-  // (velista 0130). So what starts this column is content, and it takes the gap that
-  // used to sit between the bar and the first thing under it.
+  // The page header and the head block are the items before this column and outside
+  // its scroll (velista 0130, velista 0189). So what starts this column is content,
+  // 8px under the field, as the mock draws it.
   padding-block-start: var(--app-space-3);
-  // This column is the scroll and the composer sits **below** it, so the field is
-  // not something to scroll to. `min-block-size` goes back to zero because the
-  // mixin's `100%` would make the column as tall as the host on its own and push
-  // the composer off the bottom of it.
+  // This column is the scroll and the field sits **above** it, so the field is not
+  // something to scroll to. `min-block-size` goes back to zero because the mixin's
+  // `100%` would make the column as tall as the host on its own and push it past the
+  // bottom of the host.
   flex: 1;
   min-block-size: 0;
   overflow-y: auto;
   // **No bottom safe area padding**, which is the one way this differs from the
-  // shared mixin: the composer sits below this column and owns that inset itself,
-  // so keeping it here would leave a gap the height of a home indicator between the
-  // last line and the field. The basket is drawn with the bar, which carries the
-  // inset whenever the composer is not there.
+  // shared mixin: the bar under this column carries that inset itself, so keeping it
+  // here would leave a gap the height of a home indicator after the last line.
   //
-  // This is the one scroll container on the screen in both run modes (velista
-  // 0106), so the tools bar sticks to its top standalone and mounted alike.
+  // This is the one scroll container on the screen in both run modes (velista 0106).
   padding-block-end: var(--app-space-5);
 }
 
-// Always at the bottom of the screen, which is what makes the field reachable with
-// a thumb no matter how long the basket is. The same treatment, and the same
-// reasoning, as the list page's dock.
-//
-// An ordinary item of the host's column, after `.page` (velista 0106). It used to be
-// `position: sticky` at the bottom of the document, which is exactly the strip the
-// bar covered. As the item after the scroller it is never over a line and nothing is
-// ever over it.
+// The head block (velista 0189, decisions B and D): the tools row and its chips, then
+// the field. An item of the host's column and not a row of the scroller, so the field
+// is reachable whatever the scroll, which is the one thing the foot gave it. The
+// column's top padding above it, and the mock's 16px between the tools row and the
+// field. No inline padding: the column's rows reach the edges and so does this
+// block's ground, and each item takes its own gutter.
+.page-top {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: var(--app-space-5);
+  padding-block-start: var(--app-space-3);
+  background: var(--app-surface-ground);
+}
+
+// The field, pinned in the head block, the same treatment and the same reasoning as
+// the list page's dock. It takes the 16px gutter the tools row has, so the two start
+// on one edge.
 //
 // A sheet still covers it (plan 0040): a sheet is fixed to the viewport at its own
 // stacking order, so the composer is under the sheet and its scrim rather than
@@ -53,6 +62,7 @@
 .composer-dock {
   display: block;
   flex: none;
+  padding-inline: var(--app-space-5);
 }
 
 lib-line-composer {
@@ -134,32 +144,21 @@ lib-line-composer {
   font-size: var(--app-text-2xs);
 }
 
-// The tools bar sticks to the top **edge** of the column, over the column's own start
-// padding. A sticky offset is measured from the scroller's content box, so at
-// `ListTools`'s own zero the bar stopped one `padding-block-start` short of the header
-// and the lines scrolled through that strip, in plain sight above an opaque bar.
-//
-// The three values are that one padding. The offset moves the stop up by it, the
-// padding paints the bar's ground over the strip, and the margin takes the same amount
-// back so the row rests exactly where it did: over the column's padding as the first
-// item, over the gap after a notice.
-lib-list-tools {
-  inset-block-start: calc(var(--app-space-3) * -1);
-  margin-block-start: calc(var(--app-space-3) * -1);
-  padding-block-start: var(--app-space-3);
-  // Room under the count, the total and its bar, so the first line does not start
-  // against them. On the bar and not on the list, so it holds while the lines
-  // scroll under.
-  padding-block-end: var(--app-space-3);
-  // The column's own inline padding is zero, so its rows reach the edges. The bar is
-  // not a row: without this its count, its chips and the bar of the total started on
-  // the edge of the screen. The trailing side is the filter button's, which keeps its
-  // own small inset, so what sits under the row takes the trailing gutter itself.
+// The tools row in the head block (velista 0189). The head block has no inline padding
+// of its own, so without this the count and the chips started on the edge of the
+// screen. The trailing side is the filter button's, which keeps its own small inset,
+// so what sits under the row takes the trailing gutter itself.
+// The picker's host draws nothing of its own (its popover goes to the top layer), so
+// it is taken out of the flow and adds no gap under the field.
+.page-top > lib-list-picker {
+  position: absolute;
+}
+
+.page-top > lib-list-tools {
   padding-inline-start: var(--app-space-5);
 }
 
-.chips,
-.total-bar {
+.chips {
   margin-inline-end: var(--app-space-5);
 }
 

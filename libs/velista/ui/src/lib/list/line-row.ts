@@ -22,12 +22,7 @@ import {
   type LineStatus,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
-import {
-  CommentIcon,
-  GripIcon,
-  PlusIcon,
-  StarFilledIcon,
-} from '../icons/icons';
+import { CommentIcon, PlusIcon, StarFilledIcon } from '../icons/icons';
 import { ProductPicture } from './product-picture';
 import { QuantityReel } from './quantity-reel';
 
@@ -41,19 +36,13 @@ const STATUS_KEYS: Record<LineStatus, string> = {
 };
 
 /**
- * What the row emits: the three approval decisions drawn under it, and the grip's two
- * keyboard moves.
+ * What the row emits: the three approval decisions drawn under it.
  *
  * Edit, comments and delete were here until velista plan 0083, carried by an overflow
  * menu. The detail sheet a tap opens is where a line is changed now, so the row has
  * nothing of its own to say about them.
  */
-export type LineRowAction =
-  | 'approve'
-  | 'reject'
-  | 'restore'
-  | 'moveUp'
-  | 'moveDown';
+export type LineRowAction = 'approve' | 'reject' | 'restore';
 
 /**
  * One line on the list. The row this whole screen is for.
@@ -113,20 +102,12 @@ export type LineRowAction =
  * nothing left to notice. Capture is what lets one listener cover the whole line: the
  * decision buttons and the inline notices are all under a tap that was really about
  * the reel, and each of them stops its own propagation.
- *
- * ## In reorder mode it stops being a button
- *
- * The role is dropped rather than kept and dishonoured, a focusable grip appears that
- * moves the row with the up and down keys, and **the reel goes away entirely**: a
- * second gesture living inside a row being dragged would fight the first for the same
- * finger.
  */
 @Component({
   selector: 'lib-line-row',
   imports: [
     RokuTranslatorPipe,
     CommentIcon,
-    GripIcon,
     PlusIcon,
     ProductPicture,
     QuantityReel,
@@ -135,22 +116,12 @@ export type LineRowAction =
   templateUrl: './line-row.html',
   styleUrl: './line-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    '[class.reordering]': 'reordering()',
-  },
 })
 export class LineRow {
   readonly line = input.required<LineRowVm>();
 
-  /** Whether the list is in reorder mode, which changes what the row is. */
-  readonly reordering = input(false);
-
   /** Whether an add just raised this line, which marks its quantity (velista `0170`). */
   readonly took = input(false);
-
-  /** Whether this row can be moved further in each direction, for the grip's buttons. */
-  readonly canMoveUp = input(true);
-  readonly canMoveDown = input(true);
 
   /**
    * Where a search matched inside the line's own name, or null (velista `0082`,
@@ -190,11 +161,8 @@ export class LineRow {
    */
   readonly quantityChanged = output<{ lineId: string; delta: number }>();
 
-  /** Anything from the decision buttons or the grip. */
+  /** Anything from the decision buttons. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
-
-  /** A pointer went down on the grip. The list takes the drag from here. */
-  readonly grab = output<{ event: PointerEvent; lineId: string }>();
 
   /** The inline failure notice was tapped, which retries. */
   readonly retry = output<string>();
@@ -219,14 +187,6 @@ export class LineRow {
     const product = this.line().product;
     return product?.kind === 'none' && product.canChoose;
   });
-
-  /**
-   * Whether the two buttons of section 5 are drawn: never in reorder mode, where
-   * the row is a thing being dragged and draws the square alone.
-   */
-  protected readonly canChoose = computed(
-    () => this.mayChoose() && !this.reordering()
-  );
 
   /** Every status word that applies, in the order of section 4. */
   protected readonly statuses = computed(() => lineStatuses(this.line()));
@@ -392,7 +352,7 @@ export class LineRow {
   }
 
   onRowClick(): void {
-    if (this.reordering() || !this.line().interactive) {
+    if (!this.line().interactive) {
       return;
     }
 
@@ -420,23 +380,6 @@ export class LineRow {
   /** One of the decisions drawn under the row. */
   choose(action: 'approve' | 'reject' | 'restore'): void {
     this.act.emit({ action, lineId: this.line().id });
-  }
-
-  /** The grip's keyboard equivalent. Emitted straight through. */
-  move(action: 'moveUp' | 'moveDown'): void {
-    this.act.emit({ action, lineId: this.line().id });
-  }
-
-  /**
-   * A pointer takes hold of the grip.
-   *
-   * The row hands the gesture straight up rather than running it, because a drag is
-   * about where this row sits among the others and this row knows nothing about the
-   * others. `LineList` owns the order, so it owns the geometry, and it is the only
-   * thing that can say which row a finger is currently over.
-   */
-  startDrag(event: PointerEvent): void {
-    this.grab.emit({ event, lineId: this.line().id });
   }
 
   /**

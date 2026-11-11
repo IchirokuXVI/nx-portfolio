@@ -54,10 +54,6 @@ export interface LineServiceI {
    *
    * Defaults to `position` order, which is the only order any screen asks for: a
    * shopping list has a manual order because that is the order of the aisles.
-   *
-   * The **cursor matters beyond pagination**. Rule L4 turns dragging on only once
-   * `nextCursor` is null, because `line.reorder` renumbers exactly the lines it names
-   * and leaves the rest on positions that deletes have already made non contiguous.
    */
   listLines(
     listId: string,
@@ -274,16 +270,6 @@ export interface LineServiceI {
    * turned down line back is a third outcome and not the negation of a second.
    */
   setApproval(lineId: string, status: LineApprovalStatus): Promise<Line>;
-
-  /**
-   * Rewrite the whole order (`POST /v1/lists/:id/lines/reorder`).
-   *
-   * Answers the list id and nothing else, so the caller either trusts its own optimistic
-   * order or rereads. `validation_failed` here means the order named a line the server
-   * no longer has, which is somebody deleting one mid drag: the list rereads and says
-   * nothing, per section 5.7.
-   */
-  reorder(listId: string, orderedLineIds: readonly string[]): Promise<void>;
 
   /** Take it off the list, for everybody (`DELETE /v1/lines/:id`). */
   deleteLine(lineId: string): Promise<string>;
