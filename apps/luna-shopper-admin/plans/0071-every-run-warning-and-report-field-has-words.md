@@ -12,7 +12,7 @@
 > `0067` (the voice of the harvest strings), and
 > `libs/luna-shopper/contracts/src/lib/enums/harvest.enums.ts` (`HarvestWarningCode`).
 >
-> Mock: none recommended (D3).
+> Mock: none. The owner decided this on 2026-11-11 (D3).
 
 ## Brief for the agent
 
@@ -94,7 +94,7 @@ No gateway change, no backend change, no new route. Out: `truncatedCategories`, 
 
 ### Action boundaries
 
-- Use the copy of section 1 as written until the owner corrects it (D1).
+- Use the copy of section 1 as written. The owner accepted it (D1).
 - Stop and ask before you add a screen, a route or a gateway field.
 
 ### Progress evidence
@@ -170,13 +170,15 @@ npx nx affected -t lint test
 
 ## Decisions
 
-**D1. The copy of section 1.** The owner corrects the words. Recommended: as written.
+The owner accepted every recommendation on 2026-11-11. No decision is open.
 
-**D2. Labels only, or labels and report fields.** Recommended: both, because the labels of
-`LISTING_UNREAD` and `DETAIL_UNREAD` point at the parts the report names.
+**D1 (owner, answered 2026-11-11):** the copy of section 1 as written.
 
-**D3. A mock first.** Recommended: none, as admin plans `0067` and `0069`. The parts are a list
-and two tables in a section that exists.
+**D2 (owner, answered 2026-11-11):** labels and report fields together, in this plan. The labels
+of `LISTING_UNREAD` and `DETAIL_UNREAD` point at the parts that the report names.
 
-**D4. `sizesDisproved` in this plan or in admin plan `0072`.** Recommended: here. This plan
-owns every report field, and admin `0072` draws the doubt on an entry only.
+**D3 (owner, answered 2026-11-11):** no mock, as admin plans `0067` and `0069`. The parts are a
+list and two tables in a section that exists.
+
+**D4 (owner, answered 2026-11-11):** this plan draws `sizesDisproved`. This plan owns every
+report field, and admin `0072` draws the doubt on an entry only.

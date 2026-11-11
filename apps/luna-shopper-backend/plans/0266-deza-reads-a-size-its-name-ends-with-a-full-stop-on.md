@@ -10,6 +10,10 @@
 > not re-measured on 2026-11-11, Docker was down. Its breakdown is not known: the committed
 > fixtures hold about 20 descriptions.
 >
+> The owner answered the decisions of this plan on 2026-11-11. A row whose split changes
+> becomes a new entry (D1). No size is read from the middle of a name (D2), and the rest of
+> Carrefour and El Jamón is work for the curator (D3).
+>
 > Prerequisite reading: plan `0085` (the DEZA adapter), plan `0086` D2 (the key of a source
 > with no id), plan `0177` (a source size states its own unit), plan `0250` (the Carrefour
 > and El Jamón fix, its count query), `libs/luna-shopper/deza/src/lib/size.ts`,
@@ -22,9 +26,9 @@
 ### Objective
 
 Measure first why DEZA names keep a size while `unitSize` is empty, and report the breakdown.
-Then, after the owner answers D1, make `splitSize` read a trailing size that ends with a full
-stop or `aprox`, and the units the breakdown shows, without a silent change to the identity of
-any row.
+Then make `splitSize` read a trailing size that ends with a full stop or `aprox`, and the units
+the breakdown shows. A row whose split changes becomes a new entry, and the PR says how many
+(D1).
 
 ### Context
 
@@ -57,30 +61,35 @@ any row.
 1. **Step 1, the measurement.** A table in the PR: the DEZA rows with a name that ends in a
    quantity and a unit and an empty `unitSize`, grouped by the reason (trailing stop, `aprox`,
    unit not in the list, a sum, a length, other). Quote three names per group, and give the
-   number of rows in each group by `status`, so the owner sees how many `ACTIVE` rows would
-   move (D1).
-2. **Step 2, the fix**, after D1: `splitSize` reads a trailing stop and a trailing `aprox`,
-   and the unit words the measurement names, and the identity of each row follows D1.
+   number of rows in each group by `status`, so the owner sees how many `ACTIVE` rows move
+   (D1).
+2. **Step 2, the fix**: `splitSize` reads a trailing stop and a trailing `aprox`, and the unit
+   words the measurement names. A row whose split changes gets a new key and thus a new entry.
+   The old entry stops being seen and ages out like a delisted product (D1).
 
 ### Scope
 
-Step 1: a read only query or a read of fixtures. Step 2: `size.ts` and `size.spec.ts`. Under
-D1 (c) also `rows.ts`, `deza-catalog.runner.ts`, `isNameKeyed` in `matching.ts` and the
-migration of section 2.
+Step 1: a read only query or a read of fixtures. Step 2: `size.ts` and `size.spec.ts`. No
+change to `rows.ts`, `deza-catalog.runner.ts`, `isNameKeyed` or `entryKey`. No migration and
+no release task (D1).
 
 ### Constraints
 
 - Read real rows from the locked slot 4 copy read only, or capture new fixtures with
   `npx nx run luna-shopper/deza:capture-fixtures`. Never write a fixture by hand. Do not
   unlock or start slot 4. If no catalog of DEZA is up, capture fixtures.
-- A size in the middle of a name stays in the name (D2).
+- A size in the middle of a name stays in the name (D2). **The harvester records the name as
+  the chain states it.** To read more out of a name is work for the curator, not for the
+  harvester.
 - No price is written. No change to `normalizeName` or `entryNameKey`.
 - The printed size stays verbatim in `sizeFormat`, the stop included, as Carrefour keeps it.
 
 ### Action boundaries
 
-- Do step 1 and stop. Report the breakdown and ask before step 2, until D1 is answered.
-- Stop and ask before you add a release task or a migration.
+- Do step 1 first and put the breakdown in the PR. Then do step 2 in the same PR.
+- Do not add a release task or a migration (D1).
+- Do not read a size from the middle of a name, and do not add a parser for the Carrefour rest
+  or El Jamón (D2, D3).
 
 ### Progress evidence
 
@@ -102,35 +111,32 @@ WHERE "supermarketId" = $1
 The pattern is the one plan `0250` used for Carrefour, made wide enough to show unit words
 outside the list. Classify each row in TypeScript with the reasons of Target state 1.
 
-## 2. The identity under D1 (c)
+## 2. The identity of a row whose split changes
 
-`record` builds the key from the row. Under D1 (c) the parser answers both splits: the split
-of today, for the key, and the new one, for `name`, `sizeFormat` and `unitSize`. The key then
-does not move, and the entity takes the new values on the next full read. `parseRow`
-(`rows.ts`, near line 80) has the whole `description`, and the runner reads the key in one
-place, so this half is a small change.
+By D1 (a), the key follows the new split. `record` builds the key from the row with
+`entryKey(row.name, row.sizeFormat)`, and the new split moves both, so the key changes. The
+first walk after the fix thus writes a new `source_catalog_entries` row for each row whose
+split changed. The old row stops being seen and ages out as unseen, as a renamed DEZA product
+does today. `isNameKeyed` (`matching.ts`, near lines 302 to 313) still holds for the new row,
+because its stored name and size are the ones its key was built from.
 
-**The other half is not small.** `isNameKeyed` (`matching.ts`, near lines 302 to 313, plan
-`0221` section 3.2) decides that a row is keyed on its own text by computing
-`entryKey(row.name, row.sizeFormat)` from the stored columns and comparing it with
-`externalId`. `source-ingest.ts` calls it near lines 1447 and 1967, and `matching.ts` near
-line 379. Under (c) a changed row stores the new name and size while its `externalId` is the
-hash of the old ones, so `isNameKeyed` answers false for it, and the word order rung of plan
-`0221` treats a DEZA row as a row with a chain id. To keep (c) correct, `isNameKeyed` needs
-another test, for example a column that records that the row is name keyed. That is a
-migration. Name it in the PR before you write it.
+**The cost of (a).** A moved row that a person had bound to a product (`ACTIVE`) comes back as
+a new entry and waits in the queue again. The count by `status` of step 1 says how many. The
+PR quotes it, and the count of new and orphaned entries after the walk of Progress evidence.
 
 ## Tests
 
 - `size.spec.ts`: `Leche entera 1 L.` and `Queso curado 250 g aprox` split, `Hermético azul
   TATAY 0.5 l ovalado` does not, and every unit the measurement adds.
-- Under D1 (c): the key of a row whose split changes equals the key of today.
+- `size.spec.ts`: a name with a size in the middle splits as today (D2).
 
 ## Acceptance criteria
 
 - [ ] The breakdown of step 1 is in the PR before any code of step 2.
 - [ ] A trailing stop and `aprox` split, and a size in the middle stays.
-- [ ] The identity of each row follows D1, and the PR quotes the new and orphaned counts.
+- [ ] A row whose split changes gets a new key (D1), and the PR quotes the moved `ACTIVE`
+      rows and the new and orphaned counts.
+- [ ] No migration and no release task.
 - [ ] No price, no `normalizeName` change.
 
 ## Verification
@@ -143,21 +149,15 @@ npx nx affected -t lint test
 
 ## Decisions
 
-**D1. A row whose split changes.**
+**D1 (owner, answered 2026-11-11):** a row whose split changes becomes a new entry (option a).
+The old one ages out as unseen. No release task repoints or deletes the orphans, and the key
+does not keep the split of today.
 
-- (a) Accept new entries. The old ones age out as unseen.
-- (b) A release task that repoints or deletes the orphans.
-- (c) The key keeps the split of today, and only the size is filled from the new split.
+**D2 (owner, answered 2026-11-11):** no size is read from the middle of a name. The rule: the
+harvester records the name as the chain states it. To read more out of a name is work for the
+curator, not for the harvester.
 
-Recommended: (a), if the measurement shows a few hundred rows. A new entry is what a renamed
-DEZA product makes today, and the old row stops being seen like any delisted product. (c)
-keeps every identity but needs the `isNameKeyed` change and the migration of section 2.
-Choose (c) only if the measurement shows that many of the moved rows are `ACTIVE` rows a
-person already bound to a product, because under (a) each of them waits in the queue again.
-
-**D2. A size in the middle of a name.** Recommended: no, by design (`size.ts`, near line 117).
-
-**D3. The rest of Carrefour and a count for El Jamón.** The Carrefour rest is 15 names (glued
-or two sizes), 22 `pack N` names whose noun is not in `CONTAINER`, and
-`Turron 1000 caja de 300 g`, which reads 300 kg (PR #939). Recommended: count El Jamón again on
-the next scheduled walk first, and no plan now.
+**D3 (owner, answered 2026-11-11):** no plan for the Carrefour rest or for El Jamón now. It is
+work for the curator. The Carrefour rest is 15 names (glued or two sizes), 22 `pack N` names
+whose noun is not in `CONTAINER`, and `Turron 1000 caja de 300 g`, which reads 300 kg
+(PR #939).

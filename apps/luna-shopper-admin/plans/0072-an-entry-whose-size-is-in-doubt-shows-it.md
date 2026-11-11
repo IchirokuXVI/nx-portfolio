@@ -18,8 +18,9 @@
 ### Objective
 
 Show a quiet chip on an entry whose size is in doubt, in the decision queue and on a product's
-source rows, with the stated size, the implied size and the label that disproved it. A filter
-on the queue comes only with D2.
+source rows, with the stated size, the implied size and the label that disproved it. Build it
+directly from this plan, with no mock, as admin plans `0067` and `0069` were built (D3). The
+queue gets a filter only if the count of D2 asks for one.
 
 ### Context
 
@@ -66,14 +67,16 @@ on the queue comes only with D2.
 2. The queue's identity line and the list row draw the chip. The entry's facts draw one
    sentence beside the stated size (section 1).
 3. A product's source rows draw the chip.
-4. With D2 (a), the queue has a filter "Size in doubt", with its gateway half.
+4. If the queue of a slot holds more than one screen of doubts (D2), the queue has a filter
+   "Size in doubt", with its gateway half. If it holds one screen or less, the PR gives the
+   count and builds no filter.
 
 ### Scope
 
 `entry-view.ts` and `entry-view.spec.ts`, `entries-queue-page.ts` and `entries-queue.spec.ts`,
 `item-source-entries.ts` and its spec, the models file for the new type, `harvest-memory.ts`,
-`harvest-seed.ts` (two seeded doubts), `en.json`. With D2 (a) also the gateway DTO, the
-harvester query, `openapi.json` and `wire-types.ts`.
+`harvest-seed.ts` (two seeded doubts), `en.json`. If the count of D2 asks for the filter, also
+the gateway DTO, the harvester query, `openapi.json` and `wire-types.ts`. No mock.
 
 ### Constraints
 
@@ -89,8 +92,9 @@ harvester query, `openapi.json` and `wire-types.ts`.
 
 ### Action boundaries
 
-- Stop and ask before the gateway half, until D2 is answered.
-- Stop and ask before you draw the chip in a way the owner has not seen, if D3 is a mock.
+- Count the doubts in the queue of a slot that holds a walk before you write the gateway half.
+  If the count is one screen or less, do not write it (D2).
+- Do not make a mock. Draw the chip as Constraints say (D3).
 
 ### Progress evidence
 
@@ -134,21 +138,20 @@ npx nx affected -t lint test
 
 ## Decisions
 
-**D1. The words of section 1.** Recommended: as written. The owner corrects them.
+The owner answered every decision on 2026-11-11. D1, D2 and D4 are as recommended. D3 is not.
+No decision is open.
 
-**D2. The filter.**
+**D1 (owner, answered 2026-11-11):** the words of section 1 as written.
 
-- (a) Now, in this PR, with a `sizeDoubt` flag on `SourceEntryListQueryDto` parsed like
-  `delisted`, a `"sizeDoubtImplied" IS NOT NULL` clause in the harvester beside the `delisted` clause
-  (`apps/luna-shopper-backend/harvester/src/app/harvest/source-entry.service.ts`, near line
-  312), and both regenerations.
-- (b) Later.
+**D2 (owner, answered 2026-11-11):** the filter comes in this PR if the queue of a slot holds
+more than one screen of doubts. The builder counts them first and says the number. The filter
+is a `sizeDoubt` flag on `SourceEntryListQueryDto`, parsed like `delisted`, a
+`"sizeDoubtImplied" IS NOT NULL` clause in the harvester beside the `delisted` clause
+(`apps/luna-shopper-backend/harvester/src/app/harvest/source-entry.service.ts`, near line
+312), and both regenerations. If the count is one screen or less, the filter is a later plan.
 
-Recommended: (a) if a slot's queue holds more than one screen of doubts. The builder counts
-them first and says the number.
+**D3 (owner, answered 2026-11-11):** no mock. The builder builds directly from this plan, as
+admin plans `0067` and `0069` were built. The recommendation was a small mock.
 
-**D3. A mock first.** Recommended: a small mock, because this is new vocabulary in a dense row.
-The owner decides.
-
-**D4. `sizesDisproved` on the run report.** Recommended: admin plan `0071` draws it, with every
-other report field, and this plan draws only the doubt on an entry.
+**D4 (owner, answered 2026-11-11):** admin plan `0071` draws `sizesDisproved`, with every other
+report field, and this plan draws only the doubt on an entry.
