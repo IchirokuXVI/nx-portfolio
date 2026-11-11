@@ -1,3 +1,5 @@
+> **PR:** [#981](https://github.com/IchirokuXVI/nx-portfolio/pull/981)
+
 # 0191: a zone list can draw compact rows
 
 > Decided on 2026-11-11. The owner approved a second way to draw the rows of a zone list,
