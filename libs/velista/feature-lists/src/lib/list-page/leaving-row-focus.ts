@@ -35,6 +35,46 @@ export function focusAfterLeaving(
   return { lineId: neighbour?.dataset['lineId'] ?? null, control };
 }
 
+/**
+ * Whether focus fell out of the page with the row that held it. Focus somebody put
+ * elsewhere in the meantime is theirs, and is left alone.
+ */
+export function focusDropped(column: HTMLElement): boolean {
+  const doc = column.ownerDocument;
+  const active = doc.activeElement;
+  return active === null || active === doc.body;
+}
+
+/** The due row's control for each control of a To buy row. */
+const DUE_CONTROL: Readonly<Record<string, string>> = {
+  '.step.minus': '.step.minus',
+  '.step.plus': '.step.plus',
+  [ROW_BUTTON]: '.body',
+};
+
+/**
+ * Focus the same control of the line's due row, for a row that left To buy for the
+ * due rows. False when that row or its control is not drawn (a due row past the
+ * first few), so the caller falls back to {@link focusLeavingTarget}.
+ */
+export function focusDueRow(
+  column: HTMLElement,
+  lineId: string,
+  target: LeavingRowFocus
+): boolean {
+  const row = Array.from(
+    column.querySelectorAll<HTMLElement>('[data-due-line-id]')
+  ).find((candidate) => candidate.dataset['dueLineId'] === lineId);
+  const control = row?.querySelector<HTMLElement>(
+    DUE_CONTROL[target.control] ?? DUE_CONTROL[ROW_BUTTON]
+  );
+  if (control === null || control === undefined) {
+    return false;
+  }
+  control.focus();
+  return true;
+}
+
 /** Focus what {@link focusAfterLeaving} chose, once the rows have redrawn. */
 export function focusLeavingTarget(
   column: HTMLElement,

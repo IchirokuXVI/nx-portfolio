@@ -17,9 +17,11 @@
 
 ## 1. Objective
 
-On a zone list at rest, a line whose quantity is 0 or less is not drawn, whether or not it was
-ever bought. The page's search draws it at 0, so a person can find it and step it back up, and
-a step above 0 puts it back in To buy. Nothing is deleted: the only delete is the one by hand
+On a zone list at rest, a line whose quantity is 0 or less and that was never bought is not
+drawn. A bought line at 0 keeps what `dev` does: it leaves To buy once the trips have loaded and
+named a trip, and section 2 names the three places that still draw it. The page's search draws
+any line at 0, so a person can find it and step it back up, and a step above 0 puts it back in
+To buy. Nothing is deleted: the only delete is the one by hand
 from the line's sheet or its line page, exactly as on `dev`.
 
 This is a view rule in velista's own models. The server decides nothing new. Backend `0263`
@@ -84,17 +86,41 @@ its template.
     render that would have drawn the stepper's sentence. The stepper is not changed.
   - A line another device lowered, a line lowered from the sheet or the line page, and a
     dropped write sent again move no focus and say nothing.
-  - A row that goes from To buy into the due rows says nothing; focus that was in it still
-    moves to the next row.
+  - A row that goes from To buy into the due rows says nothing, because the line is still on
+    screen. Focus that was in it moves to the same control of that due row (the minus, the
+    plus, or the due row's own button for the row's button); when that due row is not drawn
+    (past the first few), to the next row as for a hidden line.
+  - Focus is moved only when it fell out of the page with the row. Focus somebody put
+    elsewhere in the meantime is left alone.
+  - The same sentence a second time is said again: when the polite region already holds it,
+    the region is emptied in the render that takes the row away and filled 150 ms later, in
+    its own task, so a screen reader sees a change.
+  - A step during the line's legacy unit correction (backend `0246`, section 3.2) waits for
+    the correction before the store patches the amount, so the row is still drawn when the run
+    is sent. For a run that reaches 0 the page decides again once the write has settled, and
+    then says the sentence and moves focus as above.
+  - Leaving the page with a run open (the back chevron, Android's back, another tab before the
+    quiet beat ends) still writes the run, because a number the person watched move is
+    written, and says, focuses and schedules nothing: the page is being destroyed. A flag set
+    by a destroy hook registered before `quantityRuns` decides it, so the page's own teardown
+    always runs after the write.
+  - Known edge: the sentence is said and focus moves before the write answers, because the row
+    leaves on the store's optimistic patch. A write that fails brings the row back with its
+    "that did not save" note, so for that moment the sentence was untrue. Saying it only once
+    the write lands would delay the sentence on a slow connection after focus has moved, so it
+    is left as is.
 - The line page and the line sheet of a line at 0 behave as on `dev`, reached from the search,
   a link or the shopping list. Their delete by hand is the only delete, and the "deleted by
   another user" notice is exactly as on `dev`.
-- Checked and unchanged: the header ("3 of 7 pending", "Nothing left" when every line is at 0) stays true. The empty state ("Nothing on this list yet") is drawn only for a list with no
+- Checked and unchanged: the header ("3 of 7 pending", "Nothing left" when every line is at 0)
+  stays true. The empty state ("Nothing on this list yet") is drawn only for a list with no
   line at all, so it never claims that a list with hidden lines is empty. A list whose every
   line is at 0 and never bought draws the To buy heading with nothing under it, and the trips
   if it has any; the same screen `dev` already draws when every line is bought and at 0.
   Under a category whose lines are all hidden, the page says "No lines match." with Reset, as
-  for any category that narrows To buy to nothing. Sorting is unchanged. The basket, the
+  for any category that narrows To buy to nothing. With any view setting on and every line at
+  0, the page draws the same "No lines match." with Reset, and Reset brings nothing back
+  (question 5). Sorting is unchanged. The basket, the
   catalog tab and the product page are unchanged.
 
 ## 4. What this branch removed
@@ -119,7 +145,10 @@ hidden one.
   else the heading; focus elsewhere is left alone; a line another device lowered says nothing;
   the search draws the line at 0 and a plus there brings it back with no sentence; a row lowered
   inside the search stays drawn and says nothing; a minus to 0 then a plus inside the quiet beat
-  keeps the row and writes nothing. The three older cases that drew a never bought line at 0
+  keeps the row and writes nothing; a run to 0 open when the page is destroyed is written,
+  nothing throws and the page's teardown runs; the same line lowered to 0 a second time is said
+  again; a step held back by a unit correction is decided after its write; a row that becomes a
+  due row moves focus to the due row's same control and says nothing. The three older cases that drew a never bought line at 0
   now expect it hidden.
 
 ## 6. Acceptance criteria
@@ -131,7 +160,9 @@ hidden one.
 3. Lowering a line to 0 with the row's stepper makes one write; the row leaves when the write
    lands; nothing is deleted.
 4. Focus in the row moves to the same control of the next row, else the previous row, else the
-   heading; the polite region says the sentence once; nothing moves for another device's write.
+   heading, or to the due row's same control for a line that is now a due row; the polite
+   region says the sentence once, and again when the same line is lowered a second time;
+   nothing moves for another device's write.
 5. A minus to 0 and a plus inside the quiet beat keep the row and write nothing.
 6. A line with a buy behaves the same in To buy, and its trip folds and the due rows still draw
    it as on `dev`.
@@ -147,3 +178,6 @@ hidden one.
    say something there (for example that lines at 0 are found by searching)?
 4. Lowering a line to 0 from its sheet over the list hides its row with no sentence. Should the
    page say the sentence then too?
+5. With any view setting on and every line at 0, the page says "No lines match." with Reset,
+   and Reset brings nothing back, because the rule of this plan hides the lines and not the
+   view. Should that screen say something else?
