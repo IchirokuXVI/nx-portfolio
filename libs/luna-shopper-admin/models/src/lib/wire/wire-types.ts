@@ -2701,7 +2701,7 @@ export type CatalogAdminSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   comparablePrice?: number | null;
   comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
@@ -2918,7 +2918,7 @@ export type CatalogItemOfferView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   comparablePrice?: number | null;
   comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
@@ -2999,7 +2999,7 @@ export type CatalogItemPricePointView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
 };
 
 /**
@@ -3023,7 +3023,7 @@ export type CatalogItemPriceView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   observedAt: string;
   lastObservedAt: string;
   validFrom: string | null;
@@ -3746,7 +3746,7 @@ export type CatalogSupermarketItemView = {
   currency: string | null;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   comparablePrice?: number | null;
   comparableBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | null;
   observedAt: string | null;
@@ -5301,7 +5301,7 @@ export type HarvestSourceEntryPriceView = {
   currency: string;
   unitPrice: number | null;
   unitPriceLabel: string | null;
-  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH' | null;
+  unitBasis?: 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | null;
   validFrom: string | null;
   validUntil: string | null;
   details: {

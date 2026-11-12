@@ -91,22 +91,23 @@ export function unpricedStart(
  * What a price per kilo or litre is counted in, as the source published it.
  *
  * Read off the wire so the row can say "/ L" without parsing `unitPriceLabel`,
- * which is text for a human and not a unit.
+ * which is text for a human and not a unit. No value names a wash (backend
+ * `0264`): a wash is no basis, and a value this build does not know maps to no
+ * basis, so a row draws no unit price line for it.
  */
-export type PriceUnitBasis = 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN' | 'WASH';
+export type PriceUnitBasis = 'KILOGRAM' | 'LITER' | 'UNIT' | 'DOZEN';
 
 export const PRICE_UNIT_BASES: readonly PriceUnitBasis[] = [
   'KILOGRAM',
   'LITER',
   'UNIT',
   'DOZEN',
-  'WASH',
 ];
 
 /**
  * What `comparablePrice` is a price per, as the catalog derived it (backend
- * `0245`). Three values and never `DOZEN` or `WASH`: those describe the chain's
- * own figure, and a dozen is twelve units.
+ * `0245`). Three values and never `DOZEN`: that describes the chain's own
+ * figure, and a dozen is twelve units.
  */
 export type ComparableBasis = 'KILOGRAM' | 'LITER' | 'UNIT';
 

@@ -17,7 +17,8 @@ describe('unitBasisOf', () => {
     ['100 ml', 633, 'LITER'],
     ['el litro le sale a', 164, 'LITER'],
     ['el kilo le sale a', 92, 'KILOGRAM'],
-    ['lv', 72, 'WASH'],
+    // A wash is no basis (plan 0264, D2).
+    ['lv', 72, null],
     ['100 g', 60, 'KILOGRAM'],
     ['dc', 18, 'DOZEN'],
     // Metres of foil or film: no basis names a metre, so nothing is guessed.
@@ -33,9 +34,33 @@ describe('unitBasisOf', () => {
     ['litro', 'LITER'],
     ['unidad', 'UNIT'],
     ['docena', 'DOZEN'],
-    ['lavado', 'WASH'],
   ])('reads the plan own spelling %p as %p', (label, basis) => {
     expect(unitBasisOf(label)).toBe(basis);
+  });
+
+  // The labels the Carrefour adapter builds from `measure_unit` (plan 0264).
+  it.each<[label: string, basis: UnitBasis | null]>([
+    ['€/kg', 'KILOGRAM'],
+    ['€/l', 'LITER'],
+    ['€/ud', 'UNIT'],
+    ['€/m', null],
+    ['€ / kg', 'KILOGRAM'],
+    ['€/KG', 'KILOGRAM'],
+  ])('reads the Carrefour label %p as %p', (label, basis) => {
+    expect(unitBasisOf(label)).toBe(basis);
+  });
+
+  it('names no basis for a wash, in any spelling (plan 0264, D2)', () => {
+    for (const label of ['lv', 'lavado', 'lavados', '€/lavado', 'LV']) {
+      expect(unitBasisOf(label)).toBeNull();
+    }
+  });
+
+  it('removes a leading euro and slash and nothing more', () => {
+    expect(unitBasisOf('€/')).toBeNull();
+    expect(unitBasisOf('€')).toBeNull();
+    expect(unitBasisOf('kg/€')).toBeNull();
+    expect(unitBasisOf('€/€/kg')).toBeNull();
   });
 
   it('lowercases and trims before it looks', () => {
@@ -53,7 +78,7 @@ describe('unitBasisOf', () => {
   });
 
   it('only ever answers a basis the contract names', () => {
-    const labels = ['kg', 'l', 'ud', 'dz', 'lv', '100 ml', '100 g'];
+    const labels = ['kg', 'l', 'ud', 'dz', '100 ml', '100 g', '€/kg', '€/l'];
     for (const label of labels) {
       expect(UNIT_BASES).toContain(unitBasisOf(label));
     }

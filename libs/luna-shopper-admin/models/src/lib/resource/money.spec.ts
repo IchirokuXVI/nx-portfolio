@@ -1,4 +1,4 @@
-import { formatMoney, parseMoney } from './money';
+import { formatMoney, parseMoney, unitPriceUnit } from './money';
 
 describe('formatMoney', () => {
   it('groups the units and pads the fraction to the column scale', () => {
@@ -75,5 +75,19 @@ describe('parseMoney', () => {
       ok: false,
       problem: 'not-a-number',
     });
+  });
+});
+
+describe('unitPriceUnit', () => {
+  it('prints the basis when the answer carries one', () => {
+    expect(unitPriceUnit('LITER', '100 ml')).toBe('L');
+  });
+
+  // No basis names a wash (backend plan 0264): an older gateway's `WASH` is a
+  // basis this build does not know, so the label prints as the source wrote it.
+  it('falls back to the label for a wash and for a basis it does not know', () => {
+    expect(unitPriceUnit('WASH', 'lv')).toBe('lv');
+    expect(unitPriceUnit(null, '€/lavado')).toBe('€/lavado');
+    expect(unitPriceUnit(undefined, null)).toBe('');
   });
 });
