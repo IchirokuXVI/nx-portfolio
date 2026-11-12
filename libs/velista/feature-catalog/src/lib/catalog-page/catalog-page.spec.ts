@@ -1199,6 +1199,15 @@ describe('CatalogPage', () => {
       plusOf(fixture, RICE)?.click();
       await settle(fixture);
       expect(heldLines(fixture, RICE)[0]?.quantity).toBe('1');
+      // A first add is one step, so one press of minus reaches 0 and draws the
+      // trash (velista 0185 and 0188), on a line that was there before too.
+      for (const line of [
+        heldLines(fixture, RICE)[0],
+        heldLines(fixture, OIL)[0],
+      ]) {
+        expect(line?.minus?.classList).toContain('is-clear');
+        expect(line?.minus?.querySelector('lib-trash-icon')).not.toBeNull();
+      }
 
       // The visit made the rice's line, so nothing of it is left behind.
       heldLines(fixture, RICE)[0]?.minus?.click();

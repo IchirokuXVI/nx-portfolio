@@ -929,6 +929,31 @@ describe('BasketMemory: adding a line', () => {
     expect(rowOf(await rowsOf(memory), 'Milk').entries[0].left).toBe(2);
   });
 
+  it('lands on a later line in its own unit before refusing for an earlier one of another unit', async () => {
+    const memory = new BasketMemory();
+    const breakfast = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Desayuno',
+      quantity: 500,
+      unit: 'MILLILITER',
+      itemIds: ['item-milk-pascual', 'item-bread'],
+    });
+    expect(breakfast.addOutcome).toBe('created');
+    const breakfastId = breakfast.entries[0].lineId;
+
+    const met = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 25,
+      unit: 'MILLILITER',
+      itemIds: ['item-milk-pascual'],
+    });
+
+    expect(met.addOutcome).toBe('alreadyOnList');
+    expect(met.entries.map((entry) => entry.lineId)).toEqual([breakfastId]);
+    expect(rowOf(await rowsOf(memory), 'Milk').entries[0].left).toBe(2);
+  });
+
   it('refuses a list this reader was not served', async () => {
     const memory = new BasketMemory();
     expect(

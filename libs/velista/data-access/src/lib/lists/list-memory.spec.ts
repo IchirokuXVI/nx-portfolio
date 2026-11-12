@@ -988,4 +988,33 @@ describe('LineMemory mirrors where an add lands (backend 0228, 0260, velista 017
       },
     });
   });
+
+  it('lets a later line in the add’s own unit take it over an earlier one of another unit', async () => {
+    const { lines } = await build();
+    // "Leche" counts pieces first; "Desayuno" holds milk by the millilitre later.
+    await lines.addLine(OWNED_LIST, 'Leche', 2, ['item-milk']);
+    const breakfast = await lines.addLine(
+      OWNED_LIST,
+      'Desayuno',
+      500,
+      ['item-milk', 'item-bread'],
+      undefined,
+      undefined,
+      'MILLILITER'
+    );
+
+    const met = await lines.addLineResult(
+      OWNED_LIST,
+      'Leche',
+      25,
+      ['item-milk'],
+      false,
+      undefined,
+      'MILLILITER'
+    );
+
+    expect(met.outcome).toBe('alreadyOnList');
+    expect(met.alreadyOnList.map((line) => line.id)).toEqual([breakfast.id]);
+    expect(met.line).toMatchObject({ quantity: 500, unit: 'MILLILITER' });
+  });
 });

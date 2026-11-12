@@ -1,12 +1,13 @@
 import { signal, type Provider } from '@angular/core';
 import {
   CatalogAddStore,
+  GatewayError,
   LINE_SERVICE,
   LIST_SERVICE,
   SessionStore,
   ZONE_SERVICE,
 } from '@portfolio/velista/data-access';
-import type { ListPermission } from '@portfolio/velista/models';
+import type { LineUnit, ListPermission } from '@portfolio/velista/models';
 import { provideFakeBrowserFacade } from '@portfolio/velista/platform';
 
 /** One list as the store reads it from the list service. */
@@ -29,6 +30,8 @@ export interface FakeLine {
   readonly quantity: number;
   readonly itemIds: readonly string[];
   readonly approvalStatus?: 'APPROVED' | 'PENDING' | 'REJECTED';
+  /** How the line counts. A count unless a test says. */
+  readonly unit?: LineUnit;
 }
 
 export const WEEKLY: FakeList = {
@@ -92,10 +95,11 @@ function sameName(left: string, right: string): boolean {
  *
  * The line double keeps the lines of each list and resolves an add as backend
  * `0260` section 1 does. An add meets the lines of the list that hold every
- * product of the add, or that hold the product under the same name. Any of them
- * with an amount answers `alreadyOnList` and writes nothing; else the first one,
- * kept at zero, is raised by the add's amount (R2). Nothing met makes a line at
- * the add's amount. A change of quantity and a delete move the same lines, so
+ * product of the add, or that hold the product under the same name, in the add's
+ * own unit. Any of them with an amount answers `alreadyOnList` and writes nothing;
+ * else the first one, kept at zero, is raised by the add's amount (R2). Only lines
+ * of another unit refuse the add with `line_unit_differs`. Nothing met makes a
+ * line at the add's amount. A change of quantity and a delete move the same lines, so
  * every read after a write agrees with it.
  */
 export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
@@ -156,6 +160,7 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
           listId: line.listId,
           name: line.content,
           quantity: line.quantity,
+          unit: line.unit ?? 'UNIT',
           pending: line.approvalStatus === 'PENDING',
           itemIds: line.itemIds,
         })),
@@ -166,10 +171,13 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
         listId: string,
         content: string,
         quantity = 1,
-        itemIds: readonly string[] = []
+        itemIds: readonly string[] = [],
+        _named?: false,
+        _options?: unknown,
+        unit: LineUnit = 'UNIT'
       ) => {
         const itemId = itemIds[0] ?? '';
-        const met = held.filter(
+        const holding = held.filter(
           (line) =>
             line.listId === listId &&
             line.approvalStatus !== 'REJECTED' &&
@@ -178,6 +186,28 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
               (line.itemIds.includes(itemId) &&
                 sameName(line.content, content)))
         );
+        // A line in the add's own unit takes it, wherever a line of another unit
+        // stands; only when none does is the add refused (backend `0260`, U2).
+        const met = holding.filter((line) => (line.unit ?? 'UNIT') === unit);
+        const other = holding[0];
+        if (met.length === 0 && other !== undefined) {
+          throw new GatewayError({
+            code: 'line_unit_differs',
+            status: 409,
+            correlationId: 'fake-adds',
+            detail: 'produced by fakeAdds, no request was sent',
+            details: {
+              line: {
+                lineId: other.id,
+                content: other.content,
+                unit: other.unit ?? 'UNIT',
+                quantity: other.quantity,
+              },
+              unit,
+              index: null,
+            },
+          });
+        }
         const wanted = met.filter((line) => line.quantity > 0);
         if (wanted.length > 0) {
           // Nothing is written (backend `0260`, A1).
@@ -204,6 +234,7 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
             content,
             quantity,
             itemIds,
+            ...(unit === 'UNIT' ? {} : { unit }),
             approvalStatus:
               options.pendingItemIds?.includes(itemId) === true
                 ? 'PENDING'
