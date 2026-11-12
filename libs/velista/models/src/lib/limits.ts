@@ -114,9 +114,12 @@ export const LINE_CONTENT_COUNTER_FROM = 350;
  * saying it is stocked: the line stays exactly where it is holding everything it
  * knows about itself, and somebody drags it back up in a fortnight. A floor of
  * one would make the ordinary end of the gesture impossible.
+ *
+ * **The ceiling is 999 999 base units** (backend plan 0262): 999,999 kg,
+ * 999,999 l or 999 999 pieces, the same number as the contracts.
  */
 export const LINE_QUANTITY_MIN = 0;
-export const LINE_QUANTITY_MAX = 100000;
+export const LINE_QUANTITY_MAX = 999999;
 
 /** How long a held stepper button waits before it repeats (velista 0188). */
 export const QUANTITY_HOLD_DELAY_MS = 400;
