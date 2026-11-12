@@ -79,6 +79,9 @@ function shown(
     favorite: false,
     others: 0,
     price: { amount: '0,92 €', per: null },
+    brand: null,
+    size: null,
+    total: null,
     ...overrides,
   };
 }
@@ -883,21 +886,20 @@ describe('LineRow', () => {
       return fixture;
     }
 
-    /** A pack: the size, the price per litre equal to the price, the price. */
+    /** A pack at 0,99 €, totalled at two. */
     function pack(
       overrides: Partial<LineRowShownProduct> = {}
     ): LineRowShownProduct {
       return shown({
         brand: 'Hacendado',
         size: '1 L',
-        perMeasure: { amount: '0,99 €', per: '/ L' },
         price: { amount: '0,99 €', per: null },
-        askedCost: null,
+        total: { amount: '1,98 €', estimated: false },
         ...overrides,
       });
     }
 
-    /** A loose product at 2,50 € / kg, costed at 750 g. */
+    /** A loose product at 2,50 € / kg, totalled at 750 g. */
     function loose(
       overrides: Partial<LineRowShownProduct> = {}
     ): LineRowShownProduct {
@@ -906,9 +908,8 @@ describe('LineRow', () => {
         brand: null,
         brandSize: null,
         size: null,
-        perMeasure: { amount: '2,50 €', per: '/ kg' },
         price: { amount: '2,50 €', per: '/ kg' },
-        askedCost: { amount: '1,88 €', estimated: true },
+        total: { amount: '1,88 €', estimated: true },
         ...overrides,
       });
     }
@@ -959,11 +960,38 @@ describe('LineRow', () => {
       );
     });
 
-    it('draws the three facts in order: size, price per measure, price', async () => {
-      const fixture = await compact(vm({ product: pack() }));
+    it('draws a pack of two as its size, its price, and the total of two with no mark', async () => {
+      const fixture = await compact(vm({ quantity: 2, product: pack() }));
 
-      expect(facts(fixture)).toEqual(['1 L', '0,99 € / L', '0,99 €']);
+      expect(facts(fixture)).toEqual(['1 L', '0,99 €', '1,98 €']);
       expect(query(fixture, '.fact.price')?.textContent).not.toContain('≈');
+    });
+
+    it('draws both lines for a pack of one, though they say one number', async () => {
+      const fixture = await compact(
+        vm({
+          quantity: 1,
+          product: pack({ total: { amount: '0,99 €', estimated: false } }),
+        })
+      );
+
+      expect(facts(fixture)).toEqual(['1 L', '0,99 €', '0,99 €']);
+    });
+
+    it('draws a kilo piece as its weight, its piece price and the estimated total', async () => {
+      const fixture = await compact(
+        vm({
+          quantity: 3,
+          product: pack({
+            brand: null,
+            size: '~2,5 kg',
+            price: { amount: '34,98 €', per: null },
+            total: { amount: '104,94 €', estimated: true },
+          }),
+        })
+      );
+
+      expect(facts(fixture)).toEqual(['~2,5 kg', '34,98 €', '≈104,94 €']);
     });
 
     it('draws a product with no brand without a brand', async () => {
@@ -972,7 +1000,7 @@ describe('LineRow', () => {
       expect(query(fixture, '.brand')).toBeNull();
     });
 
-    it('marks what 750 g of a loose product costs, with an empty size line', async () => {
+    it('marks the total of 750 g of a loose product, under its price per kilo', async () => {
       const fixture = await compact(
         vm({ quantity: 750, unit: 'GRAM', product: loose() })
       );
@@ -980,24 +1008,30 @@ describe('LineRow', () => {
       expect(facts(fixture)).toEqual(['', '2,50 € / kg', '≈1,88 €']);
     });
 
-    it('leaves the third line of a loose product at zero empty', async () => {
+    it('leaves the third line empty at zero, for a loose product and a pack', async () => {
       const fixture = await compact(
         vm({
           quantity: 0,
           unit: 'GRAM',
-          product: loose({ askedCost: null }),
+          product: loose({ total: null }),
         })
       );
 
       expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
       expect(query(fixture, '.fact.price.none')).toBeNull();
+
+      const packAtZero = await compact(
+        vm({ quantity: 0, product: pack({ total: null }) })
+      );
+      expect(facts(packAtZero)).toEqual(['1 L', '0,99 €', '']);
     });
 
-    it('says No price for a product with none', async () => {
+    it('says No price on the third line, and leaves the second empty, for a product with none', async () => {
       const fixture = await compact(
-        vm({ product: pack({ price: null, perMeasure: null }) })
+        vm({ product: pack({ price: null, total: null }) })
       );
 
+      expect(facts(fixture)).toEqual(['1 L', '', 'list.row.noPrice']);
       expect(text(fixture, '.fact.price.none')).toBe('list.row.noPrice');
     });
 
@@ -1084,13 +1118,23 @@ describe('LineRow', () => {
     });
 
     describe('the accessible name (section 5)', () => {
-      it('says the label, the brand, the size, both prices and the quantity of a pack', async () => {
+      it('says the label, the brand, the size, the unit price, the total and the quantity of a pack', async () => {
         const fixture = await compact(
           vm({ content: 'Leche', named: true, quantity: 2, product: pack() })
         );
 
         expect(row(fixture).getAttribute('aria-label')).toBe(
-          'Leche, Hacendado, 1 L, 0,99 € / L, 0,99 €, 2'
+          'Leche, Hacendado, 1 L, 0,99 €, 1,98 €, 2'
+        );
+      });
+
+      it('says no total at zero', async () => {
+        const fixture = await compact(
+          vm({ content: 'Leche', quantity: 0, product: pack({ total: null }) })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Leche, Hacendado, 1 L, 0,99 €, 0'
         );
       });
 
@@ -1121,7 +1165,7 @@ describe('LineRow', () => {
         );
 
         expect(row(fixture).getAttribute('aria-label')).toBe(
-          'Queso, list.row.favorite, Hacendado, 1 L, 0,99 € / L, 0,99 €, list.row.more, 1'
+          'Queso, list.row.favorite, Hacendado, 1 L, 0,99 €, 1,98 €, list.row.more, 1'
         );
       });
 
@@ -1205,8 +1249,8 @@ describe('LineRow', () => {
     });
 
     /**
-     * The owner's decision of 2026-11-12: while the amount is being saved, line 3
-     * draws the saving mark in place of the price, which still follows the stored
+     * The owner's decisions of 2026-11-12: while the amount is being saved, line 3
+     * draws the saving mark in place of the total, which still follows the stored
      * amount. Lines 1 and 2 stay.
      */
     describe('the saving mark (2026-11-12)', () => {
@@ -1214,7 +1258,7 @@ describe('LineRow', () => {
         return query(fixture, '.fact.price.saving lib-spinner-icon');
       }
 
-      it('stands in for the price during an open run, and keeps the price per kilo', async () => {
+      it('stands in for the total during an open run, and keeps the price per kilo', async () => {
         const fixture = await compact(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
@@ -1228,14 +1272,14 @@ describe('LineRow', () => {
         expect(fixture.nativeElement.textContent).not.toContain('1,88');
       });
 
-      it('stands in for the price while the write is in flight', async () => {
+      it('stands in for the total while the write is in flight', async () => {
         const fixture = await compact(
           vm({
             quantity: 1000,
             unit: 'GRAM',
             write: 'pending',
             product: loose({
-              askedCost: { amount: '2,50 €', estimated: true },
+              total: { amount: '2,50 €', estimated: true },
             }),
           })
         );
@@ -1245,7 +1289,7 @@ describe('LineRow', () => {
         expect(row(fixture).classList).toContain('in-flight');
       });
 
-      it('draws the price for the new amount once the write has landed', async () => {
+      it('draws the total of the new amount once the write has landed', async () => {
         const fixture = await compact(
           vm({ quantity: 750, unit: 'GRAM', product: loose() }),
           { pending: 1000 }
@@ -1258,7 +1302,7 @@ describe('LineRow', () => {
             quantity: 1000,
             unit: 'GRAM',
             product: loose({
-              askedCost: { amount: '2,50 €', estimated: true },
+              total: { amount: '2,50 €', estimated: true },
             }),
           })
         );
@@ -1268,7 +1312,7 @@ describe('LineRow', () => {
         expect(facts(fixture)).toEqual(['', '2,50 € / kg', '≈2,50 €']);
       });
 
-      it('never draws the old price between the run and its write', async () => {
+      it('never draws the old total between the run and its write', async () => {
         // `quantityRuns` clears `pending` and the line store marks the write
         // pending in one task, so both inputs change before the next render.
         const fixture = await compact(
@@ -1292,16 +1336,27 @@ describe('LineRow', () => {
         expect(fixture.nativeElement.textContent).not.toContain('≈');
       });
 
-      it('replaces a pack price too, which does not change with the amount', async () => {
+      it("replaces a pack's total too, and keeps its price", async () => {
         const fixture = await compact(vm({ quantity: 2, product: pack() }), {
           pending: 3,
         });
 
         expect(mark(fixture)).not.toBeNull();
-        expect(facts(fixture)).toEqual(['1 L', '0,99 € / L', '']);
+        expect(facts(fixture)).toEqual(['1 L', '0,99 €', '']);
+        expect(fixture.nativeElement.textContent).not.toContain('1,98');
       });
 
-      it('leaves the cost out of the name while the mark shows', async () => {
+      it('replaces No price too, while the amount is saved', async () => {
+        const fixture = await compact(
+          vm({ quantity: 2, product: pack({ price: null, total: null }) }),
+          { pending: 3 }
+        );
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(query(fixture, '.fact.price.none')).toBeNull();
+      });
+
+      it('leaves the total out of the name while the mark shows', async () => {
         const fixture = await compact(
           vm({
             content: 'Plátano de Canarias IGP',

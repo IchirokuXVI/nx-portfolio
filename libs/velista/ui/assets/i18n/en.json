@@ -1321,7 +1321,7 @@
     },
     "listRows": {
       "label": "Compact rows",
-      "hint": "Lists show the size and the price per kilo on every row. Only on this phone."
+      "hint": "Lists show the size, the price and the total on every row. Only on this phone."
     }
   },
   "install": {

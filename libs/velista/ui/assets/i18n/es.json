@@ -1321,7 +1321,7 @@
     },
     "listRows": {
       "label": "Filas compactas",
-      "hint": "Las listas muestran el tamaño y el precio por kilo en cada fila. Solo en este teléfono."
+      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono."
     }
   },
   "install": {

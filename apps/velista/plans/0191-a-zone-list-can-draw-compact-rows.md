@@ -232,12 +232,36 @@ kilo piece, a line at zero and a long brand.
   shows it on every compact row with a product, a pack's or a piece's price included,
   since the mark says the amount is being saved; the owner may narrow it to the loose
   products. Section 4.5 has the details.
+
+  **The owner, 2026-11-12, second answer** (asked whether the mark should also replace a
+  pack's price, which does not change with the amount): "The price per unit should be
+  shown in place of the price per kg/l or whatever unit it is. The bottom price is the
+  total, unit * price. The bottom price will then always make sense to load." So line 3 is
+  now **the total of the line's amount for every kind of product**: two cartons at 0,99 €
+  read "1,98 €", three kilo pieces three times the piece price, 750 g at 2,50 € / kg
+  "≈1,88 €". It is `lineAmount(quantity, unit, product, offer)` over the same product the
+  list's total counts (`lineAmountProductOf` for a named product, the offer alone for one
+  the catalog has not named), so the rows add up to the header; "≈" shows exactly when that
+  rule says `estimated` (a kilo piece and a weight or volume; a count of packs is exact).
+  At amount 0 line 3 is empty and keeps its height, for every kind. The saving mark replaces
+  line 3 on every compact row with a product, which settles the builder decision above: line
+  3 always changes with the amount. Question 3 is answered by this.
 - **D. Line 2 shows the price per measure whenever the chain gives one, also when it equals
   the price.** `unitPriceWords` (`product-row-view.ts:298`) hides a unit price equal to the
   pack price so a card does not print one number twice. In the compact row each line is a
   fixed slot that is compared down the list, so an empty slot reads as "unknown". The mock
   draws "0,99 €/l" over "0,99 €" for a litre of milk. Basis words are the existing
   `catalog.per.*` keys ("/ kg", "/ L", "/ unidad", "/ docena", "/ lavado").
+
+  **Replaced by the owner, 2026-11-12** (his words are under decision C): line 2 is **the
+  price of one of what the line counts**, in place of the comparable price per kilo or
+  litre. For a pack it is the pack's price ("0,99 €"), for a kilo piece the piece price,
+  and for a product sold by the kilo or the litre its price per kilo or litre as before
+  ("2,50 € / kg"), because that is its unit price. It is the `price` the row of today
+  already shows (`priceWords`), so no new field: `perMeasure` and `measurePriceWords` are
+  gone. **A pack's comparable figure ("0,99 € / L", "/ docena", "/ lavado") is no longer
+  drawn anywhere on the compact row.** A pack of one draws one number on both lines; the
+  owner asked for the total always, so both are drawn.
 - **E. The label is 600 for every line.** The row of today draws a name the person gave in
   600 and a product's name in 400 (`line-row.scss:121`), and draws the product's name on
   line 2 for a named line. The compact row has no slot for a second name, and the brand
@@ -299,11 +323,24 @@ kilo piece, a line at zero and a long brand.
 | key | `en` | `es` |
 | --- | --- | --- |
 | `account.listRows.label` | Compact rows | Filas compactas |
-| `account.listRows.hint` | Lists show the size and the price per kilo on every row. Only on this phone. | Las listas muestran el tamaño y el precio por kilo en cada fila. Solo en este teléfono. |
+| `account.listRows.hint` | Lists show the size, the price and the total on every row. Only on this phone. | Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono. |
+
+The hint was "the size and the price per kilo" until the owner's answer of 2026-11-12
+(decision D) took the price per kilo off a pack's row; the words now say what the row
+draws.
 
 ## 2. The view model
 
 ### 2.1 New fields, one builder
+
+> **Amended 2026-11-12 by the owner's second answer (decisions C and D).** As built:
+> `LineRowShownProduct` gains `brand`, `size` and `total: { amount, estimated } | null`,
+> and no `perMeasure` or `askedCost`. `total` is what the line's whole amount costs with
+> the shown product, for every kind, through `lineAmount` over the product the list's
+> total counts (one helper, `amountProductOf`, feeds both), null at quantity 0 and when
+> a figure is missing. Line 2 reads the existing `price`. `measurePriceWords` and its
+> spec are removed; it had no other reader. The text below is the plan as written on
+> 2026-11-11.
 
 `LineRowShownProduct` (`list-view.ts:140`) gains, each with a doc comment:
 
@@ -362,6 +399,22 @@ price.amount, estimated: false }`) when `price` is set and its `per` is null; el
 figure), `priceBlank` is true at quantity 0 and `price` is null with `priceBlank` false
 otherwise. The component reads `lineRowFacts` in a `computed` and draws; it decides
 nothing.
+
+**As amended on 2026-11-12** (decisions C and D), the function is
+`lineRowFacts(product): { size, unitPrice, total, noPrice }`:
+
+- `unitPrice` is `product.price`: a pack's price, a piece price, or a price per kilo or
+  litre with its basis.
+- `total` is `product.total`, or null when there is no unit price.
+- **No price, one rule:** with no unit price (no offer, no price, or a kilo piece with
+  no piece price) line 2 is empty and line 3 reads "No price" (`noPrice`), at any amount,
+  as line 3 always held "No price" in this plan. With a unit price and no total (amount
+  0, or a figure the amount needs is missing) line 3 is empty and keeps its height.
+- The saving mark replaces whatever line 3 holds, "No price" included.
+
+The accessible name (section 5) follows: the label, "Favourite", the brand, the size,
+the unit price, the total (with `list.row.about` when it is an estimate), "+N", the
+quantity; no total while the saving mark shows, and no total at zero.
 
 ## 3. The layout and its tokens
 
@@ -469,12 +522,19 @@ measure as for any line, and line 3 the pack or piece price. For a loose product
 empty at zero (`priceBlank`): there is no amount to cost, and the price per kilo is on the
 line above. A settled line keeps its muted label (`.row.settled`).
 
+Amended 2026-11-12 (decision C): line 3 is the total, so it is empty at zero for every
+kind of product, a pack and a piece included; line 2 keeps the unit price.
+
 ### 4.5 The estimate mark
 
 Line 3 of a loose product is drawn `≈{{ amount }}` with no space, as the list header draws a
 cost (`list-header.html:49`), and the facts are never read out on their own (the row is a
 button with its own name, section 5), so no visually hidden words are needed in the column.
 A pack or piece price carries no mark.
+
+Amended 2026-11-12 (decision C): the mark goes with the total and follows `lineAmount`'s
+`estimated`. A count of packs is exact and carries none; a count of kilo pieces is an
+estimate ("≈104,94 €" for three at 34,98 €), as the list header already counts it.
 
 **The saving mark, the owner's decision of 2026-11-12** ("Hide the price (not the
 price/unit) and show a loading. It is also a good indicator of the save progress"):
@@ -560,6 +620,16 @@ The owner asked for these to be stated; the plan does not fix them.
   fall back to the default layout while reordering.
 
 ## 8. Specs and e2e
+
+> **Amended 2026-11-12** (decisions C and D). `line-row-facts.spec.ts`, the compact
+> `rowProduct` cases of `select-list-state.spec.ts` and the compact `line-row.spec.ts`
+> cases now hold the new meaning: a pack of two (unit price, total twice it, no mark), a
+> pack of one (both lines drawn), a loose product at 750 g ("≈") and at 0 (empty), a pack
+> at 0 (empty), three kilo pieces (piece price, "≈" total), no price (line 2 empty, line
+> 3 "No price"), the rows' totals adding up to the header's, a product the catalog has not
+> named totalled by its offer, the accessible names, and the saving mark over a pack's
+> total and over "No price". `product-row-view.spec.ts` is gone with `measurePriceWords`.
+> The e2e is unchanged: its loose product's line 2 is still its price per kilo.
 
 - `list-rows-store.spec.ts` (data-access): the default with no record, with a record that is
   not JSON, not a record, or names an unknown layout; `setLayout('compact')` sets the signal
@@ -658,7 +728,8 @@ The owner asked for these to be stated; the plan does not fix them.
    language, named "Compact rows" / "Filas compactas", kept on this phone only?
 2. Off by default while you compare, or on by default for everybody so the trial reaches
    more people?
-3. The third fact line: a pack's price and a piece's price as the row of today shows them,
+3. **Answered 2026-11-12: every line shows what its whole amount costs** (decisions C and
+   D). The third fact line: a pack's price and a piece's price as the row of today shows them,
    and for a product sold by weight or volume what the asked amount costs, with "≈"
    (decision C). Or should every line show what its whole amount costs (2 cartons of milk
    at 0,99 € reading "1,98 €")?

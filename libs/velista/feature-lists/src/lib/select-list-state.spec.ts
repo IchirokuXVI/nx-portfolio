@@ -413,39 +413,26 @@ describe('selectListState', () => {
         price: { amount: money(0.92), per: null },
         brand: 'Hacendado',
         size: '1 L',
-        perMeasure: null,
-        askedCost: null,
+        // Formatted by the catalog the spec hands in, which spaces with a plain space.
+        total: { amount: '0,92 €', estimated: false },
       });
     });
 
     describe("the compact row's facts (velista 0191)", () => {
-      it('gives a pack its brand, its size and its unit price, also when it equals the price', () => {
-        const row = rowOf(
-          { content: 'Leche', itemIds: ['milk'], quantity: 2 },
-          {
-            catalog: catalog({
-              itemOf: (itemId) =>
-                itemId === 'milk'
-                  ? ({
-                      ...ITEMS.get('milk'),
-                      unitBasis: 'LITER',
-                    } as CatalogItem)
-                  : null,
-            }),
-          }
-        );
+      it('gives a pack of two its brand, its size, its pack price and the total of two, exact', () => {
+        const row = rowOf({ content: 'Leche', itemIds: ['milk'], quantity: 2 });
 
         expect(row.product).toEqual(
           expect.objectContaining({
             brand: 'Hacendado',
             size: '1 L',
-            perMeasure: { amount: money(0.92), per: 'catalog.per.LITER' },
-            askedCost: null,
+            price: { amount: money(0.92), per: null },
+            total: { amount: '1,84 €', estimated: false },
           })
         );
       });
 
-      it('costs 750 g of a loose product, as an estimate', () => {
+      it('totals 750 g of a loose product, as an estimate', () => {
         const row = rowOf({
           content: 'Manzanas',
           itemIds: ['apples'],
@@ -456,42 +443,71 @@ describe('selectListState', () => {
         expect(row.product).toEqual(
           expect.objectContaining({
             size: null,
-            perMeasure: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
+            price: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
             // Formatted by the catalog the spec hands in, which spaces with a plain space.
-            askedCost: { amount: '1,87 €', estimated: true },
+            total: { amount: '1,87 €', estimated: true },
           })
         );
       });
 
-      it('costs nothing at zero', () => {
-        const row = rowOf({
+      it('totals nothing at zero, for a loose product and a pack alike', () => {
+        const loose = rowOf({
           content: 'Manzanas',
           itemIds: ['apples'],
           quantity: 0,
           unit: 'GRAM',
         });
+        const pack = rowOf({
+          content: 'Leche',
+          itemIds: ['milk'],
+          quantity: 0,
+        });
 
-        expect(row.product).toEqual(
-          expect.objectContaining({ askedCost: null })
-        );
+        expect(loose.product).toEqual(expect.objectContaining({ total: null }));
+        expect(pack.product).toEqual(expect.objectContaining({ total: null }));
       });
 
-      it('gives a kilo piece its weight and its price per kilo, and no asked cost', () => {
+      it('gives three kilo pieces their weight, the piece price and three times it, as an estimate', () => {
         const row = rowOf({
           content: 'Queso',
           itemIds: ['cheese'],
-          quantity: 1,
+          quantity: 3,
           unit: 'UNIT',
         });
 
         expect(row.product).toEqual(
           expect.objectContaining({
             size: '~1,56 kg',
-            perMeasure: { amount: money(13.42), per: 'catalog.per.KILOGRAM' },
             price: { amount: money(20.94), per: null },
-            askedCost: null,
+            total: { amount: '62,82 €', estimated: true },
           })
         );
+      });
+
+      it('counts the total the list header counts', () => {
+        const state = loaded(
+          select({
+            lines: [
+              line({ id: 'a', itemIds: ['milk'], quantity: 2 }),
+              line({
+                id: 'b',
+                itemIds: ['apples'],
+                quantity: 750,
+                unit: 'GRAM',
+                position: 2,
+              }),
+            ],
+            catalog: catalog(),
+          })
+        );
+
+        // 1,84 € and 1,87 €, so the header's 3,71 € is the sum of the rows.
+        expect(
+          state.lines.map((row) =>
+            row.product?.kind === 'shown' ? row.product.total?.amount : null
+          )
+        ).toEqual(['1,84 €', '1,87 €']);
+        expect(state.header.cost).toBe('3,71 €');
       });
 
       it('reads an empty brand as none', () => {
@@ -510,24 +526,34 @@ describe('selectListState', () => {
         expect(row.product).toEqual(expect.objectContaining({ brand: null }));
       });
 
-      it('has none of them for a product the catalog has not named', () => {
-        const row = rowOf(
+      it('has no brand or size for a product the catalog has not named, and totals it by its offer', () => {
+        const unnamed = { catalog: catalog({ itemOf: () => null }) };
+        const weighed = rowOf(
           {
             content: 'Manzanas',
             itemIds: ['apples'],
             quantity: 750,
             unit: 'GRAM',
           },
-          { catalog: catalog({ itemOf: () => null }) }
+          unnamed
+        );
+        const counted = rowOf(
+          { content: 'Leche', itemIds: ['milk'], quantity: 2 },
+          unnamed
         );
 
-        expect(row.product).toEqual(
+        expect(weighed.product).toEqual(
           expect.objectContaining({
             name: null,
             brand: null,
             size: null,
-            perMeasure: null,
-            askedCost: null,
+            // Read as a pack by its offer, which cannot serve a weight.
+            total: null,
+          })
+        );
+        expect(counted.product).toEqual(
+          expect.objectContaining({
+            total: { amount: '1,84 €', estimated: false },
           })
         );
       });

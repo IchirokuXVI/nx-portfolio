@@ -4,11 +4,11 @@ import {
   lineAmountProductOf,
   lineShownProduct,
   listCost,
-  soldAs,
   soldAsOf,
   type CatalogItem,
   type Line,
   type LineAction,
+  type LineAmountProduct,
   type LineEditScope,
   type LineIndicator,
   type LineName,
@@ -26,11 +26,7 @@ import {
   type ProductOffer,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
-import {
-  measurePriceWords,
-  priceWords,
-  type CatalogTranslate,
-} from '@portfolio/velista/ui';
+import { priceWords, type CatalogTranslate } from '@portfolio/velista/ui';
 
 /**
  * What the caller may do on this list, as the server answered it.
@@ -406,40 +402,32 @@ function rowProduct(
     // price. A product the catalog has not named is priced by its offer alone.
     price: priceWords(offer, item, catalog.locale, catalog.translate),
     // The compact row's facts (velista `0191`, section 2.1). Built here and
-    // nowhere else, so both layouts read one product.
+    // nowhere else, so both layouts read one product. Its unit price is `price`.
     brand: item === null ? null : nonEmpty(item.brand ?? ''),
     size: item === null ? null : catalog.sizeOf(item),
-    perMeasure:
-      item === null
-        ? null
-        : measurePriceWords(offer, item, catalog.locale, catalog.translate),
-    askedCost: item === null ? null : askedCostOf(line, item, offer, catalog),
+    total: totalOf(line, item, offer, catalog),
   };
 }
 
 /**
- * What a line's amount of a loose product costs, with its estimate mark, or null
- * (velista `0191`, decision C): only for a product sold by the kilo or the litre, a
- * line above zero, and a cost with every figure it needs.
+ * What a line's whole amount costs with its shown product, with its estimate mark,
+ * or null at zero and when a figure is missing (velista `0191`, the owner's decision
+ * of 2026-11-12). The same `lineAmount` over the same product the list's total
+ * counts, so the rows add up to the header.
  */
-function askedCostOf(
+function totalOf(
   line: Line,
-  item: CatalogItem,
+  item: CatalogItem | null,
   offer: ProductOffer | null,
   catalog: ListStateCatalog
-): LineRowShownProduct['askedCost'] {
-  const kind = soldAs(item.unit, item.size, item.approxWeight);
-  if (
-    offer === null ||
-    line.quantity <= 0 ||
-    (kind !== 'BY_THE_KILO' && kind !== 'BY_THE_LITRE')
-  ) {
+): LineRowShownProduct['total'] {
+  if (offer === null || line.quantity <= 0) {
     return null;
   }
   const cost = lineAmount(
     line.quantity,
     line.unit,
-    lineAmountProductOf(item),
+    amountProductOf(offer, item),
     offer
   );
   return cost === null
@@ -447,6 +435,26 @@ function askedCostOf(
     : {
         amount: catalog.formatMoney(cost.cents / 100, offer.currency),
         estimated: cost.estimated,
+      };
+}
+
+/**
+ * The shown product as `lineAmount` reads it: how it is sold and its size, so a kilo
+ * piece counts its piece price and a weight its price per kilo times its grams
+ * (velista `0179` and `0182`). A product the catalog has not named is read by its
+ * offer: a set piece price names a kilo piece.
+ */
+function amountProductOf(
+  offer: ProductOffer | null,
+  item: CatalogItem | null
+): LineAmountProduct {
+  return item !== null
+    ? lineAmountProductOf(item)
+    : {
+        kind: soldAsOf(offer, null),
+        unit: null,
+        size: null,
+        approxWeight: null,
       };
 }
 
@@ -485,16 +493,7 @@ function costOf(
         quantity: line.quantity,
         unit: line.unit,
         offer,
-        // How the shown product is sold and its size, so a kilo piece adds its
-        // piece price and a weight its price per kilo times its grams (velista
-        // `0179` and `0182`). A product the catalog has not named is read by its
-        // offer: a set piece price names a kilo piece.
-        product: {
-          kind: soldAsOf(offer, item),
-          unit: item?.unit ?? null,
-          size: item?.size ?? null,
-          approxWeight: item?.approxWeight ?? null,
-        },
+        product: amountProductOf(offer, item),
       };
     })
   );

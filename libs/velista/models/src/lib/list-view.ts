@@ -168,16 +168,13 @@ export interface LineRowShownProduct {
    */
   readonly size: string | null;
   /**
-   * The price per kilo, litre or unit, whenever the chain gives one, also when it
-   * equals the price (velista `0191`, decision D). Null without a figure or a basis.
+   * What the line's whole amount costs with this product, as the list's total
+   * counts it (`lineAmount`), for every kind of product (velista `0191`, the owner's
+   * decision of 2026-11-12): two packs at 0,99 € are "1,98 €", 750 g at 2,50 € / kg
+   * is about "1,88 €". `estimated` is the rule's own flag. Null at zero and when a
+   * figure the amount needs is missing.
    */
-  readonly perMeasure: PriceWords | null;
-  /**
-   * What the line's amount costs, set only for a product sold by the kilo or by the
-   * litre and a line above zero whose cost has every figure it needs (velista
-   * `0191`, decision C). `estimated` is true for every such line today.
-   */
-  readonly askedCost: {
+  readonly total: {
     readonly amount: string;
     readonly estimated: boolean;
   } | null;
@@ -196,46 +193,38 @@ export const DEFAULT_LIST_ROW_LAYOUT: ListRowLayout = 'default';
 export interface LineRowFacts {
   /** Line 1 of the facts column, or null for an empty line. */
   readonly size: string | null;
-  /** Line 2: the price per kilo, litre or unit, as words, or null. */
-  readonly perMeasure: PriceWords | null;
-  /** Line 3: the price, or null for "No price". */
-  readonly price: {
+  /**
+   * Line 2: the price of one of what the line counts, as words: a pack's price, a
+   * kilo piece's piece price, or the price of a kilo or a litre with its "/ kg" or
+   * "/ L". Null with no price, and line 3 then says so.
+   */
+  readonly unitPrice: PriceWords | null;
+  /** Line 3: what the line's amount costs, or null for an empty line. */
+  readonly total: {
     readonly amount: string;
     readonly estimated: boolean;
   } | null;
-  /** Line 3 is empty, not "No price": a loose product at zero (section 4.4). */
-  readonly priceBlank: boolean;
+  /** Line 3 reads "No price": the product has no price to count at any amount. */
+  readonly noPrice: boolean;
 }
 
 /**
  * The three facts a compact row draws for its product, decided once so the template
- * only draws (velista `0191`, section 2.2).
+ * only draws (velista `0191`, section 2.2, as the owner's decision of 2026-11-12
+ * reads it).
  *
- * Line 3 is the asked amount's cost when the builder set one; else the price, exact,
- * when it is per nothing (a pack or a piece); else the product is loose, and line 3
- * is empty at zero and "No price" above it, because a loose line with an amount and no
- * cost is missing a figure.
+ * Line 2 is the unit price, the price the row of today shows. Line 3 is the total
+ * the builder counted. With no unit price line 2 is empty and line 3 says "No
+ * price", at any amount; with a unit price and no total (zero, or a figure the
+ * amount needs is missing) line 3 is empty and keeps its height.
  */
-export function lineRowFacts(
-  product: LineRowShownProduct,
-  quantity: number
-): LineRowFacts {
-  const facts = { size: product.size, perMeasure: product.perMeasure };
-  if (product.askedCost !== null) {
-    return { ...facts, price: product.askedCost, priceBlank: false };
-  }
-  const price = product.price;
-  if (price === null) {
-    return { ...facts, price: null, priceBlank: false };
-  }
-  if (price.per === null) {
-    return {
-      ...facts,
-      price: { amount: price.amount, estimated: false },
-      priceBlank: false,
-    };
-  }
-  return { ...facts, price: null, priceBlank: quantity === 0 };
+export function lineRowFacts(product: LineRowShownProduct): LineRowFacts {
+  return {
+    size: product.size,
+    unitPrice: product.price,
+    total: product.price === null ? null : product.total,
+    noPrice: product.price === null,
+  };
 }
 
 /** One line, ready to draw. */

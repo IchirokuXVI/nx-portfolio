@@ -334,46 +334,6 @@ export function unitPriceWords(
 }
 
 /**
- * The price per kilo, litre or unit of a compact row's second fact line, or null
- * (velista `0191`, decision D).
- *
- * - A product sold by the kilo or the litre answers its price with its "/ kg" or
- *   "/ L", which is {@link priceWords}.
- * - A kilo piece answers its price per kilo, which is {@link unitPriceWords}.
- * - A pack answers the chain's unit price with its basis whenever both are set,
- *   **also when it equals the price**: on a compact row each fact is a slot read
- *   down the list, and an empty slot reads as "unknown", where the card that
- *   {@link unitPriceWords} serves would print one number twice.
- */
-export function measurePriceWords(
-  offer: ProductOffer | null,
-  product: PricedProduct | null,
-  locale: string,
-  translate: CatalogTranslate
-): PriceWords | null {
-  if (offer === null || offer.price === null) {
-    return null;
-  }
-  switch (soldAsOf(offer, product)) {
-    case 'BY_THE_KILO':
-    case 'BY_THE_LITRE':
-      return priceWords(offer, product, locale, translate);
-    case 'KILO_PIECE':
-      return unitPriceWords(offer, product, locale, translate);
-    case 'PACK': {
-      const basis = product?.unitBasis ?? null;
-      if (offer.unitPrice === null || basis === null) {
-        return null;
-      }
-      return {
-        amount: formatMoney(offer.unitPrice, offer.currency, locale),
-        per: translate(`catalog.per.${basis}`),
-      };
-    }
-  }
-}
-
-/**
  * The catalog's comparable figure with its basis ("13,42 € / kg"), or null when
  * the offer carries no pair or no price (backend `0245`). Printed as the server
  * sent it, never derived here.
