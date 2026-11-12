@@ -1,10 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   demoWorld,
   ITEM_MILK_ID,
   LINE_MILK_ID,
   LIST_GROCERIES_ID,
   PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+  ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
   addProductLine,
@@ -13,11 +14,14 @@ import {
   categoryIdBySlug,
   deleteLine,
   ensureItem,
+  finishOpenBaskets,
   lineSettlements,
+  listLines,
   login,
   readLine,
   resetAliceWorld,
   setAdminPrice,
+  type LineView,
   type Session,
 } from './support/api';
 import {
@@ -471,6 +475,225 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     expect(await readLine(alice, LIST_GROCERIES_ID, lineId)).toMatchObject({
       quantity: 750,
       unit: 'GRAM',
+    });
+  });
+});
+
+/**
+ * A typed name already on the list adds nothing (velista plan 0185, A1).
+ *
+ * The loose product of the describe above, on a line of its own at a kilo. The
+ * composer types its name and presses add: the line still asks for 1000 g, no row
+ * of that name is drawn beside it, and the list holds one line of it, in grams, at
+ * 1000. The line is made per run and deleted after.
+ */
+test.describe('a typed name already on the list (velista 0185)', () => {
+  const NAME = { en: 'Loose bananas e2e', es: 'Plátanos a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('leaves the line at 1000 g, draws no second row, and says it is on the list', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+    const amount = page.locator(
+      `lib-line-list [data-line-id="${lineId}"] lib-quantity-stepper`
+    );
+    await expect(amount).toHaveAttribute('data-value', '1000');
+
+    await composerField(page).fill(NAME.en);
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+
+    await expect(composerField(page)).toHaveValue('');
+    // Said in the page's live region, not drawn under the field: the row is drawn.
+    await expect(
+      page.getByText(`${NAME.en} is already on the list.`).first()
+    ).toBeAttached();
+    await expect(page.locator('lib-line-composer .notice')).toHaveCount(0);
+    await expect(amount).toHaveAttribute('data-value', '1000');
+    await expect(amount).toHaveClass(/is-took/);
+    await expect(
+      page.locator('lib-line-list lib-line-row').filter({ hasText: NAME.en })
+    ).toHaveCount(1);
+
+    const held = (await listLines(alice, LIST_GROCERIES_ID)).filter(
+      (one) => one.content === NAME.en
+    );
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({ id: lineId, quantity: 1000, unit: 'GRAM' });
+  });
+});
+
+/**
+ * The search field at the top of a list (velista 0189, section 8).
+ *
+ * On both pages the field sits above the first row, the bottom bar stays while
+ * somebody types, and the first touch drag of the results takes the focus off the
+ * field while the words, the results and `?search=1` stay. Desktop Chrome has no
+ * on screen keyboard, so this proves the blur, not the keyboard.
+ *
+ * The drag goes through the DevTools protocol with touch emulation on, because a
+ * synthetic DOM event is not what the browser scrolls with: this is the touch a
+ * finger makes, with the pointer cancelled once the browser takes it for a scroll.
+ * The two lines are made per run and deleted after.
+ */
+test.describe('the search field at the top of a list (velista 0189)', () => {
+  const RUN = `${Date.now()}`;
+  const WORD = 'Topsearch';
+  let alice: Session;
+  const made: LineView[] = [];
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    await resetAliceWorld(alice);
+    for (const what of ['soap', 'sponge']) {
+      const answer = await alice.post<{ line: LineView }>(
+        `/v1/lists/${LIST_GROCERIES_ID}/lines`,
+        { content: `${WORD} ${RUN} ${what}`, quantity: 1 }
+      );
+      made.push(answer.line);
+    }
+  });
+
+  test.afterAll(async () => {
+    // The basket step leaves a live basket holding the two lines.
+    await finishOpenBaskets(alice);
+    for (const line of made) await deleteLine(alice, line.id);
+    await alice?.dispose();
+  });
+
+  /** A finger on `target` that moves 120 px up in three steps and lifts. */
+  async function touchDrag(page: Page, target: Locator): Promise<void> {
+    const box = await target.boundingBox();
+    if (box === null) throw new Error('nothing to drag');
+    const x = box.x + box.width / 2;
+    const y = box.y + Math.min(box.height - 10, 200);
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x, y }],
+    });
+    for (const step of [1, 2, 3]) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: y - step * 40 }],
+      });
+    }
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await cdp.detach();
+  }
+
+  test('sits above the rows, keeps the bar, and lets a drag take the keyboard down', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+
+    await test.step('1. the zone list', async () => {
+      await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+      const field = composerField(page);
+      const firstRow = page.locator('lib-line-list .line').first();
+      await expect(firstRow).toBeVisible();
+
+      const fieldBox = await field.boundingBox();
+      const rowBox = await firstRow.boundingBox();
+      expect(fieldBox).not.toBeNull();
+      expect(rowBox).not.toBeNull();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        rowBox?.y ?? 0
+      );
+
+      await field.fill(WORD);
+      const results = page.locator('#list-results');
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+      await expect(
+        page.getByRole('navigation', { name: 'Main sections' })
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+
+      await touchDrag(page, results);
+
+      await expect(field).not.toBeFocused();
+      await expect(field).toHaveValue(WORD);
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+    });
+
+    await test.step('2. the shopping list', async () => {
+      const basketId = await generateBasket(
+        page,
+        ['Groceries'],
+        `Top search ${RUN}`
+      );
+      await expectBasketUrl(page, basketId);
+      const field = composerField(page);
+      await expect(rows(page).first()).toBeVisible();
+      const fieldBox = await field.boundingBox();
+      const rowBox = await rows(page).first().boundingBox();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        rowBox?.y ?? 0
+      );
+
+      await field.fill(WORD);
+      const results = page.locator('#basket-results');
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+      await expect(page.locator('.tools-bar')).toBeVisible();
+      await expect(
+        page.getByRole('navigation', { name: 'Main sections' })
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+
+      await touchDrag(page, results);
+
+      await expect(field).not.toBeFocused();
+      await expect(field).toHaveValue(WORD);
+      await expect(results).toBeVisible();
+      await expect(page.locator('.tools-bar')).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
     });
   });
 });

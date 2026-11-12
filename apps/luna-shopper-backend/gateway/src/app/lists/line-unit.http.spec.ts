@@ -10,6 +10,8 @@ import {
   createValidationPipe,
   ERROR_CODES,
   GlobalExceptionFilter,
+  LINE_UNIT_DIFFERS_ADD_VARIANT,
+  LineUnitDiffersException,
   LineUnitMismatchException,
 } from '@portfolio/luna-shopper/platform';
 import type { AddressInfo } from 'node:net';
@@ -40,6 +42,27 @@ const LOOSE = 'cf000000-0000-4000-a000-0000000000c3';
 const BAG = 'cf000000-0000-4000-a000-0000000000c4';
 /** A box of six eggs, which serves pieces alone. */
 const EGGS = 'cf000000-0000-4000-a000-0000000000c5';
+/** A line of several products that counts pieces and holds LOOSE (plan 0260). */
+const MIXED = 'cf000000-0000-4000-a000-0000000000c6';
+
+/** A line view as core answers it, enough of one for a client to draw. */
+const lineView = (
+  id: string,
+  content: string,
+  quantity: number,
+  unit: string
+) => ({ id, listId: LIST, content, quantity, unit, version: 7 });
+
+/** Core's refusal of a product add met only in another unit (plan 0260). */
+const unitDiffers = (index: number | null) =>
+  new LineUnitDiffersException('"Fruta" counts in another unit', {
+    details: {
+      line: { lineId: MIXED, content: 'Fruta', unit: 'UNIT', quantity: 2 },
+      unit: 'GRAM',
+      index,
+    },
+    messageArgs: { content: 'Fruta', variant: LINE_UNIT_DIFFERS_ADD_VARIANT },
+  });
 
 /** What catalog knows of each product's size. */
 const SIZES: Record<
@@ -87,6 +110,45 @@ async function boot() {
               }
               if (subject === LINE_PATTERNS.unitBasis) {
                 return basis;
+              }
+              // What core answers an add that meets a line (plan 0260): the
+              // typed name of a wanted line, and a loose product that only a
+              // line of pieces holds.
+              if (subject === LINE_PATTERNS.add) {
+                if (body['content'] === 'Platanos') {
+                  const met = lineView(LINE, 'Platanos', 750, 'GRAM');
+                  return {
+                    line: met,
+                    merged: true,
+                    outcome: 'ALREADY_ON_LIST',
+                    alreadyOnList: [met],
+                  };
+                }
+                if (body['content'] === 'Fruta') {
+                  throw unitDiffers(null);
+                }
+              }
+              if (subject === LINE_PATTERNS.addMany) {
+                const items = body['items'] as { content: string }[];
+                if (items[0]?.content === 'Fruta') {
+                  throw unitDiffers(0);
+                }
+                return items.map((item, index) => {
+                  const view = lineView(`li-${index}`, item.content, 1, 'UNIT');
+                  return index === 0
+                    ? {
+                        line: view,
+                        merged: false,
+                        outcome: 'CREATED',
+                        alreadyOnList: [],
+                      }
+                    : {
+                        line: view,
+                        merged: true,
+                        outcome: 'ALREADY_ON_LIST',
+                        alreadyOnList: [view],
+                      };
+                });
               }
               if (
                 subject === LINE_PATTERNS.addQuantity &&
@@ -307,6 +369,73 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
     });
   });
 
+  describe('an add that meets a line already on the list (plan 0260)', () => {
+    it('answers 201 with the outcome and the lines met on the list add', async () => {
+      const response = await send('POST', `lists/${LIST}/lines`, {
+        content: 'Platanos',
+      });
+
+      expect(response.status).toBe(201);
+      expect(await response.json()).toEqual({
+        line: lineView(LINE, 'Platanos', 750, 'GRAM'),
+        merged: true,
+        outcome: 'ALREADY_ON_LIST',
+        alreadyOnList: [lineView(LINE, 'Platanos', 750, 'GRAM')],
+      });
+    });
+
+    it('answers 201 with an outcome per item on the batch add', async () => {
+      const response = await send('POST', `lists/${LIST}/lines/batch`, {
+        items: [{ content: 'Pan' }, { content: 'pan' }],
+      });
+
+      expect(response.status).toBe(201);
+      const body = (await response.json()) as {
+        outcome: string;
+        alreadyOnList: unknown[];
+      }[];
+      expect(body.map((slot) => slot.outcome)).toEqual([
+        'CREATED',
+        'ALREADY_ON_LIST',
+      ]);
+      expect(body.map((slot) => slot.alreadyOnList.length)).toEqual([0, 1]);
+    });
+
+    it('answers 409 line_unit_differs with its details on the list add', async () => {
+      const response = await send('POST', `lists/${LIST}/lines`, {
+        content: 'Fruta',
+        itemIds: [LOOSE],
+        unit: 'GRAM',
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: ERROR_CODES.LINE_UNIT_DIFFERS,
+        status: 409,
+        // The add's own sentence, not the merge's (the owner, 2026-11-12).
+        message:
+          '"Fruta" is already on this list in another unit. Change the amount on that line.',
+        details: {
+          line: { lineId: MIXED, content: 'Fruta', unit: 'UNIT', quantity: 2 },
+          unit: 'GRAM',
+          index: null,
+        },
+      });
+    });
+
+    it('answers 409 line_unit_differs naming the item on the batch add', async () => {
+      const response = await send('POST', `lists/${LIST}/lines/batch`, {
+        items: [{ content: 'Fruta', itemIds: [LOOSE], unit: 'GRAM' }],
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({
+        code: ERROR_CODES.LINE_UNIT_DIFFERS,
+        details: { line: { lineId: MIXED }, unit: 'GRAM', index: 0 },
+      });
+    });
+  });
+
   describe('POST /v1/lists/:id/lines/batch', () => {
     it('refuses the batch when one item asks for a unit its products do not offer', async () => {
       const response = await send('POST', `lists/${LIST}/lines/batch`, {
@@ -389,6 +518,67 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       ]);
     });
   });
+
+  describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
+    it('passes a delta of 999 000 g to core', async () => {
+      const response = await send('POST', `lines/${LINE}/quantity`, {
+        delta: 999000,
+        unit: 'GRAM',
+      });
+
+      expect(response.status).toBe(201);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.addQuantity,
+          payload: {
+            userId: 'user-1',
+            lineId: LINE,
+            delta: 999000,
+            unit: 'GRAM',
+          },
+        },
+      ]);
+    });
+
+    it('answers 400 validation_failed on delta for a delta of 1 000 000', async () => {
+      const response = await send('POST', `lines/${LINE}/quantity`, {
+        delta: 1000000,
+        unit: 'GRAM',
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: ERROR_CODES.VALIDATION_FAILED });
+      expect(JSON.stringify(body)).toContain('delta');
+      expect(app.sent).toEqual([]);
+    });
+
+    it('passes an edit to 999 999 to core', async () => {
+      const response = await send('PATCH', `lines/${LINE}`, {
+        quantity: 999999,
+      });
+
+      expect(response.status).toBe(200);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.update,
+          payload: { userId: 'user-1', lineId: LINE, quantity: 999999 },
+        },
+      ]);
+    });
+
+    it('answers 400 validation_failed on quantity for an edit to 1 000 000', async () => {
+      const response = await send('PATCH', `lines/${LINE}`, {
+        quantity: 1000000,
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: ERROR_CODES.VALIDATION_FAILED });
+      expect(JSON.stringify(body)).toContain('quantity');
+      expect(app.sent).toEqual([]);
+    });
+  });
 });
 
 describe('the basket add checks the unit too (plan 0246, sections 3.2 and 4.2)', () => {
@@ -451,5 +641,34 @@ describe('the basket add checks the unit too (plan 0246, sections 3.2 and 4.2)',
 
     expect(w.sent).toHaveLength(1);
     expect(w.sent[0].payload).toMatchObject({ unit: 'GRAM', quantity: 1000 });
+  });
+
+  it('answers the outcome core gave, and lets its refusal of a unit through (plan 0260)', async () => {
+    const answered = {
+      entries: [],
+      progress: { boughtCount: 0, lineCount: 0 },
+      addOutcome: 'ALREADY_ON_LIST',
+    };
+    const refusal = unitDiffers(null);
+    let next: () => unknown = () => answered;
+    const nats = {
+      send: async (subject: unknown) =>
+        subject === ITEM_PATTERNS.getMany ? { items: [] } : next(),
+    };
+    const basket = new BasketController(
+      nats as never,
+      {} as never,
+      {} as never
+    );
+    const body = {
+      targetListId: LIST,
+      content: 'Platanos',
+    } as AddBasketLineDto;
+
+    expect(await basket.addLine(OWNER, BASKET, body)).toBe(answered);
+    next = () => {
+      throw refusal;
+    };
+    await expect(basket.addLine(OWNER, BASKET, body)).rejects.toBe(refusal);
   });
 });

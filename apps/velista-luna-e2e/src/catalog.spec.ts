@@ -1,6 +1,26 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ALICE_EMAIL } from './support/api';
+import {
+  ALICE_EMAIL,
+  deleteLine,
+  ensurePostalCode,
+  login,
+} from './support/api';
 import { signIn } from './support/app';
+
+/**
+ * What every walk below reads, set here so the file passes alone as well as after
+ * the others: a postal code on Alice's profile, which is what gives the catalog a
+ * shop and so its prices. `resetAliceWorld` sets it too, and the files that call
+ * it run first in a full run; this file must not rely on that.
+ */
+test.beforeAll(async () => {
+  const alice = await login(ALICE_EMAIL);
+  try {
+    await ensurePostalCode(alice, '46004');
+  } finally {
+    await alice.dispose();
+  }
+});
 
 /**
  * The category picker (velista plan 0119), walked once as a shopper would: the
@@ -175,6 +195,19 @@ test.describe('the Supermarket selector', () => {
  * opens a page with its prices, their history and the person's lists.
  */
 test.describe('adding from the catalog', () => {
+  /** The line the last step makes and follows the link to, deleted after. */
+  let followed = '';
+
+  test.afterAll(async () => {
+    if (followed === '') return;
+    const alice = await login(ALICE_EMAIL);
+    try {
+      await deleteLine(alice, followed);
+    } finally {
+      await alice.dispose();
+    }
+  });
+
   test('adds a product to the named list, takes it back, orders by price, and opens a product page', async ({
     page,
   }) => {
@@ -198,19 +231,35 @@ test.describe('adding from the catalog', () => {
 
       await expect(held).toHaveCount(1);
       await expect(held).toContainText('Bread');
-      await expect(held.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      // The row stepper of velista 0188 has no spinbutton: the amount is on the
+      // host's data-value, in base units.
+      await expect(held.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '1'
       );
       await expect(adding.locator('[data-adding="count"]')).toHaveText(
         '1 product added'
       );
+
+      // The list asks for it now, so its plus is off and the card says why, with
+      // the way to the line (velista 0185, C1).
+      // Inert by aria-disabled and still focusable (decision G).
+      const bread = products(page, 'Bread');
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      await expect(bread.locator('button.add')).not.toHaveAttribute('disabled');
+      await expect(bread.locator('.held-onlist')).toContainText('Already on');
+      await expect(
+        bread.getByRole('link', { name: 'See it on the list' })
+      ).toBeVisible();
     });
 
     await test.step('3. the stepper of that line raises it', async () => {
-      await held.getByRole('button', { name: 'One more' }).click();
-      await expect(held.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      await held.getByRole('button', { name: /^Add 1 to Bread/ }).click();
+      await expect(held.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '2'
       );
     });
@@ -234,17 +283,22 @@ test.describe('adding from the catalog', () => {
 
       const added = page.getByRole('dialog');
       await expect(added.getByText('Bread', { exact: true })).toBeVisible();
-      await added.getByRole('button', { name: 'One fewer' }).click();
-      await expect(added.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      const fewer = added.getByRole('button', { name: /^Remove 1 from Bread/ });
+      await fewer.click();
+      await expect(added.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '1'
       );
-      await added.getByRole('button', { name: 'One fewer' }).click();
+      await fewer.click();
 
       // The last line taken back closes the sheet, and the row holds no line.
       await expect(page).toHaveURL(/\/en\/catalog$/);
       await expect(adding.locator('[data-adding="count"]')).toHaveCount(0);
       await expect(held).toHaveCount(0);
+      // On no line any more, so the plus adds again (velista 0185).
+      await expect(
+        products(page, 'Bread').locator('button.add')
+      ).not.toHaveAttribute('aria-disabled', 'true');
     });
 
     await test.step('6. the order menu puts the list in a price order, kept in the URL', async () => {
@@ -278,28 +332,27 @@ test.describe('adding from the catalog', () => {
       await expectCatalogLit(page);
     });
 
-    await test.step('8. the stepper of a list adds the product there, by the litre', async () => {
+    await test.step('8. the stepper of a list adds the product once, then steps it', async () => {
       // The demo world's Milk is a litre with no size, so a line of it counts
-      // millilitres (velista `0182`). The list's plus is an add, so each press
-      // puts one more litre on the line: 1000, then 2000. Its minus steps the
-      // line: from a litre on, one step is 250 ml, so the presses down read 1750,
-      // 1500, 1250 and 1000. One more press down takes the product back, because
-      // the visit made the line and a minus at the litre it started at removes
-      // it, as a minus at one does for a count. The list's stepper reads 0 again.
+      // millilitres (velista `0182`). From zero the list's plus is an add, which
+      // makes the line at one step, 25 ml (velista 0185). After that the plus
+      // steps the line that exists by the one step of velista 0188, 25 ml, as the
+      // list page does (velista 0187, U5). The minus steps it down, and a press at
+      // the amount the visit started it at takes the product back.
       const list = page.locator('lib-lists-table .list').first();
       const row = list.locator('.row');
-      const count = row.getByRole('spinbutton');
-      const more = row.getByRole('button', { name: 'One more' });
-      const fewer = row.getByRole('button', { name: 'One fewer' });
-      await expect(count).toHaveAttribute('aria-valuenow', '0');
+      const count = row.locator('lib-quantity-stepper');
+      const more = row.getByRole('button', { name: /^Add / });
+      const fewer = row.getByRole('button', { name: /^Remove / });
+      await expect(count).toHaveAttribute('data-value', '0');
 
-      for (const reads of ['1000', '2000']) {
+      for (const reads of ['25', '50', '75']) {
         await more.click();
-        await expect(count).toHaveAttribute('aria-valuenow', reads);
+        await expect(count).toHaveAttribute('data-value', reads);
       }
-      for (const reads of ['1750', '1500', '1250', '1000', '0']) {
+      for (const reads of ['50', '25', '0']) {
         await fewer.click();
-        await expect(count).toHaveAttribute('aria-valuenow', reads);
+        await expect(count).toHaveAttribute('data-value', reads);
       }
     });
 
@@ -307,6 +360,28 @@ test.describe('adding from the catalog', () => {
       await page.getByRole('button', { name: 'Back', exact: true }).click();
       await expect(page).toHaveURL(/\/en\/catalog\?order=price$/);
       await expect(products(page, 'Bread')).toBeVisible();
+    });
+
+    await test.step('10. a product on the list links to its line, which the list centres and marks', async () => {
+      const bread = products(page, 'Bread');
+      await bread.locator('button.add').click();
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      // The press switched it off under the focus, which stays on it.
+      await expect(bread.locator('button.add')).toBeFocused();
+
+      await bread.getByRole('link', { name: 'See it on the list' }).click();
+
+      await expect(page).toHaveURL(
+        /\/en\/zones\/[0-9a-f-]{36}\/lists\/[0-9a-f-]{36}\?line=[0-9a-f-]{36}$/
+      );
+      followed = new URL(page.url()).searchParams.get('line') ?? '';
+      const line = page.locator(`lib-line-list [data-line-id="${followed}"]`);
+      await expect(line).toBeVisible();
+      await expect(line).toContainText('Bread');
+      await expect(line).toHaveClass(/marked/);
     });
   });
 });

@@ -114,9 +114,31 @@ export const LINE_CONTENT_COUNTER_FROM = 350;
  * saying it is stocked: the line stays exactly where it is holding everything it
  * knows about itself, and somebody drags it back up in a fortnight. A floor of
  * one would make the ordinary end of the gesture impossible.
+ *
+ * **The ceiling is 999 999 base units** (backend plan 0262): 999,999 kg,
+ * 999,999 l or 999 999 pieces, the same number as the contracts.
  */
 export const LINE_QUANTITY_MIN = 0;
-export const LINE_QUANTITY_MAX = 100000;
+export const LINE_QUANTITY_MAX = 999999;
+
+/** How long a held stepper button waits before it repeats (velista 0188). */
+export const QUANTITY_HOLD_DELAY_MS = 400;
+
+/**
+ * The first interval of a stepper's repeat; each next one is
+ * {@link QUANTITY_HOLD_FACTOR} of the last, never under {@link QUANTITY_HOLD_FASTEST_MS}.
+ * The intervals are 300, 255, 217, 184, 157, 133, 113, then 100 ms (velista 0188).
+ */
+export const QUANTITY_HOLD_FIRST_MS = 300;
+export const QUANTITY_HOLD_FACTOR = 0.85;
+export const QUANTITY_HOLD_FASTEST_MS = 100;
+
+/**
+ * How long after the last step a feature writes the run, and the stepper announces
+ * the amount (velista 0188, decision F). Longer than the hold's start and its
+ * slowest interval, so a hold and a run of taps stay one run.
+ */
+export const QUANTITY_STEP_QUIET_MS = 800;
 
 /**
  * How many products one line's set may hold: `LINE_ITEM_SET_MAX` in the contracts
@@ -387,10 +409,9 @@ export const ASSISTANT_AUDIO_MIME_TYPES: readonly string[] = [
 /**
  * What the list page asks for in one request.
  *
- * The gateway's `MAX_PAGE_SIZE`, and asking for all of it is what makes reordering
- * available on the first frame: rule L4 refuses to reorder a list the client has not
- * finished reading, and a shopping list with more than a hundred lines is not the case
- * this product is for (plan 0012, section 4.5).
+ * The gateway's `MAX_PAGE_SIZE`, and asking for all of it puts the whole list on the
+ * first frame: a shopping list with more than a hundred lines is not the case this
+ * product is for (plan 0012, section 4.5).
  */
 export const LINES_PAGE_SIZE = 100;
 

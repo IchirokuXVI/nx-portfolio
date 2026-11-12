@@ -80,7 +80,7 @@ import { CatalogContext } from '../catalog-context';
 import { routePath } from '../catalog-opener';
 import { categoryChoice } from '../category-choice';
 import { lineProductCard, rebaseProductSet, tickProduct } from '../pick-set';
-import { rowAdds } from '../row-adds';
+import { addFailedCopy, rowAdds } from '../row-adds';
 import {
   CATALOG_PARAMS,
   catalogChoiceOf,
@@ -678,9 +678,29 @@ export class CatalogPage {
     );
   });
 
-  /** The plus of each row and the lines under it, for the chosen list (section 4.1). */
+  /**
+   * The plus of each row and the lines under it, for the chosen list (section 4.1),
+   * and the list's URL for a product already on it (velista `0185`, decision D).
+   */
   private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held())
+    rowAdds(this.addTarget(), this._adds.held(), (target) =>
+      appPath(
+        this._locale(),
+        this._basePath,
+        'zones',
+        target.zoneId,
+        'lists',
+        target.listId
+      )
+    )
+  );
+
+  /**
+   * The sentence of a failed add (section 4.1): why, for a product the list counts
+   * in another unit (velista `0185`, section 4), and the generic one otherwise.
+   */
+  protected readonly addFailedText = computed(() =>
+    addFailedCopy(this._adds.refusal())
   );
 
   /**
@@ -1079,7 +1099,7 @@ export class CatalogPage {
       return;
     }
     this.addFailed.set(false);
-    void this._adds.step(
+    this._adds.step(
       {
         listId: target.listId,
         itemId: row.id,
@@ -1087,7 +1107,7 @@ export class CatalogPage {
         imageUrl: row.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 

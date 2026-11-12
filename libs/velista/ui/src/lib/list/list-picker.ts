@@ -7,7 +7,11 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import type { AddChoiceRow } from '@portfolio/velista/models';
 import { AddChoice } from './add-choice';
-import { AnchoredPopover, type AnchoredPopoverClose } from './anchored-popover';
+import {
+  AnchoredPopover,
+  type AnchoredPopoverClose,
+  type AnchoredPopoverSide,
+} from './anchored-popover';
 
 /** One list a line can go to, as the picker draws it. */
 export interface ListPickerRow {
@@ -32,8 +36,6 @@ export interface ListPickerChoice {
    */
   readonly listName: string | null;
   readonly rows: readonly AddChoiceRow[];
-  /** How many the add carries. */
-  readonly added: number;
 }
 
 /** Numbers each picker's title, so two on a page never share an id. */
@@ -84,6 +86,7 @@ let pickerCount = 0;
         [labelledBy]="choice() === null ? titleId : choiceTitleId"
         [open]="true"
         [origin]="origin"
+        [side]="side()"
         align="end"
       >
         @if (choice(); as asked) {
@@ -92,7 +95,6 @@ let pickerCount = 0;
             (dismissed)="close('escape', origin)"
             (newLine)="choseNewLine.emit()"
             (returned)="backToLists.emit()"
-            [added]="asked.added"
             [back]="asked.listName"
             [name]="asked.name"
             [rows]="asked.rows"
@@ -138,6 +140,13 @@ export class ListPicker {
 
   /** The button that was pressed. The picker is open while this is set. */
   readonly anchor = input<HTMLElement | null>(null);
+
+  /**
+   * Which side of {@link anchor} it tries first. The page asks for below when the
+   * anchor is the composer's plus, which sits at the top of the page since velista
+   * `0189`, and keeps above for a card's button in the results.
+   */
+  readonly side = input<AnchoredPopoverSide>('above');
 
   /** A list was picked, by id. The container adds the line to it. */
   readonly chosen = output<string>();

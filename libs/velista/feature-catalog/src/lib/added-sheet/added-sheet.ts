@@ -124,7 +124,7 @@ export class AddedSheet {
   }
 
   protected step(step: VisitAddedStep): void {
-    void this._adds.step(
+    this._adds.step(
       {
         listId: step.listId,
         itemId: step.itemId,
@@ -132,7 +132,7 @@ export class AddedSheet {
         imageUrl: step.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 

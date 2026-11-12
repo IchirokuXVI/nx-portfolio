@@ -113,8 +113,35 @@ lib-product-picture.picture {
   margin-block-end: var(--app-space-2);
 
   .heading {
+    display: flex;
     flex: 1;
+    align-items: center;
+    min-inline-size: 0;
     margin: 0;
+  }
+}
+
+// The info button at the end of the heading's words (velista 0187), the line
+// page's `.info`: a full touch target around the glyph, in the secondary text
+// colour, pulled up and down so the heading keeps the height of its words.
+.info {
+  display: grid;
+  flex: none;
+  place-items: center;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-block: calc(var(--app-space-4) * -1);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  color: var(--app-text-secondary);
+  font-size: var(--app-icon-md);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
   }
 }
 

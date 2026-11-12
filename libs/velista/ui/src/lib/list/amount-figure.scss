@@ -1,0 +1,54 @@
+// A number over its symbol (velista 0188, section 3.2). The number inherits its
+// colour, so a control can draw a raised amount in amber; zero is the secondary
+// colour, and a control that draws zero also puts its minus at an end, so zero is
+// never told by colour alone.
+:host {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--app-stepper-figure-gap);
+  min-inline-size: 0;
+  font-family: var(--app-font-sans);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.number {
+  font-size: var(--app-stepper-figure);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+// A count with no symbol has the cell to itself and draws one step larger.
+:host(.is-bare) .number {
+  font-size: var(--app-stepper-figure-count);
+}
+
+// A six character short form ("125,25") draws one step smaller, so the cell never grows.
+:host(.is-long) .number {
+  font-size: var(--app-stepper-figure-long);
+}
+
+:host(.is-zero) .number {
+  color: var(--app-text-secondary);
+}
+
+.symbol {
+  font-size: var(--app-stepper-symbol);
+  font-weight: 400;
+  line-height: 1;
+  color: var(--app-text-secondary);
+}
+
+.visually-hidden {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

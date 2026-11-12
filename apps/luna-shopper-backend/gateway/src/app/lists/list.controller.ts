@@ -474,7 +474,11 @@ export class ListsController {
    */
   @Post(':id/lines/batch')
   @ApiContractResponse(LINE_PATTERNS.addMany, { status: HttpStatus.CREATED })
-  @ApiProblemResponses({ body: true, lineUnitNotOffered: true })
+  @ApiProblemResponses({
+    body: true,
+    lineUnitDiffers: true,
+    lineUnitNotOffered: true,
+  })
   async addLines(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,

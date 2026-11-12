@@ -130,7 +130,6 @@ describe('ListPicker', () => {
     const CHOICE = {
       name: 'Leche entera',
       listName: 'Compra semanal',
-      added: 1,
       rows: [
         {
           lineId: 'line-a',

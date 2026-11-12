@@ -1,6 +1,5 @@
 import {
   composeListGroups,
-  reorderWithinSlots,
   type GroupLineFacts,
   type ListGroupsInput,
 } from './compose-list-groups';
@@ -57,7 +56,6 @@ function compose(
     rows?: Readonly<Record<string, readonly TripRow[]>>;
     open?: readonly string[];
     tripsReady?: boolean;
-    reordering?: boolean;
     state?: Partial<ListViewState>;
     query?: string;
     due?: readonly string[];
@@ -85,7 +83,6 @@ function compose(
     rowsOf: (key) => options.rows?.[key],
     tripsReady: options.tripsReady ?? true,
     openKeys: new Set(options.open ?? []),
-    reordering: options.reordering ?? false,
     dueLineIds: options.due,
   };
   const context: ListViewContext = {
@@ -145,7 +142,7 @@ describe('composeListGroups (velista 0088)', () => {
       expect(view.trips[0].rows).toBeNull();
     });
 
-    it('puts a zero line with no purchase last, and a zero line with purchases in its trips once they loaded', () => {
+    it('draws no zero line with no purchase, and a zero line with purchases in its trips once they loaded', () => {
       const view = groups(
         compose(
           [
@@ -157,7 +154,7 @@ describe('composeListGroups (velista 0088)', () => {
         )
       );
 
-      expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+      expect(ids(view.toBuy)).toEqual(['bread']);
     });
   });
 
@@ -176,13 +173,13 @@ describe('composeListGroups (velista 0088)', () => {
         })
       );
 
-      expect(ids(view.toBuy)).toEqual(['bread', 'saffron', 'eggs']);
+      expect(ids(view.toBuy)).toEqual(['bread', 'eggs']);
     });
 
     it('stays last in To buy when the heads loaded and named no trip', () => {
       const view = groups(compose(seeds, { tripsReady: true }));
 
-      expect(ids(view.toBuy)).toEqual(['bread', 'saffron', 'eggs']);
+      expect(ids(view.toBuy)).toEqual(['bread', 'eggs']);
       expect(view.trips).toEqual([]);
     });
 
@@ -194,14 +191,14 @@ describe('composeListGroups (velista 0088)', () => {
         })
       );
 
-      expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+      expect(ids(view.toBuy)).toEqual(['bread']);
       expect(ids(view.due)).toEqual([]);
     });
 
     it('is drawn once, as due, when the list suggests it', () => {
       const view = groups(compose(seeds, { tripsReady: false, due: ['eggs'] }));
 
-      expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+      expect(ids(view.toBuy)).toEqual(['bread']);
       expect(ids(view.due)).toEqual(['eggs']);
     });
 
@@ -220,12 +217,58 @@ describe('composeListGroups (velista 0088)', () => {
       const view = groups(
         compose([
           { id: 'rum', rejected: true },
-          { id: 'saffron', quantity: 0 },
+          { id: 'eggs', quantity: 0, boughtCount: 2 },
           { id: 'bread' },
         ])
       );
 
-      expect(ids(view.toBuy)).toEqual(['bread', 'saffron', 'rum']);
+      expect(ids(view.toBuy)).toEqual(['bread', 'eggs', 'rum']);
+    });
+  });
+
+  describe('a line at 0 that was never bought (velista 0192)', () => {
+    const seeds: Seed[] = [
+      { id: 'saffron', content: 'Saffron', quantity: 0 },
+      { id: 'note', content: 'Call the plumber', quantity: 0 },
+      { id: 'bread', content: 'Bread', quantity: 2 },
+    ];
+
+    it('is not drawn at rest, with trips or without, ready or not', () => {
+      for (const options of [
+        {},
+        { tripsReady: false },
+        { past: [trip('s1', { kind: 'SESSION' })] },
+      ]) {
+        expect(ids(groups(compose(seeds, options)).toBuy)).toEqual(['bread']);
+      }
+    });
+
+    it('is not drawn at rest when rejected either', () => {
+      const view = groups(
+        compose([...seeds, { id: 'rum', quantity: 0, rejected: true }])
+      );
+
+      expect(ids(view.toBuy)).toEqual(['bread']);
+    });
+
+    it('is not drawn below 0', () => {
+      const view = groups(compose([{ id: 'odd', quantity: -1 }, ...seeds]));
+
+      expect(ids(view.toBuy)).toEqual(['bread']);
+    });
+
+    it('is found by the search, at 0', () => {
+      const view = compose(seeds, { query: 'saff' });
+
+      expect(view.kind === 'flat' && ids(view.lines)).toEqual(['saffron']);
+    });
+
+    it('is drawn in To buy again once its amount is above 0', () => {
+      const view = groups(
+        compose([{ ...seeds[0], quantity: 1 }, seeds[1], seeds[2]])
+      );
+
+      expect(ids(view.toBuy)).toEqual(['saffron', 'bread']);
     });
   });
 
@@ -366,28 +409,6 @@ describe('composeListGroups (velista 0088)', () => {
       ]);
     });
   });
-
-  describe('reorder mode (test 12)', () => {
-    it('shows To buy alone, without the zero lines and without any trip', () => {
-      const view = groups(
-        compose(
-          [
-            { id: 'bread' },
-            { id: 'saffron', quantity: 0 },
-            { id: 'milk', claimed: true },
-          ],
-          {
-            live: [live],
-            rows: { [liveKey]: [tripRow('milk')] },
-            reordering: true,
-          }
-        )
-      );
-
-      expect(ids(view.toBuy)).toEqual(['bread']);
-      expect(view.trips).toEqual([]);
-    });
-  });
 });
 
 describe('composeListGroups, the due lines (velista 0089)', () => {
@@ -407,7 +428,7 @@ describe('composeListGroups, the due lines (velista 0089)', () => {
     );
 
     expect(ids(view.due)).toEqual(['coffee', 'eggs']);
-    expect(ids(view.toBuy)).toEqual(['bread', 'saffron']);
+    expect(ids(view.toBuy)).toEqual(['bread']);
     expect(view.wantedCount).toBe(1);
   });
 
@@ -442,12 +463,9 @@ describe('composeListGroups, the due lines (velista 0089)', () => {
     expect(ids(view.due)).toEqual(['coffee']);
   });
 
-  it('draws none in reorder mode, during a search, or when nothing is due (test 4)', () => {
+  it('draws none during a search, or when nothing is due (test 4)', () => {
     const seeds = [{ id: 'bread' }, { id: 'eggs', ...bought }];
 
-    expect(
-      groups(compose(seeds, { due: ['eggs'], reordering: true })).due
-    ).toEqual([]);
     expect(compose(seeds, { due: ['eggs'], query: 'egg' }).kind).toBe('flat');
     expect(groups(compose(seeds, { due: [] })).due).toEqual([]);
     expect(groups(compose(seeds)).due).toEqual([]);
@@ -474,25 +492,5 @@ describe('composeListGroups, the due lines (velista 0089)', () => {
     );
 
     expect(ids(view.due)).toEqual(['yogurt', 'butter']);
-  });
-});
-
-describe('reorderWithinSlots (velista 0088, test 12)', () => {
-  const all = ['a', 'hidden-1', 'b', 'hidden-2', 'c'];
-
-  it('moves the shown lines through their own slots and keeps every unseen line in its slot', () => {
-    expect(reorderWithinSlots(all, ['a', 'b', 'c'], 'c', 0)).toEqual([
-      'c',
-      'hidden-1',
-      'a',
-      'hidden-2',
-      'b',
-    ]);
-  });
-
-  it('answers null for a move that changes nothing or names a stranger', () => {
-    expect(reorderWithinSlots(all, ['a', 'b', 'c'], 'a', 0)).toBeNull();
-    expect(reorderWithinSlots(all, ['a', 'b', 'c'], 'a', 3)).toBeNull();
-    expect(reorderWithinSlots(all, ['a', 'x'], 'a', 1)).toBeNull();
   });
 });

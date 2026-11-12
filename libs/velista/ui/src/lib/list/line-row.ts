@@ -2,12 +2,9 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  DestroyRef,
-  ElementRef,
   inject,
   input,
   output,
-  viewChild,
 } from '@angular/core';
 import {
   RokuTranslatorPipe,
@@ -16,20 +13,15 @@ import {
 import {
   lineStatuses,
   priceWordsText,
-  QUANTITY_REEL_CLICK_SHIELD_MS,
   type LineRowShownProduct,
   type LineRowVm,
   type LineStatus,
+  type QuantityStep,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
-import {
-  CommentIcon,
-  GripIcon,
-  PlusIcon,
-  StarFilledIcon,
-} from '../icons/icons';
+import { CommentIcon, PlusIcon, StarFilledIcon } from '../icons/icons';
 import { ProductPicture } from './product-picture';
-import { QuantityReel } from './quantity-reel';
+import { QuantityStepper } from './quantity-stepper';
 
 /** The words of section 4, by status. */
 const STATUS_KEYS: Record<LineStatus, string> = {
@@ -41,19 +33,13 @@ const STATUS_KEYS: Record<LineStatus, string> = {
 };
 
 /**
- * What the row emits: the three approval decisions drawn under it, and the grip's two
- * keyboard moves.
+ * What the row emits: the three approval decisions drawn under it.
  *
  * Edit, comments and delete were here until velista plan 0083, carried by an overflow
  * menu. The detail sheet a tap opens is where a line is changed now, so the row has
  * nothing of its own to say about them.
  */
-export type LineRowAction =
-  | 'approve'
-  | 'reject'
-  | 'restore'
-  | 'moveUp'
-  | 'moveDown';
+export type LineRowAction = 'approve' | 'reject' | 'restore';
 
 /**
  * One line on the list. The row this whole screen is for.
@@ -68,21 +54,22 @@ export type LineRowAction =
  * whether the household wants it is the quantity.
  *
  * So the row has two live parts and they follow two different permissions. The row
- * opens for anybody holding `READ`, because knowing is not deciding. The reel moves for
+ * opens for anybody holding `READ`, because knowing is not deciding. The stepper moves for
  * `DECIDE`. A reader gets a row that opens and a number that does not move, which is
  * honest in both directions.
  *
  * ## Two targets, and no more
  *
- * The row and the reel. A row with an edit button, a comment button and a delete
+ * The row and the stepper. A row with an edit button, a comment button and a delete
  * button on it is a row nobody can tap correctly while walking. The overflow menu that
  * held those three went in velista plan 0083: the detail sheet a tap opens edits the
  * line, and reaches its comments and its delete.
  *
- * The reel takes the row's full height rather than the width of its digits (section 7),
- * which is why it stops the pointer and the click from reaching the row underneath: a
- * drag that ended in a tap would otherwise open the sheet every time somebody adjusted
- * a number.
+ * The stepper (velista `0188`) is two buttons and an amount in one capsule of 155 by
+ * 48, and it stops the pointer and the click from reaching the row underneath, so a
+ * press on minus or plus never opens the sheet. It has no overlay, so nothing of the
+ * row has to be made deaf around it: the reel's capture listeners and its deaf beat
+ * went with the reel.
  *
  * ## A row with a write in flight stays live
  *
@@ -97,60 +84,37 @@ export type LineRowAction =
  * control, and no change to what a tap does. The one thing it must not become is a
  * guard, because presence under reports and a guard built on it would refuse an edit
  * nobody is making.
- *
- * ## An open reel makes the rest of the line deaf
- *
- * The reel's overlay stands over the row it belongs to, so the tap that dismisses it
- * lands on the row underneath. That tap **closes the reel and does nothing else**: it
- * was aimed at the thing on top, and opening the detail sheet on the way out is the
- * app answering a question nobody asked. The same holds for
- * {@link QUANTITY_REEL_CLICK_SHIELD_MS} after the overlay times out on its own, since
- * a finger already falling does not stop when what it was falling towards vanishes.
- *
- * It is decided at `pointerdown` and enforced at `click`, in the capture phase, and
- * both halves are needed. The state has to be read at the press because focus leaves
- * the reel between the press and the click, which closes it, so by click time there is
- * nothing left to notice. Capture is what lets one listener cover the whole line: the
- * decision buttons and the inline notices are all under a tap that was really about
- * the reel, and each of them stops its own propagation.
- *
- * ## In reorder mode it stops being a button
- *
- * The role is dropped rather than kept and dishonoured, a focusable grip appears that
- * moves the row with the up and down keys, and **the reel goes away entirely**: a
- * second gesture living inside a row being dragged would fight the first for the same
- * finger.
  */
 @Component({
   selector: 'lib-line-row',
   imports: [
     RokuTranslatorPipe,
     CommentIcon,
-    GripIcon,
     PlusIcon,
     ProductPicture,
-    QuantityReel,
+    QuantityStepper,
     StarFilledIcon,
   ],
   templateUrl: './line-row.html',
   styleUrl: './line-row.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    '[class.reordering]': 'reordering()',
-  },
 })
 export class LineRow {
   readonly line = input.required<LineRowVm>();
 
-  /** Whether the list is in reorder mode, which changes what the row is. */
-  readonly reordering = input(false);
-
   /** Whether an add just raised this line, which marks its quantity (velista `0170`). */
   readonly took = input(false);
 
-  /** Whether this row can be moved further in each direction, for the grip's buttons. */
-  readonly canMoveUp = input(true);
-  readonly canMoveDown = input(true);
+  /**
+   * The amount of an open run of presses, or null to draw the stored one (velista
+   * `0188`, decision H). The page owns the run and writes it after the quiet beat.
+   */
+  readonly pending = input<number | null>(null);
+
+  /** What the row's stepper draws: the open run, or the stored amount. */
+  protected readonly amount = computed(
+    () => this.pending() ?? this.line().quantity
+  );
 
   /**
    * Where a search matched inside the line's own name, or null (velista `0082`,
@@ -183,18 +147,13 @@ export class LineRow {
   readonly opened = output<string>();
 
   /**
-   * One settled adjustment of the quantity, as a signed delta.
-   *
-   * Emitted by the reel when its overlay closes, not per step of the drag, so a thumb
-   * that went from two to five and back to four sends one delta of `+2` (section 4.1).
+   * Every step of the row's stepper, a press or a repeat of a hold (velista `0188`).
+   * The row saves nothing: the page gathers the steps into one write.
    */
-  readonly quantityChanged = output<{ lineId: string; delta: number }>();
+  readonly quantityStepped = output<{ lineId: string; step: QuantityStep }>();
 
-  /** Anything from the decision buttons or the grip. */
+  /** Anything from the decision buttons. */
   readonly act = output<{ action: LineRowAction; lineId: string }>();
-
-  /** A pointer went down on the grip. The list takes the drag from here. */
-  readonly grab = output<{ event: PointerEvent; lineId: string }>();
 
   /** The inline failure notice was tapped, which retries. */
   readonly retry = output<string>();
@@ -220,14 +179,6 @@ export class LineRow {
     return product?.kind === 'none' && product.canChoose;
   });
 
-  /**
-   * Whether the two buttons of section 5 are drawn: never in reorder mode, where
-   * the row is a thing being dragged and draws the square alone.
-   */
-  protected readonly canChoose = computed(
-    () => this.mayChoose() && !this.reordering()
-  );
-
   /** Every status word that applies, in the order of section 4. */
   protected readonly statuses = computed(() => lineStatuses(this.line()));
 
@@ -249,86 +200,7 @@ export class LineRow {
     this.chooseProduct.emit(this.line().id);
   }
 
-  private readonly _host = inject<ElementRef<HTMLElement>>(ElementRef);
   private readonly _translator = inject(RokuTranslatorService);
-  private readonly _reel = viewChild(QuantityReel);
-  private readonly _reelEl = viewChild('reel', { read: ElementRef });
-
-  /** Until when a tap on this line is swallowed, after the reel closed by itself. */
-  private _deafUntil = 0;
-
-  /** Whether the click this press will produce belongs to the reel rather than the row. */
-  private _swallowClick = false;
-
-  constructor() {
-    const host = this._host.nativeElement;
-    const onPointerDown = (event: Event) => this._notePress(event);
-    const onClick = (event: Event) => this._swallowReelDismissal(event);
-
-    // Native listeners rather than host bindings, because both have to run in the
-    // capture phase and a host binding cannot ask for one. Capture is the point: these
-    // decide whether the line hears the tap at all, so they have to run before the
-    // handlers that would act on it.
-    host.addEventListener('pointerdown', onPointerDown, true);
-    host.addEventListener('click', onClick, true);
-
-    inject(DestroyRef).onDestroy(() => {
-      host.removeEventListener('pointerdown', onPointerDown, true);
-      host.removeEventListener('click', onClick, true);
-    });
-  }
-
-  /**
-   * At the press, work out whether this tap is really about the reel.
-   *
-   * Read here and not at the click because the press moves focus, the reel commits and
-   * closes on losing it, and by the time the click arrives the overlay that the tap was
-   * dismissing is gone.
-   */
-  private _notePress(event: Event): void {
-    if (this._withinReel(event.target)) {
-      this._swallowClick = false;
-      return;
-    }
-
-    const reel = this._reel();
-    const open = reel?.open() ?? false;
-    this._swallowClick = open || Date.now() < this._deafUntil;
-
-    // Closed here rather than left to the blur. A tap on a span that cannot take focus
-    // moves focus nowhere, which is the ordinary case on a touch screen, and the reel
-    // would sit there until its own timer ran out.
-    if (open) {
-      reel?.close();
-    }
-  }
-
-  private _swallowReelDismissal(event: Event): void {
-    if (!this._swallowClick || this._withinReel(event.target)) {
-      return;
-    }
-
-    this._swallowClick = false;
-    event.stopPropagation();
-    event.preventDefault();
-  }
-
-  private _withinReel(target: EventTarget | null): boolean {
-    const reel = this._reelEl()?.nativeElement as HTMLElement | undefined;
-    return (
-      target !== null && reel !== undefined && reel.contains(target as Node)
-    );
-  }
-
-  /**
-   * The reel timed out and closed on its own, which starts the deaf beat.
-   *
-   * Only this path. A reel closed by a tap elsewhere on the line has already cost that
-   * tap its effect, and charging the next one for it too would make the row feel stuck.
-   */
-  protected onReelAutoClosed(): void {
-    this._deafUntil = Date.now() + QUANTITY_REEL_CLICK_SHIELD_MS;
-  }
 
   /**
    * The accessible name (velista `0145`, section 3): the name, the product with its
@@ -373,7 +245,7 @@ export class LineRow {
     }
     // The quantity in its words: "3" for a count, "750 g" for a weight (velista `0182`).
     parts.push(
-      formatAmount(line.quantity, line.unit, this._translator.locale())
+      formatAmount(this.amount(), line.unit, this._translator.locale())
     );
     return parts
       .filter((part): part is string => part != null && part !== '')
@@ -392,7 +264,7 @@ export class LineRow {
   }
 
   onRowClick(): void {
-    if (this.reordering() || !this.line().interactive) {
+    if (!this.line().interactive) {
       return;
     }
 
@@ -420,23 +292,6 @@ export class LineRow {
   /** One of the decisions drawn under the row. */
   choose(action: 'approve' | 'reject' | 'restore'): void {
     this.act.emit({ action, lineId: this.line().id });
-  }
-
-  /** The grip's keyboard equivalent. Emitted straight through. */
-  move(action: 'moveUp' | 'moveDown'): void {
-    this.act.emit({ action, lineId: this.line().id });
-  }
-
-  /**
-   * A pointer takes hold of the grip.
-   *
-   * The row hands the gesture straight up rather than running it, because a drag is
-   * about where this row sits among the others and this row knows nothing about the
-   * others. `LineList` owns the order, so it owns the geometry, and it is the only
-   * thing that can say which row a finger is currently over.
-   */
-  startDrag(event: PointerEvent): void {
-    this.grab.emit({ event, lineId: this.line().id });
   }
 
   /**

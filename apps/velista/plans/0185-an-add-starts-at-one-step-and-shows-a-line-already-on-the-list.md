@@ -1,4 +1,17 @@
+> **PR:** [#989](https://github.com/IchirokuXVI/nx-portfolio/pull/989)
+
 # 0185: an add starts a line at one step, and a line already on the list is shown
+
+> **Note of 2026-11-12**, from the owner's rulings on backend `0260` (PR #984). Backend `0263` is
+> **withdrawn**: no write deletes a line because it reached 0. A line at 0 stays on its list,
+> hidden outside a search, and only a delete from the line's sheet or page removes it. Every line
+> at 0 is therefore a kept line, and an add that meets only lines at 0 raises one. A press of
+> minus that reaches 0 draws the stepper's trash (velista `0188`); on a line the visit made, the
+> catalog's own take back still deletes the line it made. Second: a product add lands on a line
+> of **its own unit** when one holds the product, even when an earlier line of another unit
+> holds it too, and is refused with `line_unit_differs` only when no line of its unit does. That
+> refusal now carries its own server sentence; `code` and `details` are unchanged, so section 4
+> stands. The sentences below that say otherwise are amended in place.
 
 > **Amended on 2026-11-11** from the owner's decisions of 2026-11-10 and 2026-11-11 (section 0).
 > The plan of 2026-11-09 sent a typed name as an open add that raised the line it met by one
@@ -22,9 +35,10 @@
 > Other plans of this batch touch the same screens, and each can be built before or after this
 > one: velista `0188` (the stepper with buttons, which replaces the reel that carries today's mark),
 > velista `0189` (the search field at the top of a list, which moves the composer), velista `0187`
-> (the product page's lists table), velista `0186` (the per product step), velista `0192` and
-> backend `0263` (a line with nothing to keep is deleted at zero), backend `0262` (the limit of
-> 999 999). This plan names their surfaces only where they meet its own.
+> (the product page's lists table), velista `0186` (the per product step), backend `0262` (the
+> limit of 999 999). Velista `0192` and backend `0263` (a line with nothing to keep deleted at
+> zero) were withdrawn on 2026-11-12. This plan names their surfaces only where they meet its
+> own.
 >
 > Prerequisite reading: backend `0260` in full (its wire shape wins over sections 3 and 6 here);
 > backend `0246` section 0 (W1, M8); velista `0170` targets 3 to 6 and its section 6; velista
@@ -98,8 +112,9 @@ link that opens the list at that line.
   'ALREADY_ON_LIST'` and `alreadyOnList` (the lines, unchanged, same `version`). It raises a line
   kept at 0 by the add's amount (`RAISED`), creates at one step when nothing is met (`CREATED`),
   and asks `line_add_needs_choice` only when a typed name meets two or more lines all at 0. A
-  free text add is never refused for a unit; a product add that meets only a line of another unit
-  is `line_unit_differs` with `details.line`.
+  free text add is never refused for a unit; a product add that meets only lines of another unit
+  is `line_unit_differs` with `details.line`. A line of the add's own unit that holds the product
+  takes the add even when an earlier line of another unit holds it too (2026-11-12).
 - The list page already marks a raised row: `_markTook` scrolls it to the centre when it is out of
   view and gives its quantity an amber edge for `TOOK_DURATION_MS` (`list-page.ts:2081` to
   `:2108`). The edge is an input of `QuantityReel` (`quantity-reel.ts:33`), which velista `0188`
@@ -229,6 +244,12 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   `aria-describedby` pointing at the sentence, because a disabled button is not announced by
   itself and the sentence is the reason. The sentence is plain text in the card, not a tooltip,
   so it reads without a press.
+  > **Amended 2026-11-12, the owner's choice:** the plus is switched off with
+  > `aria-disabled="true"`, not `disabled`. It stays in the Tab order, a click, Enter or Space
+  > does nothing, it keeps `aria-describedby` on the sentence, and it is drawn switched off as
+  > before (the mock's frame "catalog D3" does the same, and so do the stepper's ends). The
+  > reason: the first add of a product switches its plus off under the focus that pressed it,
+  > and a `disabled` button drops that focus to the page, on every first add from a keyboard.
 - **H. The composer's cards on the zone list and the shopping list keep their plus on.** C1 names
   the catalog tab. A card's plus that meets a wanted line is answered `ALREADY_ON_LIST` and the
   page shows the line (target 3). Asked in section 9.
@@ -272,9 +293,10 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   holds every id.
 - The in memory fakes follow backend `0260` section 1: a wanted line met answers `alreadyOnList`
   and writes nothing; a kept line met is raised by the add's amount; two or more kept candidates of
-  a typed name with `askIfAmbiguous` refuse with `line_add_needs_choice`; a product add meeting
-  only another unit refuses with `line_unit_differs` and `details.line`; a create starts at
-  `addAmount`.
+  a typed name with `askIfAmbiguous` refuse with `line_add_needs_choice`; a product add meets the
+  lines of its own unit first, wherever a line of another unit stands, and refuses with
+  `line_unit_differs` and `details.line` only when no line of its unit holds it; a create starts
+  at `addAmount`. No fake deletes a line that reaches 0 (backend `0263` withdrawn).
 
 ## 3. The pages after an add
 
@@ -345,7 +367,7 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   such line by the order the card draws, `path` from `pathOf(target)`, which the catalog page and
   the product page pass as `appPath(locale, basePath, 'zones', target.zoneId, 'lists',
   target.listId)` (decision D). `held` lines at 0 do not set it (decision C).
-- **The card.** With `onList`, the plus (`:550` to `:561`) renders `disabled`, with
+- **The card.** With `onList`, the plus (`:550` to `:561`) renders `aria-disabled="true"` (decision G as amended), with
   `aria-describedby` the sentence's id; it keeps its size and place. Under the card, in place of
   the heading of the lines (`catalog.held.title`, `:583` to `:586`), one line: `lib-info-icon`
   (decorative, `aria-hidden`), the text `catalog.held.alreadyOn`, and a link
@@ -406,7 +428,8 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - The stepper with buttons and its steps (velista `0188`, `0186`).
 - The search field at the top (velista `0189`).
 - The product page's lists table (velista `0187`).
-- The deletion of a line at zero (velista `0192`, backend `0263`).
+- The deletion of a line at zero (velista `0192`, backend `0263`), withdrawn by the owner on
+  2026-11-12: no write deletes a line at 0.
 
 ## 8. Acceptance criteria
 

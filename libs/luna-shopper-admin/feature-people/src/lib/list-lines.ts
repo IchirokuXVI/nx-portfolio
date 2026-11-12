@@ -19,7 +19,7 @@ export type ListLine = ListLineRow;
 
 /** The bounds core puts on a quantity, repeated so the form refuses first. */
 const QUANTITY_MIN = 0;
-const QUANTITY_MAX = 100000;
+const QUANTITY_MAX = 999999;
 
 /** What a line's quantity counts, which is the whole of `LineUnit` (backend plan 0246). */
 const LINE_UNIT_OPTIONS = [

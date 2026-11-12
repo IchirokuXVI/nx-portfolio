@@ -119,8 +119,18 @@ export class BasketLineAddService {
 
     // No announcement of its own (plan 0139, section 3). The add went through
     // `LineService.add`, which announces to every basket covering the list, and
-    // this basket is one of them: it had to cover the list to add to it.
-    return opened.result([added.line.id]);
+    // this basket is one of them: it had to cover the list to add to it. An add
+    // that met a wanted line wrote nothing and announced nothing (plan 0260).
+    //
+    // The entries name every line the add met when it met wanted ones, so the
+    // shopping list can find the rows to mark, and `addOutcome` says which of
+    // the three things happened (plan 0260, section 2). A line it met is
+    // wanted, so it is a basket row.
+    const lineIds =
+      added.outcome === 'ALREADY_ON_LIST' && added.alreadyOnList.length > 0
+        ? added.alreadyOnList.map((line) => line.id)
+        : [added.line.id];
+    return { ...(await opened.result(lineIds)), addOutcome: added.outcome };
   }
 
   /**
