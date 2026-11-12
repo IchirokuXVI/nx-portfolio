@@ -9,6 +9,11 @@ import type {
   ShoppingListSummary,
   VisitProduct,
 } from '@portfolio/velista/models';
+import {
+  QUANTITY_STEP_QUIET_MS,
+  stepFrom,
+  type QuantityStep,
+} from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
@@ -103,9 +108,46 @@ interface World {
   >;
 }
 
+/** The clock's own timeout, kept before the fake timers of each spec replace it. */
+const realTimeout = globalThis.setTimeout;
+
 /** After every promise that is already on its way has answered. */
 function settled(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise((resolve) => realTimeout(resolve, 0));
+}
+
+/**
+ * One press on the stepper of a line, as the stepper draws it: from what the store
+ * draws, one step of the line's unit up or down (velista `0188`).
+ */
+function press(
+  store: CatalogAddStore,
+  product: VisitProduct,
+  lineId: string,
+  by: 1 | -1,
+  repeat = false
+): QuantityStep {
+  const held = store.held().find((entry) => entry.lineId === lineId);
+  const from = held?.quantity ?? 0;
+  const step = {
+    from,
+    to: stepFrom(from, held?.unit ?? 'UNIT', by),
+    repeat,
+  };
+  store.step(product, lineId, step);
+  return step;
+}
+
+/** One press, then the quiet beat, then every write it started. */
+async function stepped(
+  store: CatalogAddStore,
+  product: VisitProduct,
+  lineId: string,
+  by: 1 | -1
+): Promise<void> {
+  press(store, product, lineId, by);
+  jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+  await settled();
 }
 
 /**
@@ -419,6 +461,14 @@ function alone(
 }
 
 describe('CatalogAddStore', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe('the list the plus adds to', () => {
     it('reads every group and keeps the lists the person can write to', async () => {
       const { store, calls } = setup(HOME);
@@ -759,11 +809,11 @@ describe('CatalogAddStore', () => {
       await store.ensure();
       await store.add(BANANAS);
 
-      await store.step(on('weekly', BANANAS), 'line-1', 1);
-      await store.step(on('weekly', BANANAS), 'line-1', -1);
+      await stepped(store, on('weekly', BANANAS), 'line-1', 1);
+      await stepped(store, on('weekly', BANANAS), 'line-1', -1);
 
-      expect(calls).toContain('quantity:line-1:250');
-      expect(calls).toContain('quantity:line-1:-250');
+      expect(calls).toContain('quantity:line-1:25');
+      expect(calls).toContain('quantity:line-1:-25');
       expect(units).toEqual(['GRAM', 'GRAM', 'GRAM']);
     });
 
@@ -772,7 +822,7 @@ describe('CatalogAddStore', () => {
       await store.ensure();
       await store.add(BANANAS);
 
-      await store.step(on('weekly', BANANAS), 'line-1', -1);
+      await stepped(store, on('weekly', BANANAS), 'line-1', -1);
 
       // Taken back whole: to nothing here, where the reader may not delete the
       // line, and never one 25 g step.
@@ -790,14 +840,14 @@ describe('CatalogAddStore', () => {
         ...(server.get('line-1') as Line),
         quantity: 525,
       });
-      await store.step(on('weekly', BANANAS), 'line-1', 1);
-      expect(store.held()[0]?.quantity).toBe(775);
+      await stepped(store, on('weekly', BANANAS), 'line-1', 1);
+      expect(store.held()[0]?.quantity).toBe(550);
 
-      await store.step(on('weekly', BANANAS), 'line-1', -1);
+      await stepped(store, on('weekly', BANANAS), 'line-1', -1);
 
       expect(calls).toContain('quantity:line-1:-25');
       expect(calls).not.toContain('delete:line-1');
-      expect(store.held()[0]?.quantity).toBe(750);
+      expect(store.held()[0]?.quantity).toBe(525);
     });
 
     it('takes a count line the visit made back at nothing, as before', async () => {
@@ -805,7 +855,7 @@ describe('CatalogAddStore', () => {
       await store.ensure();
       await store.add(MILK);
 
-      await store.step(on('weekly', MILK), 'line-1', -1);
+      await stepped(store, on('weekly', MILK), 'line-1', -1);
 
       // Taken back: lowered to nothing, where the reader may not delete it.
       expect(calls).toContain('quantity:line-1:-1');
@@ -848,7 +898,7 @@ describe('CatalogAddStore', () => {
         const { store, calls } = setup(legacy(3));
         await store.ensure();
 
-        await store.step(on('weekly', BANANAS), 'old', 1);
+        await stepped(store, on('weekly', BANANAS), 'old', 1);
 
         expect(calls).toContain('update:old:1000:GRAM');
         expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
@@ -860,28 +910,29 @@ describe('CatalogAddStore', () => {
         await store.ensure();
         holdWrites();
 
-        const first = store.step(on('weekly', BANANAS), 'old', 1);
-        const second = store.step(on('weekly', BANANAS), 'old', 1);
+        // The correction is drawn at once, so the second press steps from it.
+        press(store, on('weekly', BANANAS), 'old', 1);
+        press(store, on('weekly', BANANAS), 'old', 1);
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
         await settled();
         expect(calls.filter((call) => call.startsWith('quantity:'))).toEqual(
           []
         );
 
         releaseNext();
-        await first;
         await settled();
         releaseNext();
-        await second;
+        await settled();
 
         expect(calls).toContain('update:old:1000:GRAM');
-        expect(calls).toContain('quantity:old:250');
+        expect(calls).toContain('quantity:old:25');
       });
 
       it('sends nothing for a minus at nothing', async () => {
         const { store, calls } = setup(legacy(0));
         await store.ensure();
 
-        await store.step(on('weekly', BANANAS), 'old', -1);
+        await stepped(store, on('weekly', BANANAS), 'old', -1);
 
         expect(calls.some((call) => call.startsWith('update:'))).toBe(false);
         expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
@@ -1304,7 +1355,7 @@ describe('CatalogAddStore', () => {
       const { store, calls, drawn } = setup(STOCKED);
       await store.ensure();
 
-      await store.step(on('weekly', MILK), 'old', 1);
+      await stepped(store, on('weekly', MILK), 'old', 1);
 
       expect(calls).toContain('quantity:old:1');
       expect(drawn('weekly', 'milk')).toEqual([3]);
@@ -1325,12 +1376,35 @@ describe('CatalogAddStore', () => {
       ]);
     });
 
+    it('records a volume line it steps up as a merged add would, and its take back only lowers it (velista 0187)', async () => {
+      // The plus of the product page's table on a list that holds 2 l of milk.
+      const { store, calls, server } = setup({
+        ...alone(['READ', 'WRITE', 'DECIDE', 'MANAGE']),
+        lines: [line('old', 'weekly', { quantity: 2000, unit: 'MILLILITER' })],
+      });
+      await store.ensure();
+
+      await stepped(store, on('weekly', MILK), 'old', 1);
+
+      expect(calls).toContain('quantity:old:25');
+      expect(store.visit()).toMatchObject([
+        { lineId: 'old', quantity: 2025, before: 2000, created: false },
+      ]);
+
+      await store.takeBack('old');
+
+      expect(calls).toContain('quantity:old:-25');
+      expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
+      expect(server.get('old')?.quantity).toBe(2000);
+      expect(store.visit()).toEqual([]);
+    });
+
     it('leaves the record when the line is back at what it held before', async () => {
       const { store, server, drawn } = setup(STOCKED);
       await store.ensure();
-      await store.step(on('weekly', MILK), 'old', 1);
+      await stepped(store, on('weekly', MILK), 'old', 1);
 
-      await store.step(on('weekly', MILK), 'old', -1);
+      await stepped(store, on('weekly', MILK), 'old', -1);
 
       expect(server.get('old')?.quantity).toBe(2);
       expect(drawn('weekly', 'milk')).toEqual([2]);
@@ -1341,7 +1415,7 @@ describe('CatalogAddStore', () => {
       const { store, drawn } = setup(STOCKED);
       await store.ensure();
 
-      await store.step(on('weekly', MILK), 'old', -1);
+      await stepped(store, on('weekly', MILK), 'old', -1);
 
       expect(drawn('weekly', 'milk')).toEqual([1]);
       expect(store.count()).toBe(0);
@@ -1356,7 +1430,7 @@ describe('CatalogAddStore', () => {
       });
       await store.ensure();
 
-      await store.step(on('weekly', MILK), 'old', -1);
+      await stepped(store, on('weekly', MILK), 'old', -1);
 
       expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
       expect(server.get('old')?.quantity).toBe(0);
@@ -1370,7 +1444,7 @@ describe('CatalogAddStore', () => {
       });
       await store.ensure();
 
-      await store.step(on('weekly', MILK), 'old', -1);
+      await stepped(store, on('weekly', MILK), 'old', -1);
 
       expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
     });
@@ -1381,7 +1455,7 @@ describe('CatalogAddStore', () => {
       await store.add(MILK);
       await store.add(MILK);
 
-      await store.step(on('weekly', MILK), 'line-1', -1);
+      await stepped(store, on('weekly', MILK), 'line-1', -1);
 
       expect(calls).toContain('quantity:line-1:-1');
       expect(store.visit()[0]?.quantity).toBe(1);
@@ -1392,18 +1466,73 @@ describe('CatalogAddStore', () => {
       await store.ensure();
       failNext();
 
-      await store.step(on('weekly', MILK), 'old', 1);
+      await stepped(store, on('weekly', MILK), 'old', 1);
 
       expect(drawn('weekly', 'milk')).toEqual([2]);
       expect(store.count()).toBe(0);
       expect(store.failures()).toBe(1);
     });
 
+    it('writes three presses once, after the quiet beat', async () => {
+      const { store, calls, drawn } = setup(STOCKED);
+      await store.ensure();
+
+      press(store, on('weekly', MILK), 'old', 1);
+      press(store, on('weekly', MILK), 'old', 1);
+      press(store, on('weekly', MILK), 'old', 1);
+      // Drawn at once, written when the presses stop.
+      expect(drawn('weekly', 'milk')).toEqual([5]);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
+      await settled();
+      expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+
+      jest.advanceTimersByTime(1);
+      await settled();
+
+      expect(calls.filter((call) => call.startsWith('quantity:'))).toEqual([
+        'quantity:old:3',
+      ]);
+      expect(drawn('weekly', 'milk')).toEqual([5]);
+      expect(store.visit()[0]).toMatchObject({ quantity: 5, before: 2 });
+    });
+
+    it('moves the drawn amount back to where the run started when the run is refused', async () => {
+      const { store, drawn, failNext } = setup(STOCKED);
+      await store.ensure();
+      failNext();
+
+      press(store, on('weekly', MILK), 'old', 1);
+      press(store, on('weekly', MILK), 'old', 1);
+      expect(drawn('weekly', 'milk')).toEqual([4]);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(drawn('weekly', 'milk')).toEqual([2]);
+      expect(store.count()).toBe(0);
+      expect(store.failures()).toBe(1);
+    });
+
+    it('sends the open run before an add on the same line, so minus, add, minus ends one lower', async () => {
+      const { store, server, drawn } = setup(STOCKED);
+      await store.ensure();
+
+      press(store, on('weekly', MILK), 'old', -1);
+      const added = store.add(MILK, 'weekly');
+      press(store, on('weekly', MILK), 'old', -1);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+      await added;
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(server.get('old')?.quantity).toBe(1);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+    });
+
     it('moves nothing on a line it does not hold', async () => {
       const { store, calls } = setup(STOCKED);
       await store.ensure();
 
-      await store.step(on('weekly', MILK), 'nowhere', 1);
+      await stepped(store, on('weekly', MILK), 'nowhere', 1);
 
       expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
     });
@@ -1441,7 +1570,7 @@ describe('CatalogAddStore', () => {
         }
         await store.add(MILK);
 
-        await store.step(on('weekly', MILK), 'line-1', -1);
+        await stepped(store, on('weekly', MILK), 'line-1', -1);
 
         expect(calls).toContain('delete:line-1');
         expect(server.size).toBe(0);
@@ -1449,6 +1578,64 @@ describe('CatalogAddStore', () => {
         expect(store.count()).toBe(0);
       }
     );
+
+    it('takes the line back on a press to nothing, after sending the open run', async () => {
+      const { store, calls, server } = setup(
+        alone(['READ', 'WRITE', 'DECIDE', 'MANAGE'])
+      );
+      await store.ensure();
+      await store.add(MILK);
+      // Up to two and back to one is a run; from one to nothing takes back.
+      press(store, on('weekly', MILK), 'line-1', 1);
+      press(store, on('weekly', MILK), 'line-1', -1);
+      press(store, on('weekly', MILK), 'line-1', -1);
+      await settled();
+
+      // The run went back to where it started, so it wrote nothing.
+      expect(calls.filter((call) => call.startsWith('quantity:'))).toEqual([]);
+      expect(calls).toContain('delete:line-1');
+      expect(server.size).toBe(0);
+      expect(store.held()).toEqual([]);
+      expect(store.count()).toBe(0);
+    });
+
+    it('sends the open run before the take back', async () => {
+      const { store, calls } = setup(
+        alone(['READ', 'WRITE', 'DECIDE', 'MANAGE'])
+      );
+      await store.ensure();
+      await store.add(MILK);
+      await stepped(store, on('weekly', MILK), 'line-1', 1);
+      await stepped(store, on('weekly', MILK), 'line-1', 1);
+      expect(store.visit()[0]?.quantity).toBe(3);
+
+      // Down from three to one in one run, then a press to nothing.
+      press(store, on('weekly', MILK), 'line-1', -1);
+      press(store, on('weekly', MILK), 'line-1', -1);
+      press(store, on('weekly', MILK), 'line-1', -1);
+      await settled();
+
+      expect(calls.slice(-2)).toEqual(['quantity:line-1:-2', 'delete:line-1']);
+      expect(store.held()).toEqual([]);
+      expect(store.count()).toBe(0);
+    });
+
+    it('drops a repeat that would take the line back', async () => {
+      const { store, calls, drawn } = setup(
+        alone(['READ', 'WRITE', 'DECIDE', 'MANAGE'])
+      );
+      await store.ensure();
+      await store.add(MILK);
+
+      press(store, on('weekly', MILK), 'line-1', -1, true);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
+      expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+      expect(store.count()).toBe(1);
+    });
 
     it('lowers an approved line to nothing for somebody who decides and does not manage', async () => {
       // DECIDE moves a quantity. Deleting an approved line is MANAGE.
@@ -1458,7 +1645,7 @@ describe('CatalogAddStore', () => {
       await store.ensure();
       await store.add(MILK);
 
-      await store.step(on('weekly', MILK), 'line-1', -1);
+      await stepped(store, on('weekly', MILK), 'line-1', -1);
 
       expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
       expect(calls).toContain('quantity:line-1:-1');
@@ -1492,7 +1679,7 @@ describe('CatalogAddStore', () => {
       });
       await store.ensure();
       await store.add(MILK);
-      await store.step(on('weekly', MILK), 'old', 1);
+      await stepped(store, on('weekly', MILK), 'old', 1);
       expect(server.get('old')?.quantity).toBe(4);
 
       await store.takeBack('old');
@@ -1687,7 +1874,7 @@ describe('CatalogAddStore', () => {
       await store.readItem('milk');
       await store.add(MILK, 'weekly');
 
-      await store.step(on('weekly', MILK), 'line-1', -1);
+      await stepped(store, on('weekly', MILK), 'line-1', -1);
 
       expect(calls).toContain('delete:line-1');
       expect(calls).not.toContain('zones');
