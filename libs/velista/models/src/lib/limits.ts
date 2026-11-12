@@ -406,10 +406,9 @@ export const ASSISTANT_AUDIO_MIME_TYPES: readonly string[] = [
 /**
  * What the list page asks for in one request.
  *
- * The gateway's `MAX_PAGE_SIZE`, and asking for all of it is what makes reordering
- * available on the first frame: rule L4 refuses to reorder a list the client has not
- * finished reading, and a shopping list with more than a hundred lines is not the case
- * this product is for (plan 0012, section 4.5).
+ * The gateway's `MAX_PAGE_SIZE`, and asking for all of it puts the whole list on the
+ * first frame: a shopping list with more than a hundred lines is not the case this
+ * product is for (plan 0012, section 4.5).
  */
 export const LINES_PAGE_SIZE = 100;
 

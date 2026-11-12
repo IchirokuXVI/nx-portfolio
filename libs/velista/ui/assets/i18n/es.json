@@ -751,12 +751,8 @@
     "header": {
       "title": "Lista",
       "inGroup": "en {{name}}",
-      "pending": "{{pending}} de {{total}} pendientes",
-      "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
-      "back": "Volver al grupo",
-      "cost": "Unos {{cost}} por las líneas que tienen precio",
-      "costExact": "{{cost}} por las líneas que tienen precio"
+      "back": "Volver al grupo"
     },
     "presence": {
       "one": "{{name}} está en la lista",
@@ -882,19 +878,7 @@
       "comments": "Comentarios",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
-      "failed": "No se ha guardado. Toca para reintentar",
-      "movedTo": "Movido a la posición {{position}} de {{total}}"
-    },
-    "reorder": {
-      "enter": "Ponerlas en orden",
-      "title": "Ponerlas en orden",
-      "body": "Arrastra por el asa. Mientras estés aquí no se puede marcar nada",
-      "done": "Hecho",
-      "started": "Poniéndolas en orden. No se puede marcar nada",
-      "ended": "Has terminado de ponerlas en orden",
-      "moveUp": "Subir {{name}}",
-      "moveDown": "Bajar {{name}}",
-      "unavailable": "Para reordenar, usa el orden de la lista, todas las líneas y ninguna búsqueda."
+      "failed": "No se ha guardado. Toca para reintentar"
     },
     "view": {
       "order": {
@@ -1169,7 +1153,6 @@
       "keepEditing": "Seguir editando"
     },
     "trips": {
-      "toBuy": "Por comprar",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} de {{total}} comprados",
       "lines": "{{count}} líneas",
@@ -2019,10 +2002,6 @@
       "amount": "≈{{amount}}",
       "open": "Total estimado, unos {{amount}}. Ver de dónde sale.",
       "openExact": "Total: {{amount}}. Ver de dónde sale.",
-      "barLabel": "Unos {{bought}} comprados de unos {{total}}",
-      "barLabelExact": "Comprado: {{bought}} de {{total}}",
-      "boughtEnd": "{{amount}} comprado",
-      "leftEnd": "{{amount}} por comprar",
       "title": "Total estimado",
       "titleExact": "Total",
       "bought": "Comprado",

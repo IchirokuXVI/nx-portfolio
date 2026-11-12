@@ -338,9 +338,9 @@ export interface LineRowVm {
    * True for anybody holding `READ`, which is everybody who can see the row at
    * all, and that is the change (section 5.1). The tap used to **be** the tick, so
    * it followed `DECIDE` and a reader's rows sat there not answering; it opens
-   * what the app knows about the thing now, and knowing is not a permission. False
-   * only in reorder mode, where every row is a thing being dragged rather than a
-   * thing being read.
+   * what the app knows about the thing now, and knowing is not a permission. The
+   * page sets it true for every row; the reorder mode that set it false is gone
+   * (velista `0189`).
    */
   readonly interactive: boolean;
   /**
@@ -348,7 +348,7 @@ export interface LineRowVm {
    *
    * `DECIDE`, and separate from {@link interactive} for the first time, because
    * the tap and the drag stopped being one gesture. A `READ` caller gets a row
-   * that opens and a reel that does not move, which is honest in both directions;
+   * that opens and a stepper with no buttons, which is honest in both directions;
    * a `WRITE` only caller gets the same, and the page says once who does the
    * buying rather than letting each row refuse in turn.
    */
@@ -402,7 +402,7 @@ export interface LineRowVm {
  * beside a fact is a second answer that will eventually disagree with the first.
  */
 export interface ListAbilitiesVm {
-  /** Add a line, edit or delete an unapproved one, reorder. `WRITE`. */
+  /** Add a line, edit or delete an unapproved one. `WRITE`. */
   readonly canWrite: boolean;
   /** Approve, reject, change an approved quantity. `DECIDE`. */
   readonly canDecide: boolean;
@@ -520,11 +520,6 @@ export type ListPageState =
       readonly abilities: ListAbilitiesVm;
       /** Nothing on the list yet. The composer is focused, per section 3.1. */
       readonly empty: boolean;
-      /**
-       * Whether dragging is available (rule L4). False while `nextCursor` is non null,
-       * because `line.reorder` renumbers only the lines it names.
-       */
-      readonly canReorder: boolean;
       /**
        * Whether this list approves new lines by itself (backend plan 0037, section 3).
        *

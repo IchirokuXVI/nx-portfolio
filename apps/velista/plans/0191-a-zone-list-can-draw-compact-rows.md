@@ -282,7 +282,8 @@ kilo piece, a line at zero and a long brand.
 - **I. No reorder in the compact layout.** If velista `0189` has not removed the reorder mode
   when this plan is built, `LineList` passes `'default'` to every row while the list is
   being reordered: the grip and a row being dragged are the row of today's business, and
-  `0189` removes them.
+  `0189` removes them. As built, `0189` removed the reorder mode, so this fallback is gone and
+  the rows take `layout` straight.
 
 ## 1. The setting
 

@@ -751,12 +751,8 @@
     "header": {
       "title": "List",
       "inGroup": "in {{name}}",
-      "pending": "{{pending}} of {{total}} pending",
-      "done": "Nothing left",
       "notLive": "Not updating right now",
-      "back": "Back to the group",
-      "cost": "About {{cost}} for the lines that have a price",
-      "costExact": "{{cost}} for the lines that have a price"
+      "back": "Back to the group"
     },
     "presence": {
       "one": "{{name}} is on the list",
@@ -882,19 +878,7 @@
       "comments": "Comments",
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
-      "failed": "That did not save. Tap to try again",
-      "movedTo": "Moved to position {{position}} of {{total}}"
-    },
-    "reorder": {
-      "enter": "Put them in order",
-      "title": "Put them in order",
-      "body": "Drag by the grip. Ticking off is off while you are in here",
-      "done": "Done",
-      "started": "Putting them in order. Ticking off is off",
-      "ended": "Finished putting them in order",
-      "moveUp": "Move {{name}} up",
-      "moveDown": "Move {{name}} down",
-      "unavailable": "To reorder, use the list order, all lines and no search."
+      "failed": "That did not save. Tap to try again"
     },
     "view": {
       "order": {
@@ -1169,7 +1153,6 @@
       "keepEditing": "Keep editing"
     },
     "trips": {
-      "toBuy": "To buy",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} of {{total}} bought",
       "lines": "{{count}} lines",
@@ -2019,10 +2002,6 @@
       "amount": "≈{{amount}}",
       "open": "Estimated total, about {{amount}}. See what is behind it.",
       "openExact": "Total, {{amount}}. See what is behind it.",
-      "barLabel": "About {{bought}} bought of about {{total}}",
-      "barLabelExact": "{{bought}} bought of {{total}}",
-      "boughtEnd": "{{amount}} bought",
-      "leftEnd": "{{amount}} left",
       "title": "Estimated total",
       "titleExact": "Total",
       "bought": "Bought",

@@ -402,62 +402,7 @@
   color: var(--app-status-info-fg);
 }
 
-.grip-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  flex-shrink: 0;
-  color: var(--app-text-muted);
-}
-
-// What a finger takes hold of. `touch-action: none` is load bearing: without it the
-// browser claims the downward movement as a scroll before the list sees it.
-.grip-handle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-inline-size: var(--app-touch-target);
-  padding-block: var(--app-space-2);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-
-  &:active {
-    cursor: grabbing;
-  }
-}
-
-.grip {
-  font-size: var(--app-icon-lg);
-}
-
-// Small on screen and 44 wide in the hit area: the arrows read as a hint and are
-// still hittable.
-.grip-step {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: var(--app-touch-target);
-  min-height: var(--app-space-5);
-  padding: 0;
-  background: none;
-  border: 0;
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
-  cursor: pointer;
-
-  &:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-
-  &:focus-visible {
-    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
-    outline-offset: var(--app-focus-ring-offset);
-  }
-}
-
-// Rows fade rather than slide, and nobody else's reorder is ever animated.
+// Rows fade rather than slide.
 @media (prefers-reduced-motion: reduce) {
   .row {
     transition: none;

@@ -66,7 +66,6 @@ import {
   ColumnScroll,
   formatAmount,
   ListSearchNavigation,
-  NavChrome,
   PageReturn,
   productPagePath,
   type QuantityRun,
@@ -80,12 +79,13 @@ import {
 import {
   AnchoredPopover,
   type AnchoredPopoverClose,
+  type AnchoredPopoverSide,
   BasketIcon,
-  BasketTotalBar,
   BasketTotalNumber,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
+  DragReleasesField,
   EllipsisIcon,
   InfoIcon,
   LineComposer,
@@ -214,11 +214,11 @@ function basketReturnKey(live: boolean, id: string): string {
     AnchoredPopover,
     BasketIcon,
     BasketRow,
-    BasketTotalBar,
     BasketTotalNumber,
     CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
+    DragReleasesField,
     EllipsisIcon,
     SeenTarget,
     InfoIcon,
@@ -1094,8 +1094,6 @@ export class BasketPage {
 
     inject(DestroyRef).onDestroy(() => {
       followed.unsubscribe();
-      // The bar comes back with whatever screen is next (velista `0117`).
-      this._chrome.setComposing(false);
       // What a return to this basket comes back to, taken before the stores let go.
       this._returns.keep<BasketPageReturn>(
         basketReturnKey(this._live, this._id),
@@ -1754,7 +1752,6 @@ export class BasketPage {
   // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
-  private readonly _chrome = inject(NavChrome);
 
   /**
    * Whether `?search=1` is on the URL (velista `0109`).
@@ -1806,22 +1803,14 @@ export class BasketPage {
   /** The id of the results region, which the field names in `aria-controls`. */
   protected readonly resultsId = 'basket-results';
 
-  /** Whether the composer's field has focus. */
-  private readonly _fieldFocused = signal(false);
-
-  /** The composer's field gained or lost focus. */
-  protected onFieldFocused(focused: boolean): void {
-    this._fieldFocused.set(focused);
-  }
-
   /**
-   * The bar gives the page its room while the field has focus or holds words (rule
-   * F3), so the results reach from the basket's bar to the composer.
+   * The first touch or pen drag of the column takes the focus off the field, so a
+   * phone puts its keyboard away (velista `0189`, section 4). The words, the results
+   * and `?search=1` stay, and a field without focus is left alone.
    */
-  private readonly _hideChrome = effect(() => {
-    const composing = this._fieldFocused() || this.typing();
-    untracked(() => this._chrome.setComposing(composing));
-  });
+  protected releaseField(): void {
+    this._composer()?.releaseFocus();
+  }
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
 
@@ -1829,12 +1818,10 @@ export class BasketPage {
   private _resultsDrawn = false;
 
   /**
-   * When the results first appear, the column goes back to its top, so they sit
-   * under the basket's bar however far down the basket somebody was.
-   *
-   * Not further, unlike the zone list: the basket's bar is inside this column
-   * rather than above it, so scrolling the heading to the top would take the bar
-   * off the screen, and the bar stays while typing.
+   * When the results first appear, the column goes back to its top, so they start
+   * under the field however far down the basket somebody was. The tools row and the
+   * field are pinned above this column (velista `0189`), so the top of the column is
+   * the top of what moves, as on the zone list.
    *
    * Not on a return to the basket: the results were already on screen when
    * somebody left, and the place they were reading in is what {@link _scroll} puts
@@ -2195,6 +2182,15 @@ export class BasketPage {
    * The plus beside the field, or the add button on a card: whichever was pressed.
    */
   protected readonly pickerAnchor = signal<HTMLElement | null>(null);
+
+  /**
+   * Which side of its anchor the picker opens on (velista `0189`). Below the
+   * composer's plus, which sits at the top of the page, where above it would cover the
+   * tools row; above a card's add button in the results, as before.
+   */
+  protected readonly pickerSide = computed<AnchoredPopoverSide>(() =>
+    this.pickerAnchor()?.closest('.composer-dock') ? 'below' : 'above'
+  );
 
   /** The line the open picker is asking about, as the composer sent it. */
   private _waiting: LineComposerSubmit | null = null;
