@@ -1253,6 +1253,33 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     });
   });
 
+  it('reads two presses in one task as one run, not as a typed amount', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    // The real buttons, with no redraw between them: the second press builds on
+    // the first (velista `0188`), so it emits 4 to 5 and is one step, a press.
+    const plusButton = fixture.debugElement
+      .query(By.css('lib-quantity-stepper.ask-amount'))
+      .nativeElement.querySelector('button.step.plus') as HTMLButtonElement;
+    plusButton.click();
+    plusButton.click();
+    fixture.detectChanges();
+    await settleWrites();
+    expect(store.setDemand).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl1',
+      quantity: 5,
+      from: 3,
+    });
+  });
+
   it('sends nothing for a run that came back to where it began', async () => {
     const { fixture, store } = await render();
     jest.useFakeTimers();

@@ -355,21 +355,6 @@ $app-landing-short: 700px;
   --app-choice-card-tick-width: 11px;
   --app-choice-card-tick-height: 6px;
 
-  // **The one number that decides how the reel feels.** It is positional, one to one
-  // with the finger, so this is the distance a thumb travels per unit. 40px leaves
-  // roughly seven units in the ~280px of comfortable travel on a 390px phone, which
-  // is what makes two to five a single gesture rather than three.
-  //
-  // The reel is gone since velista 0190 and nothing reads these four tokens now.
-  // They are kept until the owner decides to remove them.
-  --app-reel-unit: 40px;
-  --app-reel-height: 56px;
-  --app-reel-radius: 14px;
-  // Each number in the overlay keeps this width whether or not it has anything in it,
-  // so the current number does not slide sideways as the reel reaches zero and the
-  // neighbour to its left disappears.
-  --app-reel-digit-width: 28px;
-
   // The stepper (velista 0188, the owner's D3 Outline): minus, the amount cell and
   // plus in one outlined capsule, each button 48 by 48. The cells were measured in the
   // mock, never guessed: the row's 59px holds "99,975" at 16px 700 with 4px of air a
