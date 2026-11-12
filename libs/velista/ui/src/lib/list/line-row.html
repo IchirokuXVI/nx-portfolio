@@ -15,6 +15,7 @@
   [attr.aria-label]="accessibleName()"
   [attr.tabindex]="!line().interactive ? null : 0"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
+  [class.compact]="compact()"
   [class.in-flight]="line().write === 'pending'"
   [class.inert]="!line().interactive"
   [class.settled]="line().settled"
@@ -23,19 +24,22 @@
   role="button"
 >
   <!--
-    The picture (velista 0145, sections 3 and 5). A line with no product draws a
-    dashed square with a plus, and for a reader who may change the line it is the
-    full size target that chooses one.
+    **The compact row** (velista 0191): the picture as tall as the text, the label and
+    the brand on line 1, and under them three fact lines beside the stepper. Every fact
+    is decided by `lineRowFacts` and the builder; this branch only draws. The row
+    element above, the stepper below and everything under the row are shared with
+    the row of today.
   -->
-  @if (line().product; as product) {
-    @switch (product.kind) {
+  @if (compact()) {
+    @switch (line().product?.kind) {
       @case ('shown') {
-        <!-- A press on the photo opens it large and nothing else. -->
-        <lib-product-picture
-          [imageUrl]="product.imageUrl"
-          [zoom]="product.name ?? line().content"
-          class="picture"
-        />
+        @if (shown(); as product) {
+          <lib-product-picture
+            [imageUrl]="product.imageUrl"
+            [zoom]="product.name ?? line().content"
+            class="picture"
+          />
+        }
       }
       @case ('loading') {
         <span aria-hidden="true" class="picture bone"></span>
@@ -58,19 +62,17 @@
           <lib-product-picture class="picture" />
         }
       }
-      @case ('unread') {
+      @default {
         <lib-product-picture class="picture" />
       }
     }
-  }
 
-  <span class="body">
     <!--
-      Line 1: the name, then the price of one. The name is cut, the price never is.
-      The first match of a search is painted on the name (velista 0082, section 6).
+      Line 1: the label, then the brand, then the marks of decision F. The label
+      gives way first, then the brand; the marks never do.
     -->
-    <span class="line-1">
-      <span [class.own]="line().named === true" class="content">
+    <span class="compact-line-1">
+      <span class="content label">
         @if (highlighted(); as parts) {
           <span>{{ parts.before }}</span
           ><mark class="match">{{ parts.match }}</mark
@@ -81,27 +83,9 @@
       </span>
 
       @if (shown(); as product) {
-        @if (product.price; as price) {
-          <span class="price"
-            ><span>{{ price.amount }}</span>
-            @if (price.per; as per) {
-              <span class="per">{{ per }}</span>
-            }
-          </span>
-        } @else {
-          <span class="price none">{{ 'list.row.noPrice' | rokuT }}</span>
-        }
-      }
-    </span>
-
-    <!--
-      Line 2: the product, then one status word. A row has no third line: the words
-      that stood under the name are one word at the end of this one now (section 4).
-    -->
-    <span class="line-2">
-      @switch (line().product?.kind) {
-        @case ('shown') {
-          @if (shown(); as product) {
+        @if (product.favorite || product.others > 0) {
+          <!-- A line of several products: the star, the brand and "+N" in the brand's room. -->
+          <span class="brand multi">
             @if (product.favorite) {
               <span
                 [attr.aria-label]="'list.row.favorite' | rokuT"
@@ -111,15 +95,8 @@
                 <lib-star-filled-icon class="favorite-glyph" />
               </span>
             }
-            @if (line().named === true && product.name !== null) {
-              <span class="product-name">{{ product.name }}</span>
-            }
-            @if (product.brandSize !== null) {
-              <span
-                [class.alone]="line().named !== true || product.name === null"
-                class="brand-size"
-                >{{ product.brandSize }}</span
-              >
+            @if (product.brand !== null) {
+              <span class="brand-text">{{ product.brand }}</span>
             }
             @if (product.others > 0) {
               <span
@@ -131,47 +108,110 @@
                 >+{{ product.others }}</span
               >
             }
+          </span>
+        } @else if (product.brand !== null) {
+          <span class="brand">{{ product.brand }}</span>
+        }
+      } @else if (line().product?.kind === 'loading') {
+        <span aria-hidden="true" class="bone brand-bone"></span>
+      }
+
+      @if (
+        line().editor !== null ||
+        (line().commentCount ?? 0) > 0 ||
+        status() !== null
+      ) {
+        <span aria-hidden="true" class="marks">
+          @if (line().editor !== null) {
+            <span class="editor-avatar">{{ editorInitial() }}</span>
           }
+          @if ((line().commentCount ?? 0) > 0) {
+            <span class="comment-count">
+              <lib-comment-icon class="comment-glyph" />
+              {{ line().commentCount }}
+            </span>
+          }
+          @if (status(); as word) {
+            <span [class]="'status status-' + word" data-status>{{
+              statusKey(word) | rokuT: statusArgs()
+            }}</span>
+          }
+        </span>
+      }
+    </span>
+
+    <!-- The facts: three fixed lines, each cropped on its own at the column's edge. -->
+    @switch (line().product?.kind) {
+      @case ('shown') {
+        @if (facts(); as fact) {
+          <span class="facts">
+            <span class="fact">{{ fact.size }}</span>
+            <span class="fact">{{ unitPriceText() }}</span>
+            <!--
+              Line 3 is the total of the line's amount. While the amount is being
+              saved (an open run, or its write in flight) it would say what the old
+              amount cost, so the saving mark stands in its place (the owner's
+              decisions of 2026-11-12).
+            -->
+            @if (saving()) {
+              <span aria-hidden="true" class="fact price saving"
+                ><lib-spinner-icon class="saving-mark"
+              /></span>
+            } @else if (fact.total; as total) {
+              <span class="fact price"
+                >{{ total.estimated ? '≈' : '' }}{{ total.amount }}</span
+              >
+            } @else if (fact.noPrice) {
+              <span class="fact price none">{{
+                'list.row.noPrice' | rokuT
+              }}</span>
+            } @else {
+              <span class="fact price"></span>
+            }
+          </span>
         }
-        @case ('loading') {
-          <span aria-hidden="true" class="bone line-bone"></span>
-        }
-        @case ('none') {
-          @if (mayChoose()) {
+      }
+      @case ('loading') {
+        <span aria-hidden="true" class="facts">
+          <span class="fact bone fact-bone size-bone"></span>
+          <span class="fact bone fact-bone measure-bone"></span>
+          <span class="fact price bone fact-bone price-bone"></span>
+        </span>
+      }
+      @case ('none') {
+        @if (mayChoose()) {
+          <span class="facts free">
             <button
               (click)="onChoose($event)"
               (keydown)="$event.stopPropagation()"
               (pointerdown)="$event.stopPropagation()"
-              class="ask"
+              class="compact-choose"
               type="button"
             >
               {{ 'list.row.choose' | rokuT }}
             </button>
-          } @else {
-            <span class="no-product">{{ 'list.row.noProduct' | rokuT }}</span>
-          }
-        }
-        @case ('unread') {
-          <span class="no-product"></span>
-        }
-        @default {
-          @if (line().detail; as detail) {
-            <span class="brand-size alone">{{ detail }}</span>
-          }
+          </span>
+        } @else {
+          <span class="facts">
+            @if (!mayChoose()) {
+              <span class="fact no-product">{{
+                'list.row.noProduct' | rokuT
+              }}</span>
+            }
+          </span>
         }
       }
-
-      @if (status(); as word) {
-        <span
-          [class]="'status status-' + word"
-          aria-hidden="true"
-          data-status
-          >{{ statusKey(word) | rokuT: statusArgs() }}</span
-        >
+      @case ('unread') {
+        <span class="facts"></span>
       }
-    </span>
+      @default {
+        <span class="facts">
+          <span class="fact">{{ line().detail ?? '' }}</span>
+        </span>
+      }
+    }
 
-    <!-- Every word that applies, for a screen reader, in the order of section 4. -->
+    <!-- Every word that applies, for a screen reader, as the row of today has them. -->
     @if (statuses().length > 0) {
       <span [id]="'st-' + line().id" class="visually-hidden">
         @for (word of statuses(); track word; let last = $last) {
@@ -179,25 +219,184 @@
         }
       </span>
     }
-  </span>
+  } @else {
+    <!--
+      The picture (velista 0145, sections 3 and 5). A line with no product draws a
+      dashed square with a plus, and for a reader who may change the line it is the
+      full size target that chooses one.
+    -->
+    @if (line().product; as product) {
+      @switch (product.kind) {
+        @case ('shown') {
+          <!-- A press on the photo opens it large and nothing else. -->
+          <lib-product-picture
+            [imageUrl]="product.imageUrl"
+            [zoom]="product.name ?? line().content"
+            class="picture"
+          />
+        }
+        @case ('loading') {
+          <span aria-hidden="true" class="picture bone"></span>
+        }
+        @case ('none') {
+          @if (mayChoose()) {
+            <button
+              (click)="onChoose($event)"
+              (keydown)="$event.stopPropagation()"
+              (pointerdown)="$event.stopPropagation()"
+              [attr.aria-label]="
+                'list.row.chooseFor' | rokuT: { name: line().content }
+              "
+              class="picture choose"
+              type="button"
+            >
+              <lib-plus-icon class="choose-glyph" />
+            </button>
+          } @else {
+            <lib-product-picture class="picture" />
+          }
+        }
+        @case ('unread') {
+          <lib-product-picture class="picture" />
+        }
+      }
+    }
 
-  <!--
-    Who is editing this line right now: their initial, and the word, subdued. Advisory
-    and nothing more (plan 0022, section 3.4). `aria-hidden`, because a name that grew
-    "Ana is editing" would be read out every time focus touched the row.
-  -->
-  @if (line().editor !== null) {
-    <span aria-hidden="true" class="editor">
-      <span class="editor-avatar">{{ editorInitial() }}</span>
-      <span class="editor-label">{{ 'list.line.editing' | rokuT }}</span>
-    </span>
-  }
+    <span class="body">
+      <!--
+        Line 1: the name, then the price of one. The name is cut, the price never is.
+        The first match of a search is painted on the name (velista 0082, section 6).
+      -->
+      <span class="line-1">
+        <span [class.own]="line().named === true" class="content">
+          @if (highlighted(); as parts) {
+            <span>{{ parts.before }}</span
+            ><mark class="match">{{ parts.match }}</mark
+            ><span>{{ parts.after }}</span>
+          } @else {
+            {{ line().content }}
+          }
+        </span>
 
-  @if (line().commentCount !== undefined && line().commentCount! > 0) {
-    <span aria-hidden="true" class="comment-count">
-      <lib-comment-icon class="comment-glyph" />
-      {{ line().commentCount }}
+        @if (shown(); as product) {
+          @if (product.price; as price) {
+            <span class="price"
+              ><span>{{ price.amount }}</span>
+              @if (price.per; as per) {
+                <span class="per">{{ per }}</span>
+              }
+            </span>
+          } @else {
+            <span class="price none">{{ 'list.row.noPrice' | rokuT }}</span>
+          }
+        }
+      </span>
+
+      <!--
+        Line 2: the product, then one status word. A row has no third line: the words
+        that stood under the name are one word at the end of this one now (section 4).
+      -->
+      <span class="line-2">
+        @switch (line().product?.kind) {
+          @case ('shown') {
+            @if (shown(); as product) {
+              @if (product.favorite) {
+                <span
+                  [attr.aria-label]="'list.row.favorite' | rokuT"
+                  class="favorite"
+                  role="img"
+                >
+                  <lib-star-filled-icon class="favorite-glyph" />
+                </span>
+              }
+              @if (line().named === true && product.name !== null) {
+                <span class="product-name">{{ product.name }}</span>
+              }
+              @if (product.brandSize !== null) {
+                <span
+                  [class.alone]="line().named !== true || product.name === null"
+                  class="brand-size"
+                  >{{ product.brandSize }}</span
+                >
+              }
+              @if (product.others > 0) {
+                <span
+                  [attr.aria-label]="
+                    'list.row.more' | rokuT: { count: product.others }
+                  "
+                  class="more"
+                  role="img"
+                  >+{{ product.others }}</span
+                >
+              }
+            }
+          }
+          @case ('loading') {
+            <span aria-hidden="true" class="bone line-bone"></span>
+          }
+          @case ('none') {
+            @if (mayChoose()) {
+              <button
+                (click)="onChoose($event)"
+                (keydown)="$event.stopPropagation()"
+                (pointerdown)="$event.stopPropagation()"
+                class="ask"
+                type="button"
+              >
+                {{ 'list.row.choose' | rokuT }}
+              </button>
+            } @else {
+              <span class="no-product">{{ 'list.row.noProduct' | rokuT }}</span>
+            }
+          }
+          @case ('unread') {
+            <span class="no-product"></span>
+          }
+          @default {
+            @if (line().detail; as detail) {
+              <span class="brand-size alone">{{ detail }}</span>
+            }
+          }
+        }
+
+        @if (status(); as word) {
+          <span
+            [class]="'status status-' + word"
+            aria-hidden="true"
+            data-status
+            >{{ statusKey(word) | rokuT: statusArgs() }}</span
+          >
+        }
+      </span>
+
+      <!-- Every word that applies, for a screen reader, in the order of section 4. -->
+      @if (statuses().length > 0) {
+        <span [id]="'st-' + line().id" class="visually-hidden">
+          @for (word of statuses(); track word; let last = $last) {
+            {{ statusKey(word) | rokuT: statusArgs() }}{{ last ? '' : ', ' }}
+          }
+        </span>
+      }
     </span>
+
+    <!--
+      Who is editing this line right now: their initial, and the word, subdued. Advisory
+      and nothing more (plan 0022, section 3.4). `aria-hidden`, because a name that grew
+      "Ana is editing" would be read out every time focus touched the row.
+    -->
+    @if (line().editor !== null) {
+      <span aria-hidden="true" class="editor">
+        <span class="editor-avatar">{{ editorInitial() }}</span>
+        <span class="editor-label">{{ 'list.line.editing' | rokuT }}</span>
+      </span>
+    }
+
+    @if (line().commentCount !== undefined && line().commentCount! > 0) {
+      <span aria-hidden="true" class="comment-count">
+        <lib-comment-icon class="comment-glyph" />
+        {{ line().commentCount }}
+      </span>
+    }
   }
 
   <!--

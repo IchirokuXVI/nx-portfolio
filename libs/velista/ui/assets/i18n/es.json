@@ -1207,7 +1207,8 @@
       "more_other": "y {{count}} más que también valen",
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "about": "unos {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1314,6 +1315,10 @@
     },
     "tour": {
       "again": "Enséñamela otra vez"
+    },
+    "listRows": {
+      "label": "Filas compactas",
+      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono."
     }
   },
   "install": {

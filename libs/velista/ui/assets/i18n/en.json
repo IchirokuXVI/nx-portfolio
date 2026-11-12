@@ -1207,7 +1207,8 @@
       "more_other": "and {{count}} more that will do",
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
-      "retry": "Try again"
+      "retry": "Try again",
+      "about": "about {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1314,6 +1315,10 @@
     },
     "tour": {
       "again": "Show me around again"
+    },
+    "listRows": {
+      "label": "Compact rows",
+      "hint": "Lists show the size, the price and the total on every row. Only on this phone."
     }
   },
   "install": {

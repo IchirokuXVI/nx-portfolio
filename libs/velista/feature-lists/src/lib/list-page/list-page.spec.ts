@@ -32,6 +32,7 @@ import {
   LINE_SERVICE,
   LineStore,
   LIST_SERVICE,
+  ListRowsStore,
   ListViewStore,
   MEMORY_OPERATOR_SETTINGS,
   overlayKey,
@@ -238,6 +239,8 @@ interface Options {
    * service that answers this, in place of the fake (velista `0158`, item 6).
    */
   readonly lineRead?: readonly Line[];
+  /** What the real `LineStore`'s service writes with, beside `lineRead`. */
+  readonly lineWrites?: Partial<LineServiceI>;
   /** What the read of the lines failed with, beside `linesState: 'failed'`. */
   readonly linesError?: unknown;
   /** What the read of the group failed with, on a group that is not cached (velista 0156). */
@@ -374,12 +377,15 @@ async function render(options: Options = {}): Promise<{
                   items: options.lineRead ?? [],
                   nextCursor: null,
                 }),
+                ...options.lineWrites,
               } as Partial<LineServiceI>,
             },
           ]),
       // What the route provides beside the page (velista `0082`), real, over the
       // fakes above, so a spec asserts what the page draws of a real view.
       ListViewStore,
+      // How this device draws the rows (velista `0191`), real, over the storage above.
+      ListRowsStore,
       // Beside it on the route (velista `0088`), real, over a service the spec answers.
       TripStore,
       { provide: TRIP_SERVICE, useValue: tripService },
@@ -4768,4 +4774,119 @@ describe('the history names a price per kilo with its slash', () => {
       expect(json.list.history.atPer).toContain('{{- per}}');
     });
   }
+});
+
+describe('ListPage: compact rows (velista 0191)', () => {
+  const COMPACT = new Map([
+    [StorageKeys.listRows, JSON.stringify({ version: 1, layout: 'compact' })],
+  ]);
+  const ROWS = [
+    line('ln-milk', { content: 'Leche', position: 1 }),
+    line('ln-bread', { content: 'Pan', position: 2 }),
+  ];
+
+  function lineRows(fixture: ComponentFixture<ListPage>): HTMLElement[] {
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-row .row'
+      )
+    );
+  }
+
+  it('draws the row of today with no choice on the device', async () => {
+    const { fixture } = await render({ lines: ROWS });
+
+    expect(lineRows(fixture)).toHaveLength(2);
+    expect(
+      lineRows(fixture).some((row) => row.classList.contains('compact'))
+    ).toBe(false);
+  });
+
+  it('draws every row compact when the device chose it', async () => {
+    const { fixture } = await render({
+      lines: ROWS,
+      storage: new Map(COMPACT),
+    });
+
+    expect(lineRows(fixture)).toHaveLength(2);
+    expect(
+      lineRows(fixture).every((row) => row.classList.contains('compact'))
+    ).toBe(true);
+  });
+
+  it('draws the search results compact too (decision G)', async () => {
+    const { fixture } = await render({
+      lines: ROWS,
+      storage: new Map(COMPACT),
+      search: true,
+      returned: {
+        view: {
+          state: DEFAULT_LIST_VIEW_STATE,
+          openTrips: new Set<string>(),
+        },
+        words: 'le',
+        dueExpanded: false,
+        scrollTop: 0,
+      },
+    });
+    const results = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        '#list-results lib-line-row .row'
+      )
+    );
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((row) => row.classList.contains('compact'))).toBe(
+      true
+    );
+  });
+
+  it('hands a run to its write in one task, so the row is never neither (2026-11-12)', async () => {
+    // The compact row hides its price while the line has an open run or a write in
+    // flight. The real store over a write that never answers: at the quiet beat the
+    // run leaves `pending` and the write is marked in flight before anything draws.
+    const { fixture } = await render({
+      lineRead: [line('ln-1', { quantity: 2 })],
+      lineWrites: { addQuantity: () => new Promise<Line>(() => undefined) },
+      storage: new Map(COMPACT),
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    jest.useFakeTimers();
+    try {
+      const page = fixture.componentInstance;
+
+      page.stepQuantity({
+        lineId: 'ln-1',
+        step: { from: 2, to: 3, repeat: false },
+      });
+      fixture.detectChanges();
+      expect(page.quantityRuns.pending().get('ln-1')).toBe(3);
+
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // Same task: no await between the run ending and this render.
+      fixture.detectChanges();
+
+      expect(page.quantityRuns.pending().has('ln-1')).toBe(false);
+      expect(lineRows(fixture)[0].classList).toContain('in-flight');
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('redraws the rows when the choice flips, with no reload', async () => {
+    const { fixture } = await render({ lines: ROWS });
+
+    TestBed.inject(ListRowsStore).setLayout('compact');
+    fixture.detectChanges();
+    expect(
+      lineRows(fixture).every((row) => row.classList.contains('compact'))
+    ).toBe(true);
+
+    TestBed.inject(ListRowsStore).setLayout('default');
+    fixture.detectChanges();
+    expect(
+      lineRows(fixture).some((row) => row.classList.contains('compact'))
+    ).toBe(false);
+  });
 });

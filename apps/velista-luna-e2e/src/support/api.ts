@@ -579,13 +579,15 @@ export async function deleteSection(
 /**
  * `GET /v1/admin/catalog/items?query=`, then `POST /v1/admin/catalog/items` when
  * no product carries this exact English name: one product, created once and kept
- * across runs, since a product nothing names costs nothing.
+ * across runs, since a product nothing names costs nothing. A brand, when given,
+ * is set on the product as it is created.
  */
 export async function ensureItem(
   admin: Session,
   name: { en: string; es: string },
   categoryIds: string[],
-  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT'
+  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT',
+  brand: string | null = null
 ): Promise<string> {
   const page = await admin.get<{
     items: { id: string; name: { en?: string } }[];
@@ -596,6 +598,7 @@ export async function ensureItem(
     name,
     categoryIds,
     defaultUnit,
+    ...(brand === null ? {} : { brand }),
   });
   return made.id;
 }

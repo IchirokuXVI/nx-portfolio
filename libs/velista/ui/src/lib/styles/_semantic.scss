@@ -240,6 +240,23 @@ $app-landing-short: 700px;
   // How few letters of a product's name survive on a row before its brand and size
   // start to give way (section 3).
   --app-line-product-name-min: 4ch;
+  // The compact row of a list (velista 0191, section 3): the label and the brand on
+  // one 22px line, then three fact lines (the size and the price per measure on 16px
+  // lines, the price on a 20px one) beside the stepper. The picture is as tall as
+  // the text, 74px, and the brand never takes more than 96px of the first line.
+  --app-line-compact-label-leading: 22px;
+  --app-line-compact-fact-leading: 16px;
+  --app-line-compact-price-leading: 20px;
+  --app-line-compact-facts-height: calc(
+    2 * var(--app-line-compact-fact-leading) +
+      var(--app-line-compact-price-leading)
+  );
+  --app-line-compact-picture-size: calc(
+    var(--app-line-compact-label-leading) + var(--app-line-compact-facts-height)
+  );
+  --app-line-compact-brand-max: 96px;
+  // "Choose a product" in the facts column of a free text line, when it wraps.
+  --app-line-compact-choose-leading: 18px;
   // The same picture on the basket line sheet's product card, larger because the
   // card is the one product on the sheet and not one row of many.
   --app-product-card-image-size: 72px;

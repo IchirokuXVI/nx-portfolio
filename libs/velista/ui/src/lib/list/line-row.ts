@@ -11,15 +11,23 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  lineRowFacts,
   lineStatuses,
   priceWordsText,
+  type LineRowFacts,
   type LineRowShownProduct,
   type LineRowVm,
   type LineStatus,
+  type ListRowLayout,
   type QuantityStep,
 } from '@portfolio/velista/models';
 import { formatAmount } from '@portfolio/velista/platform';
-import { CommentIcon, PlusIcon, StarFilledIcon } from '../icons/icons';
+import {
+  CommentIcon,
+  PlusIcon,
+  SpinnerIcon,
+  StarFilledIcon,
+} from '../icons/icons';
 import { ProductPicture } from './product-picture';
 import { QuantityStepper } from './quantity-stepper';
 
@@ -93,6 +101,7 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
     PlusIcon,
     ProductPicture,
     QuantityStepper,
+    SpinnerIcon,
     StarFilledIcon,
   ],
   templateUrl: './line-row.html',
@@ -101,6 +110,15 @@ export type LineRowAction = 'approve' | 'reject' | 'restore';
 })
 export class LineRow {
   readonly line = input.required<LineRowVm>();
+
+  /**
+   * How the row is drawn (velista `0191`): the row of today, or the compact row with
+   * the label and the brand on one line and three fact lines beside the stepper. One
+   * component either way, so every row feature exists once and both layouts draw it.
+   */
+  readonly layout = input<ListRowLayout>('default');
+
+  protected readonly compact = computed(() => this.layout() === 'compact');
 
   /** Whether an add just raised this line, which marks its quantity (velista `0170`). */
   readonly took = input(false);
@@ -179,6 +197,40 @@ export class LineRow {
     return product?.kind === 'none' && product.canChoose;
   });
 
+  /**
+   * The compact row's three facts, or null while it shows no product (velista
+   * `0191`, section 2.2). Decided by `lineRowFacts` over what the builder set; the
+   * total is of the stored quantity, which is the one the builder counted.
+   */
+  protected readonly facts = computed<LineRowFacts | null>(() => {
+    const shown = this.shown();
+    return shown === null ? null : lineRowFacts(shown);
+  });
+
+  /**
+   * Whether the compact row's third fact draws the saving mark in place of the total
+   * (velista `0191`, the owner's decision of 2026-11-12): while the line has an open
+   * run of presses, or its write is in flight. The total follows the stored amount,
+   * so during a run it would still say what the old amount cost.
+   *
+   * One condition over both states, so the hand over cannot flash the old price:
+   * `quantityRuns` clears `pending` and starts the write in the same task, and the
+   * line store marks the write pending before its first await, so the two signals
+   * change together and no frame draws neither. Every row with a product: line 3 is
+   * a total for every kind, so it always changes with the amount.
+   */
+  protected readonly saving = computed(
+    () =>
+      this.shown() !== null &&
+      (this.pending() !== null || this.line().write === 'pending')
+  );
+
+  /** The second fact, the unit price, as one string ("2,50 € / kg"), or empty. */
+  protected readonly unitPriceText = computed(() => {
+    const words = this.facts()?.unitPrice ?? null;
+    return words === null ? '' : priceWordsText(words);
+  });
+
   /** Every status word that applies, in the order of section 4. */
   protected readonly statuses = computed(() => lineStatuses(this.line()));
 
@@ -225,7 +277,9 @@ export class LineRow {
     this._translator.locale();
     this._translator.loaded();
     const parts: (string | null | undefined)[] = [line.content];
-    if (line.product === undefined) {
+    if (this.compact() && shown !== null) {
+      parts.push(...this._compactNameParts(shown));
+    } else if (line.product === undefined) {
       parts.push(line.detail);
     } else if (shown !== null) {
       if (shown.favorite) {
@@ -250,6 +304,36 @@ export class LineRow {
     return parts
       .filter((part): part is string => part != null && part !== '')
       .join(', ');
+  }
+
+  /**
+   * The product's part of a compact row's name (velista `0191`, section 5): what the
+   * row draws, in its order. The favourite, the brand, the size, the unit price, the
+   * total ("about 1,88 €" for an estimate), and "+N". A named line's product name is
+   * not drawn, so it is not read (decision E). While the saving mark stands in for
+   * the total, the total is left out: it would state the old cost.
+   */
+  private _compactNameParts(shown: LineRowShownProduct): (string | null)[] {
+    const facts = lineRowFacts(shown);
+    const total = this.saving() ? null : facts.total;
+    return [
+      shown.favorite ? this._translator.t('list.row.favorite') : null,
+      shown.brand,
+      facts.size,
+      facts.unitPrice === null ? null : priceWordsText(facts.unitPrice),
+      total === null
+        ? null
+        : total.estimated
+          ? this._translator.t('list.row.about', undefined, undefined, {
+              price: total.amount,
+            })
+          : total.amount,
+      shown.others > 0
+        ? this._translator.t('list.row.more', undefined, undefined, {
+            count: shown.others,
+          })
+        : null,
+    ];
   }
 
   /**
