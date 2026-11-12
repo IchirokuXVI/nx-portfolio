@@ -4043,6 +4043,120 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     ).toEqual(['Leche para el café']);
   });
 
+  describe("a line's step (velista 0186, decision A)", () => {
+    // Rice by the kilo stepped by 250 g, which the basket read names, and a
+    // second rice the same line holds, stepped by 100 g, which it does not.
+    const riceItem = (id: string, quantityStep: number): CatalogItem => ({
+      ...MILK.item,
+      id,
+      quantityStep,
+      size: null,
+      unit: 'KILOGRAM',
+      categories: [],
+    });
+    const RICE_ITEM = riceItem('item-rice', 250);
+    const OTHER_RICE = riceItem('item-rice-2', 100);
+    const RICE: CatalogSuggestion = { kind: 'item', item: RICE_ITEM };
+    const RICE_PRODUCT: BasketProduct = {
+      id: RICE_ITEM.id,
+      quantityStep: 250,
+      name: RICE_ITEM.name,
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      imageUrl: null,
+      offer: null,
+      offers: [],
+      atShop: null,
+      productGroupId: null,
+      categories: [],
+      sectionIds: null,
+      approxWeight: null,
+    };
+    const riceRow = (itemIds: readonly string[]) =>
+      line('Rice', {
+        productId: RICE_ITEM.id,
+        unit: 'GRAM',
+        entries: [
+          entry('l-groceries', 'zl-1', 1000, {
+            unit: 'GRAM',
+            itemIds: [...itemIds],
+          }),
+        ],
+      });
+    const stepOf = (fixture: ComponentFixture<BasketPage>) =>
+      (
+        fixture.componentInstance as unknown as {
+          holdingsOf(): (
+            suggestion: CatalogSuggestion
+          ) => readonly { step?: number | null }[];
+        }
+      )
+        .holdingsOf()(RICE)
+        .map((held) => held.step ?? null);
+
+    it('steps a line of two products by the smaller step, and reads the one the basket did not name', async () => {
+      const itemNames = fakeItemNames({ items: [OTHER_RICE] });
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id, OTHER_RICE.id])],
+        products: new Map([[RICE_ITEM.id, RICE_PRODUCT]]),
+        served: SERVED,
+        itemNames,
+      });
+
+      expect(stepOf(fixture)).toEqual([100]);
+      expect(itemNames.asked).toContainEqual([OTHER_RICE.id]);
+    });
+
+    it("steps a line of one product by that product's step, and reads nothing", async () => {
+      const itemNames = fakeItemNames();
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id])],
+        products: new Map([[RICE_ITEM.id, RICE_PRODUCT]]),
+        served: SERVED,
+        itemNames,
+      });
+
+      expect(stepOf(fixture)).toEqual([250]);
+      expect(itemNames.asked.flat()).not.toContain(RICE_ITEM.id);
+    });
+
+    it('steps by the default while the records load, then by the line', async () => {
+      const records = signal<ReadonlyMap<string, CatalogItem>>(new Map());
+      const itemNames = {
+        ...fakeItemNames(),
+        nameOf: (itemId: string) => records().get(itemId) ?? null,
+      };
+      // The basket read names neither rice (catalog unreachable), and the card
+      // is a product with no step of its own.
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id, OTHER_RICE.id])],
+        served: SERVED,
+        itemNames,
+      });
+      const plain: CatalogSuggestion = {
+        kind: 'item',
+        item: { ...RICE_ITEM, quantityStep: null },
+      };
+      const stepNow = () =>
+        (
+          fixture.componentInstance as unknown as {
+            holdingsOf(): (
+              suggestion: CatalogSuggestion
+            ) => readonly { step?: number | null }[];
+          }
+        )
+          .holdingsOf()(plain)
+          .map((held) => held.step ?? null);
+
+      expect(stepNow()).toEqual([null]);
+
+      records.set(new Map([[OTHER_RICE.id, OTHER_RICE]]));
+
+      expect(stepNow()).toEqual([100]);
+    });
+  });
+
   it('holds nothing for a product no row is, even when a line lists it', async () => {
     const { fixture } = await render({
       lines: [

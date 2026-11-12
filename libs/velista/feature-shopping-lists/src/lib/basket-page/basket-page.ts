@@ -51,7 +51,6 @@ import {
   countableBasketRows,
   isLinkVisitor,
   lineMemberOf,
-  lineStepOf,
   type LineUnit,
   LINK_VISIT_HOURS,
   productSuggestions,
@@ -115,6 +114,7 @@ import {
   participantInitials,
   visitTime,
 } from '../basket-labels';
+import { basketLineStep, unreadLineProducts } from '../basket-line-step';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
 import { basketPath, SHOP_ASK_SEGMENTS } from '../basket-paths';
 import { BasketRow, ownBoughtUnits } from '../basket-row/basket-row';
@@ -1221,6 +1221,28 @@ export class BasketPage {
     const scope = this._groupScope();
     if (groupIds.length > 0 && this._store.me()?.kind !== 'GUEST') {
       untracked(() => void this._groupMembers.ensure(groupIds, scope));
+    }
+  });
+
+  /**
+   * The products of the basket's lines that the read did not name, read once each
+   * into `ItemNames`, so a line of several products steps here by its own step
+   * (velista `0186`, decision A; the owner, 2026-11-12). Its settle sheet sits
+   * over this page and reads the same records. Not for a guest, for the reason
+   * above.
+   */
+  private readonly _lineProductIds = computed(
+    () => unreadLineProducts(this._store.rows(), this._store.products()),
+    {
+      equal: (a, b) =>
+        a.length === b.length && a.every((itemId, i) => itemId === b[i]),
+    }
+  );
+
+  private readonly _loadLineProducts = effect(() => {
+    const itemIds = this._lineProductIds();
+    if (itemIds.length > 0 && this._store.me()?.kind !== 'GUEST') {
+      untracked(() => void this._itemNames.ensure(itemIds));
     }
   });
 
@@ -2353,6 +2375,7 @@ export class BasketPage {
     const lists = this._store.lists();
     const products = this._store.products();
     const busy = this.busyRows();
+    const names = this._itemNames;
     return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
       if (suggestion.kind !== 'item') {
         return [];
@@ -2375,10 +2398,15 @@ export class BasketPage {
               this._sending().get(entry.lineId)?.to ?? entry.left
             ),
             unit: entry.unit,
-            // The row's own product (velista `0186`, decision C).
-            step: lineStepOf(
-              { unit: entry.unit, itemIds: [suggestion.item.id] },
-              (itemId) => products.get(itemId) ?? suggestion.item
+            // The line's step over every product it holds, as its list steps
+            // it (velista `0186`, decision A; the owner, 2026-11-12). The
+            // card's own product stands in for a record not read yet.
+            step: basketLineStep(
+              entry,
+              products,
+              (itemId) =>
+                names.nameOf(itemId) ??
+                (itemId === suggestion.item.id ? suggestion.item : null)
             ),
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),

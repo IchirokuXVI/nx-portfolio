@@ -404,20 +404,31 @@ describe('RowEntries: who may change what a list asks for', () => {
     });
   });
 
-  it("steps a weight row by its product's step (velista 0186, decision C)", async () => {
+  it("steps each list by its own line's step (velista 0186, decision A)", async () => {
     const weighed = entry({ left: 1000, asked: 1000, unit: 'GRAM' });
-    const fixture = await render({ ...row([weighed]), unit: 'GRAM' });
-    fixture.componentRef.setInput('step', 100);
+    const other = entry({
+      lineId: 'zl-2',
+      listId: 'l-basics',
+      left: 1000,
+      asked: 1000,
+      unit: 'GRAM',
+    });
+    const fixture = await render({ ...row([weighed, other]), unit: 'GRAM' });
+    // The row's product's step does not reach a list that asks.
+    fixture.componentRef.setInput('step', 250);
+    fixture.componentRef.setInput('steps', new Map([['zl-1', 100]]));
     fixture.detectChanges();
     const demanded = jest.fn();
     fixture.componentInstance.demanded.subscribe(demanded);
 
     plus(askAmounts(fixture)[0], fixture);
+    plus(askAmounts(fixture)[1], fixture);
 
-    expect(demanded).toHaveBeenCalledWith({
-      lineId: 'zl-1',
-      step: { from: 1000, to: 1100, repeat: false },
-    });
+    expect(demanded.mock.calls.map(([call]) => call)).toEqual([
+      { lineId: 'zl-1', step: { from: 1000, to: 1100, repeat: false } },
+      // A line the sheet names no step for presses by the default.
+      { lineId: 'zl-2', step: { from: 1000, to: 1025, repeat: false } },
+    ]);
   });
 
   it('draws the run the sheet holds open for a line', async () => {

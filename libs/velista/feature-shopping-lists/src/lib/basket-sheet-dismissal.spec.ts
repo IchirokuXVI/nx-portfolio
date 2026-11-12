@@ -14,6 +14,7 @@ import {
   fakeZoneStore,
   LINE_SERVICE,
   provideFakeCategoryStore,
+  provideFakeItemNames,
   provideFakeShopSectionsStore,
   provideFakeZoneStore,
   SessionStore,
@@ -211,6 +212,7 @@ async function render(
       // would be a second implementation of the thing under test's whole input.
       BasketViewStore,
       provideFakeCategoryStore(),
+      provideFakeItemNames(),
       provideFakeShopSectionsStore(),
       // And a fresh `Map` for what it remembers (`0076`), so no test in this file
       // inherits an order or a grouping another one chose.

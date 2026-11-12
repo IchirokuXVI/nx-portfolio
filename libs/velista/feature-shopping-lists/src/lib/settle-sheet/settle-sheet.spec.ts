@@ -1,4 +1,4 @@
-import { signal } from '@angular/core';
+import { signal, type Signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { ActivatedRoute, convertToParamMap, Router } from '@angular/router';
@@ -11,6 +11,7 @@ import {
   BasketStore,
   BasketViewStore,
   GatewayError,
+  ItemNames,
   LINE_SERVICE,
   provideFakeCategoryStore,
   provideFakeShopSectionsStore,
@@ -26,6 +27,7 @@ import type {
   BasketRow,
   BasketRowEntry,
   BasketRowResult,
+  CatalogItem,
   LineSettlement,
   Page,
   ParticipantKind,
@@ -152,6 +154,11 @@ function settlement(overrides: Partial<LineSettlement> = {}): LineSettlement {
 }
 
 interface World {
+  /**
+   * The product records the app's `ItemNames` holds, for the products of a line
+   * the basket read did not name (velista `0186`). None by default.
+   */
+  readonly records?: Signal<ReadonlyMap<string, CatalogItem>>;
   /** Who is reading. The owner unless a test says otherwise. */
   readonly meKind?: ParticipantKind;
   /**
@@ -412,6 +419,12 @@ async function render(world: World = {}) {
       HeldBuy,
       provideFakeCategoryStore(),
       provideFakeShopSectionsStore(),
+      {
+        provide: ItemNames,
+        useValue: {
+          nameOf: (itemId: string) => world.records?.().get(itemId) ?? null,
+        },
+      },
       { provide: LINE_SERVICE, useValue: lineService },
       // The reader's own account name, which the sheet uses for their own row in the
       // history and for the caption on a finished line (plan 0052, section 2.1).
@@ -2190,6 +2203,112 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
     expect(el(fixture).querySelector('.subtitle')?.textContent?.trim()).toBe(
       'basket.sheet.each · basket.sheet.toGet'
     );
+  });
+
+  describe("a line's step (velista 0186, decision A)", () => {
+    // Rice by the kilo, stepped by 250 g, and a second rice the same line holds,
+    // stepped by 100 g, which the basket read does not name.
+    const RICE: BasketProduct = {
+      ...MILK,
+      id: 'i-rice',
+      unit: 'KILOGRAM',
+      quantityStep: 250,
+    };
+    const OTHER_RICE: CatalogItem = {
+      id: 'i-rice-2',
+      quantityStep: 100,
+      name: { en: 'Brown rice', es: 'Arroz integral' },
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      productGroupId: null,
+      categories: [],
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+      approxWeight: null,
+    };
+    const riceRow = (itemIds: readonly string[]) =>
+      line({
+        productId: RICE.id,
+        unit: 'GRAM',
+        left: 1000,
+        asked: 1000,
+        entries: [
+          entry('l1', 'zl1', 1000, { unit: 'GRAM', itemIds: [...itemIds] }),
+        ],
+      });
+    const plusOnce = async (fixture: ComponentFixture<SettleSheet>) => {
+      const stepper = fixture.debugElement.query(
+        By.css('lib-quantity-stepper.ask-amount')
+      ).componentInstance as QuantityStepper;
+      const plus = el(fixture).querySelector<HTMLButtonElement>(
+        'lib-quantity-stepper.ask-amount button.step.plus'
+      );
+      const seen: number[] = [];
+      const sub = stepper.stepped.subscribe((step) => seen.push(step.to));
+      plus?.click();
+      sub.unsubscribe();
+      fixture.detectChanges();
+      return seen;
+    };
+
+    it('steps a line of two products by the smaller step, not the row product', async () => {
+      const { fixture } = await render({
+        lines: [riceRow([RICE.id, OTHER_RICE.id])],
+        products: new Map([[RICE.id, RICE]]),
+        records: signal(new Map([[OTHER_RICE.id, OTHER_RICE]])),
+      });
+
+      expect(await plusOnce(fixture)).toEqual([1100]);
+    });
+
+    it("steps a line of one product by that product's step, as before", async () => {
+      const { fixture } = await render({
+        lines: [riceRow([RICE.id])],
+        products: new Map([[RICE.id, RICE]]),
+      });
+
+      expect(await plusOnce(fixture)).toEqual([1250]);
+    });
+
+    it('steps by the default while the records load, then by the line', async () => {
+      const records = signal<ReadonlyMap<string, CatalogItem>>(new Map());
+      // The basket read could not name the rice either (catalog unreachable).
+      const { fixture } = await render({
+        lines: [riceRow([RICE.id, OTHER_RICE.id])],
+        records,
+      });
+
+      expect(await plusOnce(fixture)).toEqual([1025]);
+
+      records.set(new Map([[OTHER_RICE.id, OTHER_RICE]]));
+      fixture.detectChanges();
+
+      // From the open run's 1025, now by the line's 100.
+      expect(await plusOnce(fixture)).toEqual([1125]);
+    });
+
+    it("reads a press on the line's step as a press, not a typed amount", async () => {
+      const { fixture, store } = await render({
+        lines: [riceRow([RICE.id, OTHER_RICE.id])],
+        products: new Map([[RICE.id, RICE]]),
+        records: signal(new Map([[OTHER_RICE.id, OTHER_RICE]])),
+      });
+      jest.useFakeTimers();
+      try {
+        await plusOnce(fixture);
+        for (let i = 0; i < 10; i++) {
+          await Promise.resolve();
+        }
+        // A press waits for the quiet time; a typed amount would be sent now.
+        expect(store.setDemand).not.toHaveBeenCalled();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
   });
 
   describe('a kilo piece (velista 0179)', () => {

@@ -23,6 +23,7 @@ import {
   BasketStore,
   BasketViewStore,
   GatewayError,
+  ItemNames,
   LINE_SERVICE,
   SessionStore,
   toBasketMergeRequired,
@@ -73,6 +74,7 @@ import {
   participantName,
   touchedCaption,
 } from '../basket-labels';
+import { basketLineStep } from '../basket-line-step';
 import { basketPath, settleSheetPath, shopAskPath } from '../basket-paths';
 import {
   changeableLineIds,
@@ -259,6 +261,8 @@ export class SettleSheet {
   private readonly _held = inject(HeldBuy);
 
   private readonly _injector = inject(Injector);
+  /** The product records the basket read did not name (velista `0186`). */
+  private readonly _itemNames = inject(ItemNames);
   private readonly _pane = signal<Pane>('settle');
   private readonly _settling = signal(false);
   /**
@@ -562,8 +566,33 @@ export class SettleSheet {
   });
 
   /**
-   * The step the steppers of the lists press by: the row's own product's
-   * (velista `0186`, decision C), or null for the unit's default.
+   * The step each list's stepper presses by, by line id: its line's step over
+   * every product the line holds (velista `0186`, decision A, which the owner
+   * ruled on 2026-11-12 wins over decision C), so a line steps here as it steps
+   * on its list. Null for the unit's default. The records the basket read did
+   * not name come from `ItemNames`, which the basket page underneath fills.
+   */
+  protected readonly lineSteps = computed<ReadonlyMap<string, number | null>>(
+    () => {
+      const row = this.row();
+      const products = this._store.products();
+      const steps = new Map<string, number | null>();
+      for (const entry of row?.entries ?? []) {
+        steps.set(
+          entry.lineId,
+          basketLineStep(entry, products, (itemId) =>
+            this._itemNames.nameOf(itemId)
+          )
+        );
+      }
+      return steps;
+    }
+  );
+
+  /**
+   * The step of a list that does not ask yet: the row's own product's, since the
+   * line that list gains holds that product (velista `0186`). Null for the
+   * unit's default.
    */
   protected readonly step = computed(() => {
     const row = this.row();
@@ -962,7 +991,7 @@ export class SettleSheet {
     readonly step: QuantityStep;
   }): void {
     this.demandRuns.step(change.lineId, change.step);
-    if (this._typed(change.step)) {
+    if (this._typed(change.step, this.lineSteps().get(change.lineId) ?? null)) {
       this.demandRuns.flush(change.lineId);
     }
   }
@@ -973,7 +1002,7 @@ export class SettleSheet {
     readonly step: QuantityStep;
   }): void {
     this.raiseRuns.step(change.list.listId, change.step);
-    if (this._typed(change.step)) {
+    if (this._typed(change.step, this.step())) {
       this.raiseRuns.flush(change.list.listId);
     }
   }
@@ -982,14 +1011,16 @@ export class SettleSheet {
    * Whether a step is a typed amount rather than a press: a press or an arrow
    * moves exactly one step, so anything else is an amount somebody committed
    * with Enter or a blur (or Home and End), and it is sent at once. Only presses
-   * wait.
+   * wait. One step is measured by the step that stepper presses by.
    */
-  private _typed(step: QuantityStep): boolean {
+  private _typed(step: QuantityStep, size: number | null): boolean {
     if (step.repeat) {
       return false;
     }
     const unit = this.row()?.unit ?? 'UNIT';
-    return step.to !== stepFrom(step.from, unit, step.to > step.from ? 1 : -1);
+    return (
+      step.to !== stepFrom(step.from, unit, step.to > step.from ? 1 : -1, size)
+    );
   }
 
   /** A run that waited for a write of its line starts from the line's answer. */

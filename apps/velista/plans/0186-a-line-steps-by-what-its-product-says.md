@@ -17,6 +17,13 @@
 > the S7b hundredth rule applied to a product step (decision F, question 2), and every
 > example that snapped.
 >
+> Amended on 2026-11-12, the owner's decisions of that day. A line steps the same on every
+> screen, so decision A wins over decisions C and E: the settle sheet and the shopping list
+> page's typeahead step a zone line by `lineStepOf` over every product the line holds, not by
+> the basket row's own product (decisions C and E, section 3). Backend `0263` is withdrawn: a
+> line at 0 is never deleted by a write, it is hidden, so a minus that reaches 0 in one press
+> (a line at 300 g on a step of 500, decision D) hides the line and deletes nothing.
+>
 > Decided on 2026-11-09. Every weight or volume line in velista steps by one fixed rule:
 > 25 g or 25 ml at every amount (velista `0188`, which replaced `0182` section 3). The owner
 > decided that the curator sets the step of a product (U4): saffron needs a small step, a
@@ -192,15 +199,37 @@ stepping 25 g.
 - **C. The basket's steppers read their own product.** A basket row is one product (backend
   `0201`), served as `BasketProduct` on the row, so the steppers `0190` draws for it take
   `quantityStep` from that product and need no `ItemNames` read.
+
+  > Note of 2026-11-12: the owner ruled that A wins. A line steps the same on every screen,
+  > and a line that holds several products could step by 250 in the settle sheet and by 100
+  > on its zone list. Each list's stepper in the settle sheet now steps by `lineStepOf` over
+  > the entry's `itemIds` (the basket read already carries them): a product the basket read
+  > names comes from `Basket.products`, any other from `ItemNames`, which the basket page
+  > fills for the measured lines' products the read did not name. A record not read yet says
+  > nothing (decision B). A row whose line holds only its own product steps as before. A list
+  > that does not ask yet still steps by the row's product, since the line it gains holds
+  > that product.
 - **D. No grid and no snapping, also on a product step** (velista `0188` decision B). Plus adds
   the step at the amount as it stands; minus takes away the step that plus uses one base step
   lower, so plus then minus returns. A line at 975 g on a step of 100 goes up to 1075 and down
   to 875; a line at 1000 goes down to 900 and up to 1100. Backend `0261` section 5 still says an
   amount off the grid snaps; this plan follows `0188` and the owner's sentence behind it, and
   the server accepts any amount either way.
+
+  > Note of 2026-11-12. Minus never goes under 0, so a line under one step goes to 0 in one
+  > press: a line at 300 g on a step of 500 goes to 0, and its minus draws the red trash of
+  > velista `0188` S14 (class `is-clear`, read from `stepFrom(value, unit, -1, step)`), as a
+  > line at 100 g on a step of 100 does. A saffron line at 1005 g on a step of 5 goes to 995
+  > and draws no trash. Backend `0263` is withdrawn (the owner, 2026-11-12): a line at 0 is
+  > never deleted by a write, it is hidden, so that press hides the line and deletes nothing.
 - **E. The typeahead card and the catalog rows read the step of the product they show.**
   They hold one product, so the S5 rule reduces to that product's step; they still call
   `lineStepOf`, so a held line with several products is stepped as the list steps it.
+
+  > Note of 2026-11-12: the owner ruled that A wins here too. The shopping list page's
+  > typeahead holdings step each held line by `lineStepOf` over the line's own products, as
+  > the settle sheet does (decision C's note), with the card's product standing in for a
+  > record not read yet. The list page and the catalog rows already did.
 - **F. The hundredth rule holds for a product step too** (the writer's reading of S7b, question
   2). The step used is the product's step, but never less than one hundredth of the name the
   row shows. A saffron step of 1 g or 5 g is used below 1000 g and becomes 10 g from 1000 g,
@@ -266,7 +295,8 @@ export function canStepUp(value: number, unit: LineUnit, max: number, step?: num
   product the row holds (decisions C and E): the zone list row, the due rows, the line page,
   the list's line sheet (both steppers), `ProductRow`'s two steppers, the lists table, the
   added sheet (`VisitAdded`), the shopping list page's typeahead, and once velista `0190` is
-  merged the basket's steppers.
+  merged the basket's steppers. Since 2026-11-12 the basket's steppers and the shopping list
+  page's typeahead read the line's step too (the notes under decisions C and E).
 - **`line-detail-sheet.ts:258`'s `howManyFloor`**, which `0188` makes `QUANTITY_STEP[unit]`,
   becomes `stepAt(0, unit, step)`, one step of the product.
 - **`CatalogAddStore`** steps nothing: it takes the stepper's `to` (`0188` section 5.5). Its
