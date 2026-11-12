@@ -62,6 +62,7 @@ const READ_ONLY: readonly ListPermission[] = ['READ'];
 
 const MILK: CatalogItem = {
   id: 'item-milk-a',
+  quantityStep: null,
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
   size: 1,

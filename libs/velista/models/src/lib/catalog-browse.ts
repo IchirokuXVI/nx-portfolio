@@ -139,9 +139,10 @@ export interface CatalogProduct {
   readonly approxWeight: number | null;
   /**
    * The step a curator set, in base units (backend `0261`), or null for the
-   * default. Optional so a record built by hand reads as one with no step.
+   * default. Required, so a conversion to another product shape cannot drop it
+   * unseen.
    */
-  readonly quantityStep?: number | null;
+  readonly quantityStep: number | null;
   /** The aisles the catalog files it under, in its order. Empty when none was readable. */
   readonly categories: readonly ProductCategory[];
   /** The cheapest price at the scopes the read was given, or null. */

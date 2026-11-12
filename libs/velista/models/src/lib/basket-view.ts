@@ -350,9 +350,10 @@ export interface BasketProduct {
   readonly approxWeight: number | null;
   /**
    * The step a curator set, in base units (backend `0261`), or null for the
-   * default. Optional so a record built by hand reads as one with no step.
+   * default. Required, so a conversion to another product shape cannot drop it
+   * unseen.
    */
-  readonly quantityStep?: number | null;
+  readonly quantityStep: number | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
   /**

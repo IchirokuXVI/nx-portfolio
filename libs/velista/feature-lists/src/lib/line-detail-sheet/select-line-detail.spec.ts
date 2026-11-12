@@ -80,6 +80,7 @@ function item(
 ): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { es: en, en },
     brand,
     size: 1,

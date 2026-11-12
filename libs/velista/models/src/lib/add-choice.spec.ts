@@ -9,6 +9,7 @@ import { LINE_QUANTITY_MAX } from './limits';
 
 const MILK: CatalogItem = {
   id: 'item-a',
+  quantityStep: null,
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
   size: 1,

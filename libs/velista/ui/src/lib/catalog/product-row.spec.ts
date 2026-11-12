@@ -43,6 +43,7 @@ const OFFER: ProductOffer = {
 
 const OIL: CatalogProduct = {
   id: 'item-oil',
+  quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
   imageUrl: null,

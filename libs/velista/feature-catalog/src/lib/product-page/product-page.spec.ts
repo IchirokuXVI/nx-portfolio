@@ -51,6 +51,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const OIL: CatalogItem = {
   id: 'item-oil',
+  quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
   size: 1,

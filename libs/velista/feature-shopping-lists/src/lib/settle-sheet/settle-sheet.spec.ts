@@ -1972,6 +1972,7 @@ describe('SettleSheet: putting a row off for now', () => {
 describe('SettleSheet: a product row (velista 0139, section 3)', () => {
   const MILK: BasketProduct = {
     id: 'i-whole',
+    quantityStep: null,
     name: { en: 'Whole milk', es: 'Leche entera' },
     brand: 'Hacendado',
     size: null,

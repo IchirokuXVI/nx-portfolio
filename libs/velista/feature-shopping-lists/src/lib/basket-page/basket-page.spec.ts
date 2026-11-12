@@ -1616,6 +1616,7 @@ describe('searching the basket', () => {
   ): BasketProduct {
     return {
       id,
+      quantityStep: null,
       name: { en, es },
       brand,
       size: null,
@@ -3481,6 +3482,7 @@ describe('the composer and the list it adds to', () => {
           items: [
             {
               id: 'item-a',
+              quantityStep: null,
               name: { es: 'Leche entera', en: 'Whole milk' },
               brand: 'Hacendado',
               size: 1,
@@ -3605,6 +3607,7 @@ describe('the composer and the list it adds to', () => {
       it('says the raised row as it draws it, its name and its number', async () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          quantityStep: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
           imageUrl: null,
@@ -3813,6 +3816,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-milk',
+      quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
       size: 1,
@@ -4177,6 +4181,7 @@ describe('similar products on the basket', () => {
 
   const GROUPED: BasketProduct = {
     id: 'i-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     imageUrl: null,
@@ -4199,6 +4204,7 @@ describe('similar products on the basket', () => {
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
     id,
+    quantityStep: null,
     name: { en: id, es: id },
     brand: null,
     size: 1,
@@ -4470,6 +4476,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   ): BasketProduct {
     return {
       id,
+      quantityStep: null,
       name: { en: name, es: name },
       brand: null,
       imageUrl: null,
@@ -4663,6 +4670,7 @@ describe('BasketPage: the map of the shop you are in', () => {
 
   const MILK: BasketProduct = {
     id: 'i-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     imageUrl: null,
@@ -4927,6 +4935,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   function yogurt(atShop: number | null = null): BasketProduct {
     return {
       id: 'item-yogurt',
+      quantityStep: null,
       name: { en: 'Yogurt', es: 'Yogur' },
       brand: null,
       imageUrl: null,

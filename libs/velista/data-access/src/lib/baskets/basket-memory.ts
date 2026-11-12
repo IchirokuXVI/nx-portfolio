@@ -164,6 +164,7 @@ const priced = (
 const PRODUCTS: readonly BasketProduct[] = [
   {
     id: 'item-milk-hacendado',
+    quantityStep: null,
     name: {
       en: 'Hacendado whole milk, 1 L',
       es: 'Leche entera Hacendado, 1 L',
@@ -185,6 +186,7 @@ const PRODUCTS: readonly BasketProduct[] = [
   },
   {
     id: 'item-milk-pascual',
+    quantityStep: null,
     name: { en: 'Pascual whole milk, 1 L', es: 'Leche entera Pascual, 1 L' },
     brand: 'Pascual',
     productGroupId: 'group-milk',
@@ -203,6 +205,7 @@ const PRODUCTS: readonly BasketProduct[] = [
   },
   {
     id: 'item-milk-central',
+    quantityStep: null,
     name: {
       en: 'Central Lechera whole milk, 1 L',
       es: 'Leche entera Central Lechera, 1 L',
@@ -221,6 +224,7 @@ const PRODUCTS: readonly BasketProduct[] = [
   },
   {
     id: 'item-eggs',
+    quantityStep: null,
     name: { en: 'Free range eggs, 12', es: 'Huevos camperos, 12' },
     brand: 'Hacendado',
     productGroupId: 'group-eggs',

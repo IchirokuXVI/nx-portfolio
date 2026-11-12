@@ -3161,6 +3161,7 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
     /** Yoghurt, under a parent the read's products do not use. */
     const YOGHURT: BasketProduct = {
       id: 'item-yoghurt',
+      quantityStep: null,
       name: { en: 'Natural yoghurt, 4', es: 'Yogur natural, 4' },
       brand: 'Hacendado',
       productGroupId: null,

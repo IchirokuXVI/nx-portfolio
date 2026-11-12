@@ -1313,6 +1313,7 @@ describe('ListPage', () => {
     ];
     const ITEM_A: CatalogItem = {
       id: 'item-a',
+      quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
       size: 1,
@@ -2218,6 +2219,7 @@ describe('ListPage: searching and viewing one category', () => {
   ): CatalogItem {
     return {
       id,
+      quantityStep: null,
       name: { es: id, en: id },
       brand: null,
       size: null,
@@ -3412,6 +3414,7 @@ describe('ListPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-oat',
+      quantityStep: null,
       name: { es: 'Bebida de avena', en: 'Oat drink' },
       brand: 'Oatly',
       size: 1,
