@@ -33,11 +33,9 @@ import {
   BasketParticipant,
   BasketSource,
   CORE_ENTITIES,
-  LineComment,
   LineSettlement,
   ListAccess,
   ListLine,
-  ListLineChange,
   ListLineGroupRemoval,
   ListLineItem,
   ShoppingList,
@@ -47,36 +45,24 @@ import {
 import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { LineChangeRecorder } from './changes/line-change.recorder';
-import { lineKeeps } from './line-keeps';
 import { LineMergeService } from './line-merge.service';
 import { LineService } from './line.service';
 import { ListAccessService } from './list-access.service';
 import { SettlementService } from './settlement.service';
 
-// A spy over the real rule (plan 0263, section 6, item 3). Neither settle may
-// ask it; the delta below must.
-jest.mock('./line-keeps', () => {
-  const actual = jest.requireActual('./line-keeps');
-  return { ...actual, lineKeeps: jest.fn(actual.lineKeeps) };
-});
-const keepsSpy = lineKeeps as jest.MockedFunction<typeof lineKeeps>;
-
 /** A product a card added; catalog ids are opaque to core. */
 const OAT = '5b7f1c2e-9a4d-4e63-8b10-2c7d9e4a6f31';
 
 /**
- * A settle never deletes a line, against real Postgres (plan 0263, section 6,
- * items 1 to 3). The owner asked for this test by name.
+ * No write deletes a line because it reached 0, against real Postgres. Plan
+ * 0263 proposed that rule and the owner withdrew it on 2026-11-12: a line is
+ * deleted only by hand, from its sheet or its page.
  *
- * Both settles save the lowered line BEFORE they insert the buy. A rule placed
- * on any save of a line at 0 would delete the line between the two and leave
- * the buy on a deleted row. The line here is as bare as a line gets, a product
- * from a card with no name, chain, favourite, comment or buy, so it is the one
- * line the rule of plan 0263 would delete if a settle ever asked it.
- *
- * The same file proves the other half on the same database: the delta that
- * takes that line to 0 deletes it, and the facts of section 1 that live in
- * other tables keep it.
+ * Both settles save the lowered line BEFORE they insert the buy, so a rule on
+ * any save of a line at 0 would leave the buy on a deleted row. The line here
+ * is as bare as a line gets, a product from a card with no name, chain,
+ * favourite, comment or buy. The delta and the basket demand that take it to 0
+ * leave it standing too.
  */
 describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
   let dataSource: DataSource;
@@ -252,7 +238,6 @@ describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
 
   beforeEach(() => {
     emitted.length = 0;
-    keepsSpy.mockClear();
   });
 
   afterAll(async () => {
@@ -365,7 +350,6 @@ describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
         expect(await buysOf(line.id)).toHaveLength(1);
         expect(view.boughtCount).toBe(1);
         expect(deletions()).toEqual([]);
-        expect(keepsSpy).not.toHaveBeenCalled();
       }
     );
   });
@@ -399,27 +383,12 @@ describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
           basketId,
         });
         expect(deletions()).toEqual([]);
-        expect(keepsSpy).not.toHaveBeenCalled();
-
-        // And the buy then keeps it: lowering it again from above 0 deletes
-        // nothing (section 1, row 4).
-        await dataSource
-          .getRepository(ListLine)
-          .update({ id: line.id }, { quantity: 1 });
-        const after = await lines.addQuantity({
-          userId: ids.owner,
-          lineId: line.id,
-          delta: -1,
-          unit: 'UNIT',
-        });
-        expect(after.deleted).toBeUndefined();
-        expect((await rowOf(line.id)).deletedAt).toBeNull();
       }
     );
   });
 
-  describe('the delta, on the same database (sections 1 and 2)', () => {
-    it('deletes a bare line it lowers from 25 g to 0, in its own transaction', async () => {
+  describe('a write that takes the line to 0', () => {
+    it('the delta leaves a bare line from 25 g at 0, standing', async () => {
       const line = await bareLine(25, 'GRAM');
 
       const answer = await lines.addQuantity({
@@ -433,34 +402,20 @@ describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
         id: line.id,
         quantity: 0,
         itemIds: [OAT],
-        deleted: true,
       });
-      expect(keepsSpy).toHaveBeenCalledTimes(1);
+      expect(answer).not.toHaveProperty('deleted');
       const row = await rowOf(line.id);
-      expect(row.deletedAt).not.toBeNull();
-      expect(row.deletedByUserId).toBe(ids.owner);
+      expect(row.quantity).toBe(0);
+      expect(row.deletedAt).toBeNull();
       expect(
         await dataSource
           .getRepository(ListLineItem)
           .count({ where: { lineId: line.id } })
-      ).toBe(0);
-      expect(deletions()).toEqual([
-        {
-          event: RealtimeEvent.LineDeleted,
-          payload: { id: line.id, listId: ids.list, emptied: true },
-        },
-      ]);
-      expect(emitted.map((entry) => entry.event)).not.toContain(
-        RealtimeEvent.LineUpdated
-      );
-      const changes = await dataSource
-        .getRepository(ListLineChange)
-        .find({ where: { lineId: line.id } });
-      expect(changes).toHaveLength(1);
-      expect(changes[0]).toMatchObject({ kind: 'DELETED', quantityBefore: 25 });
+      ).toBe(1);
+      expect(deletions()).toEqual([]);
     });
 
-    it('deletes a bare line a basket demand takes to 0, as the owner may (item 7)', async () => {
+    it('a basket demand of 0 leaves a bare line at 0, standing', async () => {
       const line = await bareLine(1);
       const { basketId, participantId } = await basketOver();
 
@@ -474,76 +429,10 @@ describeIntegration('a settle keeps the line it lowers (real Postgres)', () => {
         from: 1,
       });
 
-      expect((await rowOf(line.id)).deletedAt).not.toBeNull();
-      expect(deletions()).toEqual([
-        {
-          event: RealtimeEvent.LineDeleted,
-          payload: { id: line.id, listId: ids.list, emptied: true },
-        },
-      ]);
-    });
-
-    it.each([
-      ['a NOT_AVAILABLE', SettlementOutcome.NOT_AVAILABLE],
-      ['a BOUGHT', SettlementOutcome.BOUGHT],
-    ])('keeps a line with %s settlement (D2)', async (_, outcome) => {
-      const line = await bareLine(2);
-      await dataSource.getRepository(LineSettlement).save(
-        dataSource.getRepository(LineSettlement).create({
-          lineId: line.id,
-          listId: ids.list,
-          itemId: OAT,
-          outcome,
-          quantity: outcome === SettlementOutcome.BOUGHT ? 1 : 0,
-          settledByUserId: ids.owner,
-          settledAt: new Date(),
-        })
-      );
-      await dataSource.manager.transaction(async (manager) => {
-        expect(await lineKeeps(manager, line)).toBe(true);
-      });
-    });
-
-    it('keeps a line with a reverted buy (D2)', async () => {
-      const line = await bareLine(1);
-      const { basketId, participantId } = await basketOver();
-      await basketSettle.settle({
-        basketId,
-        participantId,
-        rowKey: line.id,
-        lineIds: [line.id],
-        outcome: SettlementOutcome.BOUGHT,
-        unit: 'UNIT',
-        quantity: 1,
-        from: 1,
-      });
-      await dataSource
-        .getRepository(LineSettlement)
-        .update(
-          { lineId: line.id },
-          { revertedAt: new Date(), revertedByParticipantId: participantId }
-        );
-
-      await dataSource.manager.transaction(async (manager) => {
-        expect(await lineKeeps(manager, line)).toBe(true);
-      });
-    });
-
-    it('keeps a line with a comment, and not one with products alone', async () => {
-      const commented = await bareLine(1);
-      const bare = await bareLine(1);
-      await dataSource.getRepository(LineComment).save(
-        dataSource.getRepository(LineComment).create({
-          lineId: commented.id,
-          authorUserId: ids.owner,
-          body: 'the green one',
-        })
-      );
-
-      await dataSource.manager.transaction(async (manager) => {
-        expect(await lineKeeps(manager, commented)).toBe(true);
-        expect(await lineKeeps(manager, bare)).toBe(false);
-      });
+      const row = await rowOf(line.id);
+      expect(row.quantity).toBe(0);
+      expect(row.deletedAt).toBeNull();
+      expect(deletions()).toEqual([]);
     });
   });
 });

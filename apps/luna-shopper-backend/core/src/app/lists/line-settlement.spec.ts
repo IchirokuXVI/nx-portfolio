@@ -18,19 +18,10 @@ import type { CoreEventsPublisher } from '../events/core-events.publisher';
 import { ZoneAuthzService } from '../zones/zone-authz.service';
 import { fakeLineChanges } from './changes/line-change.fake';
 import { fakeLineItems } from './line-items.fake';
-import { lineKeeps } from './line-keeps';
 import { fakeLineSettlements } from './line-settlements.fake';
 import { ListAccessService } from './list-access.service';
 import { toLineSettlementView } from './list.mappers';
 import { SettlementService } from './settlement.service';
-
-// A spy over the real rule (plan 0263, section 6, item 3): a settle must never
-// ask whether a line keeps anything, because it saves the line at 0 before the
-// buy exists.
-jest.mock('./line-keeps', () => {
-  const actual = jest.requireActual('./line-keeps');
-  return { ...actual, lineKeeps: jest.fn(actual.lineKeeps) };
-});
 
 /**
  * Plan 0139 gave this service a basket announcer. Every write here is asserted
@@ -813,16 +804,15 @@ describe('line.settle (plan 0047, section 4)', () => {
 });
 
 /**
- * A settle never deletes a line (plan 0263, section 6, item 1). The owner asked
- * for this test by name: the settle saves the lowered line BEFORE it inserts
- * the buy, so a rule that fired on any save of a line at 0 would delete a line
- * that is about to hold a purchase.
+ * A settle never deletes a line. The settle saves the lowered line BEFORE it
+ * inserts the buy, so a rule that fired on any save of a line at 0 would delete
+ * a line that is about to hold a purchase. Plan 0263 proposed deleting a line
+ * at 0 and the owner withdrew it on 2026-11-12; this pins the settle half.
  *
  * The line is as bare as a line gets: a product from a card, never named, no
- * chain, no favourite, no comment and no buy. Every one of those would keep it
- * at 0 by itself, so only this line proves the settle path never asks.
+ * chain, no favourite, no comment and no buy.
  */
-describe('a settle keeps the line it lowers to 0 (plan 0263)', () => {
+describe('a settle keeps the line it lowers to 0', () => {
   function bare(quantity: number): Harness {
     const w = build({ quantity, itemIds: [MILK_ITEM] });
     Object.assign(w.line, {
@@ -861,8 +851,6 @@ describe('a settle keeps the line it lowers to 0 (plan 0263)', () => {
       expect(w.events.map((entry) => entry.event)).not.toContain(
         RealtimeEvent.LineDeleted
       );
-      // Section 6, item 3: the rule was never asked.
-      expect(lineKeeps).not.toHaveBeenCalled();
     }
   );
 });
