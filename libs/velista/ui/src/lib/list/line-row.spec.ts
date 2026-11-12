@@ -1,10 +1,9 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
-  QUANTITY_REEL_CLICK_SHIELD_MS,
-  QUANTITY_REEL_IDLE_MS,
   type LineRowShownProduct,
   type LineRowVm,
+  type QuantityStep,
 } from '@portfolio/velista/models';
 import { LineRow } from './line-row';
 
@@ -40,7 +39,7 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
 
 async function render(
   line: LineRowVm,
-  inputs: { reordering?: boolean } = {}
+  inputs: { pending?: number | null } = {}
 ): Promise<ComponentFixture<LineRow>> {
   TestBed.resetTestingModule();
 
@@ -50,8 +49,8 @@ async function render(
 
   const fixture = TestBed.createComponent(LineRow);
   fixture.componentRef.setInput('line', line);
-  if (inputs.reordering !== undefined) {
-    fixture.componentRef.setInput('reordering', inputs.reordering);
+  if (inputs.pending !== undefined) {
+    fixture.componentRef.setInput('pending', inputs.pending);
   }
   fixture.detectChanges();
   await fixture.whenStable();
@@ -77,6 +76,9 @@ function shown(
     favorite: false,
     others: 0,
     price: { amount: '0,92 €', per: null },
+    brand: null,
+    size: null,
+    total: null,
     ...overrides,
   };
 }
@@ -99,51 +101,21 @@ function statusWords(fixture: ComponentFixture<LineRow>): string[] {
   ].map((word) => word.textContent?.trim() ?? '');
 }
 
-function reel(fixture: ComponentFixture<LineRow>): HTMLElement | null {
-  return fixture.nativeElement.querySelector('lib-quantity-reel');
+/** The row's stepper (velista `0188`). */
+function stepper(fixture: ComponentFixture<LineRow>): HTMLElement | null {
+  return fixture.nativeElement.querySelector('lib-quantity-stepper');
 }
 
-/**
- * A pointer going down, as the reel reads it.
- *
- * jsdom has no `PointerEvent`, so this is a `MouseEvent` carrying the two fields the
- * reel looks at, exactly as `quantity-reel.spec.ts` does it.
- */
-function down(target: EventTarget): void {
-  const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 0 });
-  Object.defineProperty(event, 'pointerId', { value: 1 });
-  Object.defineProperty(event, 'isPrimary', { value: true });
-  target.dispatchEvent(event);
+function plus(fixture: ComponentFixture<LineRow>): HTMLButtonElement {
+  return fixture.nativeElement.querySelector(
+    'lib-quantity-stepper button.plus'
+  ) as HTMLButtonElement;
 }
 
-function up(target: EventTarget): void {
-  const event = new MouseEvent('pointerup', { bubbles: true, clientX: 0 });
-  Object.defineProperty(event, 'pointerId', { value: 1 });
-  target.dispatchEvent(event);
-}
-
-/**
- * A whole tap, press included.
- *
- * The press is the part that matters here: the row decides whether it is listening at
- * `pointerdown`, because focus leaves the reel between the press and the click and the
- * overlay the tap was dismissing is gone by then.
- */
+/** A whole tap, press included. */
 function tap(target: HTMLElement): void {
-  down(target);
+  target.dispatchEvent(new Event('pointerdown', { bubbles: true }));
   target.click();
-}
-
-/** Open the reel by tapping it, and leave it up. */
-function openReel(fixture: ComponentFixture<LineRow>): void {
-  const el = reel(fixture) as HTMLElement;
-  down(el);
-  up(el);
-  fixture.detectChanges();
-}
-
-function overlay(fixture: ComponentFixture<LineRow>): HTMLElement | null {
-  return fixture.nativeElement.querySelector('.overlay');
 }
 
 describe('LineRow', () => {
@@ -511,16 +483,6 @@ describe('LineRow', () => {
       );
     });
 
-    it('draws a photo that opens nothing in reorder mode', async () => {
-      const fixture = await render(
-        vm({ product: shown({ imageUrl: 'https://img.example/1.jpg' }) }),
-        { reordering: true }
-      );
-
-      expect(query(fixture, 'lib-product-picture img')).not.toBeNull();
-      expect(query(fixture, 'button.zoom')).toBeNull();
-    });
-
     it('draws bones for the picture and line 2 while the product loads, and keeps the name', async () => {
       const fixture = await render(
         vm({ content: 'Leche', named: true, product: { kind: 'loading' } })
@@ -593,18 +555,9 @@ describe('LineRow', () => {
       expect(text(fixture, '.no-product')).toBe('list.row.noProduct');
       expect(query(fixture, 'lib-product-picture')).not.toBeNull();
     });
-
-    it('offers no choice in reorder mode', async () => {
-      const fixture = await render(
-        vm({ product: { kind: 'none', canChoose: true } }),
-        { reordering: true }
-      );
-
-      expect(query(fixture, 'button.choose')).toBeNull();
-    });
   });
 
-  describe('the quantity', () => {
+  describe('the quantity (velista 0188)', () => {
     it('is drawn on every row, zero included', async () => {
       // `0012` drew it only above one, because it was an annotation. It is the
       // control now, and a control that is only sometimes there is not one anybody
@@ -612,30 +565,50 @@ describe('LineRow', () => {
       const one = await render(vm({ quantity: 1 }));
       const zero = await render(vm({ quantity: 0 }));
 
-      expect(reel(one)).not.toBeNull();
-      expect(reel(zero)).not.toBeNull();
+      expect(stepper(one)).not.toBeNull();
+      expect(stepper(zero)?.getAttribute('data-value')).toBe('0');
     });
 
-    it('is read only for a caller who may not decide', async () => {
+    it('draws the amount alone, with no buttons, for a caller who may not decide', async () => {
       const fixture = await render(vm({ adjustable: false }));
 
-      expect(reel(fixture)?.getAttribute('aria-readonly')).toBe('true');
+      expect(stepper(fixture)?.classList).toContain('is-readonly');
+      expect(stepper(fixture)?.querySelectorAll('button')).toHaveLength(0);
     });
 
-    it('is a spinbutton naming the line, with a floor of zero', async () => {
+    it('is a row stepper naming the line', async () => {
       const fixture = await render(vm({ quantity: 3 }));
 
-      expect(reel(fixture)?.getAttribute('role')).toBe('spinbutton');
-      expect(reel(fixture)?.getAttribute('aria-valuenow')).toBe('3');
-      expect(reel(fixture)?.getAttribute('aria-valuemin')).toBe('0');
+      expect(stepper(fixture)?.classList).toContain('variant-row');
+      expect(
+        stepper(fixture)
+          ?.querySelector('[role="group"]')
+          ?.getAttribute('aria-label')
+      ).toBe('amount.group');
+      expect(stepper(fixture)?.getAttribute('data-value')).toBe('3');
     });
 
-    it('goes away in reorder mode', async () => {
-      // A second gesture living inside a row being dragged would fight the first for
-      // the same finger.
-      const fixture = await render(vm(), { reordering: true });
+    it('emits every press as a step, and does not open the line', async () => {
+      const fixture = await render(vm({ quantity: 3 }));
+      const steps: Array<{ lineId: string; step: QuantityStep }> = [];
+      const opened: string[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((s) => steps.push(s));
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
 
-      expect(reel(fixture)).toBeNull();
+      plus(fixture).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      plus(fixture).dispatchEvent(new Event('pointerup', { bubbles: true }));
+      plus(fixture).click();
+
+      expect(steps).toEqual([
+        { lineId: 'ln-1', step: { from: 3, to: 4, repeat: false } },
+      ]);
+      expect(opened).toEqual([]);
+    });
+
+    it('draws the open run while the stored line has not moved (decision H)', async () => {
+      const fixture = await render(vm({ quantity: 3 }), { pending: 6 });
+
+      expect(stepper(fixture)?.getAttribute('data-value')).toBe('6');
     });
   });
 
@@ -664,17 +637,6 @@ describe('LineRow', () => {
       }
     });
 
-    it('does nothing at all in reorder mode', async () => {
-      const fixture = await render(vm(), { reordering: true });
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      row(fixture).click();
-
-      expect(opened).toEqual([]);
-      expect(row(fixture).hasAttribute('role')).toBe(false);
-    });
-
     it('does nothing for a row that cannot be opened', async () => {
       const fixture = await render(vm({ interactive: false }));
       const opened: string[] = [];
@@ -683,96 +645,6 @@ describe('LineRow', () => {
       row(fixture).click();
 
       expect(opened).toEqual([]);
-    });
-  });
-
-  /**
-   * The overlay stands over the row it belongs to, so the tap that dismisses it lands
-   * on the row underneath. It closes the reel and stops there: it was aimed at the
-   * thing on top, and opening the detail sheet on the way out answers a question
-   * nobody asked.
-   */
-  describe('a tap on a line whose reel is up', () => {
-    it('closes the reel and does not open the line', async () => {
-      const fixture = await render(vm());
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      openReel(fixture);
-      expect(overlay(fixture)).not.toBeNull();
-
-      tap(row(fixture));
-      fixture.detectChanges();
-
-      expect(overlay(fixture)).toBeNull();
-      expect(opened).toEqual([]);
-    });
-
-    it('hears the very next tap, which is the one that was meant for the row', async () => {
-      const fixture = await render(vm());
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      openReel(fixture);
-      tap(row(fixture));
-      fixture.detectChanges();
-      tap(row(fixture));
-
-      expect(opened).toEqual(['ln-1']);
-    });
-
-    it('still hears a tap on the reel itself', async () => {
-      // "Somewhere else on the line" is the rule. The reel is not somewhere else.
-      const fixture = await render(vm({ quantity: 2 }));
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      openReel(fixture);
-      const three = fixture.nativeElement.querySelector(
-        '[data-reel-value="3"]'
-      ) as HTMLElement;
-      down(three);
-      up(three);
-      fixture.detectChanges();
-
-      // The reel moved, the overlay is still up, and the row heard nothing.
-      expect(
-        (fixture.nativeElement.querySelector('.current') as HTMLElement)
-          .textContent
-      ).toContain('3');
-      expect(overlay(fixture)).not.toBeNull();
-      expect(opened).toEqual([]);
-    });
-  });
-
-  describe('the beat after the reel closes on its own', () => {
-    it('swallows a tap for a moment, then goes back to opening the line', async () => {
-      // A finger already falling towards a number does not stop when the thing it was
-      // falling towards disappears.
-      const fixture = await render(vm());
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      // Fake timers only from here: `render` awaits `whenStable`, which never
-      // resolves under them.
-      jest.useFakeTimers();
-      try {
-        openReel(fixture);
-        jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
-        fixture.detectChanges();
-
-        // Closed by itself, and nobody spent a tap doing it.
-        expect(overlay(fixture)).toBeNull();
-
-        tap(row(fixture));
-        expect(opened).toEqual([]);
-
-        jest.advanceTimersByTime(QUANTITY_REEL_CLICK_SHIELD_MS + 1);
-        tap(row(fixture));
-        expect(opened).toEqual(['ln-1']);
-      } finally {
-        jest.useRealTimers();
-      }
     });
   });
 
@@ -860,36 +732,6 @@ describe('LineRow', () => {
     });
   });
 
-  describe('reorder mode', () => {
-    it('drops the role rather than keeping one it dishonours', async () => {
-      const fixture = await render(vm(), { reordering: true });
-
-      expect(row(fixture).hasAttribute('role')).toBe(false);
-      expect(row(fixture).hasAttribute('aria-label')).toBe(false);
-    });
-
-    it('grows a focusable grip with real keys on it', async () => {
-      const fixture = await render(vm(), { reordering: true });
-
-      const steps = fixture.nativeElement.querySelectorAll('.grip-step');
-      expect(steps).toHaveLength(2);
-    });
-
-    it('emits a move rather than reordering its own siblings', async () => {
-      const fixture = await render(vm(), { reordering: true });
-      const acted: string[] = [];
-      fixture.componentInstance.act.subscribe((e) => acted.push(e.action));
-
-      const steps = [
-        ...fixture.nativeElement.querySelectorAll('.grip-step'),
-      ] as HTMLElement[];
-      steps[0].click();
-      steps[1].click();
-
-      expect(acted).toEqual(['moveUp', 'moveDown']);
-    });
-  });
-
   describe('what the row offers', () => {
     it('draws no menu, and a tap opens the line (velista plan 0083)', async () => {
       // The three dots went: the detail sheet a tap opens edits the line and reaches
@@ -945,6 +787,545 @@ describe('LineRow', () => {
       expect(
         fixture.nativeElement.querySelector('.comment-count')?.textContent
       ).toContain('3');
+    });
+  });
+  /**
+   * Velista `0191`: the compact row. The same component and view model as the row of
+   * today, drawn in its own branch, so every case here is about what the branch draws
+   * and what it still shares (section 8).
+   */
+  describe('compact layout (velista 0191)', () => {
+    async function compact(
+      line: LineRowVm,
+      inputs: { pending?: number | null } = {}
+    ): Promise<ComponentFixture<LineRow>> {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [LineRow, RokuTranslatorTestingModule.forTesting()],
+      }).compileComponents();
+      const fixture = TestBed.createComponent(LineRow);
+      fixture.componentRef.setInput('line', line);
+      fixture.componentRef.setInput('layout', 'compact');
+      if (inputs.pending !== undefined) {
+        fixture.componentRef.setInput('pending', inputs.pending);
+      }
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    /** A pack at 0,99 €, totalled at two. */
+    function pack(
+      overrides: Partial<LineRowShownProduct> = {}
+    ): LineRowShownProduct {
+      return shown({
+        brand: 'Hacendado',
+        size: '1 L',
+        price: { amount: '0,99 €', per: null },
+        total: { amount: '1,98 €', estimated: false },
+        ...overrides,
+      });
+    }
+
+    /** A loose product at 2,50 € / kg, totalled at 750 g. */
+    function loose(
+      overrides: Partial<LineRowShownProduct> = {}
+    ): LineRowShownProduct {
+      return shown({
+        name: 'Plátano de Canarias IGP',
+        brand: null,
+        brandSize: null,
+        size: null,
+        price: { amount: '2,50 €', per: '/ kg' },
+        total: { amount: '1,88 €', estimated: true },
+        ...overrides,
+      });
+    }
+
+    function facts(fixture: ComponentFixture<LineRow>): string[] {
+      return Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('.facts > *')
+      ).map((fact) => fact.textContent?.trim() ?? '');
+    }
+
+    it('carries .compact and draws none of the row of today', async () => {
+      const fixture = await compact(vm({ product: pack() }));
+
+      expect(row(fixture).classList).toContain('compact');
+      expect(query(fixture, '.body')).toBeNull();
+      expect(query(fixture, '.line-2')).toBeNull();
+    });
+
+    it('draws line 1 as the label, then the brand, then the marks', async () => {
+      const fixture = await compact(
+        vm({
+          content: 'Leche',
+          named: true,
+          product: pack(),
+          editor: 'Ana',
+          commentCount: 2,
+          indicators: ['bought'],
+        })
+      );
+      const line1 = query(fixture, '.compact-line-1') as HTMLElement;
+      const children = Array.from(line1.children).map((child) =>
+        child.className.split(' ').filter((name) => name !== '')
+      );
+
+      expect(children[0]).toEqual(expect.arrayContaining(['content', 'label']));
+      expect(children[1]).toEqual(['brand']);
+      expect(children[2]).toEqual(['marks']);
+      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
+      expect(text(fixture, '.compact-line-1 .brand')).toBe('Hacendado');
+      // The editor's initial with no word, the comment count, then the status word.
+      expect(text(fixture, '.marks .editor-avatar')).toBe('A');
+      expect(query(fixture, '.editor-label')).toBeNull();
+      expect(text(fixture, '.marks .comment-count')).toBe('2');
+      expect(statusWords(fixture)).toEqual(['line.indicator.bought']);
+      // A named line draws no product name (decision E).
+      expect(fixture.nativeElement.textContent).not.toContain(
+        'Leche semidesnatada'
+      );
+    });
+
+    it('draws a pack of two as its size, its price, and the total of two with no mark', async () => {
+      const fixture = await compact(vm({ quantity: 2, product: pack() }));
+
+      expect(facts(fixture)).toEqual(['1 L', '0,99 €', '1,98 €']);
+      expect(query(fixture, '.fact.price')?.textContent).not.toContain('≈');
+    });
+
+    it('draws both lines for a pack of one, though they say one number', async () => {
+      const fixture = await compact(
+        vm({
+          quantity: 1,
+          product: pack({ total: { amount: '0,99 €', estimated: false } }),
+        })
+      );
+
+      expect(facts(fixture)).toEqual(['1 L', '0,99 €', '0,99 €']);
+    });
+
+    it('draws a kilo piece as its weight, its piece price and the estimated total', async () => {
+      const fixture = await compact(
+        vm({
+          quantity: 3,
+          product: pack({
+            brand: null,
+            size: '~2,5 kg',
+            price: { amount: '34,98 €', per: null },
+            total: { amount: '104,94 €', estimated: true },
+          }),
+        })
+      );
+
+      expect(facts(fixture)).toEqual(['~2,5 kg', '34,98 €', '≈104,94 €']);
+    });
+
+    it('draws a product with no brand without a brand', async () => {
+      const fixture = await compact(vm({ product: pack({ brand: null }) }));
+
+      expect(query(fixture, '.brand')).toBeNull();
+    });
+
+    it('marks the total of 750 g of a loose product, under its price per kilo', async () => {
+      const fixture = await compact(
+        vm({ quantity: 750, unit: 'GRAM', product: loose() })
+      );
+
+      expect(facts(fixture)).toEqual(['', '2,50 € / kg', '≈1,88 €']);
+    });
+
+    it('leaves the third line empty at zero, for a loose product and a pack', async () => {
+      const fixture = await compact(
+        vm({
+          quantity: 0,
+          unit: 'GRAM',
+          product: loose({ total: null }),
+        })
+      );
+
+      expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
+      expect(query(fixture, '.fact.price.none')).toBeNull();
+
+      const packAtZero = await compact(
+        vm({ quantity: 0, product: pack({ total: null }) })
+      );
+      expect(facts(packAtZero)).toEqual(['1 L', '0,99 €', '']);
+    });
+
+    it('says No price on the third line, and leaves the second empty, for a product with none', async () => {
+      const fixture = await compact(
+        vm({ product: pack({ price: null, total: null }) })
+      );
+
+      expect(facts(fixture)).toEqual(['1 L', '', 'list.row.noPrice']);
+      expect(text(fixture, '.fact.price.none')).toBe('list.row.noPrice');
+    });
+
+    it('draws a line of several products as the star, the brand and +2 in the brand', async () => {
+      const fixture = await compact(
+        vm({
+          product: pack({
+            brand: 'Quesería Artesana de Villalón',
+            favorite: true,
+            others: 2,
+          }),
+        })
+      );
+      const brand = query(fixture, '.compact-line-1 .brand.multi');
+
+      expect(brand?.querySelector('.favorite')).not.toBeNull();
+      expect(brand?.querySelector('.brand-text')?.textContent).toBe(
+        'Quesería Artesana de Villalón'
+      );
+      expect(brand?.querySelector('.more')?.textContent).toBe('+2');
+    });
+
+    it('draws a free text line as the dashed square and Choose a product, two buttons that choose', async () => {
+      const fixture = await compact(
+        vm({
+          content: 'Pan de molde',
+          product: { kind: 'none', canChoose: true },
+        })
+      );
+      const chosen: string[] = [];
+      fixture.componentInstance.chooseProduct.subscribe((id) =>
+        chosen.push(id)
+      );
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      const square = query(fixture, 'button.picture.choose') as HTMLElement;
+      const words = query(
+        fixture,
+        '.facts button.compact-choose'
+      ) as HTMLElement;
+      expect(square.getAttribute('aria-label')).toBe('list.row.chooseFor');
+      expect(words.textContent?.trim()).toBe('list.row.choose');
+      tap(square);
+      tap(words);
+
+      expect(chosen).toEqual(['ln-1', 'ln-1']);
+      expect(opened).toEqual([]);
+      expect(query(fixture, '.brand')).toBeNull();
+    });
+
+    it('says No product to a reader who may not choose', async () => {
+      const fixture = await compact(
+        vm({ product: { kind: 'none', canChoose: false } })
+      );
+
+      expect(query(fixture, 'button')?.classList).not.toContain('choose');
+      expect(text(fixture, '.fact.no-product')).toBe('list.row.noProduct');
+      expect(query(fixture, 'lib-product-picture')).not.toBeNull();
+    });
+
+    it('draws the four bones and the real label while the product loads', async () => {
+      const fixture = await compact(
+        vm({ content: 'Leche', product: { kind: 'loading' } })
+      );
+
+      expect(query(fixture, '.picture.bone')).not.toBeNull();
+      expect(query(fixture, '.compact-line-1 .brand-bone')).not.toBeNull();
+      expect(
+        fixture.nativeElement.querySelectorAll('.facts > .fact-bone')
+      ).toHaveLength(3);
+      expect(text(fixture, '.compact-line-1 .label')).toBe('Leche');
+      expect(stepper(fixture)).not.toBeNull();
+    });
+
+    it('draws a failed product as the label, the plain picture and three empty lines', async () => {
+      const fixture = await compact(
+        vm({ content: 'Leche', product: { kind: 'unread' } })
+      );
+
+      expect(query(fixture, 'lib-product-picture')).not.toBeNull();
+      expect(query(fixture, '.brand')).toBeNull();
+      expect(facts(fixture)).toEqual([]);
+    });
+
+    describe('the accessible name (section 5)', () => {
+      it('says the label, the brand, the size, the unit price, the total and the quantity of a pack', async () => {
+        const fixture = await compact(
+          vm({ content: 'Leche', named: true, quantity: 2, product: pack() })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Leche, Hacendado, 1 L, 0,99 €, 1,98 €, 2'
+        );
+      });
+
+      it('says no total at zero', async () => {
+        const fixture = await compact(
+          vm({ content: 'Leche', quantity: 0, product: pack({ total: null }) })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Leche, Hacendado, 1 L, 0,99 €, 0'
+        );
+      });
+
+      it('says an estimate as about its amount, for a loose product', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Plátano de Canarias IGP',
+            named: false,
+            quantity: 750,
+            unit: 'GRAM',
+            product: loose(),
+          })
+        );
+
+        // The testing translator answers the key; `list.row.about` reads
+        // "about 1,88 €" in the app.
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Plátano de Canarias IGP, 2,50 € / kg, list.row.about, 750 g'
+        );
+      });
+
+      it('says the favourite and +N, as the row draws them', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Queso',
+            product: pack({ favorite: true, others: 2 }),
+          })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Queso, list.row.favorite, Hacendado, 1 L, 0,99 €, 1,98 €, list.row.more, 1'
+        );
+      });
+
+      it('says the label and the quantity of a free text line', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Pan de molde',
+            quantity: 2,
+            product: { kind: 'none', canChoose: true },
+          })
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe('Pan de molde, 2');
+      });
+    });
+
+    it('draws the decisions and both notices under a compact row', async () => {
+      const decided = await compact(
+        vm({ approvalStatus: 'PENDING', decidable: true, product: pack() })
+      );
+      expect(
+        decided.nativeElement.querySelectorAll('.decisions .decision')
+      ).toHaveLength(2);
+      expect(row(decided).classList).toContain('awaiting');
+
+      const failed = await compact(vm({ write: 'failed', product: pack() }));
+      expect(text(failed, '.notice.failed')).toBe('list.line.failed');
+
+      const overwritten = await compact(
+        vm({ write: 'overwritten', overwrittenBy: 'Ana', product: pack() })
+      );
+      expect(text(overwritten, '.notice.overwritten')).toBe(
+        'list.line.overwritten'
+      );
+    });
+
+    it('keeps the status words for a screen reader, as the row of today does', async () => {
+      const fixture = await compact(
+        vm({ indicators: ['bought', 'notAvailable'], product: pack() })
+      );
+      const described = row(fixture).getAttribute('aria-describedby');
+
+      expect(described).toBe('st-ln-1');
+      expect(
+        fixture.nativeElement.querySelector(`#${described}`)?.textContent
+      ).toContain('line.indicator.notAvailable');
+    });
+
+    it('draws the row stepper bound as in the default layout', async () => {
+      const fixture = await compact(vm({ quantity: 3, product: pack() }), {
+        pending: 5,
+      });
+      const steps: Array<{ lineId: string; step: QuantityStep }> = [];
+      const opened: string[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((s) => steps.push(s));
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      expect(stepper(fixture)?.classList).toContain('variant-row');
+      expect(stepper(fixture)?.getAttribute('data-value')).toBe('5');
+      plus(fixture).dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      plus(fixture).dispatchEvent(new Event('pointerup', { bubbles: true }));
+      plus(fixture).click();
+
+      expect(steps).toEqual([
+        { lineId: 'ln-1', step: { from: 5, to: 6, repeat: false } },
+      ]);
+      expect(opened).toEqual([]);
+
+      const reader = await compact(vm({ adjustable: false, product: pack() }));
+      expect(stepper(reader)?.classList).toContain('is-readonly');
+    });
+
+    it('opens the line on a tap, as the row of today does', async () => {
+      const fixture = await compact(vm({ product: pack() }));
+      const opened: string[] = [];
+      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
+
+      row(fixture).click();
+
+      expect(opened).toEqual(['ln-1']);
+    });
+
+    /**
+     * The owner's decisions of 2026-11-12: while the amount is being saved, line 3
+     * draws the saving mark in place of the total, which still follows the stored
+     * amount. Lines 1 and 2 stay.
+     */
+    describe('the saving mark (2026-11-12)', () => {
+      function mark(fixture: ComponentFixture<LineRow>): Element | null {
+        return query(fixture, '.fact.price.saving lib-spinner-icon');
+      }
+
+      it('stands in for the total during an open run, and keeps the price per kilo', async () => {
+        const fixture = await compact(
+          vm({ quantity: 750, unit: 'GRAM', product: loose() }),
+          { pending: 1000 }
+        );
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(
+          query(fixture, '.fact.price.saving')?.getAttribute('aria-hidden')
+        ).toBe('true');
+        expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
+        expect(fixture.nativeElement.textContent).not.toContain('1,88');
+      });
+
+      it('stands in for the total while the write is in flight', async () => {
+        const fixture = await compact(
+          vm({
+            quantity: 1000,
+            unit: 'GRAM',
+            write: 'pending',
+            product: loose({
+              total: { amount: '2,50 €', estimated: true },
+            }),
+          })
+        );
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
+        expect(row(fixture).classList).toContain('in-flight');
+      });
+
+      it('draws the total of the new amount once the write has landed', async () => {
+        const fixture = await compact(
+          vm({ quantity: 750, unit: 'GRAM', product: loose() }),
+          { pending: 1000 }
+        );
+
+        fixture.componentRef.setInput('pending', null);
+        fixture.componentRef.setInput(
+          'line',
+          vm({
+            quantity: 1000,
+            unit: 'GRAM',
+            product: loose({
+              total: { amount: '2,50 €', estimated: true },
+            }),
+          })
+        );
+        fixture.detectChanges();
+
+        expect(mark(fixture)).toBeNull();
+        expect(facts(fixture)).toEqual(['', '2,50 € / kg', '≈2,50 €']);
+      });
+
+      it('never draws the old total between the run and its write', async () => {
+        // `quantityRuns` clears `pending` and the line store marks the write
+        // pending in one task, so both inputs change before the next render.
+        const fixture = await compact(
+          vm({ quantity: 750, unit: 'GRAM', product: loose() }),
+          { pending: 1000 }
+        );
+
+        fixture.componentRef.setInput('pending', null);
+        fixture.componentRef.setInput(
+          'line',
+          vm({
+            quantity: 1000,
+            unit: 'GRAM',
+            write: 'pending',
+            product: loose(),
+          })
+        );
+        fixture.detectChanges();
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('≈');
+      });
+
+      it("replaces a pack's total too, and keeps its price", async () => {
+        const fixture = await compact(vm({ quantity: 2, product: pack() }), {
+          pending: 3,
+        });
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(facts(fixture)).toEqual(['1 L', '0,99 €', '']);
+        expect(fixture.nativeElement.textContent).not.toContain('1,98');
+      });
+
+      it('replaces No price too, while the amount is saved', async () => {
+        const fixture = await compact(
+          vm({ quantity: 2, product: pack({ price: null, total: null }) }),
+          { pending: 3 }
+        );
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(query(fixture, '.fact.price.none')).toBeNull();
+      });
+
+      it('leaves the total out of the name while the mark shows', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Plátano de Canarias IGP',
+            quantity: 750,
+            unit: 'GRAM',
+            product: loose(),
+          }),
+          { pending: 1000 }
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Plátano de Canarias IGP, 2,50 € / kg, 1 kg'
+        );
+      });
+
+      it('draws no mark on a free text line or a row with no product', async () => {
+        const free = await compact(
+          vm({ product: { kind: 'none', canChoose: true }, write: 'pending' }),
+          { pending: 3 }
+        );
+        expect(query(free, '.saving')).toBeNull();
+
+        const loading = await compact(vm({ product: { kind: 'loading' } }), {
+          pending: 3,
+        });
+        expect(query(loading, '.saving')).toBeNull();
+
+        const bare = await compact(vm({ write: 'pending' }), { pending: 3 });
+        expect(query(bare, '.saving')).toBeNull();
+      });
+
+      it('draws nothing of it on the row of today', async () => {
+        const fixture = await render(
+          vm({ write: 'pending', product: shown() }),
+          { pending: 3 }
+        );
+
+        expect(query(fixture, '.saving')).toBeNull();
+        expect(text(fixture, '.line-1 .price')).toBe('0,92 €');
+      });
     });
   });
 });

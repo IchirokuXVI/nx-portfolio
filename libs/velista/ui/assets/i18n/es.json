@@ -460,8 +460,7 @@
     },
     "held": {
       "title": "En {{list}}",
-      "titleMany": "En tus listas",
-      "stepper": "Cuántos de {{line}} en {{list}}"
+      "titleMany": "En tus listas"
     },
     "adding": {
       "to": "Se añade a",
@@ -485,7 +484,6 @@
       "note": "Cambia la cantidad, o quita uno con el menos.",
       "none": "No se ha añadido nada en esta visita.",
       "pending": "Pendiente de aprobar",
-      "stepper": "Cantidad de {{name}}",
       "takeAll_one": "Quitarlo",
       "takeAll_other": "Quitar los {{count}}",
       "open": "Abrir {{list}}"
@@ -573,7 +571,6 @@
     "inLists": {
       "title": "En tus listas",
       "last": "La última",
-      "stepper": "Cuántos en {{list}}",
       "other": "Ya está en esta lista, con este producto",
       "otherPending": "Ya está en esta lista, pendiente de aprobar",
       "readOnly": "Puedes ver esta lista. No puedes añadir nada.",
@@ -742,16 +739,20 @@
       "copyReference": "Copiar referencia"
     }
   },
+  "amount": {
+    "group": "Cantidad de {{name}}",
+    "less": "Quitar {{step}} de {{name}}",
+    "more": "Añadir {{step}} a {{name}}",
+    "settled": "{{name}}, {{amount}}",
+    "inList": "{{name}} en {{list}}",
+    "newLine": "la nueva línea"
+  },
   "list": {
     "header": {
       "title": "Lista",
       "inGroup": "en {{name}}",
-      "pending": "{{pending}} de {{total}} pendientes",
-      "done": "Nada pendiente",
       "notLive": "No se está actualizando ahora",
-      "back": "Volver al grupo",
-      "cost": "Unos {{cost}} por las líneas que tienen precio",
-      "costExact": "{{cost}} por las líneas que tienen precio"
+      "back": "Volver al grupo"
     },
     "presence": {
       "one": "{{name}} está en la lista",
@@ -771,8 +772,6 @@
       "resultsCatalog": "Del catálogo",
       "action": "Añadir",
       "quantity": "Cuántos",
-      "more": "Uno más",
-      "fewer": "Uno menos",
       "startListening": "Di lo que necesitas",
       "stopListening": "Dejar de escuchar",
       "clear": "Borrar lo escrito",
@@ -848,8 +847,7 @@
         "groupMore_other": "y {{count}} más",
         "noMatch": "Ningún producto coincide con «{{- query}}»",
         "noMatchFreeText": "Puedes añadirlo tal cual",
-        "alsoCalled": "También: {{- synonym}}",
-        "alreadyQuantity": "Cuántos de {{line}}"
+        "alsoCalled": "También: {{- synonym}}"
       }
     },
     "addChoice": {
@@ -880,21 +878,7 @@
       "comments": "Comentarios",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
-      "failed": "No se ha guardado. Toca para reintentar",
-      "movedTo": "Movido a la posición {{position}} de {{total}}",
-      "quantityFor": "Cuántos de {{name}}",
-      "quantityChanged": "{{name}}, ahora {{quantity}}"
-    },
-    "reorder": {
-      "enter": "Ponerlas en orden",
-      "title": "Ponerlas en orden",
-      "body": "Arrastra por el asa. Mientras estés aquí no se puede marcar nada",
-      "done": "Hecho",
-      "started": "Poniéndolas en orden. No se puede marcar nada",
-      "ended": "Has terminado de ponerlas en orden",
-      "moveUp": "Subir {{name}}",
-      "moveDown": "Bajar {{name}}",
-      "unavailable": "Para reordenar, usa el orden de la lista, todas las líneas y ninguna búsqueda."
+      "failed": "No se ha guardado. Toca para reintentar"
     },
     "view": {
       "order": {
@@ -1169,7 +1153,6 @@
       "keepEditing": "Seguir editando"
     },
     "trips": {
-      "toBuy": "Por comprar",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} de {{total}} comprados",
       "lines": "{{count}} líneas",
@@ -1197,7 +1180,6 @@
       "staple": "En {{with}} de tus últimas {{seen}} listas",
       "add": "Añadir {{count}}",
       "addLabel": "Añadir {{count}} de {{name}} a la lista",
-      "quantityLabel": "Cuántos de {{name}}",
       "more": "Ver más sugerencias",
       "added": "{{name}} añadido a la lista"
     },
@@ -1211,7 +1193,8 @@
       "more_other": "y {{count}} más que también valen",
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "about": "unos {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1318,6 +1301,10 @@
     },
     "tour": {
       "again": "Enséñamela otra vez"
+    },
+    "listRows": {
+      "label": "Filas compactas",
+      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono."
     }
   },
   "install": {
@@ -2015,10 +2002,6 @@
       "amount": "≈{{amount}}",
       "open": "Total estimado, unos {{amount}}. Ver de dónde sale.",
       "openExact": "Total: {{amount}}. Ver de dónde sale.",
-      "barLabel": "Unos {{bought}} comprados de unos {{total}}",
-      "barLabelExact": "Comprado: {{bought}} de {{total}}",
-      "boughtEnd": "{{amount}} comprado",
-      "leftEnd": "{{amount}} por comprar",
       "title": "Total estimado",
       "titleExact": "Total",
       "bought": "Comprado",

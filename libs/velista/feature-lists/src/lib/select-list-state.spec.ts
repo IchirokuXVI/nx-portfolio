@@ -91,13 +91,11 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     zoneName: 'Flat 3B',
     lines: [line()],
     linesState: 'loaded',
-    linesComplete: true,
     writes: new Map(),
     commentCounts: new Map(),
     claims: new Map(),
     caller: { permissions: ADMIN },
     nameOf: () => null,
-    reordering: false,
     viewers: [],
     editorOf: () => null,
     live: true,
@@ -150,14 +148,6 @@ describe('selectListState', () => {
       const without = loaded(select()).lines[0];
 
       expect(withEditor).toEqual({ ...without, editor: 'Ana' });
-    });
-
-    // The sheet cannot be opened from a row in reorder mode, so an indicator there
-    // would be about a screen the reader cannot get to.
-    it('names nobody while the list is being put in order', () => {
-      const state = select({ reordering: true, editorOf: () => 'Ana' });
-
-      expect(loaded(state).lines[0]?.editor).toBeNull();
     });
   });
 
@@ -368,6 +358,13 @@ describe('selectListState', () => {
         },
         locale: 'es',
         brandSizeOf: (known) => `${known.brand} · 1 L`,
+        // What `productSizeText` answers for these records (velista 0191).
+        sizeOf: (known) =>
+          typeof known.approxWeight === 'number'
+            ? '~1,56 kg'
+            : known.size === null
+              ? null
+              : '1 L',
         formatMoney: (amount) => `${amount.toFixed(2).replace('.', ',')} €`,
         translate: (key) => key,
         ...overrides,
@@ -404,6 +401,151 @@ describe('selectListState', () => {
         favorite: false,
         others: 0,
         price: { amount: money(0.92), per: null },
+        brand: 'Hacendado',
+        size: '1 L',
+        // Formatted by the catalog the spec hands in, which spaces with a plain space.
+        total: { amount: '0,92 €', estimated: false },
+      });
+    });
+
+    describe("the compact row's facts (velista 0191)", () => {
+      it('gives a pack of two its brand, its size, its pack price and the total of two, exact', () => {
+        const row = rowOf({ content: 'Leche', itemIds: ['milk'], quantity: 2 });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            brand: 'Hacendado',
+            size: '1 L',
+            price: { amount: money(0.92), per: null },
+            total: { amount: '1,84 €', estimated: false },
+          })
+        );
+      });
+
+      it('totals 750 g of a loose product, as an estimate', () => {
+        const row = rowOf({
+          content: 'Manzanas',
+          itemIds: ['apples'],
+          quantity: 750,
+          unit: 'GRAM',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            size: null,
+            price: { amount: money(2.49), per: 'catalog.per.KILOGRAM' },
+            // Formatted by the catalog the spec hands in, which spaces with a plain space.
+            total: { amount: '1,87 €', estimated: true },
+          })
+        );
+      });
+
+      it('totals nothing at zero, for a loose product and a pack alike', () => {
+        const loose = rowOf({
+          content: 'Manzanas',
+          itemIds: ['apples'],
+          quantity: 0,
+          unit: 'GRAM',
+        });
+        const pack = rowOf({
+          content: 'Leche',
+          itemIds: ['milk'],
+          quantity: 0,
+        });
+
+        expect(loose.product).toEqual(expect.objectContaining({ total: null }));
+        expect(pack.product).toEqual(expect.objectContaining({ total: null }));
+      });
+
+      it('gives three kilo pieces their weight, the piece price and three times it, as an estimate', () => {
+        const row = rowOf({
+          content: 'Queso',
+          itemIds: ['cheese'],
+          quantity: 3,
+          unit: 'UNIT',
+        });
+
+        expect(row.product).toEqual(
+          expect.objectContaining({
+            size: '~1,56 kg',
+            price: { amount: money(20.94), per: null },
+            total: { amount: '62,82 €', estimated: true },
+          })
+        );
+      });
+
+      it('counts the total the list header counts', () => {
+        const state = loaded(
+          select({
+            lines: [
+              line({ id: 'a', itemIds: ['milk'], quantity: 2 }),
+              line({
+                id: 'b',
+                itemIds: ['apples'],
+                quantity: 750,
+                unit: 'GRAM',
+                position: 2,
+              }),
+            ],
+            catalog: catalog(),
+          })
+        );
+
+        // 1,84 € and 1,87 €, so the header's 3,71 € is the sum of the rows.
+        expect(
+          state.lines.map((row) =>
+            row.product?.kind === 'shown' ? row.product.total?.amount : null
+          )
+        ).toEqual(['1,84 €', '1,87 €']);
+        expect(state.header.cost).toBe('3,71 €');
+      });
+
+      it('reads an empty brand as none', () => {
+        const row = rowOf(
+          { content: 'Leche', itemIds: ['milk'] },
+          {
+            catalog: catalog({
+              itemOf: (itemId) =>
+                itemId === 'milk'
+                  ? ({ ...ITEMS.get('milk'), brand: '  ' } as CatalogItem)
+                  : null,
+            }),
+          }
+        );
+
+        expect(row.product).toEqual(expect.objectContaining({ brand: null }));
+      });
+
+      it('has no brand or size for a product the catalog has not named, and totals it by its offer', () => {
+        const unnamed = { catalog: catalog({ itemOf: () => null }) };
+        const weighed = rowOf(
+          {
+            content: 'Manzanas',
+            itemIds: ['apples'],
+            quantity: 750,
+            unit: 'GRAM',
+          },
+          unnamed
+        );
+        const counted = rowOf(
+          { content: 'Leche', itemIds: ['milk'], quantity: 2 },
+          unnamed
+        );
+
+        expect(weighed.product).toEqual(
+          expect.objectContaining({
+            name: null,
+            brand: null,
+            size: null,
+            // Read as a pack by its offer, which cannot serve a weight.
+            total: null,
+          })
+        );
+        expect(counted.product).toEqual(
+          expect.objectContaining({
+            total: { amount: '1,84 €', estimated: false },
+          })
+        );
       });
     });
 
@@ -1144,54 +1286,6 @@ describe('selectListState', () => {
 
     it('reports no write state at all for an untouched row', () => {
       expect(loaded(select()).lines[0].write).toBe('none');
-    });
-  });
-
-  describe('reordering, and rule L4', () => {
-    const two = [
-      line({ id: 'a', position: 1 }),
-      line({ id: 'b', position: 2 }),
-    ];
-
-    it('is available once every page has arrived', () => {
-      expect(loaded(select({ lines: two })).canReorder).toBe(true);
-    });
-
-    it('is unavailable while a page is still outstanding', () => {
-      // `line.reorder` renumbers exactly the lines it names, so reordering a half read
-      // list leaves two lines on the same position.
-      const state = select({ lines: two, linesComplete: false });
-
-      expect(loaded(state).canReorder).toBe(false);
-    });
-
-    it('is unavailable to a reader', () => {
-      const state = select({ lines: two, caller: { permissions: READ_ONLY } });
-
-      expect(loaded(state).canReorder).toBe(false);
-    });
-
-    it('follows WRITE, not the tick', () => {
-      // Reordering rewrites what the list asks for rather than what the shop had, so it
-      // stayed with `canWrite` when ticking moved to `canDecide` (section 4).
-      expect(
-        loaded(select({ lines: two, caller: { permissions: DECIDER } }))
-          .canReorder
-      ).toBe(false);
-      expect(
-        loaded(select({ lines: two, caller: { permissions: WRITER } }))
-          .canReorder
-      ).toBe(true);
-    });
-
-    it('is pointless on a single line and is not offered', () => {
-      expect(loaded(select()).canReorder).toBe(false);
-    });
-
-    it('turns opening off while the mode is on', () => {
-      const state = select({ lines: two, reordering: true });
-
-      expect(loaded(state).lines[0]).toMatchObject({ interactive: false });
     });
   });
 

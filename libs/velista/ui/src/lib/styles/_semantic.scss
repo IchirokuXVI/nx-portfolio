@@ -240,6 +240,23 @@ $app-landing-short: 700px;
   // How few letters of a product's name survive on a row before its brand and size
   // start to give way (section 3).
   --app-line-product-name-min: 4ch;
+  // The compact row of a list (velista 0191, section 3): the label and the brand on
+  // one 22px line, then three fact lines (the size and the price per measure on 16px
+  // lines, the price on a 20px one) beside the stepper. The picture is as tall as
+  // the text, 74px, and the brand never takes more than 96px of the first line.
+  --app-line-compact-label-leading: 22px;
+  --app-line-compact-fact-leading: 16px;
+  --app-line-compact-price-leading: 20px;
+  --app-line-compact-facts-height: calc(
+    2 * var(--app-line-compact-fact-leading) +
+      var(--app-line-compact-price-leading)
+  );
+  --app-line-compact-picture-size: calc(
+    var(--app-line-compact-label-leading) + var(--app-line-compact-facts-height)
+  );
+  --app-line-compact-brand-max: 96px;
+  // "Choose a product" in the facts column of a free text line, when it wraps.
+  --app-line-compact-choose-leading: 18px;
   // The same picture on the basket line sheet's product card, larger because the
   // card is the one product on the sheet and not one row of many.
   --app-product-card-image-size: 72px;
@@ -371,6 +388,27 @@ $app-landing-short: 700px;
   // so the current number does not slide sideways as the reel reaches zero and the
   // neighbour to its left disappears.
   --app-reel-digit-width: 28px;
+
+  // The stepper (velista 0188, the owner's D3 Outline): minus, the amount cell and
+  // plus in one outlined capsule, each button 48 by 48. The cells were measured in the
+  // mock, never guessed: the row's 59px holds "99,975" at 16px 700 with 4px of air a
+  // side and "MMMM" at 12px; the list sheet's 95px and the shopping list sheet's 72px
+  // hold "999,999" at 17px 700 with tabular figures. 48 + 59 + 48 is 155, 48 + 95 +
+  // 48 is 191, 48 + 72 + 48 is 168, and a control never changes size.
+  --app-stepper-button: var(--app-space-10);
+  --app-stepper-cell-row: 59px;
+  --app-stepper-cell-sheet: 95px;
+  --app-stepper-cell-sheet-narrow: 72px;
+  --app-stepper-figure: 17px;
+  --app-stepper-figure-count: var(--app-text-lg);
+  --app-stepper-figure-long: var(--app-text-sm);
+  --app-stepper-symbol: var(--app-text-xs);
+  --app-stepper-glyph: 14px;
+  --app-stepper-glyph-bar: 2px;
+  --app-stepper-figure-gap: 2px;
+  --app-stepper-cell-pad-sheet: 6px;
+  // The amber ring around the cell of an amount an add just raised (velista 0170).
+  --app-stepper-took-ring: 2px;
 
   // How tall the line page's one line suggestion rows may grow before they scroll
   // (plan 0043, section 6). Four rows and a bit: enough to show that there is more

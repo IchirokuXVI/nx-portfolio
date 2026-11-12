@@ -66,9 +66,10 @@ import {
   ColumnScroll,
   formatAmount,
   ListSearchNavigation,
-  NavChrome,
   PageReturn,
   productPagePath,
+  type QuantityRun,
+  quantityRuns,
   searchOpenOf,
   sheetSegments,
   shopMapPath,
@@ -78,12 +79,13 @@ import {
 import {
   AnchoredPopover,
   type AnchoredPopoverClose,
+  type AnchoredPopoverSide,
   BasketIcon,
-  BasketTotalBar,
   BasketTotalNumber,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
+  DragReleasesField,
   EllipsisIcon,
   InfoIcon,
   LineComposer,
@@ -212,11 +214,11 @@ function basketReturnKey(live: boolean, id: string): string {
     AnchoredPopover,
     BasketIcon,
     BasketRow,
-    BasketTotalBar,
     BasketTotalNumber,
     CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
+    DragReleasesField,
     EllipsisIcon,
     SeenTarget,
     InfoIcon,
@@ -1092,8 +1094,6 @@ export class BasketPage {
 
     inject(DestroyRef).onDestroy(() => {
       followed.unsubscribe();
-      // The bar comes back with whatever screen is next (velista `0117`).
-      this._chrome.setComposing(false);
       // What a return to this basket comes back to, taken before the stores let go.
       this._returns.keep<BasketPageReturn>(
         basketReturnKey(this._live, this._id),
@@ -1752,7 +1752,6 @@ export class BasketPage {
   // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
-  private readonly _chrome = inject(NavChrome);
 
   /**
    * Whether `?search=1` is on the URL (velista `0109`).
@@ -1804,22 +1803,14 @@ export class BasketPage {
   /** The id of the results region, which the field names in `aria-controls`. */
   protected readonly resultsId = 'basket-results';
 
-  /** Whether the composer's field has focus. */
-  private readonly _fieldFocused = signal(false);
-
-  /** The composer's field gained or lost focus. */
-  protected onFieldFocused(focused: boolean): void {
-    this._fieldFocused.set(focused);
-  }
-
   /**
-   * The bar gives the page its room while the field has focus or holds words (rule
-   * F3), so the results reach from the basket's bar to the composer.
+   * The first touch or pen drag of the column takes the focus off the field, so a
+   * phone puts its keyboard away (velista `0189`, section 4). The words, the results
+   * and `?search=1` stay, and a field without focus is left alone.
    */
-  private readonly _hideChrome = effect(() => {
-    const composing = this._fieldFocused() || this.typing();
-    untracked(() => this._chrome.setComposing(composing));
-  });
+  protected releaseField(): void {
+    this._composer()?.releaseFocus();
+  }
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
 
@@ -1827,12 +1818,10 @@ export class BasketPage {
   private _resultsDrawn = false;
 
   /**
-   * When the results first appear, the column goes back to its top, so they sit
-   * under the basket's bar however far down the basket somebody was.
-   *
-   * Not further, unlike the zone list: the basket's bar is inside this column
-   * rather than above it, so scrolling the heading to the top would take the bar
-   * off the screen, and the bar stays while typing.
+   * When the results first appear, the column goes back to its top, so they start
+   * under the field however far down the basket somebody was. The tools row and the
+   * field are pinned above this column (velista `0189`), so the top of the column is
+   * the top of what moves, as on the zone list.
    *
    * Not on a return to the basket: the results were already on screen when
    * somebody left, and the place they were reading in is what {@link _scroll} puts
@@ -2194,6 +2183,15 @@ export class BasketPage {
    */
   protected readonly pickerAnchor = signal<HTMLElement | null>(null);
 
+  /**
+   * Which side of its anchor the picker opens on (velista `0189`). Below the
+   * composer's plus, which sits at the top of the page, where above it would cover the
+   * tools row; above a card's add button in the results, as before.
+   */
+  protected readonly pickerSide = computed<AnchoredPopoverSide>(() =>
+    this.pickerAnchor()?.closest('.composer-dock') ? 'below' : 'above'
+  );
+
   /** The line the open picker is asking about, as the composer sent it. */
   private _waiting: LineComposerSubmit | null = null;
 
@@ -2454,7 +2452,12 @@ export class BasketPage {
               entry.listId === null
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
-            quantity: entry.left,
+            // The open run's amount while presses gather, then the amount of
+            // its write until that answers (velista `0188`).
+            quantity: this._holdingRuns.shown(
+              entry.lineId,
+              this._sending().get(entry.lineId)?.to ?? entry.left
+            ),
             unit: entry.unit,
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
@@ -2478,20 +2481,66 @@ export class BasketPage {
       productPagePath(locale, this._basePath, itemId);
   });
 
+  /** The amount of each run whose demand write has not answered, by line. */
+  private readonly _sending = signal<
+    ReadonlyMap<string, { readonly to: number }>
+  >(new Map());
+
+  /** The holding each open run belongs to, for the sentence after its write. */
+  private readonly _runHoldings = new Map<string, SuggestionHolding>();
+
   /**
-   * A card's stepper moved one list's demand (velista `0101`, section 2): the write
-   * the settle sheet makes, `POST rows/{lineId}/demand`, and the same sentences
-   * after it. It is sent under the line itself (backend `0201`), because a row's key
-   * can change under the panel while somebody else adds or settles.
+   * A card's steps on one line, gathered into one demand write per run (velista
+   * `0188`, section 5.6): a hold repeats ten times a second, which would otherwise be
+   * ten writes a second. The card draws the run's amount while it is open.
    */
-  protected async changeHolding(
-    change: SuggestionHoldingChange
-  ): Promise<void> {
-    const result = await this._store.setDemand({
-      lineId: change.holding.lineId,
-      quantity: change.to,
+  private readonly _holdingRuns = quantityRuns<string>((lineId, run) => {
+    const holding = this._runHoldings.get(lineId);
+    this._runHoldings.delete(lineId);
+    if (holding !== undefined) {
+      void this._sendHolding(holding, run);
+    }
+  });
+
+  /** A card's stepper stepped one list's demand. */
+  protected changeHolding(change: SuggestionHoldingChange): void {
+    this._runHoldings.set(change.holding.lineId, change.holding);
+    this._holdingRuns.step(change.holding.lineId, {
       from: change.from,
+      to: change.to,
+      repeat: change.repeat,
     });
+  }
+
+  /**
+   * One run of a card's stepper, as one list's demand (velista `0101`, section 2):
+   * the write the settle sheet makes, `POST rows/{lineId}/demand`, with the run's
+   * `from` and its last `to`, and the same sentences after it. It is sent under the
+   * line itself (backend `0201`), because a row's key can change under the panel
+   * while somebody else adds or settles.
+   */
+  private async _sendHolding(
+    holding: SuggestionHolding,
+    run: QuantityRun
+  ): Promise<void> {
+    const change = { holding, from: run.from, to: run.to };
+    // The demand write is not optimistic, so the run's amount stays drawn until
+    // it answers: the card does not jump back to the old amount and then forward.
+    const sending = { to: run.to };
+    const lineId = holding.lineId;
+    this._sending.update((all) => new Map(all).set(lineId, sending));
+    const result = await this._store
+      .setDemand({ lineId, quantity: run.to, from: run.from })
+      .finally(() =>
+        this._sending.update((all) => {
+          if (all.get(lineId) !== sending) {
+            return all;
+          }
+          const next = new Map(all);
+          next.delete(lineId);
+          return next;
+        })
+      );
 
     if (result === null) {
       this._say(

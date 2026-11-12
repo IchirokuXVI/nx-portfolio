@@ -10,9 +10,6 @@
   scrolls away and never waits for the list. On a cold arrival the name is not here
   yet and the title is the word for the kind of page; the name then takes its place in
   the same box, at the same size (rule H6).
-
-  In reorder mode back ends the mode rather than leaving the page, which is what makes
-  the mode safe to enter (rule L4).
 -->
 <lib-page-header
   (back)="back()"
@@ -24,12 +21,9 @@
       The filter (velista 0082, section 2). The badge is how many settings are on, and
       the **name carries it too**, because a count that only exists as a dot over a
       glyph is a count a screen reader never hears. Absent while the composer's field
-      holds words, on an empty list, and in reorder mode, where the order is the thing
-      being edited.
+      holds words, and on an empty list.
     -->
-    @if (
-      current.kind === 'loaded' && !typing() && !current.empty && !reordering()
-    ) {
+    @if (current.kind === 'loaded' && !typing() && !current.empty) {
       <button
         (click)="openFilter()"
         [attr.aria-label]="
@@ -46,7 +40,7 @@
     }
 
     <!-- The settings sheet, offered from `canManage` alone. -->
-    @if ((loaded()?.abilities?.canManage ?? false) && !reordering()) {
+    @if (loaded()?.abilities?.canManage ?? false) {
       <button
         (click)="openSettings()"
         [attr.aria-label]="'list.settings.title' | rokuT"
@@ -59,7 +53,147 @@
   </ng-container>
 </lib-page-header>
 
-<main #column class="page">
+<!--
+  The head block (velista 0189): pinned between the page header and the column, so
+  the field stays put while the column scrolls. Which group, who else is here, and
+  whether the list is live, then the field. It draws from the cache when the caller
+  arrived from the group page, so the common path shows it on the first frame and
+  skeletons only the lines. On a cold arrival the lines still load without it, which
+  is rule L2 and is the whole reason these are two requests.
+-->
+<div class="page-top">
+  @if (current.kind !== 'error' && current.kind !== 'gone') {
+    @if (header(); as list) {
+      <lib-list-header [header]="list" />
+    }
+  }
+
+  <!--
+    Pinned under the head block, and **absent** rather than disabled without `WRITE`: a
+    disabled text field is an invitation that does not work and costs a tap to find
+    out (section 3.2). Drawn from certainty, so it is absent from the first frame rather
+    than taken away after a refusal.
+  -->
+  @if (loaded(); as page) {
+    @if (page.abilities.canWrite) {
+      <!--
+        The field, then what was heard and what was done under it (plan 0038, section
+        5; velista 0189, decision E). Under and not above, so the field stays where the
+        thumb learned it when a strip appears.
+
+        Mishearing is the characteristic failure of a voice interface, and an action
+        you cannot see is an action you cannot check. The strip is `polite`, it is
+        dismissible, and the next recording **replaces** it rather than adding to
+        it: this is not a chat. Somebody who wants a conversation has the assistant
+        panel, and this page has a list.
+      -->
+      <div class="composer-dock">
+        <!--
+          The one field: it adds, and since velista 0117 it is also the list's search.
+          What it finds is drawn in the column, under it.
+
+          The composer holds the words on a send (velista 0170): the page clears them
+          at once for an add it draws, and keeps them for an add that may come back
+          as a question. Escape belongs to the question while it is open.
+        -->
+        <lib-line-composer
+          (queryChanged)="onComposerQuery($event)"
+          (recordingFailed)="onRecordingFailed()"
+          (spoke)="addAloud($event)"
+          (submitted)="add($event)"
+          [busy]="composerBusy()"
+          [escapeClears]="addChoice() === null"
+          [holdOnSend]="true"
+          [resultsId]="resultsId"
+          [takeFocus]="page.empty"
+          [voice]="voiceOffered()"
+          libTourAnchor="list-composer"
+        />
+
+        @if (voiceStrip(); as strip) {
+          <div
+            [class.failed]="strip.failed"
+            aria-live="polite"
+            class="voice-strip"
+          >
+            <div class="voice-said">
+              @if (strip.heard) {
+                <p class="voice-heard">
+                  {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
+                </p>
+              }
+              <!--
+                The assistant is still working out what was said (velista 0079,
+                section 5). The spinner is decoration beside a sentence that says the
+                same thing, and it sits inside the strip's own polite region, so the
+                reply that replaces it is announced like any other.
+              -->
+              @if (strip.working) {
+                <p class="voice-reply voice-working">
+                  <lib-spinner-icon
+                    aria-hidden="true"
+                    class="voice-working-glyph"
+                  />
+                  <span>{{ 'list.add.working' | rokuT }}</span>
+                </p>
+              } @else if (strip.messageKey) {
+                <p class="voice-reply">
+                  {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
+                </p>
+              } @else if (strip.reply) {
+                <p class="voice-reply">{{ strip.reply }}</p>
+              }
+            </div>
+
+            <button
+              (click)="dismissVoice()"
+              [attr.aria-label]="'list.add.dismissHeard' | rokuT"
+              class="voice-dismiss"
+              type="button"
+            >
+              <lib-close-icon class="voice-dismiss-glyph" />
+            </button>
+          </div>
+        }
+      </div>
+
+      <!--
+        Which line takes it? A typed name two or more lines with a product carry
+        (velista 0170, alternative D), held against the plus that was pressed. Below
+        the composer's plus, which sits at the top of the page, and above a card's
+        button in the results (velista 0189).
+      -->
+      @if (addChoice(); as asked) {
+        <lib-anchored-popover
+          (closed)="closeChoice($event)"
+          [labelledBy]="choiceTitleId"
+          [open]="true"
+          [origin]="asked.anchor"
+          [side]="choiceSide()"
+          align="end"
+          frame="choice"
+        >
+          <lib-add-choice
+            (chose)="chooseLine($event)"
+            (dismissed)="closeChoice('escape')"
+            (newLine)="chooseNewLine()"
+            [added]="asked.entry.quantity"
+            [name]="choiceName()"
+            [rows]="choiceRows()"
+            [titleId]="choiceTitleId"
+            scope="list"
+          />
+        </lib-anchored-popover>
+      }
+    }
+  }
+</div>
+
+<!--
+  The first touch or pen drag of the column takes the focus off the field, so a phone
+  puts its keyboard away and the results get the room (velista 0189, section 4).
+-->
+<main (dragged)="releaseField()" #column class="page" libDragReleasesField>
   @if (current.kind === 'gone') {
     <!--
       One sentence for a list this reader cannot read and for an id that names nothing,
@@ -84,17 +218,6 @@
   }
 
   @if (current.kind !== 'error' && current.kind !== 'gone') {
-    <!--
-      The first block of the content: which group, how far the shop has got and who
-      else is here. It draws from the cache when the caller arrived from the group
-      page, so the common path shows the progress on the first frame and skeletons only
-      the lines. On a cold arrival the lines still load without it, which is rule L2
-      and is the whole reason these are two requests.
-    -->
-    @if (header(); as list) {
-      <lib-list-header [header]="list" />
-    }
-
     <!--
       A quantity change the network dropped before the reconnect reloaded this page
       (velista 0159). Said once, in the person's words, with a resend only when the
@@ -186,7 +309,6 @@
       >
         <h2
           [class.is-none]="drawnLines().length === 0"
-          #resultsHeading
           aria-live="polite"
           class="results-heading"
           id="list-results-heading"
@@ -207,12 +329,14 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
-            (quantityChanged)="changeQuantity($event)"
+            (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
             [announcement]="announcement()"
             [highlight]="highlight()"
+            [layout]="listRows.layout()"
             [lines]="drawnLines()"
             [markedId]="markedLine()"
+            [pending]="quantityRuns.pending()"
             [tookId]="tookLine()"
           />
         }
@@ -278,43 +402,40 @@
         <!--
           The groups (velista 0088). A search flattens the page: every matching line
           once, with its reel and no heading, which is how a line that lives only in
-          old trips is found and raised again. Otherwise To buy comes first, then the
-          live trips, then the past ones, each folded until somebody opens it.
+          old trips is found and raised again. Otherwise the lines to buy come first,
+          with no heading of their own since velista 0189, then the live trips, then
+          the past ones, each folded until somebody opens it.
         -->
-        @if (shown?.kind === 'groups') {
-          <lib-to-buy-heading
-            (startReorder)="startReorder()"
-            [canReorder]="canReorder() && !reordering()"
-            [reorderHeld]="reorderHeld()"
-          />
-        }
-
         @if (dueSection(); as due) {
           <!--
-            The lines the list suggests (velista 0089, section 2), inside To buy after
-            its wanted lines and before its lines at zero. So To buy is drawn in two
-            lists around them, and the page's one polite region stays on the first.
-            Never drawn in reorder mode, where To buy is one list again.
+            The lines the list suggests (velista 0089, section 2), after the wanted
+            lines and before the lines at zero. So those are drawn in two lists around
+            them, and the page's one polite region stays on the first.
           -->
           <lib-line-list
             (act)="act($event)"
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
-            (quantityChanged)="changeQuantity($event)"
+            (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
             [announcement]="announcement()"
             [highlight]="highlight()"
+            [layout]="listRows.layout()"
             [lines]="wantedLines()"
             [markedId]="markedLine()"
+            [pending]="quantityRuns.pending()"
             [tookId]="tookLine()"
           />
 
           <section aria-labelledby="due-label" class="due">
-            <!-- One level below To buy, and no fold and no count: it is part of To buy. -->
-            <h3 class="due-label" id="due-label">
+            <!--
+              An h2, one level below the page's h1 (velista 0189, decision J), with no
+              fold and no count.
+            -->
+            <h2 class="due-label" id="due-label">
               {{ 'list.due.label' | rokuT }}
-            </h3>
+            </h2>
             <ul class="due-rows">
               @for (row of due.rows; track row.lineId) {
                 <li>
@@ -340,11 +461,13 @@
               (chooseProduct)="chooseProduct($event)"
               (dismiss)="dismissNote($event)"
               (opened)="openLine($event)"
-              (quantityChanged)="changeQuantity($event)"
+              (quantityStepped)="stepQuantity($event)"
               (retry)="retry($event)"
               [highlight]="highlight()"
+              [layout]="listRows.layout()"
               [lines]="restLines()"
               [markedId]="markedLine()"
+              [pending]="quantityRuns.pending()"
               [tookId]="tookLine()"
             />
           }
@@ -354,22 +477,22 @@
             (chooseProduct)="chooseProduct($event)"
             (dismiss)="dismissNote($event)"
             (opened)="openLine($event)"
-            (quantityChanged)="changeQuantity($event)"
-            (reorderTo)="moveTo($event)"
+            (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
             [announcement]="announcement()"
             [highlight]="highlight()"
+            [layout]="listRows.layout()"
             [lines]="drawnLines()"
             [markedId]="markedLine()"
-            [reordering]="reordering()"
+            [pending]="quantityRuns.pending()"
             [tookId]="tookLine()"
           />
         }
 
-        @if (shown?.kind === 'groups' && !reordering()) {
+        @if (shown?.kind === 'groups') {
           <!--
             A failed read of the trips never blocks the lines. It is said here, under
-            To buy, with a retry, the way the page reports a failed load.
+            the lines to buy, with a retry, the way the page reports a failed load.
           -->
           @if (tripsFailed()) {
             <div class="trips-failed">
@@ -405,140 +528,8 @@
         }
       }
     }
-
-    @if (reordering()) {
-      <button (click)="endReorder()" class="reorder-done" type="button">
-        {{ 'list.reorder.done' | rokuT }}
-      </button>
-    }
   }
 </main>
-
-<!--
-  Pinned to the bottom of the screen, and **absent** rather than disabled without
-  `WRITE`: a disabled text field at the bottom of the screen is an invitation that does
-  not work and costs a tap to find out (section 3.2). Drawn from certainty now, so it is
-  absent from the first frame rather than taken away after a refusal.
-
-  It is also absent in reorder mode, where adding a line mid drag would insert a row
-  into the order somebody is halfway through rewriting.
--->
-@if (loaded(); as page) {
-  @if (page.abilities.canWrite && !reordering()) {
-    <!--
-      What was heard and what was done, above the composer (plan 0038, section 5).
-
-      Mishearing is the characteristic failure of a voice interface, and an action
-      you cannot see is an action you cannot check. It is `polite`, it is
-      dismissible, and the next recording **replaces** it rather than adding to
-      it: this is not a chat. Somebody who wants a conversation has the assistant
-      panel, and this page has a list.
-    -->
-    <!--
-      The strip and the field are one pinned container, so what was heard sits on the
-      composer's own surface directly above it and shares its width, its background and
-      its scroll position. As siblings the strip was an unstyled run of text floating on
-      the page while the composer stayed pinned beneath it.
-    -->
-    <div class="composer-dock">
-      @if (voiceStrip(); as strip) {
-        <div
-          [class.failed]="strip.failed"
-          aria-live="polite"
-          class="voice-strip"
-        >
-          <div class="voice-said">
-            @if (strip.heard) {
-              <p class="voice-heard">
-                {{ 'list.add.heard' | rokuT }}: “{{ strip.heard }}”
-              </p>
-            }
-            <!--
-              The assistant is still working out what was said (velista 0079,
-              section 5). The spinner is decoration beside a sentence that says the
-              same thing, and it sits inside the strip's own polite region, so the
-              reply that replaces it is announced like any other.
-            -->
-            @if (strip.working) {
-              <p class="voice-reply voice-working">
-                <lib-spinner-icon
-                  aria-hidden="true"
-                  class="voice-working-glyph"
-                />
-                <span>{{ 'list.add.working' | rokuT }}</span>
-              </p>
-            } @else if (strip.messageKey) {
-              <p class="voice-reply">
-                {{ strip.messageKey | rokuT: strip.messageArgs ?? {} }}
-              </p>
-            } @else if (strip.reply) {
-              <p class="voice-reply">{{ strip.reply }}</p>
-            }
-          </div>
-
-          <button
-            (click)="dismissVoice()"
-            [attr.aria-label]="'list.add.dismissHeard' | rokuT"
-            class="voice-dismiss"
-            type="button"
-          >
-            <lib-close-icon class="voice-dismiss-glyph" />
-          </button>
-        </div>
-      }
-
-      <!--
-        The one field: it adds, and since velista 0117 it is also the list's search.
-        What it finds is drawn in the page, in the results above.
-      -->
-      <!--
-        The composer holds the words on a send (velista 0170): the page clears them
-        at once for an add it draws, and keeps them for an add that may come back
-        as a question. Escape belongs to the question while it is open.
-      -->
-      <lib-line-composer
-        (fieldFocused)="onFieldFocused($event)"
-        (queryChanged)="onComposerQuery($event)"
-        (recordingFailed)="onRecordingFailed()"
-        (spoke)="addAloud($event)"
-        (submitted)="add($event)"
-        [busy]="composerBusy()"
-        [escapeClears]="addChoice() === null"
-        [holdOnSend]="true"
-        [resultsId]="resultsId"
-        [takeFocus]="page.empty"
-        [voice]="voiceOffered()"
-        libTourAnchor="list-composer"
-      />
-    </div>
-
-    <!--
-      Which line takes it? A typed name two or more lines with a product carry
-      (velista 0170, alternative D), held against the plus that was pressed.
-    -->
-    @if (addChoice(); as asked) {
-      <lib-anchored-popover
-        (closed)="closeChoice($event)"
-        [labelledBy]="choiceTitleId"
-        [open]="true"
-        [origin]="asked.anchor"
-        align="end"
-        frame="choice"
-      >
-        <lib-add-choice
-          (chose)="chooseLine($event)"
-          (dismissed)="closeChoice('escape')"
-          (newLine)="chooseNewLine()"
-          [added]="asked.entry.quantity"
-          [name]="choiceName()"
-          [rows]="choiceRows()"
-          [titleId]="choiceTitleId"
-          scope="list"
-        />
-      </lib-anchored-popover>
-    }
-  }
-}
 
 <!--
   The sheets. Routes, not template flags, so the back button dismisses them. Drawn only

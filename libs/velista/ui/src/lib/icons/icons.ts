@@ -637,27 +637,6 @@ export class CommentIcon {
 }
 
 /**
- * Two columns of dots: the grip a row is dragged by in reorder mode.
- *
- * It is a **focusable button** and not decoration, because up and down on it move the
- * row. A grip that only answered a pointer would put the manual order out of reach of
- * anybody without a working one (section 7).
- */
-@Component({
-  selector: 'lib-grip-icon',
-  template: TEMPLATE,
-  styleUrl: './icon.scss',
-  changeDetection: ChangeDetectionStrategy.OnPush,
-})
-export class GripIcon {
-  readonly svg = inlineSvg(
-    () =>
-      // @ts-expect-error the `?raw` suffix does not match the ambient `*.svg` decl
-      import('./grip-icon.svg?raw')
-  );
-}
-
-/**
  * A paper plane: sending the comment in the box beside it.
  *
  * The glyph rather than the word, because the composer's button has to be as tall as
