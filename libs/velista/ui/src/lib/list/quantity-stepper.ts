@@ -139,8 +139,14 @@ export class QuantityStepper {
     this._stepWords(stepAt(this.value(), this.unit()))
   );
 
-  /** Whether the polite live region holds the settled amount (decision E). */
-  readonly announcing = signal(false);
+  /** The amount the presses settled on, which the live region says (decision E). */
+  private readonly _settled = signal<number | null>(null);
+
+  /**
+   * Whether the polite live region holds the settled amount. It empties when the
+   * value moves with no press, so a later change from outside is not read again.
+   */
+  readonly announcing = computed(() => this._settled() === this.value());
 
   /** What a person has typed into a sheet's field and not committed yet. */
   readonly draft = signal<string | null>(null);
@@ -173,11 +179,13 @@ export class QuantityStepper {
     });
   }
 
-  /** A button's `click`: one step, on release. Enter and Space land here too. */
-  press(direction: 1 | -1): void {
-    if (this._swallowClick) {
+  /**
+   * A button's `click`: one step, on release. Enter and Space land here too, as a
+   * click whose `detail` is 0, and those are never swallowed after a hold.
+   */
+  press(direction: 1 | -1, event?: MouseEvent): void {
+    if (this._swallowClick && (event?.detail ?? 1) !== 0) {
       // The release of a hold that already repeated adds no extra step.
-      this._swallowClick = false;
       return;
     }
     if (this.disabled() || this._atEnd(direction)) {
@@ -214,17 +222,18 @@ export class QuantityStepper {
   }
 
   /**
-   * The finger leaves the button: a lift, a slide off or a cancel. The click that
-   * follows a lift is swallowed when the hold repeated, also when the repeat had
-   * already stopped at an end or on a scroll, and only in this task: a hold that
-   * stopped at the last amount above 0 must not reach 0 on the release (S8b).
+   * The finger leaves the button: a lift, a slide off or a cancel. When the hold
+   * repeated, also when the repeat had already stopped at an end or on a scroll,
+   * every pointer click is swallowed until the next `pointerdown` on the control:
+   * a hold that stopped at the last amount above 0 must not reach 0 on the release
+   * (S8b), however late a touch browser sends that click, and also after the
+   * finger slid off and back on.
    */
   endHold(): void {
     this._stopRepeat();
     if (this._holdCount > 0) {
       this._swallowClick = true;
       this._holdCount = 0;
-      setTimeout(() => (this._swallowClick = false), 0);
     }
   }
 
@@ -378,13 +387,13 @@ export class QuantityStepper {
 
   /** Empties the live region, and fills it once the presses stop (decision E). */
   private _announceLater(): void {
-    this.announcing.set(false);
+    this._settled.set(null);
     if (this._announceTimer !== null) {
       clearTimeout(this._announceTimer);
     }
     this._announceTimer = setTimeout(() => {
       this._announceTimer = null;
-      this.announcing.set(true);
+      this._settled.set(this.value());
     }, QUANTITY_STEP_QUIET_MS);
   }
 

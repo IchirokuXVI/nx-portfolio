@@ -17,7 +17,7 @@
     class="stepper"
   >
     <button
-      (click)="press(-1)"
+      (click)="press(-1, $event)"
       (contextmenu)="$event.preventDefault()"
       (pointercancel)="endHold()"
       (pointerdown)="startHold(-1, $event)"
@@ -71,7 +71,7 @@
     }
 
     <button
-      (click)="press(1)"
+      (click)="press(1, $event)"
       (contextmenu)="$event.preventDefault()"
       (pointercancel)="endHold()"
       (pointerdown)="startHold(1, $event)"

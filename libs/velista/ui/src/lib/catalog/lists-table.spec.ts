@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
@@ -10,6 +11,7 @@ import type {
 } from '@portfolio/velista/models';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { QuantityStepper } from '../list/quantity-stepper';
 import { ListsTable, type ListsTableStep } from './lists-table';
 
 /**
@@ -309,6 +311,20 @@ describe('ListsTable', () => {
       // The server puts one more on the line of that name, and an add asks for
       // less than a change of quantity does.
       expect(heard.added).toEqual(['l1']);
+      expect(heard.lineStepped).toEqual([]);
+    });
+
+    it('adds once per press: a repeat of a held plus sends no add', async () => {
+      const fixture = await render();
+      const heard = record(fixture);
+      const stepper = fixture.debugElement.query(
+        By.css('.row lib-quantity-stepper')
+      ).componentInstance as QuantityStepper;
+
+      stepper.stepped.emit({ from: 2, to: 3, repeat: true });
+      stepper.stepped.emit({ from: 3, to: 4, repeat: true });
+
+      expect(heard.added).toEqual([]);
       expect(heard.lineStepped).toEqual([]);
     });
 

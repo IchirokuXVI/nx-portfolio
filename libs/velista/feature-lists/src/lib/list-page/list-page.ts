@@ -1754,6 +1754,9 @@ export class ListPage {
       return;
     }
 
+    // The line's open run is written first, so the sheet reads the amount the row
+    // drew and a Save inside the quiet beat cannot send the old one (velista 0188).
+    this.quantityRuns.flush(lineId);
     void this._openSheet(['lines', lineId, 'detail']);
   }
 
