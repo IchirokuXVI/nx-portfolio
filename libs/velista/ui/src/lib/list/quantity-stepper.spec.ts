@@ -81,6 +81,14 @@ describe('QuantityStepper (velista 0188)', () => {
   const fire = (target: EventTarget, type: string) =>
     target.dispatchEvent(new Event(type, { bubbles: true }));
 
+  /** A click a pointer made: its `detail` counts the presses, so it is at least 1. */
+  const pointerClick = (target: EventTarget) =>
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+
+  /** A click Enter or Space made on a focused button: its `detail` is 0. */
+  const keyClick = (target: EventTarget) =>
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
+
   const tos = (h: Harness) => h.steps.map((step) => step.to);
 
   beforeEach(() => jest.useFakeTimers());
@@ -194,10 +202,50 @@ describe('QuantityStepper (velista 0188)', () => {
       fire(h.plus, 'pointerdown');
       jest.advanceTimersByTime(400);
       fire(h.plus, 'pointerup');
-      h.plus.click();
+      pointerClick(h.plus);
       expect(tos(h)).toEqual([3]);
-      jest.advanceTimersByTime(1);
-      h.plus.click();
+    });
+
+    it('swallows the click of a hold that a touch browser sends in a later task', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.plus, 'pointerup');
+      jest.advanceTimersByTime(50);
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('swallows the release after the finger slid off and back on', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.plus, 'pointerleave');
+      jest.advanceTimersByTime(200);
+      fire(h.plus, 'pointerup');
+      pointerClick(h.plus);
+      expect(tos(h)).toEqual([3]);
+    });
+
+    it('still steps on a keyboard click right after a hold', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.plus, 'pointerup');
+      keyClick(h.plus);
+      expect(tos(h)).toEqual([3, 4]);
+      expect(h.steps.at(-1)?.repeat).toBe(false);
+    });
+
+    it('steps once on a fresh press after a hold', () => {
+      const h = render({ value: 2 });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.plus, 'pointerup');
+      pointerClick(h.plus);
+      fire(h.plus, 'pointerdown');
+      fire(h.plus, 'pointerup');
+      pointerClick(h.plus);
       expect(tos(h)).toEqual([3, 4]);
     });
 
@@ -217,7 +265,7 @@ describe('QuantityStepper (velista 0188)', () => {
       window.dispatchEvent(new Event('scroll'));
       jest.advanceTimersByTime(3000);
       fire(h.plus, 'pointerup');
-      h.plus.click();
+      pointerClick(h.plus);
       expect(tos(h)).toEqual([3]);
     });
 
@@ -244,12 +292,17 @@ describe('QuantityStepper (velista 0188)', () => {
       fire(h.minus, 'pointerdown');
       jest.advanceTimersByTime(5000);
       expect(tos(h)).toEqual([75, 50, 25]);
-      // The release of the hold, long after it stopped, adds no step: no 0.
+      // The release of the hold, long after it stopped, adds no step: no 0,
+      // also when the click comes in a later task.
       fire(h.minus, 'pointerup');
-      h.minus.click();
-      expect(tos(h)).toEqual([75, 50, 25]);
+      pointerClick(h.minus);
       jest.advanceTimersByTime(1);
-      h.minus.click();
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([75, 50, 25]);
+      // A separate press is the way to 0.
+      fire(h.minus, 'pointerdown');
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
       expect(tos(h)).toEqual([75, 50, 25, 0]);
       expect(h.steps.at(-1)?.repeat).toBe(false);
     });
@@ -326,6 +379,18 @@ describe('QuantityStepper (velista 0188)', () => {
       );
       h.plus.click();
       h.fixture.detectChanges();
+      expect(live.textContent?.trim()).toBe('');
+    });
+
+    it('empties the live region when the value moves with no press', () => {
+      const h = render({ value: 750, unit: 'GRAM' });
+      const live = h.el.querySelector('[aria-live="polite"]') as HTMLElement;
+      h.plus.click();
+      jest.advanceTimersByTime(800);
+      h.fixture.detectChanges();
+      expect(live.textContent?.trim()).toContain('amount.settled');
+      // Somebody else changed the line.
+      h.set('value', 1000);
       expect(live.textContent?.trim()).toBe('');
     });
 

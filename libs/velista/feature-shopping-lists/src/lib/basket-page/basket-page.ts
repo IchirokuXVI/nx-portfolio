@@ -2367,8 +2367,12 @@ export class BasketPage {
               entry.listId === null
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
-            // The open run's amount while presses gather (velista `0188`).
-            quantity: this._holdingRuns.shown(entry.lineId, entry.left),
+            // The open run's amount while presses gather, then the amount of
+            // its write until that answers (velista `0188`).
+            quantity: this._holdingRuns.shown(
+              entry.lineId,
+              this._sending().get(entry.lineId)?.to ?? entry.left
+            ),
             unit: entry.unit,
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
@@ -2391,6 +2395,11 @@ export class BasketPage {
     return (itemId: string): string =>
       productPagePath(locale, this._basePath, itemId);
   });
+
+  /** The amount of each run whose demand write has not answered, by line. */
+  private readonly _sending = signal<
+    ReadonlyMap<string, { readonly to: number }>
+  >(new Map());
 
   /** The holding each open run belongs to, for the sentence after its write. */
   private readonly _runHoldings = new Map<string, SuggestionHolding>();
@@ -2430,11 +2439,23 @@ export class BasketPage {
     run: QuantityRun
   ): Promise<void> {
     const change = { holding, from: run.from, to: run.to };
-    const result = await this._store.setDemand({
-      lineId: holding.lineId,
-      quantity: run.to,
-      from: run.from,
-    });
+    // The demand write is not optimistic, so the run's amount stays drawn until
+    // it answers: the card does not jump back to the old amount and then forward.
+    const sending = { to: run.to };
+    const lineId = holding.lineId;
+    this._sending.update((all) => new Map(all).set(lineId, sending));
+    const result = await this._store
+      .setDemand({ lineId, quantity: run.to, from: run.from })
+      .finally(() =>
+        this._sending.update((all) => {
+          if (all.get(lineId) !== sending) {
+            return all;
+          }
+          const next = new Map(all);
+          next.delete(lineId);
+          return next;
+        })
+      );
 
     if (result === null) {
       this._say(

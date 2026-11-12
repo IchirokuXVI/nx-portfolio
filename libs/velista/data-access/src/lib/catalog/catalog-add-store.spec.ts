@@ -1489,6 +1489,22 @@ describe('CatalogAddStore', () => {
       expect(store.failures()).toBe(1);
     });
 
+    it('sends the open run before an add on the same line, so minus, add, minus ends one lower', async () => {
+      const { store, server, drawn } = setup(STOCKED);
+      await store.ensure();
+
+      press(store, on('weekly', MILK), 'old', -1);
+      const added = store.add(MILK, 'weekly');
+      press(store, on('weekly', MILK), 'old', -1);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+      await added;
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(server.get('old')?.quantity).toBe(1);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+    });
+
     it('moves nothing on a line it does not hold', async () => {
       const { store, calls } = setup(STOCKED);
       await store.ensure();
