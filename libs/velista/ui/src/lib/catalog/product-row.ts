@@ -8,7 +8,11 @@ import {
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { LineUnit, PriceWords } from '@portfolio/velista/models';
+import type {
+  LineUnit,
+  PriceWords,
+  QuantityStep,
+} from '@portfolio/velista/models';
 import {
   BasketIcon,
   ChevronDownIcon,
@@ -105,8 +109,11 @@ export interface ProductRowHeldLine {
    * lines come from several lists (the shopping list's search).
    */
   readonly list?: string | null;
-  /** The stepper's name, when the host words it. Absent: "How many of X in L". */
-  readonly stepperLabel?: string;
+  /**
+   * What the stepper's amount is of, when the host words it (velista `0188`).
+   * Absent: "X on L", the line on the list of the card.
+   */
+  readonly stepperName?: string;
 }
 
 /**
@@ -146,8 +153,8 @@ export interface ProductRowStepper {
   readonly value: number;
   /** What {@link value} counts (velista `0182`). Absent is a count. */
   readonly unit?: LineUnit;
-  /** Its accessible name, naming the product. */
-  readonly label: string;
+  /** What its amount is of, naming the product (velista `0188`). */
+  readonly name: string;
   /** The lowest it goes. Absent is the stepper's own floor. */
   readonly min?: number;
   readonly disabled?: boolean;
@@ -190,10 +197,10 @@ export interface ProductRowGroup {
   readonly more: string | null;
 }
 
-/** A press on the stepper of one line under a card. */
+/** A step of the stepper of one line under a card, as the stepper drew it. */
 export interface ProductRowLineStep {
   readonly lineId: string;
-  readonly by: 1 | -1;
+  readonly step: QuantityStep;
 }
 
 /** The plus was pressed, and the button that was pressed. */
@@ -563,16 +570,14 @@ export type ProductRowExpanded = 'shops' | 'members';
       } @else if (slot() === 'stepper' && stepper(); as stepping) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <lib-quantity-stepper
-            (stepped)="stepped.emit($event > 0 ? 1 : -1)"
-            [accent]="stepping.value > 0"
-            [compact]="true"
-            [controlled]="true"
+            (stepped)="stepped.emit($event)"
             [disabled]="stepping.disabled === true"
-            [label]="stepping.label"
             [min]="stepping.min ?? 0"
+            [name]="stepping.name"
             [unit]="stepping.unit ?? 'UNIT'"
             [value]="stepping.value"
             class="control stepper"
+            variant="row"
           />
         </div>
       }
@@ -600,22 +605,17 @@ export type ProductRowExpanded = 'shops' | 'members';
                   </span>
                   <lib-quantity-stepper
                     (stepped)="
-                      lineStepped.emit({
-                        lineId: line.lineId,
-                        by: $event > 0 ? 1 : -1,
-                      })
+                      lineStepped.emit({ lineId: line.lineId, step: $event })
                     "
-                    [accent]="line.quantity > 0"
-                    [compact]="true"
-                    [controlled]="true"
                     [disabled]="!line.editable"
-                    [label]="
-                      line.stepperLabel ??
-                      ('catalog.held.stepper'
-                        | rokuT: { line: line.name, list: add()?.list })
+                    [name]="
+                      line.stepperName ??
+                      ('amount.inList'
+                        | rokuT: { name: line.name, list: add()?.list })
                     "
                     [unit]="line.unit ?? 'UNIT'"
                     [value]="line.quantity"
+                    variant="row"
                   />
                 </li>
               }
@@ -716,11 +716,11 @@ export class ProductRow {
   /** The plus was pressed: add one of this product. */
   readonly added = output<ProductRowAdded>();
 
-  /** A press on the stepper of one line that holds the product. */
+  /** A step of the stepper of one line that holds the product. */
   readonly lineStepped = output<ProductRowLineStep>();
 
-  /** A press on the stepper in the control slot. */
-  readonly stepped = output<1 | -1>();
+  /** A step of the stepper in the control slot, as the stepper drew it. */
+  readonly stepped = output<QuantityStep>();
 
   /** The chain line or a group's reveal was pressed: open or close that part. */
   readonly expandToggled = output<ProductRowExpanded>();

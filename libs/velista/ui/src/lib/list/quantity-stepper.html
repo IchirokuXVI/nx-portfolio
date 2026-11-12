@@ -1,0 +1,97 @@
+@if (readonly()) {
+  <span class="stepper is-reader">
+    <span class="cell">
+      <lib-amount-figure
+        [form]="typed() ? 'exact' : 'short'"
+        [quantity]="value()"
+        [unit]="unit()"
+      />
+    </span>
+  </span>
+} @else {
+  <span
+    [attr.aria-label]="
+      typed() ? null : ('amount.group' | rokuT: { name: name() })
+    "
+    [attr.role]="typed() ? null : 'group'"
+    class="stepper"
+  >
+    <button
+      (click)="press(-1, $event)"
+      (contextmenu)="$event.preventDefault()"
+      (pointercancel)="endHold()"
+      (pointerdown)="startHold(-1, $event)"
+      (pointerleave)="endHold()"
+      (pointerup)="endHold()"
+      [attr.aria-disabled]="disabled() || minusAtEnd() ? 'true' : null"
+      [attr.aria-label]="
+        'amount.less' | rokuT: { step: lessStep(), name: name() }
+      "
+      [class.at-end]="minusAtEnd()"
+      class="step minus"
+      type="button"
+    >
+      <span aria-hidden="true" class="glyph"></span>
+    </button>
+
+    @if (typed()) {
+      <span [class.is-bare]="!fieldSymbol()" class="cell field-cell">
+        <span [attr.data-text]="fieldText()" class="field">
+          <input
+            (blur)="onFieldBlur($event)"
+            (focus)="onFieldFocus($event)"
+            (input)="onFieldInput($event)"
+            (keydown)="onFieldKey($event)"
+            [attr.aria-disabled]="disabled() ? 'true' : null"
+            [attr.aria-label]="'amount.group' | rokuT: { name: name() }"
+            [attr.aria-valuemax]="max()"
+            [attr.aria-valuemin]="min()"
+            [attr.aria-valuenow]="value()"
+            [attr.aria-valuetext]="words().spoken"
+            [class.is-zero]="value() === 0 && draft() === null"
+            [readOnly]="disabled()"
+            [value]="fieldText()"
+            autocomplete="off"
+            class="number"
+            enterkeyhint="done"
+            inputmode="decimal"
+            role="spinbutton"
+            spellcheck="false"
+            type="text"
+          />
+        </span>
+        @if (fieldSymbol()) {
+          <span aria-hidden="true" class="symbol">{{ fieldSymbol() }}</span>
+        }
+      </span>
+    } @else {
+      <span class="cell">
+        <lib-amount-figure [quantity]="value()" [unit]="unit()" form="short" />
+      </span>
+    }
+
+    <button
+      (click)="press(1, $event)"
+      (contextmenu)="$event.preventDefault()"
+      (pointercancel)="endHold()"
+      (pointerdown)="startHold(1, $event)"
+      (pointerleave)="endHold()"
+      (pointerup)="endHold()"
+      [attr.aria-disabled]="disabled() || plusAtEnd() ? 'true' : null"
+      [attr.aria-label]="
+        'amount.more' | rokuT: { step: moreStep(), name: name() }
+      "
+      [class.at-end]="plusAtEnd()"
+      class="step plus"
+      type="button"
+    >
+      <span aria-hidden="true" class="glyph"></span>
+    </button>
+
+    <span aria-live="polite" class="visually-hidden">{{
+      announcing()
+        ? ('amount.settled' | rokuT: { name: name(), amount: words().spoken })
+        : ''
+    }}</span>
+  </span>
+}

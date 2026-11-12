@@ -1,4 +1,5 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
@@ -10,6 +11,7 @@ import type {
 } from '@portfolio/velista/models';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { QuantityStepper } from '../list/quantity-stepper';
 import { ListsTable, type ListsTableStep } from './lists-table';
 
 /**
@@ -93,6 +95,7 @@ async function render(
 
   const fixture = TestBed.createComponent(ListsTable);
   fixture.componentRef.setInput('groups', groups);
+  fixture.componentRef.setInput('product', 'Café molido');
   fixture.detectChanges();
   await fixture.whenStable();
   return fixture;
@@ -129,8 +132,21 @@ function otherOf(
   ) as HTMLElement;
 }
 
-function spinbutton(within: HTMLElement): Element | null {
-  return within.querySelector('[role="spinbutton"]');
+/** What the first stepper within draws, in base units (velista 0188, L). */
+function amountOf(within: HTMLElement): string | null | undefined {
+  return within
+    .querySelector('lib-quantity-stepper')
+    ?.getAttribute('data-value');
+}
+
+/** Whether a stepper button is at an end or off: drawn, focusable, and deaf. */
+function off(button: HTMLButtonElement | undefined): boolean {
+  return button?.getAttribute('aria-disabled') === 'true';
+}
+
+/** The accessible name of the first stepper within. */
+function groupName(within: HTMLElement): string | null | undefined {
+  return within.querySelector('[role="group"]')?.getAttribute('aria-label');
 }
 
 /** A stepper's two buttons: the minus, then the plus. */
@@ -234,50 +250,46 @@ describe('ListsTable', () => {
       const fixture = await render();
 
       const stepper = rowOf(fixture, 'l1');
-      expect(stepper.querySelector('.value')?.textContent).toBe('2');
-      expect(spinbutton(stepper)?.getAttribute('aria-valuenow')).toBe('2');
+      expect(amountOf(stepper)).toBe('2');
     });
 
     it('starts at zero on a list with no such line', async () => {
       const fixture = await render();
 
       const stepper = rowOf(fixture, 'l2');
-      expect(stepper.querySelector('.value')?.textContent).toBe('0');
-      expect(spinbutton(stepper)?.getAttribute('aria-valuenow')).toBe('0');
+      expect(amountOf(stepper)).toBe('0');
       // Nothing to take away yet.
-      expect(steps(stepper)[0]?.disabled).toBe(true);
-      expect(steps(stepper)[1]?.disabled).toBe(false);
+      expect(off(steps(stepper)[0])).toBe(true);
+      expect(off(steps(stepper)[1])).toBe(false);
     });
 
     it('starts at zero on a list that holds the product under another name only', async () => {
       const fixture = await render();
 
-      expect(rowOf(fixture, 'l3').querySelector('.value')?.textContent).toBe(
-        '0'
+      expect(amountOf(rowOf(fixture, 'l3'))).toBe('0');
+    });
+
+    it('says its amount is of the product on its list', async () => {
+      const fixture = await render();
+
+      expect(groupName(rowOf(fixture, 'l1'))).toBe('amount.group');
+      expect(valuesOf('amount.inList')).toEqual(
+        expect.arrayContaining([
+          { name: 'Café molido', list: 'Weekly shop' },
+          { name: 'Café molido', list: 'Barbecue' },
+          { name: 'Café molido', list: 'Office' },
+        ])
       );
     });
 
-    it('is named for its list', async () => {
+    it('is the row stepper, with no tint while the list holds some', async () => {
       const fixture = await render();
 
-      expect(spinbutton(rowOf(fixture, 'l1'))?.getAttribute('aria-label')).toBe(
-        'catalog.inLists.stepper'
-      );
-      expect(valuesOf('catalog.inLists.stepper')).toEqual([
-        { list: 'Weekly shop' },
-        { list: 'Barbecue' },
-        { list: 'Office' },
-      ]);
-    });
-
-    it('is full size, and in the quiet colour only while the list holds some', async () => {
-      const fixture = await render();
-
-      const some = rowOf(fixture, 'l1').querySelector('lib-quantity-stepper');
-      const none = rowOf(fixture, 'l2').querySelector('lib-quantity-stepper');
-      expect(some?.classList.contains('is-accent')).toBe(true);
-      expect(some?.classList.contains('is-compact')).toBe(false);
-      expect(none?.classList.contains('is-accent')).toBe(false);
+      for (const id of ['l1', 'l2']) {
+        const one = rowOf(fixture, id).querySelector('lib-quantity-stepper');
+        expect(one?.classList.contains('variant-row')).toBe(true);
+        expect(one?.classList.contains('is-accent')).toBe(false);
+      }
     });
 
     it('makes the line on a plus from zero: an add, with the list', async () => {
@@ -302,6 +314,20 @@ describe('ListsTable', () => {
       expect(heard.lineStepped).toEqual([]);
     });
 
+    it('adds once per press: a repeat of a held plus sends no add', async () => {
+      const fixture = await render();
+      const heard = record(fixture);
+      const stepper = fixture.debugElement.query(
+        By.css('.row lib-quantity-stepper')
+      ).componentInstance as QuantityStepper;
+
+      stepper.stepped.emit({ from: 2, to: 3, repeat: true });
+      stepper.stepped.emit({ from: 3, to: 4, repeat: true });
+
+      expect(heard.added).toEqual([]);
+      expect(heard.lineStepped).toEqual([]);
+    });
+
     it('says one fewer for the line under the product name on a minus', async () => {
       const fixture = await render();
       const heard = record(fixture);
@@ -309,7 +335,11 @@ describe('ListsTable', () => {
       steps(rowOf(fixture, 'l1'))[0]?.click();
 
       expect(heard.lineStepped).toEqual([
-        { listId: 'l1', lineId: 'line-coffee', by: -1 },
+        {
+          listId: 'l1',
+          lineId: 'line-coffee',
+          step: { from: 2, to: 1, repeat: false },
+        },
       ]);
       expect(heard.added).toEqual([]);
     });
@@ -320,13 +350,15 @@ describe('ListsTable', () => {
       );
       const heard = record(fixture);
 
-      expect(
-        spinbutton(rowOf(fixture, 'l1'))?.getAttribute('aria-valuemin')
-      ).toBe('0');
+      expect(off(steps(rowOf(fixture, 'l1'))[0])).toBe(false);
       steps(rowOf(fixture, 'l1'))[0]?.click();
 
       expect(heard.lineStepped).toEqual([
-        { listId: 'l1', lineId: 'line-coffee', by: -1 },
+        {
+          listId: 'l1',
+          lineId: 'line-coffee',
+          step: { from: 1, to: 0, repeat: false },
+        },
       ]);
     });
 
@@ -337,9 +369,8 @@ describe('ListsTable', () => {
       const heard = record(fixture);
 
       const stepper = rowOf(fixture, 'l1');
-      expect(spinbutton(stepper)?.getAttribute('aria-valuemin')).toBe('2');
-      expect(steps(stepper)[0]?.disabled).toBe(true);
-      expect(steps(stepper)[1]?.disabled).toBe(false);
+      expect(off(steps(stepper)[0])).toBe(true);
+      expect(off(steps(stepper)[1])).toBe(false);
 
       steps(stepper)[0]?.click();
       steps(stepper)[1]?.click();
@@ -359,8 +390,16 @@ describe('ListsTable', () => {
 
       expect(heard.added).toEqual([]);
       expect(heard.lineStepped).toEqual([
-        { listId: 'l1', lineId: 'line-coffee', by: 1 },
-        { listId: 'l1', lineId: 'line-coffee', by: -1 },
+        {
+          listId: 'l1',
+          lineId: 'line-coffee',
+          step: { from: 2, to: 3, repeat: false },
+        },
+        {
+          listId: 'l1',
+          lineId: 'line-coffee',
+          step: { from: 2, to: 1, repeat: false },
+        },
       ]);
     });
 
@@ -371,9 +410,7 @@ describe('ListsTable', () => {
       steps(rowOf(fixture, 'l1'))[1]?.click();
       fixture.detectChanges();
 
-      expect(rowOf(fixture, 'l1').querySelector('.value')?.textContent).toBe(
-        '2'
-      );
+      expect(amountOf(rowOf(fixture, 'l1'))).toBe('2');
     });
 
     it('draws the new quantity once the list has taken the press', async () => {
@@ -392,12 +429,8 @@ describe('ListsTable', () => {
       ]);
       fixture.detectChanges();
 
-      expect(rowOf(fixture, 'l2').querySelector('.value')?.textContent).toBe(
-        '1'
-      );
-      expect(rowOf(fixture, 'l1').querySelector('.value')?.textContent).toBe(
-        '2'
-      );
+      expect(amountOf(rowOf(fixture, 'l2'))).toBe('1');
+      expect(amountOf(rowOf(fixture, 'l1'))).toBe('2');
     });
 
     it('says the line waits for approval only when it does', async () => {
@@ -427,7 +460,7 @@ describe('ListsTable', () => {
       expect(row.querySelector('.sub')?.textContent).toContain(
         'catalog.inLists.other'
       );
-      expect(row.querySelector('.value')?.textContent).toBe('1');
+      expect(amountOf(row)).toBe('1');
       // Beside the list's own stepper, which stays at zero.
       expect(
         listOf(fixture, 'l3').querySelectorAll('lib-quantity-stepper')
@@ -456,35 +489,29 @@ describe('ListsTable', () => {
 
       expect(
         [...listOf(fixture, 'l1').querySelectorAll<HTMLElement>('.other')].map(
-          (one) => [
-            one.dataset['line'],
-            one.querySelector('.value')?.textContent,
-          ]
+          (one) => [one.dataset['line'], amountOf(one)]
         )
       ).toEqual([
         ['line-machine', '1'],
         ['line-guests', '3'],
       ]);
       // And the list's own stepper still counts the line of the product's name.
-      expect(rowOf(fixture, 'l1').querySelector('.value')?.textContent).toBe(
-        '2'
-      );
+      expect(amountOf(rowOf(fixture, 'l1'))).toBe('2');
     });
 
-    it('names its stepper for the line and the list, and draws it small', async () => {
+    it('says its amount is of the line on the list, in the row stepper', async () => {
       const fixture = await render();
 
       const row = otherOf(fixture, 'line-machine');
-      expect(spinbutton(row)?.getAttribute('aria-label')).toBe(
-        'catalog.held.stepper'
-      );
-      expect(valuesOf('catalog.held.stepper')).toEqual([
-        { line: 'Coffee for the machine', list: 'Office' },
-      ]);
+      expect(groupName(row)).toBe('amount.group');
+      expect(valuesOf('amount.inList')).toContainEqual({
+        name: 'Coffee for the machine',
+        list: 'Office',
+      });
       expect(
         row
           .querySelector('lib-quantity-stepper')
-          ?.classList.contains('is-compact')
+          ?.classList.contains('variant-row')
       ).toBe(true);
     });
 
@@ -496,8 +523,16 @@ describe('ListsTable', () => {
       steps(otherOf(fixture, 'line-machine'))[0]?.click();
 
       expect(heard.lineStepped).toEqual([
-        { listId: 'l3', lineId: 'line-machine', by: 1 },
-        { listId: 'l3', lineId: 'line-machine', by: -1 },
+        {
+          listId: 'l3',
+          lineId: 'line-machine',
+          step: { from: 1, to: 2, repeat: false },
+        },
+        {
+          listId: 'l3',
+          lineId: 'line-machine',
+          step: { from: 1, to: 0, repeat: false },
+        },
       ]);
       expect(heard.added).toEqual([]);
     });
@@ -513,8 +548,8 @@ describe('ListsTable', () => {
       const heard = record(fixture);
 
       const row = otherOf(fixture, 'line-machine');
-      expect(steps(row).map((one) => one.disabled)).toEqual([true, true]);
-      expect(row.querySelector('.value')?.textContent).toBe('1');
+      expect(steps(row).map(off)).toEqual([true, true]);
+      expect(amountOf(row)).toBe('1');
 
       for (const button of steps(row)) {
         button.click();
@@ -586,8 +621,8 @@ describe('ListsTable', () => {
         rowOf(fixture, 'l4').querySelector('lib-quantity-stepper')
       ).toBeNull();
       const row = otherOf(fixture, 'line-machine');
-      expect(row.querySelector('.value')?.textContent).toBe('1');
-      expect(steps(row).map((one) => one.disabled)).toEqual([true, true]);
+      expect(amountOf(row)).toBe('1');
+      expect(steps(row).map(off)).toEqual([true, true]);
     });
   });
 
@@ -607,10 +642,10 @@ describe('ListsTable', () => {
       for (const key of ['last', 'other', 'otherPending', 'readOnly']) {
         expect([key, typeof catalog.inLists[key]]).toEqual([key, 'string']);
       }
-      expect(catalog.inLists.stepper).toContain('{{list}}');
-      expect(catalog.held.stepper).toContain('{{line}}');
-      expect(catalog.held.stepper).toContain('{{list}}');
       expect(typeof catalog.added.pending).toBe('string');
+      const amount = JSON.parse(readFileSync(file, 'utf8')).amount;
+      expect(amount.inList).toContain('{{name}}');
+      expect(amount.inList).toContain('{{list}}');
     }
   });
 });
