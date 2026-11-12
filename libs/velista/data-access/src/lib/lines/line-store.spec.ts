@@ -93,6 +93,8 @@ function service(seed: readonly Line[]) {
   let raiseNext: Line | null = null;
   /** The lines the next add answers as already on the list (velista `0185`). */
   let metNext: readonly Line[] | null = null;
+  /** Whether that answer says `merged`, which a malformed one may not. */
+  let metMerged = true;
   /** What each add said about a name the list holds, in order (backend `0228`). */
   const addOptions: (AddLineOptions | undefined)[] = [];
   /** The unit every write named, in order, for velista `0182`. */
@@ -159,7 +161,7 @@ function service(seed: readonly Line[]) {
       if (met !== null) {
         return {
           line: await answer(met[0]),
-          merged: true,
+          merged: metMerged,
           outcome: 'alreadyOnList' as const,
           alreadyOnList: met,
         };
@@ -275,8 +277,9 @@ function service(seed: readonly Line[]) {
     raiseNext: (value: Line) => {
       raiseNext = value;
     },
-    metNext: (value: readonly Line[]) => {
+    metNext: (value: readonly Line[], merged = true) => {
       metNext = value;
+      metMerged = merged;
     },
     addOptions,
     units,
@@ -707,6 +710,46 @@ describe('LineStore', () => {
         ['milk', 2],
         ['fresh', 6],
       ]);
+    });
+
+    it('settles a met line in place by the outcome, also when the answer says merged false', async () => {
+      // Malformed, but it must not settle as a made line: that draws a second row
+      // with the met line's id. Once drawn at once, once on the answer.
+      for (const drawnFirst of [true, false]) {
+        const { store, lines } = await build([
+          milk(),
+          line('bread', { content: 'Pan', position: 2 }),
+        ]);
+        await store.load(LIST);
+        lines.metNext([milk()], false);
+
+        const outcome = drawnFirst
+          ? await store.addLine(
+              LIST,
+              'Leche',
+              1,
+              ME,
+              ASKS_FIRST,
+              ['item-other'],
+              false
+            )
+          : await store.addLine(
+              LIST,
+              'Leche entera',
+              undefined,
+              ME,
+              ASKS_FIRST
+            );
+
+        expect(outcome).toEqual(
+          expect.objectContaining({
+            state: 'added',
+            merged: true,
+            outcome: 'alreadyOnList',
+          })
+        );
+        expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
+      }
     });
 
     it('draws a typed name it cannot place as one piece', async () => {

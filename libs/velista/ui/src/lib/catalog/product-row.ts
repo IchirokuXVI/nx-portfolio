@@ -576,17 +576,20 @@ export type ProductRowExpanded = 'shops' | 'members';
           <!--
             Switched off for a product the list already asks for (velista 0185,
             decision G): still a button in its place, with its name, and the
-            sentence under the card that says why as its description.
+            sentence under the card that says why as its description. Inert by
+            aria-disabled, not disabled: the first add of a product switches it
+            off under a keyboard's focus, and a disabled button would drop that
+            focus to the page.
           -->
           <button
-            (click)="pressAdd($event)"
+            (click)="pressAdd($event, adding)"
             [attr.aria-describedby]="adding.onList ? onListId : null"
+            [attr.aria-disabled]="adding.onList ? 'true' : null"
             [attr.aria-label]="
               adding.label ??
               ('catalog.add.label'
                 | rokuT: { name: row().name, list: adding.list })
             "
-            [disabled]="adding.onList !== undefined"
             class="add control"
             type="button"
           >
@@ -810,7 +813,12 @@ export class ProductRow {
     }
   }
 
-  protected pressAdd(event: Event): void {
+  protected pressAdd(event: Event, adding: ProductRowAdd): void {
+    // Switched off by `aria-disabled`, so a click, Enter or Space still reaches
+    // here and does nothing (velista `0185`, decision G).
+    if (adding.onList !== undefined) {
+      return;
+    }
     this.added.emit({
       id: this.row().id,
       anchor: event.currentTarget as HTMLElement,

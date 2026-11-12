@@ -74,6 +74,7 @@ import {
   productPagePath,
   type QuantityRun,
   quantityRuns,
+  rowInView,
   searchOpenOf,
   sheetSegments,
   shopMapPath,
@@ -2426,9 +2427,13 @@ export class BasketPage {
   /**
    * Mark the rows of the lines an add raised or met (velista `0170`, target 4), and
    * bring the first marked row to the centre when it is out of view, as the zone
-   * list does (velista `0185`). `missing` runs when no drawn row holds any of them.
+   * list does (velista `0185`). `found` runs after the next render, with whether a
+   * drawn row holds any of them.
    */
-  private _markTook(lineIds: readonly string[], missing?: () => void): void {
+  private _markTook(
+    lineIds: readonly string[],
+    found?: (drawn: boolean) => void
+  ): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
@@ -2450,13 +2455,14 @@ export class BasketPage {
             .some((lineId) => lineIds.includes(lineId))
         );
         if (column === undefined || row === undefined) {
-          missing?.();
+          found?.(false);
           return;
         }
         if (!rowInView(row, column)) {
           // Centred and instant: the edge is the news, not the trip.
           row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
         }
+        found?.(true);
       },
       { injector: this._injector }
     );
@@ -2736,6 +2742,10 @@ export class BasketPage {
     options?: AddLineOptions
   ): Promise<void> {
     const itemIds = entry.itemIds ?? [];
+    // The basket the add was sent from. A sentence about it is not said on another
+    // one the page has followed to since (velista `0185`).
+    const basketId = this._store.basket()?.id ?? null;
+    const stillHere = () => (this._store.basket()?.id ?? null) === basketId;
     // The lines this basket already shows, so an answer naming one of them is a
     // raise: the basket route answers the lines and not whether they were new.
     const held = new Set(
@@ -2800,6 +2810,9 @@ export class BasketPage {
         ? null
         : toAddUnitRefusal(this._store.error(), entry.content);
       if (refusal !== null) {
+        if (!stillHere()) {
+          return;
+        }
         // The list counts this product in another unit (velista `0185`, section 4):
         // nothing was made, and the sentence under the field says which list and why.
         this.composerNotice.set(
@@ -2843,7 +2856,9 @@ export class BasketPage {
       // The list already asks for it, so nothing was added (velista `0185`, A1):
       // every row of a line it met is marked, the first brought into view, and the
       // sentence names the row as it is drawn. A met line no drawn row shows (a
-      // filter, a hidden list) is said under the field instead.
+      // filter, a hidden list) is said under the field instead. Either way it is
+      // said once: the page's live region speaks for a drawn row, the notice's own
+      // region for one that is not.
       const shown = this._shownRow(line.lineId);
       const sentence = this._translator.t(
         'basket.add.alreadyOn',
@@ -2855,10 +2870,18 @@ export class BasketPage {
           list: this._listNameOf(listId),
         }
       );
-      this._say(sentence);
       this._markTook(
         result.entries.map((met) => met.lineId),
-        () => this.composerNotice.set(sentence)
+        (drawn) => {
+          if (!stillHere()) {
+            return;
+          }
+          if (drawn) {
+            this._say(sentence);
+          } else {
+            this.composerNotice.set(sentence);
+          }
+        }
       );
       return;
     }
@@ -2896,11 +2919,4 @@ export class BasketPage {
       })
     );
   }
-}
-
-/** Whether a row is wholly inside the column, as the zone list reads it. */
-function rowInView(row: HTMLElement, column: HTMLElement): boolean {
-  const box = row.getBoundingClientRect();
-  const frame = column.getBoundingClientRect();
-  return box.top >= frame.top && box.bottom <= frame.bottom;
 }

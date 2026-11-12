@@ -55,7 +55,8 @@ function added(answer: LineAddResult): LineAddOutcome {
   return {
     state: 'added',
     line: answer.line,
-    merged: answer.merged,
+    // From the outcome, so the pages that read `merged` agree with it.
+    merged: answer.outcome !== 'created',
     outcome: answer.outcome,
     alreadyOnList: answer.alreadyOnList,
   };
@@ -693,7 +694,9 @@ export class LineStore {
     }
 
     const answer = outcome.value;
-    if (answer.merged) {
+    // By the outcome, not `merged`: an answer that met a line and said otherwise
+    // would settle as a made line and draw a second row with that line's id.
+    if (answer.outcome !== 'created') {
       // A line the list already held. The placeholder goes, and the line is raised
       // where it stands (velista `0170`, target 2), or, met at an amount, kept as
       // it is (velista `0185`).
@@ -761,7 +764,7 @@ export class LineStore {
     }
 
     const answer = outcome.value;
-    if (answer.merged) {
+    if (answer.outcome !== 'created') {
       this._settleMet(listId, answer);
     } else {
       this._mine.add(answer.line.id);

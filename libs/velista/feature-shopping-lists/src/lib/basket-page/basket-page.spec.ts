@@ -3932,6 +3932,46 @@ describe('the composer and the list it adds to', () => {
             'lib-line-composer .notice-text'
           );
           expect(notice?.textContent).toContain('basket.add.alreadyOn');
+          // Said once: the notice speaks in its own region, so the page's does not.
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
+        it('says nothing on a basket the page followed to while the add was out', async () => {
+          const { fixture, store } = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          let answer: (value: unknown) => void = () => undefined;
+          store.addLine.mockImplementationOnce(
+            () => new Promise((resolve) => (answer = resolve))
+          );
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          fixture.detectChanges();
+
+          const basket = TestBed.inject(BasketStore).basket as unknown as {
+            update: (fn: (value: { id: string }) => { id: string }) => void;
+          };
+          basket.update((value) => ({ ...value, id: 'basket-sunday' }));
+          answer({
+            entries: [entry(null, 'zl-elsewhere', 8, { content: 'Leche' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const host = fixture.nativeElement as HTMLElement;
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
         });
       });
 

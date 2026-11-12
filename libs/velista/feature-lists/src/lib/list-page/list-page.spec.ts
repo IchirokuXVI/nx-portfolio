@@ -1533,6 +1533,10 @@ describe('ListPage', () => {
         expect(
           query(fixture, 'lib-line-composer .notice-text')?.textContent
         ).toBe('list.add.alreadyOn');
+        // Said once: the notice speaks in its own region, so the list's does not.
+        expect(fixture.componentInstance.announcement()).not.toBe(
+          'list.add.alreadyOn'
+        );
 
         // The next words take it away.
         const input = field(fixture);
@@ -1614,6 +1618,93 @@ describe('ListPage', () => {
       expect(fixture.componentInstance.announcement()).not.toContain(
         'list.error'
       );
+    });
+
+    const unitRefusal = () =>
+      new GatewayError({
+        code: 'line_unit_differs',
+        status: 409,
+        correlationId: 'ref',
+        details: {
+          line: {
+            lineId: 'ln-whole',
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 2,
+          },
+          unit: 'UNIT',
+          index: null,
+        },
+      });
+    const sendCard = (fixture: ComponentFixture<ListPage>) =>
+      (
+        fixture.debugElement.query(By.directive(LineComposer))
+          .componentInstance as LineComposer
+      ).submitted.emit({
+        content: 'Leche',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-c'],
+        named: false,
+        anchor: plus(fixture),
+      });
+
+    it('takes the sentence away on the next send, also one that is not drawn and fails (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+      sendCard(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.composerNotice()).not.toBeNull();
+
+      // A name a loaded line carries is not drawn, so `sent()` waits for an answer
+      // that never comes: the send fails. Sent as the composer sends it, with no
+      // new words typed, which would take the sentence away by themselves.
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'internal',
+          status: 500,
+          correlationId: 'ref',
+        }),
+      });
+      (
+        fixture.debugElement.query(By.directive(LineComposer))
+          .componentInstance as LineComposer
+      ).submitted.emit({ content: 'Pan', anchor: plus(fixture) });
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(2);
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+    });
+
+    it('says no refusal on a list the page moved to while the add was out (velista 0185)', async () => {
+      const { fixture, lines, activatedRoute } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.holdAdds();
+      lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+      sendCard(fixture);
+      fixture.detectChanges();
+
+      activatedRoute.setList('list-2');
+      fixture.detectChanges();
+      lines.releaseAdds();
+      // The held answer, then each step of the add after it.
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(1);
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
     });
 
     it('draws each row of the question from 0 to one step of its own unit (velista 0185)', async () => {
@@ -2439,6 +2530,46 @@ describe('ListPage', () => {
       expect(query(fixture, '.line.marked')?.getAttribute('data-line-id')).toBe(
         'ln-2'
       );
+    });
+
+    it('centres and marks a row the catalog linked to past the first frame (velista 0185)', async () => {
+      // "See it on the list" opens the list at a line far down it.
+      const scrolled: { id: string; options: unknown }[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (
+        this: HTMLElement,
+        options?: unknown
+      ) {
+        scrolled.push({ id: this.dataset['lineId'] ?? '', options });
+      };
+      const many = Array.from({ length: 40 }, (_, index) =>
+        line(`ln-${index + 1}`, {
+          content: `Line ${index + 1}`,
+          position: index + 1,
+        })
+      );
+      jest
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: HTMLElement) {
+          const index = Number(
+            (this.dataset['lineId'] ?? 'ln-0').replace('ln-', '')
+          );
+          return { top: index * 60, bottom: index * 60 + 56 } as DOMRect;
+        });
+      try {
+        const { fixture } = await render({ line: 'ln-35', lines: many });
+
+        expect(scrolled).toEqual([
+          { id: 'ln-35', options: { block: 'center', behavior: 'auto' } },
+        ]);
+        expect(fixture.componentInstance.markedLine()).toBe('ln-35');
+        expect(
+          query(fixture, '.line.marked')?.getAttribute('data-line-id')
+        ).toBe('ln-35');
+      } finally {
+        Element.prototype.scrollIntoView = original;
+        jest.restoreAllMocks();
+      }
     });
 
     it('opens no sheet, which is the whole reason it is a query parameter', async () => {

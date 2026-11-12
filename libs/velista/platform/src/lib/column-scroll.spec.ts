@@ -1,4 +1,24 @@
-import { COLUMN_SCROLL_RETURN_MS, ColumnScroll } from './column-scroll';
+import {
+  COLUMN_SCROLL_RETURN_MS,
+  ColumnScroll,
+  rowInView,
+} from './column-scroll';
+
+describe('rowInView', () => {
+  function boxed(top: number, bottom: number): HTMLElement {
+    const element = document.createElement('div');
+    element.getBoundingClientRect = () => ({ top, bottom }) as DOMRect;
+    return element;
+  }
+
+  it('is true only for a row wholly inside the column', () => {
+    const frame = boxed(100, 600);
+
+    expect(rowInView(boxed(100, 600), frame)).toBe(true);
+    expect(rowInView(boxed(80, 140), frame)).toBe(false);
+    expect(rowInView(boxed(560, 620), frame)).toBe(false);
+  });
+});
 
 /**
  * A column whose offset clamps to how far it can scroll, which jsdom does not do:

@@ -298,6 +298,17 @@ function plusOf(
   return rowOf(fixture, name).querySelector<HTMLButtonElement>('button.add');
 }
 
+/**
+ * Whether a plus is switched off for a product the list asks for: inert by
+ * `aria-disabled`, and still focusable (velista `0185`, decision G).
+ */
+function switchedOff(plus: HTMLButtonElement | null): boolean {
+  return (
+    plus?.getAttribute('aria-disabled') === 'true' &&
+    !plus.hasAttribute('disabled')
+  );
+}
+
 /** The names of the products drawn, in the order drawn. */
 function names(fixture: ComponentFixture<CatalogPage>): string[] {
   return [...host(fixture).querySelectorAll('lib-product-row .name')].map(
@@ -1004,7 +1015,7 @@ describe('CatalogPage', () => {
 
       // The list now asks for it, so the plus is off and the card says so
       // (velista 0185, C1). A press does nothing more.
-      expect(plusOf(fixture, OIL)?.disabled).toBe(true);
+      expect(switchedOff(plusOf(fixture, OIL))).toBe(true);
       plusOf(fixture, OIL)?.click();
       await settle(fixture);
       expect(lines.addLineResult).toHaveBeenCalledTimes(1);
@@ -1019,7 +1030,7 @@ describe('CatalogPage', () => {
       });
 
       const plus = plusOf(fixture, OIL);
-      expect(plus?.disabled).toBe(true);
+      expect(switchedOff(plus)).toBe(true);
       const held = rowOf(fixture, OIL).querySelector('.held');
       const sentence = held?.querySelector('.held-onlist');
       expect(plus?.getAttribute('aria-describedby')).toBe(sentence?.id);
@@ -1036,6 +1047,7 @@ describe('CatalogPage', () => {
       ).toHaveLength(2);
       // A product on no line keeps its plus.
       expect(plusOf(fixture, RICE)?.disabled).toBe(false);
+      expect(plusOf(fixture, RICE)?.hasAttribute('aria-disabled')).toBe(false);
     });
 
     it('keeps the plus of a product held only at zero, which a press raises to one step', async () => {
@@ -1044,6 +1056,7 @@ describe('CatalogPage', () => {
       });
 
       expect(plusOf(fixture, OIL)?.disabled).toBe(false);
+      expect(switchedOff(plusOf(fixture, OIL))).toBe(false);
       expect(rowOf(fixture, OIL).querySelector('.held-onlist')).toBeNull();
       plusOf(fixture, OIL)?.click();
       await settle(fixture);

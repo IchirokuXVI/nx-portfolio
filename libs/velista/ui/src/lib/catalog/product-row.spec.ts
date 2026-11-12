@@ -1636,7 +1636,9 @@ describe('ProductRow, a product already on the list', () => {
     });
 
     const plus = host.querySelector<HTMLButtonElement>('button.add');
-    expect(plus?.disabled).toBe(true);
+    // Inert but focusable (decision G, the owner's on 2026-11-12).
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
     expect(plus?.getAttribute('aria-label')).toBe('catalog.add.label');
     const sentence = host.querySelector('.held-onlist');
     expect(sentence).not.toBeNull();
@@ -1647,6 +1649,47 @@ describe('ProductRow, a product already on the list', () => {
     expect(sentence?.textContent).toContain('catalog.held.alreadyOn');
     // In place of the heading of the lines.
     expect(host.querySelector('.held-title')).toBeNull();
+  });
+
+  it('keeps focus on the plus when an add lands and switches it off, and a second press adds nothing', async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ProductRow, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProductRow);
+    fixture.componentRef.setInput('row', productRowView(OIL, options()));
+    fixture.componentRef.setInput('add', { list: 'Weekly shop', lines: [] });
+    fixture.detectChanges();
+    document.body.appendChild(fixture.nativeElement);
+    const pressed: string[] = [];
+    fixture.componentInstance.added.subscribe((event) =>
+      pressed.push(event.id)
+    );
+    try {
+      const plus = (fixture.nativeElement as HTMLElement).querySelector(
+        'button.add'
+      ) as HTMLButtonElement;
+      plus.focus();
+      plus.click();
+      expect(pressed).toEqual([OIL.id]);
+
+      // The add landed: the line is on the list, and the plus switches off.
+      fixture.componentRef.setInput('add', {
+        list: 'Weekly shop',
+        lines: [LINE],
+        onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+      });
+      fixture.detectChanges();
+
+      expect(document.activeElement).toBe(plus);
+      expect(plus.getAttribute('aria-disabled')).toBe('true');
+      expect(plus.hasAttribute('disabled')).toBe(false);
+      plus.click();
+      expect(pressed).toEqual([OIL.id]);
+    } finally {
+      (fixture.nativeElement as HTMLElement).remove();
+    }
   });
 
   it('links to the list at that line, and keeps the line and its stepper working', async () => {
@@ -1679,6 +1722,9 @@ describe('ProductRow, a product already on the list', () => {
     expect(host.querySelector<HTMLButtonElement>('button.add')?.disabled).toBe(
       false
     );
+    expect(
+      host.querySelector('button.add')?.hasAttribute('aria-disabled')
+    ).toBe(false);
     expect(
       host.querySelector('button.add')?.hasAttribute('aria-describedby')
     ).toBe(false);

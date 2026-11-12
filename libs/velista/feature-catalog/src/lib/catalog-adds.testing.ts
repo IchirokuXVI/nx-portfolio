@@ -90,12 +90,13 @@ function sameName(left: string, right: string): boolean {
 /**
  * The real `CatalogAddStore` over doubles of what it reads and writes.
  *
- * The line double keeps the lines of each list. An add onto a line that has the
- * product under the same name raises that line and says `merged` with the outcome
- * `raised`, which is what the server does for a line kept at zero (backend `0260`,
- * R2) and what a gateway of before `0260` did for any line; the record of a visit
- * is the same either way. Any other add makes a line. A change of quantity and a
- * delete move the same lines, so every read after a write agrees with it.
+ * The line double keeps the lines of each list and resolves an add as backend
+ * `0260` section 1 does. An add meets the lines of the list that hold every
+ * product of the add, or that hold the product under the same name. Any of them
+ * with an amount answers `alreadyOnList` and writes nothing; else the first one,
+ * kept at zero, is raised by the add's amount (R2). Nothing met makes a line at
+ * the add's amount. A change of quantity and a delete move the same lines, so
+ * every read after a write agrees with it.
  */
 export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
   const lists = options.lists ?? [WEEKLY];
@@ -168,15 +169,29 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
         itemIds: readonly string[] = []
       ) => {
         const itemId = itemIds[0] ?? '';
-        const own = held.find(
+        const met = held.filter(
           (line) =>
             line.listId === listId &&
-            line.itemIds.includes(itemId) &&
-            sameName(line.content, content)
+            line.approvalStatus !== 'REJECTED' &&
+            ((itemIds.length > 0 &&
+              itemIds.every((id) => line.itemIds.includes(id))) ||
+              (line.itemIds.includes(itemId) &&
+                sameName(line.content, content)))
         );
-        if (own !== undefined) {
+        const wanted = met.filter((line) => line.quantity > 0);
+        if (wanted.length > 0) {
+          // Nothing is written (backend `0260`, A1).
           return {
-            line: put({ ...own, quantity: own.quantity + quantity }),
+            line: wanted[0],
+            merged: true,
+            outcome: 'alreadyOnList' as const,
+            alreadyOnList: wanted,
+          };
+        }
+        const kept = met[0];
+        if (kept !== undefined) {
+          return {
+            line: put({ ...kept, quantity: kept.quantity + quantity }),
             merged: true,
             outcome: 'raised' as const,
             alreadyOnList: [],

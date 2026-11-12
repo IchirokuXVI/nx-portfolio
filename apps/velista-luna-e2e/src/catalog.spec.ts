@@ -243,8 +243,13 @@ test.describe('adding from the catalog', () => {
 
       // The list asks for it now, so its plus is off and the card says why, with
       // the way to the line (velista 0185, C1).
+      // Inert by aria-disabled and still focusable (decision G).
       const bread = products(page, 'Bread');
-      await expect(bread.locator('button.add')).toBeDisabled();
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      await expect(bread.locator('button.add')).not.toHaveAttribute('disabled');
       await expect(bread.locator('.held-onlist')).toContainText('Already on');
       await expect(
         bread.getByRole('link', { name: 'See it on the list' })
@@ -291,7 +296,9 @@ test.describe('adding from the catalog', () => {
       await expect(adding.locator('[data-adding="count"]')).toHaveCount(0);
       await expect(held).toHaveCount(0);
       // On no line any more, so the plus adds again (velista 0185).
-      await expect(products(page, 'Bread').locator('button.add')).toBeEnabled();
+      await expect(
+        products(page, 'Bread').locator('button.add')
+      ).not.toHaveAttribute('aria-disabled', 'true');
     });
 
     await test.step('6. the order menu puts the list in a price order, kept in the URL', async () => {
@@ -358,7 +365,12 @@ test.describe('adding from the catalog', () => {
     await test.step('10. a product on the list links to its line, which the list centres and marks', async () => {
       const bread = products(page, 'Bread');
       await bread.locator('button.add').click();
-      await expect(bread.locator('button.add')).toBeDisabled();
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      // The press switched it off under the focus, which stays on it.
+      await expect(bread.locator('button.add')).toBeFocused();
 
       await bread.getByRole('link', { name: 'See it on the list' }).click();
 

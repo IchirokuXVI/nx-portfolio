@@ -422,8 +422,9 @@ lib-product-picture.thumb:not(.has-photo),
 
 // A product the list already asks for (velista 0185, frame "catalog D3"): the plus
 // keeps its size and place and is drawn switched off, the outline and the glyph at
-// reduced strength, as the composer draws its own plus when it cannot send.
-.add:disabled {
+// reduced strength, as the composer draws its own plus when it cannot send. It is
+// `aria-disabled`, so it keeps its place in the Tab order and its focus ring.
+.add[aria-disabled='true'] {
   cursor: default;
 
   .add-dot {

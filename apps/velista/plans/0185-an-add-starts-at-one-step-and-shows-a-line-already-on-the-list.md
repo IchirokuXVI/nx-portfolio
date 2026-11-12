@@ -231,6 +231,12 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   `aria-describedby` pointing at the sentence, because a disabled button is not announced by
   itself and the sentence is the reason. The sentence is plain text in the card, not a tooltip,
   so it reads without a press.
+  > **Amended 2026-11-12, the owner's choice:** the plus is switched off with
+  > `aria-disabled="true"`, not `disabled`. It stays in the Tab order, a click, Enter or Space
+  > does nothing, it keeps `aria-describedby` on the sentence, and it is drawn switched off as
+  > before (the mock's frame "catalog D3" does the same, and so do the stepper's ends). The
+  > reason: the first add of a product switches its plus off under the focus that pressed it,
+  > and a `disabled` button drops that focus to the page, on every first add from a keyboard.
 - **H. The composer's cards on the zone list and the shopping list keep their plus on.** C1 names
   the catalog tab. A card's plus that meets a wanted line is answered `ALREADY_ON_LIST` and the
   page shows the line (target 3). Asked in section 9.
@@ -347,7 +353,7 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   such line by the order the card draws, `path` from `pathOf(target)`, which the catalog page and
   the product page pass as `appPath(locale, basePath, 'zones', target.zoneId, 'lists',
   target.listId)` (decision D). `held` lines at 0 do not set it (decision C).
-- **The card.** With `onList`, the plus (`:550` to `:561`) renders `disabled`, with
+- **The card.** With `onList`, the plus (`:550` to `:561`) renders `aria-disabled="true"` (decision G as amended), with
   `aria-describedby` the sentence's id; it keeps its size and place. Under the card, in place of
   the heading of the lines (`catalog.held.title`, `:583` to `:586`), one line: `lib-info-icon`
   (decorative, `aria-hidden`), the text `catalog.held.alreadyOn`, and a link

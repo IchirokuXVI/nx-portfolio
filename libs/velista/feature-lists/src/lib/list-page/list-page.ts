@@ -101,6 +101,7 @@ import {
   quantityRuns,
   RECORDING_LIMITS,
   type RecordingLimits,
+  rowInView,
   searchOpenOf,
   sheetSegments,
   StorageKeys,
@@ -1753,6 +1754,10 @@ export class ListPage {
     options: AddLineOptions | undefined,
     listId: string = this.listId()
   ): Promise<void> {
+    // A sentence of the last add goes with the next send, whatever this one answers
+    // (velista `0185`, section 4): a send that is not drawn calls `sent()` only on its
+    // answer, and a failure never does.
+    this.composerNotice.set(null);
     const current = this.loaded();
     const drawn = this._lines.drawsBeforeAnswer(
       listId,
@@ -1823,6 +1828,11 @@ export class ListPage {
           ? toAddUnitRefusal(outcome.error, entry.content)
           : null;
       if (refusal !== null) {
+        if (listId !== this.listId()) {
+          // The page went to another list while the add was out, and the
+          // sentence is about the list it left.
+          return;
+        }
         // The list counts this product in another unit (velista `0185`, section 4):
         // nothing was made, the row drawn for it is gone, and the words and focus
         // come back so the person can go to that line. The sentence says why.
@@ -1858,7 +1868,9 @@ export class ListPage {
       // The list already asks for it, so nothing was added (velista `0185`, A1):
       // every line it met is shown, the first brought into view, and marked. A met
       // line the page does not draw (a filter, a section shut, a page not loaded) is
-      // said on the composer instead; the page changes no filter by itself.
+      // said on the composer instead; the page changes no filter by itself. Either
+      // way it is said once: the list's live region speaks for a drawn row, the
+      // notice's own region for one that is not.
       const met = outcome.alreadyOnList;
       const sentence = this._translator.t(
         'list.add.alreadyOn',
@@ -1866,11 +1878,15 @@ export class ListPage {
         this._locale(),
         { name: this._lineName(met[0] ?? outcome.line) }
       );
-      this.announcement.set(sentence);
       this._markTook(
         met.map((line) => line.id),
-        () => {
-          if (listId === this.listId()) {
+        (shown) => {
+          if (listId !== this.listId()) {
+            return;
+          }
+          if (shown) {
+            this.announcement.set(sentence);
+          } else {
             this._setNotice(sentence);
           }
         }
@@ -2034,9 +2050,13 @@ export class ListPage {
 
   /**
    * Mark the rows an add raised or met, after the list has scrolled the first of
-   * them into view if it was not. `missing` runs when none of them is drawn.
+   * them into view if it was not. `found` runs after the next render, with whether
+   * any of them is drawn.
    */
-  private _markTook(lineIds: readonly string[], missing?: () => void): void {
+  private _markTook(
+    lineIds: readonly string[],
+    found?: (shown: boolean) => void
+  ): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
@@ -2058,7 +2078,7 @@ export class ListPage {
           )
           .find((found) => found !== undefined);
         if (column === undefined || row === undefined) {
-          missing?.();
+          found?.(false);
           return;
         }
         if (!rowInView(row, column)) {
@@ -2066,6 +2086,7 @@ export class ListPage {
           // news, not the trip.
           row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
         }
+        found?.(true);
       },
       { injector: this._injector }
     );
@@ -2592,18 +2613,6 @@ export class ListPage {
  * about", and a ring that stayed would start saying something about the item itself.
  */
 const MARK_DURATION_MS = 4000;
-
-/**
- * Whether a row is wholly inside the scrolling column. The field is pinned above the
- * column, outside it, so the column's own box is the whole of what shows. Reads
- * geometry, so it says yes where there is none to read (jsdom), and nothing scrolls
- * there.
- */
-function rowInView(row: HTMLElement, column: HTMLElement): boolean {
-  const box = row.getBoundingClientRect();
-  const frame = column.getBoundingClientRect();
-  return box.top >= frame.top && box.bottom <= frame.bottom;
-}
 
 /**
  * The words above a list shown one category at a time: this app's own for "No
