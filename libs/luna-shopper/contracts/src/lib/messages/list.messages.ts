@@ -104,11 +104,11 @@ export const LINE_PATTERNS = {
  * page moves lines into. It used to be one, from when a line was a thing you
  * ticked off and a quantity of nothing was meaningless.
  *
- * **Zero is not deleted** (section 2.2) when the line keeps anything a person
- * wrote: a typed name, a chain, a favourite, a buy or a comment. Since plan 0263
- * a member's write that lowers a line with none of those from above 0 to 0
- * deletes it in the same write; a settle never does. Deleting by hand is a
- * separate, confirmed gesture.
+ * **Zero is not deleted** (section 2.2). Deleting is a separate, confirmed
+ * gesture and it is the only thing that discards the history, which is the whole
+ * reason the model works. No write deletes a line because it reached 0 (plan
+ * 0263 proposed it and was withdrawn on 2026-11-12); velista hides a line at 0
+ * outside a search instead.
  *
  * **The ceiling is 999 999 base units** (plan 0262): 999,999 kg, 999,999 l or
  * 999 999 pieces, one number for the three units. It was 100 000 from when a
@@ -964,34 +964,6 @@ export interface UpdateLineRequest {
  */
 export interface UpdateLineResult extends LineView {
   absorbedLineId?: string;
-  /**
-   * Present and true when the edit lowered the line from above 0 to 0 and the
-   * line kept nothing a person wrote, so it was deleted in the same write (plan
-   * 0263). The rest is the line as it stood at 0. Absent on every other answer.
-   */
-  deleted?: true;
-}
-
-/**
- * What `line.addQuantity` answers (plan 0263, section 3): the line as it now
- * stands, and `deleted: true` when the delta took it from above 0 to 0 and it
- * kept nothing a person wrote. A deleted line is answered as it stood at 0,
- * with the products it held.
- */
-export interface LineQuantityResult extends LineView {
-  deleted?: true;
-}
-
-/**
- * The payload of `line.deleted`. `emptied` is true when the line was deleted
- * because a write lowered it to 0 with nothing to keep (plan 0263), and absent
- * for a delete by hand. A reader that knows only `id` and `listId` removes the
- * row either way.
- */
-export interface LineDeletedPayload {
-  id: string;
-  listId: string;
-  emptied?: true;
 }
 
 /**

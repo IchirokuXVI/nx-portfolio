@@ -32,7 +32,6 @@ export const LIST_SCHEMA_IDS = {
   listAccessView: schemaId('list/ListAccessView'),
   lineView: schemaId('list/LineView'),
   updateLineResult: schemaId('list/UpdateLineResult'),
-  lineQuantityResult: schemaId('list/LineQuantityResult'),
   addLineResult: schemaId('list/AddLineResult'),
   addLineResultList: schemaId('list/AddLineResultList'),
   lineClaimRef: schemaId('list/LineClaimRef'),
@@ -251,29 +250,9 @@ const lineView = object(
 
 // What an edit answers: the surviving line, and the line a merge absorbed when
 // there was one (plan 0112, section 6). Optional, and absent when nothing merged.
-//
-// `deleted` is present and true when the edit lowered a line with nothing to
-// keep from above 0 to 0 and so deleted it (plan 0263, section 3).
-const lineDeletedFlag: JsonSchema = {
-  type: 'boolean',
-  enum: [true],
-  description:
-    'Present and true when the write lowered the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write. The rest is the line as it stood at 0. Absent on every other answer.',
-};
 const updateLineResult = object(
   LIST_SCHEMA_IDS.updateLineResult,
-  {
-    ...lineViewProperties,
-    absorbedLineId: nonEmptyString(),
-    deleted: lineDeletedFlag,
-  },
-  lineViewRequired
-);
-
-// What a delta answers (plan 0263, section 3): the line, and `deleted` as above.
-const lineQuantityResult = object(
-  LIST_SCHEMA_IDS.lineQuantityResult,
-  { ...lineViewProperties, deleted: lineDeletedFlag },
+  { ...lineViewProperties, absorbedLineId: nonEmptyString() },
   lineViewRequired
 );
 
@@ -1092,7 +1071,6 @@ export const listSchemas: JsonSchema[] = [
   listAccessView,
   lineView,
   updateLineResult,
-  lineQuantityResult,
   addLineResult,
   addLineResultList,
   lineClaimRef,
@@ -1216,7 +1194,7 @@ export const listMessageContracts: Record<
   },
   [LINE_PATTERNS.addQuantity]: {
     request: LIST_SCHEMA_IDS.addLineQuantityRequest,
-    response: LIST_SCHEMA_IDS.lineQuantityResult,
+    response: LIST_SCHEMA_IDS.lineView,
   },
   [LINE_PATTERNS.setApproval]: {
     request: LIST_SCHEMA_IDS.setApprovalRequest,

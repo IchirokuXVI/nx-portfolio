@@ -23,11 +23,9 @@ import {
   type DeleteLineRequest,
   type LineAddNeedsChoiceDetails,
   type LineClaim,
-  type LineDeletedPayload,
   type LineMergeRequiredDetails,
   type LineOrder,
   type LinePage,
-  type LineQuantityResult,
   type LineSettlementSummary,
   type LineUnit,
   type LineUnitBasis,
@@ -93,7 +91,6 @@ import {
   toLineItemSet,
   type LineItemSet,
 } from './line-item-set';
-import { lineKeeps } from './line-keeps';
 import {
   assertMergeFits,
   isEarlierLine,
@@ -107,7 +104,7 @@ import {
   validateLineUnit,
 } from './line-unit-rules';
 import { ListAccessService } from './list-access.service';
-import { canChangeDemand, canDeleteLine } from './list-acts';
+import { canChangeDemand } from './list-acts';
 import { toLineView } from './list.mappers';
 import { readLineSettlementSummaries } from './settlement.sql';
 
@@ -136,21 +133,6 @@ export interface WrittenLine {
   settlements: LineSettlementSummary;
   /** And the third indicator, for the same reason (plan 0052, section 4). */
   claim: LineClaim;
-}
-
-/**
- * A line a write lowered to 0 with nothing to keep, deleted in that write
- * (plan 0263). `view` is the line as it stood at 0.
- */
-interface EmptiedLine {
-  emptied: true;
-  id: string;
-  listId: string;
-  view: LineView;
-}
-
-function isEmptied(written: WrittenLine | EmptiedLine): written is EmptiedLine {
-  return 'emptied' in written;
 }
 
 /**
@@ -2034,10 +2016,7 @@ export class LineService {
       req,
       permissions,
       this.plainWriter(),
-      actorOf(req),
-      // A member's edit to 0 deletes a line with nothing to keep (plan 0263),
-      // and the member is who deleted it.
-      req.userId
+      actorOf(req)
     );
   }
 
@@ -2094,9 +2073,7 @@ export class LineService {
       // 0138, section 9). The two tables answer different people: the trail is
       // for whoever investigates the operator, and the change is what tells the
       // household's shopper that their list moved while they were in the aisle.
-      operatorActor(actorId),
-      // An operator's edit to 0 never deletes (plan 0263, D5).
-      null
+      operatorActor(actorId)
     );
   }
 
@@ -2106,12 +2083,7 @@ export class LineService {
     req: LineEdit,
     permissions: ReadonlySet<ListPermission>,
     writer: LineWriter,
-    actor: LineChangeActor,
-    /**
-     * The member whose edit to 0 deletes a line with nothing to keep (plan
-     * 0263), or null when no edit of this caller deletes.
-     */
-    deletesAtZeroBy: string | null
+    actor: LineChangeActor
   ): Promise<UpdateLineResult> {
     this.authorizeEdit(req, line, permissions);
     this.validateUnitEdit(req);
@@ -2154,8 +2126,6 @@ export class LineService {
       this.authorizeEdit(req, locked, permissions);
       assertFrom(req, locked);
       const unitBefore = locked.unit ?? 'UNIT';
-      // Asked of the approval the lock read: the edit may reopen it below.
-      const approvalBefore = locked.approvalStatus;
       const prepared = await this.prepareEdit(
         locked,
         list,
@@ -2164,27 +2134,6 @@ export class LineService {
         manager
       );
       unitMoved = (locked.unit ?? 'UNIT') !== unitBefore;
-      // A member's edit to 0 of a line that keeps nothing, as the edit leaves
-      // it, deletes the line in this transaction (plan 0263, section 2).
-      if (
-        deletesAtZeroBy !== null &&
-        (await this.emptiesAtZero(
-          manager,
-          locked,
-          prepared.before.quantity,
-          locked.quantity,
-          { permissions, list, approvalStatus: approvalBefore }
-        ))
-      ) {
-        return this.removeEmptied(
-          manager,
-          locked,
-          list,
-          prepared.before,
-          deletesAtZeroBy,
-          actor
-        );
-      }
       return this.writePreparedEdit(
         manager,
         locked,
@@ -2194,9 +2143,6 @@ export class LineService {
         record
       );
     });
-    if (isEmptied(written)) {
-      return this.announceEmptied(list, written);
-    }
     return this.announce(
       list,
       written,
@@ -3153,7 +3099,7 @@ export class LineService {
    * remove. Routing it through the same code costs nothing, because that code
    * already knows what a reduction means.
    */
-  async addQuantity(req: AddLineQuantityRequest): Promise<LineQuantityResult> {
+  async addQuantity(req: AddLineQuantityRequest): Promise<LineView> {
     this.validateDelta(req.delta);
     // Required (plan 0246 M8): an old client holding a weight line would add
     // one gram where it meant one kilo. Refused before anything is read.
@@ -3210,26 +3156,6 @@ export class LineService {
       // The row as the lock read it, which is the only state a delta can
       // honestly say it moved from.
       const before = snapshotOf(line);
-
-      // A line lowered to 0 with nothing to keep goes (plan 0263, section 2),
-      // under this lock and in this transaction. Asked of the approval the
-      // lock read, before the edit could move it.
-      if (
-        await this.emptiesAtZero(manager, line, before.quantity, quantity, {
-          permissions,
-          list,
-        })
-      ) {
-        return this.removeEmptied(
-          manager,
-          line,
-          list,
-          before,
-          req.userId,
-          actorOf(req)
-        );
-      }
-
       line.quantity = quantity;
       this.reopenAfterEdit(line, list, permissions);
       line.version += 1;
@@ -3246,112 +3172,8 @@ export class LineService {
       return written;
     });
 
-    if (isEmptied(written)) {
-      return this.announceEmptied(list, written);
-    }
     // A delta moves the quantity and nothing else (plan 0204, section 3).
     return this.announce(list, written, 'moved');
-  }
-
-  /**
-   * Whether this write deletes the line it lowered (plan 0263, sections 1 and
-   * 2): from above 0 to 0, by a caller who may delete the line by hand (D6),
-   * on a line that keeps nothing a person wrote.
-   *
-   * `line` is the row the caller's lock read, as the write leaves it apart from
-   * its quantity, and `manager` is that write's. Only `addQuantity` and a
-   * member's `update` ask it. A settle saves the lowered line before it inserts
-   * the buy, so it must never reach this, and it does not: the two settles
-   * write through their own repositories.
-   */
-  private async emptiesAtZero(
-    manager: EntityManager,
-    line: ListLine,
-    from: number,
-    to: number,
-    caller: {
-      permissions: ReadonlySet<ListPermission>;
-      list: ShoppingList;
-      approvalStatus?: LineApprovalStatus;
-    }
-  ): Promise<boolean> {
-    if (from <= 0 || to !== 0) {
-      return false;
-    }
-    if (
-      !canDeleteLine(
-        caller.permissions,
-        caller.approvalStatus ?? line.approvalStatus,
-        caller.list.autoApproveLines
-      )
-    ) {
-      return false;
-    }
-    return !(await lineKeeps(manager, line));
-  }
-
-  /**
-   * Delete a line a write lowered to 0 with nothing to keep (plan 0263), in that
-   * write's transaction and under its lock.
-   *
-   * The answer is the line as it stood at 0, read before its contents go, so
-   * `itemIds` are the products it held (section 3). The removal is
-   * {@link delete}'s: {@link removeLineContents} and the soft delete. The change
-   * is one `deleted` row with the line as it stood **before** the write (D9),
-   * which is what a basket's removed row shows.
-   */
-  private async removeEmptied(
-    manager: EntityManager,
-    line: ListLine,
-    list: ShoppingList,
-    before: LineSnapshot,
-    deletedByUserId: string,
-    actor: LineChangeActor
-  ): Promise<EmptiedLine> {
-    const items = await this.itemSetOf(line.id, manager);
-    const settlements = await this.settlementsOf(line.id, manager);
-    const claim = await this.claims.claimOf(line.id, manager);
-    const view = toLineView(
-      { ...line, quantity: 0 } as ListLine,
-      items,
-      settlements,
-      claim
-    );
-
-    await this.removeLineContents(manager, line.id, deletedByUserId, () =>
-      manager.getRepository(ListLine).softDelete({ id: line.id })
-    );
-    await this.changes.deleted(
-      manager,
-      this.listRef(list),
-      { id: line.id, ...before },
-      actor
-    );
-    return { emptied: true, id: line.id, listId: line.listId, view };
-  }
-
-  /**
-   * After the commit of {@link removeEmptied}: `line.deleted` with `emptied`,
-   * and no `line.updated` before it, then every basket that covers the list,
-   * as a delete by hand does (plan 0263, section 3).
-   */
-  private announceEmptied(
-    list: ShoppingList,
-    emptied: EmptiedLine
-  ): LineView & { deleted: true } {
-    const payload: LineDeletedPayload = {
-      id: emptied.id,
-      listId: emptied.listId,
-      emptied: true,
-    };
-    this.events.emit(
-      RealtimeEvent.LineDeleted,
-      list.zoneId,
-      payload,
-      emptied.listId
-    );
-    void this.baskets.linesChanged(emptied.listId, [emptied.id]);
-    return { ...emptied.view, deleted: true };
   }
 
   /**
@@ -3783,17 +3605,18 @@ export class LineService {
       line.listId,
       req.userId
     );
-    // The rule lives in `canDeleteLine`, which the deletion at 0 reads too
-    // (plan 0263, D6). The words name which half of it refused.
-    if (
-      !canDeleteLine(permissions, line.approvalStatus, list.autoApproveLines)
-    ) {
-      throw new ForbiddenException(
+    if (!permissions.has(ListPermission.MANAGE)) {
+      if (
         line.approvalStatus === LineApprovalStatus.APPROVED &&
-          !list.autoApproveLines
-          ? 'This line was approved on a list that asks for approval, so only an admin of this list can delete it'
-          : 'You need write access to this list'
-      );
+        !list.autoApproveLines
+      ) {
+        throw new ForbiddenException(
+          'This line was approved on a list that asks for approval, so only an admin of this list can delete it'
+        );
+      }
+      if (!permissions.has(ListPermission.WRITE)) {
+        throw new ForbiddenException('You need write access to this list');
+      }
     }
     return this.applyLineDeletion(line, list, actorOf(req), (row, record) =>
       this.dataSource.transaction(async (manager) => {

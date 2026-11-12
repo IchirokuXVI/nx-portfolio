@@ -3,14 +3,12 @@ import { ConfigService } from '@nestjs/config';
 import type {
   AddLineResult,
   LinePage,
-  LineQuantityResult,
   LineSettlementResult,
   LineUnit,
   LineView,
   ListPage,
   ListView,
   MyZoneView,
-  UpdateLineResult,
   UserProfileView,
   ZonePage,
 } from '@portfolio/luna-shopper/contracts';
@@ -193,8 +191,8 @@ export class GatewayApiClient {
     caller: ApiCaller,
     lineId: string,
     body: { content?: string; quantity?: number; unit?: LineUnit }
-  ): Promise<UpdateLineResult> {
-    return this.request<UpdateLineResult>(
+  ): Promise<LineView> {
+    return this.request<LineView>(
       caller,
       'PATCH',
       `/v1/lines/${encodeURIComponent(lineId)}`,
@@ -217,8 +215,8 @@ export class GatewayApiClient {
     delta: number,
     /** The unit the delta was made in, required by the route (plan 0246 M8). */
     unit: LineUnit
-  ): Promise<LineQuantityResult> {
-    return this.request<LineQuantityResult>(
+  ): Promise<LineView> {
+    return this.request<LineView>(
       caller,
       'POST',
       `/v1/lines/${encodeURIComponent(lineId)}/quantity`,
