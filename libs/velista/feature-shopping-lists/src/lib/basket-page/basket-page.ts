@@ -43,7 +43,6 @@ import {
   type BasketRow as BasketRowModel,
   basketRowPick,
   basketRowProduct,
-  type BasketViewRow,
   type BasketViewSection,
   type BasketViewState,
   catalogName,
@@ -69,6 +68,8 @@ import {
   NavChrome,
   PageReturn,
   productPagePath,
+  type QuantityRun,
+  quantityRuns,
   searchOpenOf,
   sheetSegments,
   shopMapPath,
@@ -110,7 +111,6 @@ import { basketErrorKey, type BasketOperation } from '../basket-error-copy';
 import {
   basketRowName,
   listPickerRows,
-  outstandingCaption,
   participantInitials,
   visitTime,
 } from '../basket-labels';
@@ -1414,72 +1414,6 @@ export class BasketPage {
   }
 
   /**
-   * The row's reel was let go: one call, whichever direction it went (plan 0054).
-   *
-   * **The client never decides whether the drag was a purchase or a take back.**
-   * `BasketStore.setLeft` turns the pair of numbers into a settle or a revert, and it
-   * is the one place that decision lives, so the row, the entries pane and this
-   * cannot disagree. What this page owns is the sentence a refusal leaves behind.
-   *
-   * Under a list heading the row is drawn for one entry, and moving its reel is
-   * still a write on the **row**: the units it settles are allocated to that
-   * household through `allocations`, which is velista `0092`'s to draw from the
-   * entries pane. Until then the reel under a heading commits against the row and
-   * the server divides oldest entry first, which is what it did before a heading
-   * existed.
-   */
-  protected setRowLeft(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): void {
-    // Only the settling direction is a buy. Taking units back names no shop, so
-    // it never asks (velista `0141`).
-    if (change.to < change.from) {
-      this._buy(() => this._writeRowLeft(row, change));
-      return;
-    }
-    void this._writeRowLeft(row, change);
-  }
-
-  private async _writeRowLeft(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): Promise<void> {
-    // Whatever the last move of any row came to, gone before this one starts: one
-    // sentence at a time across the whole basket, and a stale refusal sitting under
-    // a row somebody has since moved again would be a lie about the present.
-    this._notice.set(null);
-
-    const result = await this._store.setLeft(
-      row.row.rowKey,
-      change.to,
-      change.from,
-      this._settleAt(row.row)
-    );
-
-    if (result === null) {
-      this._reportLeft(row.row);
-      return;
-    }
-
-    // The same sentence the caption showed under the thumb, so a reader who could
-    // not see it still learns which of the two happened (section 7).
-    this._say(
-      outstandingCaption(
-        change.from,
-        change.to,
-        this._translator,
-        this._locale(),
-        row.row.unit
-      ) ?? ''
-    );
-
-    if (result.skippedCount > 0) {
-      this.openRow(row.row);
-    }
-  }
-
-  /**
    * A section's count as the heading draws it, or empty where it has none.
    *
    * "1 of 3 got", in the same words and from the same function as the sentence in
@@ -1547,33 +1481,11 @@ export class BasketPage {
   }
 
   /**
-   * Say what went wrong, once, on the row it went wrong on.
-   *
-   * The count is read back off the store rather than off the row this was called
-   * with, and that is the whole of the stale answer: `BasketStore.setLeft`
-   * refetches before it returns null, so by now the row's number is the true one and
-   * "it says 3 now" is a sentence worth saying. Every other failure gets its own
-   * sentence the same way, because a failure with no sentence is the defect
-   * `basket-error-copy.ts` exists to close (plan 0052, section 7).
-   */
-  private _reportLeft(row: BasketRowModel): void {
-    const key = basketErrorKey(this._store.error(), 'basket.outstanding');
-    // Found again rather than trusted: a `stale_quantity` refetch can land a
-    // re-keyed row, and the number to report is that row's as it now stands.
-    const found = this._store.rowFor(row.rowKey);
-    const count = (found ?? row).left;
-
-    // On the row as it now stands, so a re-keyed row draws it (velista `0141`).
-    this._notice.set({ rowKey: (found ?? row).rowKey, key, count });
-    this._say(this._translator.t(key, undefined, this._locale(), { count }));
-  }
-
-  /**
    * Say that a held buy was refused, on its row (velista `0141`).
    *
    * The settle sheet drew this sentence before the hold. A held buy outlives the
    * sheet, which the question replaced, so the row says it instead, as it does for
-   * a refused reel. The row is found again by the key of the press, because a
+   * a refused circle. The row is found again by the key of the press, because a
    * patch can have re-keyed it while the question was open.
    */
   private _reportSettle(
@@ -2454,7 +2366,12 @@ export class BasketPage {
               entry.listId === null
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
-            quantity: entry.left,
+            // The open run's amount while presses gather, then the amount of
+            // its write until that answers (velista `0188`).
+            quantity: this._holdingRuns.shown(
+              entry.lineId,
+              this._sending().get(entry.lineId)?.to ?? entry.left
+            ),
             unit: entry.unit,
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
@@ -2478,20 +2395,66 @@ export class BasketPage {
       productPagePath(locale, this._basePath, itemId);
   });
 
+  /** The amount of each run whose demand write has not answered, by line. */
+  private readonly _sending = signal<
+    ReadonlyMap<string, { readonly to: number }>
+  >(new Map());
+
+  /** The holding each open run belongs to, for the sentence after its write. */
+  private readonly _runHoldings = new Map<string, SuggestionHolding>();
+
   /**
-   * A card's stepper moved one list's demand (velista `0101`, section 2): the write
-   * the settle sheet makes, `POST rows/{lineId}/demand`, and the same sentences
-   * after it. It is sent under the line itself (backend `0201`), because a row's key
-   * can change under the panel while somebody else adds or settles.
+   * A card's steps on one line, gathered into one demand write per run (velista
+   * `0188`, section 5.6): a hold repeats ten times a second, which would otherwise be
+   * ten writes a second. The card draws the run's amount while it is open.
    */
-  protected async changeHolding(
-    change: SuggestionHoldingChange
-  ): Promise<void> {
-    const result = await this._store.setDemand({
-      lineId: change.holding.lineId,
-      quantity: change.to,
+  private readonly _holdingRuns = quantityRuns<string>((lineId, run) => {
+    const holding = this._runHoldings.get(lineId);
+    this._runHoldings.delete(lineId);
+    if (holding !== undefined) {
+      void this._sendHolding(holding, run);
+    }
+  });
+
+  /** A card's stepper stepped one list's demand. */
+  protected changeHolding(change: SuggestionHoldingChange): void {
+    this._runHoldings.set(change.holding.lineId, change.holding);
+    this._holdingRuns.step(change.holding.lineId, {
       from: change.from,
+      to: change.to,
+      repeat: change.repeat,
     });
+  }
+
+  /**
+   * One run of a card's stepper, as one list's demand (velista `0101`, section 2):
+   * the write the settle sheet makes, `POST rows/{lineId}/demand`, with the run's
+   * `from` and its last `to`, and the same sentences after it. It is sent under the
+   * line itself (backend `0201`), because a row's key can change under the panel
+   * while somebody else adds or settles.
+   */
+  private async _sendHolding(
+    holding: SuggestionHolding,
+    run: QuantityRun
+  ): Promise<void> {
+    const change = { holding, from: run.from, to: run.to };
+    // The demand write is not optimistic, so the run's amount stays drawn until
+    // it answers: the card does not jump back to the old amount and then forward.
+    const sending = { to: run.to };
+    const lineId = holding.lineId;
+    this._sending.update((all) => new Map(all).set(lineId, sending));
+    const result = await this._store
+      .setDemand({ lineId, quantity: run.to, from: run.from })
+      .finally(() =>
+        this._sending.update((all) => {
+          if (all.get(lineId) !== sending) {
+            return all;
+          }
+          const next = new Map(all);
+          next.delete(lineId);
+          return next;
+        })
+      );
 
     if (result === null) {
       this._say(

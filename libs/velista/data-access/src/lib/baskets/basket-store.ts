@@ -172,6 +172,8 @@ export class BasketStore {
   /** See {@link accessEnded}. */
   private readonly _accessEnded = signal<BasketAccessEnded | null>(null);
   private readonly _busyRows = signal<ReadonlySet<string>>(new Set());
+  /** How many writes are out per key of {@link _busyRows}. */
+  private readonly _busyCount = new Map<string, number>();
   private readonly _present = signal<readonly BasketPresenceEntry[]>([]);
   /** See {@link rowGone}. A counter, so the same sentence can be said twice. */
   private readonly _rowGone = signal(0);
@@ -1712,6 +1714,7 @@ export class BasketStore {
       return null;
     }
 
+    this._busyCount.set(rowKey, (this._busyCount.get(rowKey) ?? 0) + 1);
     this._busyRows.update((busy) => new Set(busy).add(rowKey));
     try {
       return await send(id);
@@ -1720,11 +1723,19 @@ export class BasketStore {
       await this._rereadIfOvertaken(error);
       return null;
     } finally {
-      this._busyRows.update((busy) => {
-        const next = new Set(busy);
-        next.delete(rowKey);
-        return next;
-      });
+      // Free only once the last write on this key is back: two lines of one row
+      // can each have a demand out (velista `0190`).
+      const left = (this._busyCount.get(rowKey) ?? 1) - 1;
+      if (left > 0) {
+        this._busyCount.set(rowKey, left);
+      } else {
+        this._busyCount.delete(rowKey);
+        this._busyRows.update((busy) => {
+          const next = new Set(busy);
+          next.delete(rowKey);
+          return next;
+        });
+      }
     }
   }
 

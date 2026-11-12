@@ -138,7 +138,7 @@
 }
 
 // The row proper, and the control that opens the sheet. It takes the whole space
-// between the status and the numbers so a tap anywhere on the words reaches it,
+// between the status and the amount so a tap anywhere on the words reaches it,
 // which is what the row was before it was split.
 .body {
   @include shared.tap-target;
@@ -163,9 +163,11 @@
   }
 }
 
-// The hover moves to the row, so pointing at the words still lights the whole line
-// as it did before the split, and pointing at the status control lights only it.
-.row:has(.body:hover) {
+// The hover moves to the row, so pointing at the words or at the amount lights the
+// whole line as it did before the split, and pointing at the status control lights
+// only it. Both open the same sheet.
+.row:has(.body:hover),
+.row:has(.amount:hover) {
   background: var(--app-surface-raised);
 }
 
@@ -422,50 +424,43 @@
   color: var(--app-text-secondary);
 }
 
-// The trailing column, which is the reel and one caption under it. `flex: none` so
-// the control keeps its size on the narrowest phone and the words truncate instead:
-// the number is the control and the text is not (plan 0054, section 7).
-.numbers {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--app-space-1);
-  flex: none;
-}
-
-// The number on a finished trip: read, not moved (velista 0057, section 6).
+// The amount, at the trailing edge (velista 0190): one cell of one size on every
+// row, so the amounts of a list stand in one column. No fill and no border, as the
+// mock draws it: the fixed size alone keeps the column. It is a button that opens
+// the settle sheet, so it takes the body's focus ring and its pointer. The number
+// and the symbol are drawn by `lib-amount-figure` at its own sizes and colours.
 //
-// The reel's resting pill without its edges. A bordered pill that could not be
-// dragged would keep offering the gesture the whole basket has stopped accepting, and
-// `0030` takes the control away rather than dressing one up as disabled. The width
-// and the tabular figures stay, so a finished basket's column of numbers lines up
-// exactly where a live one's did and the screen does not shift when the banner lands.
-.settled-count {
+// Centred on the row's height, as the approved mock places it.
+.amount {
+  @include shared.tap-target;
+
   display: flex;
   align-items: center;
+  align-self: center;
   justify-content: center;
-  min-inline-size: var(--app-quantity-width);
-  block-size: var(--app-quantity-height);
-  font-size: var(--app-text-base);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  color: var(--app-text-secondary);
+  flex: none;
+  box-sizing: border-box;
+  inline-size: var(--app-stepper-cell-row);
+  block-size: var(--app-stepper-button);
+  padding: 0;
+  border: none;
+  border-radius: var(--app-radius-md);
+  background: transparent;
+  font-family: inherit;
+  color: var(--app-text-primary);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
 }
 
-// What the gesture is about to record, and the progress caption the rest of the
-// time. One line, never wrapped: a caption that grew a second line while a thumb was
-// down would move the number out from under it.
-.preview,
-.progress {
-  font-size: var(--app-text-2xs);
-  color: var(--app-text-muted);
-  white-space: nowrap;
-}
-
-// The one about to happen, said in the colour the reel's own current number takes,
-// so the caption and the control read as one thing. `--app-action-quiet-fg` is this
-// app's amber; `--app-status-attention-*` is violet despite its name.
-.preview {
+// The units of an add went here (velista 0170, target 4): the amber edge the
+// stepper draws for the same mark, inside the cell so the row does not move when it
+// comes and goes, and the number in the same amber.
+.amount.took {
+  box-shadow: inset 0 0 0 var(--app-stepper-took-ring) var(--app-action-bg);
   color: var(--app-action-quiet-fg);
 }
 

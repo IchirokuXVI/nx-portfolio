@@ -16,18 +16,19 @@ import {
 } from './support/api';
 import {
   addInTheAisle,
+  amountCell,
+  amountField,
   expectBasketUrl,
   generateBasket,
   newVisitor,
-  nudge,
   openSettleSheet,
   pressBasketMenuRow,
   readShareLinkFromSheet,
-  reel,
   row,
   rows,
   sheet,
   signIn,
+  stepAmount,
 } from './support/app';
 
 /**
@@ -197,16 +198,16 @@ test.describe('a registered participant', () => {
         })
         .toBe(true);
 
-      // The lists behind the row: Hardware, with what it asks for as a reel the
-      // owner may move (velista `0092`, section 6). Raising it from zero is how
+      // The lists behind the row: Hardware, with what it asks for in a stepper
+      // the owner may change (velista `0092`, section 6; velista 0190). Raising it from zero is how
       // the household's list asks for one more after the shop.
       const dialog = await openSettleSheet(page, aisleLine);
       const entries = dialog.locator('lib-row-entries');
       await expect(
         entries.locator('.row-name', { hasText: 'Hardware' })
       ).toBeVisible();
-      const asks = reel(entries, /^Hardware.*, asks for$/);
-      await nudge(asks, 1);
+      const asks = amountField(entries, /^Amount of Hardware.*, asks for$/);
+      await stepAmount(asks, 1);
       await expect(asks).toHaveAttribute('aria-valuenow', '1');
 
       // The zone list asks for it again, read back through the API.
@@ -309,7 +310,7 @@ test.describe('a registered participant', () => {
         'the name is struck through'
       ).toHaveCSS('text-decoration-line', 'line-through');
       await expect(hers.locator('.status')).toHaveCount(0);
-      await expect(hers.locator('lib-quantity-reel')).toHaveCount(0);
+      await expect(amountCell(hers)).toHaveCount(0);
       await expectBasketUrl(dana, basketId);
     });
   });

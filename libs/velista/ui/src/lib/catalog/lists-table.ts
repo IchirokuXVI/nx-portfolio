@@ -8,14 +8,15 @@ import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angul
 import type {
   ProductListGroup,
   ProductListRow,
+  QuantityStep,
 } from '@portfolio/velista/models';
 import { QuantityStepper } from '../list/quantity-stepper';
 
-/** A press on the stepper of one line. */
+/** A step of the stepper of one line, as the stepper drew it. */
 export interface ListsTableStep {
   readonly listId: string;
   readonly lineId: string;
-  readonly by: 1 | -1;
+  readonly step: QuantityStep;
 }
 
 /**
@@ -39,7 +40,8 @@ export interface ListsTableStep {
  * It says so in words. A stepper that could never be pressed would be a question
  * with no answer.
  *
- * It decides nothing about saving. Each press goes out, and the page writes it.
+ * It decides nothing about saving. Each step goes out, and the store waits for
+ * the presses to stop before it writes (velista `0188`, decision G).
  */
 @Component({
   selector: 'lib-lists-table',
@@ -75,15 +77,15 @@ export interface ListsTableStep {
               </span>
               @if (usable(list)) {
                 <lib-quantity-stepper
-                  (stepped)="stepMain(list, $event > 0 ? 1 : -1)"
-                  [accent]="quantityOf(list) > 0"
-                  [controlled]="true"
-                  [label]="
-                    'catalog.inLists.stepper' | rokuT: { list: list.name }
-                  "
+                  (stepped)="stepMain(list, $event)"
                   [min]="floorOf(list)"
+                  [name]="
+                    'amount.inList'
+                      | rokuT: { name: product(), list: list.name }
+                  "
                   [unit]="list.main?.unit ?? 'UNIT'"
                   [value]="quantityOf(list)"
+                  variant="row"
                 />
               }
             </div>
@@ -103,19 +105,17 @@ export interface ListsTableStep {
                     lineStepped.emit({
                       listId: list.listId,
                       lineId: line.lineId,
-                      by: $event > 0 ? 1 : -1,
+                      step: $event,
                     })
                   "
-                  [accent]="line.quantity > 0"
-                  [compact]="true"
-                  [controlled]="true"
                   [disabled]="!line.editable"
-                  [label]="
-                    'catalog.held.stepper'
-                      | rokuT: { line: line.name, list: list.name }
+                  [name]="
+                    'amount.inList'
+                      | rokuT: { name: line.name, list: list.name }
                   "
                   [unit]="line.unit"
                   [value]="line.quantity"
+                  variant="row"
                 />
               </div>
             }
@@ -130,10 +130,16 @@ export interface ListsTableStep {
 export class ListsTable {
   readonly groups = input.required<readonly ProductListGroup[]>();
 
+  /**
+   * The product's name in the reader's language, which the stepper of each list
+   * says its amount is of: "Leche on Weekly shop" (velista `0188`).
+   */
+  readonly product = input.required<string>();
+
   /** The plus of a list with no line under the product's name: make that line. */
   readonly added = output<string>();
 
-  /** A press on the stepper of a line that exists. */
+  /** A step of the stepper of a line that exists. */
   readonly lineStepped = output<ListsTableStep>();
 
   /** Whether the list's own stepper can do anything for this person. */
@@ -154,18 +160,21 @@ export class ListsTable {
   }
 
   /**
-   * A press on a list's own stepper. One more goes through an add wherever the
+   * A step of a list's own stepper. A plus goes through an add wherever the
    * person may add: the server puts it on the line of that name or makes the line,
-   * and an add asks for less than a change of quantity does.
+   * and an add asks for less than a change of quantity does. An add happens
+   * once per press, so a repeat of a held plus that would add sends nothing.
    */
-  protected stepMain(list: ProductListRow, by: 1 | -1): void {
+  protected stepMain(list: ProductListRow, step: QuantityStep): void {
     const main = list.main;
-    if (by === 1 && list.canAdd) {
-      this.added.emit(list.listId);
+    if (step.to > step.from && list.canAdd) {
+      if (!step.repeat) {
+        this.added.emit(list.listId);
+      }
       return;
     }
     if (main !== null && main.editable) {
-      this.lineStepped.emit({ listId: list.listId, lineId: main.lineId, by });
+      this.lineStepped.emit({ listId: list.listId, lineId: main.lineId, step });
     }
   }
 }

@@ -1079,7 +1079,7 @@ export class CatalogPage {
       return;
     }
     this.addFailed.set(false);
-    void this._adds.step(
+    this._adds.step(
       {
         listId: target.listId,
         itemId: row.id,
@@ -1087,7 +1087,7 @@ export class CatalogPage {
         imageUrl: row.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 

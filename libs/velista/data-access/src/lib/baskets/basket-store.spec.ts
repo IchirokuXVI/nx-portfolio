@@ -737,6 +737,41 @@ describe('BasketStore', () => {
       await pending;
       expect(store.busyRows().has(first.rowKey)).toBe(false);
     });
+
+    it('keeps the row busy until the last of two writes on it is back', async () => {
+      // Two lines of one row can each send a demand from the settle sheet
+      // (velista `0190`), and both are counted on the row's key.
+      const releases: (() => void)[] = [];
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        settle: (id, rowKey, body) =>
+          new Promise((resolve) => {
+            releases.push(() => resolve(memory.settle(id, rowKey, body)));
+          }),
+      });
+      await store.open('basket-saturday');
+
+      const first = store.rows()[0];
+      const one = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
+      const two = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
+
+      releases[0]();
+      await one;
+      expect(store.busyRows().has(first.rowKey)).toBe(true);
+
+      releases[1]();
+      await two;
+      expect(store.busyRows().has(first.rowKey)).toBe(false);
+    });
   });
 
   describe('the share link', () => {
