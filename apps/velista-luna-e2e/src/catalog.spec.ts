@@ -281,12 +281,17 @@ test.describe('adding from the catalog', () => {
       await expectCatalogLit(page);
     });
 
-    await test.step('8. the stepper of a list adds the product there, by the litre', async () => {
+    await test.step('8. the stepper of a list adds the product once, then steps it', async () => {
       // The demo world's Milk is a litre with no size, so a line of it counts
-      // millilitres (velista `0182`). The list's plus is an add, so each press
-      // puts one more litre on the line: 1000, then 2000. Its minus steps the
-      // line by the one step of velista 0188, 25 ml, so a press down reads 1975.
-      // Velista 0187 rewrites this step with its own rule for the plus.
+      // millilitres (velista `0182`). From zero the list's plus is an add, which
+      // makes the line. After that the plus steps the line that exists by the one
+      // step of velista 0188, 25 ml, as the list page does (velista 0187, U5).
+      // The minus steps it down, and a press at the amount the visit started it
+      // at takes the product back.
+      //
+      // Until velista 0185 makes an add one step, the add puts a litre on, so the
+      // reads are 1000, 1025, 1050 and back down to 0. Whichever of 0185 and
+      // 0187 lands second sets the final numbers: 25, 50, 75, then 50, 25, 0.
       const list = page.locator('lib-lists-table .list').first();
       const row = list.locator('.row');
       const count = row.locator('lib-quantity-stepper');
@@ -294,12 +299,14 @@ test.describe('adding from the catalog', () => {
       const fewer = row.getByRole('button', { name: /^Remove / });
       await expect(count).toHaveAttribute('data-value', '0');
 
-      for (const reads of ['1000', '2000']) {
+      for (const reads of ['1000', '1025', '1050']) {
         await more.click();
         await expect(count).toHaveAttribute('data-value', reads);
       }
-      await fewer.click();
-      await expect(count).toHaveAttribute('data-value', '1975');
+      for (const reads of ['1025', '1000', '0']) {
+        await fewer.click();
+        await expect(count).toHaveAttribute('data-value', reads);
+      }
     });
 
     await test.step('9. back returns to the list, in the order it was left in', async () => {

@@ -46,7 +46,9 @@ async function render(basePath = '/velista'): Promise<Harness> {
 }
 
 /** Lets every pending promise run, then draws. */
-async function settle(fixture: ComponentFixture<OrderInfoSheet>): Promise<void> {
+async function settle(
+  fixture: ComponentFixture<OrderInfoSheet>
+): Promise<void> {
   for (let tick = 0; tick < 20; tick++) {
     await Promise.resolve();
   }
@@ -78,11 +80,13 @@ describe('OrderInfoSheet', () => {
   it('has one close control, which dismisses onto the product page', async () => {
     const { fixture, sheets } = await render();
 
-    const buttons = host(fixture).querySelectorAll('button');
-    expect(buttons).toHaveLength(1);
-    expect(buttons[0]?.textContent?.trim()).toBe(
-      'catalog.similar.about.close'
+    // The shell's scrim is a button too, hidden from assistive technology and
+    // out of the tab order; the controls a person reaches are the rest.
+    const buttons = host(fixture).querySelectorAll(
+      'button:not([aria-hidden="true"])'
     );
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]?.textContent?.trim()).toBe('catalog.similar.about.close');
     buttons[0]?.click();
     await settle(fixture);
 

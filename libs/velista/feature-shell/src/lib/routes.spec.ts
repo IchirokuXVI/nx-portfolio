@@ -1512,7 +1512,10 @@ describe('the sheets and their exit animation', () => {
     // upgrade.
     //
     // The language sheet added one, over the account page.
-    expect(sheets).toHaveLength(72);
+    //
+    // `0187` added one over a product's page: why Similar products and a line's
+    // cheapest mark can name different products.
+    expect(sheets).toHaveLength(73);
   });
 
   it('holds the navigation off every sheet until the panel has fallen', () => {

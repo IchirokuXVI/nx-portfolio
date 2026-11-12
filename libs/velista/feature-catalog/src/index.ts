@@ -10,6 +10,6 @@ export * from './lib/added-sheet/added-sheet';
 export * from './lib/catalog-page/catalog-page';
 export * from './lib/categories-page/categories-page';
 export * from './lib/category-children-page/category-children-page';
-export * from './lib/product-page/product-page';
 export * from './lib/order-info-sheet/order-info-sheet';
+export * from './lib/product-page/product-page';
 export * from './lib/supermarket-page/supermarket-page';

@@ -379,7 +379,11 @@ describe('ListsTable', () => {
       const fixture = await render(
         only(
           list('l1', 'Weekly shop', {
-            main: held({ lineId: 'line-milk', quantity: 2000, unit: 'MILLILITER' }),
+            main: held({
+              lineId: 'line-milk',
+              quantity: 2000,
+              unit: 'MILLILITER',
+            }),
           })
         )
       );

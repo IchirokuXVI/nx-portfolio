@@ -1107,7 +1107,11 @@ describe('ProductPage', () => {
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', -1, 'UNIT');
       expect(lines.deleteLine).not.toHaveBeenCalled();
-      expect(listRow(fixture, 'list-weekly').main?.quantity).toBe('0');
+      // At zero the line is stocked, so it is no longer the list's own line: it
+      // moves to a row of its own, with its stepper at zero, and the list draws
+      // no stepper of its own (velista 0187, decision B).
+      expect(listRow(fixture, 'list-weekly').main).toBeNull();
+      expect(otherLine(fixture, 'line-oil').stepper?.quantity).toBe('0');
     });
 
     it('moves a line under another name with its own stepper, and leaves the list’s own line alone', async () => {
