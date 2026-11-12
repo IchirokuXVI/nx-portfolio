@@ -21,6 +21,8 @@ import type { LinkableChain, LinkableShop } from './place-linking';
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
 const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 const DEZA = '33333333-3333-4333-8333-333333333333';
+/** A chain with no source row here, for its walk on the run screen alone. */
+const ELJAMON = '88888888-8888-4888-8888-888888888881';
 
 /**
  * The scopes a price belongs to, fixed so a spec can name one.
@@ -149,11 +151,56 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     failed: 0,
     stage: 'fetch-products',
     stageLabel: 'Fetching products',
-    warnings: [],
+    warnings: [
+      {
+        code: 'LISTING_UNREAD',
+        offerId: null,
+        page: null,
+        name: null,
+        message:
+          'Category cat21449123 Congelados was refused twice and was not read.',
+      },
+    ],
     documentSha256: null,
     abortRequestedAt: null,
     error: null,
-    report: {},
+    // What the walk did not read and the sizes it doubted (admin plan 0071;
+    // backend plans 0249 and 0251), so the run screen draws the Carrefour
+    // part of its report with nothing listening.
+    report: {
+      unreadableCategories: ['/supermercado/congelados/cat21449123/c'],
+      askedAgain: [
+        { id: 'cat20002', name: 'Lácteos', read: true },
+        { id: 'cat21449123', name: 'Congelados', read: false },
+      ],
+      blockedAfter: null,
+      sizesDisproved: 2,
+      probablePackCounts: 1,
+      sizesDisprovedExamples: [
+        {
+          entryId: 'entry-carrefour-yogur',
+          externalId: '521006',
+          name: 'Yogur natural Carrefour 125 g',
+          stated: 125,
+          implied: 500,
+          unit: 'GRAM',
+          ratio: 4,
+          label: '2,36 €/kg',
+          probablePackCount: 4,
+        },
+        {
+          entryId: 'entry-carrefour-aceite',
+          externalId: '600214',
+          name: 'Aceite de oliva virgen extra 1 l',
+          stated: 1000,
+          implied: 750,
+          unit: 'MILLILITER',
+          ratio: 0.75,
+          label: '9,99 €/l',
+          probablePackCount: null,
+        },
+      ],
+    },
     correlationId: 'seed-correlation-4',
     requestedByUserId: null,
     revertedAt: '2026-09-01T11:20:00.000Z',
@@ -251,6 +298,177 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     error: null,
     report: {},
     correlationId: 'seed-correlation-3',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // A DEZA walk (admin plan 0071; backend plans 0257 and 0258): one section
+    // out of queries, one that stopped growing with queries still at the
+    // ceiling, one read whole. DEZA prints no price, so it created none.
+    id: 'run-deza-completed',
+    supermarketId: DEZA,
+    sourceId: 'source-deza',
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-30T21:00:00.000Z',
+    startedAt: '2026-08-30T21:00:03.000Z',
+    finishedAt: '2026-08-30T21:41:20.000Z',
+    heartbeatAt: '2026-08-30T21:41:20.000Z',
+    totalPlanned: 2361,
+    processed: 2361,
+    created: 0,
+    updated: 0,
+    unchanged: 2361,
+    notFound: 0,
+    skipped: 0,
+    failed: 1,
+    stage: null,
+    stageLabel: null,
+    warnings: [
+      {
+        code: 'LISTING_SHORT',
+        offerId: null,
+        page: null,
+        name: null,
+        message:
+          'Section 04 Bebidas spent its 25 queries with a term still left.',
+      },
+      {
+        code: 'LISTING_UNREAD',
+        offerId: null,
+        page: null,
+        name: 'Mascotas',
+        message: 'Section 07 Mascotas failed: Error: socket hang up',
+      },
+    ],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {
+      products: 2361,
+      incompleteSections: [
+        {
+          code: '04',
+          name: 'Bebidas',
+          queries: 25,
+          stoppedBy: 'BUDGET',
+          openQueries: ['agua', 'refresco'],
+          narrowing: 'zumo',
+          termsTried: 9,
+        },
+        // A section that threw, as the runner records one: no queries, no
+        // stop word, and the error where the open queries would be.
+        {
+          code: '07',
+          name: 'Mascotas',
+          queries: null,
+          stoppedBy: null,
+          openQueries: ['Error: socket hang up'],
+          narrowing: null,
+          termsTried: null,
+        },
+      ],
+      sections: [
+        {
+          code: '01',
+          name: 'Droguería',
+          products: 812,
+          firstSeen: 801,
+          queries: 14,
+          stoppedBy: 'GROWTH',
+          coverageOnce: 63,
+          growthAtStop: 4,
+          openQueries: ['champú', 'gel de baño'],
+        },
+        {
+          code: '04',
+          name: 'Bebidas',
+          products: 1320,
+          firstSeen: 1301,
+          queries: 25,
+          stoppedBy: 'BUDGET',
+          coverageOnce: 118,
+          growthAtStop: 37,
+          openQueries: [],
+        },
+        {
+          code: '07',
+          name: 'Mascotas',
+          products: 259,
+          firstSeen: 259,
+          queries: null,
+          stoppedBy: null,
+          coverageOnce: null,
+          growthAtStop: null,
+          openQueries: [],
+        },
+      ],
+    },
+    correlationId: 'seed-correlation-6',
+    requestedByUserId: null,
+    revertedAt: null,
+    revertedByUserId: null,
+    revertedPriceCount: null,
+  },
+  {
+    // An El Jamón walk (admin plan 0071; backend plan 0253): one category
+    // read short against the count it printed, and the detail stage's counts.
+    id: 'run-eljamon-completed',
+    supermarketId: ELJAMON,
+    sourceId: null,
+    mode: 'CATALOG_DISCOVERY',
+    trigger: 'MANUAL',
+    status: 'COMPLETED',
+    requestedAt: '2026-08-29T20:00:00.000Z',
+    startedAt: '2026-08-29T20:00:02.000Z',
+    finishedAt: '2026-08-29T20:52:47.000Z',
+    heartbeatAt: '2026-08-29T20:52:47.000Z',
+    totalPlanned: 3402,
+    processed: 3402,
+    created: 3310,
+    updated: 0,
+    unchanged: 0,
+    notFound: 0,
+    skipped: 0,
+    failed: 92,
+    stage: null,
+    stageLabel: null,
+    warnings: [
+      {
+        code: 'DETAIL_UNREAD',
+        offerId: null,
+        page: null,
+        name: null,
+        message: '92 product pages did not answer after two tries.',
+      },
+    ],
+    documentSha256: null,
+    abortRequestedAt: null,
+    error: null,
+    report: {
+      postalCode: '41001',
+      categories: [
+        {
+          code: '01',
+          name: 'DESPENSA',
+          printedCount: 1214,
+          rowsRead: 1188,
+          rowsRepeated: 0,
+        },
+        {
+          code: '02',
+          name: 'BEBIDAS',
+          printedCount: 412,
+          rowsRead: 412,
+          rowsRepeated: 3,
+        },
+      ],
+      detail: { pages: 3402, failed: 92, timeouts: 17, silentAttempts: 4 },
+    },
+    correlationId: 'seed-correlation-7',
     requestedByUserId: null,
     revertedAt: null,
     revertedByUserId: null,

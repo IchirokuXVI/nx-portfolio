@@ -1010,7 +1010,17 @@
       "EXTRACTOR": "From the extractor",
       "COPY_TARGET_GONE": "A copy target was deleted",
       "COPY_SOURCE_NOT_WRITTEN": "Nothing to copy",
-      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown"
+      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown",
+      "UNKNOWN_PRICE_SCOPE": "A price named an unknown scope",
+      "NO_PRICE_SCOPE": "A price had no scope",
+      "SCOPE_KIND_MISMATCH": "A scope of another kind",
+      "PRICE_SOLD_ANOTHER_WAY": "Sold another way",
+      "SOURCE_PAUSED": "The chain refused, the run paused",
+      "SOURCE_RESUMED": "The chain answered again",
+      "APPROX_WEIGHT_ROWS_DISAGREE": "Two weights for one piece",
+      "LISTING_UNREAD": "A part was not read",
+      "LISTING_SHORT": "A part was read short",
+      "DETAIL_UNREAD": "Product pages stopped answering"
     },
     "status": {
       "PENDING": "Pending",
@@ -1233,6 +1243,44 @@
           "prices": "Prices copied",
           "availability": "Availability copied",
           "more": "{{count}} more"
+        },
+        "unreadable": "Not read",
+        "askedAgain": "Asked again at the end",
+        "askedAgainRead": "read the second time",
+        "askedAgainLost": "still not read",
+        "blockedAfter": "Stopped because the chain refused",
+        "sections": {
+          "caption": "Sections",
+          "name": "Section",
+          "products": "Products",
+          "queries": "Queries",
+          "stoppedBy": "Why it stopped",
+          "openQueries": "Still at the ceiling"
+        },
+        "stoppedBy": {
+          "BUDGET": "Out of queries",
+          "BARREN": "Nothing new to find",
+          "GROWTH": "Stopped growing",
+          "NO_TERM": "No term left to narrow by",
+          "COMPLETE": "Finished",
+          "FAILED": "Failed"
+        },
+        "categories": {
+          "caption": "Categories, read against printed",
+          "name": "Category",
+          "printed": "Printed",
+          "read": "Read",
+          "repeated": "Repeated"
+        },
+        "detail": "Product pages: {{pages}} asked, {{failed}} failed, {{timeouts}} timed out",
+        "sizesDisproved": "Sizes their own price disproves: {{count}}",
+        "probablePackCounts": "Of them, probably a pack: {{count}} (a guess)",
+        "sizes": {
+          "name": "Product",
+          "stated": "Stated",
+          "implied": "Implied",
+          "unit": "Unit",
+          "label": "Label"
         }
       },
       "queue": {
