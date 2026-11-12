@@ -222,6 +222,16 @@ kilo piece, a line at zero and a long brand.
   and the melón (`page.js:464` to `:470`). The mock's queso row (300 g, "13,99 €") reads the
   line's kind and not the product's, which is a mock artefact; built by the rule, that row
   reads "≈4,20 €". Question 3.
+
+  **The owner, 2026-11-12:** "Hide the price (not the price/unit) and show a loading. It is
+  also a good indicator of the save progress." Line 3 follows the saved amount, so during
+  a run of presses it kept the old cost while the stepper read the new amount. While the
+  line has an open run (the row's `pending` input is not null) or its write is in flight
+  (`LineRowVm.write === 'pending'`, the state that draws the row at 70%), line 3 draws the
+  app's spinner (`lib-spinner-icon`) in place of the price; lines 1 and 2 stay. The builder
+  shows it on every compact row with a product, a pack's or a piece's price included,
+  since the mark says the amount is being saved; the owner may narrow it to the loose
+  products. Section 4.5 has the details.
 - **D. Line 2 shows the price per measure whenever the chain gives one, also when it equals
   the price.** `unitPriceWords` (`product-row-view.ts:298`) hides a unit price equal to the
   pack price so a card does not print one number twice. In the compact row each line is a
@@ -465,6 +475,24 @@ Line 3 of a loose product is drawn `≈{{ amount }}` with no space, as the list 
 cost (`list-header.html:49`), and the facts are never read out on their own (the row is a
 button with its own name, section 5), so no visually hidden words are needed in the column.
 A pack or piece price carries no mark.
+
+**The saving mark, the owner's decision of 2026-11-12** ("Hide the price (not the
+price/unit) and show a loading. It is also a good indicator of the save progress"):
+
+- While `pending() !== null || line().write === 'pending'` on a row with a shown product,
+  line 3 is `<span class="fact price saving" aria-hidden="true">` holding
+  `lib-spinner-icon` at `--app-icon-sm`, in `--app-text-secondary`. The span keeps the
+  20 px price line, so the row stays 99 px and the stepper does not move. The spinner
+  turns on `--app-motion-slow`, which is 0 under `prefers-reduced-motion`, so it stands
+  still there as every spinner of the app does.
+- The open run ends and the write starts in the same task (`quantityRuns` clears
+  `pending` and calls the send; `LineStore._write` marks the line pending before its
+  first await), so no frame draws the old price between the two. `list-page.spec.ts`
+  holds it. A step while the line's unit is being corrected awaits the correction first;
+  there the stored amount shows for that wait, as it does for the stepper.
+- The accessible name leaves the cost out while the mark shows, and nothing new is
+  announced.
+- A free text line, a product still loading or unread, and the row of today draw no mark.
 
 ### 4.6 A product still loading, and one that failed
 

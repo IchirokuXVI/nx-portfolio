@@ -1203,5 +1203,145 @@ describe('LineRow', () => {
 
       expect(opened).toEqual(['ln-1']);
     });
+
+    /**
+     * The owner's decision of 2026-11-12: while the amount is being saved, line 3
+     * draws the saving mark in place of the price, which still follows the stored
+     * amount. Lines 1 and 2 stay.
+     */
+    describe('the saving mark (2026-11-12)', () => {
+      function mark(fixture: ComponentFixture<LineRow>): Element | null {
+        return query(fixture, '.fact.price.saving lib-spinner-icon');
+      }
+
+      it('stands in for the price during an open run, and keeps the price per kilo', async () => {
+        const fixture = await compact(
+          vm({ quantity: 750, unit: 'GRAM', product: loose() }),
+          { pending: 1000 }
+        );
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(
+          query(fixture, '.fact.price.saving')?.getAttribute('aria-hidden')
+        ).toBe('true');
+        expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
+        expect(fixture.nativeElement.textContent).not.toContain('1,88');
+      });
+
+      it('stands in for the price while the write is in flight', async () => {
+        const fixture = await compact(
+          vm({
+            quantity: 1000,
+            unit: 'GRAM',
+            write: 'pending',
+            product: loose({
+              askedCost: { amount: '2,50 €', estimated: true },
+            }),
+          })
+        );
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(facts(fixture)).toEqual(['', '2,50 € / kg', '']);
+        expect(row(fixture).classList).toContain('in-flight');
+      });
+
+      it('draws the price for the new amount once the write has landed', async () => {
+        const fixture = await compact(
+          vm({ quantity: 750, unit: 'GRAM', product: loose() }),
+          { pending: 1000 }
+        );
+
+        fixture.componentRef.setInput('pending', null);
+        fixture.componentRef.setInput(
+          'line',
+          vm({
+            quantity: 1000,
+            unit: 'GRAM',
+            product: loose({
+              askedCost: { amount: '2,50 €', estimated: true },
+            }),
+          })
+        );
+        fixture.detectChanges();
+
+        expect(mark(fixture)).toBeNull();
+        expect(facts(fixture)).toEqual(['', '2,50 € / kg', '≈2,50 €']);
+      });
+
+      it('never draws the old price between the run and its write', async () => {
+        // `quantityRuns` clears `pending` and the line store marks the write
+        // pending in one task, so both inputs change before the next render.
+        const fixture = await compact(
+          vm({ quantity: 750, unit: 'GRAM', product: loose() }),
+          { pending: 1000 }
+        );
+
+        fixture.componentRef.setInput('pending', null);
+        fixture.componentRef.setInput(
+          'line',
+          vm({
+            quantity: 1000,
+            unit: 'GRAM',
+            write: 'pending',
+            product: loose(),
+          })
+        );
+        fixture.detectChanges();
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(fixture.nativeElement.textContent).not.toContain('≈');
+      });
+
+      it('replaces a pack price too, which does not change with the amount', async () => {
+        const fixture = await compact(vm({ quantity: 2, product: pack() }), {
+          pending: 3,
+        });
+
+        expect(mark(fixture)).not.toBeNull();
+        expect(facts(fixture)).toEqual(['1 L', '0,99 € / L', '']);
+      });
+
+      it('leaves the cost out of the name while the mark shows', async () => {
+        const fixture = await compact(
+          vm({
+            content: 'Plátano de Canarias IGP',
+            quantity: 750,
+            unit: 'GRAM',
+            product: loose(),
+          }),
+          { pending: 1000 }
+        );
+
+        expect(row(fixture).getAttribute('aria-label')).toBe(
+          'Plátano de Canarias IGP, 2,50 € / kg, 1 kg'
+        );
+      });
+
+      it('draws no mark on a free text line or a row with no product', async () => {
+        const free = await compact(
+          vm({ product: { kind: 'none', canChoose: true }, write: 'pending' }),
+          { pending: 3 }
+        );
+        expect(query(free, '.saving')).toBeNull();
+
+        const loading = await compact(vm({ product: { kind: 'loading' } }), {
+          pending: 3,
+        });
+        expect(query(loading, '.saving')).toBeNull();
+
+        const bare = await compact(vm({ write: 'pending' }), { pending: 3 });
+        expect(query(bare, '.saving')).toBeNull();
+      });
+
+      it('draws nothing of it on the row of today', async () => {
+        const fixture = await render(
+          vm({ write: 'pending', product: shown() }),
+          { pending: 3 }
+        );
+
+        expect(query(fixture, '.saving')).toBeNull();
+        expect(text(fixture, '.line-1 .price')).toBe('0,92 €');
+      });
+    });
   });
 });

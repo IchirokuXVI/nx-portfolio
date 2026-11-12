@@ -241,6 +241,8 @@ interface Options {
    * service that answers this, in place of the fake (velista `0158`, item 6).
    */
   readonly lineRead?: readonly Line[];
+  /** What the real `LineStore`'s service writes with, beside `lineRead`. */
+  readonly lineWrites?: Partial<LineServiceI>;
   /** What the read of the lines failed with, beside `linesState: 'failed'`. */
   readonly linesError?: unknown;
   /** What the read of the group failed with, on a group that is not cached (velista 0156). */
@@ -382,6 +384,7 @@ async function render(options: Options = {}): Promise<{
                   items: options.lineRead ?? [],
                   nextCursor: null,
                 }),
+                ...options.lineWrites,
               } as Partial<LineServiceI>,
             },
           ]),
@@ -4100,6 +4103,39 @@ describe('ListPage: compact rows (velista 0191)', () => {
     expect(results.every((row) => row.classList.contains('compact'))).toBe(
       true
     );
+  });
+
+  it('hands a run to its write in one task, so the row is never neither (2026-11-12)', async () => {
+    // The compact row hides its price while the line has an open run or a write in
+    // flight. The real store over a write that never answers: at the quiet beat the
+    // run leaves `pending` and the write is marked in flight before anything draws.
+    const { fixture } = await render({
+      lineRead: [line('ln-1', { quantity: 2 })],
+      lineWrites: { addQuantity: () => new Promise<Line>(() => undefined) },
+      storage: new Map(COMPACT),
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    jest.useFakeTimers();
+    try {
+      const page = fixture.componentInstance;
+
+      page.stepQuantity({
+        lineId: 'ln-1',
+        step: { from: 2, to: 3, repeat: false },
+      });
+      fixture.detectChanges();
+      expect(page.quantityRuns.pending().get('ln-1')).toBe(3);
+
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      // Same task: no await between the run ending and this render.
+      fixture.detectChanges();
+
+      expect(page.quantityRuns.pending().has('ln-1')).toBe(false);
+      expect(lineRows(fixture)[0].classList).toContain('in-flight');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('redraws the rows when the choice flips, with no reload', async () => {

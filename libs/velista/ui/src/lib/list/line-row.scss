@@ -623,6 +623,20 @@
   color: var(--app-text-muted);
 }
 
+// The saving mark in the price's place (the owner's decision of 2026-11-12): the
+// app's spinner, in the quiet voice of the two lines above, centred on the price's
+// 20px line so the row keeps its height. It turns on a motion token, so under
+// `prefers-reduced-motion` it stands still as every spinner here does.
+.fact.price.saving {
+  display: flex;
+  align-items: center;
+  color: var(--app-text-secondary);
+}
+
+.saving-mark {
+  font-size: var(--app-icon-sm);
+}
+
 .fact.no-product {
   color: var(--app-text-muted);
 }

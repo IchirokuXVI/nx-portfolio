@@ -207,6 +207,24 @@ test.describe('compact rows (velista 0191)', () => {
       expect(await isCropped(brand)).toBe(false);
     });
 
+    await test.step('a press hides the cost behind the saving mark until the write lands', async () => {
+      // The owner's decision of 2026-11-12. The mark stands for the quiet beat of
+      // 800 ms and the write after it, which Playwright's polling sees with room.
+      const row = lineRow(page);
+      const price = row.locator('.facts > .fact').nth(2);
+      await row.locator('lib-quantity-stepper button.plus').click();
+
+      await expect(price.locator('lib-spinner-icon')).toBeVisible();
+      await expect(row.locator('.facts > .fact').nth(1)).toContainText('/ kg');
+      const during = await size(row);
+      expect(Math.abs(during.height - 99)).toBeLessThanOrEqual(TOLERANCE);
+
+      // 775 g at 1.99 a kilo.
+      await expect(price).toHaveText(/^≈/);
+      await expect(price).toContainText('1.54');
+      await expect(price.locator('lib-spinner-icon')).toHaveCount(0);
+    });
+
     await test.step('a reload keeps it compact', async () => {
       await page.reload();
       await expect(lineRow(page)).toHaveClass(/\bcompact\b/);

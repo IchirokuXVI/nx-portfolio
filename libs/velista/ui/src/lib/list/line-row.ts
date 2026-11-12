@@ -26,6 +26,7 @@ import {
   CommentIcon,
   GripIcon,
   PlusIcon,
+  SpinnerIcon,
   StarFilledIcon,
 } from '../icons/icons';
 import { ProductPicture } from './product-picture';
@@ -115,6 +116,7 @@ export type LineRowAction =
     PlusIcon,
     ProductPicture,
     QuantityStepper,
+    SpinnerIcon,
     StarFilledIcon,
   ],
   templateUrl: './line-row.html',
@@ -241,6 +243,24 @@ export class LineRow {
     return shown === null ? null : lineRowFacts(shown, this.line().quantity);
   });
 
+  /**
+   * Whether the compact row's third fact draws the saving mark in place of the price
+   * (velista `0191`, the owner's decision of 2026-11-12): while the line has an open
+   * run of presses, or its write is in flight. The price follows the stored amount,
+   * so during a run it would still say what the old amount cost.
+   *
+   * One condition over both states, so the hand over cannot flash the old price:
+   * `quantityRuns` clears `pending` and starts the write in the same task, and the
+   * line store marks the write pending before its first await, so the two signals
+   * change together and no frame draws neither. Every row with a product, a pack's
+   * price included: the mark says the amount is being saved (builder decision).
+   */
+  protected readonly saving = computed(
+    () =>
+      this.shown() !== null &&
+      (this.pending() !== null || this.line().write === 'pending')
+  );
+
   /** The second fact as one string ("2,50 € / kg"), or empty. */
   protected readonly perMeasureText = computed(() => {
     const words = this.facts()?.perMeasure ?? null;
@@ -326,11 +346,12 @@ export class LineRow {
    * The product's part of a compact row's name (velista `0191`, section 5): what the
    * row draws, in its order. The favourite, the brand, the size, the price per
    * measure, the third fact ("about 1,88 €" for an estimate), and "+N". A named line's
-   * product name is not drawn, so it is not read (decision E).
+   * product name is not drawn, so it is not read (decision E). While the saving mark
+   * stands in for the price, the price is left out: it would state the old cost.
    */
   private _compactNameParts(shown: LineRowShownProduct): (string | null)[] {
     const facts = lineRowFacts(shown, this.line().quantity);
-    const price = facts.price;
+    const price = this.saving() ? null : facts.price;
     return [
       shown.favorite ? this._translator.t('list.row.favorite') : null,
       shown.brand,

@@ -197,7 +197,16 @@
           <span class="facts">
             <span class="fact">{{ fact.size }}</span>
             <span class="fact">{{ perMeasureText() }}</span>
-            @if (fact.price; as price) {
+            <!--
+              While the amount is being saved (an open run, or its write in flight)
+              the price would say what the old amount cost, so the saving mark
+              stands in its place (the owner's decision of 2026-11-12).
+            -->
+            @if (saving()) {
+              <span aria-hidden="true" class="fact price saving"
+                ><lib-spinner-icon class="saving-mark"
+              /></span>
+            } @else if (fact.price; as price) {
               <span class="fact price"
                 >{{ price.estimated ? '≈' : '' }}{{ price.amount }}</span
               >
