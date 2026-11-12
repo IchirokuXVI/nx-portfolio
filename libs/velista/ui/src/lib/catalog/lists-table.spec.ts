@@ -483,6 +483,76 @@ describe('ListsTable', () => {
       expect(steps(rowOf(fixture, 'l2'))).toHaveLength(2);
     });
 
+    it('keeps both buttons, switched off, and the focus while the add of a plus at zero is out', async () => {
+      const fixture = await render(only(BARBECUE));
+      document.body.appendChild(host(fixture));
+      const plus = steps(rowOf(fixture, 'l2'))[1];
+      plus?.focus();
+      plus?.click();
+
+      // The store draws the line at once, before the add answers.
+      fixture.componentRef.setInput(
+        'groups',
+        only(
+          list('l2', 'Barbecue', {
+            main: held({
+              lineId: 'unsaved:l2/item-coffee',
+              quantity: 1,
+              editable: false,
+            }),
+          })
+        )
+      );
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const row = rowOf(fixture, 'l2');
+      const stepper = row.querySelector('lib-quantity-stepper');
+      expect(stepper?.classList.contains('is-readonly')).toBe(false);
+      expect(stepper?.classList.contains('is-disabled')).toBe(true);
+      const both = steps(row);
+      expect(both).toHaveLength(2);
+      expect(both.every(off)).toBe(true);
+      expect(both[1]).toBe(plus);
+      expect(document.activeElement).toBe(plus);
+      host(fixture).remove();
+    });
+
+    it('counts at zero in the unit the product is asked for: "0" over "ml", a step of 25 ml', async () => {
+      TestBed.resetTestingModule();
+      await TestBed.configureTestingModule({
+        imports: [ListsTable, RokuTranslatorTestingModule.forTesting()],
+      }).compileComponents();
+      asked = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+      const fixture = TestBed.createComponent(ListsTable);
+      fixture.componentRef.setInput('groups', only(BARBECUE));
+      fixture.componentRef.setInput('product', 'Leche');
+      fixture.componentRef.setInput('unit', 'MILLILITER');
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      const figure = rowOf(fixture, 'l2').querySelector('lib-amount-figure');
+      expect(figure?.querySelector('.number')?.textContent).toBe('0');
+      expect(figure?.querySelector('.symbol')?.textContent).toBe('ml');
+      expect(valuesOf('amount.more')).toContainEqual(
+        expect.objectContaining({ step: '25 ml' })
+      );
+    });
+
+    it('counts at zero for a product with no unit given, and the line drawn keeps its own unit', async () => {
+      const fixture = await render(
+        only(
+          BARBECUE,
+          list('l1', 'Weekly shop', {
+            main: held({ quantity: 750, unit: 'GRAM' }),
+          })
+        )
+      );
+
+      expect(stepperOf(fixture, 'l2').unit()).toBe('UNIT');
+      expect(stepperOf(fixture, 'l1').unit()).toBe('GRAM');
+    });
+
     it('moves the line both ways for a person who may change it and may not add', async () => {
       const fixture = await render(
         only(list('l1', 'Weekly shop', { canAdd: false, main: held() }))

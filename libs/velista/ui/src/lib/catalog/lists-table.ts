@@ -5,10 +5,12 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  ProductListGroup,
-  ProductListRow,
-  QuantityStep,
+import {
+  isUnsavedLine,
+  type LineUnit,
+  type ProductListGroup,
+  type ProductListRow,
+  type QuantityStep,
 } from '@portfolio/velista/models';
 import { QuantityStepper } from '../list/quantity-stepper';
 
@@ -84,12 +86,13 @@ export interface ListsTableStep {
               @if (ownStepper(list)) {
                 <lib-quantity-stepper
                   (stepped)="stepMain(list, $event)"
+                  [disabled]="unsaved(list)"
                   [name]="
                     'amount.inList'
                       | rokuT: { name: product(), list: list.name }
                   "
-                  [readonly]="list.main !== null && !list.main.editable"
-                  [unit]="list.main?.unit ?? 'UNIT'"
+                  [readonly]="readOnly(list)"
+                  [unit]="list.main?.unit ?? unit()"
                   [value]="quantityOf(list)"
                   variant="row"
                 />
@@ -142,6 +145,13 @@ export class ListsTable {
    */
   readonly product = input.required<string>();
 
+  /**
+   * What the product is asked for in, `lineUnitOfProduct` of the product shown:
+   * the stepper of a list with no line of it counts in it at zero, so a product
+   * sold by the litre reads "0 ml" and names a step of 25 ml.
+   */
+  readonly unit = input<LineUnit>('UNIT');
+
   /** The plus of a list with no line under the product's name: make that line. */
   readonly added = output<string>();
 
@@ -161,6 +171,20 @@ export class ListsTable {
     return (
       this.usable(list) && (list.main !== null || list.others.length === 0)
     );
+  }
+
+  /**
+   * Whether the line under the product's name is the one an add drew before it
+   * answered. It is not editable yet, and that is not a missing right: its stepper
+   * keeps both buttons, switched off, so the focus stays on the plus just pressed.
+   */
+  protected unsaved(list: ProductListRow): boolean {
+    return list.main !== null && isUnsavedLine(list.main.lineId);
+  }
+
+  /** The amount and no buttons: the person may not change the line (decision C). */
+  protected readOnly(list: ProductListRow): boolean {
+    return list.main !== null && !list.main.editable && !this.unsaved(list);
   }
 
   protected quantityOf(list: ProductListRow): number {

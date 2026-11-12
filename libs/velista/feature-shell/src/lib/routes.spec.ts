@@ -1770,7 +1770,7 @@ describe('the bottom bar', () => {
     ]);
     for (const child of page?.children ?? []) {
       expect(child.loadComponent).toBeDefined();
-      expect(child.canDeactivate).toHaveLength(1);
+      expect(child.canDeactivate).toEqual([sheetFallGuard]);
     }
   });
 

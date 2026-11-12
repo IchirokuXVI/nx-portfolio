@@ -223,6 +223,11 @@ export class ProductPage {
   /** The photo; the picture draws the carton for none and for one that fails. */
   protected readonly imageUrl = computed(() => this._item()?.imageUrl ?? null);
 
+  /** What the product is asked for in (velista `0182`). */
+  protected readonly lineUnit = computed(() =>
+    lineUnitOfProduct(this._item()?.offer ?? null, this._item())
+  );
+
   /** `brand · size`, with the row's own rule for when a size is worth saying. */
   protected readonly detail = computed(() => {
     const item = this._item();
@@ -477,7 +482,7 @@ export class ProductPage {
         detail: this.detail(),
         imageUrl: this.imageUrl(),
         // A product sold by the kilo is asked for by weight (velista `0182`).
-        unit: lineUnitOfProduct(this._item()?.offer ?? null, this._item()),
+        unit: this.lineUnit(),
       },
       listId
     );
