@@ -676,6 +676,7 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
         written: 3,
         skippedHasSize: 0,
         skippedSetByAdmin: 0,
+        skippedHasStep: 0,
       });
       for (const [id, weight] of [
         [loose.id, 1560],
@@ -711,6 +712,7 @@ describeIntegration('the approximate weight of a piece (real Postgres)', () => {
         written: 0,
         skippedHasSize: 1,
         skippedSetByAdmin: 1,
+        skippedHasStep: 0,
       });
       expect(Number((await row(typed.id)).approxWeight)).toBe(1500);
       expect((await row(typed.id)).approxWeightSetBy).toBe('ADMIN');

@@ -348,8 +348,17 @@ describeIntegration('the comparable price of plan 0245 (real Postgres)', () => {
 
     it('the migration backfills every kind of row as the function derives it, and down drops it', async () => {
       // The rows were written straight, so the pair is null on each. Down
-      // drops the columns, and up adds them back and backfills them.
-      await dataSource.undoLastMigration();
+      // drops the columns, and up adds them back and backfills them. Down to
+      // this plan's migration, whatever lands after it (plan 0261 did).
+      for (;;) {
+        const [last] = (await dataSource.query(
+          `SELECT name FROM "${SCHEMA}".migrations ORDER BY id DESC LIMIT 1`
+        )) as { name: string }[];
+        await dataSource.undoLastMigration();
+        if (last?.name === 'SupermarketItemComparablePrice1759400000000') {
+          break;
+        }
+      }
       const dropped: { count: string }[] = await dataSource.query(
         `SELECT count(*)::text AS count FROM information_schema.columns
           WHERE table_schema = $1 AND table_name = 'supermarket_items'

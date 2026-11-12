@@ -7,6 +7,7 @@ import {
 import type {
   FieldCheck,
   FieldDescriptor,
+  FieldMessage,
   ImageCaption,
   ResourceRow,
 } from './resource-field';
@@ -34,7 +35,14 @@ export type RecordValue = BareValue & {
 
 /** The value alone, before the mark and the state a field puts beside it. */
 type BareValue =
-  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'none';
+      /**
+       * What the field calls its empty value, drawn greyed in place of
+       * "None" (admin plan 0070). Absent, the value reads "None".
+       */
+      readonly said?: FieldMessage;
+    }
   | { readonly kind: 'text'; readonly text: string; readonly mono?: true }
   | {
       /** A value that is a word and not data: yes, no, the label of a choice. */
@@ -210,6 +218,16 @@ function bareValue<T extends ResourceRow>(
 
 /** A cell of the list, as a value of the page. */
 function fromCell(cell: ResourceCell): BareValue {
+  if (cell.empty === true) {
+    // An empty value in the field's own words, still an empty value.
+    const said: FieldMessage =
+      cell.key === undefined
+        ? { kind: 'text', text: cell.text }
+        : cell.args === undefined
+          ? { kind: 'key', key: cell.key }
+          : { kind: 'key', key: cell.key, args: cell.args };
+    return { kind: 'none', said };
+  }
   if (cell.key === EMPTY_VALUE_KEY || (cell.key !== undefined && cell.flag)) {
     return NONE;
   }

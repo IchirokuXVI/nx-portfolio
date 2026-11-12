@@ -2,15 +2,20 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
   output,
   signal,
 } from '@angular/core';
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorPipe,
+  RokuTranslatorService,
+} from '@portfolio/localization/rokutranslator-angular';
 import type {
   DraftValue,
   FieldDescriptor,
   FieldMessage,
+  NumberUnit,
   ReferenceScope,
   ResourceRow,
   ScopeMarkView,
@@ -175,7 +180,31 @@ import { ReferencesControl } from './references-control';
       }
 
       @default {
-        @if (multiline()) {
+        @if (choiceOptions(); as choices) {
+          <!-- A number from a short closed list, as a select of it (admin
+               plan 0070). Each option says whether it is the one held, for
+               the reason the options of an enum do. -->
+          <select
+            (change)="onInput($event)"
+            [attr.aria-describedby]="describedBy()"
+            [attr.aria-invalid]="invalid() ? 'true' : null"
+            [disabled]="disabled()"
+            [id]="controlId()"
+            [required]="required()"
+            [value]="asText()"
+            class="short"
+            data-choices
+          >
+            @for (choice of choices; track choice.value) {
+              <option
+                [selected]="choice.value === asText()"
+                [value]="choice.value"
+              >
+                {{ choice.label }}
+              </option>
+            }
+          </select>
+        } @else if (multiline()) {
           <textarea
             (input)="onInput($event)"
             [attr.aria-describedby]="describedBy()"
@@ -196,6 +225,7 @@ import { ReferencesControl } from './references-control';
               [attr.aria-invalid]="invalid() ? 'true' : null"
               [attr.inputmode]="inputMode()"
               [attr.maxlength]="maxLengthOf() ?? null"
+              [attr.placeholder]="emptyLabel()"
               [class.mono]="isCode()"
               [class.short]="isShort()"
               [disabled]="disabled()"
@@ -204,6 +234,10 @@ import { ReferencesControl } from './references-control';
               [value]="asText()"
               type="text"
             />
+            <!-- What the number is counted in, after it: "g". -->
+            @if (numberUnit(); as unit) {
+              <span class="unit" data-unit>{{ unit.word }}</span>
+            }
             <!-- The picture an address points at, beside the field once it
                  loads. An address that is half typed, or that names no
                  picture, draws nothing: the field itself is the answer
@@ -263,6 +297,13 @@ import { ReferencesControl } from './references-control';
       display: flex;
       gap: var(--admin-space-3);
       align-items: center;
+    }
+
+    /* The unit sits close to its number, in the muted ink of a hint. */
+    .unit {
+      flex: none;
+      margin-inline-start: calc(-1 * var(--admin-space-2));
+      color: var(--admin-ink-muted);
     }
 
     /* Out of the row until it has loaded, so a broken address leaves no
@@ -345,6 +386,89 @@ export class FieldControl {
 
   /** The address whose picture has loaded, for a field that holds one. */
   readonly pictured = signal<string | null>(null);
+
+  private readonly _translator = inject(RokuTranslatorService);
+
+  /**
+   * The unit a number is counted in for the row as the form holds it, or
+   * `null` for a bare number (admin plan 0070).
+   */
+  readonly numberUnit = computed<NumberUnit | null>(() => {
+    const field = this.field();
+    return field.kind === 'number'
+      ? (field.unit?.(this.context()) ?? null)
+      : null;
+  });
+
+  /**
+   * What an empty number is called, translated, or `null` for nothing: the
+   * placeholder of an empty box, and the empty option of a select.
+   */
+  readonly emptyLabel = computed<string | null>(() => {
+    const field = this.field();
+    const said =
+      field.kind === 'number'
+        ? (field.emptyText?.(this.context()) ?? null)
+        : null;
+    return said === null ? null : this._say(said);
+  });
+
+  /**
+   * The options of a number drawn as a select, in order, or `null` for the
+   * box (admin plan 0070). The empty option comes first, in the field's own
+   * words when it has them. A held value that is not in the list is one
+   * more option, after them, so a stale row shows what it holds.
+   */
+  readonly choiceOptions = computed<
+    readonly { readonly value: string; readonly label: string }[] | null
+  >(() => {
+    const field = this.field();
+    if (field.kind !== 'number') {
+      return null;
+    }
+    const values = field.choices?.(this.context()) ?? null;
+    if (values === null) {
+      return null;
+    }
+    const locale = this._translator.locale();
+    const unit = this.numberUnit();
+    const label = (value: number) =>
+      unit === null
+        ? new Intl.NumberFormat(locale).format(value)
+        : unit.format(value, locale);
+    const empty =
+      this.emptyLabel() ??
+      this._say({
+        kind: 'key',
+        key:
+          field.nullable === true
+            ? 'resource.field.unset'
+            : 'resource.field.choose',
+      });
+    const options = [
+      { value: '', label: empty },
+      ...values.map((value) => ({ value: String(value), label: label(value) })),
+    ];
+    const held = this.asText().trim();
+    if (held !== '' && !options.some((option) => option.value === held)) {
+      const number = Number(held);
+      options.push({
+        value: held,
+        label: Number.isFinite(number) ? label(number) : held,
+      });
+    }
+    return options;
+  });
+
+  /** A message in words, in the interface language. */
+  private _say(said: FieldMessage): string {
+    if (said.kind === 'text') {
+      return said.text;
+    }
+    this._translator.loaded();
+    this._translator.locale();
+    return this._translator.t(said.key, undefined, undefined, said.args);
+  }
 
   asText(): string {
     const value = this.value();

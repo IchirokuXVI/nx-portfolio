@@ -18274,7 +18274,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18519,7 +18519,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18623,7 +18623,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18917,7 +18917,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28864,7 +28864,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -32609,6 +32609,23 @@
             "nullable": true,
             "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
           },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo or the litre carries one: `KILOGRAM` or `LITER`, no `unitSize` and no `approxWeight` (S3). A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it."
+          },
           "packCount": {
             "type": "integer",
             "nullable": true,
@@ -32706,6 +32723,23 @@
             "nullable": true,
             "description": "Compared as a number of grams, as `unitSize` is (plan 0244)."
           },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "The step the product holds, or null for none (plan 0261, section 2.4)."
+          },
           "defaultUnit": {
             "type": "string",
             "enum": [
@@ -32766,6 +32800,23 @@
             "type": "number",
             "nullable": true,
             "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo or the litre carries one: `KILOGRAM` or `LITER`, no `unitSize` and no `approxWeight` (S3). A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it."
           },
           "packCount": {
             "type": "integer",
@@ -32900,6 +32951,23 @@
             "type": "number",
             "nullable": true,
             "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo or the litre carries one: `KILOGRAM` or `LITER`, no `unitSize` and no `approxWeight` (S3). A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it."
           },
           "packCount": {
             "type": "integer",
@@ -37892,6 +37960,28 @@
               }
             ]
           },
+          "quantityStep": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  5,
+                  10,
+                  25,
+                  50,
+                  100,
+                  200,
+                  250,
+                  500,
+                  1000
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "packCount": {
             "type": [
               "integer",
@@ -40381,6 +40471,28 @@
                 "enum": [
                   "SOURCE",
                   "ADMIN"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantityStep": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  5,
+                  10,
+                  25,
+                  50,
+                  100,
+                  200,
+                  250,
+                  500,
+                  1000
                 ]
               },
               {
@@ -48933,6 +49045,7 @@
               "item_unit_not_base",
               "item_kilogram_has_size",
               "item_approx_weight_beside_size",
+              "item_quantity_step_not_allowed",
               "item_merged",
               "item_merge_two_articles_one_chain",
               "item_merge_format_differs",

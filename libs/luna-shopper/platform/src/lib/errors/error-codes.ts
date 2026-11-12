@@ -398,6 +398,14 @@ export const ERROR_CODES = {
    */
   ITEM_APPROX_WEIGHT_BESIDE_SIZE: 'item_approx_weight_beside_size',
   /**
+   * A product write would store a step off the list, or a step on a product
+   * that is not sold by the kilo or the litre (plan 0261, section 2.2). An
+   * edit that makes a stepped product a pack or a piece sends a null step
+   * with it. The step, the allowed steps, the unit, the size and the weight
+   * travel in `details`.
+   */
+  ITEM_QUANTITY_STEP_NOT_ALLOWED: 'item_quantity_step_not_allowed',
+  /**
    * The product was merged into another one (plan 0239). A merge names it
    * as the product to merge or as the survivor, or a delete names it. A
    * merged row is the record of the merge and is never merged again or
@@ -778,6 +786,8 @@ export const ERROR_STATUS: Record<ErrorCode, HttpStatus> = {
   [ERROR_CODES.ITEM_KILOGRAM_HAS_SIZE]: HttpStatus.BAD_REQUEST,
   // 400 as well: the weight and the size are values of one body (plan 0244).
   [ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE]: HttpStatus.BAD_REQUEST,
+  // 400 too: the step and the size fields are values of one body (plan 0261).
+  [ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED]: HttpStatus.BAD_REQUEST,
   // All four 409: the request is well formed and the caller may make it, and
   // what refuses it is the state of the products (plan 0239).
   [ERROR_CODES.ITEM_MERGED]: HttpStatus.CONFLICT,

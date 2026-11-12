@@ -311,3 +311,34 @@ describe('toRecordValue', () => {
     });
   });
 });
+
+/**
+ * A number with a unit, and an empty one said in the field's words (admin
+ * plan 0070, section 3), on the record page.
+ */
+describe('toRecordValue, for a number with a unit or an empty text', () => {
+  const step: Field = {
+    kind: 'number',
+    name: 'value',
+    label: 'l',
+    unit: () => ({ word: 'g', format: (value) => `${value} g` }),
+    emptyText: () => ({ kind: 'key', key: 'steps.default' }),
+  };
+
+  it('reads a value with its unit', () => {
+    expect(read(step, 250)).toEqual({ kind: 'text', text: '250 g' });
+  });
+
+  it('reads an empty value as none, in the words of the field', () => {
+    expect(read(step, null)).toEqual({
+      kind: 'none',
+      said: { kind: 'key', key: 'steps.default' },
+    });
+  });
+
+  it('reads an empty value as a bare none without the words', () => {
+    expect(read({ kind: 'number', name: 'value', label: 'l' }, null)).toEqual({
+      kind: 'none',
+    });
+  });
+});

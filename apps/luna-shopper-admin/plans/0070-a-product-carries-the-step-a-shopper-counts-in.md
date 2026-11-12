@@ -1,3 +1,5 @@
+> **PR:** [#985](https://github.com/IchirokuXVI/nx-portfolio/pull/985)
+
 # 0070: A product carries the step a shopper counts in
 
 > Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no

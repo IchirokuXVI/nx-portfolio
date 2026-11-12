@@ -93,6 +93,18 @@ export class Item extends BaseEntity {
   approxWeightSetBy!: ApproxWeightSetBy | null;
 
   /**
+   * How far one step moves a line of this product, in grams or millilitres,
+   * or null for velista's default steps (plan 0261).
+   *
+   * One of `QUANTITY_STEPS`, and only on a product sold by the kilo or the
+   * litre: `KILOGRAM` or `LITER`, no size, no weight. The checks
+   * `item_quantity_step_allowed` and `item_quantity_step_on_loose` restate
+   * both rules. Only a person writes it, so it names no writer (S7).
+   */
+  @Column({ type: 'smallint', nullable: true })
+  quantityStep!: number | null;
+
+  /**
    * How many units the pack holds, 2 to 1000, or null (plan 0162).
    *
    * Written in three ways only: on creation from a source entry, by a run's

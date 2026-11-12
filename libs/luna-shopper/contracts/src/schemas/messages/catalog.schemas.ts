@@ -51,6 +51,7 @@ import {
   WITHDRAW_MAX_SCOPES,
 } from '../../lib/messages/catalog.messages';
 import { COMPARABLE_BASES } from '../../lib/units/comparable-price';
+import { QUANTITY_STEPS } from '../../lib/units/quantity-step';
 // The one bound a suggestion's product set has to respect, taken from the line it
 // will become rather than restated here, so the two cannot drift apart.
 import { LINE_ITEM_SET_MAX } from '../../lib/messages/list.messages';
@@ -392,6 +393,15 @@ export const CATALOG_SCHEMA_IDS = {
 
 const numberOrNull = (): JsonSchema => ({ type: ['number', 'null'] });
 const integerOrNull = (): JsonSchema => ({ type: ['integer', 'null'] });
+/**
+ * A step a product is served with (plan 0261, S2): one of the ten, or null.
+ * Only the view states the list. A request states an integer, so a step off
+ * the list reaches catalog and is refused there with
+ * `item_quantity_step_not_allowed`, the floor for a caller on the bus.
+ */
+const quantityStepOrNull = (): JsonSchema => ({
+  anyOf: [{ type: 'integer', enum: [...QUANTITY_STEPS] }, { type: 'null' }],
+});
 /** A pack count (plan 0162): a whole number in the bounds, or null. */
 const packCountOrNull = (): JsonSchema => ({
   type: ['integer', 'null'],
@@ -733,6 +743,9 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   approxWeight: numberOrNull(),
   // Who wrote the weight, for the back office. Not required either.
   approxWeightSetBy: { anyOf: [approxWeightSetBy(), { type: 'null' }] },
+  // Plan 0261: the step of a product sold by the kilo or the litre. Stated
+  // but not required, so a reader built before it keeps validating.
+  quantityStep: quantityStepOrNull(),
   packCount: packCountOrNull(),
   // Plan 0166: position order and never empty, so a reader always has a first.
   categories: {
@@ -1533,6 +1546,9 @@ const createItemRequest = withRule(
       // below, with `item_approx_weight_beside_size`, so no bound here.
       approxWeight: numberOrNull(),
       approxWeightSetBy: approxWeightSetBy(),
+      // Plan 0261. Catalog refuses a step off the list, or on a product not
+      // sold by the kilo or the litre, with `item_quantity_step_not_allowed`.
+      quantityStep: integerOrNull(),
       // Plan 0244, section 7.4: recorded in the audit row only.
       createdFromEntry: nonEmptyString(),
       packCount: packCountOrNull(),
@@ -1561,6 +1577,8 @@ const updateItemFields = {
   // states SOURCE, which catalog checks against the caller.
   approxWeight: numberOrNull(),
   approxWeightSetBy: approxWeightSetBy(),
+  // Plan 0261, bounded by catalog as on a create.
+  quantityStep: integerOrNull(),
   packCount: packCountOrNull(),
   // Replaces the whole set. Never empty, because a product always has one.
   categoryIds: categoryIds(),
@@ -1582,6 +1600,7 @@ const itemExpectation = object(
     brand: nullableString(),
     unitSize: numberOrNull(),
     approxWeight: numberOrNull(),
+    quantityStep: integerOrNull(),
     defaultUnit: ref(CATALOG_SCHEMA_IDS.unitOfMeasure),
     packCount: { type: ['integer', 'null'] },
     categorySlugs: array(
@@ -1861,6 +1880,7 @@ const createItemInput = withRule(
       // below, with `item_approx_weight_beside_size`, so no bound here.
       approxWeight: numberOrNull(),
       approxWeightSetBy: approxWeightSetBy(),
+      quantityStep: integerOrNull(),
       createdFromEntry: nonEmptyString(),
       packCount: packCountOrNull(),
       categoryIds: categoryIds(),
@@ -2104,8 +2124,10 @@ const setApproxWeightsResult = object(
     written: integer({ minimum: 0 }),
     skippedHasSize: integer({ minimum: 0 }),
     skippedSetByAdmin: integer({ minimum: 0 }),
+    // Plan 0261, S6: a product a person gave a step.
+    skippedHasStep: integer({ minimum: 0 }),
   },
-  ['written', 'skippedHasSize', 'skippedSetByAdmin']
+  ['written', 'skippedHasSize', 'skippedSetByAdmin', 'skippedHasStep']
 );
 const itemIdRequest = object(
   CATALOG_SCHEMA_IDS.itemIdRequest,
