@@ -140,6 +140,25 @@ export const QUANTITY_HOLD_FASTEST_MS = 100;
  */
 export const QUANTITY_STEP_QUIET_MS = 800;
 
+/** How long a held stepper button waits before it repeats (velista 0188). */
+export const QUANTITY_HOLD_DELAY_MS = 400;
+
+/**
+ * The first interval of a stepper's repeat; each next one is
+ * {@link QUANTITY_HOLD_FACTOR} of the last, never under {@link QUANTITY_HOLD_FASTEST_MS}.
+ * The intervals are 300, 255, 217, 184, 157, 133, 113, then 100 ms (velista 0188).
+ */
+export const QUANTITY_HOLD_FIRST_MS = 300;
+export const QUANTITY_HOLD_FACTOR = 0.85;
+export const QUANTITY_HOLD_FASTEST_MS = 100;
+
+/**
+ * How long after the last step a feature writes the run, and the stepper announces
+ * the amount (velista 0188, decision F). Longer than the hold's start and its
+ * slowest interval, so a hold and a run of taps stay one run.
+ */
+export const QUANTITY_STEP_QUIET_MS = 800;
+
 /**
  * How many products one line's set may hold: `LINE_ITEM_SET_MAX` in the contracts
  * (backend plan 0048 section 1.1, given its precise meaning by `0070` section 7).

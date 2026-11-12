@@ -1,3 +1,5 @@
+> **PR:** [#982](https://github.com/IchirokuXVI/nx-portfolio/pull/982)
+
 # 0187: the product page steps a line and explains its order
 
 > Amended on 2026-11-11: the lists table draws the stepper of velista `0188` (D3, the amount
