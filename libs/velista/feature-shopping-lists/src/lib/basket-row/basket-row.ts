@@ -623,7 +623,6 @@ export class BasketRow {
     this.open.emit();
   }
 
-
   /**
    * Whether this row is one whose lines all left the coverage (velista `0093`,
    * section 4).

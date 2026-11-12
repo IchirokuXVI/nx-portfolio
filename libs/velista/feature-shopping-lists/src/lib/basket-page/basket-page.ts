@@ -43,7 +43,6 @@ import {
   type BasketRow as BasketRowModel,
   basketRowPick,
   basketRowProduct,
-  type BasketViewRow,
   type BasketViewSection,
   type BasketViewState,
   catalogName,

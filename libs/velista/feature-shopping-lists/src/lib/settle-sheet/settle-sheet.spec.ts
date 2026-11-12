@@ -2671,9 +2671,9 @@ describe('SettleSheet: a row bought outside this shopping list (velista 0142)', 
     const { fixture, store } = await render({ lines: [elsewhere(true)] });
 
     expect(steppers(fixture, 'ask-amount')).toHaveLength(1);
-    expect(steppers(fixture, 'ask-amount')[0].nativeElement.classList).toContain(
-      'variant-sheet-narrow'
-    );
+    expect(
+      steppers(fixture, 'ask-amount')[0].nativeElement.classList
+    ).toContain('variant-sheet-narrow');
 
     await commitAmount(fixture, '', { from: 0, to: 1 });
 

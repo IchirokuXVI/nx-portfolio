@@ -12,7 +12,10 @@ import {
   type BasketRow,
   type BasketRowEntry,
 } from '@portfolio/velista/models';
-import { exactAmount, provideVelistaTesting } from '@portfolio/velista/platform';
+import {
+  exactAmount,
+  provideVelistaTesting,
+} from '@portfolio/velista/platform';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { BasketRow as BasketRowComponent, ownBoughtUnits } from './basket-row';
@@ -560,7 +563,7 @@ describe('BasketRowComponent: the amount cell', () => {
     expect(figure(none)?.querySelector('.number')?.textContent).toBe('4');
   });
 
-  it('draws the entry\'s numbers under a list heading', async () => {
+  it("draws the entry's numbers under a list heading", async () => {
     const mine = entry('l1', { left: 0, bought: 2, asked: 2, state: 'DONE' });
     const fixture = await render(
       line({ left: 3, asked: 5, bought: 2, state: 'PARTLY', entries: [mine] }),
@@ -572,7 +575,9 @@ describe('BasketRowComponent: the amount cell', () => {
 
   it('is named by the label key, with the amount in the exact form', async () => {
     // Drawn at one amount first, so the spy sees the name composed for the next.
-    const fixture = await render(line({ unit: 'GRAM', left: 1000, asked: 1275 }));
+    const fixture = await render(
+      line({ unit: 'GRAM', left: 1000, asked: 1275 })
+    );
     const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
     fixture.componentRef.setInput(
       'row',
@@ -631,7 +636,7 @@ describe('BasketRowComponent: the amount cell', () => {
     expect(html.querySelector('.preview')).toBeNull();
   });
 
-  it('keeps the progress caption in the body\'s name on a partly settled row', async () => {
+  it("keeps the progress caption in the body's name on a partly settled row", async () => {
     const fixture = await render(
       line({ left: 4, bought: 2, asked: 6, state: 'PARTLY' })
     );
