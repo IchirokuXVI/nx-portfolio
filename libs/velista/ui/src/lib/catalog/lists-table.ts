@@ -92,7 +92,7 @@ export interface ListsTableStep {
                       | rokuT: { name: product(), list: list.name }
                   "
                   [readonly]="readOnly(list)"
-                  [step]="step()"
+                  [step]="stepOf(list.main)"
                   [unit]="list.main?.unit ?? unit()"
                   [value]="quantityOf(list)"
                   variant="row"
@@ -123,7 +123,7 @@ export interface ListsTableStep {
                     'amount.inList'
                       | rokuT: { name: line.name, list: list.name }
                   "
-                  [step]="step()"
+                  [step]="stepOf(line)"
                   [unit]="line.unit"
                   [value]="line.quantity"
                   variant="row"
@@ -194,6 +194,16 @@ export class ListsTable {
   /** The amount and no buttons: the person may not change the line (decision C). */
   protected readOnly(list: ProductListRow): boolean {
     return list.main !== null && !list.main.editable && !this.unsaved(list);
+  }
+
+  /**
+   * The step of one line's stepper: the line's own (`HoldingRow.step`, the step
+   * the list page presses the same line by, decision A), and the product's only
+   * while the line's is not known yet. A line known to step by the default
+   * (null) keeps the default here too. A list with no line steps by the product.
+   */
+  protected stepOf(line: HoldingRow | null): number | null {
+    return line?.step !== undefined ? line.step : this.step();
   }
 
   protected quantityOf(list: ProductListRow): number {

@@ -285,7 +285,7 @@ export function lineStepOf(
     if (!product || !isQuantityStep(step)) {
       continue;
     }
-    if (!servesLineUnit(product, line.unit)) {
+    if (!carriesStepFor(product, line.unit)) {
       continue;
     }
     if (smallest === null || step < smallest) {
@@ -293,6 +293,20 @@ export function lineStepOf(
     }
   }
   return smallest;
+}
+
+/**
+ * True when a product's step can count on a line of this unit: the product is
+ * sold by the kilo for a gram line or by the litre for a millilitre line
+ * (backend `0261` S3). A pack and a kilo piece also serve grams, through their
+ * size or weight, but count pieces, so a step left on one says nothing.
+ */
+function carriesStepFor(product: LineUnitProduct, unit: LineUnit): boolean {
+  const kind = soldAs(product.unit, product.size, product.approxWeight);
+  return (
+    (kind === 'BY_THE_KILO' && unit === 'GRAM') ||
+    (kind === 'BY_THE_LITRE' && unit === 'MILLILITER')
+  );
 }
 
 /**

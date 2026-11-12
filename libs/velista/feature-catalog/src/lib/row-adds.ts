@@ -88,7 +88,11 @@ function stepOf(
     | undefined
 ): { readonly step?: number } {
   const step =
-    line.step ?? (productOf === undefined ? null : lineStepOf(line, productOf));
+    line.step !== undefined
+      ? line.step
+      : productOf === undefined
+        ? null
+        : lineStepOf(line, productOf);
   return step === null ? {} : { step };
 }
 

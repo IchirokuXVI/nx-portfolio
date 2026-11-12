@@ -208,14 +208,21 @@ export class CatalogAddStore {
     const shown = held.map((line) => {
       const productOf = (itemId: string) => items.nameOf(itemId);
       const unit = shownLineUnit(line, productOf);
-      // The product's step (velista `0186`, decision A), set only when one is
-      // known: a record not read yet says nothing.
-      const step = lineStepOf({ ...line, unit }, productOf);
-      if (unit === line.unit && step === (line.step ?? null)) {
+      // The product's step (velista `0186`, decision A). A record not read yet
+      // says nothing (decision B), so null is only known to be the default once
+      // every product of the line has answered; until then the step is absent,
+      // and a screen that knows a product's step may step by it meanwhile.
+      const found = lineStepOf({ ...line, unit }, productOf);
+      const step =
+        found !== null ||
+        line.itemIds.every((itemId) => items.sizingOf(itemId) !== undefined)
+          ? found
+          : undefined;
+      if (unit === line.unit && step === line.step) {
         return line;
       }
       changed = true;
-      return step === null ? { ...line, unit } : { ...line, unit, step };
+      return { ...line, unit, step };
     });
     return changed ? shown : held;
   });
@@ -321,6 +328,7 @@ export class CatalogAddStore {
           ...answer.lines.filter((fresh) => !known.has(fresh.lineId)),
         ];
       });
+      this._readProductsOf(answer.lines);
       return answer.lists;
     } catch {
       return null;
@@ -734,6 +742,25 @@ export class CatalogAddStore {
     }
   }
 
+  /**
+   * Read the products of the weight and volume lines just read, so {@link held}
+   * can name each line's step (velista `0186`, decision A): a line of a whole
+   * chicken and thighs steps by the thighs' 100 on the chicken's page too, as the
+   * list page steps it. Until they answer, the step is not known.
+   */
+  private _readProductsOf(lines: readonly HeldLine[]): void {
+    const items = this._items;
+    if (items === null) {
+      return;
+    }
+    const itemIds = lines
+      .filter((line) => isMeasured(line.unit))
+      .flatMap((line) => line.itemIds);
+    if (itemIds.length > 0) {
+      void items.ensure(itemIds);
+    }
+  }
+
   /** {@link legacyLineUnit} of a held line, over the products this session read. */
   private _legacyUnit(line: HeldLine): LineUnit | null {
     const items = this._items;
@@ -876,6 +903,7 @@ export class CatalogAddStore {
         ),
         ...lines.filter((line) => !this._written(line.lineId)),
       ]);
+      this._readProductsOf(lines);
       this._markLines(listId, 'ready');
     } catch {
       if (generation === this._generation) {

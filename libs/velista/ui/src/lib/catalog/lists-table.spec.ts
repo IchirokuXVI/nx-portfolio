@@ -826,6 +826,38 @@ describe('ListsTable', () => {
     ]);
   });
 
+  it("steps each line by the line's own step, the one the list page uses (velista 0186, decision A)", async () => {
+    // "Pollo" holds a whole chicken (250) and thighs (100): the list page steps it
+    // by 100, the smallest, so the whole chicken's page must too.
+    const pollo = held({ quantity: 1000, unit: 'GRAM', step: 100 });
+    const plain = held({ quantity: 1000, unit: 'GRAM', step: null });
+    const fixture = await render(
+      only(
+        list('l1', 'Groceries', { main: pollo }),
+        list('l3', 'Office', {
+          others: [{ ...MACHINE, quantity: 1000, unit: 'GRAM', step: null }],
+        }),
+        list('l5', 'Unread', {
+          main: { ...plain, lineId: 'line-unread', step: undefined },
+        })
+      )
+    );
+    fixture.componentRef.setInput('step', 250);
+    fixture.detectChanges();
+
+    const stepped: ListsTableStep[] = [];
+    fixture.componentInstance.lineStepped.subscribe((step) =>
+      stepped.push(step)
+    );
+    steps(rowOf(fixture, 'l1'))[0].click();
+    // Known to be the default: not the product's 250.
+    steps(otherOf(fixture, 'line-machine'))[0].click();
+    // Not known yet: the product's step stands in.
+    steps(rowOf(fixture, 'l5'))[0].click();
+
+    expect(stepped.map((each) => each.step.to)).toEqual([900, 975, 750]);
+  });
+
   it('never draws a dash for a list that holds none', async () => {
     const fixture = await render();
 

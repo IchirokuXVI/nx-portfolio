@@ -108,6 +108,25 @@ describe('lineStepOf (backend 0261, section 5)', () => {
     ).toBe(50);
   });
 
+  it('ignores a step on a product not sold by the kilo or the litre (backend 0261 S3)', () => {
+    const stepped = new Map<string, LineUnitProduct>([
+      ['rice-pack-100', product('GRAM', 500, 100)],
+      [
+        'chicken-piece-100',
+        { unit: 'KILOGRAM', size: null, approxWeight: 1800, quantityStep: 100 },
+      ],
+    ]);
+    const of = (itemId: string) => stepped.get(itemId) ?? null;
+    // A sized pack serves grams through its size, but counts pieces.
+    expect(
+      lineStepOf({ unit: 'GRAM', itemIds: ['rice-pack-100'] }, of)
+    ).toBeNull();
+    // A loose chicken given a weight later is a kilo piece: its old step is not the line's.
+    expect(
+      lineStepOf({ unit: 'GRAM', itemIds: ['chicken-piece-100'] }, of)
+    ).toBeNull();
+  });
+
   it('ignores a step off the list of ten', () => {
     expect(
       lineStepOf({ unit: 'GRAM', itemIds: ['odd-30'] }, productOf)

@@ -107,6 +107,8 @@ interface World {
       }
     >
   >;
+  /** Ids whose record has not answered yet; every other id has answered. */
+  readonly unreadItems?: readonly string[];
 }
 
 /** The clock's own timeout, kept before the fake timers of each spec replace it. */
@@ -169,6 +171,8 @@ function setup(world: World) {
   const addedNamed: (false | undefined)[] = [];
   /** The unit every add and every step named (velista `0182`). */
   const units: (string | undefined)[] = [];
+  /** Every set of products the store asked `ItemNames` to read (velista `0186`). */
+  const ensured: string[][] = [];
   const storage = new Map<string, string>();
   if (world.lastList !== undefined) {
     storage.set(StorageKeys.lastList, world.lastList);
@@ -369,6 +373,12 @@ function setup(world: World) {
               provide: ItemNames,
               useValue: {
                 nameOf: (itemId: string) => world.items?.[itemId] ?? null,
+                sizingOf: (itemId: string) =>
+                  world.items?.[itemId] ??
+                  (world.unreadItems?.includes(itemId) ? undefined : null),
+                ensure: async (itemIds: readonly string[]) => {
+                  ensured.push([...itemIds]);
+                },
               },
             },
           ]),
@@ -395,6 +405,7 @@ function setup(world: World) {
     calls,
     addedNamed,
     units,
+    ensured,
     storage,
     /** The lines as the server holds them. */
     server,
@@ -974,6 +985,41 @@ describe('CatalogAddStore', () => {
 
         expect(calls).toContain('quantity:kilo:-100');
         expect(store.held()[0]?.quantity).toBe(900);
+      });
+
+      it('tells a line known to step by the default from one whose products have not answered (decision A)', async () => {
+        const PLAIN = { ...STEPPED, quantityStep: null };
+        const { store, ensured } = setup({
+          ...HOME,
+          items: { bananas: PLAIN },
+          unreadItems: ['thighs'],
+          lines: [
+            line('known', 'weekly', {
+              content: 'Plátanos',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas'],
+            }),
+            line('waiting', 'weekly', {
+              content: 'Pollo',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas', 'thighs'],
+            }),
+          ],
+        });
+        await store.ensure();
+
+        const steps = new Map(
+          store.held().map((held) => [held.lineId, held.step])
+        );
+        expect(steps.get('known')).toBeNull();
+        expect(steps.get('waiting')).toBeUndefined();
+        // And the store asks for the products of its weight lines, so the
+        // step of "Pollo" becomes known.
+        expect(ensured.flat()).toEqual(
+          expect.arrayContaining(['bananas', 'thighs'])
+        );
       });
 
       it('still takes a line the visit made back with one minus at its floor', async () => {
