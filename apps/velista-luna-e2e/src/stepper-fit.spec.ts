@@ -3,7 +3,14 @@ import {
   LIST_GROCERIES_ID,
   ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
-import { ALICE_EMAIL } from './support/api';
+import {
+  ALICE_EMAIL,
+  deleteLine,
+  login,
+  resetAliceWorld,
+  type LineView,
+  type Session,
+} from './support/api';
 import { generateBasket, openSettleSheet, signIn } from './support/app';
 
 /**
@@ -131,24 +138,54 @@ async function dropDraft(stepper: Locator): Promise<void> {
   await stepper.getByRole('spinbutton').press('Escape');
 }
 
+/**
+ * The line every case measures, made by this spec and deleted after it. A case
+ * that measured whatever line came first measured what earlier specs left: after
+ * `shop.spec.ts` the first row of Groceries draws no stepper, and the box was 0
+ * by 0.
+ */
+const FIT_LINE = 'Stepper fit e2e';
+
+/** The list row of {@link FIT_LINE}. */
+const fitRow = (page: Page) =>
+  page.locator('lib-line-row', { hasText: FIT_LINE });
+
 async function openList(page: Page): Promise<void> {
   await signIn(page, ALICE_EMAIL);
   await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
   await expect(
-    page.locator('lib-line-row lib-quantity-stepper.variant-row').first()
+    fitRow(page).locator('lib-quantity-stepper.variant-row')
   ).toBeVisible();
 }
 
 test.describe('the stepper fits its longest amount (velista 0188)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
+  let alice: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    // Alice's lists as the seed has them, her open baskets finished and her
+    // postal code set, so a basket can be generated, whatever ran before.
+    await resetAliceWorld(alice);
+    const answer = await alice.post<{ line: LineView }>(
+      `/v1/lists/${LIST_GROCERIES_ID}/lines`,
+      { content: FIT_LINE, itemIds: [], named: true, quantity: 2, unit: 'UNIT' }
+    );
+    lineId = answer.line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+  });
+
   test('a row stepper holds "999,99", "125,25" and a four letter symbol', async ({
     page,
   }) => {
     await openList(page);
-    const stepper = page
-      .locator('lib-line-row lib-quantity-stepper.variant-row')
-      .first();
+    const stepper = fitRow(page).locator('lib-quantity-stepper.variant-row');
 
     for (const figure of ['999,99', '125,25', '0']) {
       await test.step(`row ${figure} ${SYMBOL}`, async () => {
@@ -164,7 +201,7 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     page,
   }) => {
     await openList(page);
-    await page.locator('lib-line-row .row').first().click();
+    await fitRow(page).locator('.row').click();
     const stepper = page
       .getByRole('dialog')
       .locator('lib-quantity-stepper.variant-sheet')
@@ -189,7 +226,7 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
   }) => {
     await signIn(page, ALICE_EMAIL);
     await generateBasket(page, ['Groceries'], `Fit ${Date.now()}`);
-    const dialog = await openSettleSheet(page, 'Milk');
+    const dialog = await openSettleSheet(page, FIT_LINE);
     const stepper = dialog
       .locator('lib-row-entries lib-quantity-stepper.variant-sheet-narrow')
       .first();
