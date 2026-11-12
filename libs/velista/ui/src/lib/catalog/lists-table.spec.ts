@@ -386,6 +386,8 @@ describe('ListsTable', () => {
       const heard = record(fixture);
 
       steps(rowOf(fixture, 'l1'))[1]?.click();
+      // The caller keeps the amount; its redraw is the base of the next press.
+      fixture.detectChanges();
       steps(rowOf(fixture, 'l1'))[0]?.click();
 
       expect(heard.added).toEqual([]);
@@ -520,6 +522,8 @@ describe('ListsTable', () => {
       const heard = record(fixture);
 
       steps(otherOf(fixture, 'line-machine'))[1]?.click();
+      // The caller keeps the amount; its redraw is the base of the next press.
+      fixture.detectChanges();
       steps(otherOf(fixture, 'line-machine'))[0]?.click();
 
       expect(heard.lineStepped).toEqual([
