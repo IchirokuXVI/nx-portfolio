@@ -1154,8 +1154,10 @@ describe('ListPage', () => {
         fixture.componentInstance.stepQuantity(press(2, 3));
         fixture.detectChanges();
 
+        // The row's stepper: the composer's own comes first in the page since the
+        // field moved to the top (velista 0189).
         const stepper = (fixture.nativeElement as HTMLElement).querySelector(
-          'lib-quantity-stepper'
+          'lib-line-row lib-quantity-stepper'
         );
         expect(stepper?.getAttribute('data-value')).toBe('3');
       });

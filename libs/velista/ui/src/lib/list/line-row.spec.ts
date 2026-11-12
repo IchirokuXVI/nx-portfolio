@@ -37,14 +37,10 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
   };
 }
 
-<<<<<<< HEAD
-async function render(line: LineRowVm): Promise<ComponentFixture<LineRow>> {
-=======
 async function render(
   line: LineRowVm,
-  inputs: { reordering?: boolean; pending?: number | null } = {}
+  inputs: { pending?: number | null } = {}
 ): Promise<ComponentFixture<LineRow>> {
->>>>>>> origin/feat/velista-0188-stepper
   TestBed.resetTestingModule();
 
   await TestBed.configureTestingModule({
@@ -53,15 +49,9 @@ async function render(
 
   const fixture = TestBed.createComponent(LineRow);
   fixture.componentRef.setInput('line', line);
-<<<<<<< HEAD
-=======
-  if (inputs.reordering !== undefined) {
-    fixture.componentRef.setInput('reordering', inputs.reordering);
-  }
   if (inputs.pending !== undefined) {
     fixture.componentRef.setInput('pending', inputs.pending);
   }
->>>>>>> origin/feat/velista-0188-stepper
   fixture.detectChanges();
   await fixture.whenStable();
   fixture.detectChanges();
@@ -617,17 +607,6 @@ describe('LineRow', () => {
 
       expect(stepper(fixture)?.getAttribute('data-value')).toBe('6');
     });
-<<<<<<< HEAD
-=======
-
-    it('goes away in reorder mode', async () => {
-      // A second gesture living inside a row being dragged would fight the first for
-      // the same finger.
-      const fixture = await render(vm(), { reordering: true });
-
-      expect(stepper(fixture)).toBeNull();
-    });
->>>>>>> origin/feat/velista-0188-stepper
   });
 
   describe('what a tap does', () => {

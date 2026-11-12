@@ -4,16 +4,11 @@ import {
   input,
   output,
 } from '@angular/core';
-<<<<<<< HEAD
-import { basketMatchRange, type LineRowVm } from '@portfolio/velista/models';
-=======
-import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   basketMatchRange,
   type LineRowVm,
   type QuantityStep,
 } from '@portfolio/velista/models';
->>>>>>> origin/feat/velista-0188-stepper
 import { LineRow, type LineRowAction } from './line-row';
 
 /**
@@ -62,11 +57,7 @@ import { LineRow, type LineRowAction } from './line-row';
             (retry)="retry.emit($event)"
             [line]="line"
             [match]="matchOf(line)"
-<<<<<<< HEAD
-=======
             [pending]="pending().get(line.id) ?? null"
-            [reordering]="reordering()"
->>>>>>> origin/feat/velista-0188-stepper
             [took]="tookId() === line.id"
           />
         </li>

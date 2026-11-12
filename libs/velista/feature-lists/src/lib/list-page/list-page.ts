@@ -1634,16 +1634,9 @@ export class ListPage {
    * from `0008`, so Android's back button dismisses it (`0012`, section 4.2).
    */
   openLine(lineId: string): void {
-<<<<<<< HEAD
-=======
-    if (this.reordering()) {
-      return;
-    }
-
     // The line's open run is written first, so the sheet reads the amount the row
     // drew and a Save inside the quiet beat cannot send the old one (velista 0188).
     this.quantityRuns.flush(lineId);
->>>>>>> origin/feat/velista-0188-stepper
     void this._openSheet(['lines', lineId, 'detail']);
   }
 

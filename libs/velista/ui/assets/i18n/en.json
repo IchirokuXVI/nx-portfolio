@@ -878,13 +878,7 @@
       "comments": "Comments",
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
-      "failed": "That did not save. Tap to try again",
-<<<<<<< HEAD
-      "quantityFor": "How many {{name}}",
-      "quantityChanged": "{{name}}, now {{quantity}}"
-=======
-      "movedTo": "Moved to position {{position}} of {{total}}"
->>>>>>> origin/feat/velista-0188-stepper
+      "failed": "That did not save. Tap to try again"
     },
     "view": {
       "order": {

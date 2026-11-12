@@ -878,13 +878,7 @@
       "comments": "Comentarios",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
-      "failed": "No se ha guardado. Toca para reintentar",
-<<<<<<< HEAD
-      "quantityFor": "Cuántos de {{name}}",
-      "quantityChanged": "{{name}}, ahora {{quantity}}"
-=======
-      "movedTo": "Movido a la posición {{position}} de {{total}}"
->>>>>>> origin/feat/velista-0188-stepper
+      "failed": "No se ha guardado. Toca para reintentar"
     },
     "view": {
       "order": {
