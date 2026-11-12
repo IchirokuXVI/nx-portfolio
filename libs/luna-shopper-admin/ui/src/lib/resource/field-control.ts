@@ -407,7 +407,9 @@ export class FieldControl {
   readonly emptyLabel = computed<string | null>(() => {
     const field = this.field();
     const said =
-      field.kind === 'number' ? (field.emptyText?.(this.context()) ?? null) : null;
+      field.kind === 'number'
+        ? (field.emptyText?.(this.context()) ?? null)
+        : null;
     return said === null ? null : this._say(said);
   });
 
@@ -439,7 +441,9 @@ export class FieldControl {
       this._say({
         kind: 'key',
         key:
-          field.nullable === true ? 'resource.field.unset' : 'resource.field.choose',
+          field.nullable === true
+            ? 'resource.field.unset'
+            : 'resource.field.choose',
       });
     const options = [
       { value: '', label: empty },

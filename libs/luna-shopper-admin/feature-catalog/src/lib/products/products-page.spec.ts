@@ -330,7 +330,7 @@ describe('the category tree beside the product list', () => {
     tree.choose.emit('');
     await settle(fixture);
     expect(page(fixture).category()).toBe('');
-    expect(page(fixture).products()).toHaveLength(4);
+    expect(page(fixture).products()).toHaveLength(5);
   });
 
   it('opens already narrowed by the category a link names, and marks it', async () => {
@@ -472,6 +472,7 @@ describe('"Prices at" on the product list', () => {
         'it_milk_6pack',
         'it_olive_oil_1l',
         'it_dish_soap',
+        'it_tomato_loose',
       ],
     });
     // And the scope never reaches the product read.
@@ -562,7 +563,7 @@ describe('"Prices at" on the product list', () => {
 
     expect(page(fixture).store.filters()['query'] ?? '').toBe('');
     expect(page(fixture).scope()?.scope.id).toBe('ps_mercadona_4661');
-    expect(page(fixture).products()).toHaveLength(4);
+    expect(page(fixture).products()).toHaveLength(5);
   });
 });
 
@@ -653,7 +654,7 @@ describe('the states of a price at the chosen scope', () => {
     await settle(fixture);
     await settle(fixture);
     expect(q(fixture, 'lib-resource-filters')).not.toBeNull();
-    expect(page(fixture).products()).toHaveLength(4);
+    expect(page(fixture).products()).toHaveLength(5);
   });
 
   /**
@@ -752,7 +753,7 @@ describe('the states of a price at the chosen scope', () => {
     const listed = page(fixture)
       .products()
       .map((row) => row.id);
-    expect(listed).toHaveLength(2);
+    expect(listed).toHaveLength(3);
     expect(listed).not.toContain('it_milk_1l');
     expect(listed).not.toContain('it_olive_oil_1l');
     expect(
@@ -763,7 +764,7 @@ describe('the states of a price at the chosen scope', () => {
 
     const pressed = q(fixture, '[data-state="noPrice"]');
     expect(pressed?.getAttribute('aria-pressed')).toBe('true');
-    expect(q(fixture, '[data-state-count]')?.textContent?.trim()).toBe('2');
+    expect(q(fixture, '[data-state-count]')?.textContent?.trim()).toBe('3');
     expect(pressed?.textContent).toContain('catalog.pricesAt.state.noPrice');
   });
 
@@ -830,7 +831,7 @@ describe('the states of a price at the chosen scope', () => {
     await settle(fixture);
 
     expect(q(fixture, '[data-state-count]')).toBeNull();
-    expect(page(fixture).products()).toHaveLength(4);
+    expect(page(fixture).products()).toHaveLength(5);
   });
 
   it('opens on "No price" when a link names the scope and the state', async () => {
@@ -839,7 +840,7 @@ describe('the states of a price at the chosen scope', () => {
     );
 
     expect(page(fixture).state()).toBe('noPrice');
-    expect(page(fixture).products()).toHaveLength(2);
+    expect(page(fixture).products()).toHaveLength(3);
   });
 
   it('drops the state with the scope', async () => {
@@ -854,7 +855,7 @@ describe('the states of a price at the chosen scope', () => {
 
     expect(page(fixture).state()).toBeNull();
     expect(page(fixture).store.filters()['priceState'] ?? '').toBe('');
-    expect(page(fixture).products()).toHaveLength(4);
+    expect(page(fixture).products()).toHaveLength(5);
   });
 });
 
@@ -887,7 +888,7 @@ describe('ticking products', () => {
 
     head?.dispatchEvent(new Event('change'));
     await settle(fixture);
-    expect(page(fixture).selectedRows()).toHaveLength(4);
+    expect(page(fixture).selectedRows()).toHaveLength(5);
     expect(page(fixture).allPicked()).toBe(true);
 
     head?.dispatchEvent(new Event('change'));

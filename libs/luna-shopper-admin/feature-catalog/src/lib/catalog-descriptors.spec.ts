@@ -12,6 +12,7 @@ import {
   toRecordValue,
   type FieldDescriptor,
   type ResourceRow,
+  type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   CATEGORY_KIND_OPTIONS,
@@ -32,7 +33,12 @@ import {
 import { CATEGORIES } from './categories';
 import { ChainCounts } from './chains/chain-context';
 import { CHAIN_RESOURCES } from './chains/chains-routes';
-import { ITEMS, withCategoryIds } from './items';
+import {
+  ITEMS,
+  measuredUnitOf,
+  QUANTITY_STEP_CHOICES,
+  withCategoryIds,
+} from './items';
 import { LOCATION_ITEMS } from './location-items';
 import { LOCATIONS } from './locations';
 import { PRICE_POLICIES } from './price-policies';
@@ -1231,7 +1237,14 @@ describe('the record of a product', () => {
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
       [
         'catalog.items.section.sold',
-        ['defaultUnit', 'unitSize', 'approxWeight', 'imageUrl', 'shownPhoto'],
+        [
+          'defaultUnit',
+          'unitSize',
+          'approxWeight',
+          'quantityStep',
+          'imageUrl',
+          'shownPhoto',
+        ],
       ],
     ]);
   });
@@ -1293,14 +1306,195 @@ describe('the record of a product', () => {
     expect(ITEMS.record?.facts).toBeUndefined();
   });
 
-  it('says three refusals under the categories, and one under each of size and weight', () => {
+  it('says three refusals under the categories, and one under each of size, weight and step', () => {
     expect(ITEMS.errorFields).toEqual({
       category_not_a_leaf: 'categoryIds',
       item_needs_a_category: 'categoryIds',
       category_not_found: 'categoryIds',
       item_kilogram_has_size: 'unitSize',
       item_approx_weight_beside_size: 'approxWeight',
+      item_quantity_step_not_allowed: 'quantityStep',
     });
+  });
+});
+
+/**
+ * The step of a product (backend plan 0261, admin plan 0070): a select of
+ * the server's ten steps, shown only for a product sold by the kilo or the
+ * litre.
+ */
+describe('the step of a product', () => {
+  type Item = Wire.CatalogItemView;
+  type WireStep = NonNullable<Item['quantityStep']>;
+
+  const step = fieldOf(ITEMS, 'quantityStep');
+  const numberStep = step?.kind === 'number' ? step : null;
+
+  /** A row of these size fields, as the page reads it. */
+  const sized = (
+    defaultUnit: Item['defaultUnit'],
+    unitSize: number | null,
+    approxWeight: number | null,
+    quantityStep: Item['quantityStep'] = null
+  ): Item =>
+    ({
+      ...ITEM_SEED[0],
+      defaultUnit,
+      unitSize,
+      approxWeight,
+      quantityStep,
+    }) as Item;
+
+  it('holds every step of the generated wire type, and no other', () => {
+    // A step the gateway adds and the list lacks fails to compile here: the
+    // spec does not build, so the list cannot fall behind the wire. The
+    // `satisfies` in `items.ts` refuses a step the wire does not carry.
+    type Missing = Exclude<WireStep, (typeof QUANTITY_STEP_CHOICES)[number]>;
+    const everyWireStepIsListed: [Missing] extends [never] ? true : false =
+      true;
+
+    expect(everyWireStepIsListed).toBe(true);
+    expect(QUANTITY_STEP_CHOICES).toEqual([
+      1, 5, 10, 25, 50, 100, 200, 250, 500, 1000,
+    ]);
+  });
+
+  /** Each row of the table of backend plan 0246 section 1, plus the legacy rows. */
+  it.each([
+    ['a pack sized in grams', 'GRAM', 500, null, null],
+    ['a pack sized in millilitres', 'MILLILITER', 750, null, null],
+    ['a counted pack, sized', 'PACK', 6, null, null],
+    ['a counted product', 'UNIT', null, null, null],
+    ['a piece priced as one', 'UNIT', null, 580, null],
+    ['sold by the kilo', 'KILOGRAM', null, null, 'g'],
+    ['sold by the litre', 'LITER', null, null, 'ml'],
+    ['a kilo piece', 'KILOGRAM', null, 1560, null],
+    ['a legacy litre with a size', 'LITER', 1, null, null],
+    ['a litre with a weight', 'LITER', null, 900, null],
+    ['a kilo with a size', 'KILOGRAM', 1, null, null],
+  ] as const)(
+    'counts the step of %s in %s',
+    (_, defaultUnit, unitSize, approxWeight, unit) => {
+      const row = sized(defaultUnit, unitSize, approxWeight);
+      expect(measuredUnitOf(row)).toBe(unit);
+      expect(numberStep?.shown?.(row)).toBe(unit !== null);
+    }
+  );
+
+  it('reads the size fields as the form holds them, as text', () => {
+    const held = (unitSize: string, approxWeight: string) =>
+      ({ defaultUnit: 'KILOGRAM', unitSize, approxWeight }) as unknown as Item;
+
+    expect(measuredUnitOf(held('', ''))).toBe('g');
+    expect(measuredUnitOf(held('', '  '))).toBe('g');
+    expect(measuredUnitOf(held('', '120'))).toBeNull();
+    expect(measuredUnitOf(held('2', ''))).toBeNull();
+  });
+
+  it('is a nullable whole number drawn as a select of the ten steps', () => {
+    expect(numberStep).toMatchObject({
+      kind: 'number',
+      nullable: true,
+      integer: true,
+      label: 'catalog.items.quantityStep',
+      help: 'catalog.items.quantityStepHelp',
+    });
+    expect(numberStep?.choices?.(sized('KILOGRAM', null, null))).toEqual(
+      QUANTITY_STEP_CHOICES
+    );
+  });
+
+  it('says a step in grams for the kilo and in millilitres for the litre', () => {
+    const grams = numberStep?.unit?.(sized('KILOGRAM', null, null));
+    const millilitres = numberStep?.unit?.(sized('LITER', null, null));
+
+    expect(grams?.word).toBe('g');
+    expect(
+      QUANTITY_STEP_CHOICES.map((value) => grams?.format(value, 'en'))
+    ).toEqual([
+      '1 g',
+      '5 g',
+      '10 g',
+      '25 g',
+      '50 g',
+      '100 g',
+      '200 g',
+      '250 g',
+      '500 g',
+      '1 kg',
+    ]);
+    expect(millilitres?.word).toBe('ml');
+    expect(millilitres?.format(50, 'en')).toBe('50 ml');
+    expect(millilitres?.format(1000, 'en')).toBe('1 L');
+    expect(numberStep?.unit?.(sized('UNIT', null, null))).toBeNull();
+  });
+
+  it('calls an empty step the default of its unit', () => {
+    expect(numberStep?.emptyText?.(sized('KILOGRAM', null, null))).toEqual({
+      kind: 'key',
+      key: 'catalog.items.quantityStepDefault.gram',
+    });
+    expect(numberStep?.emptyText?.(sized('LITER', null, null))).toEqual({
+      kind: 'key',
+      key: 'catalog.items.quantityStepDefault.milliliter',
+    });
+    expect(numberStep?.emptyText?.(sized('PACK', 6, null))).toBeNull();
+  });
+
+  it('says under a set step what a run does with it, and nothing under the default', () => {
+    const stepped = sized('KILOGRAM', null, null, 100);
+    expect(numberStep?.note?.(stepped, stepped)).toEqual({
+      text: {
+        kind: 'key',
+        key: 'catalog.items.quantityStepSet',
+      },
+    });
+    const loose = sized('KILOGRAM', null, null);
+    expect(numberStep?.note?.(loose, loose)).toBeNull();
+  });
+
+  it('reads a set step with its unit, and an empty one as the default, greyed', () => {
+    const options = { locale: 'en', locales: ENGLISH_FIRST };
+    const value = (row: Item) =>
+      step === undefined ? null : toRecordValue(step, row, options);
+
+    expect(value(sized('KILOGRAM', null, null, 250))).toMatchObject({
+      kind: 'text',
+      text: '250 g',
+    });
+    expect(value(sized('KILOGRAM', null, null, 1000))).toMatchObject({
+      kind: 'text',
+      text: '1 kg',
+    });
+    expect(value(sized('LITER', null, null, 50))).toMatchObject({
+      kind: 'text',
+      text: '50 ml',
+    });
+    expect(value(sized('KILOGRAM', null, null))).toMatchObject({
+      kind: 'none',
+      said: { kind: 'key', key: 'catalog.items.quantityStepDefault.gram' },
+    });
+    expect(value(sized('LITER', null, null))).toMatchObject({
+      kind: 'none',
+      said: {
+        kind: 'key',
+        key: 'catalog.items.quantityStepDefault.milliliter',
+      },
+    });
+  });
+
+  it('seeds one loose product with a step and every other one with none', () => {
+    expect(
+      ITEM_SEED.map((item) => [item.id, item.quantityStep ?? null])
+    ).toEqual([
+      ['it_milk_1l', null],
+      ['it_milk_6pack', null],
+      ['it_olive_oil_1l', null],
+      ['it_dish_soap', null],
+      ['it_tomato_loose', 100],
+    ]);
+    const tomato = ITEM_SEED.find((item) => item.id === 'it_tomato_loose');
+    expect(tomato === undefined ? null : measuredUnitOf(tomato)).toBe('g');
   });
 });
 

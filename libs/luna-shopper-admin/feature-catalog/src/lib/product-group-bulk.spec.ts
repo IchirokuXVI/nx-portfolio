@@ -143,8 +143,9 @@ describe('Add items on a product group', () => {
     await settle(fixture, 300);
 
     const boxes = all(fixture, '[data-pick-item]');
-    // `it_dish_soap` is the one product in no group in the seed.
-    expect(boxes).toHaveLength(1);
+    // `it_dish_soap` and `it_tomato_loose` are the products in no group in
+    // the seed, the soap first.
+    expect(boxes).toHaveLength(2);
     await tick(fixture, boxes[0]);
 
     expect(q(fixture, '[data-add-review]')?.hasAttribute('disabled')).toBe(
@@ -265,7 +266,7 @@ describe('Set group on the product list', () => {
     const { fixture, assign } = await boot('/products');
 
     const boxes = all(fixture, '[data-pick-row]');
-    expect(boxes.length).toBe(4);
+    expect(boxes.length).toBe(5);
     // The bar at the bottom is drawn only while rows are ticked (admin plan
     // 0043, target 2).
     expect(q(fixture, '[data-bulk-bar]')).toBeNull();

@@ -44,6 +44,23 @@ describe('FieldValue', () => {
     expect(host.querySelector('[data-none]')?.classList).toContain('none');
   });
 
+  /** A step left empty reads "Default: 25 g" (admin plan 0070). */
+  it('reads an empty value in the words of its field, in the same muted ink', () => {
+    const keyed = render({
+      kind: 'none',
+      said: { kind: 'key', key: 'steps.default', args: { size: 25 } },
+    }).host.querySelector('[data-none]');
+    expect(keyed?.textContent?.trim()).toBe('steps.default');
+    expect(keyed?.classList).toContain('none');
+
+    const plain = render({
+      kind: 'none',
+      said: { kind: 'text', text: 'Default' },
+    }).host.querySelector('[data-none]');
+    expect(plain?.textContent?.trim()).toBe('Default');
+    expect(plain?.classList).toContain('none');
+  });
+
   it('draws text, and a code in the mono face', () => {
     expect(text(render({ kind: 'text', text: 'Sevilla' }).host)).toBe(
       'Sevilla'

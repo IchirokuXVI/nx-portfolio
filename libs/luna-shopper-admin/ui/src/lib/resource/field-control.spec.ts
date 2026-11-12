@@ -311,3 +311,147 @@ describe('a reference field of a form', () => {
     expect(emptyOf({ emptyOption: true })).toBe('none');
   });
 });
+
+/**
+ * A number with a unit, a closed list of values, or words for its empty
+ * value (admin plan 0070, section 3). The step of a product uses all three.
+ */
+describe('a number of a form, with a unit, choices or an empty text', () => {
+  const grams = {
+    word: 'g',
+    format: (value: number) =>
+      value >= 1000 ? `${value / 1000} kg` : `${value} g`,
+  };
+
+  /** The options of the select, as value and label. */
+  const optionsOf = (host: HTMLElement) =>
+    [...(host.querySelector('select') as HTMLSelectElement).options].map(
+      (option) => [option.value, option.textContent?.trim()]
+    );
+
+  it('is a select of the values, labelled through the unit, the empty text first', () => {
+    const { host } = render(
+      {
+        kind: 'number',
+        nullable: true,
+        choices: () => [25, 100, 1000],
+        unit: () => grams,
+        emptyText: () => ({ kind: 'key', key: 'steps.default' }),
+      },
+      '100'
+    );
+    const select = host.querySelector('select[data-choices]');
+
+    expect(host.querySelector('input')).toBeNull();
+    expect(select?.id).toBe('field-value');
+    expect(optionsOf(host)).toEqual([
+      ['', 'steps.default'],
+      ['25', '25 g'],
+      ['100', '100 g'],
+      ['1000', '1 kg'],
+    ]);
+    expect((select as HTMLSelectElement).value).toBe('100');
+  });
+
+  it('labels the empty option "Not set" for a nullable field with no words, and "Choose" otherwise', () => {
+    const nullable = render(
+      { kind: 'number', nullable: true, choices: () => [1, 2] },
+      ''
+    );
+    expect(optionsOf(nullable.host)).toEqual([
+      ['', 'resource.field.unset'],
+      ['1', '1'],
+      ['2', '2'],
+    ]);
+
+    const required = render({ kind: 'number', choices: () => [1, 2] }, '');
+    expect(optionsOf(required.host)[0]).toEqual(['', 'resource.field.choose']);
+  });
+
+  /** A stale row shows what it holds, and is not silently replaced. */
+  it('draws a held value that is off the list as one more option, chosen', () => {
+    const { host } = render(
+      {
+        kind: 'number',
+        nullable: true,
+        choices: () => [25, 100],
+        unit: () => grams,
+      },
+      '30'
+    );
+
+    expect(optionsOf(host)).toEqual([
+      ['', 'resource.field.unset'],
+      ['25', '25 g'],
+      ['100', '100 g'],
+      ['30', '30 g'],
+    ]);
+    expect((host.querySelector('select') as HTMLSelectElement).value).toBe(
+      '30'
+    );
+  });
+
+  it('emits the value chosen as the box would, and the empty option as empty', () => {
+    const { host, emitted } = render(
+      { kind: 'number', nullable: true, choices: () => [25, 100] },
+      '25'
+    );
+    const select = host.querySelector('select') as HTMLSelectElement;
+
+    select.value = '100';
+    select.dispatchEvent(new Event('change'));
+    select.value = '';
+    select.dispatchEvent(new Event('change'));
+
+    expect(emitted).toEqual(['100', '']);
+  });
+
+  it('keeps the box for no choices, with the unit word after it and the empty text as placeholder', () => {
+    const { host } = render(
+      {
+        kind: 'number',
+        nullable: true,
+        choices: () => null,
+        unit: () => grams,
+        emptyText: () => ({ kind: 'key', key: 'steps.default' }),
+      },
+      ''
+    );
+    const box = host.querySelector('input[type="text"]') as HTMLInputElement;
+
+    expect(host.querySelector('select')).toBeNull();
+    expect(box.getAttribute('placeholder')).toBe('steps.default');
+    expect(host.querySelector('[data-unit]')?.textContent?.trim()).toBe('g');
+  });
+
+  it('draws a plain box with no unit and no placeholder without the hooks', () => {
+    const { host } = render({ kind: 'number' }, '3');
+
+    expect(host.querySelector('select')).toBeNull();
+    expect(host.querySelector('[data-unit]')).toBeNull();
+    expect(host.querySelector('input')?.hasAttribute('placeholder')).toBe(
+      false
+    );
+  });
+
+  it('reads the unit and the choices from the row as the form holds it', () => {
+    const { fixture, host } = render(
+      {
+        kind: 'number',
+        nullable: true,
+        choices: (held) => (held['sold'] === 'kilo' ? [100] : null),
+        unit: (held) => (held['sold'] === 'kilo' ? grams : null),
+      },
+      '',
+      { context: { sold: 'unit' } }
+    );
+    expect(host.querySelector('select')).toBeNull();
+
+    fixture.componentRef.setInput('context', { sold: 'kilo' });
+    fixture.detectChanges();
+    expect(optionsOf(host)).toEqual([
+      ['', 'resource.field.unset'],
+      ['100', '100 g'],
+    ]);
+  });
+});

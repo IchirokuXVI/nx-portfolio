@@ -87,6 +87,13 @@ function unavailable(): GatewayError {
 
 /** The memory gateways, with every change of a product refused with a code. */
 function refusingProducts(code: string): ResourceGatewaysI {
+  return refusingProductsWith(
+    new GatewayError({ status: 409, code, correlationId: 'cid' })
+  );
+}
+
+/** The memory gateways, with every change of a product refused with `error`. */
+function refusingProductsWith(error: GatewayError): ResourceGatewaysI {
   const memory = new ResourceMemoryGateways();
   return {
     for: <T extends ResourceRow>(source: ResourceSource<T>) => {
@@ -99,7 +106,7 @@ function refusingProducts(code: string): ResourceGatewaysI {
         read: (id) => inner.read(id),
         create: (input) => inner.create(input),
         update: async () => {
-          throw new GatewayError({ status: 409, code, correlationId: 'cid' });
+          throw error;
         },
         remove: (id) => inner.remove(id),
       } satisfies ResourceGateway<T>;
@@ -309,7 +316,14 @@ describe('a product, on the record page', () => {
       ['catalog.items.section.where', ['categoryIds', 'productGroupId']],
       [
         'catalog.items.section.sold',
-        ['defaultUnit', 'unitSize', 'approxWeight', 'imageUrl', 'shownPhoto'],
+        [
+          'defaultUnit',
+          'unitSize',
+          'approxWeight',
+          'quantityStep',
+          'imageUrl',
+          'shownPhoto',
+        ],
       ],
     ]);
     // The brand is the text the product holds, and no picker.
@@ -353,8 +367,10 @@ describe('a product, on the record page', () => {
   });
 
   /**
-   * The two refusals about a size (backend plan 0244, admin plan 0068), each
-   * said under the field it names, with its own sentence.
+   * The two refusals about a size (backend plan 0244, admin plan 0068), and
+   * the one about a step (backend plan 0261, admin plan 0070), each said under
+   * the field it names, with its own sentence. The milk shows no step field,
+   * and a field with something said under it is drawn anyway.
    */
   it.each([
     [
@@ -366,6 +382,11 @@ describe('a product, on the record page', () => {
       'item_approx_weight_beside_size',
       'approxWeight',
       'resource.error.itemApproxWeightBesideSize',
+    ],
+    [
+      'item_quantity_step_not_allowed',
+      'quantityStep',
+      'resource.error.itemQuantityStepNotAllowed',
     ],
   ])('says %s under %s', async (code, field, key) => {
     const fixture = await boot('/products/it_milk_1l/details', [
@@ -384,6 +405,7 @@ describe('a product, on the record page', () => {
     expect(store.mode()).toBe('edit');
     expect(view(fixture).messages()[field]).toEqual([{ kind: 'key', key }]);
     expect(view(fixture).shownRefusal()).toBeNull();
+    expect(view(fixture).isShown(itemField(field))).toBe(true);
   });
 
   /** The three codes of `errorFields`, each said under "Categories". */
@@ -459,9 +481,12 @@ describe('a product, on the record page', () => {
 
       store.set('defaultUnit', 'KILOGRAM');
       await settle(fixture);
+      // Sold by the kilo with no size and no weight: it may carry a step
+      // (admin plan 0070).
       expect(soldRows(fixture)).toEqual([
         'defaultUnit',
         'approxWeight',
+        'quantityStep',
         'imageUrl',
         'shownPhoto',
       ]);
@@ -602,6 +627,252 @@ describe('a product, on the record page', () => {
       });
       store.set('approxWeight', '');
       expect(view(fixture).noteOf(itemField('approxWeight'))).toBeNull();
+    });
+  });
+
+  /**
+   * The step of a product (backend plan 0261, admin plan 0070): shown only
+   * for a product sold by the kilo or the litre, a select of the ten steps,
+   * and emptied with the kind that took it away.
+   */
+  describe('the step of a product', () => {
+    const step = () => itemField('quantityStep');
+
+    /** The milk read with these fields over it. */
+    const milkAs = (over: Partial<Wire.CatalogItemView>) =>
+      readingProducts((row) => ({ ...row, ...over }));
+
+    async function editing(id: string, providers: Provider[] = []) {
+      const fixture = await boot(`/products/${id}/details`, providers);
+      page(fixture).edit();
+      await settle(fixture);
+      await settle(fixture);
+      return { fixture, store: page(fixture).store() };
+    }
+
+    /** The select the step is drawn as, while the page is a form. */
+    const select = (fixture: ComponentFixture<TestHost>) =>
+      fixture.nativeElement.querySelector(
+        'select[data-choices]'
+      ) as HTMLSelectElement | null;
+
+    it.each([
+      ['sold by the kilo', { defaultUnit: 'KILOGRAM', unitSize: null }, true],
+      ['sold by the litre', { defaultUnit: 'LITER', unitSize: null }, true],
+      [
+        'a kilo piece',
+        { defaultUnit: 'KILOGRAM', unitSize: null, approxWeight: 1560 },
+        false,
+      ],
+      ['a pack', {}, false],
+      ['sold by the unit', { defaultUnit: 'UNIT', unitSize: null }, false],
+    ] as const)('is shown for a product %s: %s', async (_, over, shown) => {
+      const fixture = await boot('/products/it_milk_1l/details', [
+        { provide: RESOURCE_GATEWAYS, useValue: milkAs(over) },
+      ]);
+      expect(view(fixture).isShown(step())).toBe(shown);
+
+      page(fixture).edit();
+      await settle(fixture);
+      await settle(fixture);
+      expect(view(fixture).isShown(step())).toBe(shown);
+      expect(select(fixture) !== null).toBe(shown);
+    });
+
+    it.each([
+      ['KILOGRAM', 250, '250 g'],
+      ['KILOGRAM', 1000, '1 kg'],
+      ['LITER', 50, '50 ml'],
+      ['LITER', 1000, '1 L'],
+    ] as const)('reads a step of %s %s as "%s"', async (unit, value, read) => {
+      const fixture = await boot('/products/it_milk_1l/details', [
+        {
+          provide: RESOURCE_GATEWAYS,
+          useValue: milkAs({
+            defaultUnit: unit,
+            unitSize: null,
+            quantityStep: value,
+          }),
+        },
+      ]);
+
+      expect(view(fixture).valueOf(step())).toMatchObject({
+        kind: 'text',
+        text: read,
+      });
+      expect(text(fixture)).toContain(read);
+      // The line under a set step says what a run does with it.
+      expect(view(fixture).noteOf(step())).toEqual({
+        text: { kind: 'key', key: 'catalog.items.quantityStepSet' },
+      });
+    });
+
+    it.each([
+      ['KILOGRAM', 'catalog.items.quantityStepDefault.gram'],
+      ['LITER', 'catalog.items.quantityStepDefault.milliliter'],
+    ] as const)(
+      'reads no step of %s as its default line, greyed',
+      async (unit, key) => {
+        const fixture = await boot('/products/it_milk_1l/details', [
+          {
+            provide: RESOURCE_GATEWAYS,
+            useValue: milkAs({ defaultUnit: unit, unitSize: null }),
+          },
+        ]);
+
+        expect(view(fixture).valueOf(step())).toMatchObject({
+          kind: 'none',
+          said: { kind: 'key', key },
+        });
+        const greyed = Array.from(
+          fixture.nativeElement.querySelectorAll(
+            '[data-none]'
+          ) as NodeListOf<HTMLElement>
+        ).map((none) => none.textContent?.trim());
+        expect(greyed).toContain(key);
+        expect(view(fixture).noteOf(step())).toBeNull();
+      }
+    );
+
+    it('offers the default first, then the ten steps in grams, on the step it holds', async () => {
+      const { fixture } = await editing('it_tomato_loose');
+      const options = Array.from(select(fixture)?.options ?? []);
+
+      expect(options.map((option) => option.textContent?.trim())).toEqual([
+        'catalog.items.quantityStepDefault.gram',
+        '1 g',
+        '5 g',
+        '10 g',
+        '25 g',
+        '50 g',
+        '100 g',
+        '200 g',
+        '250 g',
+        '500 g',
+        '1 kg',
+      ]);
+      expect(options[0].value).toBe('');
+      expect(select(fixture)?.value).toBe('100');
+    });
+
+    it('redraws the steps in millilitres for the litre, and keeps the value', async () => {
+      const { fixture, store } = await editing('it_tomato_loose');
+
+      store.set('defaultUnit', 'LITER');
+      await settle(fixture);
+
+      const options = Array.from(select(fixture)?.options ?? []);
+      expect(options[0].textContent?.trim()).toBe(
+        'catalog.items.quantityStepDefault.milliliter'
+      );
+      expect(options[options.length - 1].textContent?.trim()).toBe('1 L');
+      expect(store.draft()['quantityStep']).toBe('100');
+      expect(select(fixture)?.value).toBe('100');
+    });
+
+    it('sends the step chosen in the select', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const { fixture } = await editing('it_tomato_loose', [
+        { provide: RESOURCE_GATEWAYS, useValue: gateways },
+      ]);
+
+      const box = select(fixture);
+      if (box !== null) {
+        box.value = '1000';
+        box.dispatchEvent(new Event('change'));
+      }
+      await settle(fixture);
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([{ quantityStep: 1000 }]);
+    });
+
+    it('sends null for the default', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const { fixture } = await editing('it_tomato_loose', [
+        { provide: RESOURCE_GATEWAYS, useValue: gateways },
+      ]);
+
+      const box = select(fixture);
+      if (box !== null) {
+        box.value = '';
+        box.dispatchEvent(new Event('change'));
+      }
+      await settle(fixture);
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([{ quantityStep: null }]);
+    });
+
+    /** Backend plan 0261 section 2.2 refuses the weight without the null. */
+    it('hides the step once a weight is typed, and sends the weight with a null step', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const { fixture, store } = await editing('it_tomato_loose', [
+        { provide: RESOURCE_GATEWAYS, useValue: gateways },
+      ]);
+      expect(view(fixture).isShown(step())).toBe(true);
+
+      store.set('approxWeight', '1500');
+      await settle(fixture);
+      expect(view(fixture).isShown(step())).toBe(false);
+      expect(select(fixture)).toBeNull();
+
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([{ approxWeight: 1500, quantityStep: null }]);
+    });
+
+    it('sends a null step beside a new unit that carries none', async () => {
+      const sent: ResourceRow[] = [];
+      const { gateways } = recordingProducts(sent);
+      const { fixture, store } = await editing('it_tomato_loose', [
+        { provide: RESOURCE_GATEWAYS, useValue: gateways },
+      ]);
+
+      store.set('defaultUnit', 'UNIT');
+      await settle(fixture);
+      expect(view(fixture).isShown(step())).toBe(false);
+      await view(fixture).save();
+      await settle(fixture);
+
+      expect(sent).toEqual([{ defaultUnit: 'UNIT', quantityStep: null }]);
+    });
+
+    it('draws the sentence of the server under the step for a step off the list', async () => {
+      const fixture = await boot('/products/it_tomato_loose/details', [
+        {
+          provide: RESOURCE_GATEWAYS,
+          useValue: refusingProductsWith(
+            new GatewayError({
+              status: 400,
+              code: 'validation_failed',
+              correlationId: 'cid',
+              fieldErrors: {
+                quantityStep: ['quantityStep must be one of the steps'],
+              },
+            })
+          ),
+        },
+      ]);
+      const store = page(fixture).store();
+      page(fixture).edit();
+      await settle(fixture);
+      await settle(fixture);
+      store.set('brand', 'Another');
+      await view(fixture).save();
+      await settle(fixture);
+      await settle(fixture);
+
+      expect(view(fixture).messages()['quantityStep']).toEqual([
+        { kind: 'text', text: 'quantityStep must be one of the steps' },
+      ]);
+      expect(text(fixture)).toContain('quantityStep must be one of the steps');
     });
   });
 
