@@ -461,6 +461,38 @@ describe('ListsTable', () => {
       ]);
     });
 
+    it('draws the trash on the minus at one, and the line at zero then has its own row (owner, 2026-11-12; decision B)', async () => {
+      const fixture = await render(
+        only(list('l1', 'Weekly shop', { main: held({ quantity: 1 }) }))
+      );
+
+      // The next press reaches zero, so the minus says the line will go.
+      const minus = steps(rowOf(fixture, 'l1'))[0];
+      expect(minus?.classList.contains('is-clear')).toBe(true);
+      minus?.click();
+
+      // The store keeps the line at zero; it is no longer under the product name.
+      fixture.componentRef.setInput(
+        'groups',
+        only(list('l1', 'Weekly shop', { others: [held({ quantity: 0 })] }))
+      );
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(
+        rowOf(fixture, 'l1').querySelector('lib-quantity-stepper')
+      ).toBeNull();
+      expect(amountOf(otherOf(fixture, 'line-coffee'))).toBe('0');
+    });
+
+    it('draws no trash on the minus above one', async () => {
+      const fixture = await render();
+
+      expect(
+        steps(rowOf(fixture, 'l1'))[0]?.classList.contains('is-clear')
+      ).toBe(false);
+    });
+
     it('draws the amount and no buttons for a person who may add and may not change the quantity (decision C)', async () => {
       const fixture = await render(
         only(
