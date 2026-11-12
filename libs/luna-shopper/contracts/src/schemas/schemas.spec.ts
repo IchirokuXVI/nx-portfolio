@@ -2125,11 +2125,83 @@ describe('contract schemas', () => {
           written: 3,
           skippedHasSize: 1,
           skippedSetByAdmin: 0,
+          skippedHasStep: 2,
         }).valid
       ).toBe(true);
       expect(
         validateMessageResponse('item.setApproxWeights', { written: 3 }).valid
       ).toBe(false);
+    });
+
+    it('a product view states its step from the list, and a write leaves the list to catalog (plan 0261)', () => {
+      const view = (extra: Record<string, unknown>) =>
+        validateMessageResponse('item.get', {
+          id: 'i',
+          name: { en: 'Chicken', es: 'Pollo' },
+          brand: null,
+          imageUrl: null,
+          imageSource: null,
+          imageSupermarketId: null,
+          ownImageUrl: null,
+          images: [],
+          sku: null,
+          ean: null,
+          eans: [],
+          unitSize: null,
+          packCount: null,
+          categories: [MILK_CATEGORY],
+          defaultUnit: 'KILOGRAM',
+          productGroupId: null,
+          ...extra,
+        }).valid;
+      // Not required, so a view built before the plan still validates.
+      expect(view({})).toBe(true);
+      expect(view({ quantityStep: null })).toBe(true);
+      expect(view({ quantityStep: 100 })).toBe(true);
+      expect(view({ quantityStep: 30 })).toBe(false);
+      expect(view({ quantityStep: '100' })).toBe(false);
+
+      // Catalog, not the schema, refuses a step off the list, so a caller on
+      // the bus meets `item_quantity_step_not_allowed` and not a schema error.
+      const update = (quantityStep: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          quantityStep,
+          expect: { quantityStep: null },
+        }).valid;
+      expect(update(100)).toBe(true);
+      expect(update(30)).toBe(true);
+      expect(update(null)).toBe(true);
+      expect(update(2.5)).toBe(false);
+      expect(
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { es: 'Pollo' },
+          categoryIds: ['c'],
+          defaultUnit: 'KILOGRAM',
+          quantityStep: 100,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.createMany', {
+          userId: 'owner',
+          items: [
+            {
+              name: { es: 'Pollo' },
+              categoryIds: ['c'],
+              defaultUnit: 'KILOGRAM',
+              quantityStep: 100,
+            },
+          ],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [{ itemId: 'i', quantityStep: 250 }],
+        }).valid
+      ).toBe(true);
     });
 
     it('a create and an edit state a weight and who wrote it (plan 0244)', () => {
