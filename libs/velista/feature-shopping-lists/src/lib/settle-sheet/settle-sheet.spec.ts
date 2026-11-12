@@ -1319,6 +1319,119 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     });
   });
 
+  /** One press of plus from what the stepper draws, as the real stepper emits it. */
+  function plus(fixture: ComponentFixture<SettleSheet>): void {
+    const from = stepper(fixture).value();
+    press(fixture, from, from + 1);
+  }
+
+  /** A `setDemand` that answers when the spec says so. */
+  function heldDemand(store: Awaited<ReturnType<typeof render>>['store']) {
+    const answers: ((result: BasketRowResult | null) => void)[] = [];
+    store.setDemand.mockImplementation(
+      () =>
+        new Promise<BasketRowResult | null>((done) => {
+          answers.push(done);
+        })
+    );
+    return answers;
+  }
+
+  it('draws the amount it sent while the write is out, not the old one', async () => {
+    const { fixture, store } = await render();
+    const answers = heldDemand(store);
+    jest.useFakeTimers();
+
+    plus(fixture);
+    plus(fixture);
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    fixture.detectChanges();
+
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(stepper(fixture).value()).toBe(5);
+
+    store.rows.set([
+      line({ entries: [entry('l1', 'zl1', 5), entry('l2', 'zl2', 1)] }),
+    ]);
+    answers[0](landed());
+    await settleWrites();
+    fixture.detectChanges();
+
+    expect(stepper(fixture).value()).toBe(5);
+  });
+
+  it('ends two quick runs on an asking line at the sum of what was stepped', async () => {
+    const { fixture, store } = await render();
+    const answers = heldDemand(store);
+    jest.useFakeTimers();
+
+    // 3 to 5, sent; then one more press while that save is out.
+    plus(fixture);
+    plus(fixture);
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    fixture.detectChanges();
+    plus(fixture);
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+
+    store.rows.set([
+      line({ entries: [entry('l1', 'zl1', 5), entry('l2', 'zl2', 1)] }),
+    ]);
+    answers[0](landed());
+    await settleWrites();
+
+    expect(store.setDemand).toHaveBeenCalledTimes(2);
+    expect(store.setDemand).toHaveBeenLastCalledWith({
+      lineId: 'zl1',
+      quantity: 6,
+      from: 5,
+    });
+  });
+
+  it('puts the stored amount back when the write is refused', async () => {
+    const { fixture, store } = await render();
+    const answers = heldDemand(store);
+    jest.useFakeTimers();
+
+    plus(fixture);
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    fixture.detectChanges();
+    expect(stepper(fixture).value()).toBe(4);
+
+    answers[0](null);
+    await settleWrites();
+    fixture.detectChanges();
+
+    expect(stepper(fixture).value()).toBe(3);
+  });
+
+  it('does not navigate again when the row leaves after a back destroyed the sheet', async () => {
+    const { fixture, store } = await render({
+      lines: [line({ left: 1, asked: 1, entries: [entry('l1', 'zl1', 1)] })],
+    });
+    store.setDemand.mockImplementation(async () => {
+      store.rows.set([]);
+      return { entries: [], skippedCount: 0 };
+    });
+    jest.useFakeTimers();
+
+    press(fixture, 1, 0);
+    // A route change destroys the sheet; nothing called `close()`.
+    fixture.destroy();
+    await settleWrites();
+
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl1',
+      quantity: 0,
+      from: 1,
+    });
+    expect(store.handOver).toHaveBeenCalledWith('basket.demand.nothingLeft');
+    expect(dismissedTo()).toEqual([]);
+  });
+
   it('sends a waiting demand first when "Got all" is pressed, and settles after it', async () => {
     const { fixture, store } = await render();
     const order: string[] = [];
@@ -2370,6 +2483,88 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
         named: false,
       });
       expect(disclosure(fixture)).toBeNull();
+    });
+
+    it('ends two quick runs on a list that does not ask yet at what was stepped', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [BREAKFAST],
+      });
+      let answer: (result: BasketRowResult | null) => void = () => undefined;
+      store.addLine.mockImplementationOnce(
+        () =>
+          new Promise<BasketRowResult | null>((done) => {
+            answer = done;
+          })
+      );
+      store.setDemand.mockResolvedValue({
+        entries: [entry('l-breakfast', 'zl10', 3)],
+        skippedCount: 0,
+      });
+      await openOthers(fixture);
+      const others = () =>
+        fixture.debugElement.query(By.css('.others lib-quantity-stepper'))
+          .componentInstance as QuantityStepper;
+      const plus = () => {
+        const from = others().value();
+        others().stepped.emit({ from, to: from + 1, repeat: false });
+        fixture.detectChanges();
+      };
+
+      plus();
+      plus();
+      sendWaiting(fixture);
+      await Promise.resolve();
+      fixture.detectChanges();
+      // The add is out, and the stepper draws what it sent.
+      expect(store.addLine).toHaveBeenCalledWith(
+        expect.objectContaining({ quantity: 2 })
+      );
+      expect(others().value()).toBe(2);
+
+      plus();
+      sendWaiting(fixture);
+      store.rows.set([
+        milkRow({
+          entries: [...milkRow().entries, entry('l-breakfast', 'zl10', 2)],
+        }),
+      ]);
+      answer({ entries: [entry('l-breakfast', 'zl10', 2)], skippedCount: 0 });
+      await fixture.whenStable();
+
+      expect(store.addLine).toHaveBeenCalledTimes(1);
+      expect(store.setDemand).toHaveBeenCalledWith({
+        lineId: 'zl10',
+        quantity: 3,
+        from: 2,
+      });
+    });
+
+    it('says so, and drops nothing in silence, when a later run finds no line to move', async () => {
+      const { fixture, store } = await render({
+        lines: [milkRow()],
+        products,
+        productLists: [BREAKFAST],
+      });
+      store.addLine.mockResolvedValue({
+        entries: [entry('l-breakfast', 'zl10', 1)],
+        skippedCount: 0,
+      });
+      await openOthers(fixture);
+      await raise(fixture, 1);
+      expect(el(fixture).querySelector('.failed')).toBeNull();
+
+      // The add landed, but the row this sheet reads holds no line of that list.
+      const runs = fixture.componentInstance['raiseRuns'];
+      runs.step('l-breakfast', { from: 1, to: 2, repeat: false });
+      runs.flush('l-breakfast');
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(store.addLine).toHaveBeenCalledTimes(1);
+      expect(store.setDemand).not.toHaveBeenCalled();
+      expect(el(fixture).querySelector('.failed')).not.toBeNull();
     });
 
     it('keeps the list and says so when the add is refused', async () => {

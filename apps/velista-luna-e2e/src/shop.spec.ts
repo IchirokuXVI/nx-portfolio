@@ -399,7 +399,7 @@ test.describe('one trip, by the owner', () => {
  * 1000 g, its row's amount cell reads 1 over kg, and the sheet's field is typed
  * down to 0.75 (a kilo figure, so 750 g, velista 0188 decision K). The line then
  * asks for 750 g and nothing was bought (velista 0190). `aria-valuenow` stays
- * the integer in grams.
+ * the integer in grams. "Got all" then records one buy of 750 in grams.
  *
  * The product is made through the back office and kept across runs, as
  * `aisles.spec.ts` makes its own; the line is made per run and deleted after,
@@ -443,7 +443,7 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     await admin?.dispose();
   });
 
-  test('is added at a kilo and typed down to 750 g in the sheet', async ({
+  test('is added at a kilo, typed down to 750 g in the sheet, and bought at 750 g', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
@@ -482,6 +482,18 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     expect(
       (await lineSettlements(alice, lineId)).filter((s) => !s.revertedAt)
     ).toEqual([]);
+
+    // Bought from the sheet: one settlement of 750, recorded in grams.
+    const again = await openSettleSheet(page, NAME.en);
+    await again.getByRole('button', { name: /^Got all\b/ }).click();
+    await expectBasketUrl(page, basketId);
+    await expect
+      .poll(async () =>
+        (await lineSettlements(alice, lineId))
+          .filter((s) => !s.revertedAt)
+          .map((s) => [s.outcome, s.quantity, s.unit])
+      )
+      .toEqual([['BOUGHT', 750, 'GRAM']]);
   });
 });
 

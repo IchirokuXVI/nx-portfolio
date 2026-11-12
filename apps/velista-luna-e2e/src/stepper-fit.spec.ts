@@ -21,6 +21,11 @@ import { generateBasket, openSettleSheet, signIn } from './support/app';
  * sheet is given "999,999" and "125,25", the longest exact forms (S5). Velista 0190
  * adds the shopping list sheet's `sheet-narrow` variant, 168 by 48, with the same
  * exact forms, on a settle sheet of a generated basket.
+ *
+ * A sheet's "999,999" always carries a symbol: 999 999 g reads "999,999 kg" and a
+ * count of 999 999 reads "999,999 K", so it is drawn at the 17 px figure and never
+ * at the 18 px a bare count takes (0188, section 3.2). The sheet cases therefore
+ * measure a field in that state, not the bare count the seed's lines start in.
  */
 
 /** Half a pixel, for subpixel layout. */
@@ -32,6 +37,8 @@ interface Fit {
   readonly width: number;
   readonly height: number;
   readonly problems: readonly string[];
+  /** The figure's font size, its width and its cell's width, for the report. */
+  readonly measured: string;
 }
 
 /**
@@ -100,10 +107,28 @@ function writeAndMeasure(
         );
       }
       const host2 = host.getBoundingClientRect();
-      return { width: host2.width, height: host2.height, problems };
+      const measured = `"${figure}" ${symbol}: figure ${getComputedStyle(number).fontSize}, ${number.getBoundingClientRect().width.toFixed(1)}px in a ${box.width.toFixed(1)}px cell`;
+      return { width: host2.width, height: host2.height, problems, measured };
     },
     { figure, symbol, epsilon: EPSILON }
   );
+}
+
+/**
+ * Puts a sheet's stepper in the state a real "999,999" is drawn in: a field with a
+ * symbol, at the 17 px figure. Text with a separator is read in the top name, so
+ * "1,5" draws a symbol whatever the line's unit, and nothing is saved until Enter
+ * or a blur. {@link dropDraft} takes it back.
+ */
+async function withSymbol(stepper: Locator): Promise<void> {
+  await stepper.getByRole('spinbutton').fill('1,5');
+  await expect(stepper.locator('.field-cell')).not.toHaveClass(/is-bare/);
+  await expect(stepper.locator('.field-cell .symbol')).not.toBeEmpty();
+}
+
+/** Escape drops the typed text, so the measuring saves nothing. */
+async function dropDraft(stepper: Locator): Promise<void> {
+  await stepper.getByRole('spinbutton').press('Escape');
 }
 
 async function openList(page: Page): Promise<void> {
@@ -146,14 +171,17 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
       .first();
     await expect(stepper).toBeVisible();
 
+    await withSymbol(stepper);
     for (const figure of ['999,999', '125,25', '0']) {
       await test.step(`sheet ${figure} ${SYMBOL}`, async () => {
         const fit = await writeAndMeasure(stepper, figure, SYMBOL);
+        console.log(`sheet: ${fit.measured}`);
         expect.soft(fit.problems).toEqual([]);
         expect.soft(Math.round(fit.width)).toBe(191);
         expect.soft(Math.round(fit.height)).toBe(48);
       });
     }
+    await dropDraft(stepper);
   });
 
   test('the settle sheet stepper holds "999,999", "125,25" and a four letter symbol', async ({
@@ -167,13 +195,16 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
       .first();
     await expect(stepper).toBeVisible();
 
+    await withSymbol(stepper);
     for (const figure of ['999,999', '125,25', '0']) {
       await test.step(`settle sheet ${figure} ${SYMBOL}`, async () => {
         const fit = await writeAndMeasure(stepper, figure, SYMBOL);
+        console.log(`settle sheet: ${fit.measured}`);
         expect.soft(fit.problems).toEqual([]);
         expect.soft(Math.round(fit.width)).toBe(168);
         expect.soft(Math.round(fit.height)).toBe(48);
       });
     }
+    await dropDraft(stepper);
   });
 });

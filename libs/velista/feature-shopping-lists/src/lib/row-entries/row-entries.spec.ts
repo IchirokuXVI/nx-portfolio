@@ -325,6 +325,20 @@ describe('RowEntries: who may change what a list asks for', () => {
     ).toBe('2');
   });
 
+  it('says the number with no control in words with its unit', async () => {
+    const fixture = await render({
+      ...row([entry({ demandEditable: false, left: 1275 })]),
+      unit: 'GRAM',
+    });
+    const drawn = fixture.componentInstance['entries']();
+
+    // Not "asks for 1275": the amount the screen reader hears names its unit.
+    expect(drawn[0].asksSpoken).toBe('1.275 kilograms');
+    expect(
+      html(fixture).querySelector('.row-number .visually-hidden')?.textContent
+    ).toContain('basket.entries.asks');
+  });
+
   it('draws no control on an unserved entry of a row of several lists', async () => {
     const fixture = await render(
       row([entry(), entry({ lineId: 'zl-2', listId: null })])

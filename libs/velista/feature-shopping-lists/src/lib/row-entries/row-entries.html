@@ -65,7 +65,7 @@
           -->
           <span class="row-number">
             <span class="visually-hidden">
-              {{ 'basket.entries.asks' | rokuT: { count: entry.asks } }}
+              {{ 'basket.entries.asks' | rokuT: { amount: entry.asksSpoken } }}
             </span>
             <lib-amount-figure
               [quantity]="entry.asks"

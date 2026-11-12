@@ -1955,7 +1955,7 @@
     },
     "entries": {
       "otherList": "Another list",
-      "asks": "asks for {{count}}"
+      "asks": "asks for {{amount}}"
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",

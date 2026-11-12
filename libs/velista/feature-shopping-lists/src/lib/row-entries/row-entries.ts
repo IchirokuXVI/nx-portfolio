@@ -19,6 +19,7 @@ import {
   type BasketRowEntry,
   type QuantityStep,
 } from '@portfolio/velista/models';
+import { exactAmount } from '@portfolio/velista/platform';
 import {
   AmountFigure,
   ChevronDownIcon,
@@ -38,6 +39,8 @@ interface DrawnEntry {
   readonly where: string | null;
   /** What the list asks for, which is the entry's `left`. */
   readonly asks: number;
+  /** {@link asks} in words with its unit, for a number with no control. */
+  readonly asksSpoken: string;
   /** What the stepper draws: the sheet's open run on this line, else {@link asks}. */
   readonly shown: number;
   /** Whether the quantity is a control, by the server's `demandEditable`. */
@@ -291,6 +294,7 @@ export class RowEntries {
       list,
       where,
       asks: entry.left,
+      asksSpoken: exactAmount(entry.left, this.unit(), locale).spoken,
       shown: this.pending().get(entry.lineId) ?? entry.left,
       editable: this._mayDemand(entry),
       // The list's own name, so two steppers on one sheet are told apart by somebody
