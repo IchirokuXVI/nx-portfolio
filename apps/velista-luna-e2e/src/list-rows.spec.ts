@@ -24,8 +24,9 @@ import { signIn } from './support/app';
  * Velista 0191, section 8: the compact row, chosen on the account page.
  *
  * A loose product at 750 g, priced at 1,99 a kilo, so the row has every fact a
- * compact row draws: no size, the price per kilo, and what the 750 g cost, marked
- * as an estimate. The geometry is measured in the browser at the phone width the
+ * compact row draws: no size, the price per kilo as its unit price, and what the
+ * 750 g cost, marked as an estimate. A pack at two, priced at 0,99, draws its
+ * price and the exact total of two (the owner's decision of 2026-11-12). The geometry is measured in the browser at the phone width the
  * plan states: 99 high, a 74 square picture, and the 0188 row stepper at 155 by
  * 48. The stepper's own steps are 0188's specs, not this one.
  */
@@ -134,10 +135,16 @@ test.describe('compact rows (velista 0191)', () => {
       'UNIT',
       SHORT_BRAND
     );
+    await setAdminPrice(
+      admin,
+      brandedId,
+      PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+      0.99
+    );
     const branded = await addProductLine(alice, LIST_GROCERIES_ID, {
       content: LONG_LABEL,
       itemId: brandedId,
-      quantity: 1,
+      quantity: 2,
       unit: 'UNIT',
     });
     brandedLineId = branded.id;
@@ -187,7 +194,7 @@ test.describe('compact rows (velista 0191)', () => {
       await expect(facts.nth(2)).toHaveText(/^≈/);
       await expect(facts.nth(2)).toContainText('1.49');
 
-      // The price starts at the column's edge, under the price per kilo, as the
+      // The total starts at the column's edge, under the price per kilo, as the
       // mock draws it: the row of today's `.price` must not push it to the end.
       const measureStart = await startOfText(facts.nth(1));
       const priceStart = await startOfText(facts.nth(2));
@@ -205,6 +212,12 @@ test.describe('compact rows (velista 0191)', () => {
 
       expect(await isCropped(label)).toBe(true);
       expect(await isCropped(brand)).toBe(false);
+    });
+
+    await test.step('a pack at two draws its price, then the exact total of two', async () => {
+      const facts = lineRow(page, LONG_LABEL).locator('.facts > .fact');
+      await expect(facts.nth(1)).toHaveText('€0.99');
+      await expect(facts.nth(2)).toHaveText('€1.98');
     });
 
     await test.step('a press hides the cost behind the saving mark until the write lands', async () => {
