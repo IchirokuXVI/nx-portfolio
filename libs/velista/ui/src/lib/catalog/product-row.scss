@@ -420,6 +420,17 @@ lib-product-picture.thumb:not(.has-photo),
   font-size: var(--app-text-lg);
 }
 
+// A product the list already asks for (velista 0185, frame "catalog D3"): the plus
+// keeps its size and place and is drawn switched off, the outline and the glyph at
+// reduced strength, as the composer draws its own plus when it cannot send.
+.add:disabled {
+  cursor: default;
+
+  .add-dot {
+    opacity: 0.4;
+  }
+}
+
 // In a mode that chooses (velista 0140, 0146), the radio or the tick at the
 // trailing edge, level with the middle of the picture. The radio says the card is
 // chosen, so the card draws no other sign of it.
@@ -616,6 +627,46 @@ label.open .pick:focus-visible {
 .held-title {
   color: var(--app-text-muted);
   font-size: var(--app-text-xs);
+}
+
+// "Already on Weekly shop. See it on the list", in place of the heading (velista
+// 0185). Body text in the secondary colour with the info glyph before it; the
+// sentence wraps, the link never breaks inside itself.
+.held-onlist {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-3);
+  margin: 0 0 var(--app-space-2);
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-sm);
+  line-height: var(--app-leading-body);
+}
+
+.held-onlist-icon {
+  flex: none;
+  // The glyph sits on the first line of the sentence, not on the middle of it.
+  margin-block-start: var(--app-space-hair);
+  font-size: var(--app-icon-sm);
+}
+
+.held-onlist-text {
+  min-inline-size: 0;
+}
+
+// The app's quiet action colour, underlined: inside a sentence a link must not
+// rest on colour alone.
+.held-onlist-link {
+  border-radius: var(--app-radius-sm);
+  color: var(--app-action-quiet-fg);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  white-space: nowrap;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
 }
 
 // The held lines sit 12 px apart, as the stepper mock draws them (velista 0188).

@@ -21,6 +21,7 @@ import type {
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
+import { toAddOutcome } from '../mapping/add-choice-mappers';
 import {
   toAlsoOnPlace,
   toDeletedId,
@@ -160,11 +161,26 @@ export class LineApi implements LineServiceI {
     );
 
     // The route answers what the add did, not the line alone (plan 0091): it may
-    // have raised a line the list already held rather than created one.
-    const record = body as Record<string, unknown> | null;
+    // have met a line the list already held rather than created one. Since backend
+    // `0260` it says which of three things happened; a gateway of before it names
+    // none, and `merged` then reads as a raise, as it always did.
+    const record = isRecord(body) ? body : null;
+    const merged = record?.['merged'] === true;
+    const outcome =
+      toAddOutcome(record?.['outcome']) ?? (merged ? 'raised' : 'created');
+    const line = required(toLine(record?.['line']), 'lines.add');
+    // A met line that does not map is dropped. `line` is the first one met, so a
+    // list that maps to nothing still names it.
+    const met =
+      outcome === 'alreadyOnList'
+        ? mapArray(record?.['alreadyOnList'], toLine)
+        : [];
     return {
-      line: required(toLine(record?.['line']), 'lines.add'),
-      merged: record?.['merged'] === true,
+      line,
+      merged,
+      outcome,
+      alreadyOnList:
+        outcome === 'alreadyOnList' && met.length === 0 ? [line] : met,
     };
   }
 

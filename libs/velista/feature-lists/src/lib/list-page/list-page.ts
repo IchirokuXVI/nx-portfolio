@@ -48,6 +48,7 @@ import {
   SessionStore,
   ShoppingProfileStore,
   toAddChoice,
+  toAddUnitRefusal,
   TripStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
@@ -57,6 +58,7 @@ import {
   type AddChoiceRow,
   addChoiceRows,
   type AddLineOptions,
+  addUnitRefusalKey,
   APP_BASE_PATH,
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
@@ -1816,6 +1818,27 @@ export class ListPage {
         this._openChoice(listId, entry, entry.anchor, choice);
         return;
       }
+      const refusal =
+        (entry.itemIds ?? []).length > 0
+          ? toAddUnitRefusal(outcome.error, entry.content)
+          : null;
+      if (refusal !== null) {
+        // The list counts this product in another unit (velista `0185`, section 4):
+        // nothing was made, the row drawn for it is gone, and the words and focus
+        // come back so the person can go to that line. The sentence says why.
+        if (drawn && (this._composer()?.content().trim() ?? '') === '') {
+          this._composer()?.restore(entry.content);
+        }
+        this._setNotice(
+          this._translator.t(
+            addUnitRefusalKey(refusal, 'list'),
+            undefined,
+            this._locale(),
+            { name: refusal.name }
+          )
+        );
+        return;
+      }
       if (drawn) {
         this._query.set('');
       }
@@ -1831,10 +1854,34 @@ export class ListPage {
     }
     this._query.set('');
 
+    if (outcome.outcome === 'alreadyOnList') {
+      // The list already asks for it, so nothing was added (velista `0185`, A1):
+      // every line it met is shown, the first brought into view, and marked. A met
+      // line the page does not draw (a filter, a section shut, a page not loaded) is
+      // said on the composer instead; the page changes no filter by itself.
+      const met = outcome.alreadyOnList;
+      const sentence = this._translator.t(
+        'list.add.alreadyOn',
+        undefined,
+        this._locale(),
+        { name: this._lineName(met[0] ?? outcome.line) }
+      );
+      this.announcement.set(sentence);
+      this._markTook(
+        met.map((line) => line.id),
+        () => {
+          if (listId === this.listId()) {
+            this._setNotice(sentence);
+          }
+        }
+      );
+      return;
+    }
+
     if (outcome.merged) {
       // The units went to a line already on the list, which stays where it is: the
       // page shows it and marks its quantity (target 4).
-      this._markTook(outcome.line.id);
+      this._markTook([outcome.line.id]);
       this.announcement.set(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
@@ -1903,18 +1950,13 @@ export class ListPage {
     }
     const facts = this._catalogFacts();
     const lines = this._lines.linesIn(asked.listId);
-    return addChoiceRows(
-      asked.choice,
-      asked.entry.quantity,
-      {
-        itemOf: (itemId) => this._itemNames.nameOf(itemId),
-        favoriteOf: (lineId) =>
-          lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
-        locale: facts.locale,
-        brandSizeOf: facts.brandSizeOf,
-      },
-      asked.entry.unit
-    );
+    return addChoiceRows(asked.choice, {
+      itemOf: (itemId) => this._itemNames.nameOf(itemId),
+      favoriteOf: (lineId) =>
+        lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
+      locale: facts.locale,
+      brandSizeOf: facts.brandSizeOf,
+    });
   });
 
   /** A line of the question was chosen: the same add, into that line. */
@@ -1965,31 +2007,58 @@ export class ListPage {
   }
 
   /**
-   * The line an add just raised, whose quantity carries the amber edge for
-   * {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   * The lines an add just raised or met, whose quantity carries the amber edge for
+   * {@link TOOK_DURATION_MS} (velista `0170`, target 4; velista `0185`, decision E).
    */
-  readonly tookLine = signal<string | null>(null);
+  readonly tookLines = signal<ReadonlySet<string>>(new Set());
 
   private _tookTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Mark a raised row, after the list has scrolled it into view if it was not. */
-  private _markTook(lineId: string): void {
+  /**
+   * One sentence under the composer's row, or null (velista `0185`): a line an add
+   * met that the page does not draw, or why a product could not be added. It goes
+   * on the next words, the next send and its cross. The voice strip sits in the
+   * same place, so the two are never drawn together: whichever came last stays.
+   */
+  readonly composerNotice = signal<string | null>(null);
+
+  /** The cross of the composer's sentence. */
+  dismissNotice(): void {
+    this.composerNotice.set(null);
+  }
+
+  private _setNotice(text: string): void {
+    this.voiceStrip.set(null);
+    this.composerNotice.set(text);
+  }
+
+  /**
+   * Mark the rows an add raised or met, after the list has scrolled the first of
+   * them into view if it was not. `missing` runs when none of them is drawn.
+   */
+  private _markTook(lineIds: readonly string[], missing?: () => void): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
-    this.tookLine.set(lineId);
+    this.tookLines.set(new Set(lineIds));
     this._tookTimer = setTimeout(() => {
       this._tookTimer = null;
-      this.tookLine.set(null);
+      this.tookLines.set(new Set());
     }, TOOK_DURATION_MS);
 
     afterNextRender(
       () => {
         const column = this._column()?.nativeElement;
-        const row = Array.from(
+        const rows = Array.from(
           column?.querySelectorAll<HTMLElement>('[data-line-id]') ?? []
-        ).find((candidate) => candidate.dataset['lineId'] === lineId);
+        );
+        const row = lineIds
+          .map((lineId) =>
+            rows.find((candidate) => candidate.dataset['lineId'] === lineId)
+          )
+          .find((found) => found !== undefined);
         if (column === undefined || row === undefined) {
+          missing?.();
           return;
         }
         if (!rowInView(row, column)) {
@@ -2033,6 +2102,8 @@ export class ListPage {
     this._tone.play();
 
     this._voiceBusy.set(true);
+    // The strip takes the place under the field (velista `0185`).
+    this.composerNotice.set(null);
     // Said at once, and replaced by the reply or the failure exactly as nothing used
     // to be (velista `0079`, section 5). A turn takes seconds, and a strip that is
     // empty for all of them reads as a recording that went nowhere.
@@ -2085,6 +2156,7 @@ export class ListPage {
 
   /** The microphone did not start. Two sentences, because they read differently. */
   onRecordingFailed(): void {
+    this.composerNotice.set(null);
     this.voiceStrip.set({
       heard: '',
       reply: '',
@@ -2185,6 +2257,8 @@ export class ListPage {
 
   onComposerQuery(query: string): void {
     this._query.set(query);
+    // The sentence about the last add goes with the next words (velista `0185`).
+    this.composerNotice.set(null);
     // New words are a new add: the open question was about the old ones.
     const asked = this.addChoice();
     if (asked !== null && query.trim() !== asked.entry.content) {

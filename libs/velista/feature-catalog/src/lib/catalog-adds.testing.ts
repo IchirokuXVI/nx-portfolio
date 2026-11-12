@@ -90,9 +90,11 @@ function sameName(left: string, right: string): boolean {
 /**
  * The real `CatalogAddStore` over doubles of what it reads and writes.
  *
- * The line double keeps the lines of each list and answers the way the server
- * does. An add onto a line that has the product under the same name raises that
- * line and says `merged`. Any other add makes a line. A change of quantity and a
+ * The line double keeps the lines of each list. An add onto a line that has the
+ * product under the same name raises that line and says `merged` with the outcome
+ * `raised`, which is what the server does for a line kept at zero (backend `0260`,
+ * R2) and what a gateway of before `0260` did for any line; the record of a visit
+ * is the same either way. Any other add makes a line. A change of quantity and a
  * delete move the same lines, so every read after a write agrees with it.
  */
 export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
@@ -176,6 +178,8 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
           return {
             line: put({ ...own, quantity: own.quantity + quantity }),
             merged: true,
+            outcome: 'raised' as const,
+            alreadyOnList: [],
           };
         }
         return {
@@ -191,6 +195,8 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
                 : 'APPROVED',
           }),
           merged: false,
+          outcome: 'created' as const,
+          alreadyOnList: [],
         };
       }
     ),

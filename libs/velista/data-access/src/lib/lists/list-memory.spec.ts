@@ -720,28 +720,28 @@ describe('LineMemory keeps the two rules of backend 0207 (velista 0144)', () => 
   });
 });
 
-describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170)', () => {
-  /** Two lines that hold a product under one name, on the owned list. */
+describe('LineMemory mirrors where an add lands (backend 0228, 0260, velista 0170, 0185)', () => {
+  /** Two lines that hold a product under one name, on the owned list, both at zero. */
   async function twoMilks() {
     const built = await build();
     const whole = await built.lines.addLine(
       OWNED_LIST,
       'Leche entera',
-      2,
+      0,
       ['item-milk-a'],
       false
     );
     const other = await built.lines.addLine(
       OWNED_LIST,
       'Leche entera',
-      1,
+      0,
       ['item-milk-b'],
       false
     );
     return { ...built, whole, other };
   }
 
-  it('raises the one line that holds a product under the typed name', async () => {
+  it('shows the one line that holds a product under the typed name, unchanged', async () => {
     const { lines } = await build();
     const milk = await lines.addLine(
       OWNED_LIST,
@@ -754,17 +754,43 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
     const result = await lines.addLineResult(
       OWNED_LIST,
       'leche ENTERA',
-      1,
+      undefined,
       undefined,
       undefined,
       { askIfAmbiguous: true }
     );
 
-    expect(result.merged).toBe(true);
-    expect(result.line).toMatchObject({ id: milk.id, quantity: 3 });
+    expect(result).toEqual({
+      line: expect.objectContaining({ id: milk.id, quantity: 2, version: 1 }),
+      merged: true,
+      outcome: 'alreadyOnList',
+      alreadyOnList: [expect.objectContaining({ id: milk.id })],
+    });
   });
 
-  it('asks which line when two hold a product under the name, in list order', async () => {
+  it('raises a line at zero by one step of its own unit', async () => {
+    const { lines } = await build();
+    const bananas = await lines.addLine(
+      OWNED_LIST,
+      'Plátanos',
+      0,
+      ['item-bananas'],
+      false,
+      undefined,
+      'GRAM'
+    );
+
+    const result = await lines.addLineResult(OWNED_LIST, 'plátanos');
+
+    expect(result.outcome).toBe('raised');
+    expect(result.line).toMatchObject({
+      id: bananas.id,
+      quantity: 25,
+      unit: 'GRAM',
+    });
+  });
+
+  it('asks which line when two at zero hold a product under the name, in list order', async () => {
     const { lines, whole, other } = await twoMilks();
 
     let refusal: unknown = null;
@@ -772,7 +798,7 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
       await lines.addLineResult(
         OWNED_LIST,
         'Leche entera',
-        1,
+        undefined,
         undefined,
         undefined,
         {
@@ -788,16 +814,39 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
     expect(failure.code).toBe('line_add_needs_choice');
     expect(failure.status).toBe(409);
     expect(
-      (failure.details?.['lines'] as { lineId: string }[]).map((l) => l.lineId)
-    ).toEqual([whole.id, other.id]);
+      (failure.details?.['lines'] as { lineId: string; unit: string }[]).map(
+        ({ lineId, unit }) => ({ lineId, unit })
+      )
+    ).toEqual([
+      { lineId: whole.id, unit: 'UNIT' },
+      { lineId: other.id, unit: 'UNIT' },
+    ]);
   });
 
-  it('makes a line when two match and the caller cannot ask', async () => {
-    const { lines } = await twoMilks();
+  it('asks nothing when one of them is asked for, and shows that one', async () => {
+    const { lines, other } = await twoMilks();
+    await lines.updateLine(other.id, { quantity: 3 });
 
-    const result = await lines.addLineResult(OWNED_LIST, 'Leche entera', 1);
+    const result = await lines.addLineResult(
+      OWNED_LIST,
+      'Leche entera',
+      undefined,
+      undefined,
+      undefined,
+      { askIfAmbiguous: true }
+    );
 
-    expect(result.merged).toBe(false);
+    expect(result.outcome).toBe('alreadyOnList');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([other.id]);
+  });
+
+  it('raises the earliest when two at zero match and the caller cannot ask', async () => {
+    const { lines, whole } = await twoMilks();
+
+    const result = await lines.addLineResult(OWNED_LIST, 'Leche entera');
+
+    expect(result.outcome).toBe('raised');
+    expect(result.line).toMatchObject({ id: whole.id, quantity: 1 });
   });
 
   it('raises the line the person chose, and makes one when they asked for a new one', async () => {
@@ -806,25 +855,29 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
     const into = await lines.addLineResult(
       OWNED_LIST,
       'Leche entera',
-      3,
+      undefined,
       undefined,
       undefined,
       { intoLineId: other.id }
     );
     expect(into).toEqual({
-      line: expect.objectContaining({ id: other.id, quantity: 4 }),
+      line: expect.objectContaining({ id: other.id, quantity: 1 }),
       merged: true,
+      outcome: 'raised',
+      alreadyOnList: [],
     });
 
     const fresh = await lines.addLineResult(
       OWNED_LIST,
       'Leche entera',
-      1,
+      undefined,
       undefined,
       undefined,
       { newLine: true }
     );
     expect(fresh.merged).toBe(false);
+    expect(fresh.outcome).toBe('created');
+    expect(fresh.line).toMatchObject({ quantity: 1, unit: 'UNIT' });
   });
 
   it('refuses a chosen line that is not on the list', async () => {
@@ -847,7 +900,7 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
     const result = await lines.addLineResult(
       OWNED_LIST,
       'garbanzos tostados',
-      1,
+      undefined,
       undefined,
       undefined,
       { askIfAmbiguous: true }
@@ -864,15 +917,75 @@ describe('LineMemory mirrors where a typed add lands (backend 0228, velista 0170
     const result = await lines.addLineResult(
       OWNED_LIST,
       'Leche entera',
-      1,
+      undefined,
       undefined,
       undefined,
       { newLine: true }
     );
 
     expect(result).toEqual({
-      line: expect.objectContaining({ id: typed.id, quantity: 2 }),
+      line: expect.objectContaining({ id: typed.id, quantity: 1 }),
       merged: true,
+      outcome: 'alreadyOnList',
+      alreadyOnList: [expect.objectContaining({ id: typed.id })],
+    });
+  });
+
+  it('makes a product on no line at one step of its unit (backend 0260, A2)', async () => {
+    const { lines } = await build();
+
+    const result = await lines.addLineResult(
+      OWNED_LIST,
+      'Plátanos',
+      undefined,
+      ['item-bananas'],
+      false,
+      undefined,
+      'GRAM'
+    );
+
+    expect(result.outcome).toBe('created');
+    expect(result.line).toMatchObject({ quantity: 25, unit: 'GRAM' });
+  });
+
+  it('shows a line of several products that holds the product, and refuses another unit', async () => {
+    const { lines } = await build();
+    const fruit = await lines.addLine(OWNED_LIST, 'Fruta', 2, [
+      'item-bananas',
+      'item-apples',
+    ]);
+
+    const met = await lines.addLineResult(
+      OWNED_LIST,
+      'Plátanos',
+      1,
+      ['item-bananas'],
+      false
+    );
+    expect(met.outcome).toBe('alreadyOnList');
+    expect(met.line).toMatchObject({ id: fruit.id, quantity: 2 });
+
+    let refusal: unknown = null;
+    try {
+      await lines.addLineResult(
+        OWNED_LIST,
+        'Plátanos',
+        25,
+        ['item-bananas'],
+        false,
+        undefined,
+        'GRAM'
+      );
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toMatchObject({
+      code: 'line_unit_differs',
+      details: {
+        line: { lineId: fruit.id, content: 'Fruta', unit: 'UNIT', quantity: 2 },
+        unit: 'GRAM',
+        index: null,
+      },
     });
   });
 });

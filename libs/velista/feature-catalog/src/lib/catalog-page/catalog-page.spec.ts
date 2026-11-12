@@ -1002,13 +1002,52 @@ describe('CatalogPage', () => {
         host(fixture).querySelectorAll('lib-product-row .held')
       ).toHaveLength(1);
 
-      // A second press raises that line. It does not make another.
+      // The list now asks for it, so the plus is off and the card says so
+      // (velista 0185, C1). A press does nothing more.
+      expect(plusOf(fixture, OIL)?.disabled).toBe(true);
       plusOf(fixture, OIL)?.click();
       await settle(fixture);
-      expect(lines.addLineResult).toHaveBeenCalledTimes(2);
+      expect(lines.addLineResult).toHaveBeenCalledTimes(1);
       expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
-        '2',
+        '1',
       ]);
+    });
+
+    it('switches the plus off for a product on the list, with the sentence and a link to the line (velista 0185)', async () => {
+      const { fixture } = await render('priced', {
+        lines: [OIL_LINE, FRYING_LINE],
+      });
+
+      const plus = plusOf(fixture, OIL);
+      expect(plus?.disabled).toBe(true);
+      const held = rowOf(fixture, OIL).querySelector('.held');
+      const sentence = held?.querySelector('.held-onlist');
+      expect(plus?.getAttribute('aria-describedby')).toBe(sentence?.id);
+      expect(sentence?.textContent).toContain('catalog.held.alreadyOn');
+      expect(held?.querySelector('.held-title')).toBeNull();
+      // The first line in the order drawn, on the list's own URL.
+      const link = held?.querySelector<HTMLAnchorElement>('a.held-onlist-link');
+      expect(link?.getAttribute('href')).toMatch(
+        /\/zones\/[^/]+\/lists\/list-weekly\?line=line-oil$/
+      );
+      // The lines keep their steppers, and they work.
+      expect(
+        held?.querySelectorAll('lib-quantity-stepper:not(.is-disabled)')
+      ).toHaveLength(2);
+      // A product on no line keeps its plus.
+      expect(plusOf(fixture, RICE)?.disabled).toBe(false);
+    });
+
+    it('keeps the plus of a product held only at zero, which a press raises to one step', async () => {
+      const { fixture, lines } = await render('priced', {
+        lines: [{ ...OIL_LINE, quantity: 0 }],
+      });
+
+      expect(plusOf(fixture, OIL)?.disabled).toBe(false);
+      expect(rowOf(fixture, OIL).querySelector('.held-onlist')).toBeNull();
+      plusOf(fixture, OIL)?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).toHaveBeenCalledTimes(1);
     });
 
     it('shows under a row the lines of the chosen list that already hold the product, each with its quantity', async () => {
@@ -1038,8 +1077,10 @@ describe('CatalogPage', () => {
         { lineId: 'line-frying', name: 'Oil for frying', quantity: '1' },
       ]);
       const held = rowOf(fixture, OIL).querySelector('.held');
-      expect(held?.querySelector('.held-title')?.textContent?.trim()).toBe(
-        'catalog.held.title'
+      // Already on the list, so the card says so in place of the heading
+      // (velista 0185).
+      expect(held?.querySelector('.held-onlist')?.textContent).toContain(
+        'catalog.held.alreadyOn'
       );
       expect(
         held

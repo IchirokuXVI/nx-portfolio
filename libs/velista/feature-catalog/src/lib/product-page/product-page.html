@@ -247,7 +247,7 @@
 <!-- A write that failed, said once (section 4.1). -->
 <p aria-live="polite" class="add-failed" role="status">
   @if (addFailed()) {
-    {{ 'catalog.add.failed' | rokuT }}
+    {{ addFailedText().key | rokuT: addFailedText().args }}
   }
 </p>
 

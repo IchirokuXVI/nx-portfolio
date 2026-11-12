@@ -35,11 +35,14 @@ import type {
   WriteShoppingProfileRequest,
 } from '@portfolio/velista/models';
 import {
+  addAmount,
   addMayMeetLine,
+  addMayMeetProduct,
   buildCategoryTree,
   EMPTY_CATEGORY_TREE,
   isOpenBasket,
   itemShopPrices,
+  type AddOutcome,
   type CategoryNode,
   type LineProductPriceRead,
   type LineUnitProductRead,
@@ -769,7 +772,10 @@ export type LineWriteCall =
   | {
       readonly kind: 'add';
       readonly content: string;
-      readonly quantity: number;
+      /** Absent for a typed name, which states no amount (velista `0185`). */
+      readonly quantity?: number;
+      /** What `quantity` counts. Absent for a typed name (velista `0185`). */
+      readonly unit?: LineUnit;
       /**
        * The products the composer attached, or undefined for a free text line.
        *
@@ -935,11 +941,18 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   let releaseUpdate: (() => void) | null = null;
   /**
    * The answers the next adds give, in order, before an add makes a line (velista
-   * `0170`): a refusal with its error, or a raise of a line this double holds.
+   * `0170`): a refusal with its error, a raise of a line this double holds, or the
+   * lines an add met and left as they are (velista `0185`).
    */
   const addAnswers: (
     | { readonly state: 'failed'; readonly error: unknown }
     | { readonly state: 'raised'; readonly lineId: string }
+    | {
+        readonly state: 'alreadyOnList';
+        readonly lineIds: readonly string[];
+        /** Lines the server met that this double does not hold, so no row draws. */
+        readonly unseen?: readonly Line[];
+      }
   )[] = [];
   /** Holds every add in flight until released. */
   let addHeld: Promise<void> | null = null;
@@ -993,25 +1006,28 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     addLine: async (
       listId: string,
       content: string,
-      quantity: number,
+      quantity: number | undefined,
       createdByUserId: string,
       _approval: unknown,
       itemIds?: readonly string[],
       named?: false,
       options?: AddLineOptions,
-      unit: LineUnit = 'UNIT'
+      unit?: LineUnit
     ): Promise<
       | {
           readonly state: 'added';
           readonly line: Line;
           readonly merged: boolean;
+          readonly outcome: AddOutcome;
+          readonly alreadyOnList: readonly Line[];
         }
       | { readonly state: 'failed'; readonly error: unknown }
     > => {
       calls.push({
         kind: 'add',
         content,
-        quantity,
+        ...(quantity === undefined ? {} : { quantity }),
+        ...(unit === undefined ? {} : { unit }),
         itemIds,
         ...(named === undefined ? {} : { named }),
         ...(options === undefined ? {} : { options }),
@@ -1030,13 +1046,36 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         if (held !== undefined) {
           const raised: Line = {
             ...held,
-            quantity: held.quantity + quantity,
+            quantity: held.quantity + (quantity ?? addAmount(held.unit)),
             version: held.version + 1,
           };
           lines.update((current) =>
             current.map((each) => (each.id === raised.id ? raised : each))
           );
-          return { state: 'added' as const, line: raised, merged: true };
+          return {
+            state: 'added' as const,
+            line: raised,
+            merged: true,
+            outcome: 'raised' as const,
+            alreadyOnList: [],
+          };
+        }
+      }
+      if (next?.state === 'alreadyOnList') {
+        const met = [
+          ...next.lineIds
+            .map((id) => lines().find((each) => each.id === id))
+            .filter((each): each is Line => each !== undefined),
+          ...(next.unseen ?? []),
+        ];
+        if (met.length > 0) {
+          return {
+            state: 'added' as const,
+            line: met[0],
+            merged: true,
+            outcome: 'alreadyOnList' as const,
+            alreadyOnList: met,
+          };
         }
       }
 
@@ -1049,8 +1088,8 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         listId,
         content,
         named: named !== false || (itemIds ?? []).length === 0,
-        quantity,
-        unit,
+        quantity: quantity ?? addAmount(unit ?? 'UNIT'),
+        unit: unit ?? 'UNIT',
         itemIds: [...(itemIds ?? [])],
         // Following no group, like every line the composer adds: nothing on the
         // client creates a binding, so a double that invented one would put a `Keep`
@@ -1070,24 +1109,40 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
         version: 1,
       };
       lines.update((current) => [...current, added]);
-      return { state: 'added' as const, line: added, merged: false };
+      return {
+        state: 'added' as const,
+        line: added,
+        merged: false,
+        outcome: 'created' as const,
+        alreadyOnList: [],
+      };
     },
 
-    /** As the real store reads it: whether the loaded lines carry the typed name. */
+    /**
+     * As the real store reads it: whether the loaded lines carry the typed name, or
+     * a line above zero holds every product of the add (velista `0185`).
+     */
     drawsBeforeAnswer: (
       _listId: string,
       content: string,
       itemIds?: readonly string[],
       options?: AddLineOptions
     ) =>
-      (itemIds ?? []).length > 0 ||
-      (options?.intoLineId === undefined && !addMayMeetLine(lines(), content)),
+      itemIds !== undefined && itemIds.length > 0
+        ? !addMayMeetProduct(lines(), itemIds)
+        : options?.intoLineId === undefined &&
+          !addMayMeetLine(lines(), content),
 
     /** The next add answers this, before any add makes a line (velista `0170`). */
     answerAddWith: (
       answer:
         | { readonly state: 'failed'; readonly error: unknown }
         | { readonly state: 'raised'; readonly lineId: string }
+        | {
+            readonly state: 'alreadyOnList';
+            readonly lineIds: readonly string[];
+            readonly unseen?: readonly Line[];
+          }
     ) => {
       addAnswers.push(answer);
     },

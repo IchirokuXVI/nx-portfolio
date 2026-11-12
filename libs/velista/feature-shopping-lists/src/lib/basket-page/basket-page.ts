@@ -1,5 +1,6 @@
 import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import {
+  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
@@ -8,6 +9,7 @@ import {
   effect,
   type ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
@@ -30,12 +32,14 @@ import {
   ShopDetailStore,
   ShopSectionsStore,
   toAddChoice,
+  toAddUnitRefusal,
 } from '@portfolio/velista/data-access';
 import {
   type AddChoice,
   addChoiceName,
   addChoiceRows,
   type AddLineOptions,
+  addUnitRefusalKey,
   APP_BASE_PATH,
   type BasketParticipant,
   type BasketProduct,
@@ -2223,37 +2227,58 @@ export class BasketPage {
     return {
       name: addChoiceName(asked.choice, asked.entry.content),
       listName: asked.listName,
-      added: asked.entry.quantity,
-      rows: addChoiceRows(
-        asked.choice,
-        asked.entry.quantity,
-        {
-          itemOf: (itemId) => this._itemNames.nameOf(itemId),
-          // The basket holds no favourite, so a row shows the line's first product.
-          favoriteOf: () => null,
-          locale,
-          brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
-        },
-        asked.entry.unit
-      ),
+      rows: addChoiceRows(asked.choice, {
+        itemOf: (itemId) => this._itemNames.nameOf(itemId),
+        // The basket holds no favourite, so a row shows the line's first product.
+        favoriteOf: () => null,
+        locale,
+        brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      }),
     };
   });
 
   /**
-   * The line a basket add just raised, whose row's quantity carries the amber edge
-   * for {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   * The lines a basket add just raised or met, whose rows' quantity carries the
+   * amber edge for {@link TOOK_DURATION_MS} (velista `0170`, target 4; velista
+   * `0185`, decision E).
    */
-  protected readonly tookLine = signal<string | null>(null);
+  protected readonly tookLines = signal<ReadonlySet<string>>(new Set());
 
   private _tookTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Whether a row holds the line an add just raised. */
+  /** Whether a row holds a line an add just raised or met. */
   protected tookIn(row: BasketRowModel): boolean {
-    const lineId = this.tookLine();
-    return (
-      lineId !== null && row.entries.some((held) => held.lineId === lineId)
-    );
+    const took = this.tookLines();
+    return took.size > 0 && row.entries.some((held) => took.has(held.lineId));
   }
+
+  /**
+   * The lines a drawn row stands for, space separated, so a page that names a line
+   * finds its row (velista `0185`, section 3.2): the entry of a row under a list
+   * heading, every entry of a row everywhere else.
+   */
+  protected lineIdsOf(drawn: {
+    readonly row: BasketRowModel;
+    readonly entry: { readonly lineId: string } | null;
+  }): string {
+    return drawn.entry === null
+      ? drawn.row.entries.map((held) => held.lineId).join(' ')
+      : drawn.entry.lineId;
+  }
+
+  /**
+   * One sentence under the composer's row, or null (velista `0185`): a line an add
+   * met that no drawn row shows, or why a product could not go on in its unit. It
+   * goes on the next words, the next send and its cross.
+   */
+  protected readonly composerNotice = signal<string | null>(null);
+
+  /** The cross of the composer's sentence. */
+  protected dismissNotice(): void {
+    this.composerNotice.set(null);
+  }
+
+  private readonly _injector = inject(Injector);
 
   /**
    * The plus or a card's add button was pressed, and the answer is a question:
@@ -2265,6 +2290,8 @@ export class BasketPage {
    * away leaves them in the field.
    */
   protected askWhere(entry: LineComposerSubmit): void {
+    // A new send: the sentence about the last one goes (velista `0185`).
+    this.composerNotice.set(null);
     if (entry.anchor === undefined) {
       // The composer here always names the button, because `holdOnSend` is on.
       // This is the belt: a picker with nothing to stand on cannot be drawn.
@@ -2341,6 +2368,15 @@ export class BasketPage {
     this.pickerAnchor.set(null);
   }
 
+  /** The name of a covered list, as the picker draws it, or nothing. */
+  private _listNameOf(listId: string): string {
+    return (
+      this._store.lists().get(listId)?.name ??
+      this.pickerRows().find((row) => row.listId === listId)?.name ??
+      ''
+    );
+  }
+
   /** Whether the composer's field is empty, as a cleared or a sent field is. */
   private _fieldIsEmpty(): boolean {
     return (this._composer()?.content().trim() ?? '') === '';
@@ -2387,16 +2423,43 @@ export class BasketPage {
     };
   }
 
-  /** Mark the row of a line an add raised (velista `0170`, target 4). */
-  private _markTook(lineId: string): void {
+  /**
+   * Mark the rows of the lines an add raised or met (velista `0170`, target 4), and
+   * bring the first marked row to the centre when it is out of view, as the zone
+   * list does (velista `0185`). `missing` runs when no drawn row holds any of them.
+   */
+  private _markTook(lineIds: readonly string[], missing?: () => void): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
-    this.tookLine.set(lineId);
+    this.tookLines.set(new Set(lineIds));
     this._tookTimer = setTimeout(() => {
       this._tookTimer = null;
-      this.tookLine.set(null);
+      this.tookLines.set(new Set());
     }, TOOK_DURATION_MS);
+
+    afterNextRender(
+      () => {
+        const column = this._column()?.nativeElement;
+        const rows = Array.from(
+          column?.querySelectorAll<HTMLElement>('[data-line-ids]') ?? []
+        );
+        const row = rows.find((candidate) =>
+          (candidate.dataset['lineIds'] ?? '')
+            .split(' ')
+            .some((lineId) => lineIds.includes(lineId))
+        );
+        if (column === undefined || row === undefined) {
+          missing?.();
+          return;
+        }
+        if (!rowInView(row, column)) {
+          // Centred and instant: the edge is the news, not the trip.
+          row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+        }
+      },
+      { injector: this._injector }
+    );
   }
 
   /**
@@ -2584,6 +2647,8 @@ export class BasketPage {
 
   protected onComposerQuery(query: string): void {
     this._query.set(query);
+    // The sentence about the last add goes with the next words (velista `0185`).
+    this.composerNotice.set(null);
     // The rows are searched from the first character, the catalog from the third
     // (velista `0117`).
     this._view.search(query);
@@ -2679,9 +2744,10 @@ export class BasketPage {
     const result = await this._store.addLine({
       targetListId: listId,
       content: entry.content,
-      quantity: entry.quantity,
-      // The composer's unit: grams for one product sold by the kilo (velista `0182`).
-      unit: entry.unit,
+      // A card's one step and its unit, grams for a product sold by the kilo
+      // (velista `0182`); a typed name states neither (velista `0185`).
+      ...(entry.quantity === undefined ? {} : { quantity: entry.quantity }),
+      ...(entry.unit === undefined ? {} : { unit: entry.unit }),
       ...(itemIds.length > 0 ? { itemIds } : {}),
       // A chosen card is not named (velista `0144`, section 3).
       ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
@@ -2705,10 +2771,7 @@ export class BasketPage {
         void this._itemNames.ensure(
           choice.lines.flatMap((line) => line.itemIds)
         );
-        const listName =
-          this._store.lists().get(listId)?.name ??
-          this.pickerRows().find((row) => row.listId === listId)?.name ??
-          '';
+        const listName = this._listNameOf(listId);
         this._choice.set({
           listId,
           listName: listName === '' ? null : listName,
@@ -2732,6 +2795,22 @@ export class BasketPage {
         this._query.set('');
         this.suggestions.set([]);
         this._composer()?.restore(entry.content);
+      }
+      const refusal = typed
+        ? null
+        : toAddUnitRefusal(this._store.error(), entry.content);
+      if (refusal !== null) {
+        // The list counts this product in another unit (velista `0185`, section 4):
+        // nothing was made, and the sentence under the field says which list and why.
+        this.composerNotice.set(
+          this._translator.t(
+            addUnitRefusalKey(refusal, 'basket'),
+            undefined,
+            this._locale(),
+            { name: refusal.name, list: this._listNameOf(listId) }
+          )
+        );
+        return;
       }
       this._say(
         this._translator.t(
@@ -2760,13 +2839,41 @@ export class BasketPage {
     }
 
     const line = result.entries[0];
+    if (result.addOutcome === 'alreadyOnList' && line !== undefined) {
+      // The list already asks for it, so nothing was added (velista `0185`, A1):
+      // every row of a line it met is marked, the first brought into view, and the
+      // sentence names the row as it is drawn. A met line no drawn row shows (a
+      // filter, a hidden list) is said under the field instead.
+      const shown = this._shownRow(line.lineId);
+      const sentence = this._translator.t(
+        'basket.add.alreadyOn',
+        undefined,
+        this._locale(),
+        {
+          name:
+            shown?.name ?? (line.content === '' ? entry.content : line.content),
+          list: this._listNameOf(listId),
+        }
+      );
+      this._say(sentence);
+      this._markTook(
+        result.entries.map((met) => met.lineId),
+        () => this.composerNotice.set(sentence)
+      );
+      return;
+    }
     if (
       line !== undefined &&
-      (options?.intoLineId !== undefined || held.has(line.lineId))
+      result.addOutcome !== 'created' &&
+      (result.addOutcome === 'raised' ||
+        options?.intoLineId !== undefined ||
+        held.has(line.lineId))
     ) {
       // A line the basket already showed, raised: its row is marked (target 4),
-      // and said as that row draws it, its name and its number.
-      this._markTook(line.lineId);
+      // and said as that row draws it, its name and its number. With no
+      // `addOutcome` (a gateway of before backend `0260`) a raise is told by a line
+      // this basket already showed.
+      this._markTook([line.lineId]);
       const shown = this._shownRow(line.lineId);
       this._say(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
@@ -2789,4 +2896,11 @@ export class BasketPage {
       })
     );
   }
+}
+
+/** Whether a row is wholly inside the column, as the zone list reads it. */
+function rowInView(row: HTMLElement, column: HTMLElement): boolean {
+  const box = row.getBoundingClientRect();
+  const frame = column.getBoundingClientRect();
+  return box.top >= frame.top && box.bottom <= frame.bottom;
 }

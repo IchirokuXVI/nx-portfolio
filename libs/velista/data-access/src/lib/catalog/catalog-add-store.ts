@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
+  addAmount,
   addedToLine,
   defaultQuantity,
   firstAddTarget,
@@ -17,6 +18,7 @@ import {
   visitTakeBack,
   visitWithout,
   type AddTargetList,
+  type AddUnitRefusal,
   type CatalogVisit,
   type HeldLine,
   type ItemList,
@@ -37,6 +39,7 @@ import {
 import { SessionStore } from '../auth/session-store';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
+import { toAddUnitRefusal } from '../mapping/add-choice-mappers';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { ItemNames } from './item-names';
 
@@ -52,7 +55,7 @@ export interface CatalogAddProduct {
   /**
    * What a line of this product counts in (velista `0182`):
    * `lineUnitOf(soldAsOf(offer, product))`. Absent is a count. An add starts at
-   * `defaultQuantity` of it, one piece or one kilo.
+   * `addAmount` of it, one piece, 25 g or 25 ml (velista `0185`).
    */
   readonly unit?: LineUnit;
 }
@@ -125,6 +128,7 @@ export class CatalogAddStore {
   private readonly _targetId = signal<string | null>(null);
   private readonly _visit = signal<CatalogVisit>([]);
   private readonly _failures = signal(0);
+  private readonly _refusal = signal<AddUnitRefusal | null>(null);
   private readonly _held = signal<readonly HeldLine[]>([]);
   private readonly _lineReads = signal<ReadonlyMap<string, CatalogAddStatus>>(
     new Map()
@@ -226,6 +230,13 @@ export class CatalogAddStore {
    * its live region, by watching this number move.
    */
   readonly failures = this._failures.asReadonly();
+
+  /**
+   * Why the last failed write failed, when it was an add of a product the list
+   * counts in another unit (velista `0185`, section 4): the page says that sentence
+   * in place of the generic one. Null after any other failure.
+   */
+  readonly refusal = this._refusal.asReadonly();
 
   /**
    * Read the lists the person can write to, once for the visit (section 4.3):
@@ -481,7 +492,7 @@ export class CatalogAddStore {
     );
     const unit = product.unit ?? 'UNIT';
     if (own !== null) {
-      this._move(own.lineId, defaultQuantity(own.unit));
+      this._move(own.lineId, addAmount(own.unit));
       return own.lineId;
     }
     const lineId = unsavedLineId(listId, product.itemId);
@@ -491,7 +502,7 @@ export class CatalogAddStore {
         lineId,
         listId,
         name: product.name,
-        quantity: defaultQuantity(unit),
+        quantity: addAmount(unit),
         unit,
         pending: false,
         itemIds: [product.itemId],
@@ -513,9 +524,9 @@ export class CatalogAddStore {
     generation: number
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
-    // One piece or one kilo, in the product's unit (velista `0182`).
+    // One step of the product's unit, 25 g, 25 ml or one piece (velista `0185`).
     const unit = product.unit ?? 'UNIT';
-    const amount = defaultQuantity(unit);
+    const amount = addAmount(unit);
     try {
       // Not named: the words are the product's (velista `0144`, section 3), and
       // they are still sent, because the server needs them and `sameLineName`
@@ -543,15 +554,28 @@ export class CatalogAddStore {
       }
       const answered = heldOf(result.line, elsewhere ? 0 : ahead);
       // A stepper's run still open on the line stays drawn on top of the answer.
+      // Every other line the add met is read as the server holds it.
+      const met = result.alreadyOnList.filter(
+        (line) => line.id !== result.line.id
+      );
       this._held.update((held) =>
-        upsert(
-          held.filter((line) => line.lineId !== unsaved),
-          {
-            ...answered,
-            quantity: answered.quantity + this._openOffset(answered.lineId),
-          }
+        met.reduce(
+          (all, line) => upsert(all, heldOf(line, 0)),
+          upsert(
+            held.filter((line) => line.lineId !== unsaved),
+            {
+              ...answered,
+              quantity: answered.quantity + this._openOffset(answered.lineId),
+            }
+          )
         )
       );
+      if (result.outcome === 'alreadyOnList') {
+        // The list already asked for it, so nothing was added (backend `0260`,
+        // A1): what was drawn came off with the server's quantity above, and the
+        // visit records nothing to take back.
+        return;
+      }
       this._visit.update((visit) =>
         visitAfterAdd(
           visit,
@@ -566,7 +590,7 @@ export class CatalogAddStore {
           amount
         )
       );
-    } catch {
+    } catch (error) {
       if (generation !== this._generation) {
         return;
       }
@@ -588,6 +612,7 @@ export class CatalogAddStore {
           this._move(drawn.lineId, -amount);
         }
       }
+      this._refusal.set(toAddUnitRefusal(error, product.name));
       this._failures.update((count) => count + 1);
     }
   }
@@ -642,6 +667,7 @@ export class CatalogAddStore {
     } catch {
       if (generation === this._generation) {
         this._move(lineId, -delta);
+        this._refusal.set(null);
         this._failures.update((count) => count + 1);
       }
     }
@@ -724,6 +750,7 @@ export class CatalogAddStore {
     } catch {
       if (generation === this._generation) {
         replace(line);
+        this._refusal.set(null);
         this._failures.update((count) => count + 1);
       }
     }
@@ -779,6 +806,7 @@ export class CatalogAddStore {
           ...visit.slice(at),
         ]);
         this._held.set(before);
+        this._refusal.set(null);
         this._failures.update((count) => count + 1);
       }
     }
@@ -991,8 +1019,8 @@ function heldOf(line: Line, ahead: number): HeldLine {
     lineId: line.id,
     listId: line.listId,
     name: line.content,
-    // Each add on its way is one piece or one kilo of the line's unit.
-    quantity: line.quantity + ahead * defaultQuantity(line.unit),
+    // Each add on its way is one step of the line's unit (velista `0185`).
+    quantity: line.quantity + ahead * addAmount(line.unit),
     unit: line.unit,
     pending: line.approvalStatus === 'PENDING',
     itemIds: line.itemIds,

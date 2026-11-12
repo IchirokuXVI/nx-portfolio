@@ -81,7 +81,7 @@ import {
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
 import { CATEGORY_PARAM } from '../category-choice';
-import { rowAdds } from '../row-adds';
+import { addFailedCopy, rowAdds } from '../row-adds';
 
 /**
  * `gone` is a product the catalog no longer holds, which is not a failed read:
@@ -395,7 +395,21 @@ export class ProductPage {
   });
 
   private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held())
+    rowAdds(this.addTarget(), this._adds.held(), (target) =>
+      appPath(
+        this._locale(),
+        this._basePath,
+        'zones',
+        target.zoneId,
+        'lists',
+        target.listId
+      )
+    )
+  );
+
+  /** The sentence of a failed add, as the catalog says it (velista `0185`). */
+  protected readonly addFailedText = computed(() =>
+    addFailedCopy(this._adds.refusal())
   );
 
   constructor() {

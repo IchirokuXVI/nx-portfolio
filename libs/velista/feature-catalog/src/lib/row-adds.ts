@@ -1,8 +1,10 @@
 import type { ActivatedRouteSnapshot } from '@angular/router';
 import {
+  addUnitRefusalKey,
   canStepLine,
   isUnsavedLine,
   type AddTargetList,
+  type AddUnitRefusal,
   type HeldLine,
   type HoldingRow,
 } from '@portfolio/velista/models';
@@ -26,10 +28,18 @@ export interface RowAdds {
  *
  * Shared by the catalog page and the product page, whose similar products carry
  * the same plus and add to the same list.
+ *
+ * A product a line of the list asks for, alone or among other products, has its
+ * plus switched off (velista `0185`, C1 and decision C): an add would change
+ * nothing. `onList` names the first such line in the order the card draws them,
+ * and `pathOf` the list's URL, which the card's link opens with `?line=`. A line at
+ * zero does not count, because a press raises it, and neither does the line an
+ * add still on its way drew, which has no id the list knows.
  */
 export function rowAdds(
   target: AddTargetList | null,
-  held: readonly HeldLine[]
+  held: readonly HeldLine[],
+  pathOf: (target: AddTargetList) => string
 ): RowAdds {
   const byItem = new Map<string, ProductRowAdd>();
   if (target === null) {
@@ -60,11 +70,35 @@ export function rowAdds(
       }
     }
   }
+  const path = pathOf(target);
   for (const [itemId, rows] of lines) {
-    byItem.set(itemId, { list: target.name, lines: rows });
+    const wanted = rows.find(
+      (row) => row.quantity > 0 && !isUnsavedLine(row.lineId)
+    );
+    byItem.set(itemId, {
+      list: target.name,
+      lines: rows,
+      ...(wanted === undefined
+        ? {}
+        : { onList: { lineId: wanted.lineId, path } }),
+    });
   }
 
   return { plain: { list: target.name, lines: [] }, byItem };
+}
+
+/**
+ * The sentence a failed add says (velista `0134`, section 4.1), as a key and its
+ * arguments: why, for a product the list counts in another unit (velista `0185`,
+ * section 4), and the generic sentence for any other failure.
+ */
+export function addFailedCopy(refusal: AddUnitRefusal | null): {
+  readonly key: string;
+  readonly args: Record<string, unknown>;
+} {
+  return refusal === null
+    ? { key: 'catalog.add.failed', args: {} }
+    : { key: addUnitRefusalKey(refusal, 'list'), args: { name: refusal.name } };
 }
 
 /**

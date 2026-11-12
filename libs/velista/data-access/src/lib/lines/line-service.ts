@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 import { serviceToken } from '@portfolio/shared/data-access';
 import type {
   AddLineOptions,
+  AddOutcome,
   AlsoOnVm,
   ItemLists,
   Line,
@@ -29,11 +30,19 @@ export interface LineUpdateResult {
 
 /**
  * What an add answers (backend plan 0091): the line, and whether it is a line the
- * list already held, raised, rather than a new one.
+ * list already held rather than a new one.
+ *
+ * Since backend `0260` an add that meets a line the list already asks for changes
+ * nothing: `outcome` is `alreadyOnList`, `line` is the first line it met, and
+ * `alreadyOnList` names every one of them, unchanged and at their own versions. A
+ * line kept at zero is `raised`, and nothing met is `created`.
  */
 export interface LineAddResult {
   readonly line: Line;
   readonly merged: boolean;
+  readonly outcome: AddOutcome;
+  /** Empty unless {@link outcome} is `alreadyOnList`. In list position order. */
+  readonly alreadyOnList: readonly Line[];
 }
 
 /**
@@ -80,7 +89,9 @@ export interface LineServiceI {
    * ignored on an add that carries products, and is not sent there.
    *
    * `unit` is what `quantity` counts (velista `0182`): the unit of the product
-   * added, `lineUnitOf(soldAsOf(offer, product))`. Absent is `UNIT`.
+   * added, `lineUnitOf(soldAsOf(offer, product))`. Absent is `UNIT`. A typed name
+   * sends neither (velista `0185`): the server then makes a line of one piece, or
+   * meets the line of that name in whatever unit it counts.
    */
   addLine(
     listId: string,

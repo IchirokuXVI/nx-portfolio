@@ -460,7 +460,9 @@
     },
     "held": {
       "title": "En {{list}}",
-      "titleMany": "En tus listas"
+      "titleMany": "En tus listas",
+      "alreadyOn": "Ya está en {{list}}.",
+      "openLine": "Ver en la lista"
     },
     "adding": {
       "to": "Se añade a",
@@ -751,8 +753,7 @@
     "less": "Quitar {{step}} de {{name}}",
     "more": "Añadir {{step}} a {{name}}",
     "settled": "{{name}}, {{amount}}",
-    "inList": "{{name}} en {{list}}",
-    "newLine": "la nueva línea"
+    "inList": "{{name}} en {{list}}"
   },
   "list": {
     "header": {
@@ -778,7 +779,6 @@
       "resultsNone": "Nada en tu lista dice “{{query}}”",
       "resultsCatalog": "Del catálogo",
       "action": "Añadir",
-      "quantity": "Cuántos",
       "startListening": "Di lo que necesitas",
       "stopListening": "Dejar de escuchar",
       "clear": "Borrar lo escrito",
@@ -855,15 +855,15 @@
         "noMatch": "Ningún producto coincide con «{{- query}}»",
         "noMatchFreeText": "Puedes añadirlo tal cual",
         "alsoCalled": "También: {{- synonym}}"
-      }
+      },
+      "alreadyOn": "{{name}} ya está en la lista.",
+      "dismissNotice": "Cerrar"
     },
     "addChoice": {
       "title": "{{name}} ya está en tu lista",
       "newLine": "Una línea nueva",
       "row": "Añadir {{added}} a {{name}}, {{product}}: de {{from}} a {{to}}",
       "rowNoProduct": "Añadir {{added}} a {{name}}: de {{from}} a {{to}}",
-      "rowHolds": "{{name}}, {{product}}: {{from}}, contado en otra unidad",
-      "rowHoldsNoProduct": "{{name}}: {{from}}, contado en otra unidad",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {
@@ -997,7 +997,13 @@
       "failed": "No ha funcionado. Inténtalo de nuevo en un momento",
       "mergeNeedsApproval": "Ese nombre es de una línea aprobada, y esta línea aún no lo está.",
       "mergeTooManyProducts": "Juntas tienen más de {{max}} productos.",
-      "unitDiffers": "Estas dos líneas se cuentan en unidades distintas, así que siguen separadas."
+      "unitDiffers": "Estas dos líneas se cuentan en unidades distintas, así que siguen separadas.",
+      "addUnitDiffers": {
+        "UNIT": "Esta lista ya cuenta {{name}} por unidades. Cambia la cantidad en esa línea.",
+        "GRAM": "Esta lista ya cuenta {{name}} por peso. Cambia la cantidad en esa línea.",
+        "MILLILITER": "Esta lista ya cuenta {{name}} por volumen. Cambia la cantidad en esa línea.",
+        "unknown": "Esta lista ya tiene {{name}} en otra unidad. Cambia la cantidad en esa línea."
+      }
     },
     "detail": {
       "title": "Sobre esta línea",
@@ -1941,7 +1947,13 @@
       "belowSettled_one": "Ya se ha comprado uno para esta lista",
       "belowSettled_other": "Ya se han comprado {{count}} para esta lista",
       "basketFinished": "Quien hizo la lista ha terminado la compra. Ya no se puede cambiar",
-      "reference": "ref {{correlationId}}"
+      "reference": "ref {{correlationId}}",
+      "addUnitDiffers": {
+        "UNIT": "{{list}} ya cuenta {{name}} por unidades. Cambia la cantidad en esa línea.",
+        "GRAM": "{{list}} ya cuenta {{name}} por peso. Cambia la cantidad en esa línea.",
+        "MILLILITER": "{{list}} ya cuenta {{name}} por volumen. Cambia la cantidad en esa línea.",
+        "unknown": "{{list}} ya tiene {{name}} en otra unidad. Cambia la cantidad en esa línea."
+      }
     },
     "status": {
       "got": "Marcar {{name}} como conseguido",
@@ -1985,7 +1997,8 @@
       "sheetTitle": "¿Para qué lista es?",
       "listCaption": "{{zone}} · {{count}} por comprar",
       "resultsOnLists": "En tus listas",
-      "resultsNone": "Nada en tus listas dice “{{query}}”"
+      "resultsNone": "Nada en tus listas dice “{{query}}”",
+      "alreadyOn": "{{name}} ya está en {{list}}."
     },
     "addChoice": {
       "title": "{{name}} ya está en esta lista",

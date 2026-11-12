@@ -441,7 +441,7 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(input.getAttribute('inputmode')).toBe('decimal');
       expect(input.getAttribute('aria-valuenow')).toBe('1275');
       expect(input.getAttribute('aria-valuemin')).toBe('0');
-      expect(input.getAttribute('aria-valuemax')).toBe('100000');
+      expect(input.getAttribute('aria-valuemax')).toBe('999999');
       expect(input.getAttribute('aria-valuetext')).toBe('1.275 kilograms');
       expect(input.getAttribute('aria-label')).toBe(
         'amount.group:{"name":"Plátano"}'

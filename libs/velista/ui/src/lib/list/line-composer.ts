@@ -16,11 +16,10 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
+  addAmount,
   catalogName,
-  defaultQuantity,
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
-  LINE_QUANTITY_MAX,
   lineUnitOfProduct,
   type CatalogSuggestion,
   type LineUnit,
@@ -40,7 +39,6 @@ import {
   StopIcon,
   TrashIcon,
 } from '../icons/icons';
-import { QuantityStepper } from './quantity-stepper';
 
 /** What the one button at the end of the row is for. */
 export type LineComposerButton = 'add' | 'record';
@@ -48,14 +46,18 @@ export type LineComposerButton = 'add' | 'record';
 /** One line sent from the composer. */
 export interface LineComposerSubmit {
   readonly content: string;
-  /** In {@link unit}: a count, or grams for a product sold by the kilo. */
-  readonly quantity: number;
+  /**
+   * In {@link unit}: one step of it for a chosen card, {@link addAmount} (velista
+   * `0185`). Absent for typed text, which states no amount: the server makes a line
+   * of one piece, or shows the line that already carries the name.
+   */
+  readonly quantity?: number;
   /**
    * What `quantity` counts (velista `0182`): `GRAM` for one product sold by the
-   * kilo, `MILLILITER` for one sold by the litre, and `UNIT` for everything else,
-   * typed text included.
+   * kilo, `MILLILITER` for one sold by the litre, and `UNIT` for any other card.
+   * Absent for typed text, with the amount (velista `0185`).
    */
-  readonly unit: LineUnit;
+  readonly unit?: LineUnit;
   readonly itemIds?: readonly string[];
   /**
    * `false` for a card that was chosen: `content` is then the name of the product
@@ -77,9 +79,20 @@ export interface LineComposerSubmit {
  * ## Adding happens in runs
  *
  * Somebody stands in the kitchen and enters six things. So the field **keeps focus
- * across a submit**, the keyboard never comes down between two adds, and the quantity
- * resets to one so the seventh item does not silently inherit the sixth one's count.
- * A FAB would put a dialog between every pair of those six.
+ * across a submit** and the keyboard never comes down between two adds. A FAB would
+ * put a dialog between every pair of those six.
+ *
+ * ## It asks no amount
+ *
+ * The row is the field and its one button (velista `0185`, the owner's U3). A typed
+ * name goes with no amount, and a card at one step of its unit. The amount is changed
+ * on the list, on the line that holds it, where it can be seen.
+ *
+ * ## One sentence under the row
+ *
+ * {@link notice} is the page's: what became of an add that changed nothing, or why
+ * an add was refused. The composer draws it under the row, where the voice strip
+ * goes, and never clears it; its cross asks the page to ({@link noticeDismissed}).
  *
  * ## It is absent without `WRITE`, and never locked
  *
@@ -109,7 +122,7 @@ export interface LineComposerSubmit {
  * field is empty and the plus it has always been when it is not, and the field's
  * emptiness is the switch rather than a mode anybody selects: two buttons side by
  * side, one of which is always inert, is a row of controls that has to be read
- * before either can be used, and this row already carries a stepper.
+ * before either can be used.
  *
  * The run property survives it. Somebody typing never sees the microphone and
  * somebody speaking never has the keyboard open, so neither mode interrupts the
@@ -159,7 +172,6 @@ export interface LineComposerSubmit {
     TrashIcon,
     CloseIcon,
     ClearsField,
-    QuantityStepper,
   ],
   templateUrl: './line-composer.html',
   styleUrl: './line-composer.scss',
@@ -182,8 +194,8 @@ export class LineComposer {
    * Off everywhere but the basket. There, a send is a question first: the plus or a
    * card's add button opens a picker of lists, held against the button that was
    * pressed, and only a pick adds the line. So with this on, {@link submitted}
-   * carries that button as `anchor`, and the words, the quantity and the
-   * suggestions stay as they are. The container calls {@link sent} once the line
+   * carries that button as `anchor`, and the words and the suggestions stay as
+   * they are. The container calls {@link sent} once the line
    * has somewhere to go, and nothing at all if the picker is waved away, which
    * leaves the words in the field for another try.
    *
@@ -234,11 +246,25 @@ export class LineComposer {
    *
    * ## An input and not a second component
    *
-   * The field, the run behaviour across a submit, the counter and the quantity
-   * stepper are all the same on both screens, and a copy of this component would be
+   * The field, the run behaviour across a submit, the counter and the sentence under
+   * the row are all the same on both screens, and a copy of this component would be
    * a second place for those four to drift.
    */
   readonly voice = input(true);
+
+  /**
+   * One sentence under the row, translated by the page, or null (velista `0185`):
+   * a line the add met that the page cannot show ("Plátanos is already on the
+   * list."), or why a product could not be added in its unit. A polite live region,
+   * so it is said when it appears.
+   *
+   * The page owns it and clears it: on the next words, the next send, and the
+   * cross, which reports through {@link noticeDismissed}.
+   */
+  readonly notice = input<string | null>(null);
+
+  /** The cross of {@link notice} was pressed. */
+  readonly noticeDismissed = output<void>();
 
   /**
    * The id of the region the page draws this field's results in (velista `0117`).
@@ -282,7 +308,6 @@ export class LineComposer {
   readonly recordingFailed = output<void>();
 
   readonly content = signal('');
-  readonly quantity = signal(1);
 
   readonly maxLength = LINE_CONTENT_MAX_LENGTH;
   readonly counterFrom = LINE_CONTENT_COUNTER_FROM;
@@ -578,12 +603,8 @@ export class LineComposer {
    * A method the container calls rather than an input it binds, and the difference
    * matters: an input would have to be cleared again on the next keystroke or it
    * would fight whatever is typed next, and the container has no reason to know when
-   * that happened. This is one event — a failure — and one act.
-   *
-   * The quantity is deliberately **not** restored. It resets to one on every submit
-   * so the next item does not inherit the last one's count, and somebody who typed
-   * three is far more likely to have moved on than to want three of whatever they
-   * type next; the words are what would be painful to lose in an aisle.
+   * that happened. This is one event, a failure, and one act: the words are what
+   * would be painful to lose in an aisle.
    *
    * Only used where the add is not optimistic. The list page draws its row
    * immediately and reports a failure on the row itself, which is a better place for
@@ -611,8 +632,8 @@ export class LineComposer {
 
   /**
    * The line a held send was for has somewhere to go (velista `0116`): clear the
-   * field, reset the quantity, drop the suggestions and keep focus, exactly as an
-   * unheld send does at once. See {@link holdOnSend}.
+   * field, drop the suggestions and keep focus, exactly as an unheld send does at
+   * once. See {@link holdOnSend}.
    */
   sent(): void {
     this._clear();
@@ -633,13 +654,11 @@ export class LineComposer {
    */
   clear(): void {
     this.content.set('');
-    this.quantity.set(1);
     this.queryChanged.emit('');
   }
 
   /**
-   * The cross in the field: the words go, the quantity stays. Somebody who set a
-   * count and then mistyped the name is retyping the name, not the count. Focus is
+   * The cross in the field: the words go, and the results with them. Focus is
    * {@link ClearsField}'s rule, so a keyboard that was up stays up.
    */
   protected clearTyped(): void {
@@ -687,7 +706,7 @@ export class LineComposer {
   /**
    * Send it, and stay ready for the next one.
    *
-   * The field is cleared and the quantity reset **here**, before the request resolves,
+   * The field is cleared **here**, before the request resolves,
    * because the add is optimistic and the row is already on screen: leaving the text in
    * the field until a response arrived would show the same item twice and invite a
    * second submit of it.
@@ -719,10 +738,14 @@ export class LineComposer {
   /**
    * Send one line and stay ready for the next.
    *
-   * The field is cleared and the quantity reset **here**, before the request resolves,
-   * because the add is optimistic and the row is already on screen: leaving the text in
-   * the field until a response arrived would show the same item twice and invite a
-   * second submit of it.
+   * A typed name goes with no amount and no unit, so the server decides both (velista
+   * `0185`): a new line counts one piece (U1), and a line that already carries the
+   * name is shown rather than raised. A chosen card goes at one step of its unit,
+   * {@link addAmount}: 25 g, 25 ml or one piece.
+   *
+   * The field is cleared **here**, before the request resolves, because the add is
+   * optimistic and the row is already on screen: leaving the text in the field until a
+   * response arrived would show the same item twice and invite a second submit of it.
    *
    * Focus is taken back explicitly. Clearing an input does not move focus, but the
    * button or the suggestion that was tapped has it, and on a phone that is enough to
@@ -742,16 +765,7 @@ export class LineComposer {
     const products = itemIds !== undefined && itemIds.length > 0;
     this.submitted.emit({
       content,
-      // The stepper counts what the person asks for. For a product sold by the
-      // kilo or the litre each one is a kilo or a litre, so the line starts at
-      // `defaultQuantity` of its unit, "1 kg", and the reel then weighs it. The
-      // unit is known only once the product is chosen, so the count is capped
-      // here, at 100 kilos or litres, which the server still takes.
-      quantity:
-        Math.min(this.quantity(), LINE_QUANTITY_MAX / defaultQuantity(unit)) *
-        defaultQuantity(unit),
-      unit,
-      ...(products ? { itemIds } : {}),
+      ...(products ? { quantity: addAmount(unit), unit, itemIds } : {}),
       ...(products && named === false ? { named } : {}),
       ...(hold && anchor !== undefined ? { anchor } : {}),
     });

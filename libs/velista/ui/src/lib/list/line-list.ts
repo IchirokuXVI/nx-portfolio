@@ -58,7 +58,7 @@ import { LineRow, type LineRowAction } from './line-row';
             [line]="line"
             [match]="matchOf(line)"
             [pending]="pending().get(line.id) ?? null"
-            [took]="tookId() === line.id"
+            [took]="tookIds().has(line.id)"
           />
         </li>
       }
@@ -84,10 +84,11 @@ export class LineList {
   readonly markedId = input<string | null>(null);
 
   /**
-   * The line an add just raised, whose quantity takes an amber edge while it is set
-   * (velista `0170`, target 4). The container clears it, as it clears the mark.
+   * The lines an add just raised or met, whose quantity takes an amber edge while
+   * they are set (velista `0170`, target 4; velista `0185`, decision E). The
+   * container clears them, as it clears the mark.
    */
-  readonly tookId = input<string | null>(null);
+  readonly tookIds = input<ReadonlySet<string>>(new Set());
 
   /**
    * The amount of each line with an open run of presses (velista `0188`, decision H):

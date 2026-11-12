@@ -36,8 +36,6 @@ export interface ListPickerChoice {
    */
   readonly listName: string | null;
   readonly rows: readonly AddChoiceRow[];
-  /** How many the add carries. */
-  readonly added: number;
 }
 
 /** Numbers each picker's title, so two on a page never share an id. */
@@ -97,7 +95,6 @@ let pickerCount = 0;
             (dismissed)="close('escape', origin)"
             (newLine)="choseNewLine.emit()"
             (returned)="backToLists.emit()"
-            [added]="asked.added"
             [back]="asked.listName"
             [name]="asked.name"
             [rows]="asked.rows"

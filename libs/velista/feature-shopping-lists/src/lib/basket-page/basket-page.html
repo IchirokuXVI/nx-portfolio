@@ -216,11 +216,13 @@
         empties the field (velista 0117, rule F2).
       -->
       <lib-line-composer
+        (noticeDismissed)="dismissNotice()"
         (queryChanged)="onComposerQuery($event)"
         (submitted)="askWhere($event)"
         [busy]="adding()"
         [escapeClears]="pickerAnchor() === null"
         [holdOnSend]="true"
+        [notice]="composerNotice()"
         [resultsId]="resultsId"
         [voice]="false"
       />
@@ -461,7 +463,7 @@
           @if (resultRows().length > 0) {
             <ul class="lines">
               @for (row of resultRows(); track row.key) {
-                <li>
+                <li [attr.data-line-ids]="lineIdsOf(row)">
                   <lib-basket-row
                     (changeProduct)="openChange(row.row)"
                     (left)="setRowLeft(row, $event)"
@@ -714,7 +716,10 @@
                       marked: an ordinary row observes nothing, so a basket of
                       forty rows holds observers for the two that changed.
                     -->
-                    <li [libSeenTarget]="row.row.mark !== null">
+                    <li
+                      [attr.data-line-ids]="lineIdsOf(row)"
+                      [libSeenTarget]="row.row.mark !== null"
+                    >
                       <lib-basket-row
                         (changeProduct)="openChange(row.row)"
                         (left)="setRowLeft(row, $event)"

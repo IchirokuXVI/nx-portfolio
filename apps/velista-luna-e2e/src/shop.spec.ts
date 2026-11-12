@@ -16,6 +16,7 @@ import {
   ensureItem,
   finishOpenBaskets,
   lineSettlements,
+  listLines,
   login,
   readLine,
   resetAliceWorld,
@@ -475,6 +476,86 @@ test.describe('a loose product, by weight (velista 0182)', () => {
       quantity: 750,
       unit: 'GRAM',
     });
+  });
+});
+
+/**
+ * A typed name already on the list adds nothing (velista plan 0185, A1).
+ *
+ * The loose product of the describe above, on a line of its own at a kilo. The
+ * composer types its name and presses add: the line still asks for 1000 g, no row
+ * of that name is drawn beside it, and the list holds one line of it, in grams, at
+ * 1000. The line is made per run and deleted after.
+ */
+test.describe('a typed name already on the list (velista 0185)', () => {
+  const NAME = { en: 'Loose bananas e2e', es: 'Plátanos a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('leaves the line at 1000 g, draws no second row, and says it is on the list', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+    const amount = page.locator(
+      `lib-line-list [data-line-id="${lineId}"] lib-quantity-stepper`
+    );
+    await expect(amount).toHaveAttribute('data-value', '1000');
+
+    await composerField(page).fill(NAME.en);
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+
+    await expect(composerField(page)).toHaveValue('');
+    // Said in the page's live region, not drawn under the field: the row is drawn.
+    await expect(
+      page.getByText(`${NAME.en} is already on the list.`).first()
+    ).toBeAttached();
+    await expect(page.locator('lib-line-composer .notice')).toHaveCount(0);
+    await expect(amount).toHaveAttribute('data-value', '1000');
+    await expect(amount).toHaveClass(/is-took/);
+    await expect(
+      page.locator('lib-line-list lib-line-row').filter({ hasText: NAME.en })
+    ).toHaveCount(1);
+
+    const held = (await listLines(alice, LIST_GROCERIES_ID)).filter(
+      (one) => one.content === NAME.en
+    );
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({ id: lineId, quantity: 1000, unit: 'GRAM' });
   });
 });
 

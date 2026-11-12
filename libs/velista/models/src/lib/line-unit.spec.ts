@@ -1,4 +1,5 @@
 import {
+  addAmount,
   canStepUp,
   legacyLineUnit,
   lineUnitOfProduct,
@@ -265,5 +266,13 @@ describe('legacyLineUnit and shownLineUnit (backend 0246 M2, section 3.2)', () =
     expect(shownLineUnit(at('UNIT', 0, ['i1', 'i2']), () => loose)).toBe(
       'UNIT'
     );
+  });
+});
+
+describe('addAmount (velista 0185)', () => {
+  it('starts a line at one step of its unit: one piece, 25 g, 25 ml', () => {
+    expect(addAmount('UNIT')).toBe(1);
+    expect(addAmount('GRAM')).toBe(25);
+    expect(addAmount('MILLILITER')).toBe(25);
   });
 });

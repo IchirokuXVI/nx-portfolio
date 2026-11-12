@@ -3555,7 +3555,6 @@ describe('the composer and the list it adds to', () => {
     it('adds to the picked list, then clears the field and keeps focus in it', async () => {
       const { fixture, store } = await render({ served });
       typeInto(fixture, 'Batteries');
-      composer(fixture).quantity.set(2);
       plus(fixture).click();
       fixture.detectChanges();
 
@@ -3566,13 +3565,11 @@ describe('the composer and the list it adds to', () => {
       expect(store.addLine).toHaveBeenCalledWith({
         targetListId: 'l-parents',
         content: 'Batteries',
-        quantity: 2,
-        unit: 'UNIT',
-        // Typed words say the page can ask which line (velista 0170).
+        // Typed words state no amount and no unit (velista 0185), and say the
+        // page can ask which line (velista 0170).
         askIfAmbiguous: true,
       });
       expect(field(fixture).value).toBe('');
-      expect(composer(fixture).quantity()).toBe(1);
       expect(document.activeElement).toBe(field(fixture));
       expect(options()).toHaveLength(0);
     });
@@ -3767,8 +3764,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           intoLineId: 'zl-b',
         });
         expect(document.querySelector('.pop')).toBeNull();
@@ -3784,8 +3779,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           newLine: true,
         });
       });
@@ -3868,6 +3861,131 @@ describe('the composer and the list it adds to', () => {
         expect(said).toContain('list.addChoice.merged');
         expect(said).toContain('"name":"Whole milk"');
         expect(said).toContain('"quantity":"8"');
+      });
+
+      /** Velista `0185`: an add that met a line already asked for adds nothing. */
+      describe('an add that meets a line already on the list (velista 0185)', () => {
+        const WHOLE_MILK: BasketProduct = {
+          id: 'i-milk',
+          name: { en: 'Whole milk', es: 'Whole milk' },
+          brand: null,
+          imageUrl: null,
+          size: null,
+          unit: null,
+          offer: null,
+          offers: [],
+          atShop: null,
+          productGroupId: null,
+          categories: [],
+          sectionIds: [],
+          approxWeight: null,
+        };
+        const milk = line('Leche entera', {
+          productId: 'i-milk',
+          left: 8,
+          entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+        });
+
+        async function met(lineIds: readonly string[]) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockResolvedValueOnce({
+            entries: lineIds.map((lineId) =>
+              entry(null, lineId, 8, { content: 'Leche entera' })
+            ),
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(rendered.fixture, 'Leche entera');
+          plus(rendered.fixture).click();
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          return rendered;
+        }
+
+        it('finds the row by its lines, marks it, and says it is already on that list', async () => {
+          const { fixture } = await met(['zl-milk']);
+
+          const host = fixture.nativeElement as HTMLElement;
+          const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+          expect(row).not.toBeNull();
+          expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+          const said = query(fixture, '.said')?.textContent ?? '';
+          expect(said).toContain('basket.add.alreadyOn');
+          expect(said).toContain('"name":"Whole milk"');
+          expect(said).toContain('"list":"Weekly shop"');
+          // The words go, as on any add that landed, and nothing is said under the field.
+          expect(field(fixture).value).toBe('');
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+        });
+
+        it('says it under the field when no drawn row holds the line', async () => {
+          const { fixture } = await met(['zl-elsewhere']);
+
+          const notice = (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-line-composer .notice-text'
+          );
+          expect(notice?.textContent).toContain('basket.add.alreadyOn');
+        });
+      });
+
+      it('says why under the field when a card the list counts in another unit is refused (velista 0185)', async () => {
+        const { fixture, store } = await render({ served, echoValues: true });
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'line_unit_differs',
+              status: 409,
+              correlationId: 'ref',
+              details: {
+                line: {
+                  lineId: 'zl-milk',
+                  content: 'Leche entera',
+                  unit: 'MILLILITER',
+                  quantity: 1500,
+                },
+                unit: 'UNIT',
+                index: null,
+              },
+            })
+          );
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche',
+          quantity: 1,
+          unit: 'UNIT',
+          itemIds: ['i-milk'],
+          named: false,
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const notice = (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer .notice-text'
+        );
+        expect(notice?.textContent).toContain(
+          'basket.error.addUnitDiffers.MILLILITER'
+        );
+        expect(notice?.textContent).toContain('"name":"Leche entera"');
+        expect(notice?.textContent).toContain('"list":"Weekly shop"');
+        // The words come back, and the generic sentence is not said.
+        expect(field(fixture).value).toBe('Leche');
+        expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+          'basket.error'
+        );
+        card.remove();
       });
 
       it('titles the question with the line as it is stored, not as it was typed', async () => {
