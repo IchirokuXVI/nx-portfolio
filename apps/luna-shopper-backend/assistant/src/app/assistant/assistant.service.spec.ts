@@ -1352,6 +1352,96 @@ describe('AssistantService', () => {
       });
     });
 
+    // The owner, 2026-11-12: "Make sure the assistant also answers with some
+    // help to fix it."
+    const unitDiffers = () =>
+      new GatewayApiError(
+        409,
+        '"Desayuno" is already on this list in another unit. Change the amount on that line.',
+        'line_unit_differs',
+        {
+          line: {
+            lineId: 'line-desayuno',
+            content: 'Desayuno',
+            unit: 'MILLILITER',
+            quantity: 500,
+          },
+          unit: 'UNIT',
+          index: 0,
+        }
+      );
+    const insteadOfDesayuno =
+      '"Desayuno" is already on the list and counts in millilitres. Do not add it again. Change the amount on that line instead: call upsert_lines with "Desayuno" and the amount in millilitres.';
+
+    it('hands the model the line a refused add met, and says to change its amount (plan 0260)', async () => {
+      const api = new RecordingApi();
+      api.failNextWriteWith = unitDiffers();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
+        FakeModelProvider.says('Ya está en Desayuno.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade leche'));
+
+      expect(
+        provider.requests[1].turns.at(-1)?.toolResults?.[0]?.result
+      ).toEqual({
+        ok: false,
+        refused: true,
+        attempted: 'add that to the list',
+        reason:
+          '"Desayuno" is already on this list in another unit. Change the amount on that line.',
+        onList: {
+          id: 'line-desayuno',
+          product: 'Desayuno',
+          quantity: 500,
+          unit: 'MILLILITER',
+        },
+        instead: insteadOfDesayuno,
+      });
+    });
+
+    it('names the met line on the refused item only, when another write went through (plan 0260)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'pan', 1),
+      ]);
+      api.failNextWriteWith = unitDiffers();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'leche' },
+            { product: 'pan', quantity: 2 },
+            { product: 'huevos' },
+          ],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('leche, dos de pan y huevos'));
+
+      const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        ?.result as { items?: Record<string, unknown>[] };
+      const [leche, pan, huevos] = result.items ?? [];
+      expect(leche).toMatchObject({
+        product: 'leche',
+        refused: true,
+        onList: { id: 'line-desayuno', product: 'Desayuno' },
+        instead: insteadOfDesayuno,
+      });
+      expect(pan).toMatchObject({ action: 'updated', quantity: 2 });
+      expect(huevos).toEqual({
+        product: 'huevos',
+        refused: true,
+        reason:
+          'nothing was added, because another item of this call was refused',
+      });
+    });
+
     it('reports the items in the order they were said, however they were written', async () => {
       // The writes are grouped, because the new ones go in one request and the
       // rest one at a time. The report is not: the model is composing a sentence

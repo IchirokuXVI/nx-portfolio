@@ -44,6 +44,7 @@ import {
   encodeCursor,
   ForbiddenException,
   isUuid,
+  LINE_UNIT_DIFFERS_ADD_VARIANT,
   LineAddNeedsChoiceException,
   LineMergeNeedsApprovalException,
   LineMergeRequiredException,
@@ -360,10 +361,27 @@ function lineUnitDiffers(
     unit,
     index,
   };
+  // `variant: 'add'` picks the add's own sentence (the owner, 2026-11-12):
+  // the code's sentence is the merge's.
   return new LineUnitDiffersException(
     `"${line.content}" counts in another unit`,
-    { details: { ...details }, messageArgs: { content: line.content } }
+    {
+      details: { ...details },
+      messageArgs: {
+        content: line.content,
+        variant: LINE_UNIT_DIFFERS_ADD_VARIANT,
+      },
+    }
   );
+}
+
+/** The earliest of these lines by list position, or none. */
+function earliestLine(
+  lines: readonly (ListLine | undefined)[]
+): ListLine | undefined {
+  return lines
+    .filter((line): line is ListLine => line !== undefined)
+    .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
 }
 
 /**
@@ -1058,8 +1076,9 @@ export class LineService {
    *
    * ## A unit is never summed, and never a question (plan 0260 U2, R4)
    *
-   * A product add meets a line of its own unit first. When its unit holds
-   * none and a line of another unit is met, the add is refused with
+   * A product add meets a line of its own unit first: its identity line, or a
+   * line that holds the product. When no line of its unit holds the product
+   * and a line of another unit does, the add is refused with
    * `line_unit_differs` before any write, whatever `newLine` says. A free text
    * add counts pieces (U1) and is never refused for a unit: it meets a line of
    * any unit by name, and a raise of a kept line of another unit is one step
@@ -1202,20 +1221,17 @@ export class LineService {
             return meet(target);
           }
         } else {
-          // A line of the add's unit first (plan 0246 M5). Only when the unit
-          // holds none does a line of another unit answer, and then as the
-          // refusal, whatever `newLine` says (plan 0260 U2).
+          // A line of the add's unit first (plan 0246 M5): its identity
+          // target, then a line that holds every product of the add (R5).
+          // Only when no line of its unit holds the product does a line of
+          // another unit answer, and then as the refusal, whatever `newLine`
+          // says (plan 0260 U2; the owner, 2026-11-12: "only").
           const sameUnit = earliest(
             identities.map((identity) => inUnit(identity, unit))
           );
           if (sameUnit !== undefined) {
             return meet(sameUnit);
           }
-          const otherUnit = earliest(identities);
-          if (otherUnit !== undefined) {
-            throw lineUnitDiffers(otherUnit, unit, null);
-          }
-          // The lines that hold every product of the add (R5).
           const held = await this.findLinesHolding(
             manager,
             req.listId,
@@ -1227,8 +1243,13 @@ export class LineService {
             if (answer !== null) {
               return answer;
             }
-          } else if (held.length > 0) {
-            throw lineUnitDiffers(held[0], unit, null);
+          }
+          const refused = earliestLine([
+            earliest(identities),
+            ...held.filter((line) => unitOf(line) !== unit),
+          ]);
+          if (refused !== undefined) {
+            throw lineUnitDiffers(refused, unit, null);
           }
         }
 
@@ -1554,27 +1575,32 @@ export class LineService {
         } else {
           // The line of the item's unit (plan 0246 M5); then a line this
           // batch creates for the same products, whose unit agrees by the
-          // check above; then a line of another unit, which refuses the batch
-          // (R7); then the lines that hold every product (R5), those already
-          // on the list and those this batch creates.
+          // check above; then the lines of its unit that hold every product
+          // (R5), those already on the list and those this batch creates.
+          // Only when no line of its unit holds the product does a line of
+          // another unit answer, and it refuses the batch (R7; the owner,
+          // 2026-11-12).
           const target = targets.get(inUnit(key, unit));
           if (target !== undefined) {
             slot = await meet(target, index);
           } else if (byKey.has(key)) {
             slot = { met: [{ created: byKey.get(key) as number }] };
           } else {
-            const otherUnit = targets.get(key);
-            if (otherUnit !== undefined) {
-              throw lineUnitDiffers(otherUnit, unit, index);
-            }
             const lines = await readProductLines();
             const held = holdingIn(lines, itemSets[index]);
             const inItsUnit = held.filter((line) => unitOf(line) === unit);
             const planned = plannedFor(index);
             if (inItsUnit.length > 0 || planned.length > 0) {
               slot = await meetAny(inItsUnit, index, planned);
-            } else if (held.length > 0) {
-              throw lineUnitDiffers(held[0], unit, index);
+            }
+            if (slot === null) {
+              const refused = earliestLine([
+                targets.get(key),
+                ...held.filter((line) => unitOf(line) !== unit),
+              ]);
+              if (refused !== undefined) {
+                throw lineUnitDiffers(refused, unit, index);
+              }
             }
           }
         }
@@ -1913,8 +1939,10 @@ export class LineService {
   /**
    * The lines of a list that hold every one of these products (plan 0260 R5),
    * in list position order: the same set, or a set of several products that
-   * includes them (velista 0183). Read after the identity targets, so a line
-   * the add meets by its identity never gets here.
+   * includes them (velista 0183). Read after the identity target of the add's
+   * unit, and before an identity target of another unit refuses the add: a
+   * line of the add's unit that holds the product takes it (the owner,
+   * 2026-11-12).
    */
   private async findLinesHolding(
     manager: EntityManager,
