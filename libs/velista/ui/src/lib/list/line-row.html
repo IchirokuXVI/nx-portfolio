@@ -86,7 +86,7 @@
         @if (shown(); as product) {
           <lib-product-picture
             [imageUrl]="product.imageUrl"
-            [zoom]="product.name ?? line().content"
+            [zoom]="reordering() ? null : (product.name ?? line().content)"
             class="picture"
           />
         }

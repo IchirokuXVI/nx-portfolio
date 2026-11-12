@@ -516,11 +516,16 @@
   white-space: nowrap;
 }
 
-// Every label is in the heavier weight (decision E). It gives way first: its shrink
-// weight is far above the brand's, so the brand gives way only once the label is
-// down to its ellipsis and the marks still need room (section 3.3).
+// Every label is in the heavier weight (decision E). It gives way first: it starts
+// from nothing and grows into the room the brand and the marks leave, up to its own
+// width, so the brand gives way only once the label is gone and the marks still need
+// room (section 3.3). A shrink weight cannot do this: flex shrinks every item in
+// proportion to its width too, and the brand's share, however small, fires its
+// ellipsis while the label still has room.
 .compact-line-1 > .label {
-  flex: 0 1000 auto;
+  flex: 1 1 0;
+  min-inline-size: 0;
+  max-inline-size: max-content;
   font-weight: 600;
 }
 

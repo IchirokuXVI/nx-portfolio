@@ -35,8 +35,35 @@ const TOLERANCE = 1;
 
 const NAME = { en: 'Loose bananas rows e2e', es: 'Plátanos filas e2e' };
 
-function lineRow(page: Page): Locator {
-  return page.locator('lib-line-row', { hasText: NAME.en }).locator('.row');
+/**
+ * A product with a short brand and a name far longer than a phone's line 1. The
+ * line is not named, so its label is that name: the label must crop and the brand
+ * must not (section 3.3).
+ */
+const BRANDED = {
+  en: 'Semi skimmed milk for the whole week and the office coffee rows e2e',
+  es: 'Leche semidesnatada para toda la semana y el café de la oficina filas e2e',
+};
+const SHORT_BRAND = 'Pascual';
+const LONG_LABEL = BRANDED.en;
+
+function lineRow(page: Page, label: string = NAME.en): Locator {
+  return page.locator('lib-line-row', { hasText: label }).locator('.row');
+}
+
+/**
+ * Whether an element's text is cut: wider than the box it is drawn in. Measured in
+ * fractions of a pixel, not with `scrollWidth` against `clientWidth`: both round to
+ * whole pixels, and a brand that flex shrank by three hundredths of a pixel is
+ * drawn with its ellipsis while the two still agree.
+ */
+async function isCropped(locator: Locator): Promise<boolean> {
+  return locator.evaluate((element) => {
+    const text = document.createRange();
+    text.selectNodeContents(element);
+    const drawn = element.getBoundingClientRect().width;
+    return text.getBoundingClientRect().width > drawn + 0.001;
+  });
 }
 
 function compactSwitch(page: Page): Locator {
@@ -51,6 +78,9 @@ async function openList(page: Page): Promise<void> {
 async function size(
   locator: Locator
 ): Promise<{ width: number; height: number }> {
+  // Polled: in the full suite a late realtime event can redraw the row between
+  // the check of its class and this read.
+  await expect.poll(() => locator.boundingBox()).not.toBeNull();
   const box = await locator.boundingBox();
   if (box === null) throw new Error('the element has no box');
   return { width: box.width, height: box.height };
@@ -71,6 +101,7 @@ test.describe('compact rows (velista 0191)', () => {
   let alice: Session;
   let admin: Session;
   let lineId = '';
+  let brandedLineId = '';
 
   test.beforeAll(async () => {
     alice = await login(ALICE_EMAIL);
@@ -95,10 +126,26 @@ test.describe('compact rows (velista 0191)', () => {
       unit: 'GRAM',
     });
     lineId = line.id;
+
+    const brandedId = await ensureItem(
+      admin,
+      BRANDED,
+      [await categoryIdBySlug(alice, slug)],
+      'UNIT',
+      SHORT_BRAND
+    );
+    const branded = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: LONG_LABEL,
+      itemId: brandedId,
+      quantity: 1,
+      unit: 'UNIT',
+    });
+    brandedLineId = branded.id;
   });
 
   test.afterAll(async () => {
     if (lineId !== '') await deleteLine(alice, lineId);
+    if (brandedLineId !== '') await deleteLine(alice, brandedLineId);
     await alice?.dispose();
     await admin?.dispose();
   });
@@ -147,6 +194,17 @@ test.describe('compact rows (velista 0191)', () => {
       expect(Math.abs(priceStart - measureStart)).toBeLessThanOrEqual(
         TOLERANCE
       );
+    });
+
+    await test.step('a long label crops first, a short brand never', async () => {
+      const row = lineRow(page, LONG_LABEL);
+      await expect(row).toHaveClass(/\bcompact\b/);
+      const label = row.locator('.compact-line-1 > .label');
+      const brand = row.locator('.compact-line-1 > .brand');
+      await expect(brand).toHaveText(SHORT_BRAND);
+
+      expect(await isCropped(label)).toBe(true);
+      expect(await isCropped(brand)).toBe(false);
     });
 
     await test.step('a reload keeps it compact', async () => {
