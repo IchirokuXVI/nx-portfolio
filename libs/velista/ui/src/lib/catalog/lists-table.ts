@@ -7,6 +7,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   isUnsavedLine,
+  type HoldingRow,
   type LineUnit,
   type ProductListGroup,
   type ProductListRow,
