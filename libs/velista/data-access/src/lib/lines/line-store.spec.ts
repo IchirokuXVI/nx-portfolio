@@ -1313,6 +1313,44 @@ describe('LineStore', () => {
       expect(store.emptiedNotice()).toBeNull();
     });
 
+    it('takes a deleted answer as its own when its own amount did not reach 0', async () => {
+      // Another device lowered the line to 1 and its event has not arrived: this
+      // store still shows 3, and the server says the minus deleted the line.
+      const { store, lines, realtime } = await build([
+        line('a', { content: 'Bananas', quantity: 3 }),
+      ]);
+      await store.load(LIST);
+      lines.deleteNext();
+
+      expect(await store.addQuantity('a', -1)).toBe('succeeded');
+
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('mine');
+      expect(store.emptiedNotice()).toMatchObject({
+        lineId: 'a',
+        name: 'Bananas',
+      });
+      store.clearEmptiedNotice('a');
+
+      // The event that follows changes nothing and says nothing again.
+      realtime.emit('line.deleted', { id: 'a', listId: LIST, emptied: true });
+      expect(store.deletionOf('a')).toBe('mine');
+      expect(store.emptiedNotice()).toBeNull();
+    });
+
+    it('takes a deleted answer to an edit from a stale 0 as its own', async () => {
+      const { store, lines } = await build([line('a', { quantity: 0 })]);
+      await store.load(LIST);
+      lines.deleteNext();
+
+      const outcome = await store.updateLine('a', { quantity: 0 });
+
+      expect(outcome).toMatchObject({ state: 'succeeded', deleted: true });
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('mine');
+      expect(store.emptiedNotice()?.lineId).toBe('a');
+    });
+
     it('marks an emptied event for a line it is not lowering as emptied', async () => {
       const { store, realtime } = await build([line('a')]);
       await store.load(LIST);

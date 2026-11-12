@@ -1070,6 +1070,28 @@ describe('LinePage', () => {
       expect(lines.emptiedNotice()?.lineId).toBe(LINE_ID);
     });
 
+    it('does not say its own deleted line is missing while it leaves (velista 0192)', async () => {
+      const { fixture, lines } = await render();
+
+      lines.emptyByMe(LINE_ID);
+      await drain(fixture);
+
+      expect(textOf(fixture)).not.toContain('list.gone.unavailable');
+      expect(textOf(fixture)).not.toContain('list.gone.emptied');
+    });
+
+    it('drops the notice and says the line is missing when the way to the list did not happen (velista 0192)', async () => {
+      const { fixture, lines, router } = await render();
+      router.navigateByUrl.mockResolvedValue(false);
+
+      lines.emptyByMe(LINE_ID);
+      await drain(fixture);
+
+      expect(router.navigateByUrl).toHaveBeenCalledTimes(1);
+      expect(lines.emptiedNotice()).toBeNull();
+      expect(textOf(fixture)).toContain('list.gone.unavailable');
+    });
+
     it('says the line reached 0 when another device took it there (velista 0192)', async () => {
       const { fixture, lines, router } = await render();
 

@@ -175,9 +175,22 @@ export class LinePage {
     selectAbilities(this._list()?.myPermissions ?? [])
   );
 
-  /** Loading, failed, gone, missing or ready (section 4, velista 0156). */
-  readonly status = computed(() =>
-    linePageStatus(this._lines, this.listId(), this.lineId())
+  /**
+   * Loading, failed, gone, missing or ready (section 4, velista 0156), or leaving:
+   * a minus of this page deleted the line and the page is on its way to the list
+   * (velista `0192`), which draws nothing rather than the missing sentence for the
+   * frame before it goes.
+   */
+  readonly status = computed(() => {
+    const status = linePageStatus(this._lines, this.listId(), this.lineId());
+    return status === 'missing' && this._leavingOwn() ? 'leaving' : status;
+  });
+
+  /** The notice of this page's own deleting write is waiting for the list. */
+  private readonly _leavingOwn = computed(
+    () =>
+      this._lines.emptiedNotice()?.lineId === this.lineId() &&
+      this._lines.deletionOf(this.lineId()) === 'mine'
   );
 
   /**
@@ -322,7 +335,9 @@ export class LinePage {
     });
 
     // A minus of this page took the line to 0 and the server deleted it (velista
-    // `0192`): back to the list, which says it. The notice is the list's to clear.
+    // `0192`): back to the list, which says it. The notice is the list's to clear,
+    // unless the way there did not happen: then no list page will say it in context,
+    // so it is dropped and this page draws its missing state.
     let leaving = false;
     effect(() => {
       const emptied = this._lines.emptiedNotice();
@@ -330,7 +345,18 @@ export class LinePage {
         return;
       }
       leaving = true;
-      untracked(() => void this.leave());
+      const lineId = emptied.lineId;
+      untracked(
+        () =>
+          void this._router
+            .navigateByUrl(this._listUrl(), { replaceUrl: true })
+            .catch(() => false)
+            .then((went) => {
+              if (!went) {
+                this._lines.clearEmptiedNotice(lineId);
+              }
+            })
+      );
     });
   }
 

@@ -874,7 +874,7 @@ export class LineStore {
     // The edit took the line to 0 and the server deleted it (velista `0192`). The
     // caller's answer is still a success, with the line gone.
     if (deleted) {
-      this._emptied(lineId);
+      this._emptied(lineId, before);
       this._clearNote(lineId);
       this._stopEmptying(lineId, before);
       return { state: 'succeeded', line, absorbedLineId, deleted };
@@ -1008,7 +1008,7 @@ export class LineStore {
     // Deleted: the row leaves as this client's own delete, and the caller is told
     // the write succeeded, with the line gone (velista `0192`, section 2).
     if (outcome !== 'failed' && deleted) {
-      this._emptied(lineId);
+      this._emptied(lineId, before);
       this._clearNote(lineId);
       this._stopEmptying(lineId, before);
       return 'succeeded';
@@ -2096,10 +2096,20 @@ export class LineStore {
   /**
    * A line this client lowered to 0 was deleted by the server, learned from the
    * answer or from the event, whichever came first (velista `0192`). Once: the
-   * second of the two finds no entry and does nothing.
+   * second of the two finds the line already marked as its own and does nothing.
+   *
+   * @param answered the line as the write saw it, passed by an answer that said
+   *   `deleted`. The server decides: such an answer is this client's own even when
+   *   its optimistic amount did not reach 0, as when another device lowered the line
+   *   first and its event has not arrived. The event path passes nothing, and is its
+   *   own only for a line in {@link _emptying}.
    */
-  private _emptied(lineId: string): void {
-    const before = this._emptying.get(lineId);
+  private _emptied(lineId: string, answered?: Line): void {
+    const entry = this._emptying.get(lineId);
+    if (entry === undefined && this.deletionOf(lineId) === 'mine') {
+      return;
+    }
+    const before = entry ?? answered;
     if (before === undefined) {
       return;
     }
