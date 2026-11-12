@@ -1352,6 +1352,96 @@ describe('AssistantService', () => {
       });
     });
 
+    // The owner, 2026-11-12: "Make sure the assistant also answers with some
+    // help to fix it."
+    const unitDiffers = () =>
+      new GatewayApiError(
+        409,
+        '"Desayuno" is already on this list in another unit. Change the amount on that line.',
+        'line_unit_differs',
+        {
+          line: {
+            lineId: 'line-desayuno',
+            content: 'Desayuno',
+            unit: 'MILLILITER',
+            quantity: 500,
+          },
+          unit: 'UNIT',
+          index: 0,
+        }
+      );
+    const insteadOfDesayuno =
+      '"Desayuno" is already on the list and counts in millilitres. Do not add it again. Change the amount on that line instead: call upsert_lines with "Desayuno" and the amount in millilitres.';
+
+    it('hands the model the line a refused add met, and says to change its amount (plan 0260)', async () => {
+      const api = new RecordingApi();
+      api.failNextWriteWith = unitDiffers();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche' }],
+        }),
+        FakeModelProvider.says('Ya está en Desayuno.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('añade leche'));
+
+      expect(
+        provider.requests[1].turns.at(-1)?.toolResults?.[0]?.result
+      ).toEqual({
+        ok: false,
+        refused: true,
+        attempted: 'add that to the list',
+        reason:
+          '"Desayuno" is already on this list in another unit. Change the amount on that line.',
+        onList: {
+          id: 'line-desayuno',
+          product: 'Desayuno',
+          quantity: 500,
+          unit: 'MILLILITER',
+        },
+        instead: insteadOfDesayuno,
+      });
+    });
+
+    it('names the met line on the refused item only, when another write went through (plan 0260)', async () => {
+      const api = new RecordingApi();
+      api.linesByList.set('list-flat', [
+        line('line-existing', 'list-flat', 'pan', 1),
+      ]);
+      api.failNextWriteWith = unitDiffers();
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [
+            { product: 'leche' },
+            { product: 'pan', quantity: 2 },
+            { product: 'huevos' },
+          ],
+        }),
+        FakeModelProvider.says('Hecho.'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('leche, dos de pan y huevos'));
+
+      const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        ?.result as { items?: Record<string, unknown>[] };
+      const [leche, pan, huevos] = result.items ?? [];
+      expect(leche).toMatchObject({
+        product: 'leche',
+        refused: true,
+        onList: { id: 'line-desayuno', product: 'Desayuno' },
+        instead: insteadOfDesayuno,
+      });
+      expect(pan).toMatchObject({ action: 'updated', quantity: 2 });
+      expect(huevos).toEqual({
+        product: 'huevos',
+        refused: true,
+        reason:
+          'nothing was added, because another item of this call was refused',
+      });
+    });
+
     it('reports the items in the order they were said, however they were written', async () => {
       // The writes are grouped, because the new ones go in one request and the
       // rest one at a time. The report is not: the model is composing a sentence
@@ -3603,67 +3693,5 @@ describe('the words of a turn in its record (k8s plan 0018, D3)', () => {
     expect(record?.['replied']).toBe('Hola, Ana.');
     expect(record).not.toHaveProperty('saidChars');
     expect(record).not.toHaveProperty('repliedChars');
-  });
-});
-
-// ---------------------------------------------------------------------------
-
-/**
- * An edit the server answers with `deleted` (plan 0263, section 4).
- *
- * The tool never sends a quantity below one (`readQuantity` drops it, and a
- * "set to 0" asks nothing), so today no turn of its own lowers a line to 0.
- * What this pins is the reading of the answer: whenever the gateway says the
- * line was deleted, the item reports `removed` and never `updated`.
- */
-describe('an edit the server answered with deleted (plan 0263)', () => {
-  /** A gateway that says every edit deleted its line. */
-  class DeletingApi extends RecordingApi {
-    override async updateLine(
-      caller: ApiCaller,
-      lineId: string,
-      body: { content?: string; quantity?: number }
-    ): Promise<LineView> {
-      const answer = await super.updateLine(caller, lineId, body);
-      return { ...answer, quantity: 0, deleted: true } as LineView;
-    }
-  }
-
-  const setTo = (quantity: number) =>
-    new FakeModelProvider([
-      FakeModelProvider.calls('upsert_lines', {
-        items: [{ product: 'leche', quantity, mode: 'set' }],
-      }),
-      FakeModelProvider.says('Hecho.'),
-    ]);
-
-  it('reports the item as removed', async () => {
-    const api = new DeletingApi();
-    api.linesByList.set('list-flat', [
-      line('line-existing', 'list-flat', 'leche', 2),
-    ]);
-    const provider = setTo(1);
-
-    await build(provider, api).turn(turnRequest('deja una leche'));
-
-    expect(api.of('updateLine')).toHaveLength(1);
-    expect(
-      JSON.stringify(provider.requests[1].turns.at(-1)?.toolResults)
-    ).toContain('"action":"removed"');
-  });
-
-  it('sends nothing for a set to 0, as before', async () => {
-    const api = new DeletingApi();
-    api.linesByList.set('list-flat', [
-      line('line-existing', 'list-flat', 'leche', 2),
-    ]);
-    const provider = setTo(0);
-
-    await build(provider, api).turn(turnRequest('pon la leche a cero'));
-
-    expect(api.of('updateLine')).toHaveLength(0);
-    expect(
-      JSON.stringify(provider.requests[1].turns.at(-1)?.toolResults)
-    ).toContain('"action":"unchanged"');
   });
 });

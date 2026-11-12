@@ -10,6 +10,7 @@ import {
   createValidationPipe,
   ERROR_CODES,
   GlobalExceptionFilter,
+  LINE_UNIT_DIFFERS_ADD_VARIANT,
   LineUnitDiffersException,
   LineUnitMismatchException,
 } from '@portfolio/luna-shopper/platform';
@@ -60,7 +61,7 @@ const unitDiffers = (index: number | null) =>
       unit: 'GRAM',
       index,
     },
-    messageArgs: { content: 'Fruta' },
+    messageArgs: { content: 'Fruta', variant: LINE_UNIT_DIFFERS_ADD_VARIANT },
   });
 
 /** What catalog knows of each product's size. */
@@ -411,6 +412,9 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       expect(await response.json()).toMatchObject({
         code: ERROR_CODES.LINE_UNIT_DIFFERS,
         status: 409,
+        // The add's own sentence, not the merge's (the owner, 2026-11-12).
+        message:
+          '"Fruta" is already on this list in another unit. Change the amount on that line.',
         details: {
           line: { lineId: MIXED, content: 'Fruta', unit: 'UNIT', quantity: 2 },
           unit: 'GRAM',

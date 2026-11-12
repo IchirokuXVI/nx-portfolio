@@ -197,6 +197,36 @@ From 2026-11-10 and 2026-11-11:
   is one size per unit (25 for a weight "or any other measurement unit", 1 for a count). The per
   product step of backend `0261` is later work and, once built, is the step an add uses.
 
+From 2026-11-12 (the owner's rulings on the build, PR #984):
+
+- **R5 stands, and replaces decision 2 of `0214` for adds.** A product add meets a line that
+  holds the product whatever the line's `named` flag, and raises it when it is kept at 0. The
+  owner: the old rule as he remembers it was that when only one line holds a product, adding
+  that product lands on that line regardless of its name. Decision 2 of `0214` ("an unnamed add
+  never lands on a named line") still governs the identity key; for an add it is replaced by
+  R5.
+- **U2 means "only".** A product add lands on a line of its own unit when one holds the
+  product, and is refused with `line_unit_differs` only when no line of its unit holds it, even
+  when its earliest identity line counts in another unit. Example: "Leche" counts 2 pieces at
+  position 1, "Desayuno" (several products, millilitres) holds milk at position 3; an add of milk
+  in millilitres answers `ALREADY_ON_LIST` with "Desayuno", or raises it when it is kept at 0.
+  The same in `addMany`. Section 1 steps 2 and 3 are amended below.
+- **`intoLineId` on a kept line** raises it by the request's amount when the units agree, and by
+  one step of the line's unit otherwise. Step 1 is amended below.
+- **A refused add has its own sentence.** `line_unit_differs` on an add names the line with
+  `messageArgs.content` and `messageArgs.variant: 'add'`, which picks "\"{content}\" is already
+  on this list in another unit. Change the amount on that line." (Spanish: "\"{content}\" ya está
+  en esta lista en otra unidad. Cambia la cantidad en esa línea."). The code and the `details`
+  of section 3 are unchanged; the merge keeps its own sentence.
+- **The assistant helps to fix it.** In the owner's words: "Make sure the assistant also answers
+  with some help to fix it. For example, returning the line that is already on the list and
+  telling you to use that one instead." A refused add or batch hands the model the met line
+  from `details.line` (`onList`: id, name, quantity, unit) and an `instead` sentence that says
+  to change the amount on that line. An `ALREADY_ON_LIST` slot already names its line
+  (`product`, `quantity`, `unit` of the line it met), so it is left as it was.
+- **Backend `0263` was withdrawn.** No write deletes a line because it reached 0; velista hides
+  a line at 0 outside a search. Every line at 0 is a kept line (R2).
+
 ### The writer's, open to the owner
 
 - **R1. The answer of an add that adds nothing is 201 with `outcome: 'ALREADY_ON_LIST'`, and
@@ -216,6 +246,9 @@ From 2026-11-10 and 2026-11-11:
   one step. Once backend `0263` is built, a line with nothing to keep is deleted at 0, so the
   kept lines an add meets are the ones that hold a buy, a name or a choice. Either plan can be
   built first.
+  _Note of 2026-11-12: backend `0263` was withdrawn by the owner. No write deletes a line at 0,
+  so every line at 0 is a kept line, and an add that meets only kept lines raises one. The code
+  needed no change for it._
 - **R3. The duplicate question of `0228` survives only where an add would write.** When a typed
   name meets two or more candidates and at least one is wanted, nothing is written, so there is
   nothing to choose: the add answers `ALREADY_ON_LIST` with every wanted candidate, and the client
@@ -267,6 +300,9 @@ a raise of a line that counts in another unit than the request (a free text add,
 1. **`intoLineId`** (free text only, `0228` B3). The chosen line, locked. Wanted: answer
    `ALREADY_ON_LIST` with it. Kept: raise it by `defaultQuantityOf(chosen.unit)` (R2, R4),
    whatever its unit; the old `line_unit_differs` at `:1035` to `:1040` goes.
+   _Amended on 2026-11-12 (the owner, no change to the code): a kept chosen line is raised by
+   the request's amount when its unit is the request's, and by one step of the line's own unit
+   otherwise (`amountOnto`)._
 2. **The identity targets** (`:1052`). The earliest line in the add's unit, as today
    (`sameUnit`). For a free text add the unit does not filter (R4): the earliest identity target
    of any unit. Wanted: `ALREADY_ON_LIST`. Kept: raise it.
@@ -278,6 +314,13 @@ a raise of a line that counts in another unit than the request (a free text add,
    any wanted, `ALREADY_ON_LIST` with every wanted one (up to `LINE_ADD_CHOICE_MAX`); none
    wanted, raise the earliest. None in its unit and one or more of another unit:
    `line_unit_differs` naming the first by position.
+
+_Amended on 2026-11-12 (the owner: U2 said "only"): for a product add, steps 2 and 3 run as one
+step. The identity target of the add's unit, then the held lines of the add's unit, take the add
+as above. Only when neither exists is the add refused with `line_unit_differs`, naming the
+earliest by position of the identity target of another unit and the held lines of another unit,
+whatever `newLine` says. An identity target of another unit no longer refuses before
+`findLinesHolding` runs. `addMany` follows the same order per item (section 4)._
 4. **A free text add's candidates** (`0228` target 1.4, `findNamedProductLines`), skipped when
    `newLine` is true, as today. Every candidate, whatever its unit (R4).
    - One or more wanted: `ALREADY_ON_LIST` with every wanted candidate (R3).
@@ -524,7 +567,8 @@ a merge across units waits for a conversion.
 - A conversion between units at an add or a merge (backlog `0024`).
 - The per product step (backend `0261`, velista `0186`).
 - The limit of 999 999 (backend `0262`).
-- The deletion of a line with nothing to keep at 0 (backend `0263`, velista `0192`).
+- The deletion of a line with nothing to keep at 0 (backend `0263`, velista `0192`). _Note of
+  2026-11-12: `0263` was withdrawn by the owner; no write deletes a line at 0._
 - The merge and the rename planner (`0246` section 3.3 stands).
 - Everything a client draws (velista `0185`).
 
@@ -538,6 +582,7 @@ a merge across units waits for a conversion.
    at 0. Is losing the "A new line" choice in the first case acceptable?
 3. **R5.** A product on a line of several products counts as already on the list, so the add
    writes nothing there. Should it instead create a line of that product alone?
+   _Answered on 2026-11-12: R5 stands (section 0)._
 4. **R6.** A pasted list that names one thing twice now makes one line at the first amount, not
    the sum. Is that right?
 5. **R7.** Is a whole batch refusal still acceptable for the assistant, or should a later plan
