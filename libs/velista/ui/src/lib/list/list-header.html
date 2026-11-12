@@ -9,65 +9,6 @@
 }
 
 <!--
-  "7 of 12 pending", with the bar underneath. The number is what the list still wants,
-  so the sentence counts down while the bar fills (plan 0060). The text is the
-  accessible version and the bar is `aria-hidden`, because a progressbar role here
-  would announce a number the sentence beside it already gives in words.
-
-  Nothing pending gets its own sentence. "0 of 12 pending" is arithmetically fine and
-  reads badly on the one screen somebody wants to feel good about (plan 0060, section
-  3.1); the bar is full behind it either way.
-
-  An empty list gets neither: "0 of 0 pending" describes progress through a shop nobody
-  has written down, and an empty bar under it is decoration that describes nothing
-  (plan 0019, section 3).
--->
-@if (header().lineCount === 0) {
-  <p class="progress-line">{{ 'list.empty.short' | rokuT }}</p>
-} @else {
-  <p class="progress-line">
-    <span>
-      @if (header().wantedCount === 0) {
-        {{ 'list.header.done' | rokuT }}
-      } @else {
-        {{
-          'list.header.pending'
-            | rokuT
-              : { pending: header().wantedCount, total: header().lineCount }
-        }}
-      }
-    </span>
-
-    <!--
-      What the pending lines cost (velista 0145, section 6): plain text that opens
-      nothing. The estimate mark is drawn only before an estimate (velista 0182): a
-      weight, a volume or a kilo piece added to it. A sum of counts at their pack
-      prices is exact and carries no mark, and its words for a screen reader say
-      which it is.
-    -->
-    @if (header().cost; as cost) {
-      <span class="cost">
-        @if (header().costEstimated) {
-          <span aria-hidden="true">≈{{ cost }}</span>
-          <span class="visually-hidden">{{
-            'list.header.cost' | rokuT: { cost: cost }
-          }}</span>
-        } @else {
-          <span aria-hidden="true">{{ cost }}</span>
-          <span class="visually-hidden">{{
-            'list.header.costExact' | rokuT: { cost: cost }
-          }}</span>
-        }
-      </span>
-    }
-  </p>
-
-  <div aria-hidden="true" class="progress">
-    <span [style.inline-size.%]="percent()" class="progress-fill"></span>
-  </div>
-}
-
-<!--
   Who else has this list open. Its own component rather than the `PresenceRow` the
   cards use, because this one opens: the screen somebody stands in a shop looking at is
   the one place worth answering who they are and since when, and a card read in passing

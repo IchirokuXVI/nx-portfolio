@@ -1,17 +1,15 @@
-// Pinned above the safe area, which is what makes this a composer rather than a form
-// somebody has to scroll to. The safe inset is added to the padding rather than
-// replacing it, so there is still a gap on a phone with no notch.
+// At the top of the page now, under its head block and above the list (velista 0189),
+// so it no longer sits on the safe area and has no surface of its own: the row lies
+// on the page's ground at the width of the page's content, as the approved mock draws
+// it. The page that places it sets the gaps around it.
 //
-// The surface belongs to both rows, not to this one alone. The listening row replaces
-// this one in place, inside a dock that is pinned over the list, so a row that painted
-// nothing let the lines scroll straight through the controls and the hint. Same
-// padding, same safe inset, same hairline above, in both modes.
+// Both rows alike. The listening row replaces this one in place, so the two share
+// their padding and their ground and the list under them does not move when the mode
+// changes.
 .composer,
 .listening {
-  padding: var(--app-space-3);
-  padding-block-end: calc(var(--app-space-3) + var(--app-safe-bottom));
-  background: var(--app-surface-raised);
-  border-block-start: 1px solid var(--app-border-subtle);
+  padding: 0;
+  background: transparent;
 }
 
 .composer {
@@ -138,7 +136,7 @@
 }
 
 // While it listens, the whole row is this (plan 0038, section 4.1). Same height as
-// the row it replaced, so the list above does not jump when the mode changes.
+// the row it replaced, so the list below does not jump when the mode changes.
 //
 // Stop at the leading end, the bin at the trailing end, and the meter and its hint
 // taking every pixel between them (plan 0042, section 6). The distance is the
@@ -149,8 +147,8 @@
   display: flex;
   align-items: center;
   gap: var(--app-space-4);
-  // The row is the height of one target plus the padding above, which is what the
-  // field row measures too, so the list does not jump when the mode changes.
+  // The row is the height of one target, with no padding of its own, which is what
+  // the field row measures too, so the list does not jump when the mode changes.
   box-sizing: content-box;
   min-block-size: var(--app-touch-target);
 }

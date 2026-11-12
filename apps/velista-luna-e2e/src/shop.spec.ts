@@ -1,10 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   demoWorld,
   ITEM_MILK_ID,
   LINE_MILK_ID,
   LIST_GROCERIES_ID,
   PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+  ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
   addProductLine,
@@ -13,11 +14,13 @@ import {
   categoryIdBySlug,
   deleteLine,
   ensureItem,
+  finishOpenBaskets,
   lineSettlements,
   login,
   readLine,
   resetAliceWorld,
   setAdminPrice,
+  type LineView,
   type Session,
 } from './support/api';
 import {
@@ -471,6 +474,145 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     expect(await readLine(alice, LIST_GROCERIES_ID, lineId)).toMatchObject({
       quantity: 750,
       unit: 'GRAM',
+    });
+  });
+});
+
+/**
+ * The search field at the top of a list (velista 0189, section 8).
+ *
+ * On both pages the field sits above the first row, the bottom bar stays while
+ * somebody types, and the first touch drag of the results takes the focus off the
+ * field while the words, the results and `?search=1` stay. Desktop Chrome has no
+ * on screen keyboard, so this proves the blur, not the keyboard.
+ *
+ * The drag goes through the DevTools protocol with touch emulation on, because a
+ * synthetic DOM event is not what the browser scrolls with: this is the touch a
+ * finger makes, with the pointer cancelled once the browser takes it for a scroll.
+ * The two lines are made per run and deleted after.
+ */
+test.describe('the search field at the top of a list (velista 0189)', () => {
+  const RUN = `${Date.now()}`;
+  const WORD = 'Topsearch';
+  let alice: Session;
+  const made: LineView[] = [];
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    await resetAliceWorld(alice);
+    for (const what of ['soap', 'sponge']) {
+      const answer = await alice.post<{ line: LineView }>(
+        `/v1/lists/${LIST_GROCERIES_ID}/lines`,
+        { content: `${WORD} ${RUN} ${what}`, quantity: 1 }
+      );
+      made.push(answer.line);
+    }
+  });
+
+  test.afterAll(async () => {
+    // The basket step leaves a live basket holding the two lines.
+    await finishOpenBaskets(alice);
+    for (const line of made) await deleteLine(alice, line.id);
+    await alice?.dispose();
+  });
+
+  /** A finger on `target` that moves 120 px up in three steps and lifts. */
+  async function touchDrag(page: Page, target: Locator): Promise<void> {
+    const box = await target.boundingBox();
+    if (box === null) throw new Error('nothing to drag');
+    const x = box.x + box.width / 2;
+    const y = box.y + Math.min(box.height - 10, 200);
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x, y }],
+    });
+    for (const step of [1, 2, 3]) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: y - step * 40 }],
+      });
+    }
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await cdp.detach();
+  }
+
+  test('sits above the rows, keeps the bar, and lets a drag take the keyboard down', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+
+    await test.step('1. the zone list', async () => {
+      await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+      const field = composerField(page);
+      const firstRow = page.locator('lib-line-list .line').first();
+      await expect(firstRow).toBeVisible();
+
+      const fieldBox = await field.boundingBox();
+      const rowBox = await firstRow.boundingBox();
+      expect(fieldBox).not.toBeNull();
+      expect(rowBox).not.toBeNull();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        rowBox?.y ?? 0
+      );
+
+      await field.fill(WORD);
+      const results = page.locator('#list-results');
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+      await expect(
+        page.getByRole('navigation', { name: 'Main sections' })
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+
+      await touchDrag(page, results);
+
+      await expect(field).not.toBeFocused();
+      await expect(field).toHaveValue(WORD);
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+    });
+
+    await test.step('2. the shopping list', async () => {
+      const basketId = await generateBasket(
+        page,
+        ['Groceries'],
+        `Top search ${RUN}`
+      );
+      await expectBasketUrl(page, basketId);
+      const field = composerField(page);
+      await expect(rows(page).first()).toBeVisible();
+      const fieldBox = await field.boundingBox();
+      const rowBox = await rows(page).first().boundingBox();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        rowBox?.y ?? 0
+      );
+
+      await field.fill(WORD);
+      const results = page.locator('#basket-results');
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+      await expect(page.locator('.tools-bar')).toBeVisible();
+      await expect(
+        page.getByRole('navigation', { name: 'Main sections' })
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+
+      await touchDrag(page, results);
+
+      await expect(field).not.toBeFocused();
+      await expect(field).toHaveValue(WORD);
+      await expect(results).toBeVisible();
+      await expect(page.locator('.tools-bar')).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
     });
   });
 });

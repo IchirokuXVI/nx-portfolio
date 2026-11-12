@@ -1,12 +1,7 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  ListHeaderVm,
-  ListRowVm,
-  ZoneCardVm,
-} from '@portfolio/velista/models';
+import type { ListRowVm, ZoneCardVm } from '@portfolio/velista/models';
 import { ZoneCard } from './home/zone-card';
-import { ListHeader } from './list/list-header';
 import { ListRow } from './zone/list-row';
 
 /**
@@ -14,8 +9,9 @@ import { ListRow } from './zone/list-row';
  * about progress through a shop nobody has written down: arithmetically true and read
  * as a bug.
  *
- * The three surfaces are tested together because the rule is one rule and applying it
- * to two of them would be a fresh inconsistency rather than a fix. The resume card is
+ * The surfaces are tested together because the rule is one rule and applying it to
+ * some of them would be a fresh inconsistency rather than a fix. The list page header
+ * was the third until velista `0189` took its count line away. The resume card is
  * not here: its progress block already sits behind a computed that returns null at
  * zero lines, so it draws neither bar nor sentence and needed no change.
  *
@@ -59,18 +55,6 @@ function card(lists: readonly ListRowVm[]): ZoneCardVm {
     lists,
     online: [],
     tappable: true,
-  };
-}
-
-function header(overrides: Partial<ListHeaderVm> = {}): ListHeaderVm {
-  return {
-    listName: 'Weekly shop',
-    zoneName: 'Flat 3B',
-    wantedCount: 0,
-    lineCount: 0,
-    viewers: [],
-    live: true,
-    ...overrides,
   };
 }
 
@@ -137,32 +121,6 @@ describe('an empty list says so, and an unknown one says nothing', () => {
       const fixture = await renderRow(listRow());
 
       expect(text(fixture, '.meta')).toEqual([]);
-    });
-  });
-
-  describe('the list page header', () => {
-    async function renderHeader(vm: ListHeaderVm) {
-      const fixture = await render(ListHeader);
-      fixture.componentRef.setInput('header', vm);
-      fixture.detectChanges();
-      return fixture;
-    }
-
-    it('reads "list is empty" and draws no bar', async () => {
-      const fixture = await renderHeader(header({ lineCount: 0 }));
-
-      expect(text(fixture, '.progress-line')).toEqual(['list.empty.short']);
-      // An empty bar under an empty list is decoration that describes nothing.
-      expect(text(fixture, '.progress')).toEqual([]);
-    });
-
-    it('reads the progress and draws the bar once there are lines', async () => {
-      const fixture = await renderHeader(
-        header({ lineCount: 12, wantedCount: 7 })
-      );
-
-      expect(text(fixture, '.progress-line')).toEqual(['list.header.pending']);
-      expect(text(fixture, '.progress')).toHaveLength(1);
     });
   });
 });

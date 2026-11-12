@@ -6,88 +6,34 @@
   gets read. The status words are **description, not name**: they go in
   `aria-describedby`, so a screen reader reads the thing and its number first and
   the commentary on demand.
-
-  In reorder mode the role is **dropped** rather than kept and dishonoured: the row is
-  not a button while it is a thing being dragged, and claiming otherwise would announce
-  a control that does nothing.
 -->
 <div
   (click)="onRowClick()"
   (keydown)="onRowKeydown($event)"
   [attr.aria-busy]="line().write === 'pending' ? 'true' : null"
   [attr.aria-describedby]="describedBy()"
-  [attr.aria-label]="reordering() ? null : accessibleName()"
-  [attr.role]="reordering() ? null : 'button'"
-  [attr.tabindex]="reordering() || !line().interactive ? null : 0"
+  [attr.aria-label]="accessibleName()"
+  [attr.tabindex]="!line().interactive ? null : 0"
   [class.awaiting]="line().approvalStatus === 'PENDING'"
   [class.in-flight]="line().write === 'pending'"
-  [class.inert]="!line().interactive && !reordering()"
+  [class.inert]="!line().interactive"
   [class.settled]="line().settled"
   [class.turned-down]="line().approvalStatus === 'REJECTED'"
   class="row"
+  role="button"
 >
-  @if (reordering()) {
-    <!--
-      The grip is a real button with real keys on it. Up and down move the row and each
-      step is announced through the page's live region, because a grip that only
-      answered a pointer would put the manual order out of reach of anybody without a
-      working one.
-    -->
-    <span class="grip-wrap">
-      <button
-        (click)="move('moveUp')"
-        [attr.aria-label]="
-          'list.reorder.moveUp' | rokuT: { name: line().content }
-        "
-        [disabled]="!canMoveUp()"
-        class="grip-step"
-        type="button"
-      >
-        <span aria-hidden="true">&#9650;</span>
-      </button>
-
-      <!--
-        The grip proper, and what a pointer takes hold of. `touch-action: none` is what
-        makes the drag reach the list at all.
-      -->
-      <span
-        (pointerdown)="startDrag($event)"
-        aria-hidden="true"
-        class="grip-handle"
-      >
-        <lib-grip-icon class="grip" />
-      </span>
-
-      <button
-        (click)="move('moveDown')"
-        [attr.aria-label]="
-          'list.reorder.moveDown' | rokuT: { name: line().content }
-        "
-        [disabled]="!canMoveDown()"
-        class="grip-step"
-        type="button"
-      >
-        <span aria-hidden="true">&#9660;</span>
-      </button>
-    </span>
-  }
-
   <!--
     The picture (velista 0145, sections 3 and 5). A line with no product draws a
     dashed square with a plus, and for a reader who may change the line it is the
-    full size target that chooses one. Not in reorder mode, where a second control in
-    the row would fight the drag.
+    full size target that chooses one.
   -->
   @if (line().product; as product) {
     @switch (product.kind) {
       @case ('shown') {
-        <!--
-          A press on the photo opens it large and nothing else. Not in reorder mode,
-          where the row is a thing being dragged.
-        -->
+        <!-- A press on the photo opens it large and nothing else. -->
         <lib-product-picture
           [imageUrl]="product.imageUrl"
-          [zoom]="reordering() ? null : (product.name ?? line().content)"
+          [zoom]="product.name ?? line().content"
           class="picture"
         />
       }
@@ -95,7 +41,7 @@
         <span aria-hidden="true" class="picture bone"></span>
       }
       @case ('none') {
-        @if (canChoose()) {
+        @if (mayChoose()) {
           <button
             (click)="onChoose($event)"
             (keydown)="$event.stopPropagation()"
@@ -108,11 +54,6 @@
           >
             <lib-plus-icon class="choose-glyph" />
           </button>
-        } @else if (mayChoose()) {
-          <!-- Reorder mode: the same square, not a button while the row is dragged. -->
-          <span aria-hidden="true" class="picture choose">
-            <lib-plus-icon class="choose-glyph" />
-          </span>
         } @else {
           <lib-product-picture class="picture" />
         }
@@ -196,7 +137,7 @@
           <span aria-hidden="true" class="bone line-bone"></span>
         }
         @case ('none') {
-          @if (canChoose()) {
+          @if (mayChoose()) {
             <button
               (click)="onChoose($event)"
               (keydown)="$event.stopPropagation()"
@@ -206,7 +147,7 @@
             >
               {{ 'list.row.choose' | rokuT }}
             </button>
-          } @else if (!mayChoose()) {
+          } @else {
             <span class="no-product">{{ 'list.row.noProduct' | rokuT }}</span>
           }
         }
@@ -260,22 +201,19 @@
   }
 
   <!--
-    **The quantity, on every row, zero included** (velista 0043, section 3.2). Absent
-    in reorder mode, where a second gesture inside the row would fight the drag.
+    **The quantity, on every row, zero included** (velista 0043, section 3.2).
   -->
-  @if (!reordering()) {
-    <lib-quantity-stepper
-      (click)="$event.stopPropagation()"
-      (pointerdown)="$event.stopPropagation()"
-      (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
-      [name]="line().content"
-      [readonly]="!line().adjustable"
-      [took]="took()"
-      [unit]="line().unit"
-      [value]="amount()"
-      variant="row"
-    />
-  }
+  <lib-quantity-stepper
+    (click)="$event.stopPropagation()"
+    (pointerdown)="$event.stopPropagation()"
+    (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
+    [name]="line().content"
+    [readonly]="!line().adjustable"
+    [took]="took()"
+    [unit]="line().unit"
+    [value]="amount()"
+    variant="row"
+  />
 </div>
 
 <!--

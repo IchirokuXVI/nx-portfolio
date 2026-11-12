@@ -10,7 +10,6 @@ import {
   lineCategories,
   listCategoryCounts,
   listViewActiveCount,
-  listViewHoldsReorder,
   NO_CATEGORY,
   pickedListCategory,
   type Line,
@@ -232,11 +231,6 @@ export class ListViewStore {
 
   /** How many settings are on, for the filter button's badge. */
   readonly activeCount = computed(() => listViewActiveCount(this._state()));
-
-  /** Whether the reorder action has to wait for the list order (section 7). */
-  readonly holdsReorder = computed(() =>
-    listViewHoldsReorder(this._state(), this._query())
-  );
 
   /** How many lines the page draws, for the sheet's footer. */
   readonly visibleCount = computed(

@@ -44,9 +44,7 @@ import { SEED_LINES } from './static-line-data';
  *
  * - **`version` really increments**, on every write, so the overwritten branch of
  *   `Mutations.run` can be provoked deterministically rather than raced for.
- * - **Positions are integers with gaps**, exactly as deletes leave them on the server,
- *   so a reorder that renumbers only part of a list produces the collision rule L4
- *   exists to prevent rather than quietly working.
+ * - **Positions are integers with gaps**, exactly as deletes leave them on the server.
  *
  * ## It refuses what the server would refuse
  *
@@ -875,42 +873,6 @@ export class LineMemory implements LineServiceI {
       approvedByUserId:
         approvalStatus === 'APPROVED' ? caller : current.approvedByUserId,
     }));
-  }
-
-  /**
-   * Rewrite the order.
-   *
-   * Renumbers **only** the lines named, which is what core does, so a caller that
-   * sends one page of a two page list gets the collision rather than a tidy result.
-   * A named line the list does not have is a `validation_failed`, which is the mid
-   * drag delete section 5.7 handles by rereading and saying nothing.
-   */
-  async reorder(
-    listId: string,
-    orderedLineIds: readonly string[]
-  ): Promise<void> {
-    this._require(listId, 'WRITE');
-    this._maybeFail();
-
-    const lines = this._lines(listId);
-    for (const id of orderedLineIds) {
-      if (!lines.some((line) => line.id === id)) {
-        throw memoryFailure('validation_failed', 400);
-      }
-    }
-
-    const positions = new Map(
-      orderedLineIds.map((id, index) => [id, index + 1])
-    );
-    this._write(
-      listId,
-      lines.map((line) => {
-        const position = positions.get(line.id);
-        return position === undefined
-          ? line
-          : { ...line, position, version: line.version + 1 };
-      })
-    );
   }
 
   /**
