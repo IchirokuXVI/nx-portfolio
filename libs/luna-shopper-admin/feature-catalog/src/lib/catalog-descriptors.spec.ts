@@ -14,6 +14,8 @@ import {
   type ResourceRow,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   CATEGORY_KIND_OPTIONS,
   POSTAL_CODE_SOURCE_OPTIONS,
@@ -1345,18 +1347,42 @@ describe('the step of a product', () => {
       quantityStep,
     }) as Item;
 
-  it('holds every step of the generated wire type, and no other', () => {
-    // A step the gateway adds and the list lacks fails to compile here: the
-    // spec does not build, so the list cannot fall behind the wire. The
-    // `satisfies` in `items.ts` refuses a step the wire does not carry.
+  it('holds every step of the gateway document, and no other', () => {
+    // The type below states the rule for a reader and an editor, but nothing
+    // type checks a spec here (ts-jest only transpiles), so it fails no run.
+    // The runtime check is the one that fails: it reads the step enum of the
+    // committed OpenAPI document, the same document the wire type is
+    // generated from (plan 0070, section 2.2).
     type Missing = Exclude<WireStep, (typeof QUANTITY_STEP_CHOICES)[number]>;
     const everyWireStepIsListed: [Missing] extends [never] ? true : false =
       true;
-
     expect(everyWireStepIsListed).toBe(true);
-    expect(QUANTITY_STEP_CHOICES).toEqual([
-      1, 5, 10, 25, 50, 100, 200, 250, 500, 1000,
-    ]);
+
+    const document = JSON.parse(
+      readFileSync(
+        join(
+          __dirname,
+          '../../../../../apps/luna-shopper-backend/gateway/docs/openapi.json'
+        ),
+        'utf8'
+      )
+    ) as {
+      components: {
+        schemas: Record<
+          string,
+          { properties?: Record<string, { enum?: unknown[] }> }
+        >;
+      };
+    };
+    const documented =
+      document.components.schemas['UpdateItemDto']?.properties?.['quantityStep']
+        ?.enum;
+
+    // Null is how the document says "no step"; it is not a choice.
+    expect(documented).toBeDefined();
+    expect([...QUANTITY_STEP_CHOICES]).toEqual(
+      (documented ?? []).filter((step) => step !== null)
+    );
   });
 
   /** Each row of the table of backend plan 0246 section 1, plus the legacy rows. */

@@ -146,6 +146,9 @@ describe('Add items on a product group', () => {
     // `it_dish_soap` and `it_tomato_loose` are the products in no group in
     // the seed, the soap first.
     expect(boxes).toHaveLength(2);
+    expect(
+      boxes[0].closest('label')?.querySelector('.title')?.textContent
+    ).toMatch(/Dishwashing liquid|Lavavajillas/);
     await tick(fixture, boxes[0]);
 
     expect(q(fixture, '[data-add-review]')?.hasAttribute('disabled')).toBe(
