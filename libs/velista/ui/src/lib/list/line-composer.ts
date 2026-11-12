@@ -71,7 +71,7 @@ export interface LineComposerSubmit {
 }
 
 /**
- * The field at the bottom of the list, and the reason this screen has no floating
+ * The field at the top of the list, and the reason this screen has no floating
  * action button.
  *
  * ## Adding happens in runs
@@ -85,7 +85,7 @@ export interface LineComposerSubmit {
  *
  * That decision belongs to the container, which knows whether the caller may write.
  * This component is simply not rendered in that case, because a disabled text field at
- * the bottom of a screen is an invitation that does not work and costs a tap to find
+ * the top of a screen is an invitation that does not work and costs a tap to find
  * out (section 3.2).
  *
  * The basket used to lock it until a list was chosen (velista `0110`). It asks which

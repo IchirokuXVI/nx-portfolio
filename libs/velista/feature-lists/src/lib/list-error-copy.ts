@@ -110,12 +110,12 @@ export function listErrorKey(
 /**
  * What a failure does to the page, beyond what it says.
  *
- * Separate from the copy because two of these change the page's **state** and the
- * sentence is only the visible half of that:
+ * Separate from the copy because one of these changes the page's **state** and the
+ * sentence is only the visible half of that: `gone` is the list being deleted, or the
+ * caller's access to it withdrawn, which are indistinguishable and get the same
+ * treatment.
  *
- * - `gone` is the list being deleted, or the caller's access to it withdrawn, which are
- *   indistinguishable and get the same treatment. *
- * `read-only` was a third, and it is **deleted** rather than kept and made inert (plan
+ * `read-only` was another, and it is **deleted** rather than kept and made inert (plan
  * 0030, section 3). It existed because a refused write was the only way the client could
  * learn the caller was a reader, and it did two things: it set `_knownReader` on the
  * page, and it swallowed the failure so nothing was said. The page draws from

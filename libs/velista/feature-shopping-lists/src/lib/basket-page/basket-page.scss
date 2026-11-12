@@ -50,6 +50,12 @@
   gap: var(--app-space-5);
   padding-block-start: var(--app-space-3);
   background: var(--app-surface-ground);
+
+  // Nothing to hold while the basket loads or after it failed: no padding over the
+  // message, as on the list page.
+  &:empty {
+    display: none;
+  }
 }
 
 // The field, pinned in the head block, the same treatment and the same reasoning as

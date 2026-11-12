@@ -136,7 +136,7 @@
 }
 
 // While it listens, the whole row is this (plan 0038, section 4.1). Same height as
-// the row it replaced, so the list above does not jump when the mode changes.
+// the row it replaced, so the list below does not jump when the mode changes.
 //
 // Stop at the leading end, the bin at the trailing end, and the meter and its hint
 // taking every pixel between them (plan 0042, section 6). The distance is the
@@ -147,8 +147,8 @@
   display: flex;
   align-items: center;
   gap: var(--app-space-4);
-  // The row is the height of one target plus the padding above, which is what the
-  // field row measures too, so the list does not jump when the mode changes.
+  // The row is the height of one target, with no padding of its own, which is what
+  // the field row measures too, so the list does not jump when the mode changes.
   box-sizing: content-box;
   min-block-size: var(--app-touch-target);
 }

@@ -42,8 +42,8 @@ export interface LineAddResult {
  * Split from `ListServiceI` on the same line that separates memberships from zones:
  * that interface is operations on **a list**, this is operations on **a line**. The
  * split is not cosmetic here, because the routes are on two different controllers and
- * two different permission rules: reading and reordering are addressed through the
- * list, while editing, ticking, deciding and deleting are addressed by line id alone.
+ * two different permission rules: reading is addressed through the list, while
+ * editing, ticking, deciding and deleting are addressed by line id alone.
  *
  * Every method returns a promise. The live half arrives through `REALTIME_CLIENT`, and
  * `LineStore` is the only thing that joins the two (plan 0012, section 5.2).
@@ -120,8 +120,9 @@ export interface LineServiceI {
    * Version bumped.
    *
    * `itemIds` replaces the **whole** set, and an empty array clears it back to
-   * free text. A whole set rather than an add or a remove, for the reason reorder
-   * takes the whole order.
+   * free text. A whole set rather than an add or a remove, because two people
+   * editing a line's products would otherwise each send a delta against a set
+   * neither of them still has.
    *
    * `adoptItemIds` moves products from the catalog's side of the line to the
    * person's and changes the set not at all (backend plan 0070, section 9). It is

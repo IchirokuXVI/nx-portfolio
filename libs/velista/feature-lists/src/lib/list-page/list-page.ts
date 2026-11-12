@@ -1689,7 +1689,7 @@ export class ListPage {
   }
 
   /**
-   * Everything the row's decision buttons and grip emit.
+   * Everything the row's decision buttons emit.
    *
    * Edit, comments and delete are not here since velista plan 0083: the row has no menu,
    * and the detail sheet a tap opens is where each of them starts.

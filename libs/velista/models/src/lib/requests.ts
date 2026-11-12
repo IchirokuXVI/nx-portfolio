@@ -163,9 +163,9 @@ export interface UpdateLineRequest {
   /**
    * Replace the whole product set. An empty array clears it back to free text.
    *
-   * A whole set rather than an add or a remove, for the same reason the reorder
-   * request takes the whole order: two people editing a line's products would
-   * otherwise each send a delta against a set neither of them still has.
+   * A whole set rather than an add or a remove, because two people editing a
+   * line's products would otherwise each send a delta against a set neither of
+   * them still has.
    */
   readonly itemIds?: readonly string[];
   /**
