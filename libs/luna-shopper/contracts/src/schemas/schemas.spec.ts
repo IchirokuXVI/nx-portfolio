@@ -3316,3 +3316,40 @@ describe('a line counts in a unit (plan 0246)', () => {
     expect(valid({ ...row, estimated: undefined })).toBe(false);
   });
 });
+
+describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
+  it('a delta reaches the ceiling in both directions and stops there', () => {
+    const delta = { userId: 'u', lineId: 'l', unit: 'GRAM' };
+    const valid = (value: number) =>
+      validateMessageRequest('line.addQuantity', { ...delta, delta: value })
+        .valid;
+    expect(valid(999999)).toBe(true);
+    expect(valid(-999999)).toBe(true);
+    expect(valid(1000000)).toBe(false);
+    expect(valid(-1000000)).toBe(false);
+  });
+
+  it('an edit sets a line to the ceiling and not past it', () => {
+    const edit = { userId: 'u', lineId: 'l', unit: 'GRAM' };
+    const valid = (quantity: number) =>
+      validateMessageRequest('line.update', { ...edit, quantity }).valid;
+    expect(valid(999999)).toBe(true);
+    expect(valid(1000000)).toBe(false);
+  });
+
+  it('a basket demand sets a line to the ceiling and not past it', () => {
+    const demand = {
+      basketId: 'b',
+      participantId: 'p',
+      rowKey: 'r',
+      lineId: 'l',
+      unit: 'GRAM',
+      from: 0,
+    };
+    const valid = (quantity: number) =>
+      validateSchema(BASKET_SCHEMA_IDS.demandRequest, { ...demand, quantity })
+        .valid;
+    expect(valid(999999)).toBe(true);
+    expect(valid(1000000)).toBe(false);
+  });
+});

@@ -106,10 +106,16 @@ export const LINE_PATTERNS = {
  *
  * **Zero is not deleted** (section 2.2). Deleting is a separate, confirmed
  * gesture and it is the only thing that discards the history, which is the whole
- * reason the model works.
+ * reason the model works. No write deletes a line because it reached 0 (plan
+ * 0263 proposed it and was withdrawn on 2026-11-12); velista hides a line at 0
+ * outside a search instead.
+ *
+ * **The ceiling is 999 999 base units** (plan 0262): 999,999 kg, 999,999 l or
+ * 999 999 pieces, one number for the three units. It was 100 000 from when a
+ * line counted pieces only. Every column that holds an amount is `int`.
  */
 export const LINE_QUANTITY_MIN = 0;
-export const LINE_QUANTITY_MAX = 100000;
+export const LINE_QUANTITY_MAX = 999999;
 
 /**
  * How many lines one `line.addMany` may carry (plan 0040, section 6.1).
