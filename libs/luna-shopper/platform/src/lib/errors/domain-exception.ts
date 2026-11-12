@@ -639,6 +639,24 @@ export class ItemApproxWeightBesideSizeException extends DomainException {
   override readonly exposesDetails = true;
 }
 
+/** The `details` keys of a refused step (plan 0261, section 2.2). */
+export const ITEM_QUANTITY_STEP_DETAIL = 'quantityStep';
+export const ITEM_QUANTITY_STEPS_ALLOWED_DETAIL = 'allowed';
+
+/**
+ * A product write would store a step off the list, or a step on a product
+ * that is not sold by the kilo or the litre (plan 0261, section 2.2). The
+ * details are public: the step under {@link ITEM_QUANTITY_STEP_DETAIL}, the
+ * allowed steps under {@link ITEM_QUANTITY_STEPS_ALLOWED_DETAIL}, the unit
+ * under `defaultUnit`, the size under {@link ITEM_UNIT_SIZE_DETAIL} and the
+ * weight under {@link ITEM_APPROX_WEIGHT_DETAIL}, with `itemId` or `index` as
+ * for {@link ItemUnitNotBaseException}.
+ */
+export class ItemQuantityStepNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED;
+  override readonly exposesDetails = true;
+}
+
 /**
  * The `details` keys of the merge refusals (plan 0239): the product the
  * refusal is about, and the product it was merged into.

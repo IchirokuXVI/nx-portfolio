@@ -17,6 +17,7 @@ import {
   PACK_COUNT_MIN,
   PriceScopeKind,
   PriceSourceKind,
+  QUANTITY_STEPS,
   SECTION_LIMITS,
   SECTION_SLUG_MAX_LENGTH,
   UnitOfMeasure,
@@ -442,6 +443,27 @@ export class UpdateSupermarketLocationDto extends CreateSupermarketLocationDto {
 const APPROX_WEIGHT_DESCRIPTION =
   'The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it.';
 
+const QUANTITY_STEP_DESCRIPTION =
+  'How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo or the litre carries one: `KILOGRAM` or `LITER`, no `unitSize` and no `approxWeight` (S3). A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it.';
+
+/**
+ * The step of a product sold by the kilo or the litre (plan 0261, section 3),
+ * stated once for the create, the edit and the expectation. The enum lists
+ * the steps in the document, so the admin wire types carry them.
+ */
+function QuantityStepProperty(description: string): PropertyDecorator {
+  return applyDecorators(
+    ApiPropertyOptional({
+      type: 'integer',
+      enum: [...QUANTITY_STEPS],
+      nullable: true,
+      description,
+    }),
+    IsOptional(),
+    IsIn([...QUANTITY_STEPS])
+  );
+}
+
 const BASE_UNIT_DESCRIPTION =
   'A base unit (plan 0237, section 3.3). `LITER` and `PACK` are refused with `item_unit_not_base`, which names the unit and size they become (`MILLILITER`, `UNIT`). A `KILOGRAM` with a size is refused with `item_kilogram_has_size`, which names the grams it would be: a product sold by the kilo has no size. A piece with an approximate weight sends `approxWeight` instead. An edit is checked as the product will be saved, and only when it names the unit or the size.';
 
@@ -498,6 +520,9 @@ export class CreateItemDto {
   @IsOptional()
   @IsNumber()
   approxWeight?: number | null;
+
+  @QuantityStepProperty(QUANTITY_STEP_DESCRIPTION)
+  quantityStep?: number | null;
 
   @ApiPropertyOptional({
     type: 'integer',
@@ -642,6 +667,11 @@ export class ItemExpectationDto {
   @IsNumber()
   approxWeight?: number | null;
 
+  @QuantityStepProperty(
+    'The step the product holds, or null for none (plan 0261, section 2.4).'
+  )
+  quantityStep?: number | null;
+
   @ApiPropertyOptional({ enum: UnitOfMeasure })
   @IsOptional()
   @IsEnum(UnitOfMeasure)
@@ -719,6 +749,9 @@ export class UpdateItemDto {
   @IsOptional()
   @IsNumber()
   approxWeight?: number | null;
+
+  @QuantityStepProperty(QUANTITY_STEP_DESCRIPTION)
+  quantityStep?: number | null;
 
   @ApiPropertyOptional({
     type: 'integer',

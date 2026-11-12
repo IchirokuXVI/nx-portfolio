@@ -1491,6 +1491,16 @@ export interface ItemView {
    */
   approxWeightSetBy?: ApproxWeightSetBy | null;
   /**
+   * How far one step moves a line of this product, in grams or millilitres,
+   * or null for the default steps (plan 0261).
+   *
+   * One of {@link QUANTITY_STEPS}, and only on a product sold by the kilo or
+   * the litre (`KILOGRAM` or `LITER`, no size, no weight). A curator writes
+   * it, and no run does. Velista reads it to step a line; no server code
+   * steps an amount by it, and an amount off its grid stays valid.
+   */
+  quantityStep: number | null;
+  /**
    * How many units the pack holds, a whole number from {@link PACK_COUNT_MIN}
    * to {@link PACK_COUNT_MAX}, or null for a product that is not a pack or
    * whose source did not state a count (plan 0162).
@@ -2446,6 +2456,13 @@ export interface CreateItemRequest extends AdminCredential {
    * 0006 is the one sender today.
    */
   createdFromEntry?: string;
+  /**
+   * The step of a product sold by the kilo or the litre (plan 0261). See
+   * {@link ItemView.quantityStep}. A value off {@link QUANTITY_STEPS}, or a
+   * step on any other product, is refused with
+   * `item_quantity_step_not_allowed`. A run never sends one.
+   */
+  quantityStep?: number | null;
   /** How many units the pack holds (plan 0162). See {@link ItemView.packCount}. */
   packCount?: number | null;
   /**
@@ -2528,6 +2545,15 @@ export interface UpdateItemRequest extends AdminCredential {
    */
   approxWeightSetBy?: ApproxWeightSetBy;
   /**
+   * Set, change or (with `null`) clear the step of a product sold by the kilo
+   * or the litre (plan 0261, section 2.2). See {@link ItemView.quantityStep}.
+   *
+   * An edit that makes a stepped product a pack or a piece (a size, a weight
+   * or another unit) must send `quantityStep: null` with it, or it is refused
+   * with `item_quantity_step_not_allowed`.
+   */
+  quantityStep?: number | null;
+  /**
    * Set, correct or (with `null`) clear the pack count (plan 0162).
    *
    * **The only write that changes a count that is set.** A run fills a null
@@ -2576,6 +2602,8 @@ export interface ItemExpectation {
   unitSize?: number | null;
   /** Compared as a number, as `unitSize` is (plan 0244, section 3.3). */
   approxWeight?: number | null;
+  /** The step the product holds, or null for none (plan 0261, section 2.4). */
+  quantityStep?: number | null;
   defaultUnit?: UnitOfMeasure;
   packCount?: number | null;
   categorySlugs?: string[];
@@ -2727,6 +2755,12 @@ export interface SetApproxWeightsResult {
   skippedHasSize: number;
   /** Products skipped because a person wrote their weight. */
   skippedSetByAdmin: number;
+  /**
+   * Products skipped because a person gave them a step (plan 0261, S6). A
+   * weight would make such a product a kilo piece, which carries no step, so
+   * the run leaves it and the curator decides.
+   */
+  skippedHasStep: number;
 }
 
 /**
