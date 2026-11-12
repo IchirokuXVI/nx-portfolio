@@ -180,6 +180,8 @@ function setup(world: World) {
   let failNextRead = false;
   let failNextLists = false;
   let pendingNext = false;
+  /** A move to 0 deletes the line, as backend `0263` does for a bare line. */
+  let deletesAtZero = false;
   let nextId = 0;
   let holding = false;
   const gates: (() => void)[] = [];
@@ -336,8 +338,13 @@ function setup(world: World) {
       await written();
       const current = server.get(lineId) as Line;
       const moved = { ...current, quantity: current.quantity + delta };
+      // Backend `0263`, when the spec says the line keeps nothing.
+      if (deletesAtZero && current.quantity > 0 && moved.quantity === 0) {
+        server.delete(lineId);
+        return { line: moved, deleted: true };
+      }
       server.set(lineId, moved);
-      return moved;
+      return { line: moved, deleted: false };
     },
     updateLine: async (lineId, changes) => {
       calls.push(`update:${lineId}:${changes.quantity}:${changes.unit}`);
@@ -345,7 +352,7 @@ function setup(world: World) {
       const current = server.get(lineId) as Line;
       const updated = { ...current, ...changes } as Line;
       server.set(lineId, updated);
-      return { line: updated, absorbedLineId: null };
+      return { line: updated, absorbedLineId: null, deleted: false };
     },
     deleteLine: async (lineId) => {
       calls.push(`delete:${lineId}`);
@@ -416,6 +423,10 @@ function setup(world: World) {
     },
     pendingNext: () => {
       pendingNext = true;
+    },
+    /** From here on a move to 0 deletes the line it lowers (backend `0263`). */
+    deleteAtZero: () => {
+      deletesAtZero = true;
     },
     /** Leave every write from here on unanswered until {@link releaseNext}. */
     holdWrites: () => {
@@ -1412,6 +1423,44 @@ describe('CatalogAddStore', () => {
       expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
       expect(server.get('old')?.quantity).toBe(0);
       expect(store.held()[0]).toMatchObject({ lineId: 'old', quantity: 0 });
+    });
+
+    it('drops a held line the server deleted at nothing, with its record (velista 0192)', async () => {
+      // A line that was there before, raised by the visit and lowered past where
+      // it was to nothing: the server deletes it, and the card offers the add again.
+      const { store, server, deleteAtZero } = setup({
+        ...alone(['READ', 'WRITE', 'DECIDE', 'MANAGE']),
+        lines: [line('old', 'weekly', { quantity: 1 })],
+      });
+      await store.ensure();
+      await stepped(store, on('weekly', MILK), 'old', 1);
+      expect(store.visit()).toHaveLength(1);
+      deleteAtZero();
+
+      press(store, on('weekly', MILK), 'old', -1);
+      press(store, on('weekly', MILK), 'old', -1);
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      await settled();
+
+      expect(server.has('old')).toBe(false);
+      expect(store.held().some((held) => held.lineId === 'old')).toBe(false);
+      expect(store.visit()).toEqual([]);
+    });
+
+    it('drops a line the take back lowered to nothing and the server deleted', async () => {
+      const { store, server, deleteAtZero } = setup({
+        ...alone(['READ', 'WRITE', 'DECIDE']),
+        lines: [line('old', 'weekly', { quantity: 0 })],
+      });
+      await store.ensure();
+      await stepped(store, on('weekly', MILK), 'old', 1);
+      deleteAtZero();
+
+      await store.takeBack('old');
+      await settled();
+
+      expect(server.has('old')).toBe(false);
+      expect(store.held().some((held) => held.lineId === 'old')).toBe(false);
     });
 
     it('does not go under nothing', async () => {

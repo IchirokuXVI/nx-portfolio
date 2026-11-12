@@ -69,7 +69,12 @@ import {
 } from '../catalog/group-members';
 import { GroupNames } from '../catalog/group-names';
 import { ItemNames } from '../catalog/item-names';
-import { LineStore, type LineLoadState } from '../lines/line-store';
+import {
+  LineStore,
+  type LineDeletion,
+  type LineEmptied,
+  type LineLoadState,
+} from '../lines/line-store';
 import { ListStore, type ListLoadState } from '../lists/list-store';
 import { MemberNames } from '../memberships/member-names';
 import {
@@ -908,9 +913,9 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
   );
   const loads = signal(0);
   /** Lines known to be gone, as `LineStore.deletionOf` answers (velista plan 0083). */
-  const deletions = signal<ReadonlyMap<string, 'mine' | 'others' | 'seen'>>(
-    new Map()
-  );
+  const deletions = signal<ReadonlyMap<string, LineDeletion>>(new Map());
+  /** As `LineStore.emptiedNotice` (velista `0192`). */
+  const emptiedNotice = signal<LineEmptied | null>(null);
 
   const calls: LineWriteCall[] = [];
   let outcome = options.writeOutcome ?? 'succeeded';
@@ -1175,6 +1180,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
           state: 'succeeded' as const,
           line: answered as Line,
           absorbedLineId: staged.absorbedLineId ?? null,
+          deleted: false,
         };
       }
 
@@ -1235,6 +1241,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
             state: outcome as 'succeeded' | 'overwritten',
             line: edited,
             absorbedLineId: null,
+            deleted: false,
           };
     },
 
@@ -1377,6 +1384,35 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     deleteByOthers: (lineId: string) => {
       deletions.update((current) => new Map(current).set(lineId, 'others'));
       lines.update((current) => current.filter((l) => l.id !== lineId));
+    },
+    /** Another device took the line to 0 and the server deleted it (velista `0192`). */
+    emptyByOthers: (lineId: string) => {
+      deletions.update((current) => new Map(current).set(lineId, 'emptied'));
+      lines.update((current) => current.filter((l) => l.id !== lineId));
+    },
+    /**
+     * This client's write took the line to 0 and the server deleted it: the store
+     * marks it `mine`, removes it and sets the notice (velista `0192`).
+     */
+    emptyByMe: (lineId: string) => {
+      const line = lines().find((l) => l.id === lineId);
+      if (line === undefined) {
+        return;
+      }
+      deletions.update((current) => new Map(current).set(lineId, 'mine'));
+      lines.update((current) => current.filter((l) => l.id !== lineId));
+      emptiedNotice.set({
+        listId: line.listId,
+        lineId,
+        name: line.content,
+        line,
+      });
+    },
+    emptiedNotice: emptiedNotice.asReadonly(),
+    clearEmptiedNotice: (lineId: string) => {
+      if (emptiedNotice()?.lineId === lineId) {
+        emptiedNotice.set(null);
+      }
     },
 
     recordCommentCount: (lineId: string, count: number) => {

@@ -60,8 +60,25 @@ import {
  * a line this client did not remove itself, and `seen` is either of those after the
  * reader has been told. A sheet about the line reads it to decide whether to close
  * quietly or to say what happened first.
+ *
+ * `emptied` is a `line.deleted` event that says the line reached 0 with nothing to
+ * keep (backend `0263`), for a line this client was not lowering itself: nobody
+ * deleted it, so a sheet says it reached 0 rather than naming another user
+ * (velista `0192`). A line this client was lowering to 0 is `mine`.
  */
-export type LineDeletion = 'mine' | 'others' | 'seen';
+export type LineDeletion = 'mine' | 'others' | 'emptied' | 'seen';
+
+/**
+ * A line this client lowered to 0 that the server deleted (velista `0192`): what the
+ * page that drew it says, once. `line` is the line as it stood before the write,
+ * so the page can name it the way it drew it; `name` is its own words.
+ */
+export interface LineEmptied {
+  readonly listId: string;
+  readonly lineId: string;
+  readonly name: string;
+  readonly line: Line;
+}
 
 export type LineUpdateOutcome =
   | ({ readonly state: 'succeeded' | 'overwritten' } & LineUpdateResult)
@@ -162,6 +179,23 @@ export class LineStore {
   private readonly _deletions = signal<ReadonlyMap<string, LineDeletion>>(
     new Map()
   );
+
+  /**
+   * The lines a write of this client is taking from above 0 to 0, with the line as
+   * it stood before (velista `0192`). Put here before the request goes out and taken
+   * out by its answer, so a `line.deleted` with `emptied` that beats the answer is
+   * this client's own and not news from another device. A plain `Map`: nothing
+   * renders from it.
+   */
+  private readonly _emptying = new Map<string, Line>();
+
+  private readonly _emptiedNotice = signal<LineEmptied | null>(null);
+
+  /**
+   * The last line this client lowered to 0 that the server deleted, until a page
+   * says it and clears it (velista `0192`).
+   */
+  readonly emptiedNotice = this._emptiedNotice.asReadonly();
   private readonly _destroyRef = inject(DestroyRef);
 
   private readonly _byList = signal<ReadonlyMap<string, readonly Line[]>>(
@@ -387,6 +421,13 @@ export class LineStore {
   /** The reader was told the line is gone. The next sheet about it closes quietly. */
   acknowledgeDeletion(lineId: string): void {
     this._markDeleted(lineId, 'seen');
+  }
+
+  /** The page said {@link emptiedNotice}. Only that notice is cleared. */
+  clearEmptiedNotice(lineId: string): void {
+    if (this._emptiedNotice()?.lineId === lineId) {
+      this._emptiedNotice.set(null);
+    }
   }
 
   /**
@@ -803,6 +844,11 @@ export class LineStore {
       fields,
     };
 
+    const emptying = sent.quantity === 0 && before.quantity > 0;
+    if (emptying) {
+      this._emptying.set(lineId, before);
+    }
+
     this._patch(listId, lineId, apply);
     this._note(lineId, { outcome: 'pending', byUserId: null });
 
@@ -817,12 +863,23 @@ export class LineStore {
     );
 
     if (outcome.state === 'failed') {
+      this._stopEmptying(lineId, before);
       this._patch(listId, lineId, () => before);
       this._note(lineId, { outcome: 'failed', byUserId: null });
       return { state: 'failed', error: outcome.error };
     }
 
-    const { line, absorbedLineId } = outcome.value;
+    const { line, absorbedLineId, deleted } = outcome.value;
+
+    // The edit took the line to 0 and the server deleted it (velista `0192`). The
+    // caller's answer is still a success, with the line gone.
+    if (deleted) {
+      this._emptied(lineId);
+      this._clearNote(lineId);
+      this._stopEmptying(lineId, before);
+      return { state: 'succeeded', line, absorbedLineId, deleted };
+    }
+    this._stopEmptying(lineId, before);
 
     // A merge this client confirmed removes a line too, and the event that follows must
     // not read as somebody else deleting it.
@@ -843,11 +900,11 @@ export class LineStore {
         outcome: 'overwritten',
         byUserId: line.approvedByUserId,
       });
-      return { state: 'overwritten', line, absorbedLineId };
+      return { state: 'overwritten', line, absorbedLineId, deleted };
     }
 
     this._clearNote(lineId);
-    return { state: 'succeeded', line, absorbedLineId };
+    return { state: 'succeeded', line, absorbedLineId, deleted };
   }
 
   /**
@@ -905,7 +962,14 @@ export class LineStore {
       return this._correctUnit(before, legacy, delta);
     }
 
-    return this._write(
+    // A move from above 0 to 0 may delete the line (backend `0263`). Which one does
+    // is the server's to say; this only notes that the event may be ours.
+    if (before.quantity > 0 && before.quantity + delta <= 0) {
+      this._emptying.set(lineId, before);
+    }
+    let deleted = false;
+
+    const outcome = await this._write(
       lineId,
       before,
       ['quantity'],
@@ -913,7 +977,11 @@ export class LineStore {
         ...line,
         quantity: Math.max(LINE_QUANTITY_MIN, line.quantity + delta),
       }),
-      () => this._lines.addQuantity(lineId, delta, before.unit),
+      () =>
+        this._lines.addQuantity(lineId, delta, before.unit).then((answer) => {
+          deleted = answer.deleted;
+          return answer.line;
+        }),
       // Velista `0159`: the reconnect reloads the page and this row's note goes with
       // it, so a delta the network dropped is written down for the next document.
       // The name is the line's own text, which the page swaps for the name it draws.
@@ -936,6 +1004,17 @@ export class LineStore {
           }
         : undefined
     );
+
+    // Deleted: the row leaves as this client's own delete, and the caller is told
+    // the write succeeded, with the line gone (velista `0192`, section 2).
+    if (outcome !== 'failed' && deleted) {
+      this._emptied(lineId);
+      this._clearNote(lineId);
+      this._stopEmptying(lineId, before);
+      return 'succeeded';
+    }
+    this._stopEmptying(lineId, before);
+    return outcome;
   }
 
   /**
@@ -1609,10 +1688,16 @@ export class LineStore {
       }
 
       case 'line.deleted': {
+        // A line this client is lowering to 0, whose event beat the answer of the
+        // write (velista `0192`): its own, said by the page as the answer would.
+        if (event.emptied && this._emptying.has(event.lineId)) {
+          this._emptied(event.lineId);
+          break;
+        }
         // Only a line this client has not already accounted for. Its own delete and
         // its own merge are marked before the request goes out.
         if (this.deletionOf(event.lineId) === null) {
-          this._markDeleted(event.lineId, 'others');
+          this._markDeleted(event.lineId, event.emptied ? 'emptied' : 'others');
         }
         this._removeLine(event.lineId);
         break;
@@ -2006,6 +2091,35 @@ export class LineStore {
 
   private _markDeleted(lineId: string, how: LineDeletion): void {
     this._deletions.update((current) => new Map(current).set(lineId, how));
+  }
+
+  /**
+   * A line this client lowered to 0 was deleted by the server, learned from the
+   * answer or from the event, whichever came first (velista `0192`). Once: the
+   * second of the two finds no entry and does nothing.
+   */
+  private _emptied(lineId: string): void {
+    const before = this._emptying.get(lineId);
+    if (before === undefined) {
+      return;
+    }
+    this._emptying.delete(lineId);
+    // Marked first, as a delete by hand is, so an open sheet closes quietly.
+    this._markDeleted(lineId, 'mine');
+    this._removeLine(lineId);
+    this._emptiedNotice.set({
+      listId: before.listId,
+      lineId,
+      name: before.content,
+      line: before,
+    });
+  }
+
+  /** The write that put `before` in {@link _emptying} has answered. */
+  private _stopEmptying(lineId: string, before: Line): void {
+    if (this._emptying.get(lineId) === before) {
+      this._emptying.delete(lineId);
+    }
   }
 
   private _removeLine(lineId: string): void {

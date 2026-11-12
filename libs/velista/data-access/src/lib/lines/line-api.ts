@@ -34,6 +34,7 @@ import { isRecord, mapArray, str } from '../mapping/primitives';
 import { required } from '../mapping/required';
 import type {
   LineAddResult,
+  LineQuantityResult,
   LineServiceI,
   LineUpdateResult,
 } from './line-service';
@@ -236,11 +237,12 @@ export class LineApi implements LineServiceI {
       })
     );
 
-    // The answer is a line view with one optional field beside it, so the line maps
-    // as any other and the extra id is read on its own, from `unknown` (rule D4).
+    // The answer is a line view with optional fields beside it, so the line maps as
+    // any other and the extras are read on their own, from `unknown` (rule D4).
     return {
       line: required(toLine(body), 'lines.update'),
       absorbedLineId: isRecord(body) ? str(body['absorbedLineId']) : null,
+      deleted: isRecord(body) && body['deleted'] === true,
     };
   }
 
@@ -248,7 +250,7 @@ export class LineApi implements LineServiceI {
     lineId: string,
     delta: number,
     unit: LineUnit
-  ): Promise<Line> {
+  ): Promise<LineQuantityResult> {
     const request: AddLineQuantityRequest = { delta, unit };
 
     const body = await firstValueFrom(
@@ -257,7 +259,12 @@ export class LineApi implements LineServiceI {
       })
     );
 
-    return required(toLine(body), 'lines.addQuantity');
+    // The line as it stood, and `deleted` beside it when the move took it to 0
+    // with nothing to keep (backend `0263`). Only a JSON `true` counts.
+    return {
+      line: required(toLine(body), 'lines.addQuantity'),
+      deleted: isRecord(body) && body['deleted'] === true,
+    };
   }
 
   async settle(

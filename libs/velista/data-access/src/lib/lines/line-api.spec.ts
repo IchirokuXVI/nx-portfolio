@@ -146,7 +146,33 @@ describe('LineApi, the unit on every write (velista 0182)', () => {
     expect(req.request.url).toBe(`${GATEWAY}/v1/lines/ln-1/quantity`);
     expect(req.request.body).toEqual({ delta: -250, unit: 'GRAM' });
     req.flush(LINE);
-    expect((await done).unit).toBe('GRAM');
+    const answer = await done;
+    expect(answer.line.unit).toBe('GRAM');
+    // Absent is false (backend `0263`).
+    expect(answer.deleted).toBe(false);
+  });
+
+  it('reads `deleted` beside the line a delta answers, only as a JSON true', async () => {
+    const done = api.addQuantity('ln-1', -250, 'GRAM');
+    next().flush({ ...LINE, quantity: 0, deleted: true });
+    expect(await done).toMatchObject({
+      line: { id: 'ln-1', quantity: 0 },
+      deleted: true,
+    });
+
+    const odd = api.addQuantity('ln-1', -250, 'GRAM');
+    next().flush({ ...LINE, quantity: 0, deleted: 'true' });
+    expect((await odd).deleted).toBe(false);
+  });
+
+  it('reads `deleted` beside the line an edit answers', async () => {
+    const done = api.updateLine('ln-1', { quantity: 0 });
+    next().flush({ ...LINE, quantity: 0, deleted: true });
+    expect(await done).toMatchObject({ deleted: true, absorbedLineId: null });
+
+    const kept = api.updateLine('ln-1', { quantity: 0 });
+    next().flush({ ...LINE, quantity: 0 });
+    expect((await kept).deleted).toBe(false);
   });
 
   it('sends the unit on a settle, with a quantity in it', async () => {

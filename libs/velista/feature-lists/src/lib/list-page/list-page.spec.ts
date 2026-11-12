@@ -1187,6 +1187,122 @@ describe('ListPage', () => {
         jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
         expect(writes(lines.calls)).toHaveLength(1);
       });
+
+      it('sends nothing for a minus to 0 and a plus inside the quiet beat, so nothing is deleted (velista 0192, decision A)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 1 })],
+        });
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(press(1, 0));
+        page.stepQuantity(press(0, 1));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+
+        expect(writes(lines.calls)).toEqual([]);
+      });
+    });
+
+    describe('a line that reaches 0 with nothing to keep (velista 0192)', () => {
+      const three = () =>
+        render({
+          lines: [
+            line('ln-1', { quantity: 2, position: 1 }),
+            line('ln-2', { content: 'Bananas', quantity: 1, position: 2 }),
+            line('ln-3', { quantity: 3, position: 3 }),
+          ],
+        });
+      const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
+        (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+          `li.line[data-line-id="${id}"]`
+        );
+      const drain = async (fixture: ComponentFixture<ListPage>) => {
+        for (let turn = 0; turn < 3; turn += 1) {
+          await fixture.whenStable();
+          fixture.detectChanges();
+        }
+      };
+
+      it('moves focus to the same control of the next row, and says it once', async () => {
+        const { fixture, lines } = await three();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        lines.emptyByMe('ln-2');
+        await drain(fixture);
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.emptied'
+        );
+        // Read once: the notice is cleared, so a redraw says nothing again.
+        expect(lines.emptiedNotice()).toBeNull();
+        fixture.componentInstance.announcement.set('');
+        await drain(fixture);
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('moves focus to the previous row when the last row left', async () => {
+        const { fixture, lines } = await three();
+        rowOf(fixture, 'ln-3')
+          ?.querySelector<HTMLElement>('.step.plus')
+          ?.focus();
+
+        lines.emptyByMe('ln-3');
+        await drain(fixture);
+
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-2')?.querySelector('.step.plus')
+        );
+      });
+
+      it('moves focus to the heading when no row is left', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 1 })],
+        });
+        rowOf(fixture, 'ln-1')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        lines.emptyByMe('ln-1');
+        await drain(fixture);
+
+        expect(document.activeElement).toBe(
+          (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-page-header h1'
+          )
+        );
+      });
+
+      it('leaves focus alone when it was not in the row', async () => {
+        const { fixture, lines } = await three();
+        const other = rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>(
+          '.step.plus'
+        );
+        other?.focus();
+
+        lines.emptyByMe('ln-2');
+        await drain(fixture);
+
+        expect(document.activeElement).toBe(other);
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.emptied'
+        );
+      });
+
+      it('says nothing for a line another device took to 0', async () => {
+        const { fixture, lines } = await three();
+
+        lines.emptyByOthers('ln-2');
+        await drain(fixture);
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
     });
 
     it('opens the line rather than repeating a write that failed', async () => {

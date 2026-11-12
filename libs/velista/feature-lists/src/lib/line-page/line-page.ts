@@ -320,7 +320,30 @@ export class LinePage {
         void this._resolveAlsoOn(itemIds, listId);
       });
     });
+
+    // A minus of this page took the line to 0 and the server deleted it (velista
+    // `0192`): back to the list, which says it. The notice is the list's to clear.
+    let leaving = false;
+    effect(() => {
+      const emptied = this._lines.emptiedNotice();
+      if (leaving || emptied === null || emptied.lineId !== this.lineId()) {
+        return;
+      }
+      leaving = true;
+      untracked(() => void this.leave());
+    });
   }
+
+  /**
+   * What the page says when its line is missing: that it reached 0, when another
+   * device took it there and the server deleted it (velista `0192`), or that it is
+   * no longer on the list.
+   */
+  readonly missingKey = computed(() =>
+    this._lines.deletionOf(this.lineId()) === 'emptied'
+      ? 'list.gone.emptied'
+      : 'list.gone.unavailable'
+  );
 
   /**
    * Where else this line's products are still wanted (backend plan 0053, section 3).

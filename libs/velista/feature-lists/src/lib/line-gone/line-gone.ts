@@ -17,13 +17,27 @@ import { LineStore } from '@portfolio/velista/data-access';
  *
  * - `byOthers`: a `line.deleted` event removed it while this reader had a sheet about
  *   it open, or open underneath another one.
+ * - `emptied`: another device took it to 0 and it kept nothing, so the server
+ *   deleted it (velista `0192`). Nobody deleted it, so the sheet does not say so.
  * - `unavailable`: the list has loaded in full and the line is not on it, which is a
  *   link or a typed URL to a line deleted before the sheet was opened.
  *
  * A delete this reader made has no reason: the sheet closes without a word, because
- * the reader already knows.
+ * the reader already knows. A line this reader lowered to 0 is such a delete.
  */
-export type LineGoneReason = 'byOthers' | 'unavailable';
+export type LineGoneReason = 'byOthers' | 'emptied' | 'unavailable';
+
+/** The sentence a {@link LineGoneReason} is said with. */
+export function lineGoneKey(reason: LineGoneReason): string {
+  switch (reason) {
+    case 'byOthers':
+      return 'list.gone.byOthers';
+    case 'emptied':
+      return 'list.gone.emptied';
+    default:
+      return 'list.gone.unavailable';
+  }
+}
 
 export interface LineGoneWatch {
   /** What to tell the reader, or null when there is nothing to tell. */
@@ -91,6 +105,8 @@ export function watchLineGone(options: {
       switch (status()) {
         case 'others':
           return 'byOthers';
+        case 'emptied':
+          return 'emptied';
         case 'unavailable':
           return 'unavailable';
         default:
@@ -119,12 +135,7 @@ export function watchLineGone(options: {
   imports: [RokuTranslatorPipe],
   template: `
     <h2 [id]="titleId()" class="title">
-      {{
-        (reason() === 'byOthers'
-          ? 'list.gone.byOthers'
-          : 'list.gone.unavailable'
-        ) | rokuT
-      }}
+      {{ key() | rokuT }}
     </h2>
     <button (click)="closed.emit()" class="primary" type="button">
       {{ 'list.gone.close' | rokuT }}
@@ -137,4 +148,6 @@ export class LineGoneNotice {
   readonly reason = input.required<LineGoneReason>();
   readonly titleId = input.required<string>();
   readonly closed = output<void>();
+
+  protected readonly key = computed(() => lineGoneKey(this.reason()));
 }

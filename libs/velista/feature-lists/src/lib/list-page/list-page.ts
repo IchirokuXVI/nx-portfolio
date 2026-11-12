@@ -29,6 +29,7 @@ import {
   DueLineStore,
   GatewayError,
   ItemNames,
+  type LineEmptied,
   LineStore,
   LIST_SERVICE,
   type ListServiceI,
@@ -145,6 +146,7 @@ import { selectDueLines } from '../select-due-lines';
 import { type ListStateCatalog, selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
+import { focusAfterRemoval, focusEmptied } from './emptied-focus';
 
 /** What the list page hands the catalog that chooses a product, to know its answer. */
 const LIST_ROW_PICK = 'list-row';
@@ -1789,6 +1791,52 @@ export class ListPage {
       reportDropped: true,
     });
     this._afterWrite(outcome, event.lineId, 'lines.write');
+  }
+
+  /**
+   * A line this reader took to 0 left the list, because it kept nothing (velista
+   * `0192`, section 4). Read from the store and not from the write, because the
+   * event can beat the answer and the line page's own minus lands here too.
+   *
+   * A view effect, so it runs before the rows redraw: the row is still in the
+   * column, and the effect can see whether focus was in it and which rows were its
+   * neighbours.
+   */
+  private readonly _sayEmptied = effect(() => {
+    const emptied = this._lines.emptiedNotice();
+    if (
+      emptied === null ||
+      emptied.listId !== this.listId() ||
+      this.loaded() === null
+    ) {
+      return;
+    }
+    untracked(() => this._emptied(emptied));
+  });
+
+  private _emptied(emptied: LineEmptied): void {
+    this._lines.clearEmptiedNotice(emptied.lineId);
+    const column = this._column()?.nativeElement;
+    const target =
+      column === undefined ? null : focusAfterRemoval(column, emptied.lineId);
+    const sentence = this._translator.t(
+      'list.line.emptied',
+      undefined,
+      undefined,
+      { name: this._lineName(emptied.line) }
+    );
+
+    afterNextRender(
+      () => {
+        // After the region is drawn, so a page that opened on this notice (the
+        // line page left to it) still has it read.
+        this.announcement.set(sentence);
+        if (target !== null && column !== undefined) {
+          focusEmptied(column, target);
+        }
+      },
+      { injector: this._injector }
+    );
   }
 
   /**

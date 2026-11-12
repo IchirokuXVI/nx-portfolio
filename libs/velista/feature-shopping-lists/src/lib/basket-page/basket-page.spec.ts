@@ -25,6 +25,7 @@ import {
   fakeShopDetailStore,
   fakeShopSectionsStore,
   GatewayError,
+  LineStore,
   MEMORY_CATEGORIES,
   MEMORY_SHOP_MAPS,
   provideFakeCategoryStore,
@@ -200,6 +201,11 @@ const PAGE_TREE: readonly CategoryNode[] = [
 ];
 
 interface Options {
+  /**
+   * What the app's line store knows is gone (velista `0192`). Absent provides no
+   * line store, as most specs here do.
+   */
+  readonly lineDeletions?: Readonly<Record<string, string>>;
   /** `?search=1`, the open search (velista `0109`). */
   readonly search?: boolean;
   /** What `PageReturn` hands back, which makes this arrival a return to the basket. */
@@ -553,6 +559,17 @@ async function render(options: Options = {}): Promise<{
     providers: [
       provideVelistaTesting({ basePath: '' }),
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
+      ...(options.lineDeletions === undefined
+        ? []
+        : [
+            {
+              provide: LineStore,
+              useValue: {
+                deletionOf: (lineId: string) =>
+                  options.lineDeletions?.[lineId] ?? null,
+              },
+            },
+          ]),
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
       { provide: NavChrome, useValue: navChrome },
@@ -4008,7 +4025,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     }[];
     productLink(): ((itemId: string) => string) | null;
     changeHolding(change: {
-      holding: { lineId: string; text?: string };
+      holding: { lineId: string; text?: string; listName?: string };
       from: number;
       to: number;
       repeat: boolean;
@@ -4179,6 +4196,39 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     fixture.detectChanges();
 
     expect(text(fixture)).toContain('basket.demand.nothingLeft');
+  });
+
+  it('says the line is off its list when the demand to 0 deleted it (velista 0192)', async () => {
+    const { fixture } = await render({
+      lines: [milk()],
+      served: SERVED,
+      lineDeletions: { 'zl-1': 'emptied' },
+    });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+    store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
+
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1', text: 'Milk', listName: 'Groceries' },
+        from: 2,
+        to: 0,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
+    fixture.detectChanges();
+
+    expect(text(fixture)).toContain('basket.line.emptied');
+    expect(text(fixture)).not.toContain('basket.demand.nothingLeft');
   });
 
   it('names an entry by its own line, which can differ from the row (velista 0139)', async () => {

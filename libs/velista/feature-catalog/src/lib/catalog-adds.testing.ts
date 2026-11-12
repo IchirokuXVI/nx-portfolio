@@ -199,7 +199,10 @@ export function fakeAdds(options: FakeAddsOptions = {}): FakeAdds {
       if (line === undefined) {
         throw new Error(`no line ${lineId}`);
       }
-      return put({ ...line, quantity: Math.max(0, line.quantity + delta) });
+      return {
+        line: put({ ...line, quantity: Math.max(0, line.quantity + delta) }),
+        deleted: false,
+      };
     }),
     deleteLine: jest.fn(async (lineId: string) => {
       held = held.filter((line) => line.id !== lineId);

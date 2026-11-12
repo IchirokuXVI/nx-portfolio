@@ -383,7 +383,7 @@ describe('LineMemory refuses what the server would refuse', () => {
     it('may move a quantity, approve, and turn one down', async () => {
       const { lines } = await build();
 
-      expect((await lines.addQuantity('ln-m-01', 2)).quantity).toBe(5);
+      expect((await lines.addQuantity('ln-m-01', 2)).line.quantity).toBe(5);
       expect(
         (await lines.setApproval('ln-m-03', 'APPROVED')).approvalStatus
       ).toBe('APPROVED');

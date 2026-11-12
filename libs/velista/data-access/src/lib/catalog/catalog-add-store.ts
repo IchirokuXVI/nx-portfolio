@@ -627,8 +627,17 @@ export class CatalogAddStore {
       if (generation !== this._generation) {
         return;
       }
+      if (answer.deleted) {
+        // The run took the line to 0 and it kept nothing, so the server deleted
+        // it (backend `0263`): the line and its record go, the card offers the
+        // add again, and a run opened since has no line to write to.
+        this._runOf.delete(lineId);
+        this._drop(lineId);
+        this._visit.update((visit) => visitWithout(visit, lineId));
+        return;
+      }
       const ahead = this._adding.get(keyOf(product.listId, product.itemId));
-      const held = heldOf(answer, ahead ?? 0);
+      const held = heldOf(answer.line, ahead ?? 0);
       // A run opened on the line since this one closed is drawn on top.
       this._held.update((all) =>
         upsert(all, {
@@ -637,7 +646,7 @@ export class CatalogAddStore {
         })
       );
       this._visit.update((visit) =>
-        visitAfterStep(visit, product, stateOf(answer), run.from)
+        visitAfterStep(visit, product, stateOf(answer.line), run.from)
       );
     } catch {
       if (generation === this._generation) {
@@ -767,7 +776,13 @@ export class CatalogAddStore {
           unit
         );
         if (generation === this._generation) {
-          this._held.update((held) => upsert(held, heldOf(answer, 0)));
+          // A take back that took a line there before the visit to 0 with nothing
+          // to keep: the server deleted it (backend `0263`, section 4).
+          if (answer.deleted) {
+            this._drop(lineId);
+          } else {
+            this._held.update((held) => upsert(held, heldOf(answer.line, 0)));
+          }
         }
       }
     } catch {

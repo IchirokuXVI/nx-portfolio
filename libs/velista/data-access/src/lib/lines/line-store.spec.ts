@@ -91,6 +91,8 @@ function service(seed: readonly Line[]) {
   let absorbNext: string | null = null;
   /** The line the next add answers as raised, `merged: true` (velista `0170`). */
   let raiseNext: Line | null = null;
+  /** The next quantity write answers `deleted: true` (backend `0263`). */
+  let deleteNext = false;
   /** What each add said about a name the list holds, in order (backend `0228`). */
   const addOptions: (AddLineOptions | undefined)[] = [];
   /** The unit every write named, in order, for velista `0182`. */
@@ -174,15 +176,25 @@ function service(seed: readonly Line[]) {
       updates.push({ ...changes });
       const absorbedLineId = absorbNext;
       absorbNext = null;
+      const deleted = deleteNext;
+      deleteNext = false;
       return {
         line: await answer(line(lineId, { ...changes, version: 2 })),
         absorbedLineId,
+        deleted,
       };
     },
     addQuantity: async (lineId, delta, unit) => {
       units.push(unit);
       deltas.push({ delta, unit });
-      return answer(line(lineId, { quantity: 1 + delta, unit, version: 2 }));
+      const deleted = deleteNext;
+      deleteNext = false;
+      return {
+        line: await answer(
+          line(lineId, { quantity: 1 + delta, unit, version: 2 })
+        ),
+        deleted,
+      };
     },
     settle: async (lineId, outcome, options) => {
       units.push(options.unit);
@@ -263,6 +275,9 @@ function service(seed: readonly Line[]) {
     },
     raiseNext: (value: Line) => {
       raiseNext = value;
+    },
+    deleteNext: () => {
+      deleteNext = true;
     },
     addOptions,
     units,
@@ -1248,6 +1263,119 @@ describe('LineStore', () => {
 
       store.acknowledgeDeletion('a');
       expect(store.deletionOf('a')).toBe('seen');
+    });
+  });
+
+  describe('a line that reaches 0 with nothing to keep (velista 0192)', () => {
+    it('removes a line the answer says was deleted, as its own, and sets the notice', async () => {
+      const { store, lines } = await build([line('a', { content: 'Bananas' })]);
+      await store.load(LIST);
+      lines.deleteNext();
+
+      const outcome = await store.addQuantity('a', -1);
+
+      expect(outcome).toBe('succeeded');
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('mine');
+      expect(store.writeNoteOf('a')).toBeNull();
+      expect(store.emptiedNotice()).toMatchObject({
+        listId: LIST,
+        lineId: 'a',
+        name: 'Bananas',
+      });
+
+      store.clearEmptiedNotice('a');
+      expect(store.emptiedNotice()).toBeNull();
+    });
+
+    it('takes the event before the answer as its own, and says it once', async () => {
+      // The ordinary order on a deployed environment: the event reaches the socket
+      // before the answer comes back through the gateway.
+      const { store, lines, realtime } = await build([line('a')]);
+      await store.load(LIST);
+      lines.holdWrites();
+      lines.deleteNext();
+
+      const writing = store.addQuantity('a', -1);
+      await Promise.resolve();
+      realtime.emit('line.deleted', { id: 'a', listId: LIST, emptied: true });
+
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('mine');
+      expect(store.emptiedNotice()?.lineId).toBe('a');
+      store.clearEmptiedNotice('a');
+
+      lines.releaseWrites();
+      expect(await writing).toBe('succeeded');
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('mine');
+      // The answer finds the line already accounted for and says nothing again.
+      expect(store.emptiedNotice()).toBeNull();
+    });
+
+    it('marks an emptied event for a line it is not lowering as emptied', async () => {
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      realtime.emit('line.deleted', { id: 'a', listId: LIST, emptied: true });
+
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('emptied');
+      expect(store.emptiedNotice()).toBeNull();
+    });
+
+    it('marks an emptied event for a line it is only raising as emptied', async () => {
+      const { store, lines, realtime } = await build([line('a')]);
+      await store.load(LIST);
+      lines.holdWrites();
+
+      const writing = store.addQuantity('a', 1);
+      await Promise.resolve();
+      realtime.emit('line.deleted', { id: 'a', listId: LIST, emptied: true });
+
+      expect(store.deletionOf('a')).toBe('emptied');
+      lines.releaseWrites();
+      await writing;
+    });
+
+    it('keeps a line the server kept at 0, and a later event is news', async () => {
+      const { store, realtime } = await build([line('a')]);
+      await store.load(LIST);
+
+      expect(await store.addQuantity('a', -1)).toBe('succeeded');
+
+      expect(store.linesIn(LIST)[0]).toMatchObject({ id: 'a', quantity: 0 });
+      expect(store.deletionOf('a')).toBeNull();
+      expect(store.emptiedNotice()).toBeNull();
+
+      // The write has answered, so an emptied event now comes from elsewhere.
+      realtime.emit('line.deleted', { id: 'a', listId: LIST, emptied: true });
+      expect(store.deletionOf('a')).toBe('emptied');
+    });
+
+    it('removes a line an edit to 0 deleted', async () => {
+      const { store, lines } = await build([line('a', { quantity: 3 })]);
+      await store.load(LIST);
+      lines.deleteNext();
+
+      const outcome = await store.updateLine('a', { quantity: 0 });
+
+      expect(outcome).toMatchObject({ state: 'succeeded', deleted: true });
+      expect(store.linesIn(LIST)).toEqual([]);
+      expect(store.deletionOf('a')).toBe('mine');
+      expect(store.emptiedNotice()?.lineId).toBe('a');
+    });
+
+    it('forgets the lowering of a write that failed', async () => {
+      const { store, lines, realtime } = await build([line('a')]);
+      await store.load(LIST);
+      lines.failNext(new Error('offline'));
+
+      expect(await store.addQuantity('a', -1)).toBe('failed');
+      realtime.emit('line.deleted', { id: 'a', listId: LIST, emptied: true });
+
+      expect(store.deletionOf('a')).toBe('emptied');
+      expect(store.emptiedNotice()).toBeNull();
     });
 
     it('marks both sides of its own merge as its own', async () => {
