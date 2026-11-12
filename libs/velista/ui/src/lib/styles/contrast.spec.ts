@@ -228,6 +228,18 @@ describe('contrast', () => {
       );
     });
 
+    // Velista `0188` S14: the stepper's minus draws a trash in the danger foreground
+    // where its next press reaches 0. The capsule is raised, and the button sinks
+    // while it is pressed.
+    it.each(['--app-surface-raised', '--app-surface-sunken'])(
+      `the stepper's trash reaches ${NON_TEXT}:1 on %s`,
+      (surface) => {
+        expect(
+          ratio('--app-status-danger-fg', surface, theme)
+        ).toBeGreaterThanOrEqual(NON_TEXT);
+      }
+    );
+
     // Velista `0133`: the strip of a support session. Its text, the border of End and
     // the ring End takes are all the one foreground, so one ratio covers the three.
     it(`the strip of a support session reaches ${TEXT}:1`, () => {
