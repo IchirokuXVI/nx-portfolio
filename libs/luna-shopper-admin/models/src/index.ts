@@ -200,7 +200,6 @@ export {
   type FieldNote,
   type FilterValue,
   type FormMode,
-  type NumberField,
   type NumberUnit,
   type ReferenceField,
   type ReferenceScope,
