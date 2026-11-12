@@ -28,10 +28,15 @@
         'amount.less' | rokuT: { step: lessStep(), name: name() }
       "
       [class.at-end]="minusAtEnd()"
+      [class.is-clear]="minusClears()"
       class="step minus"
       type="button"
     >
-      <span aria-hidden="true" class="glyph"></span>
+      @if (minusClears()) {
+        <lib-trash-icon class="trash" />
+      } @else {
+        <span aria-hidden="true" class="glyph"></span>
+      }
     </button>
 
     @if (typed()) {
