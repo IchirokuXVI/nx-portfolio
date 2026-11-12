@@ -2,6 +2,7 @@ import {
   addChoiceName,
   addChoiceRows,
   addMayMeetLine,
+  addMayMeetProduct,
   type AddChoice,
 } from './add-choice';
 import type { CatalogItem } from './domain';
@@ -9,6 +10,7 @@ import { LINE_QUANTITY_MAX } from './limits';
 
 const MILK: CatalogItem = {
   id: 'item-a',
+  quantityStep: null,
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
   size: 1,
@@ -58,7 +60,7 @@ describe('addChoiceRows', () => {
   };
 
   it('draws each line as its row would, in the refusal’s order', () => {
-    expect(addChoiceRows(CHOICE, 1, facts)).toEqual([
+    expect(addChoiceRows(CHOICE, facts)).toEqual([
       {
         lineId: 'line-a',
         // Not named: the product's name in the reader's language (velista 0144).
@@ -83,27 +85,32 @@ describe('addChoiceRows', () => {
     ]);
   });
 
-  it('adds the composer’s quantity, capped as the server caps a raise', () => {
+  it('caps the raise as the server caps it', () => {
     const rows = addChoiceRows(
-      { lines: [{ ...CHOICE.lines[0], quantity: LINE_QUANTITY_MAX - 1 }] },
-      5,
+      { lines: [{ ...CHOICE.lines[0], quantity: LINE_QUANTITY_MAX }] },
       facts
     );
 
     expect(rows[0].to).toBe(LINE_QUANTITY_MAX);
   });
 
-  it('sums nothing onto a line of another unit (velista 0182, backend 0246 M5)', () => {
+  it('takes each row up one step of its own unit: 0 to 25 g, 0 to 25 ml, 0 to 1 (velista 0185)', () => {
     const rows = addChoiceRows(
-      { lines: [{ ...CHOICE.lines[0], quantity: 1000, unit: 'GRAM' }] },
-      1,
-      facts,
-      'UNIT'
+      {
+        lines: [
+          { ...CHOICE.lines[0], lineId: 'g', quantity: 0, unit: 'GRAM' },
+          { ...CHOICE.lines[0], lineId: 'ml', quantity: 0, unit: 'MILLILITER' },
+          { ...CHOICE.lines[0], lineId: 'u', quantity: 0, unit: 'UNIT' },
+        ],
+      },
+      facts
     );
 
-    expect(rows[0]).toEqual(
-      expect.objectContaining({ from: 1000, to: null, unit: 'GRAM' })
-    );
+    expect(rows.map(({ from, to, unit }) => ({ from, to, unit }))).toEqual([
+      { from: 0, to: 25, unit: 'GRAM' },
+      { from: 0, to: 25, unit: 'MILLILITER' },
+      { from: 0, to: 1, unit: 'UNIT' },
+    ]);
   });
 });
 
@@ -121,6 +128,30 @@ describe('addMayMeetLine', () => {
     expect(addMayMeetLine(held, 'Pan')).toBe(false);
     expect(addMayMeetLine(held, 'Leche')).toBe(false);
     expect(addMayMeetLine(held, '   ')).toBe(false);
+  });
+});
+
+describe('addMayMeetProduct (velista 0185, decision I)', () => {
+  const held = [
+    {
+      itemIds: ['bananas', 'apples'],
+      quantity: 750,
+      approvalStatus: 'APPROVED' as const,
+    },
+    { itemIds: ['bread'], quantity: 0, approvalStatus: 'APPROVED' as const },
+    { itemIds: ['milk'], quantity: 2, approvalStatus: 'REJECTED' as const },
+  ];
+
+  it('meets a wanted line that holds every product, also among others', () => {
+    expect(addMayMeetProduct(held, ['bananas'])).toBe(true);
+    expect(addMayMeetProduct(held, ['apples', 'bananas'])).toBe(true);
+  });
+
+  it('does not meet a line at zero, a turned down line, a partial set or nothing', () => {
+    expect(addMayMeetProduct(held, ['bread'])).toBe(false);
+    expect(addMayMeetProduct(held, ['milk'])).toBe(false);
+    expect(addMayMeetProduct(held, ['bananas', 'pears'])).toBe(false);
+    expect(addMayMeetProduct(held, [])).toBe(false);
   });
 });
 

@@ -5,7 +5,7 @@ import {
   output,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import type { LineUnit } from '@portfolio/velista/models';
+import type { LineUnit, QuantityStep } from '@portfolio/velista/models';
 import { ProductRow, type ProductRowView } from './product-row';
 
 /** One line the visit added to, as its row draws it. */
@@ -21,6 +21,8 @@ export interface VisitAddedRow {
   readonly quantity: number;
   /** What {@link quantity} counts (velista `0182`). Absent is a count. */
   readonly unit?: LineUnit;
+  /** The step its stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
   /** The lowest count the stepper shows. A minus pressed there takes it back. */
   readonly floor: number;
   /** The line waits for approval, which the row says under the name. */
@@ -35,7 +37,7 @@ export interface VisitAddedSection {
   readonly rows: readonly VisitAddedRow[];
 }
 
-/** A press on one row's stepper. */
+/** A step of one row's stepper, as the stepper drew it. */
 export interface VisitAddedStep {
   readonly listId: string;
   readonly itemId: string;
@@ -44,7 +46,7 @@ export interface VisitAddedStep {
   readonly detail: string | null;
   /** The product's photo, which the record keeps for the line. */
   readonly imageUrl: string | null;
-  readonly by: 1 | -1;
+  readonly step: QuantityStep;
 }
 
 /**
@@ -85,7 +87,7 @@ export interface VisitAddedStep {
                     lineId: row.lineId,
                     detail: row.detail,
                     imageUrl: row.imageUrl,
-                    by: $event,
+                    step: $event,
                   })
                 "
                 [compact]="true"
@@ -95,7 +97,8 @@ export interface VisitAddedStep {
                 [stepper]="{
                   value: row.quantity,
                   unit: row.unit,
-                  label: 'catalog.added.stepper' | rokuT: { name: row.name },
+                  step: row.step,
+                  name: row.name,
                   min: row.floor - 1,
                 }"
               />

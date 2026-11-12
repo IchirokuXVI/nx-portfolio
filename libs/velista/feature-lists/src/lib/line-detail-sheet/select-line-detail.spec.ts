@@ -80,6 +80,7 @@ function item(
 ): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { es: en, en },
     brand,
     size: 1,
@@ -147,6 +148,27 @@ function select(overrides: Partial<LineDetailInput> = {}): LineDetailVm | null {
 describe('selectLineDetail', () => {
   it('is null for a line the store does not hold', () => {
     expect(select({ line: undefined })).toBeNull();
+  });
+
+  it("gives both steppers the product's step (velista 0186)", () => {
+    const saffron: CatalogItem = {
+      ...item('item-saffron', 'Saffron'),
+      size: null,
+      unit: 'KILOGRAM',
+      quantityStep: 5,
+    };
+    const detail = select({
+      line: {
+        ...line(),
+        unit: 'GRAM',
+        quantity: 20,
+        itemIds: ['item-saffron'],
+      },
+      itemNameOf: (itemId) => (itemId === 'item-saffron' ? saffron : null),
+    });
+
+    expect(detail?.step).toBe(5);
+    expect(select()?.step).toBeNull();
   });
 
   describe('the estimate', () => {

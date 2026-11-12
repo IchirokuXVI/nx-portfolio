@@ -56,14 +56,14 @@ const BARBECUE: VisitAddedSection = {
   ],
 };
 
-/** A press on the minus of the olive oil on the weekly shop. */
+/** A press on the minus of the olive oil on the weekly shop, from two to one. */
 const OIL_DOWN: VisitAddedStep = {
   listId: 'l1',
   itemId: 'item-oil',
   lineId: 'line-oil',
   detail: '1 L · €8.45 at Mercadona',
   imageUrl: null,
-  by: -1,
+  step: { from: 2, to: 1, repeat: false },
 };
 
 /**
@@ -145,6 +145,18 @@ function valuesOf(key: string): unknown[] {
   return [...seen.values()];
 }
 
+/** What the first stepper within draws, in base units (velista 0188, L). */
+function amountOf(within: HTMLElement): string | null | undefined {
+  return within
+    .querySelector('lib-quantity-stepper')
+    ?.getAttribute('data-value');
+}
+
+/** Whether a stepper button is at an end or off: drawn, focusable, and deaf. */
+function off(button: HTMLButtonElement | undefined): boolean {
+  return button?.getAttribute('aria-disabled') === 'true';
+}
+
 /** One row by its line, which is what tells two rows of one product apart. */
 function line(
   fixture: ComponentFixture<VisitAdded>,
@@ -214,7 +226,7 @@ describe('VisitAdded', () => {
       expect(oil.querySelector('.detail')?.textContent).toBe(
         '1 L · €8.45 at Mercadona'
       );
-      expect(oil.querySelector('.value')?.textContent).toBe('2');
+      expect(amountOf(oil)).toBe('2');
     });
 
     it('marks each row with its line and its product', async () => {
@@ -239,15 +251,11 @@ describe('VisitAdded', () => {
       expect(
         line(fixture, 'l1', 'line-oil').querySelector('.name')?.textContent
       ).toBe('Olive oil');
-      expect(
-        line(fixture, 'l1', 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
+      expect(amountOf(line(fixture, 'l1', 'line-oil'))).toBe('2');
       expect(
         line(fixture, 'l1', 'line-fry').querySelector('.name')?.textContent
       ).toBe('Oil for the fryer');
-      expect(
-        line(fixture, 'l1', 'line-fry').querySelector('.value')?.textContent
-      ).toBe('4');
+      expect(amountOf(line(fixture, 'l1', 'line-fry'))).toBe('4');
     });
 
     it('draws each row as the compact card, with the photo of the product', async () => {
@@ -299,32 +307,49 @@ describe('VisitAdded', () => {
       ).toBeNull();
     });
 
-    it('names each stepper for its product', async () => {
+    it('says the amount of each stepper is of its product', async () => {
       const fixture = await render([WEEKLY]);
 
       expect(
         item(fixture, 'l1', 'item-oil')
-          .querySelector('[role="spinbutton"]')
+          .querySelector('[role="group"]')
           ?.getAttribute('aria-label')
-      ).toBe('catalog.added.stepper');
-      expect(valuesOf('catalog.added.stepper')).toEqual([
+      ).toBe('amount.group');
+      expect(valuesOf('amount.group')).toEqual([
         { name: 'Olive oil' },
         { name: 'Milk' },
       ]);
     });
 
-    it('draws the stepper in the quiet colour and the small size', async () => {
+    it('draws the row stepper, with no tint', async () => {
       const fixture = await render([WEEKLY]);
 
       const stepper = item(fixture, 'l1', 'item-oil').querySelector(
         'lib-quantity-stepper'
       );
-      expect(stepper?.classList.contains('is-accent')).toBe(true);
-      expect(stepper?.classList.contains('is-compact')).toBe(true);
+      expect(stepper?.classList.contains('variant-row')).toBe(true);
+      expect(stepper?.classList.contains('is-accent')).toBe(false);
     });
   });
 
   describe('the stepper', () => {
+    it("steps by the product's step the row carries (velista 0186)", async () => {
+      const fixture = await render([
+        {
+          listId: 'l1',
+          name: 'Weekly shop',
+          rows: [row({ quantity: 1000, unit: 'GRAM', floor: 1000, step: 100 })],
+        },
+      ]);
+      const heard = steppedOf(fixture);
+
+      steps(fixture, 'l1', 'item-oil')[1]?.click();
+
+      expect(heard.map((each) => each.step)).toEqual([
+        { from: 1000, to: 1100, repeat: false },
+      ]);
+    });
+
     it('says one more, with the list, the product, the line and its detail', async () => {
       const fixture = await render([WEEKLY, BARBECUE]);
       const heard = steppedOf(fixture);
@@ -338,7 +363,7 @@ describe('VisitAdded', () => {
           lineId: 'line-coal',
           detail: '1 L · €8.45 at Mercadona',
           imageUrl: null,
-          by: 1,
+          step: { from: 3, to: 4, repeat: false },
         },
       ]);
     });
@@ -355,7 +380,11 @@ describe('VisitAdded', () => {
         ?.click();
 
       expect(heard).toEqual([
-        { ...OIL_DOWN, lineId: 'line-fry', by: 1 },
+        {
+          ...OIL_DOWN,
+          lineId: 'line-fry',
+          step: { from: 4, to: 5, repeat: false },
+        },
         OIL_DOWN,
       ]);
     });
@@ -374,12 +403,8 @@ describe('VisitAdded', () => {
       ]);
       fixture.detectChanges();
 
-      expect(
-        line(fixture, 'l1', 'line-oil').querySelector('.value')?.textContent
-      ).toBe('2');
-      expect(
-        line(fixture, 'l1', 'line-fry').querySelector('.value')?.textContent
-      ).toBe('5');
+      expect(amountOf(line(fixture, 'l1', 'line-oil'))).toBe('2');
+      expect(amountOf(line(fixture, 'l1', 'line-fry'))).toBe('5');
     });
 
     it('says one fewer, with the list, the product, the line and its detail', async () => {
@@ -395,11 +420,7 @@ describe('VisitAdded', () => {
       const fixture = await render([WEEKLY]);
       const heard = steppedOf(fixture);
 
-      const milk = item(fixture, 'l1', 'item-milk');
-      expect(
-        milk.querySelector('[role="spinbutton"]')?.getAttribute('aria-valuemin')
-      ).toBe('0');
-      expect(steps(fixture, 'l1', 'item-milk')[0]?.disabled).toBe(false);
+      expect(off(steps(fixture, 'l1', 'item-milk')[0])).toBe(false);
       steps(fixture, 'l1', 'item-milk')[0]?.click();
 
       expect(heard).toEqual([
@@ -409,7 +430,7 @@ describe('VisitAdded', () => {
           lineId: 'line-milk',
           detail: null,
           imageUrl: null,
-          by: -1,
+          step: { from: 1, to: 0, repeat: false },
         },
       ]);
     });
@@ -420,14 +441,12 @@ describe('VisitAdded', () => {
       ]);
       const heard = steppedOf(fixture);
 
-      expect(
-        item(fixture, 'l1', 'item-oil')
-          .querySelector('[role="spinbutton"]')
-          ?.getAttribute('aria-valuemin')
-      ).toBe('4');
+      expect(off(steps(fixture, 'l1', 'item-oil')[0])).toBe(false);
       steps(fixture, 'l1', 'item-oil')[0]?.click();
 
-      expect(heard).toEqual([OIL_DOWN]);
+      expect(heard).toEqual([
+        { ...OIL_DOWN, step: { from: 5, to: 4, repeat: false } },
+      ]);
     });
 
     it('says a step down and then a step up when both land before the quantity moves', async () => {
@@ -439,7 +458,10 @@ describe('VisitAdded', () => {
       steps(fixture, 'l1', 'item-oil')[1]?.click();
       fixture.detectChanges();
 
-      expect(heard).toEqual([OIL_DOWN, { ...OIL_DOWN, by: 1 }]);
+      expect(heard).toEqual([
+        OIL_DOWN,
+        { ...OIL_DOWN, step: { from: 2, to: 3, repeat: false } },
+      ]);
     });
 
     it('draws the quantity it is given again after a press the list did not take', async () => {
@@ -450,10 +472,7 @@ describe('VisitAdded', () => {
       steps(fixture, 'l1', 'item-oil')[1]?.click();
       fixture.detectChanges();
 
-      expect(oil.querySelector('.value')?.textContent).toBe('2');
-      expect(
-        oil.querySelector('[role="spinbutton"]')?.getAttribute('aria-valuenow')
-      ).toBe('2');
+      expect(amountOf(oil)).toBe('2');
     });
 
     it('draws the new quantity only once the list has taken the press', async () => {
@@ -466,9 +485,7 @@ describe('VisitAdded', () => {
       ]);
       fixture.detectChanges();
 
-      expect(
-        item(fixture, 'l1', 'item-oil').querySelector('.value')?.textContent
-      ).toBe('3');
+      expect(amountOf(item(fixture, 'l1', 'item-oil'))).toBe('3');
     });
   });
 

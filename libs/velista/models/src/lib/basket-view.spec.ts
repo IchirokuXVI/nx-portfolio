@@ -38,6 +38,7 @@ function product(
 ): BasketProduct {
   return {
     id: 'p-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     size: null,

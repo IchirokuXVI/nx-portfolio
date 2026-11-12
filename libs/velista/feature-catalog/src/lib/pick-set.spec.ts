@@ -1,5 +1,5 @@
-import { LINE_ITEM_SET_MAX } from '@portfolio/velista/models';
-import { rebaseProductSet, tickProduct } from './pick-set';
+import { LINE_ITEM_SET_MAX, type CatalogItem } from '@portfolio/velista/models';
+import { lineProductCard, rebaseProductSet, tickProduct } from './pick-set';
 
 function ids(count: number, prefix = 'p'): string[] {
   return Array.from({ length: count }, (_, at) => `${prefix}${at}`);
@@ -88,5 +88,31 @@ describe('rebaseProductSet (velista 0146, section 3)', () => {
 
   it('keeps a product both added only once', () => {
     expect(rebaseProductSet(['a'], ['a', 'x'], ['a', 'x'])).toEqual(['a', 'x']);
+  });
+});
+
+describe('lineProductCard', () => {
+  it("carries the product's step onto the card (velista 0186)", () => {
+    const item = {
+      id: 'chicken',
+      name: { en: 'Whole chicken', es: 'Pollo entero' },
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      productGroupId: null,
+      categories: [],
+      offer: null,
+      chainPrices: [],
+      imageUrl: null,
+      packCount: null,
+      unitBasis: null,
+      approxWeight: null,
+      quantityStep: 250,
+    } as CatalogItem;
+
+    expect(lineProductCard(item).quantityStep).toBe(250);
+    expect(
+      lineProductCard({ ...item, quantityStep: null }).quantityStep
+    ).toBeNull();
   });
 });

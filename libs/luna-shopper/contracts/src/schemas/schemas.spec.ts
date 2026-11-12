@@ -387,9 +387,12 @@ describe('contract schemas', () => {
     it('line.add response (a free text line, and no trip status on it)', () => {
       expect(
         // The line, and whether the add raised one the list already held rather
-        // than creating it (plan 0091, section 4).
+        // than creating it (plan 0091, section 4), and which of the three
+        // things the add did (plan 0260, section 2).
         validateMessageResponse('line.add', {
           merged: false,
+          outcome: 'CREATED',
+          alreadyOnList: [],
           line: {
             id: 'l',
             listId: 'li',
@@ -2125,11 +2128,83 @@ describe('contract schemas', () => {
           written: 3,
           skippedHasSize: 1,
           skippedSetByAdmin: 0,
+          skippedHasStep: 2,
         }).valid
       ).toBe(true);
       expect(
         validateMessageResponse('item.setApproxWeights', { written: 3 }).valid
       ).toBe(false);
+    });
+
+    it('a product view states its step from the list, and a write leaves the list to catalog (plan 0261)', () => {
+      const view = (extra: Record<string, unknown>) =>
+        validateMessageResponse('item.get', {
+          id: 'i',
+          name: { en: 'Chicken', es: 'Pollo' },
+          brand: null,
+          imageUrl: null,
+          imageSource: null,
+          imageSupermarketId: null,
+          ownImageUrl: null,
+          images: [],
+          sku: null,
+          ean: null,
+          eans: [],
+          unitSize: null,
+          packCount: null,
+          categories: [MILK_CATEGORY],
+          defaultUnit: 'KILOGRAM',
+          productGroupId: null,
+          ...extra,
+        }).valid;
+      // Not required, so a view built before the plan still validates.
+      expect(view({})).toBe(true);
+      expect(view({ quantityStep: null })).toBe(true);
+      expect(view({ quantityStep: 100 })).toBe(true);
+      expect(view({ quantityStep: 30 })).toBe(false);
+      expect(view({ quantityStep: '100' })).toBe(false);
+
+      // Catalog, not the schema, refuses a step off the list, so a caller on
+      // the bus meets `item_quantity_step_not_allowed` and not a schema error.
+      const update = (quantityStep: unknown) =>
+        validateMessageRequest('item.update', {
+          userId: 'owner',
+          itemId: 'i',
+          quantityStep,
+          expect: { quantityStep: null },
+        }).valid;
+      expect(update(100)).toBe(true);
+      expect(update(30)).toBe(true);
+      expect(update(null)).toBe(true);
+      expect(update(2.5)).toBe(false);
+      expect(
+        validateMessageRequest('item.create', {
+          userId: 'owner',
+          name: { es: 'Pollo' },
+          categoryIds: ['c'],
+          defaultUnit: 'KILOGRAM',
+          quantityStep: 100,
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.createMany', {
+          userId: 'owner',
+          items: [
+            {
+              name: { es: 'Pollo' },
+              categoryIds: ['c'],
+              defaultUnit: 'KILOGRAM',
+              quantityStep: 100,
+            },
+          ],
+        }).valid
+      ).toBe(true);
+      expect(
+        validateMessageRequest('item.updateMany', {
+          userId: 'owner',
+          items: [{ itemId: 'i', quantityStep: 250 }],
+        }).valid
+      ).toBe(true);
     });
 
     it('a create and an edit state a weight and who wrote it (plan 0244)', () => {
@@ -3314,5 +3389,42 @@ describe('a line counts in a unit (plan 0246)', () => {
     expect(valid(row)).toBe(true);
     expect(valid({ ...row, unit: undefined })).toBe(false);
     expect(valid({ ...row, estimated: undefined })).toBe(false);
+  });
+});
+
+describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
+  it('a delta reaches the ceiling in both directions and stops there', () => {
+    const delta = { userId: 'u', lineId: 'l', unit: 'GRAM' };
+    const valid = (value: number) =>
+      validateMessageRequest('line.addQuantity', { ...delta, delta: value })
+        .valid;
+    expect(valid(999999)).toBe(true);
+    expect(valid(-999999)).toBe(true);
+    expect(valid(1000000)).toBe(false);
+    expect(valid(-1000000)).toBe(false);
+  });
+
+  it('an edit sets a line to the ceiling and not past it', () => {
+    const edit = { userId: 'u', lineId: 'l', unit: 'GRAM' };
+    const valid = (quantity: number) =>
+      validateMessageRequest('line.update', { ...edit, quantity }).valid;
+    expect(valid(999999)).toBe(true);
+    expect(valid(1000000)).toBe(false);
+  });
+
+  it('a basket demand sets a line to the ceiling and not past it', () => {
+    const demand = {
+      basketId: 'b',
+      participantId: 'p',
+      rowKey: 'r',
+      lineId: 'l',
+      unit: 'GRAM',
+      from: 0,
+    };
+    const valid = (quantity: number) =>
+      validateSchema(BASKET_SCHEMA_IDS.demandRequest, { ...demand, quantity })
+        .valid;
+    expect(valid(999999)).toBe(true);
+    expect(valid(1000000)).toBe(false);
   });
 });

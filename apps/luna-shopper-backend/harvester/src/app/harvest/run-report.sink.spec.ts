@@ -120,6 +120,8 @@ function build(
     weightHasSize?: string[];
     /** Products whose weight a person wrote (plan 0244). */
     weightSetByAdmin?: string[];
+    // Plan 0261, S6: products a person gave a step.
+    weightHasStep?: string[];
     /** Whether the chain may declare a whole listing (plan 0220, 15.3). */
     provesDelisting?: boolean;
     /**
@@ -247,10 +249,14 @@ function build(
       const byAdmin = entries.filter((entry) =>
         options.weightSetByAdmin?.includes(entry.itemId)
       ).length;
+      const stepped = entries.filter((entry) =>
+        options.weightHasStep?.includes(entry.itemId)
+      ).length;
       return {
-        written: entries.length - sized - byAdmin,
+        written: entries.length - sized - byAdmin - stepped,
         skippedHasSize: sized,
         skippedSetByAdmin: byAdmin,
+        skippedHasStep: stepped,
       };
     }),
   } as unknown as CatalogClient;
@@ -635,6 +641,7 @@ describe('RunReportSink', () => {
         approxWeightsWritten: 1,
         approxWeightsSkippedSetByAdmin: 0,
         approxWeightsSkippedHasSize: 0,
+        approxWeightsSkippedHasStep: 0,
       });
       expect(context.warn).not.toHaveBeenCalled();
     });
@@ -730,6 +737,7 @@ describe('RunReportSink', () => {
         resolves,
         weightHasSize: ['item-0'],
         weightSetByAdmin: ['item-1', 'item-2'],
+        weightHasStep: ['item-3'],
       });
 
       for (let i = 0; i < 1001; i += 1) {
@@ -739,9 +747,10 @@ describe('RunReportSink', () => {
 
       expect(catalog.setApproxWeights).toHaveBeenCalledTimes(2);
       expect(written).toMatchObject({
-        approxWeightsWritten: 998,
+        approxWeightsWritten: 997,
         approxWeightsSkippedHasSize: 1,
         approxWeightsSkippedSetByAdmin: 2,
+        approxWeightsSkippedHasStep: 1,
       });
     });
   });

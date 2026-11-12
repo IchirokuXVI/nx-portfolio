@@ -1,6 +1,6 @@
 import { ADD_CHOICE_MAX } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { toAddChoice } from './add-choice-mappers';
+import { toAddChoice, toAddUnitRefusal } from './add-choice-mappers';
 
 function refusal(details: Record<string, unknown> | undefined): GatewayError {
   return new GatewayError({
@@ -123,5 +123,78 @@ describe('toAddChoice', () => {
     }));
 
     expect(toAddChoice(refusal({ lines }))?.lines).toHaveLength(ADD_CHOICE_MAX);
+  });
+});
+
+/** Velista `0185`, section 4: the refusal of a product add of another unit. */
+describe('toAddUnitRefusal', () => {
+  function differs(details?: Record<string, unknown>): GatewayError {
+    return new GatewayError({
+      code: 'line_unit_differs',
+      status: 409,
+      correlationId: 'ref',
+      details,
+    });
+  }
+
+  it('reads the line the add met: its id, its own spelling and its unit', () => {
+    expect(
+      toAddUnitRefusal(
+        differs({
+          line: {
+            lineId: 'line-milk',
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 1500,
+          },
+          unit: 'UNIT',
+          index: null,
+        }),
+        'Leche'
+      )
+    ).toEqual({
+      lineId: 'line-milk',
+      name: 'Leche entera',
+      unit: 'MILLILITER',
+    });
+  });
+
+  it('is still the refusal with no line: the added name and no unit', () => {
+    expect(toAddUnitRefusal(differs(undefined), 'Leche')).toEqual({
+      lineId: null,
+      name: 'Leche',
+      unit: null,
+    });
+    expect(toAddUnitRefusal(differs({ line: 'x' }), 'Leche')).toEqual({
+      lineId: null,
+      name: 'Leche',
+      unit: null,
+    });
+  });
+
+  it('reads a missing or unknown unit as none, and blank words as the added name', () => {
+    expect(
+      toAddUnitRefusal(
+        differs({ line: { lineId: 'l1', content: '  ', unit: 'LITRE' } }),
+        'Leche'
+      )
+    ).toEqual({ lineId: 'l1', name: 'Leche', unit: null });
+    expect(
+      toAddUnitRefusal(differs({ line: { lineId: 'l1', content: 'Pan' } }), 'x')
+    ).toEqual({ lineId: 'l1', name: 'Pan', unit: null });
+  });
+
+  it('is null for any other failure', () => {
+    expect(toAddUnitRefusal(new Error('boom'), 'Leche')).toBeNull();
+    expect(
+      toAddUnitRefusal(
+        new GatewayError({
+          code: 'line_add_needs_choice',
+          status: 409,
+          correlationId: 'ref',
+        }),
+        'Leche'
+      )
+    ).toBeNull();
   });
 });

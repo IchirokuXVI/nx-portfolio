@@ -1035,10 +1035,12 @@ function describeWrites(written: RunReportResult): Record<string, unknown> {
     packCountConflicts: written.packCountConflicts,
     // Plan 0244, section 5.7: weights of one piece written onto products, and
     // the products catalog skipped because a person wrote the weight or the
-    // product is still a sized pack.
+    // product is still a sized pack, or (plan 0261, S6) because a person gave
+    // the product a step.
     approxWeightsWritten: written.approxWeightsWritten,
     approxWeightsSkippedSetByAdmin: written.approxWeightsSkippedSetByAdmin,
     approxWeightsSkippedHasSize: written.approxWeightsSkippedHasSize,
+    approxWeightsSkippedHasStep: written.approxWeightsSkippedHasStep,
   };
 }
 

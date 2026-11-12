@@ -1,3 +1,5 @@
+> **PR:** [#975](https://github.com/IchirokuXVI/nx-portfolio/pull/975)
+
 # 0262: a line holds up to 999 999 of its unit
 
 > Written on 2026-11-11 from the owner's decision of that day (section 1 of the batch

@@ -450,7 +450,8 @@ export class BasketApi implements BasketServiceI {
     const request: Record<string, unknown> = {
       targetListId: body.targetListId,
       content: body.content,
-      quantity: body.quantity,
+      // Absent for a typed name (velista `0185`): the server decides the amount.
+      ...(body.quantity === undefined ? {} : { quantity: body.quantity }),
       // A weight or a volume only (velista `0182`). A count is the server's default,
       // and every add before backend `0246` named none.
       ...(isMeasured(body.unit) ? { unit: body.unit } : {}),

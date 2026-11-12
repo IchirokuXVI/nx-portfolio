@@ -202,6 +202,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       kind: 'item',
       item: {
         id: 'item-oat',
+        quantityStep: null,
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',
         size: null,
@@ -245,56 +246,55 @@ describe('LineComposer, one slot and the empty field decides', () => {
       expect(field?.value).toBe('oat');
     });
 
-    it('asks for a product sold by the kilo by weight, starting at a kilo (velista 0182)', async () => {
+    it('sends a chosen card at one step of its unit: 25 g, 25 ml or one piece (velista 0185)', async () => {
       const { fixture } = await render();
       const added: unknown[] = [];
       fixture.componentInstance.submitted.subscribe((one) => added.push(one));
-      const bananas: CatalogSuggestion = {
+      const item = (OAT as Extract<CatalogSuggestion, { kind: 'item' }>).item;
+      const loose = (id: string, unit: string): CatalogSuggestion => ({
         kind: 'item',
-        item: {
-          ...(OAT as Extract<CatalogSuggestion, { kind: 'item' }>).item,
-          id: 'item-bananas',
-          name: { es: 'Plátanos', en: 'Bananas' },
-          unit: 'KILOGRAM',
-        },
-      };
+        item: { ...item, id, unit },
+      });
 
       fixture.componentInstance.choose(
-        bananas,
+        loose('item-bananas', 'KILOGRAM'),
         document.createElement('button')
       );
+      fixture.componentInstance.choose(
+        loose('item-milk', 'LITER'),
+        document.createElement('button')
+      );
+      fixture.componentInstance.choose(OAT, document.createElement('button'));
       fixture.detectChanges();
 
       expect(added).toEqual([
         expect.objectContaining({
           itemIds: ['item-bananas'],
-          quantity: 1000,
+          quantity: 25,
           unit: 'GRAM',
+        }),
+        expect.objectContaining({
+          itemIds: ['item-milk'],
+          quantity: 25,
+          unit: 'MILLILITER',
+        }),
+        expect.objectContaining({
+          itemIds: ['item-oat'],
+          quantity: 1,
+          unit: 'UNIT',
         }),
       ]);
     });
 
-    it('caps a loose product at the 100 kilos the server takes', async () => {
+    it('draws no stepper: the field and the one button are the whole row (velista 0185)', async () => {
       const { fixture } = await render();
-      const added: { quantity: number }[] = [];
-      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
-      const bananas: CatalogSuggestion = {
-        kind: 'item',
-        item: {
-          ...(OAT as Extract<CatalogSuggestion, { kind: 'item' }>).item,
-          id: 'item-bananas',
-          unit: 'KILOGRAM',
-        },
-      };
+      type(fixture, 'oat');
 
-      fixture.componentInstance.quantity.set(150);
-      fixture.componentInstance.choose(
-        bananas,
-        document.createElement('button')
-      );
-      fixture.detectChanges();
-
-      expect(added[0]?.quantity).toBe(100000);
+      const row = host(fixture).querySelector('form.composer');
+      expect(row?.querySelector('lib-quantity-stepper')).toBeNull();
+      expect(
+        [...(row?.children ?? [])].map((child) => child.className.split(' ')[0])
+      ).toEqual(['field-wrap', 'send']);
     });
 
     it('sends again once the submit is over', async () => {
@@ -310,7 +310,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
         .querySelector('form.composer')
         ?.dispatchEvent(new Event('submit'));
 
-      expect(added).toEqual([{ content: 'oat', quantity: 1, unit: 'UNIT' }]);
+      expect(added).toEqual([{ content: 'oat' }]);
     });
 
     it('sends a chosen card as not named, with the product name as its words (velista 0144)', async () => {
@@ -333,8 +333,9 @@ describe('LineComposer, one slot and the empty field decides', () => {
           itemIds: ['item-oat'],
           named: false,
         },
-        // Typed text says nothing, and the server names the line.
-        { content: 'oat', quantity: 1, unit: 'UNIT' },
+        // Typed text says nothing, and the server names the line and decides its
+        // amount (velista 0185).
+        { content: 'oat' },
       ]);
     });
   });
@@ -349,6 +350,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       kind: 'item',
       item: {
         id: 'item-oat',
+        quantityStep: null,
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',
         size: null,
@@ -396,23 +398,19 @@ describe('LineComposer, one slot and the empty field decides', () => {
       expect(button(fixture).disabled).toBe(false);
     });
 
-    it('names the plus as the anchor and keeps the words and the quantity', async () => {
+    it('names the plus as the anchor and keeps the words', async () => {
       const { fixture } = await held();
       const added: { anchor?: HTMLElement }[] = [];
       const queries: string[] = [];
       fixture.componentInstance.submitted.subscribe((one) => added.push(one));
       fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
       type(fixture, 'oat');
-      fixture.componentInstance.quantity.set(3);
 
       button(fixture).click();
       fixture.detectChanges();
 
-      expect(added).toEqual([
-        { content: 'oat', quantity: 3, unit: 'UNIT', anchor: button(fixture) },
-      ]);
+      expect(added).toEqual([{ content: 'oat', anchor: button(fixture) }]);
       expect(field(fixture).value).toBe('oat');
-      expect(fixture.componentInstance.quantity()).toBe(3);
       expect(queries).toEqual(['oat']);
     });
 
@@ -428,19 +426,17 @@ describe('LineComposer, one slot and the empty field decides', () => {
       expect(added[0]?.itemIds).toEqual(['item-oat']);
     });
 
-    it('clears, resets and keeps focus once the page says the line was placed', async () => {
+    it('clears and keeps focus once the page says the line was placed', async () => {
       const { fixture } = await held();
       const queries: string[] = [];
       fixture.componentInstance.queryChanged.subscribe((q) => queries.push(q));
       type(fixture, 'oat');
-      fixture.componentInstance.quantity.set(2);
       button(fixture).click();
 
       fixture.componentInstance.sent();
       fixture.detectChanges();
 
       expect(field(fixture).value).toBe('');
-      expect(fixture.componentInstance.quantity()).toBe(1);
       expect(queries).toEqual(['oat', '']);
       expect(document.activeElement).toBe(field(fixture));
     });
@@ -464,22 +460,21 @@ describe('LineComposer, one slot and the empty field decides', () => {
       button(fixture).click();
       fixture.detectChanges();
 
-      expect(added).toEqual([{ content: 'oat', quantity: 1, unit: 'UNIT' }]);
+      expect(added).toEqual([{ content: 'oat' }]);
       expect(field(fixture).value).toBe('');
     });
   });
 
   it('adds the line when there is something typed, and records nothing', async () => {
     const { fixture, detector } = await render();
-    const added: { content: string; quantity: number }[] = [];
+    const added: { content: string; quantity?: number }[] = [];
     fixture.componentInstance.submitted.subscribe((one) => added.push(one));
 
     type(fixture, 'Sourdough loaf');
     await press(fixture);
 
-    expect(added).toEqual([
-      { content: 'Sourdough loaf', quantity: 1, unit: 'UNIT' },
-    ]);
+    // No amount and no unit for typed words (velista 0185).
+    expect(added).toEqual([{ content: 'Sourdough loaf' }]);
     expect(detector.handlers).toBeNull();
   });
 
@@ -732,29 +727,42 @@ describe('LineComposer, the field and its results', () => {
       expect(escape.defaultPrevented).toBe(false);
     });
 
-    it('says when the field gains and loses focus', async () => {
+    // Velista `0189`, section 3: the page calls it on the first drag of its column.
+    it('releases the focus and keeps the words', async () => {
       const { fixture } = await onPage();
-      const focused: boolean[] = [];
-      fixture.componentInstance.fieldFocused.subscribe((one) =>
-        focused.push(one)
-      );
+      type(fixture, 'oat');
+      field(fixture).focus();
 
-      field(fixture).dispatchEvent(new Event('focus'));
-      field(fixture).dispatchEvent(new Event('blur'));
+      fixture.componentInstance.releaseFocus();
+      fixture.detectChanges();
 
-      expect(focused).toEqual([true, false]);
+      expect(document.activeElement).not.toBe(field(fixture));
+      expect(field(fixture).value).toBe('oat');
+      expect(fixture.componentInstance.content()).toBe('oat');
+    });
+
+    it('leaves focus alone when the field does not have it', async () => {
+      const { fixture } = await onPage();
+      type(fixture, 'oat');
+      const elsewhere = document.createElement('button');
+      document.body.appendChild(elsewhere);
+      elsewhere.focus();
+
+      fixture.componentInstance.releaseFocus();
+
+      expect(document.activeElement).toBe(elsewhere);
+      expect(field(fixture).value).toBe('oat');
+      elsewhere.remove();
     });
 
     it('empties the field on clear() without taking focus', async () => {
       const { fixture } = await onPage();
       type(fixture, 'oat');
-      fixture.componentInstance.quantity.set(3);
 
       fixture.componentInstance.clear();
       fixture.detectChanges();
 
       expect(field(fixture).value).toBe('');
-      expect(fixture.componentInstance.quantity()).toBe(1);
       expect(document.activeElement).not.toBe(field(fixture));
     });
 
@@ -777,21 +785,19 @@ describe('LineComposer, the field and its results', () => {
         expect(cross(fixture)?.type).toBe('button');
       });
 
-      it('empties the words, says so, and keeps the quantity', async () => {
+      it('empties the words and says so', async () => {
         const { fixture } = await onPage();
         const queries: string[] = [];
         fixture.componentInstance.queryChanged.subscribe((q) =>
           queries.push(q)
         );
         type(fixture, 'oat');
-        fixture.componentInstance.quantity.set(3);
 
         cross(fixture)?.click();
         fixture.detectChanges();
 
         expect(field(fixture).value).toBe('');
         expect(queries).toEqual(['oat', '']);
-        expect(fixture.componentInstance.quantity()).toBe(3);
         expect(cross(fixture)).toBeNull();
       });
 
@@ -811,10 +817,6 @@ describe('LineComposer, the field and its results', () => {
         const { fixture } = await onPage();
         type(fixture, 'oat');
         field(fixture).focus();
-        const blurs: boolean[] = [];
-        fixture.componentInstance.fieldFocused.subscribe((one) =>
-          blurs.push(one)
-        );
         const press = new MouseEvent('mousedown', { cancelable: true });
 
         cross(fixture)?.dispatchEvent(press);
@@ -823,8 +825,64 @@ describe('LineComposer, the field and its results', () => {
 
         expect(press.defaultPrevented).toBe(true);
         expect(document.activeElement).toBe(field(fixture));
-        expect(blurs).toEqual([]);
       });
+    });
+  });
+
+  /** Velista `0185`: the page's one sentence about the last add, under the row. */
+  describe('the notice under the row', () => {
+    it('draws nothing while there is none, and keeps an empty live region', async () => {
+      const { fixture } = await render();
+
+      const region = host(fixture).querySelector('.notice-region');
+      expect(region?.getAttribute('aria-live')).toBe('polite');
+      expect(region?.querySelector('.notice')).toBeNull();
+    });
+
+    it('draws the sentence after the row, inside the live region', async () => {
+      const { fixture } = await render();
+      fixture.componentRef.setInput(
+        'notice',
+        'Plátanos is already on the list.'
+      );
+      fixture.detectChanges();
+
+      const region = host(fixture).querySelector('.notice-region');
+      expect(region?.querySelector('.notice-text')?.textContent?.trim()).toBe(
+        'Plátanos is already on the list.'
+      );
+      // Under the row, not above it.
+      const row = host(fixture).querySelector('form.composer');
+      expect(
+        row !== null &&
+          region !== null &&
+          (row.compareDocumentPosition(region) &
+            Node.DOCUMENT_POSITION_FOLLOWING) !==
+            0
+      ).toBe(true);
+    });
+
+    it('asks the page to clear it from its cross, and clears nothing itself', async () => {
+      const { fixture } = await render();
+      fixture.componentRef.setInput(
+        'notice',
+        'Plátanos is already on the list.'
+      );
+      fixture.detectChanges();
+      let dismissed = 0;
+      fixture.componentInstance.noticeDismissed.subscribe(
+        () => (dismissed += 1)
+      );
+
+      const cross = host(fixture).querySelector<HTMLButtonElement>(
+        'button.notice-dismiss'
+      );
+      expect(cross?.getAttribute('aria-label')).toBe('list.add.dismissNotice');
+      cross?.click();
+      type(fixture, 'oat');
+
+      expect(dismissed).toBe(1);
+      expect(host(fixture).querySelector('.notice')).not.toBeNull();
     });
   });
 

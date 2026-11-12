@@ -58,16 +58,16 @@ import type {
 } from '@portfolio/velista/models';
 import {
   DEFAULT_BASKET_VIEW_STATE,
+  QUANTITY_STEP_QUIET_MS,
   SUGGEST_DEBOUNCE_MS,
 } from '@portfolio/velista/models';
 import {
-  NavChrome,
   PageReturn,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineComposer, NoPricesNote } from '@portfolio/velista/ui';
+import { LineComposer, ListPicker, NoPricesNote } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
@@ -127,11 +127,8 @@ interface FakeStore {
   /** What the store last failed with, which is where the row's sentence comes from. */
   readonly error: WritableSignal<unknown>;
   /**
-   * Every move of a row's reel, and what it answered.
-   *
-   * One mock and not two, because `setLeft` is the one call the reel makes: the
-   * client never decides whether a drag was a purchase or a take back (velista
-   * `0090`, section 6).
+   * The store's write of a partial buy, which no control on the page calls since
+   * velista `0190` took the reel off the row. Kept so a spec can say so.
    */
   readonly setLeft: jest.Mock;
   /** Every settle the page sent from a row's status control. */
@@ -453,9 +450,6 @@ function queryOnRoute(initial: Params) {
   };
 }
 
-/** What the page told the bottom bar, per render (velista `0117`). */
-const navChrome = { setComposing: jest.fn() };
-
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
@@ -463,7 +457,6 @@ async function render(options: Options = {}): Promise<{
   returns: { keep: jest.Mock; recall: jest.Mock };
 }> {
   TestBed.resetTestingModule();
-  navChrome.setComposing.mockClear();
 
   const returns = {
     keep: jest.fn(),
@@ -485,12 +478,7 @@ async function render(options: Options = {}): Promise<{
     leave: jest.fn(),
     rows: signal<readonly BasketRow[]>(options.lines ?? []),
     error: signal<unknown>(null),
-    /**
-     * The reel's one call, in both directions.
-     *
-     * It answers the row as the server would, which is what the page draws: the
-     * row on screen is the answer's and never the number that was sent.
-     */
+    /** A partial buy, which nothing on the page sends (velista `0190`). */
     setLeft: jest.fn(
       (rowKey: string): Promise<BasketRowResult | null> =>
         Promise.resolve(rowResult(line(rowKey)))
@@ -554,7 +542,6 @@ async function render(options: Options = {}): Promise<{
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
-      { provide: NavChrome, useValue: navChrome },
       { provide: PageReturn, useValue: returns },
       {
         provide: Router,
@@ -822,6 +809,38 @@ function field(fixture: ComponentFixture<BasketPage>): HTMLInputElement {
   return found as HTMLInputElement;
 }
 
+/**
+ * A finger that goes down on `target` and moves 40px up, as `DragReleasesField` hears
+ * it. jsdom has no `PointerEvent`, so the pointer events are mouse events with the
+ * pointer's fields defined on them, and the touch events carry their `touches`.
+ */
+function touchDrag(target: HTMLElement): void {
+  const pointer = (type: string, y: number) => {
+    const event = new MouseEvent(type, {
+      clientX: 0,
+      clientY: y,
+      bubbles: true,
+    });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'pointerType', { value: 'touch' });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    return event;
+  };
+  const touch = (type: string, y: number | null) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperty(event, 'touches', {
+      value: y === null ? [] : [{ clientX: 0, clientY: y }],
+    });
+    return event;
+  };
+
+  target.dispatchEvent(pointer('pointerdown', 200));
+  target.dispatchEvent(touch('touchstart', 200));
+  target.dispatchEvent(pointer('pointercancel', 200));
+  target.dispatchEvent(touch('touchmove', 160));
+  target.dispatchEvent(touch('touchend', null));
+}
+
 /** Type, and let the composer hear it, exactly as a keyboard does. */
 function typeInto(fixture: ComponentFixture<BasketPage>, typed: string): void {
   const input = field(fixture);
@@ -1032,10 +1051,11 @@ describe('the basket header, live', () => {
 
       expect(query(fixture, 'lib-page-header')).not.toBeNull();
       expect(query(fixture, 'main lib-page-header')).toBeNull();
-      // The scroller is still the column the page scrolls.
-      expect(
-        query(fixture, 'lib-page-header')?.nextElementSibling?.tagName
-      ).toBe('MAIN');
+      // The scroller is still the column the page scrolls, after the head block
+      // (velista 0189).
+      const next = query(fixture, 'lib-page-header')?.nextElementSibling;
+      expect(next?.classList).toContain('page-top');
+      expect(next?.nextElementSibling?.tagName).toBe('MAIN');
     });
 
     it('holds the basket’s name as the page’s one title', async () => {
@@ -1199,14 +1219,11 @@ describe('the basket header, live', () => {
 });
 
 /**
- * The number on the row, once it has been let go (plan 0054).
- *
- * The page is where the gesture becomes a request, and there are only three things
- * it has to get right: it sends both numbers, it opens the sheet when the write had
- * something to report that a row cannot draw, and it says one sentence when the
- * write was refused. The gesture itself is the row's spec and the reel's.
+ * A row's controls on the page (velista `0190`): the status control writes, and
+ * the amount cell opens the settle sheet, as the words do. The amount is changed
+ * in that sheet, and the row has no write of its own for it.
  */
-describe('the number on a row', () => {
+describe('the controls on a row', () => {
   /** The row component, which is what a gesture reaches the page through. */
   function row(fixture: ComponentFixture<BasketPage>): BasketRowComponent {
     return fixture.debugElement.query(By.directive(BasketRowComponent))
@@ -1224,16 +1241,21 @@ describe('the number on a row', () => {
 
   const milk = () => line('Milk', { left: 5 });
 
-  it('sends where the gesture ended and where it believed it began', async () => {
-    // `from` is not decoration: without it a stale gesture is applied as the
-    // opposite act, which is the one thing this message must never do (backend
-    // `0056`, section 3.2).
+  it('opens the settle sheet from the amount, as the words do', async () => {
     const { fixture, store } = await render({ lines: [milk()] });
+    const host = fixture.nativeElement as HTMLElement;
 
-    row(fixture).left.emit({ from: 5, to: 3 });
+    host.querySelector<HTMLButtonElement>('lib-basket-row .body')?.click();
+    host.querySelector<HTMLButtonElement>('lib-basket-row .amount')?.click();
     await settleWrites(fixture);
 
-    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {});
+    expect(store.navigate).toHaveBeenCalledTimes(2);
+    expect(store.navigate.mock.calls[1]).toEqual(store.navigate.mock.calls[0]);
+    expect(store.navigate).toHaveBeenLastCalledWith(
+      ['sheet', 'rows', 'row-Milk', 'settle'],
+      expect.objectContaining({ queryParams: expect.anything() })
+    );
+    expect(store.setLeft).not.toHaveBeenCalled();
   });
 
   describe('the price scope (velista 0095, section 6)', () => {
@@ -1275,22 +1297,6 @@ describe('the number on a row', () => {
       ],
     ]);
     const pricedMilk = () => line('Milk', { left: 5, productId: 'item-milk' });
-
-    it('the reel names the scope of the price the row draws', async () => {
-      const { fixture, store } = await render({
-        lines: [pricedMilk()],
-        products: priced,
-      });
-
-      row(fixture).left.emit({ from: 5, to: 3 });
-      await settleWrites(fixture);
-
-      // The row's product travels with the buy (velista `0139`, section 4).
-      expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 3, 5, {
-        itemId: 'item-milk',
-        priceScopeId: 's-dia',
-      });
-    });
 
     it('the status control names it too, and never an amount', async () => {
       const { fixture, store } = await render({
@@ -1353,114 +1359,6 @@ describe('the number on a row', () => {
 
       expect(store.settle.mock.calls[0][1]).not.toHaveProperty('priceScopeId');
     });
-  });
-
-  it('says which of the two happened, once, in the live region', async () => {
-    // The same sentence the caption showed under the thumb, so a reader who could
-    // not see it still learns whether they recorded a purchase or raised a target
-    // (section 7).
-    const { fixture } = await render({ lines: [milk()] });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(query(fixture, '.said')?.textContent).toContain(
-      'basket.outstanding.bought'
-    );
-  });
-
-  it('opens the sheet when an origin was missed', async () => {
-    // A skipped origin report is a paragraph and a row is three short lines, so it
-    // goes where the sentence for it already lives (plan 0052, section 6.4). A raise
-    // answers `skippedCount: 0`, so this needs no branch on direction.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockResolvedValue({
-      ...rowResult(milk()),
-      skippedCount: 1,
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(store.navigate).toHaveBeenCalledWith(
-      ['sheet', 'rows', 'row-Milk', 'settle'],
-      expect.anything()
-    );
-  });
-
-  it('tells the row what the line says now when somebody else moved it', async () => {
-    // Section 4.1. The store refetches before it answers, so the count in the
-    // sentence is the true one; a refusal that only said "that did not work" would
-    // send somebody dragging again into the same race.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockImplementation(() => {
-      store.error.set(
-        new GatewayError({
-          code: 'stale_quantity' as ErrorCode,
-          status: 409,
-          correlationId: 'ref-1',
-        })
-      );
-      store.rows.set([line('Milk', { left: 3 })]);
-      return Promise.resolve(null);
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(row(fixture).notice()?.key).toBe('basket.error.staleLine');
-    expect(row(fixture).notice()?.count).toBe(3);
-    expect(query(fixture, '.said')?.textContent).toContain(
-      'basket.error.staleLine'
-    );
-  });
-
-  it('gives every other failure a sentence of its own', async () => {
-    // A failure with no sentence is the defect `basket-error-copy.ts` exists to
-    // close: somebody in a shop performed this on purpose and is waiting on it.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockImplementation(() => {
-      store.error.set(
-        new GatewayError({
-          code: 'forbidden',
-          status: 403,
-          correlationId: 'ref-2',
-        })
-      );
-      return Promise.resolve(null);
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-
-    expect(row(fixture).notice()?.key).toBe('basket.error.accessChanged');
-  });
-
-  it('clears the last refusal before the next move goes out', async () => {
-    // One sentence at a time across the whole basket. A refusal left under a row
-    // somebody has since moved again is a claim about the present that nothing is
-    // checking.
-    const { fixture, store } = await render({ lines: [milk()] });
-    store.setLeft.mockImplementation(() => {
-      store.error.set(
-        new GatewayError({
-          code: 'forbidden',
-          status: 403,
-          correlationId: 'ref-3',
-        })
-      );
-      return Promise.resolve(null);
-    });
-
-    row(fixture).left.emit({ from: 5, to: 3 });
-    await settleWrites(fixture);
-    expect(row(fixture).notice()).not.toBeNull();
-
-    store.setLeft.mockResolvedValue({ line: milk(), skippedCount: 0 });
-    row(fixture).left.emit({ from: 5, to: 4 });
-    await settleWrites(fixture);
-
-    expect(row(fixture).notice()).toBeNull();
   });
 });
 
@@ -1745,6 +1643,7 @@ describe('searching the basket', () => {
   ): BasketProduct {
     return {
       id,
+      quantityStep: null,
       name: { en, es },
       brand,
       size: null,
@@ -1814,8 +1713,8 @@ describe('searching the basket', () => {
     });
 
     it('keeps the row and the chips in one bar', async () => {
-      // Velista `0079`, section 2: one sticky bar, so both stay on screen down a long
-      // basket. The lines are not in it; they scroll under it.
+      // Velista `0079`, section 2: one bar, so both stay on screen down a long basket.
+      // The lines are not in it; they scroll in the column under the head block.
       const { fixture } = await render({ lines: threeLines });
       TestBed.inject(BasketViewStore).setOrder('alpha');
       fixture.detectChanges();
@@ -1825,40 +1724,35 @@ describe('searching the basket', () => {
       expect(query(fixture, '.tools-bar lib-basket-row')).toBeNull();
     });
 
-    it('scrolls in its own column in both run modes, with the composer after it', () => {
-      // velista 0106. The app is a frame that never scrolls, so `.page` is the tools
-      // bar's scroll container standalone and mounted alike, and the composer is the
-      // next item of the host rather than a row pinned to the document's foot, which
-      // is the strip the bottom bar covered. jsdom cannot lay any of this out, so the
-      // stylesheet is the half a spec can see.
+    it('scrolls in its own column in both run modes, with the head block before it', async () => {
+      // velista 0106 and 0189. The app is a frame that never scrolls, so `.page` is
+      // the scroll container standalone and mounted alike, and the tools row and the
+      // composer are in the head block, the item of the host before it, rather than
+      // rows inside it. jsdom cannot lay any of this out, so the markup and the
+      // stylesheet are the halves a spec can see.
       const css = readFileSync(join(__dirname, 'basket-page.scss'), 'utf8')
         // Comments out, because the stylesheet says what it used to do.
         .replace(/\/\/.*$/gm, '');
 
       expect(css).not.toContain('.standalone');
       expect(css).not.toMatch(/position:\s*sticky/);
+      expect(css).toMatch(/\.page-top\s*\{[^}]*flex:\s*none/);
       expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
-    });
 
-    it('sticks the tools bar over the start padding of its column', () => {
-      // A sticky offset is measured from the content box of the scroller. With a start
-      // padding on `.page` and an offset of zero, the bar stopped that padding short of
-      // the header and the lines showed through the strip above it. So the bar's offset
-      // and its own padding are both the padding of the column, under one token.
-      const css = readFileSync(
-        join(__dirname, 'basket-page.scss'),
-        'utf8'
-      ).replace(/\/\/.*$/gm, '');
-
-      const lead = /\.page\s*\{[^}]*padding-block-start:\s*(var\([^)]+\))/.exec(
-        css
-      )?.[1];
-      const bar = /lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-
-      expect(lead).toBeDefined();
-      expect(bar).toContain(`inset-block-start: calc(${lead} * -1)`);
-      expect(bar).toContain(`margin-block-start: calc(${lead} * -1)`);
-      expect(bar).toContain(`padding-block-start: ${lead}`);
+      const { fixture } = await render({ lines: threeLines, served });
+      const top = query(fixture, '.page-top');
+      expect(top?.querySelector('lib-list-tools')).not.toBeNull();
+      expect(top?.querySelector('.composer-dock')).not.toBeNull();
+      expect(top?.nextElementSibling?.matches('main.page')).toBe(true);
+      expect(query(fixture, 'main.page lib-list-tools')).toBeNull();
+      expect(query(fixture, 'main.page .composer-dock')).toBeNull();
+      // The field sits under the tools row.
+      const tools = top?.querySelector('lib-list-tools') as Node;
+      const dockNode = top?.querySelector('.composer-dock') as Node;
+      expect(
+        tools.compareDocumentPosition(dockNode) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).not.toBe(0);
     });
   });
 
@@ -1918,14 +1812,18 @@ describe('searching the basket', () => {
       );
     });
 
-    it('hides the tools row while the results show', async () => {
+    it('keeps the tools row and the chips while the results show (velista 0189)', async () => {
       const { fixture } = await render({ lines: threeLines, served });
+      TestBed.inject(BasketViewStore).setOrder('alpha');
+      fixture.detectChanges();
 
       typeInto(fixture, 'milk');
-      expect(query(fixture, 'lib-list-tools')).toBeNull();
+      expect(query(fixture, '.tools-bar')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
+      expect(query(fixture, '#basket-results')).not.toBeNull();
 
       typeInto(fixture, '');
-      expect(query(fixture, 'lib-list-tools')).not.toBeNull();
+      expect(query(fixture, '.tools-bar')).not.toBeNull();
     });
 
     it('empties the field and shows the basket when back takes search=1 off', async () => {
@@ -2058,19 +1956,40 @@ describe('searching the basket', () => {
       TestBed.resetTestingModule();
     });
 
-    it('gives the bar’s room to the page while the field has focus or holds words', async () => {
+    /**
+     * Velista `0189`, section 4: the bar stays while somebody types, and the first
+     * touch drag of the column takes the keyboard down instead. The words, the
+     * results and `?search=1` stay.
+     */
+    it('releases the field on a touch drag of the column, and keeps the words and the results', async () => {
+      const { fixture, store } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
+      field(fixture).focus();
+      store.navigate.mockClear();
+
+      touchDrag(query(fixture, '#basket-results') as HTMLElement);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(document.activeElement).not.toBe(field(fixture));
+      expect(field(fixture).value).toBe('milk');
+      expect(query(fixture, '#basket-results')).not.toBeNull();
+      expect(store.navigate).not.toHaveBeenCalled();
+    });
+
+    it('changes nothing on a drag while the field has no focus', async () => {
       const { fixture } = await render({ lines: threeLines, served });
-      const last = () => navChrome.setComposing.mock.calls.at(-1)?.[0];
+      typeInto(fixture, 'milk');
+      const elsewhere = document.createElement('button');
+      document.body.appendChild(elsewhere);
+      elsewhere.focus();
 
-      field(fixture).dispatchEvent(new Event('focus'));
+      touchDrag(query(fixture, '#basket-results') as HTMLElement);
       fixture.detectChanges();
-      await fixture.whenStable();
-      expect(last()).toBe(true);
 
-      field(fixture).dispatchEvent(new Event('blur'));
-      fixture.detectChanges();
-      await fixture.whenStable();
-      expect(last()).toBe(false);
+      expect(document.activeElement).toBe(elsewhere);
+      expect(field(fixture).value).toBe('milk');
+      elsewhere.remove();
     });
 
     it('makes the field a search box that controls the results', async () => {
@@ -2171,7 +2090,6 @@ describe('searching the basket', () => {
       // Nothing about the search survives leaving: it is the one thing on this
       // screen that is never remembered (section 4.7).
       expect(view.query()).toBe('');
-      expect(navChrome.setComposing).toHaveBeenLastCalledWith(false);
     });
   });
 
@@ -2552,39 +2470,6 @@ describe('searching the basket', () => {
       const { fixture } = await render({ lines: grouped });
 
       expect(headings(fixture)).toHaveLength(0);
-    });
-
-    /**
-     * **One call, under a heading and everywhere else** (velista `0090`,
-     * section 6). `setLeft` is what the reel emits into, and it turns the pair of
-     * numbers into a settle or a revert: the client never decides which.
-     *
-     * The units a reel under a heading commits are allocated to that household by
-     * velista `0092`, from the entries pane. Until then the reel commits against
-     * the row and the server divides oldest entry first, which is what it did
-     * before a heading existed.
-     */
-    it('commits a row under a list heading through the row’s own write', async () => {
-      const { fixture, store } = await renderGrouped('list');
-
-      // Four asked for and none got, so the reel runs from four and lands on one.
-      rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 1 });
-      await settleWrites(fixture);
-
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 1, 4, {
-        itemId: 'i-milk',
-      });
-    });
-
-    it('commits an ungrouped row through the same call', async () => {
-      const { fixture, store } = await render({ lines: grouped });
-
-      rowFor(fixture, 'Cheese')?.left.emit({ from: 4, to: 0 });
-      await settleWrites(fixture);
-
-      expect(store.setLeft).toHaveBeenCalledWith('l-2', 0, 4, {
-        itemId: 'i-milk',
-      });
     });
 
     /**
@@ -3003,9 +2888,9 @@ describe('another basket at the same route', () => {
       const row = () =>
         fixture.debugElement.query(By.directive(BasketRowComponent))
           .componentInstance as BasketRowComponent;
-      store.setLeft.mockResolvedValue(null);
+      store.settle.mockResolvedValue(null);
 
-      row().left.emit({ from: 5, to: 3 });
+      row().settle.emit();
       await Promise.resolve();
       await Promise.resolve();
       fixture.detectChanges();
@@ -3182,7 +3067,7 @@ describe('the basket that is always there', () => {
   });
 
   it('keeps every row a generated basket would draw', async () => {
-    // The rows, the reels and the settle sheet are the same screen. Only the
+    // The rows, the amounts and the settle sheet are the same screen. Only the
     // header and the two sentences differ.
     const { fixture } = await render({ kind: 'LIVE', lines: someLines });
 
@@ -3482,6 +3367,19 @@ describe('the composer and the list it adds to', () => {
       expect(field(fixture).value).toBe('Batteries');
     });
 
+    it('opens below the composer’s plus, at the top of the page (velista 0189)', async () => {
+      const { fixture } = await render({ served });
+      typeInto(fixture, 'Batteries');
+
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      const picker = fixture.debugElement.query(By.directive(ListPicker))
+        .componentInstance as ListPicker;
+      expect(picker.side()).toBe('below');
+      expect(options()).toHaveLength(2);
+    });
+
     it('opens for a single list too', async () => {
       const { fixture } = await render({ served: [served[0]] });
       typeInto(fixture, 'Batteries');
@@ -3495,7 +3393,6 @@ describe('the composer and the list it adds to', () => {
     it('adds to the picked list, then clears the field and keeps focus in it', async () => {
       const { fixture, store } = await render({ served });
       typeInto(fixture, 'Batteries');
-      composer(fixture).quantity.set(2);
       plus(fixture).click();
       fixture.detectChanges();
 
@@ -3506,13 +3403,11 @@ describe('the composer and the list it adds to', () => {
       expect(store.addLine).toHaveBeenCalledWith({
         targetListId: 'l-parents',
         content: 'Batteries',
-        quantity: 2,
-        unit: 'UNIT',
-        // Typed words say the page can ask which line (velista 0170).
+        // Typed words state no amount and no unit (velista 0185), and say the
+        // page can ask which line (velista 0170).
         askIfAmbiguous: true,
       });
       expect(field(fixture).value).toBe('');
-      expect(composer(fixture).quantity()).toBe(1);
       expect(document.activeElement).toBe(field(fixture));
       expect(options()).toHaveLength(0);
     });
@@ -3643,6 +3538,7 @@ describe('the composer and the list it adds to', () => {
           items: [
             {
               id: 'item-a',
+              quantityStep: null,
               name: { es: 'Leche entera', en: 'Whole milk' },
               brand: 'Hacendado',
               size: 1,
@@ -3707,8 +3603,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           intoLineId: 'zl-b',
         });
         expect(document.querySelector('.pop')).toBeNull();
@@ -3724,8 +3618,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           newLine: true,
         });
       });
@@ -3756,7 +3648,7 @@ describe('the composer and the list it adds to', () => {
 
         expect(
           (fixture.nativeElement as HTMLElement).querySelector(
-            'lib-quantity-reel.took'
+            'lib-basket-row .amount.took'
           )
         ).not.toBeNull();
         expect(query(fixture, '.said')?.textContent).toContain(
@@ -3767,6 +3659,7 @@ describe('the composer and the list it adds to', () => {
       it('says the raised row as it draws it, its name and its number', async () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          quantityStep: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
           imageUrl: null,
@@ -3808,6 +3701,171 @@ describe('the composer and the list it adds to', () => {
         expect(said).toContain('list.addChoice.merged');
         expect(said).toContain('"name":"Whole milk"');
         expect(said).toContain('"quantity":"8"');
+      });
+
+      /** Velista `0185`: an add that met a line already asked for adds nothing. */
+      describe('an add that meets a line already on the list (velista 0185)', () => {
+        const WHOLE_MILK: BasketProduct = {
+          id: 'i-milk',
+          name: { en: 'Whole milk', es: 'Whole milk' },
+          brand: null,
+          imageUrl: null,
+          size: null,
+          unit: null,
+          offer: null,
+          offers: [],
+          atShop: null,
+          productGroupId: null,
+          categories: [],
+          sectionIds: [],
+          approxWeight: null,
+        };
+        const milk = line('Leche entera', {
+          productId: 'i-milk',
+          left: 8,
+          entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+        });
+
+        async function met(lineIds: readonly string[]) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockResolvedValueOnce({
+            entries: lineIds.map((lineId) =>
+              entry(null, lineId, 8, { content: 'Leche entera' })
+            ),
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(rendered.fixture, 'Leche entera');
+          plus(rendered.fixture).click();
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          return rendered;
+        }
+
+        it('finds the row by its lines, marks it, and says it is already on that list', async () => {
+          const { fixture } = await met(['zl-milk']);
+
+          const host = fixture.nativeElement as HTMLElement;
+          const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+          expect(row).not.toBeNull();
+          expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+          const said = query(fixture, '.said')?.textContent ?? '';
+          expect(said).toContain('basket.add.alreadyOn');
+          expect(said).toContain('"name":"Whole milk"');
+          expect(said).toContain('"list":"Weekly shop"');
+          // The words go, as on any add that landed, and nothing is said under the field.
+          expect(field(fixture).value).toBe('');
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+        });
+
+        it('says it under the field when no drawn row holds the line', async () => {
+          const { fixture } = await met(['zl-elsewhere']);
+
+          const notice = (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-line-composer .notice-text'
+          );
+          expect(notice?.textContent).toContain('basket.add.alreadyOn');
+          // Said once: the notice speaks in its own region, so the page's does not.
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
+        it('says nothing on a basket the page followed to while the add was out', async () => {
+          const { fixture, store } = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          let answer: (value: unknown) => void = () => undefined;
+          store.addLine.mockImplementationOnce(
+            () => new Promise((resolve) => (answer = resolve))
+          );
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          fixture.detectChanges();
+
+          const basket = TestBed.inject(BasketStore).basket as unknown as {
+            update: (fn: (value: { id: string }) => { id: string }) => void;
+          };
+          basket.update((value) => ({ ...value, id: 'basket-sunday' }));
+          answer({
+            entries: [entry(null, 'zl-elsewhere', 8, { content: 'Leche' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const host = fixture.nativeElement as HTMLElement;
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+      });
+
+      it('says why under the field when a card the list counts in another unit is refused (velista 0185)', async () => {
+        const { fixture, store } = await render({ served, echoValues: true });
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'line_unit_differs',
+              status: 409,
+              correlationId: 'ref',
+              details: {
+                line: {
+                  lineId: 'zl-milk',
+                  content: 'Leche entera',
+                  unit: 'MILLILITER',
+                  quantity: 1500,
+                },
+                unit: 'UNIT',
+                index: null,
+              },
+            })
+          );
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche',
+          quantity: 1,
+          unit: 'UNIT',
+          itemIds: ['i-milk'],
+          named: false,
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const notice = (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer .notice-text'
+        );
+        expect(notice?.textContent).toContain(
+          'basket.error.addUnitDiffers.MILLILITER'
+        );
+        expect(notice?.textContent).toContain('"name":"Leche entera"');
+        expect(notice?.textContent).toContain('"list":"Weekly shop"');
+        // The words come back, and the generic sentence is not said.
+        expect(field(fixture).value).toBe('Leche');
+        expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+          'basket.error'
+        );
+        card.remove();
       });
 
       it('titles the question with the line as it is stored, not as it was typed', async () => {
@@ -3975,6 +4033,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-milk',
+      quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
       size: 1,
@@ -4007,10 +4066,11 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     }[];
     productLink(): ((itemId: string) => string) | null;
     changeHolding(change: {
-      holding: { lineId: string };
+      holding: { lineId: string; text?: string };
       from: number;
       to: number;
-    }): Promise<void>;
+      repeat: boolean;
+    }): void;
   }
 
   const milk = () =>
@@ -4072,14 +4132,83 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
       setDemand: jest.Mock;
     };
 
-    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 3 });
+    // Three presses are one run, and one write with the run's first from (velista
+    // `0188`, section 5.6).
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      });
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 3,
+        to: 4,
+        repeat: false,
+      });
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 4,
+        to: 5,
+        repeat: true,
+      });
+      expect(store.setDemand).not.toHaveBeenCalled();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
 
     // Sent under its own line (backend `0201`, section 4), whichever row holds it.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
     expect(store.setDemand).toHaveBeenCalledWith({
       lineId: 'zl-1',
-      quantity: 3,
+      quantity: 5,
       from: 2,
     });
+  });
+
+  it('keeps drawing the run’s amount until its demand write answers', async () => {
+    const { fixture } = await render({ lines: [milk()], served: SERVED });
+    const page = fixture.componentInstance as unknown as CardSurface;
+    const store = TestBed.inject(BasketStore) as unknown as {
+      setDemand: jest.Mock;
+    };
+    let answer: (result: null) => void = () => undefined;
+    store.setDemand.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const shown = () =>
+      page
+        .holdingsOf()(MILK)
+        .find((held) => held.lineId === 'zl-1')?.quantity;
+
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 3,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // The run is closed and its write is on its way: still 3, not the stored 2.
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
+    expect(shown()).toBe(3);
+
+    // A refusal leaves the stored amount, which is drawn again.
+    answer(null);
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
+    expect(shown()).toBe(2);
   });
 
   it('says the line is no longer asked for when the answer no longer holds it', async () => {
@@ -4090,7 +4219,21 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     };
     store.setDemand.mockResolvedValue({ entries: [], skippedCount: 0 });
 
-    await page.changeHolding({ holding: { lineId: 'zl-1' }, from: 2, to: 0 });
+    jest.useFakeTimers();
+    try {
+      page.changeHolding({
+        holding: { lineId: 'zl-1' },
+        from: 2,
+        to: 0,
+        repeat: false,
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    } finally {
+      jest.useRealTimers();
+    }
+    for (let tick = 0; tick < 6; tick++) {
+      await Promise.resolve();
+    }
     fixture.detectChanges();
 
     expect(text(fixture)).toContain('basket.demand.nothingLeft');
@@ -4115,6 +4258,120 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
         .holdingsOf()(MILK)
         .map((held) => held.text)
     ).toEqual(['Leche para el café']);
+  });
+
+  describe("a line's step (velista 0186, decision A)", () => {
+    // Rice by the kilo stepped by 250 g, which the basket read names, and a
+    // second rice the same line holds, stepped by 100 g, which it does not.
+    const riceItem = (id: string, quantityStep: number): CatalogItem => ({
+      ...MILK.item,
+      id,
+      quantityStep,
+      size: null,
+      unit: 'KILOGRAM',
+      categories: [],
+    });
+    const RICE_ITEM = riceItem('item-rice', 250);
+    const OTHER_RICE = riceItem('item-rice-2', 100);
+    const RICE: CatalogSuggestion = { kind: 'item', item: RICE_ITEM };
+    const RICE_PRODUCT: BasketProduct = {
+      id: RICE_ITEM.id,
+      quantityStep: 250,
+      name: RICE_ITEM.name,
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      imageUrl: null,
+      offer: null,
+      offers: [],
+      atShop: null,
+      productGroupId: null,
+      categories: [],
+      sectionIds: null,
+      approxWeight: null,
+    };
+    const riceRow = (itemIds: readonly string[]) =>
+      line('Rice', {
+        productId: RICE_ITEM.id,
+        unit: 'GRAM',
+        entries: [
+          entry('l-groceries', 'zl-1', 1000, {
+            unit: 'GRAM',
+            itemIds: [...itemIds],
+          }),
+        ],
+      });
+    const stepOf = (fixture: ComponentFixture<BasketPage>) =>
+      (
+        fixture.componentInstance as unknown as {
+          holdingsOf(): (
+            suggestion: CatalogSuggestion
+          ) => readonly { step?: number | null }[];
+        }
+      )
+        .holdingsOf()(RICE)
+        .map((held) => held.step ?? null);
+
+    it('steps a line of two products by the smaller step, and reads the one the basket did not name', async () => {
+      const itemNames = fakeItemNames({ items: [OTHER_RICE] });
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id, OTHER_RICE.id])],
+        products: new Map([[RICE_ITEM.id, RICE_PRODUCT]]),
+        served: SERVED,
+        itemNames,
+      });
+
+      expect(stepOf(fixture)).toEqual([100]);
+      expect(itemNames.asked).toContainEqual([OTHER_RICE.id]);
+    });
+
+    it("steps a line of one product by that product's step, and reads nothing", async () => {
+      const itemNames = fakeItemNames();
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id])],
+        products: new Map([[RICE_ITEM.id, RICE_PRODUCT]]),
+        served: SERVED,
+        itemNames,
+      });
+
+      expect(stepOf(fixture)).toEqual([250]);
+      expect(itemNames.asked.flat()).not.toContain(RICE_ITEM.id);
+    });
+
+    it('steps by the default while the records load, then by the line', async () => {
+      const records = signal<ReadonlyMap<string, CatalogItem>>(new Map());
+      const itemNames = {
+        ...fakeItemNames(),
+        nameOf: (itemId: string) => records().get(itemId) ?? null,
+      };
+      // The basket read names neither rice (catalog unreachable), and the card
+      // is a product with no step of its own.
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id, OTHER_RICE.id])],
+        served: SERVED,
+        itemNames,
+      });
+      const plain: CatalogSuggestion = {
+        kind: 'item',
+        item: { ...RICE_ITEM, quantityStep: null },
+      };
+      const stepNow = () =>
+        (
+          fixture.componentInstance as unknown as {
+            holdingsOf(): (
+              suggestion: CatalogSuggestion
+            ) => readonly { step?: number | null }[];
+          }
+        )
+          .holdingsOf()(plain)
+          .map((held) => held.step ?? null);
+
+      expect(stepNow()).toEqual([null]);
+
+      records.set(new Map([[OTHER_RICE.id, OTHER_RICE]]));
+
+      expect(stepNow()).toEqual([100]);
+    });
   });
 
   it('holds nothing for a product no row is, even when a line lists it', async () => {
@@ -4255,6 +4512,7 @@ describe('similar products on the basket', () => {
 
   const GROUPED: BasketProduct = {
     id: 'i-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     imageUrl: null,
@@ -4277,6 +4535,7 @@ describe('similar products on the basket', () => {
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
     id,
+    quantityStep: null,
     name: { en: id, es: id },
     brand: null,
     size: 1,
@@ -4548,6 +4807,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   ): BasketProduct {
     return {
       id,
+      quantityStep: null,
       name: { en: name, es: name },
       brand: null,
       imageUrl: null,
@@ -4741,6 +5001,7 @@ describe('BasketPage: the map of the shop you are in', () => {
 
   const MILK: BasketProduct = {
     id: 'i-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     imageUrl: null,
@@ -4965,7 +5226,7 @@ describe('a row bought outside this shopping list (velista 0142)', () => {
     expect(last.querySelector('.row.is-removed')).not.toBeNull();
     expect(last.textContent).toContain('basket.line.boughtFromAnotherList');
     expect(last.querySelector('.status')).toBeNull();
-    expect(last.querySelector('lib-quantity-reel')).toBeNull();
+    expect(last.querySelector('.amount')).toBeNull();
     expect(store.revert).not.toHaveBeenCalled();
   });
 
@@ -4977,9 +5238,7 @@ describe('a row bought outside this shopping list (velista 0142)', () => {
 
     expect(page.querySelector('lib-basket-row .row.is-removed')).toBeNull();
     expect(page.querySelector('lib-basket-row button.status')).not.toBeNull();
-    expect(
-      page.querySelector('lib-basket-row lib-quantity-reel')
-    ).not.toBeNull();
+    expect(page.querySelector('lib-basket-row .amount')).not.toBeNull();
     expect(text(fixture)).not.toContain('basket.line.alreadyBought');
   });
 });
@@ -5007,6 +5266,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   function yogurt(atShop: number | null = null): BasketProduct {
     return {
       id: 'item-yogurt',
+      quantityStep: null,
       name: { en: 'Yogurt', es: 'Yogur' },
       brand: null,
       imageUrl: null,
@@ -5056,7 +5316,6 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   ];
 
   const NUMBER = 'lib-list-tools lib-basket-total';
-  const BAR = 'lib-list-tools lib-basket-total-bar';
   const NOTE = 'lib-no-prices-note';
 
   // A popover is drawn beside the page and not inside it, so one left open
@@ -5065,7 +5324,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     TestBed.resetTestingModule();
   });
 
-  it('draws the number and the bar with a priced line, and no small row', async () => {
+  it('draws the number with a priced line, no bar, and no small row', async () => {
     const { fixture } = await render({
       lines: lines(),
       products: priced(),
@@ -5074,23 +5333,22 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
     // Two at 1.35: the number is the sum of the rows under it.
     expect(query(fixture, NUMBER)?.textContent).toContain('"amount":"€2.70"');
-    expect(query(fixture, BAR)).not.toBeNull();
+    // The bar went with velista 0189; the number stays (decision K).
+    expect(query(fixture, 'lib-basket-total-bar')).toBeNull();
+    expect(query(fixture, '.total-bar')).toBeNull();
     expect(query(fixture, NOTE)).toBeNull();
   });
 
-  it('puts the number before the filter, and the bar under the chips', async () => {
+  it('puts the number before the filter', async () => {
     const { fixture } = await render({ lines: lines(), products: priced() });
     TestBed.inject(BasketViewStore).setOrder('alpha');
     fixture.detectChanges();
 
     const number = query(fixture, NUMBER);
     expect(number?.nextElementSibling?.classList).toContain('tool');
-    expect(query(fixture, BAR)?.previousElementSibling?.tagName).toBe(
-      'LIB-CHIP-ROW'
-    );
   });
 
-  it('keeps the bar and the small row off the edges of the screen', () => {
+  it('keeps the tools row, the chips and the small row off the edges of the screen', () => {
     // The column's inline padding is zero, so its rows reach the edges, and
     // nothing in the tools bar is a row. jsdom lays nothing out, so the
     // stylesheet is the half a spec can see.
@@ -5103,9 +5361,10 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     expect(/lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
       `padding-inline-start: ${gutter}`
     );
-    expect(/\.chips,\s*\.total-bar\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
+    expect(/\.chips\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
       `margin-inline-end: ${gutter}`
     );
+    expect(css).not.toContain('.total-bar');
     expect(/\.no-prices\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
       `padding-inline: ${gutter}`
     );
@@ -5118,11 +5377,12 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     });
 
     expect(query(fixture, NUMBER)).toBeNull();
-    expect(query(fixture, BAR)).toBeNull();
 
-    // First in the scroll: under the sticky bar and above the changes banner.
+    // First in the scroll, under the field, and above the changes banner. The tools
+    // row is in the head block since velista 0189, so nothing precedes it.
     const note = query(fixture, NOTE);
-    expect(note?.previousElementSibling?.tagName).toBe('LIB-LIST-TOOLS');
+    expect(note?.parentElement?.matches('main.page')).toBe(true);
+    expect(note?.previousElementSibling).toBeNull();
     expect(note?.nextElementSibling?.tagName).toBe('LIB-CHANGES-BANNER');
   });
 
@@ -5134,7 +5394,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     expect(query(fixture, NOTE)).toBeNull();
   });
 
-  it('draws neither while the composer holds words, with or without a price', async () => {
+  it('keeps the number while the composer holds words, and drops the small row', async () => {
     const withPrice = await render({
       lines: lines(),
       products: priced(),
@@ -5142,7 +5402,8 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     });
     typeInto(withPrice.fixture, 'yog');
 
-    expect(query(withPrice.fixture, 'lib-basket-total')).toBeNull();
+    // The tools row stays while typing since velista 0189, and the number with it.
+    expect(query(withPrice.fixture, 'lib-basket-total')).not.toBeNull();
     expect(query(withPrice.fixture, 'lib-basket-total-bar')).toBeNull();
 
     const without = await render({ lines: [line('Candles')], served });
@@ -5332,21 +5593,6 @@ describe('the first buy asks where you are', () => {
     );
   });
 
-  it('holds the reel when it buys, and never when it takes units back', async () => {
-    const { fixture, store } = await render({
-      lines: [line('Milk', { left: 3, bought: 2, state: 'PARTLY' })],
-      storage: new Map(),
-    });
-
-    firstRow(fixture).left.emit({ from: 3, to: 1 });
-    await settleWrites(fixture);
-    expect(store.setLeft).not.toHaveBeenCalled();
-
-    firstRow(fixture).left.emit({ from: 3, to: 4 });
-    await settleWrites(fixture);
-    expect(store.setLeft).toHaveBeenCalledWith('row-Milk', 4, 3, {});
-  });
-
   /**
    * A held buy keeps the `from` and the row key of the press. A patch that moves
    * or re-keys the row while the question is open makes the server refuse it, and
@@ -5392,22 +5638,6 @@ describe('the first buy asks where you are', () => {
         key: 'basket.error.staleLine',
         count: 3,
       });
-    });
-
-    it('says so on the row after the reel', async () => {
-      const { fixture, store } = await render({
-        lines: [milk()],
-        storage: new Map(),
-      });
-      refuseWith(store, store.setLeft);
-
-      firstRow(fixture).left.emit({ from: 5, to: 2 });
-      await settleWrites(fixture);
-      await fixture.debugElement.injector.get(HeldBuy).release();
-      fixture.detectChanges();
-
-      expect(firstRow(fixture).row().rowKey).toBe('row-Milk-2');
-      expect(firstRow(fixture).notice()?.key).toBe('basket.error.staleLine');
     });
 
     it('says so on the row for a buy the settle sheet held', async () => {

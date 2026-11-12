@@ -1,4 +1,5 @@
 import {
+  LINE_QUANTITY_MAX,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -411,7 +412,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     // already checked. The delta is computed here, so here is the only place that
     // can check the result, and core's callers are NATS messages rather than one
     // gateway acting as a wall.
-    const w = build({ permissions: DECIDER, quantity: 99999 });
+    const w = build({ permissions: DECIDER, quantity: 999999 });
 
     await expect(
       w.service.addQuantity({
@@ -420,7 +421,35 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
         delta: 100,
         unit: 'UNIT',
       })
-    ).rejects.toThrow(/at most 100000/);
+    ).rejects.toThrow(/at most 999999/);
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('takes a line to exactly the ceiling of 999 999 (plan 0262)', async () => {
+    const w = build({ permissions: DECIDER, quantity: 999 });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: 999000,
+      unit: 'UNIT',
+    });
+
+    expect(view.quantity).toBe(999999);
+    expect(w.saved[0].quantity).toBe(999999);
+  });
+
+  it('refuses a delta that would pass the ceiling by one (plan 0262)', async () => {
+    const w = build({ permissions: DECIDER, quantity: 1000 });
+
+    await expect(
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: 999000,
+        unit: 'UNIT',
+      })
+    ).rejects.toThrow(/at most 999999/);
     expect(w.saved).toHaveLength(0);
   });
 
@@ -445,7 +474,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       w.service.addQuantity({
         userId: SHOPPER,
         lineId: 'li1',
-        delta: 100001,
+        delta: LINE_QUANTITY_MAX + 1,
         unit: 'UNIT',
       })
     ).rejects.toThrow(/delta must be between/);
@@ -623,9 +652,11 @@ describe('line.addMany (plan 0040, section 6)', () => {
     );
   });
 
-  it('folds a thing named twice into one line at the summed quantity', async () => {
+  it('folds a thing named twice into one line at the first amount (plan 0260 R6)', async () => {
     // Plan 0091 section 2 reverses section 6.3: a list that holds one line per
     // normalized name cannot hold two of them because they arrived together.
+    // Plan 0260 R6 stopped the sum: the second item meets the line the first
+    // made, which is wanted, so it adds nothing.
     const w = build({ permissions: WRITER });
 
     const results = await w.service.addMany({
@@ -637,10 +668,14 @@ describe('line.addMany (plan 0040, section 6)', () => {
       ],
     });
 
-    // One row written, at five, and both slots of the answer name it. The second
+    // One row written, at two, and both slots of the answer name it. The second
     // says `merged`, because the first is the one that created the line.
     expect(w.saved).toHaveLength(1);
-    expect(w.saved[0].quantity).toBe(5);
+    expect(w.saved[0].quantity).toBe(2);
+    expect(results.map((result) => result.outcome)).toEqual([
+      'CREATED',
+      'ALREADY_ON_LIST',
+    ]);
     expect(results).toHaveLength(2);
     expect(results[0].line.id).toBe(results[1].line.id);
     expect(results.map((result) => result.merged)).toEqual([false, true]);
@@ -648,8 +683,9 @@ describe('line.addMany (plan 0040, section 6)', () => {
     expect(w.events[0].event).toBe(RealtimeEvent.LineAdded);
   });
 
-  it('raises a line the list already holds, and announces it as an update', async () => {
-    const w = build({ permissions: WRITER, quantity: 3 });
+  it('raises a line the list keeps at zero, and announces it as an update', async () => {
+    // A wanted line is left as it was (plan 0260 A1); a kept one is raised.
+    const w = build({ permissions: WRITER, quantity: 0 });
 
     const results = await w.service.addMany({
       userId: SHOPPER,
@@ -658,7 +694,8 @@ describe('line.addMany (plan 0040, section 6)', () => {
     });
 
     expect(results[0].merged).toBe(true);
-    expect(results[0].line.quantity).toBe(5);
+    expect(results[0].outcome).toBe('RAISED');
+    expect(results[0].line.quantity).toBe(2);
     expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineUpdated]);
   });
 

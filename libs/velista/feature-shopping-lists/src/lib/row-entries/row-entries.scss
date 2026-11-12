@@ -38,8 +38,8 @@
   list-style: none;
 }
 
-// The list leads, the quantity closes the row. The quantity keeps its size at the
-// smallest width and the words beside it give way, because the number is the
+// The list leads, the amount closes the row. The amount keeps its size at the
+// smallest width and the words beside it give way, because the stepper is the
 // control and the words are not.
 .row {
   display: flex;
@@ -76,7 +76,8 @@
   white-space: nowrap;
 }
 
-.ask-reel {
+// The stepper sizes itself at 168 by 48 (velista 0188, section 3.2).
+.ask-amount {
   flex: none;
 }
 
@@ -106,13 +107,18 @@
   }
 }
 
-// Change, before the quantity: the edge and the surface of the quantity's pill,
-// at the full height of a touch target, as the mock draws it.
+// Change, before the amount: the swap icon in a square touch target with the edge
+// and the raised surface it had as a word, as the mock draws it (velista 0190).
 .change {
   @include shared.tap-target;
 
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: none;
-  padding-inline: var(--app-space-3);
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  padding: 0;
   border: 1px solid var(--app-border-subtle);
   border-radius: var(--app-radius-md);
   background: var(--app-surface-raised);
@@ -133,15 +139,22 @@
   }
 }
 
-// A number where the reel would be, for a list whose ask cannot change from here.
+// The swap glyph, at the size the row's own swap draws.
+.change-glyph {
+  font-size: var(--app-icon-md);
+}
+
+// A number where the stepper would be, for a list whose ask cannot change from
+// here: the exact form, end aligned in a box of the stepper's width (decision I).
 .row-number {
+  display: flex;
+  justify-content: flex-end;
   flex: none;
-  min-inline-size: var(--app-quantity-width);
-  font-size: var(--app-text-base);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  inline-size: calc(
+    var(--app-stepper-button) * 2 + var(--app-stepper-cell-sheet-narrow)
+  );
   color: var(--app-text-secondary);
-  text-align: center;
+  text-align: end;
 }
 
 // "Add it to another list": a plain row with a chevron, the whole width.

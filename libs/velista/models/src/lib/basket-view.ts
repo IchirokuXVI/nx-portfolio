@@ -1,3 +1,4 @@
+import type { AddOutcome } from './add-choice';
 import type { ProductOffer } from './domain';
 import type {
   BasketChangeMark,
@@ -348,6 +349,12 @@ export interface BasketProduct {
    * the kilo with no stated weight.
    */
   readonly approxWeight: number | null;
+  /**
+   * The step a curator set, in base units (backend `0261`), or null for the
+   * default. Required, so a conversion to another product shape cannot drop it
+   * unseen.
+   */
+  readonly quantityStep: number | null;
   /** The cheapest price at the run's scopes, or null where there is none. */
   readonly offer: ProductOffer | null;
   /**
@@ -1387,12 +1394,17 @@ export interface BasketAddLineRequest {
   /** A list from {@link Basket.lists}, which is one this reader holds `WRITE` on. */
   readonly targetListId: string;
   readonly content: string;
-  readonly quantity: number;
   /**
-   * What {@link quantity} counts (velista `0182`): the unit of the product added,
-   * and `UNIT` for typed text. Sent only when it is not `UNIT`.
+   * One step of the product's unit for a product add (velista `0185`). Absent for
+   * typed text, which states no amount: the server then makes a line of one piece,
+   * or shows the line of that name as it stands.
    */
-  readonly unit: LineUnit;
+  readonly quantity?: number;
+  /**
+   * What {@link quantity} counts (velista `0182`): the unit of the product added.
+   * Absent for typed text. Sent only when it is not `UNIT`.
+   */
+  readonly unit?: LineUnit;
   /** The product set a suggestion carried, as the list's own add takes it. */
   readonly itemIds?: readonly string[];
   /**
@@ -1432,6 +1444,13 @@ export interface BasketRowResult {
   readonly entries: readonly BasketRowEntry[];
   /** Set by a revert: entries whose line was deleted since, so no units went back. */
   readonly skippedCount: number;
+  /**
+   * What a line add did (backend `0260`, section 2), set by the add only. With
+   * `alreadyOnList` the entries are the lines the add met, unchanged, so the page
+   * finds their rows and shows them. Absent on every other write, and on an add
+   * answered by a gateway of before backend `0260`.
+   */
+  readonly addOutcome?: AddOutcome;
 }
 
 /**

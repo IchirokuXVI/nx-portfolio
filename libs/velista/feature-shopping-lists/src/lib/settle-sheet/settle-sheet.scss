@@ -300,12 +300,6 @@
   color: var(--app-text-muted);
 }
 
-// The reel without its buttons: the field it replaced was a bare number input,
-// so nothing here grew a control it did not have.
-.allocation-reel {
-  flex: 0 0 auto;
-}
-
 .allocation-total {
   margin: var(--app-space-4) 0 0;
   font-size: var(--app-text-sm);

@@ -10,7 +10,6 @@ import {
   type BasketProduct,
   type BasketRow,
   type BasketRowState,
-  type LineUnit,
 } from '@portfolio/velista/models';
 import { formatAmount, formatQuantity } from '@portfolio/velista/platform';
 import { productSizeText, type ListPickerRow } from '@portfolio/velista/ui';
@@ -416,62 +415,6 @@ export function listsCaption(
     : translator.t('basket.row.listsAndMore', undefined, locale, {
         names: named,
         count: others,
-      });
-}
-
-/**
- * What a move of the outstanding number is about to do, in one short sentence
- * (plan 0054, section 3).
- *
- * The whole of the row's reel is legible or not on this string. `QuantityReel`
- * commits on release, so between the thumb landing and letting go there is a window
- * in which the consequence can be shown rather than explained, and this is what is
- * shown. It is not a confirmation dialog and must never become one: a dialog on a
- * gesture done one handed over a trolley is the thing `0043` removed from the list
- * page.
- *
- * The two directions say different things because they **are** different things
- * (velista `0073`, section 2): down is units going into the trolley, up is units
- * coming back out of it. Neither sentence says "units", and both count what the
- * gesture moved rather than where it landed, because the number a shopper is deciding
- * about is how many tins changed hands.
- *
- * The raise used to read "buying 20 instead of 5", which is the act `0073` deleted.
- *
- * Null where there is nothing about to happen: no thumb down, or a gesture that came
- * back to where it started.
- *
- * @param current where the run began, which is what is outstanding now
- * @param next where the thumb is, or null when it is not down
- */
-export function outstandingCaption(
-  current: number,
-  next: number | null,
-  translator: RokuTranslatorService,
-  locale: string,
-  unit: LineUnit = 'UNIT'
-): string | null {
-  if (next === null || next === current) {
-    return null;
-  }
-
-  // A weight counts what moved in its words: "250 g bought" (velista `0182`).
-  if (isMeasured(unit)) {
-    return next < current
-      ? translator.t('basket.outstanding.boughtAmount', undefined, locale, {
-          amount: formatAmount(current - next, unit, locale),
-        })
-      : translator.t('basket.line.takenBackAmount', undefined, locale, {
-          amount: formatAmount(next - current, unit, locale),
-        });
-  }
-
-  return next < current
-    ? translator.t('basket.outstanding.bought', undefined, locale, {
-        count: current - next,
-      })
-    : translator.t('basket.line.takenBack', undefined, locale, {
-        count: next - current,
       });
 }
 

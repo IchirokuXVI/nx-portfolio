@@ -4,7 +4,23 @@ import {
   type AddTargetList,
   type HeldLine,
 } from '@portfolio/velista/models';
-import { coveredPageUrl, rowAdds } from './row-adds';
+import {
+  addFailedCopy,
+  coveredPageUrl,
+  rowAdds as rowAddsOf,
+} from './row-adds';
+
+/** The list's URL as the pages build it, for a product already on it. */
+const pathOf = (target: AddTargetList) =>
+  `/en/zones/${target.zoneId}/lists/${target.listId}`;
+
+function rowAdds(
+  target: AddTargetList | null,
+  held: readonly HeldLine[],
+  productOf?: Parameters<typeof rowAddsOf>[3]
+) {
+  return rowAddsOf(target, held, pathOf, productOf);
+}
 
 const WEEKLY: AddTargetList = {
   listId: 'list-weekly',
@@ -26,6 +42,40 @@ function line(part: Partial<HeldLine> & Pick<HeldLine, 'lineId'>): HeldLine {
     ...part,
   };
 }
+
+describe("rowAdds: the product's step (velista 0186, decision E)", () => {
+  const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const weighed = line({
+    lineId: 'line-chicken',
+    unit: 'GRAM',
+    quantity: 1000,
+    itemIds: ['item-chicken'],
+  });
+  const rowOf = (adds: ReturnType<typeof rowAdds>) =>
+    adds.byItem.get('item-chicken')?.lines[0];
+
+  it("steps a held row by the page's record of its product", () => {
+    const adds = rowAdds(WEEKLY, [weighed], (itemId) =>
+      itemId === 'item-chicken' ? { ...LOOSE, quantityStep: 250 } : null
+    );
+    expect(rowOf(adds)?.step).toBe(250);
+  });
+
+  it('prefers the step the store read for the line', () => {
+    const adds = rowAdds(WEEKLY, [{ ...weighed, step: 100 }], () => ({
+      ...LOOSE,
+      quantityStep: 250,
+    }));
+    expect(rowOf(adds)?.step).toBe(100);
+  });
+
+  it('says nothing with no record, so the row steps by the default', () => {
+    expect(rowOf(rowAdds(WEEKLY, [weighed], () => null))).not.toHaveProperty(
+      'step'
+    );
+    expect(rowOf(rowAdds(WEEKLY, [weighed]))).not.toHaveProperty('step');
+  });
+});
 
 describe('rowAdds (velista 0134, section 4.1)', () => {
   it('draws no plus at all with no list to add to', () => {
@@ -53,6 +103,10 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
 
     expect(adds.byItem.get('item-oil')).toEqual({
       list: 'Weekly shop',
+      onList: {
+        lineId: 'line-oil',
+        path: '/en/zones/zone-home/lists/list-weekly',
+      },
       lines: [
         {
           lineId: 'line-oil',
@@ -109,6 +163,52 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
     });
   });
 
+  /** Velista `0185`, C1 and decisions C and D. */
+  describe('a product already on the list', () => {
+    it('switches the plus off for a line above zero, naming the first in the order drawn', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept', quantity: 0 }),
+        line({ lineId: 'line-oil', quantity: 2 }),
+        line({ lineId: 'line-frying', quantity: 3 }),
+      ]);
+
+      expect(adds.byItem.get('item-oil')?.onList).toEqual({
+        lineId: 'line-oil',
+        path: '/en/zones/zone-home/lists/list-weekly',
+      });
+      // The lines keep their steppers.
+      expect(
+        adds.byItem.get('item-oil')?.lines.map((row) => row.editable)
+      ).toEqual([true, true, true]);
+    });
+
+    it('counts a line of several products that holds it', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({
+          lineId: 'line-fruit',
+          itemIds: ['item-bananas', 'item-apples'],
+        }),
+      ]);
+
+      expect(adds.byItem.get('item-bananas')?.onList?.lineId).toBe(
+        'line-fruit'
+      );
+    });
+
+    it('keeps the plus on for a product held only at zero, and for an add still on its way', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept', quantity: 0 }),
+        line({
+          lineId: unsavedLineId('list-weekly', 'item-rice'),
+          itemIds: ['item-rice'],
+        }),
+      ]);
+
+      expect(adds.byItem.get('item-oil')?.onList).toBeUndefined();
+      expect(adds.byItem.get('item-rice')?.onList).toBeUndefined();
+    });
+  });
+
   it('follows the server’s rule for who may move a line: an approved one needs more than write', () => {
     const held = [
       line({ lineId: 'line-approved' }),
@@ -154,6 +254,27 @@ describe('coveredPageUrl', () => {
     );
     expect(coveredPageUrl({ parent: null } as ActivatedRouteSnapshot)).toBe(
       '/'
+    );
+  });
+});
+
+describe('addFailedCopy (velista 0185, section 4)', () => {
+  it('says the generic sentence for any failure but a unit refusal', () => {
+    expect(addFailedCopy(null)).toEqual({
+      key: 'catalog.add.failed',
+      args: {},
+    });
+  });
+
+  it('says why for a product the list counts in another unit', () => {
+    expect(
+      addFailedCopy({ lineId: 'l1', name: 'Leche entera', unit: 'MILLILITER' })
+    ).toEqual({
+      key: 'list.error.addUnitDiffers.MILLILITER',
+      args: { name: 'Leche entera' },
+    });
+    expect(addFailedCopy({ lineId: null, name: 'Leche', unit: null }).key).toBe(
+      'list.error.addUnitDiffers.unknown'
     );
   });
 });

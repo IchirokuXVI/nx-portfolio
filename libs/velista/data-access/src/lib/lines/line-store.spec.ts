@@ -91,6 +91,10 @@ function service(seed: readonly Line[]) {
   let absorbNext: string | null = null;
   /** The line the next add answers as raised, `merged: true` (velista `0170`). */
   let raiseNext: Line | null = null;
+  /** The lines the next add answers as already on the list (velista `0185`). */
+  let metNext: readonly Line[] | null = null;
+  /** Whether that answer says `merged`, which a malformed one may not. */
+  let metMerged = true;
   /** What each add said about a name the list holds, in order (backend `0228`). */
   const addOptions: (AddLineOptions | undefined)[] = [];
   /** The unit every write named, in order, for velista `0182`. */
@@ -152,10 +156,25 @@ function service(seed: readonly Line[]) {
       options
     ) => {
       addOptions.push(options);
+      const met = metNext;
+      metNext = null;
+      if (met !== null) {
+        return {
+          line: await answer(met[0]),
+          merged: metMerged,
+          outcome: 'alreadyOnList' as const,
+          alreadyOnList: met,
+        };
+      }
       const raised = raiseNext;
       raiseNext = null;
       if (raised !== null) {
-        return { line: await answer(raised), merged: true };
+        return {
+          line: await answer(raised),
+          merged: true,
+          outcome: 'raised' as const,
+          alreadyOnList: [],
+        };
       }
       return {
         line: await answer(
@@ -167,6 +186,8 @@ function service(seed: readonly Line[]) {
           })
         ),
         merged: false,
+        outcome: 'created' as const,
+        alreadyOnList: [],
       };
     },
     updateLine: async (lineId, { confirmMerge: _confirm, ...changes }) => {
@@ -219,14 +240,6 @@ function service(seed: readonly Line[]) {
     linesHoldingItem: async () => ({ lists: [], lines: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
-    reorder: async () => {
-      calls.push('reorder');
-      if (failWith !== null) {
-        const error = failWith;
-        failWith = null;
-        throw error;
-      }
-    },
     deleteLine: async (lineId) => {
       calls.push('delete');
       if (failWith !== null) {
@@ -263,6 +276,10 @@ function service(seed: readonly Line[]) {
     },
     raiseNext: (value: Line) => {
       raiseNext = value;
+    },
+    metNext: (value: readonly Line[], merged = true) => {
+      metNext = value;
+      metMerged = merged;
     },
     addOptions,
     units,
@@ -584,20 +601,35 @@ describe('LineStore', () => {
       ).toBe(false);
     });
 
-    it('draws a product add at once whatever its name', async () => {
-      const { store } = await build([milk()]);
+    it('draws no row for a product a loaded line above zero holds (velista 0185, decision I)', async () => {
+      const { store } = await build([
+        milk(),
+        line('fruit', {
+          content: 'Fruta',
+          itemIds: ['item-bananas', 'item-apples'],
+          quantity: 0,
+          position: 2,
+        }),
+      ]);
       await store.load(LIST);
 
       expect(store.drawsBeforeAnswer(LIST, 'Leche entera', ['item-milk'])).toBe(
+        false
+      );
+      // Whatever its name, and also among other products.
+      expect(store.drawsBeforeAnswer(LIST, 'Milk', ['item-milk'])).toBe(false);
+      // A line at zero is raised, and a product no line holds is new.
+      expect(store.drawsBeforeAnswer(LIST, 'Plátanos', ['item-bananas'])).toBe(
         true
       );
+      expect(store.drawsBeforeAnswer(LIST, 'Pan', ['item-bread'])).toBe(true);
     });
 
     it('leaves no placeholder behind when an optimistic add is answered as a raise', async () => {
-      // A product add draws at once and can still meet a line (backend 0091): the
-      // placeholder goes and the held line takes the units in its place.
+      // A product add on a line at zero draws at once and meets that line (backend
+      // 0091, 0260): the placeholder goes and the held line takes the units.
       const { store, lines } = await build([
-        milk(),
+        milk({ quantity: 0 }),
         line('bread', { content: 'Pan', position: 2 }),
       ]);
       await store.load(LIST);
@@ -618,6 +650,118 @@ describe('LineStore', () => {
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
       expect(store.linesIn(LIST)[0].quantity).toBe(3);
       expect(store.writeNoteOf(store.linesIn(LIST)[0].id)).toBeNull();
+    });
+
+    it('adds nothing for a line already asked for, and passes on every line it met (velista 0185)', async () => {
+      const { store, lines } = await build([
+        milk(),
+        line('bread', { content: 'Pan', position: 2 }),
+      ]);
+      await store.load(LIST);
+      const before = store.linesIn(LIST);
+      lines.metNext([milk()]);
+
+      const outcome = await store.addLine(
+        LIST,
+        'Leche entera',
+        undefined,
+        ME,
+        ASKS_FIRST
+      );
+
+      expect(outcome).toEqual(
+        expect.objectContaining({
+          state: 'added',
+          merged: true,
+          outcome: 'alreadyOnList',
+          alreadyOnList: [expect.objectContaining({ id: 'milk' })],
+        })
+      );
+      expect(store.linesIn(LIST)).toEqual(before);
+    });
+
+    it('takes the placeholder of a product add away when the answer is a line already asked for', async () => {
+      // A product a loaded line does not hold draws at once; another device may
+      // have made its line meanwhile.
+      const { store, lines } = await build([milk()]);
+      await store.load(LIST);
+      const elsewhere = line('fresh', {
+        content: 'Huevos',
+        itemIds: ['item-eggs'],
+        quantity: 6,
+        position: 2,
+        version: 4,
+      });
+      lines.metNext([elsewhere]);
+
+      const adding = store.addLine(
+        LIST,
+        'Huevos',
+        1,
+        ME,
+        ASKS_FIRST,
+        ['item-eggs'],
+        false
+      );
+      expect(store.linesIn(LIST)).toHaveLength(2);
+      await adding;
+
+      expect(store.linesIn(LIST).map((l) => [l.id, l.quantity])).toEqual([
+        ['milk', 2],
+        ['fresh', 6],
+      ]);
+    });
+
+    it('settles a met line in place by the outcome, also when the answer says merged false', async () => {
+      // Malformed, but it must not settle as a made line: that draws a second row
+      // with the met line's id. Once drawn at once, once on the answer.
+      for (const drawnFirst of [true, false]) {
+        const { store, lines } = await build([
+          milk(),
+          line('bread', { content: 'Pan', position: 2 }),
+        ]);
+        await store.load(LIST);
+        lines.metNext([milk()], false);
+
+        const outcome = drawnFirst
+          ? await store.addLine(
+              LIST,
+              'Leche',
+              1,
+              ME,
+              ASKS_FIRST,
+              ['item-other'],
+              false
+            )
+          : await store.addLine(
+              LIST,
+              'Leche entera',
+              undefined,
+              ME,
+              ASKS_FIRST
+            );
+
+        expect(outcome).toEqual(
+          expect.objectContaining({
+            state: 'added',
+            merged: true,
+            outcome: 'alreadyOnList',
+          })
+        );
+        expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);
+      }
+    });
+
+    it('draws a typed name it cannot place as one piece', async () => {
+      const { store } = await build([milk()]);
+      await store.load(LIST);
+
+      const adding = store.addLine(LIST, 'Huevos', undefined, ME, ASKS_FIRST);
+
+      expect(store.linesIn(LIST)[1]).toEqual(
+        expect.objectContaining({ quantity: 1, unit: 'UNIT' })
+      );
+      await adding;
     });
 
     it('leaves no ghost when the echo of the raise arrives before the answer', async () => {
@@ -1675,37 +1819,6 @@ describe('LineStore', () => {
       await store.refresh(LIST);
 
       expect(store.commentCountOf('a')).toBe(3);
-    });
-  });
-
-  describe('reordering', () => {
-    it('renumbers optimistically and keeps the order on success', async () => {
-      const { store } = await build([
-        line('a', { position: 1 }),
-        line('b', { position: 2 }),
-      ]);
-      await store.load(LIST);
-
-      const outcome = await store.reorder(LIST, ['b', 'a']);
-
-      expect(outcome).toBe('succeeded');
-      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['b', 'a']);
-    });
-
-    it('puts the old order back and rereads when the server refuses', async () => {
-      // A `validation_failed` means somebody deleted a line mid drag. The person who
-      // dragged has done nothing wrong, so the list rereads and says nothing.
-      const { store, lines } = await build([
-        line('a', { position: 1 }),
-        line('b', { position: 2 }),
-      ]);
-      await store.load(LIST);
-      lines.failNext(new Error('gone'));
-
-      const outcome = await store.reorder(LIST, ['b', 'a']);
-
-      expect(outcome).toBe('failed');
-      expect(lines.calls.filter((call) => call === 'list').length).toBe(2);
     });
   });
 

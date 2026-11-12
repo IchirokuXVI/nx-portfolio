@@ -131,6 +131,22 @@ describe('the lines of a list that hold a product', () => {
     });
   });
 
+  it("carries the line's step, and tells a default apart from one not known (velista 0186, decision A)", () => {
+    const rows = holdingRows(
+      [
+        line('line-1', { step: 100 }),
+        line('line-4', { step: null }),
+        line('line-5'),
+      ],
+      'weekly',
+      'milk',
+      DECIDES
+    );
+
+    expect(rows.map((row) => row.step)).toEqual([100, null, undefined]);
+    expect('step' in (rows[2] ?? {})).toBe(false);
+  });
+
   it('lets a person move only the lines the server would let them move', () => {
     // Write alone moves the waiting line and not the approved ones.
     expect(

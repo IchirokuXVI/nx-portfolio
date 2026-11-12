@@ -737,6 +737,41 @@ describe('BasketStore', () => {
       await pending;
       expect(store.busyRows().has(first.rowKey)).toBe(false);
     });
+
+    it('keeps the row busy until the last of two writes on it is back', async () => {
+      // Two lines of one row can each send a demand from the settle sheet
+      // (velista `0190`), and both are counted on the row's key.
+      const releases: (() => void)[] = [];
+      const memory = new BasketMemory();
+      const { store } = build({
+        getBasket: () => memory.getBasket(),
+        settle: (id, rowKey, body) =>
+          new Promise((resolve) => {
+            releases.push(() => resolve(memory.settle(id, rowKey, body)));
+          }),
+      });
+      await store.open('basket-saturday');
+
+      const first = store.rows()[0];
+      const one = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
+      const two = store.settle(first.rowKey, {
+        outcome: 'BOUGHT',
+        quantity: 1,
+        from: first.left,
+      });
+
+      releases[0]();
+      await one;
+      expect(store.busyRows().has(first.rowKey)).toBe(true);
+
+      releases[1]();
+      await two;
+      expect(store.busyRows().has(first.rowKey)).toBe(false);
+    });
   });
 
   describe('the share link', () => {
@@ -2501,7 +2536,7 @@ describe('BasketStore: skip, demand and the add', () => {
     expect(store.state()).toBe('ready');
   });
 
-  it('folds an add that merged in place, rather than drawing a second row', async () => {
+  it('folds an add that met a line in place, rather than drawing a second row', async () => {
     // The add goes through the target list\u2019s own rules, so it can land on a
     // line the list already held (backend `0091`). The answer is then a row
     // already on the screen under a key nobody named.
@@ -2509,10 +2544,10 @@ describe('BasketStore: skip, demand and the add', () => {
     await store.open('basket-saturday');
     const rows = store.rows().length;
 
-    await store.addLine({
+    const result = await store.addLine({
       targetListId: 'list-weekly',
       content: 'milk',
-      quantity: 2,
+      quantity: 1,
       // The products that line holds: the name alone is not a match.
       itemIds: [
         'item-milk-hacendado',
@@ -2522,7 +2557,9 @@ describe('BasketStore: skip, demand and the add', () => {
     });
 
     expect(store.rows()).toHaveLength(rows);
-    expect(rowOf(store, 'Milk').entries[0].left).toBe(4);
+    // Already asked for, so nothing was added (velista 0185, backend 0260).
+    expect(result?.addOutcome).toBe('alreadyOnList');
+    expect(rowOf(store, 'Milk').entries[0].left).toBe(2);
   });
 
   it('says when an add is out, and stops when it lands', async () => {
@@ -3161,6 +3198,7 @@ describe('BasketStore: a buy reaches the other phone at once (velista 0143)', ()
     /** Yoghurt, under a parent the read's products do not use. */
     const YOGHURT: BasketProduct = {
       id: 'item-yoghurt',
+      quantityStep: null,
       name: { en: 'Natural yoghurt, 4', es: 'Yogur natural, 4' },
       brand: 'Hacendado',
       productGroupId: null,

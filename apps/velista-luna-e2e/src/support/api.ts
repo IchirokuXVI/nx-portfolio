@@ -579,13 +579,15 @@ export async function deleteSection(
 /**
  * `GET /v1/admin/catalog/items?query=`, then `POST /v1/admin/catalog/items` when
  * no product carries this exact English name: one product, created once and kept
- * across runs, since a product nothing names costs nothing.
+ * across runs, since a product nothing names costs nothing. A brand, when given,
+ * is set on the product as it is created.
  */
 export async function ensureItem(
   admin: Session,
   name: { en: string; es: string },
   categoryIds: string[],
-  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT'
+  defaultUnit: 'UNIT' | 'KILOGRAM' | 'LITER' = 'UNIT',
+  brand: string | null = null
 ): Promise<string> {
   const page = await admin.get<{
     items: { id: string; name: { en?: string } }[];
@@ -596,8 +598,22 @@ export async function ensureItem(
     name,
     categoryIds,
     defaultUnit,
+    ...(brand === null ? {} : { brand }),
   });
   return made.id;
+}
+
+/**
+ * `PATCH /v1/admin/catalog/items/:id` with `quantityStep` (backend `0261`,
+ * section 3): the step a curator gives a product sold by the kilo or the litre,
+ * or null for the default. Absolute, so a run after a failed one starts the same.
+ */
+export async function setQuantityStep(
+  admin: Session,
+  itemId: string,
+  quantityStep: number | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { quantityStep });
 }
 
 /**

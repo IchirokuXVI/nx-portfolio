@@ -1,17 +1,22 @@
 import {
   catalogName,
+  lineAmount,
+  lineAmountProductOf,
   lineShownProduct,
+  lineStepOf,
   listCost,
   soldAsOf,
   type CatalogItem,
   type Line,
   type LineAction,
+  type LineAmountProduct,
   type LineEditScope,
   type LineIndicator,
   type LineName,
   type LineProductPrice,
   type LineProductPriceRead,
   type LineRowProduct,
+  type LineRowShownProduct,
   type LineRowVm,
   type LineWriteState,
   type ListAbilitiesVm,
@@ -19,6 +24,7 @@ import {
   type ListPageState,
   type ListPermission,
   type ListViewerVm,
+  type ProductOffer,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import { priceWords, type CatalogTranslate } from '@portfolio/velista/ui';
@@ -56,7 +62,6 @@ export interface ListStateInput {
   readonly zoneName: string | null;
   readonly lines: readonly Line[];
   readonly linesState: 'idle' | 'loading' | 'loaded' | 'failed';
-  readonly linesComplete: boolean;
   readonly writes: ReadonlyMap<
     string,
     {
@@ -77,7 +82,6 @@ export interface ListStateInput {
   readonly caller: CallerFacts;
   /** Resolves a user id to a name in this zone, or null. */
   readonly nameOf: (userId: string) => string | null;
-  readonly reordering: boolean;
   /**
    * Who else has this list open, already resolved and already without the reader.
    *
@@ -132,6 +136,11 @@ export interface ListStateCatalog {
   readonly locale: string;
   /** "Hacendado · 1 L", or null with neither. */
   readonly brandSizeOf: (item: CatalogItem) => string | null;
+  /**
+   * How big a product is ("1000 ml", "~2,5 kg"), or null for a loose product and a
+   * count of one: `productSizeText` (velista `0191`, the compact row's first fact).
+   */
+  readonly sizeOf: (item: CatalogItem) => string | null;
   /** A price in the reader's language. */
   readonly formatMoney: (amount: number, currency: string | null) => string;
   /**
@@ -187,10 +196,6 @@ export function selectListState(input: ListStateInput): ListPageState {
     lines,
     abilities,
     empty: lines.length === 0,
-    // Rule L4: dragging is available only once every page has arrived, and never in
-    // the middle of somebody reading a long list. Still `canWrite`, because reordering
-    // rewrites what the list asks for rather than what the shop had (section 4).
-    canReorder: abilities.canWrite && input.linesComplete && lines.length > 1,
     // A list fact rather than an ability, so it is read from the summary and not from
     // the permission set. False while the list itself is still a cold cache miss, which
     // is the safe direction: an optimistic row drawn PENDING and corrected to APPROVED
@@ -319,6 +324,12 @@ function toRow(
         : null,
     quantity: line.quantity,
     unit: line.unit,
+    // The product's step (velista `0186`, decision A), over the records the page
+    // read: a record still loading says nothing, so the row steps by the default.
+    step:
+      input.catalog === undefined
+        ? null
+        : lineStepOf(line, input.catalog.itemOf),
     approvalStatus: line.approvalStatus,
     settled: isSettled(line),
     indicators: indicatorsFor(line, claimedBy),
@@ -334,21 +345,18 @@ function toRow(
     // **Everybody who can see the row can open it**, which is the change (velista plan
     // 0043, section 5.1). The tap used to be the tick, so it followed `DECIDE` and a
     // reader's rows sat there not answering; it opens what the app knows about the
-    // thing now, and knowing is not a permission. False only in reorder mode, where
-    // every row is a thing being dragged rather than a thing being read.
-    interactive: !input.reordering,
+    // thing now, and knowing is not a permission.
+    interactive: true,
     // The reel is the half that still follows `DECIDE`, because moving the number is
     // saying what the household now has. The two came apart here for the first time,
     // and a `WRITE` only caller is why: they get a full composer, a row that opens, and
     // a number that does not move, with one caption at the top of the page saying who
     // does the buying rather than each row refusing in turn (section 7).
-    adjustable: abilities.canDecide && !input.reordering,
-    decidable: abilities.canDecide && awaiting && !input.reordering,
-    restorable: abilities.canDecide && rejected && !input.reordering,
-    // Nobody is shown as editing while the list is being reordered: the sheet cannot be
-    // opened from a row in that mode, so an indicator there would be about a screen the
-    // reader cannot see. Advisory either way, and it locks nothing (section 3).
-    editor: input.reordering ? null : input.editorOf(line.id),
+    adjustable: abilities.canDecide,
+    decidable: abilities.canDecide && awaiting,
+    restorable: abilities.canDecide && rejected,
+    // Advisory, and it locks nothing (section 3).
+    editor: input.editorOf(line.id),
   };
 }
 
@@ -391,7 +399,61 @@ function rowProduct(
     // piece, and no price without one, a price per kilo with its "/ kg", or the
     // price. A product the catalog has not named is priced by its offer alone.
     price: priceWords(offer, item, catalog.locale, catalog.translate),
+    // The compact row's facts (velista `0191`, section 2.1). Built here and
+    // nowhere else, so both layouts read one product. Its unit price is `price`.
+    brand: item === null ? null : nonEmpty(item.brand ?? ''),
+    size: item === null ? null : catalog.sizeOf(item),
+    total: totalOf(line, item, offer, catalog),
   };
+}
+
+/**
+ * What a line's whole amount costs with its shown product, with its estimate mark,
+ * or null at zero and when a figure is missing (velista `0191`, the owner's decision
+ * of 2026-11-12). The same `lineAmount` over the same product the list's total
+ * counts, so the rows add up to the header.
+ */
+function totalOf(
+  line: Line,
+  item: CatalogItem | null,
+  offer: ProductOffer | null,
+  catalog: ListStateCatalog
+): LineRowShownProduct['total'] {
+  if (offer === null || line.quantity <= 0) {
+    return null;
+  }
+  const cost = lineAmount(
+    line.quantity,
+    line.unit,
+    amountProductOf(offer, item),
+    offer
+  );
+  return cost === null
+    ? null
+    : {
+        amount: catalog.formatMoney(cost.cents / 100, offer.currency),
+        estimated: cost.estimated,
+      };
+}
+
+/**
+ * The shown product as `lineAmount` reads it: how it is sold and its size, so a kilo
+ * piece counts its piece price and a weight its price per kilo times its grams
+ * (velista `0179` and `0182`). A product the catalog has not named is read by its
+ * offer: a set piece price names a kilo piece.
+ */
+function amountProductOf(
+  offer: ProductOffer | null,
+  item: CatalogItem | null
+): LineAmountProduct {
+  return item !== null
+    ? lineAmountProductOf(item)
+    : {
+        kind: soldAsOf(offer, null),
+        unit: null,
+        size: null,
+        approxWeight: null,
+      };
 }
 
 /** `lineShownProduct` over the catalog's prices, or null for a line with none. */
@@ -429,16 +491,7 @@ function costOf(
         quantity: line.quantity,
         unit: line.unit,
         offer,
-        // How the shown product is sold and its size, so a kilo piece adds its
-        // piece price and a weight its price per kilo times its grams (velista
-        // `0179` and `0182`). A product the catalog has not named is read by its
-        // offer: a set piece price names a kilo piece.
-        product: {
-          kind: soldAsOf(offer, item),
-          unit: item?.unit ?? null,
-          size: item?.size ?? null,
-          approxWeight: item?.approxWeight ?? null,
-        },
+        product: amountProductOf(offer, item),
       };
     })
   );

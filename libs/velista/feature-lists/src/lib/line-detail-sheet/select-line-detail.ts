@@ -4,6 +4,7 @@ import {
   inLocale,
   lineName,
   lineProductPrices,
+  lineStepOf,
   PURCHASE_SESSION_GAP_MS,
   toSettlementRow,
   type CatalogItem,
@@ -140,6 +141,8 @@ export function selectLineDetail(input: LineDetailInput): LineDetailVm | null {
     quantity: line.quantity,
     unit: line.unit,
     units: offeredUnits(line, input.productOf),
+    // The product's step (velista `0186`), for both of the sheet's steppers.
+    step: lineStepOf(line, input.itemNameOf),
     ...productsPhrase(line, input, purchases),
     namesUnavailable: input.namesUnavailable && line.itemIds.length > 0,
     lastPurchase: rows.find((row) => row.outcome === 'BOUGHT') ?? null,

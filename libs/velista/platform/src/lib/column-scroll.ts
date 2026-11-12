@@ -137,3 +137,15 @@ export class ColumnScroll {
     this._column = null;
   }
 }
+
+/**
+ * Whether a row is wholly inside the scrolling column. The field is pinned above the
+ * column, outside it, so the column's own box is the whole of what shows. Reads
+ * geometry, so it says yes where there is none to read (jsdom), and nothing scrolls
+ * there.
+ */
+export function rowInView(row: HTMLElement, column: HTMLElement): boolean {
+  const box = row.getBoundingClientRect();
+  const frame = column.getBoundingClientRect();
+  return box.top >= frame.top && box.bottom <= frame.bottom;
+}

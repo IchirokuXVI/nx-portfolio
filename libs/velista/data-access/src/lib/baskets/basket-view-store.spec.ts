@@ -99,6 +99,7 @@ function product(
 ): BasketProduct {
   return {
     id,
+    quantityStep: null,
     name: { en, es },
     brand,
     size: null,

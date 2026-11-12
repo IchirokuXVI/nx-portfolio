@@ -34,6 +34,7 @@ import {
   catalogName,
   categoryName,
   chainPriceHistories,
+  lineStepOf,
   lineUnitOfProduct,
   PRICE_HISTORY_DEFAULT_RANGE,
   PRICE_HISTORY_READ_DAYS,
@@ -61,6 +62,7 @@ import {
 import {
   AddingBar,
   ChevronRightIcon,
+  InfoIcon,
   ListsTable,
   PageHeader,
   PriceHistory,
@@ -80,7 +82,7 @@ import {
 } from '@portfolio/velista/ui';
 import { CatalogContext } from '../catalog-context';
 import { CATEGORY_PARAM } from '../category-choice';
-import { rowAdds } from '../row-adds';
+import { addFailedCopy, rowAdds } from '../row-adds';
 
 /**
  * `gone` is a product the catalog no longer holds, which is not a failed read:
@@ -127,7 +129,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
  * The other products of its group, each with the plus of the catalog's rows. The
  * heading says which list the plus adds to and opens the same sheet of lists as
  * the catalog: the choice is one value for both pages. A press on a row opens
- * that product's page.
+ * that product's page. An info button on the heading opens a sheet that says
+ * why they are sorted per kilo or litre while a list marks as cheapest what
+ * costs least for its amount (velista `0187`, U6).
  *
  * ## Back never leaves the app
  *
@@ -140,6 +144,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
   imports: [
     AddingBar,
     ChevronRightIcon,
+    InfoIcon,
     ListsTable,
     PageHeader,
     PriceHistory,
@@ -218,6 +223,22 @@ export class ProductPage {
 
   /** The photo; the picture draws the carton for none and for one that fails. */
   protected readonly imageUrl = computed(() => this._item()?.imageUrl ?? null);
+
+  /** What the product is asked for in (velista `0182`). */
+  protected readonly lineUnit = computed(() =>
+    lineUnitOfProduct(this._item()?.offer ?? null, this._item())
+  );
+
+  /**
+   * The product's step (velista `0186`, decision E): `lineStepOf` of a line of this
+   * one product in {@link lineUnit}, or null for the default.
+   */
+  protected readonly step = computed(() => {
+    const item = this._item();
+    return item === null
+      ? null
+      : lineStepOf({ unit: this.lineUnit(), itemIds: [item.id] }, () => item);
+  });
 
   /** `brand · size`, with the row's own rule for when a size is worth saying. */
   protected readonly detail = computed(() => {
@@ -385,8 +406,39 @@ export class ProductPage {
     };
   });
 
-  private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held())
+  private readonly _rowAdds = computed(() => {
+    // The records of the page and its similar rows, so a held line steps by its
+    // product's step (velista `0186`, decision E).
+    const item = this._item();
+    const groupId = item?.productGroupId ?? null;
+    const entry = groupId === null ? null : this._groupMembers.entry(groupId);
+    const members = new Map(
+      (entry?.status === 'ready' ? entry.members : []).map(
+        (member) => [member.id, member] as const
+      )
+    );
+    return rowAdds(
+      this.addTarget(),
+      this._adds.held(),
+      (target) =>
+        appPath(
+          this._locale(),
+          this._basePath,
+          'zones',
+          target.zoneId,
+          'lists',
+          target.listId
+        ),
+      (itemId) =>
+        item !== null && itemId === item.id
+          ? item
+          : (members.get(itemId) ?? null)
+    );
+  });
+
+  /** The sentence of a failed add, as the catalog says it (velista `0185`). */
+  protected readonly addFailedText = computed(() =>
+    addFailedCopy(this._adds.refusal())
   );
 
   constructor() {
@@ -448,7 +500,7 @@ export class ProductPage {
       return;
     }
     this.addFailed.set(false);
-    void this._adds.step(
+    this._adds.step(
       {
         listId: target.listId,
         itemId: row.id,
@@ -456,11 +508,14 @@ export class ProductPage {
         imageUrl: row.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 
-  /** The plus of a list in the table: one of this product on that list. */
+  /**
+   * The plus of a list in the table that holds no line of this product: one of
+   * it on that list. A list that holds it steps that line (velista `0187`).
+   */
   protected addToList(listId: string): void {
     this.addFailed.set(false);
     void this._adds.add(
@@ -470,16 +525,16 @@ export class ProductPage {
         detail: this.detail(),
         imageUrl: this.imageUrl(),
         // A product sold by the kilo is asked for by weight (velista `0182`).
-        unit: lineUnitOfProduct(this._item()?.offer ?? null, this._item()),
+        unit: this.lineUnit(),
       },
       listId
     );
   }
 
-  /** A press on the stepper of a line in the table. */
+  /** A press on the stepper of a line in the table, a plus as much as a minus. */
   protected stepListLine(step: ListsTableStep): void {
     this.addFailed.set(false);
-    void this._adds.step(
+    this._adds.step(
       {
         listId: step.listId,
         itemId: this.itemId(),
@@ -487,7 +542,7 @@ export class ProductPage {
         imageUrl: this.imageUrl(),
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 
@@ -513,6 +568,14 @@ export class ProductPage {
   /** The heading of Similar products: the sheet of lists, over this page. */
   protected openLists(): void {
     const segments = sheetSegments(CATALOG_PATHS.addListSheet).join('/');
+    void this._router.navigateByUrl(
+      `${productPagePath(this._locale(), this._basePath, this.itemId())}/${segments}`
+    );
+  }
+
+  /** The info button of Similar products: why they are sorted that way. */
+  protected openOrderInfo(): void {
+    const segments = sheetSegments(CATALOG_PATHS.orderInfoSheet).join('/');
     void this._router.navigateByUrl(
       `${productPagePath(this._locale(), this._basePath, this.itemId())}/${segments}`
     );

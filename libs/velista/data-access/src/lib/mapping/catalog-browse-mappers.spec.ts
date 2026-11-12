@@ -35,6 +35,32 @@ describe('toCatalogProduct: the weight of a piece (velista 0179)', () => {
   });
 });
 
+describe("toCatalogProduct: the product's step (velista 0186, backend 0261)", () => {
+  const loose = {
+    id: 'item-chicken',
+    name: { es: 'Pollo', en: 'Chicken' },
+    defaultUnit: 'KILOGRAM',
+    unitSize: null,
+  };
+
+  it('reads one of the ten steps', () => {
+    expect(
+      toCatalogProduct({ ...loose, quantityStep: 250 })?.quantityStep
+    ).toBe(250);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a step off the list', 30],
+    ['a string', '250'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, value) => {
+    expect(
+      toCatalogProduct({ ...loose, quantityStep: value })?.quantityStep
+    ).toBeNull();
+  });
+});
+
 /** `GET /v1/catalog/items/:id/price-history` (backend `0196`, section 2). */
 describe('toProductPriceHistory', () => {
   const FROM = '2026-07-01T00:00:00.000Z';

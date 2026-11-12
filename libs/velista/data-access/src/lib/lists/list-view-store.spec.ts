@@ -29,6 +29,7 @@ function line(id: string, content: string, itemIds: string[] = []): Line {
 function product(id: string, en: string, ...slugs: string[]): CatalogItem {
   return {
     id,
+    quantityStep: null,
     name: { es: en, en },
     brand: null,
     size: null,
@@ -187,16 +188,6 @@ describe('ListViewStore', () => {
     expect(view.view()).toBe('category');
     expect(ids(view.compose(LINES).lines)).toEqual(['l2']);
     expect(view.activeCount()).toBe(1);
-  });
-
-  it('holds reorder while a search is on, and lets it go when the search is cleared', () => {
-    const view = harness(new Map());
-
-    view.search('milk');
-    expect(view.holdsReorder()).toBe(true);
-
-    view.search('');
-    expect(view.holdsReorder()).toBe(false);
   });
 
   describe('what the device remembers (section 8)', () => {

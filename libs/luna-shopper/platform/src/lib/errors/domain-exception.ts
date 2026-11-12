@@ -290,11 +290,18 @@ export class LineUnitMismatchException extends DomainException {
 }
 
 /**
- * A rename would merge two lines of different units (plan 0246, section 3.3).
- * Nothing was written and the two lines stay.
+ * A rename would merge two lines of different units (plan 0246, section 3.3),
+ * or a product add met only lines of another unit (plan 0260, section 3).
+ * Nothing was written and the lines stay.
+ *
+ * It publishes its details: on an add, `details.line` names the line met
+ * (`lineId`, `content`, `unit`, `quantity`), `details.unit` what the add
+ * counted in and `details.index` the batch item or null. A merge throws it
+ * with no details, and the envelope then carries none.
  */
 export class LineUnitDiffersException extends DomainException {
   readonly code = ERROR_CODES.LINE_UNIT_DIFFERS;
+  override readonly exposesDetails = true;
 }
 
 /**
@@ -636,6 +643,24 @@ export const ITEM_APPROX_WEIGHT_DETAIL = 'approxWeight';
  */
 export class ItemApproxWeightBesideSizeException extends DomainException {
   readonly code = ERROR_CODES.ITEM_APPROX_WEIGHT_BESIDE_SIZE;
+  override readonly exposesDetails = true;
+}
+
+/** The `details` keys of a refused step (plan 0261, section 2.2). */
+export const ITEM_QUANTITY_STEP_DETAIL = 'quantityStep';
+export const ITEM_QUANTITY_STEPS_ALLOWED_DETAIL = 'allowed';
+
+/**
+ * A product write would store a step off the list, or a step on a product
+ * that is not sold by the kilo or the litre (plan 0261, section 2.2). The
+ * details are public: the step under {@link ITEM_QUANTITY_STEP_DETAIL}, the
+ * allowed steps under {@link ITEM_QUANTITY_STEPS_ALLOWED_DETAIL}, the unit
+ * under `defaultUnit`, the size under {@link ITEM_UNIT_SIZE_DETAIL} and the
+ * weight under {@link ITEM_APPROX_WEIGHT_DETAIL}, with `itemId` or `index` as
+ * for {@link ItemUnitNotBaseException}.
+ */
+export class ItemQuantityStepNotAllowedException extends DomainException {
+  readonly code = ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED;
   override readonly exposesDetails = true;
 }
 

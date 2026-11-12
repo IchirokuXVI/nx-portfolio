@@ -97,7 +97,7 @@
             <span class="label">{{ 'list.detail.askedFor' | rokuT }}</span>
             @if (editScope === 'full') {
               <!--
-                What the line counts in, above the reel, on a line whose products
+                What the line counts in, beside the stepper, on a line whose products
                 offer more than one unit (velista 0183). Draws nothing otherwise.
               -->
               <div class="amount-controls">
@@ -107,18 +107,21 @@
                   [units]="line.units"
                   [value]="unit()"
                 />
-                <lib-quantity-reel
-                  (committedTo)="onAmountCommitted($event.to)"
-                  (preview)="onAmountPreview($event)"
-                  [label]="'list.detail.askedFor' | rokuT"
-                  [readonly]="saving() || unitPending()"
+                <lib-quantity-stepper
+                  (focusout)="amountTyping.set(false)"
+                  (input)="onAmountTyping()"
+                  (valueChange)="onAmountChanged($event)"
+                  [disabled]="saving() || unitPending()"
+                  [name]="line.content"
+                  [step]="productStep()"
                   [unit]="unit()"
                   [value]="amount()"
+                  variant="sheet"
                 />
               </div>
             } @else {
               <!--
-                The number as text, where the reel's pill would be, so the sheet does not
+                The number as text, where the stepper would be, so the sheet does not
                 change shape between two readers.
               -->
               <p class="shown">{{ wordsOf(amount()) }}</p>
@@ -414,7 +417,10 @@
             [(value)]="howMany"
             [disabled]="line.busy"
             [min]="howManyFloor()"
+            [name]="line.content"
+            [step]="productStep()"
             [unit]="unit()"
+            variant="sheet"
           />
           <p class="step-note">{{ 'list.detail.howManyNote' | rokuT }}</p>
         </div>

@@ -13,7 +13,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import type { AddChoiceRow } from '@portfolio/velista/models';
+import { addAmount, type AddChoiceRow } from '@portfolio/velista/models';
 import { formatAmount, handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, PlusIcon } from '../icons/icons';
 import { ProductPicture } from './product-picture';
@@ -91,19 +91,13 @@ let choiceCount = 0;
               }
             </span>
             <!--
-              A line of another unit (backend 0246 M5) cannot take the add's
-              amount, so it shows what it holds and no arrow.
+              What a choice of the row does, in the row's own unit: one step more,
+              "0 g" to "25 g" (velista 0185).
             -->
-            @if (row.to; as to) {
-              <span aria-hidden="true" class="count"
-                >{{ amount(row.from, row) }} &rarr;
-                <b class="to">{{ amount(to, row) }}</b></span
-              >
-            } @else {
-              <span aria-hidden="true" class="count">{{
-                amount(row.from, row)
-              }}</span>
-            }
+            <span aria-hidden="true" class="count"
+              >{{ amount(row.from, row) }} &rarr;
+              <b class="to">{{ amount(row.to, row) }}</b></span
+            >
           </button>
         </li>
       }
@@ -131,9 +125,6 @@ export class AddChoice {
 
   /** The lines that carry them, in the order the server named them. */
   readonly rows = input.required<readonly AddChoiceRow[]>();
-
-  /** How many the add carries, for each row's accessible name. */
-  readonly added = input(1);
 
   readonly scope = input<AddChoiceScope>('list');
 
@@ -183,11 +174,6 @@ export class AddChoice {
   }
 
   protected rowLabel(row: AddChoiceRow): string {
-    if (row.to === null) {
-      return row.product === null
-        ? 'list.addChoice.rowHoldsNoProduct'
-        : 'list.addChoice.rowHolds';
-    }
     return row.product === null
       ? 'list.addChoice.rowNoProduct'
       : 'list.addChoice.row';
@@ -195,11 +181,12 @@ export class AddChoice {
 
   protected rowArgs(row: AddChoiceRow): Record<string, unknown> {
     return {
-      added: this.amount(this.added(), row),
+      // One step of the row's own unit, "25 g" or "1" (velista 0185).
+      added: this.amount(addAmount(row.unit), row),
       name: row.name,
       product: row.product ?? '',
       from: this.amount(row.from, row),
-      to: row.to === null ? '' : this.amount(row.to, row),
+      to: this.amount(row.to, row),
     };
   }
 }

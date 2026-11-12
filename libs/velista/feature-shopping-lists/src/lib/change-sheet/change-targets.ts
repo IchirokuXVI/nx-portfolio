@@ -146,6 +146,7 @@ export function basketProductOf(
     size: item.size,
     unit: item.unit,
     approxWeight: item.approxWeight,
+    quantityStep: item.quantityStep,
     offer,
     offers: offer === null ? [] : [offer],
     atShop: atShop

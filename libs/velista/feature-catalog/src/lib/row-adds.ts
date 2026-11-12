@@ -1,10 +1,14 @@
 import type { ActivatedRouteSnapshot } from '@angular/router';
 import {
+  addUnitRefusalKey,
   canStepLine,
   isUnsavedLine,
+  lineStepOf,
   type AddTargetList,
+  type AddUnitRefusal,
   type HeldLine,
   type HoldingRow,
+  type LineUnitProduct,
 } from '@portfolio/velista/models';
 import type { ProductRowAdd } from '@portfolio/velista/ui';
 
@@ -26,10 +30,24 @@ export interface RowAdds {
  *
  * Shared by the catalog page and the product page, whose similar products carry
  * the same plus and add to the same list.
+ *
+ * A product a line of the list asks for, alone or among other products, has its
+ * plus switched off (velista `0185`, C1 and decision C): an add would change
+ * nothing. `onList` names the first such line in the order the card draws them,
+ * and `pathOf` the list's URL, which the card's link opens with `?line=`. A line at
+ * zero does not count, because a press raises it, and neither does the line an
+ * add still on its way drew, which has no id the list knows.
+ *
+ * `productOf` is the page's records of the products it shows (velista `0186`,
+ * decision E): each held row steps by `lineStepOf` over them, so a row of a
+ * product stepped at 100 g steps its lines by 100 g. Absent, every row steps by
+ * its unit's default.
  */
 export function rowAdds(
   target: AddTargetList | null,
-  held: readonly HeldLine[]
+  held: readonly HeldLine[],
+  pathOf: (target: AddTargetList) => string,
+  productOf?: (itemId: string) => LineUnitProduct | null | undefined
 ): RowAdds {
   const byItem = new Map<string, ProductRowAdd>();
   if (target === null) {
@@ -50,6 +68,7 @@ export function rowAdds(
         !isUnsavedLine(line.lineId) &&
         canStepLine(target.permissions, line.pending),
       pending: line.pending,
+      ...stepOf(line, productOf),
     };
     for (const itemId of line.itemIds) {
       const rows = lines.get(itemId);
@@ -60,11 +79,55 @@ export function rowAdds(
       }
     }
   }
+  const path = pathOf(target);
   for (const [itemId, rows] of lines) {
-    byItem.set(itemId, { list: target.name, lines: rows });
+    const wanted = rows.find(
+      (row) => row.quantity > 0 && !isUnsavedLine(row.lineId)
+    );
+    byItem.set(itemId, {
+      list: target.name,
+      lines: rows,
+      ...(wanted === undefined
+        ? {}
+        : { onList: { lineId: wanted.lineId, path } }),
+    });
   }
 
   return { plain: { list: target.name, lines: [] }, byItem };
+}
+
+/**
+ * The sentence a failed add says (velista `0134`, section 4.1), as a key and its
+ * arguments: why, for a product the list counts in another unit (velista `0185`,
+ * section 4), and the generic sentence for any other failure.
+ */
+export function addFailedCopy(refusal: AddUnitRefusal | null): {
+  readonly key: string;
+  readonly args: Record<string, unknown>;
+} {
+  return refusal === null
+    ? { key: 'catalog.add.failed', args: {} }
+    : { key: addUnitRefusalKey(refusal, 'list'), args: { name: refusal.name } };
+}
+
+/**
+ * A held row's step, as a field to spread: the store's (`HeldLine.step`, over
+ * the products this session read), else `lineStepOf` over the page's records,
+ * else nothing, which steps by the unit's default.
+ */
+function stepOf(
+  line: HeldLine,
+  productOf:
+    | ((itemId: string) => LineUnitProduct | null | undefined)
+    | undefined
+): { readonly step?: number } {
+  const step =
+    line.step !== undefined
+      ? line.step
+      : productOf === undefined
+        ? null
+        : lineStepOf(line, productOf);
+  return step === null ? {} : { step };
 }
 
 /**

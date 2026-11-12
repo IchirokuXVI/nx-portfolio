@@ -101,9 +101,25 @@ export function shownLineUnit(
   return legacy !== null && line.quantity === 0 ? legacy : line.unit;
 }
 
-/** The amount a new line starts at in a unit: one piece, one kilo, one litre. */
+/**
+ * The amount a line moves to when its unit changes: one piece, one kilo, one
+ * litre. An add no longer uses it (velista `0185`): see {@link addAmount}.
+ */
 export function defaultQuantity(unit: LineUnit): number {
   return isMeasured(unit) ? 1000 : 1;
+}
+
+/**
+ * The amount an add asks for (velista `0185`, the owner's A2): one step of the
+ * unit at the first add, 25 g, 25 ml or one piece. It is the server's own
+ * default since backend `0260`, so an add that states it and one that does not
+ * make the same line.
+ *
+ * Not the stepper's step: a count steps by ten from a thousand, which a first
+ * add never reaches.
+ */
+export function addAmount(unit: LineUnit): number {
+  return isMeasured(unit) ? 25 : 1;
 }
 
 /**
@@ -115,87 +131,134 @@ export function isMeasured(unit: LineUnit | undefined): boolean {
 }
 
 /**
- * Where a weight or a volume moves from its fine step to its coarse one, and
- * where its words switch from grams to kilos (backend `0096`, section 4).
+ * Where the words of an amount move up one name: grams to kilos, millilitres to
+ * litres, a count to thousands (backend `0096`, section 4; velista `0188`, S4).
+ * It is no longer where the step changes for a weight or a volume: from here the
+ * short form reads hundredths of the top name, so {@link stepAt} keeps a count's
+ * step at one of those hundredths.
  */
 export const QUANTITY_COARSE_FROM = 1000;
 
-/** The fine step of each measured unit, below {@link QUANTITY_COARSE_FROM}. Each divides 1000. */
-export const QUANTITY_FINE_STEP: Readonly<Record<LineUnit, number>> = {
+/** The base step of each unit (the owner, 2026-11-11): 25 g, 25 ml, one piece. */
+export const QUANTITY_STEP: Readonly<Record<LineUnit, number>> = {
   UNIT: 1,
   GRAM: 25,
-  MILLILITER: 50,
-};
-
-/** The coarse step, from {@link QUANTITY_COARSE_FROM} on. A multiple of each fine step. */
-export const QUANTITY_COARSE_STEP: Readonly<Record<LineUnit, number>> = {
-  UNIT: 1,
-  GRAM: 250,
-  MILLILITER: 250,
+  MILLILITER: 25,
 };
 
 /**
- * How far one step moves a quantity at `value` (velista `0182`, section 3): 1
- * for a count; the fine step below a thousand and the coarse step from it for a
- * weight or a volume.
+ * The steps a curator can give a product sold by the kilo or the litre, in base
+ * units (backend `0261` S2): each divides 1000, so a kilo or a litre is a whole
+ * number of steps. velista's own copy by rule D4; a served step off this list is
+ * read as none.
  */
-export function stepAt(value: number, unit: LineUnit): number {
-  if (!isMeasured(unit)) {
-    return 1;
-  }
-  return value >= QUANTITY_COARSE_FROM
-    ? QUANTITY_COARSE_STEP[unit]
-    : QUANTITY_FINE_STEP[unit];
+export const QUANTITY_STEPS: readonly number[] = [
+  1, 5, 10, 25, 50, 100, 200, 250, 500, 1000,
+];
+
+/** Whether `value` is one of {@link QUANTITY_STEPS}. */
+export function isQuantityStep(value: unknown): value is number {
+  return typeof value === 'number' && QUANTITY_STEPS.includes(value);
 }
 
 /**
- * The value one step up or down from `value`, on the grid of the step that
- * applies there.
+ * The base step at any amount: the product's step for a weight or a volume when
+ * it has one (backend `0261` S1 and S4), else {@link QUANTITY_STEP}. A step passed
+ * for a count is ignored: a count never reads a product's step.
+ */
+function baseStep(unit: LineUnit, step: number | null | undefined): number {
+  if (isMeasured(unit) && typeof step === 'number' && step > 0) {
+    return step;
+  }
+  return QUANTITY_STEP[unit] ?? 1;
+}
+
+/**
+ * The most hundredths the short form reads of its top name (velista `0188`, S4):
+ * "999,99", never "1000" of the top name.
+ */
+export const QUANTITY_SHORT_HUNDREDTHS_MAX = 99_999;
+
+/**
+ * The hundredths of the top name the short form reads at `quantity`, from
+ * {@link QUANTITY_COARSE_FROM} on: half up on the integer, held under 1000 of the top
+ * name (velista `0188`, section 2). In integers, so no floating point rounding can
+ * move a digit. `shortAmount` draws this number and {@link canStepUp} compares it.
+ */
+export function shortHundredths(quantity: number): number {
+  return Math.min(
+    QUANTITY_SHORT_HUNDREDTHS_MAX,
+    Math.floor((Math.round(quantity) + 5) / 10)
+  );
+}
+
+/**
+ * How far plus moves an amount at `value` (velista `0188`, S7b): the base step, but
+ * never less than one hundredth of the name the short form shows there, so a press
+ * always changes what a row reads. A count: 1 below 1000, 10 from 1000. A weight or
+ * a volume: 25 everywhere, already more than the 10 that "1,25 kg" needs.
  *
- * Going up reads the step at `value`, going down the step just below it, so
- * down from 1000 lands on 975 (grams) and up from 975 on 1000: the boundary is
- * a value both steps reach, by the divisibility rule of backend `0096` section
- * 4. A value off the grid (a typed 1100) snaps onto it in the direction of the
- * step rather than carrying its offset. For a count the grid is every integer,
- * so a step is exactly ±1.
+ * `step` is the product's step (velista `0186`): it replaces the base for a weight
+ * or a volume, and the hundredth rule still holds over it (decision F), so a step of
+ * 1 or 5 is used below 1000 and becomes 10 from 1000.
+ */
+export function stepAt(
+  value: number,
+  unit: LineUnit,
+  step?: number | null
+): number {
+  const base = baseStep(unit, step);
+  return value >= QUANTITY_COARSE_FROM ? Math.max(base, 10) : base;
+}
+
+/**
+ * One press from `value` (velista `0188`, S7b and decision B). Up adds the step at
+ * `value`. Down takes away the step that plus uses one base step lower, so 1000
+ * minus is 999 for a count and plus then minus always returns. No grid and no
+ * snapping: a typed 1010 g goes to 1035 and back to 1010, and on a product step of
+ * 100 a 975 goes to 1075 and to 875 (velista `0186`, decision D). Never under 0.
  */
 export function stepFrom(
   value: number,
   unit: LineUnit,
-  direction: 1 | -1
+  direction: 1 | -1,
+  step?: number | null
 ): number {
   if (direction === 1) {
-    const step = stepAt(value, unit);
-    return Math.floor(value / step) * step + step;
+    return value + stepAt(value, unit, step);
   }
-  const step = stepAt(value - 1, unit);
-  return Math.ceil(value / step) * step - step;
+  const base = baseStep(unit, step);
+  return Math.max(0, value - stepAt(Math.max(0, value - base), unit, step));
 }
 
 /**
- * `steps` whole steps from `value`, one at a time so a run that crosses the
- * boundary changes its step there, held inside `[min, max]`.
+ * Whether a plus at `value` stays within `max` and changes the short reading
+ * (velista `0188`, S8). A plus that would pass the most is off and never clamps to
+ * it; a count's plus is also off where the reading would not move (999 985 to
+ * 999 989 read "999,99" before and after).
  */
-export function stepsFrom(
+export function canStepUp(
   value: number,
   unit: LineUnit,
-  steps: number,
-  min: number,
-  max: number
-): number {
-  let at = value;
-  const direction = steps < 0 ? -1 : 1;
-  for (let taken = 0; taken < Math.abs(steps); taken++) {
-    const next = stepFrom(at, unit, direction);
-    if (next > max) {
-      return max;
-    }
-    if (next < min) {
-      return min;
-    }
-    at = next;
+  max: number,
+  step?: number | null
+): boolean {
+  const next = stepFrom(value, unit, 1, step);
+  if (next > max) {
+    return false;
   }
-  return Math.min(max, Math.max(min, at));
+  if (isMeasured(unit) || value < QUANTITY_COARSE_FROM) {
+    return true;
+  }
+  return shortHundredths(next) !== shortHundredths(value);
+}
+
+/** One press or one repeat of a stepper, as the stepper drew it (velista `0188`). */
+export interface QuantityStep {
+  readonly from: number;
+  readonly to: number;
+  /** True for a step the hold made, false for a press, a key or a typed amount. */
+  readonly repeat: boolean;
 }
 
 /**
@@ -207,6 +270,59 @@ export interface LineUnitProduct {
   readonly unit: string | null;
   readonly size: number | null;
   readonly approxWeight: number | null;
+  /**
+   * The curator's step, in base units (backend `0261`), or null for the default.
+   * Optional so a record built before velista `0186` reads as one with no step.
+   */
+  readonly quantityStep?: number | null;
+}
+
+/**
+ * The step a line is pressed by (backend `0261` section 5, velista `0186`), or
+ * null for the default of its unit.
+ *
+ * Null for a count. Otherwise the members are the line's products that are read,
+ * that serve the line's unit and that carry a step, and the answer is the
+ * smallest of their steps (S5): the product a line counts as follows the cost of
+ * the amount, so its step could change under a finger while stepping, and the
+ * smallest does not. A product not read yet says nothing (decision B).
+ */
+export function lineStepOf(
+  line: { readonly unit: LineUnit; readonly itemIds: readonly string[] },
+  productOf: (itemId: string) => LineUnitProduct | null | undefined
+): number | null {
+  if (!isMeasured(line.unit)) {
+    return null;
+  }
+  let smallest: number | null = null;
+  for (const itemId of line.itemIds) {
+    const product = productOf(itemId);
+    const step = product?.quantityStep;
+    if (!product || !isQuantityStep(step)) {
+      continue;
+    }
+    if (!carriesStepFor(product, line.unit)) {
+      continue;
+    }
+    if (smallest === null || step < smallest) {
+      smallest = step;
+    }
+  }
+  return smallest;
+}
+
+/**
+ * True when a product's step can count on a line of this unit: the product is
+ * sold by the kilo for a gram line or by the litre for a millilitre line
+ * (backend `0261` S3). A pack and a kilo piece also serve grams, through their
+ * size or weight, but count pieces, so a step left on one says nothing.
+ */
+function carriesStepFor(product: LineUnitProduct, unit: LineUnit): boolean {
+  const kind = soldAs(product.unit, product.size, product.approxWeight);
+  return (
+    (kind === 'BY_THE_KILO' && unit === 'GRAM') ||
+    (kind === 'BY_THE_LITRE' && unit === 'MILLILITER')
+  );
 }
 
 /**

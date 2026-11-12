@@ -330,6 +330,7 @@ export type CreateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -527,6 +528,7 @@ export type ItemExpectationDto = {
   brand?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   defaultUnit?: 'UNIT' | 'GRAM' | 'KILOGRAM' | 'MILLILITER' | 'LITER' | 'PACK';
   packCount?: number | null;
   categorySlugs?: string[];
@@ -727,6 +729,7 @@ export type ProblemDetails = {
     | 'item_unit_not_base'
     | 'item_kilogram_has_size'
     | 'item_approx_weight_beside_size'
+    | 'item_quantity_step_not_allowed'
     | 'item_merged'
     | 'item_merge_two_articles_one_chain'
     | 'item_merge_format_differs'
@@ -1282,6 +1285,7 @@ export type UpdateItemBatchEntryDto = {
   ean?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -1302,6 +1306,7 @@ export type UpdateItemDto = {
   ean?: string | null;
   unitSize?: number | null;
   approxWeight?: number | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount?: number | null;
   categoryIds?: string[];
   categorySlugs?: string[];
@@ -2447,6 +2452,7 @@ export type BasketBasketProductView = {
   unitSize: number | null;
   approxWeight?: number | null;
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -2523,6 +2529,7 @@ export type BasketBasketRowResult = {
   entries: BasketBasketRowEntryView[];
   progress: BasketBasketProgress;
   skippedCount?: number;
+  addOutcome?: EnumsAddLineOutcome;
 };
 
 /**
@@ -3111,6 +3118,7 @@ export type CatalogItemView = {
   unitSize: number | null;
   approxWeight?: number | null;
   approxWeightSetBy?: 'SOURCE' | 'ADMIN' | null;
+  quantityStep?: 1 | 5 | 10 | 25 | 50 | 100 | 200 | 250 | 500 | 1000 | null;
   packCount: number | null;
   categories: CatalogItemCategoryView[];
   defaultUnit: EnumsUnitOfMeasure;
@@ -3916,6 +3924,11 @@ export type EnumsAdapterKey =
   | 'dia-api'
   | 'osm-places'
   | 'manual';
+
+/**
+ * `enums.AddLineOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsAddLineOutcome = 'CREATED' | 'RAISED' | 'ALREADY_ON_LIST';
 
 /**
  * `enums.AiTextProvider` in the gateway's OpenAPI document.
@@ -5476,6 +5489,8 @@ export type ImpersonationStartImpersonationView = {
 export type ListAddLineResult = {
   line: ListLineView;
   merged: boolean;
+  outcome: EnumsAddLineOutcome;
+  alreadyOnList: ListLineView[];
 };
 
 /**

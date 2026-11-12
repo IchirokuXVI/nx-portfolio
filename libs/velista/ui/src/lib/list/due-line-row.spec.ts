@@ -89,7 +89,7 @@ describe('DueLineRow (velista 0089)', () => {
 
     press(fixture, 0);
     expect(stepper(fixture).value()).toBe(1);
-    expect(stepper(fixture).canDecrease()).toBe(false);
+    expect(stepper(fixture).minusAtEnd()).toBe(true);
   });
 
   it('adds the suggested amount when the button is pressed as it is', async () => {
@@ -170,5 +170,16 @@ describe('DueLineRow (velista 0089)', () => {
     fixture.componentRef.setInput('row', row({ quantity: 6 }));
     fixture.detectChanges();
     expect(fixture.componentInstance.amount()).toBe(6);
+  });
+
+  it("steps by the product's step the row carries (velista 0186)", async () => {
+    const fixture = await render(
+      row({ quantity: 1000, unit: 'GRAM', step: 100 })
+    );
+    expect(stepper(fixture).step()).toBe(100);
+
+    press(fixture, 0);
+
+    expect(fixture.componentInstance.amount()).toBe(900);
   });
 });

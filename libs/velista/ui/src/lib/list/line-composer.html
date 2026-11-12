@@ -78,8 +78,6 @@
         suggestions above it.
       -->
       <input
-        (blur)="fieldFocused.emit(false)"
-        (focus)="fieldFocused.emit(true)"
         (input)="onInput($event)"
         (keydown.escape)="onEscape($event)"
         [attr.aria-controls]="resultsId()"
@@ -125,15 +123,14 @@
       }
     </div>
 
-    <lib-quantity-stepper [(value)]="quantity" [disabled]="busy()" />
-
     <!--
     One slot, two jobs, and the empty field decides (plan 0038, section 2). A
     plus when there is something typed, a microphone when there is not.
 
     **The field's emptiness is the switch**, not a mode somebody selects. Two
     buttons side by side, one of them always inert, is a row of controls that has
-    to be read before either can be used, and this row already carries a stepper.
+    to be read before either can be used. The row asks no amount (velista 0185),
+    so the field takes the width beside the button.
 
     It also keeps the property the composer exists for: adding happens in runs.
     Somebody typing never sees the microphone and somebody speaking never has the
@@ -164,3 +161,25 @@
     </button>
   </form>
 }
+
+<!--
+  The page's one sentence about the last add, under the row as the voice strip is
+  (velista 0185, decision F): a line the add met that the page does not draw, or why
+  a product could not go on in its unit. The region stays in the page while empty, so
+  a sentence that appears in it is announced.
+-->
+<div aria-live="polite" class="notice-region">
+  @if (notice(); as text) {
+    <div class="notice">
+      <p class="notice-text">{{ text }}</p>
+      <button
+        (click)="noticeDismissed.emit()"
+        [attr.aria-label]="'list.add.dismissNotice' | rokuT"
+        class="notice-dismiss"
+        type="button"
+      >
+        <lib-close-icon class="notice-dismiss-glyph" />
+      </button>
+    </div>
+  }
+</div>

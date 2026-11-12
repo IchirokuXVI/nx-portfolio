@@ -1,12 +1,15 @@
 import {
+  addAmount,
+  canStepUp,
   legacyLineUnit,
   lineUnitOfProduct,
   lineUnits,
+  QUANTITY_STEP,
   servesLineUnit,
+  shortHundredths,
   shownLineUnit,
   stepAt,
   stepFrom,
-  stepsFrom,
   unitsServedBy,
   type LineUnitProduct,
 } from './line-unit';
@@ -99,63 +102,100 @@ describe('lineUnits (velista 0183, section 1; backend 0246 lineUnitsOf)', () => 
   });
 });
 
-describe('stepAt (velista 0182, section 3)', () => {
-  it('steps a count by one at any value', () => {
+describe('stepAt (velista 0188, S7b: a press always changes what the row reads)', () => {
+  it('steps a count by one below a thousand and by ten from it', () => {
     expect(stepAt(0, 'UNIT')).toBe(1);
     expect(stepAt(999, 'UNIT')).toBe(1);
-    expect(stepAt(5000, 'UNIT')).toBe(1);
+    expect(stepAt(1000, 'UNIT')).toBe(10);
+    expect(stepAt(5000, 'UNIT')).toBe(10);
   });
 
-  it('steps grams by 25 below a thousand and by 250 from it', () => {
-    expect(stepAt(975, 'GRAM')).toBe(25);
-    expect(stepAt(1000, 'GRAM')).toBe(250);
+  it('steps grams and millilitres by 25 at every amount', () => {
+    for (const unit of ['GRAM', 'MILLILITER'] as const) {
+      expect(stepAt(0, unit)).toBe(25);
+      expect(stepAt(975, unit)).toBe(25);
+      expect(stepAt(1000, unit)).toBe(25);
+      expect(stepAt(999_975, unit)).toBe(25);
+    }
   });
 
-  it('steps millilitres by 50 below a thousand and by 250 from it', () => {
-    expect(stepAt(950, 'MILLILITER')).toBe(50);
-    expect(stepAt(1000, 'MILLILITER')).toBe(250);
+  it('keeps the base steps of the owner', () => {
+    expect(QUANTITY_STEP).toEqual({ UNIT: 1, GRAM: 25, MILLILITER: 25 });
   });
 });
 
-describe('stepFrom', () => {
-  it('crosses a thousand in both directions on a value both steps reach', () => {
-    expect(stepFrom(1000, 'GRAM', -1)).toBe(975);
-    expect(stepFrom(975, 'GRAM', 1)).toBe(1000);
-    expect(stepFrom(1000, 'GRAM', 1)).toBe(1250);
-    expect(stepFrom(1250, 'GRAM', -1)).toBe(1000);
-    expect(stepFrom(1000, 'MILLILITER', -1)).toBe(950);
-    expect(stepFrom(950, 'MILLILITER', 1)).toBe(1000);
+describe('stepFrom (velista 0188, S7b and decision B: no grid)', () => {
+  it('moves a count across a thousand', () => {
+    expect(stepFrom(999, 'UNIT', 1)).toBe(1000);
+    expect(stepFrom(1000, 'UNIT', 1)).toBe(1010);
+    expect(stepFrom(1000, 'UNIT', -1)).toBe(999);
+    expect(stepFrom(1010, 'UNIT', -1)).toBe(1000);
   });
 
-  it('snaps a value off the grid onto it in the direction of the step', () => {
-    expect(stepFrom(1100, 'GRAM', -1)).toBe(1000);
-    expect(stepFrom(1100, 'GRAM', 1)).toBe(1250);
-    expect(stepFrom(990, 'GRAM', 1)).toBe(1000);
+  it('does not return from minus then plus for a typed count of 1001 to 1009', () => {
+    expect(stepFrom(1005, 'UNIT', -1)).toBe(995);
+    expect(stepFrom(995, 'UNIT', 1)).toBe(996);
+  });
+
+  it('never goes under zero', () => {
+    expect(stepFrom(0, 'UNIT', -1)).toBe(0);
     expect(stepFrom(10, 'GRAM', -1)).toBe(0);
+    expect(stepFrom(0, 'GRAM', -1)).toBe(0);
   });
 
-  it('moves a count by exactly one', () => {
-    expect(stepFrom(3, 'UNIT', 1)).toBe(4);
-    expect(stepFrom(3, 'UNIT', -1)).toBe(2);
-    expect(stepFrom(1, 'UNIT', -1)).toBe(0);
+  it('adds and takes away 25 g with no snapping', () => {
+    expect(stepFrom(1000, 'GRAM', -1)).toBe(975);
+    expect(stepFrom(1010, 'GRAM', 1)).toBe(1035);
+    expect(stepFrom(1035, 'GRAM', -1)).toBe(1010);
+    expect(stepFrom(750, 'GRAM', 1)).toBe(775);
+  });
+
+  it('returns after plus then minus from every amount, for all three units (the loop)', () => {
+    const amounts: number[] = [];
+    for (let value = 0; value <= 1100; value++) {
+      amounts.push(value);
+    }
+    for (let value = 999_900; value <= 999_999; value++) {
+      amounts.push(value);
+    }
+    for (const unit of ['UNIT', 'GRAM', 'MILLILITER'] as const) {
+      const broken = amounts.filter(
+        (value) => stepFrom(stepFrom(value, unit, 1), unit, -1) !== value
+      );
+      expect(broken).toEqual([]);
+    }
   });
 });
 
-describe('stepsFrom', () => {
-  it('changes its step where a run crosses the boundary', () => {
-    expect(stepsFrom(950, 'GRAM', 4, 0, 100000)).toBe(1500);
-    expect(stepsFrom(1250, 'GRAM', -3, 0, 100000)).toBe(950);
+describe('canStepUp (velista 0188, S8)', () => {
+  it('is off from 999 985 to 999 999 for a count, where the reading stays "999,99"', () => {
+    expect(canStepUp(999_980, 'UNIT', 999_999)).toBe(true);
+    for (let value = 999_985; value <= 999_999; value++) {
+      expect(canStepUp(value, 'UNIT', 999_999)).toBe(false);
+    }
   });
 
-  it('holds the run inside the range', () => {
-    expect(stepsFrom(25, 'GRAM', -5, 0, 100000)).toBe(0);
-    expect(stepsFrom(99, 'UNIT', 5, 0, 100)).toBe(100);
-    expect(stepsFrom(2, 'UNIT', -5, 1, 100)).toBe(1);
+  it('is off from 999 975 for grams, one step before the most, and never clamps', () => {
+    expect(canStepUp(999_950, 'GRAM', 999_999)).toBe(true);
+    expect(canStepUp(999_975, 'GRAM', 999_999)).toBe(false);
+    expect(canStepUp(999_999, 'GRAM', 999_999)).toBe(false);
   });
 
-  it('is plain arithmetic for a count', () => {
-    expect(stepsFrom(3, 'UNIT', 5, 0, 100000)).toBe(8);
-    expect(stepsFrom(3, 'UNIT', -2, 0, 100000)).toBe(1);
+  it('follows the max it is given', () => {
+    expect(canStepUp(99_999, 'UNIT', 100_000)).toBe(false);
+    expect(canStepUp(99_990, 'UNIT', 100_000)).toBe(true);
+    expect(canStepUp(99_975, 'GRAM', 100_000)).toBe(true);
+    expect(canStepUp(99_980, 'GRAM', 100_000)).toBe(false);
+  });
+});
+
+describe('shortHundredths', () => {
+  it('rounds half up on the integer and never reads 1000 of the top name', () => {
+    expect(shortHundredths(1250)).toBe(125);
+    expect(shortHundredths(1275)).toBe(128);
+    expect(shortHundredths(2010)).toBe(201);
+    expect(shortHundredths(999_994)).toBe(99_999);
+    expect(shortHundredths(999_999)).toBe(99_999);
   });
 });
 
@@ -215,5 +255,13 @@ describe('legacyLineUnit and shownLineUnit (backend 0246 M2, section 3.2)', () =
     expect(shownLineUnit(at('UNIT', 0, ['i1', 'i2']), () => loose)).toBe(
       'UNIT'
     );
+  });
+});
+
+describe('addAmount (velista 0185)', () => {
+  it('starts a line at one step of its unit: one piece, 25 g, 25 ml', () => {
+    expect(addAmount('UNIT')).toBe(1);
+    expect(addAmount('GRAM')).toBe(25);
+    expect(addAmount('MILLILITER')).toBe(25);
   });
 });

@@ -4,6 +4,7 @@ import {
   Component,
   computed,
   DestroyRef,
+  DOCUMENT,
   effect,
   ElementRef,
   inject,
@@ -38,7 +39,7 @@ import {
   lineNameChange,
   lineNameRefused,
   priceWordsText,
-  stepFrom,
+  stepAt,
   type BasketShop,
   type Line,
   type LineUnit,
@@ -60,7 +61,6 @@ import {
   CommentIcon,
   LineUnitChip,
   ProductRow,
-  QuantityReel,
   QuantityStepper,
   SheetShell,
   SpinnerIcon,
@@ -140,7 +140,6 @@ type Step = 'summary' | 'howMany' | 'shop';
     RokuTranslatorPipe,
     SheetShell,
     QuantityStepper,
-    QuantityReel,
     LineUnitChip,
     SpinnerIcon,
     CheckIcon,
@@ -157,6 +156,7 @@ type Step = 'summary' | 'howMany' | 'shop';
 })
 export class LineDetailSheet {
   private readonly _lines = inject(LineStore);
+  private readonly _document = inject(DOCUMENT);
   private readonly _lists = inject(ListStore);
   private readonly _names = inject(MemberNames);
   private readonly _itemNames = inject(ItemNames);
@@ -254,8 +254,13 @@ export class LineDetailSheet {
   /** What the line counts in (velista `0182`), a count while it is not read yet. */
   readonly unit = computed<LineUnit>(() => this.detail()?.unit ?? 'UNIT');
 
-  /** The least the how many step records: one step of the line's unit. */
-  readonly howManyFloor = computed(() => stepFrom(0, this.unit(), 1));
+  /** The product's step (velista `0186`), or null for the unit's default. */
+  readonly productStep = computed(() => this.detail()?.step ?? null);
+
+  /** The least the how many step records: one step of the line's product. */
+  readonly howManyFloor = computed(() =>
+    stepAt(0, this.unit(), this.productStep())
+  );
 
   /** A quantity of this line in words: "3" for a count, "750 g" for a weight. */
   wordsOf(quantity: number): string {
@@ -425,7 +430,7 @@ export class LineDetailSheet {
     const line = this._line();
     return (
       line !== undefined &&
-      this.changed() &&
+      (this.changed() || this.amountTyping()) &&
       // A line with no product needs words: there is no product to be called by.
       !lineNameRefused(line, this.name()) &&
       !this.submitting()
@@ -649,6 +654,7 @@ export class LineDetailSheet {
 
   /** Record the purchase. */
   async recordBought(): Promise<void> {
+    this._commitTyping();
     await this._settle('BOUGHT', this.howMany());
   }
 
@@ -715,26 +721,45 @@ export class LineDetailSheet {
   }
 
   /**
-   * The number under the thumb while the reel is worked, so a save that lands inside
-   * the reel's idle beat sends what is on screen. The reel moving is also the other
-   * thing that announces the edit (section 7).
+   * The stepper's next amount: a press, a repeat, a key or a typed commit (velista
+   * `0188`, section 5.3). The amount is a form value, so nothing is written until
+   * Save. A change is also the other thing that announces the edit (section 7).
    */
-  onAmountPreview(next: number | null): void {
-    if (next === null) {
-      return;
-    }
-    this.startEditing();
-    if (next !== this.amount()) {
-      this.amount.set(next);
-      this.saved.set(false);
-    }
-  }
-
-  onAmountCommitted(to: number): void {
+  onAmountChanged(to: number): void {
+    this.amountTyping.set(false);
     this.startEditing();
     if (to !== this.amount()) {
       this.amount.set(to);
       this.saved.set(false);
+    }
+  }
+
+  /**
+   * Whether the amount field holds typed text it has not committed yet (velista
+   * `0188`). Save is offered for it, and the save commits it first; leaving the field
+   * commits it or puts the shown amount back, so it ends there.
+   */
+  readonly amountTyping = signal(false);
+
+  /** The amount field was typed into: an edit, before it is committed. */
+  onAmountTyping(): void {
+    this.amountTyping.set(true);
+    this.startEditing();
+    this.saved.set(false);
+  }
+
+  /**
+   * Moves focus out of a sheet's typed amount, which commits what was typed (velista
+   * `0188`, section 5.3). A press on Save does not always take focus first (Safari
+   * does not focus a button), so the save itself makes sure it reads the typed amount.
+   */
+  private _commitTyping(): void {
+    const active = this._document.activeElement as HTMLElement | null;
+    if (
+      active?.tagName === 'INPUT' &&
+      active.getAttribute('role') === 'spinbutton'
+    ) {
+      active.blur();
     }
   }
 
@@ -809,6 +834,7 @@ export class LineDetailSheet {
 
   /** Save the name and the amount (section 4). */
   async save(): Promise<void> {
+    this._commitTyping();
     if (!this.canSave()) {
       return;
     }

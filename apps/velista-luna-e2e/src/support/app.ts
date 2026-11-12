@@ -98,23 +98,49 @@ export function row(page: Page, name: string): Locator {
   });
 }
 
-/** The reel on a basket row, or in a sheet by its label. */
-export function reel(scope: Locator | Page, label: string | RegExp): Locator {
+/**
+ * The typed amount of a sheet's stepper (velista `0188`), by its label. The
+ * stepper names its field "Amount of <name>".
+ */
+export function amountField(
+  scope: Locator | Page,
+  label: string | RegExp
+): Locator {
   return scope.getByRole('spinbutton', { name: label });
 }
 
 /**
- * Move a reel by keyboard and let it commit. A run of key presses commits once
- * after the idle window, or at once on blur; both are used so the commit is
- * not left to the timer alone.
+ * The amount cell of a basket row (velista `0190`): a button that opens the
+ * row's settle sheet, named "Amount of <name>: <amount>".
  */
-export async function nudge(control: Locator, delta: number): Promise<void> {
+export function amountCell(row: Locator): Locator {
+  return row.getByRole('button', { name: /^Amount of / });
+}
+
+/**
+ * Step a sheet's amount by keyboard and wait for the save. The sheet sends a run
+ * of arrow steps once, `QUANTITY_STEP_QUIET_MS` after the last one, so this waits
+ * for that one answer from the server rather than for a timer.
+ */
+export async function stepAmount(
+  control: Locator,
+  delta: number
+): Promise<void> {
+  const saved = control
+    .page()
+    .waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname),
+      { timeout: 10_000 }
+    );
   await control.focus();
   const key = delta > 0 ? 'ArrowUp' : 'ArrowDown';
   for (let i = 0; i < Math.abs(delta); i++) {
     await control.press(key);
   }
   await control.blur();
+  await saved;
 }
 
 /** The sheet currently open, by its title. */
@@ -158,13 +184,13 @@ export async function openSettleSheet(
 }
 
 /**
- * The quantity one list asks for on an open settle sheet (velista `0139`,
- * section 3): a reel, by the list's name.
+ * The amount one list asks for on an open settle sheet (velista `0139`,
+ * section 3): the typed field of its stepper, by the list's name.
  */
-export function askReel(dialog: Locator, list: string): Locator {
-  return reel(
+export function askAmount(dialog: Locator, list: string): Locator {
+  return amountField(
     dialog.locator('lib-row-entries'),
-    new RegExp(`^${list}, asks for$`)
+    new RegExp(`^Amount of ${list}, asks for$`)
   );
 }
 

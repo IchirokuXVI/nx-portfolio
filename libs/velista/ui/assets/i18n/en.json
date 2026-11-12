@@ -461,7 +461,8 @@
     "held": {
       "title": "On {{list}}",
       "titleMany": "On your lists",
-      "stepper": "How many of {{line}} in {{list}}"
+      "alreadyOn": "Already on {{list}}.",
+      "openLine": "See it on the list"
     },
     "adding": {
       "to": "Adding to",
@@ -485,7 +486,6 @@
       "note": "Change how many, or take one back with the minus.",
       "none": "Nothing was added in this visit.",
       "pending": "Waiting for approval",
-      "stepper": "How many of {{name}}",
       "takeAll_one": "Take it back",
       "takeAll_other": "Take all {{count}} back",
       "open": "Open {{list}}"
@@ -573,7 +573,6 @@
     "inLists": {
       "title": "In your lists",
       "last": "Last used",
-      "stepper": "How many in {{list}}",
       "other": "Already on this list, with this product",
       "otherPending": "Already on this list, waiting for approval",
       "readOnly": "You can read this list. You cannot add to it.",
@@ -582,7 +581,14 @@
     },
     "similar": {
       "title": "Similar products",
-      "failed": "Similar products did not load."
+      "failed": "Similar products did not load.",
+      "aboutLabel": "How these are sorted",
+      "about": {
+        "title": "How these are sorted",
+        "order": "Similar products are sorted by price per kilo or litre, so a big pack and a small one are compared fairly.",
+        "line": "On a list, the product marked cheapest is the one that costs least for the amount you asked for. For 300 g, a small pack can cost less than a big pack that is cheaper per kilo.",
+        "close": "Close"
+      }
     },
     "categories": {
       "title": "Categories",
@@ -742,16 +748,19 @@
       "copyReference": "Copy reference"
     }
   },
+  "amount": {
+    "group": "Amount of {{name}}",
+    "less": "Remove {{step}} from {{name}}",
+    "more": "Add {{step}} to {{name}}",
+    "settled": "{{name}}, {{amount}}",
+    "inList": "{{name}} on {{list}}"
+  },
   "list": {
     "header": {
       "title": "List",
       "inGroup": "in {{name}}",
-      "pending": "{{pending}} of {{total}} pending",
-      "done": "Nothing left",
       "notLive": "Not updating right now",
-      "back": "Back to the group",
-      "cost": "About {{cost}} for the lines that have a price",
-      "costExact": "{{cost}} for the lines that have a price"
+      "back": "Back to the group"
     },
     "presence": {
       "one": "{{name}} is on the list",
@@ -770,9 +779,6 @@
       "resultsNone": "Nothing on your list says “{{query}}”",
       "resultsCatalog": "From the catalog",
       "action": "Add",
-      "quantity": "How many",
-      "more": "One more",
-      "fewer": "One fewer",
       "startListening": "Say what you need",
       "stopListening": "Stop listening",
       "clear": "Clear what you typed",
@@ -848,17 +854,16 @@
         "groupMore_other": "and {{count}} more",
         "noMatch": "No products match “{{- query}}”",
         "noMatchFreeText": "You can still add it as written",
-        "alsoCalled": "Also called: {{- synonym}}",
-        "alreadyQuantity": "How many of {{line}}"
-      }
+        "alsoCalled": "Also called: {{- synonym}}"
+      },
+      "alreadyOn": "{{name}} is already on the list.",
+      "dismissNotice": "Dismiss"
     },
     "addChoice": {
       "title": "{{name}} is already on your list",
       "newLine": "A new line",
       "row": "Add {{added}} to {{name}}, {{product}}: {{from}} to {{to}}",
       "rowNoProduct": "Add {{added}} to {{name}}: {{from}} to {{to}}",
-      "rowHolds": "{{name}}, {{product}}: {{from}}, counted in another unit",
-      "rowHoldsNoProduct": "{{name}}: {{from}}, counted in another unit",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {
@@ -881,20 +886,7 @@
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
-      "movedTo": "Moved to position {{position}} of {{total}}",
-      "quantityFor": "How many {{name}}",
-      "quantityChanged": "{{name}}, now {{quantity}}"
-    },
-    "reorder": {
-      "enter": "Put them in order",
-      "title": "Put them in order",
-      "body": "Drag by the grip. Ticking off is off while you are in here",
-      "done": "Done",
-      "started": "Putting them in order. Ticking off is off",
-      "ended": "Finished putting them in order",
-      "moveUp": "Move {{name}} up",
-      "moveDown": "Move {{name}} down",
-      "unavailable": "To reorder, use the list order, all lines and no search."
+      "hiddenAtZero": "{{name}} is at 0 and hidden. Search for it to bring it back."
     },
     "view": {
       "order": {
@@ -1006,7 +998,13 @@
       "failed": "That did not work. Try again in a moment",
       "mergeNeedsApproval": "That name belongs to an approved line, and this line is not approved yet.",
       "mergeTooManyProducts": "Together they have more than {{max}} products.",
-      "unitDiffers": "These two lines count in different units, so they stay apart."
+      "unitDiffers": "These two lines count in different units, so they stay apart.",
+      "addUnitDiffers": {
+        "UNIT": "This list already counts {{name}} in pieces. Change the amount on that line instead.",
+        "GRAM": "This list already counts {{name}} by weight. Change the amount on that line instead.",
+        "MILLILITER": "This list already counts {{name}} by volume. Change the amount on that line instead.",
+        "unknown": "This list already has {{name}} in another unit. Change the amount on that line instead."
+      }
     },
     "detail": {
       "title": "About this line",
@@ -1169,7 +1167,6 @@
       "keepEditing": "Keep editing"
     },
     "trips": {
-      "toBuy": "To buy",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} of {{total}} bought",
       "lines": "{{count}} lines",
@@ -1197,7 +1194,6 @@
       "staple": "In {{with}} of your last {{seen}} shopping lists",
       "add": "Add {{count}}",
       "addLabel": "Add {{count}} of {{name}} to the list",
-      "quantityLabel": "How many of {{name}}",
       "more": "Show more suggestions",
       "added": "{{name}} added to the list"
     },
@@ -1211,7 +1207,8 @@
       "more_other": "and {{count}} more that will do",
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
-      "retry": "Try again"
+      "retry": "Try again",
+      "about": "about {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1318,6 +1315,10 @@
     },
     "tour": {
       "again": "Show me around again"
+    },
+    "listRows": {
+      "label": "Compact rows",
+      "hint": "Lists show the size, the price and the total on every row. Only on this phone."
     }
   },
   "install": {
@@ -1643,20 +1644,10 @@
       "open": "Settle {{name}}",
       "wanted": "×{{count}}",
       "busy": "Saving",
-      "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back",
       "removed": "No longer on the list",
       "boughtFromAnotherList": "Bought from another shopping list",
       "boughtFromTheList": "Bought from the list",
-      "alreadyBought": "Already bought",
-      "takenBackAmount": "{{amount}} taken back"
-    },
-    "outstanding": {
-      "label": "{{name}}, still to get",
-      "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought",
-      "listLabel": "{{list}}, {{name}}, still to get",
-      "boughtAmount": "{{amount}} bought"
+      "alreadyBought": "Already bought"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1952,7 +1943,13 @@
       "belowSettled_one": "One of these has already been bought for this list",
       "belowSettled_other": "{{count}} of these have already been bought for this list",
       "basketFinished": "The owner finished this shopping trip. It cannot be edited any more",
-      "reference": "ref {{correlationId}}"
+      "reference": "ref {{correlationId}}",
+      "addUnitDiffers": {
+        "UNIT": "{{list}} already counts {{name}} in pieces. Change the amount on that line instead.",
+        "GRAM": "{{list}} already counts {{name}} by weight. Change the amount on that line instead.",
+        "MILLILITER": "{{list}} already counts {{name}} by volume. Change the amount on that line instead.",
+        "unknown": "{{list}} already has {{name}} in another unit. Change the amount on that line instead."
+      }
     },
     "status": {
       "got": "Mark {{name}} as got",
@@ -1966,7 +1963,7 @@
     },
     "entries": {
       "otherList": "Another list",
-      "asks": "asks for {{count}}"
+      "asks": "asks for {{amount}}"
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",
@@ -1996,7 +1993,8 @@
       "sheetTitle": "Which list is this for?",
       "listCaption": "{{zone}} · {{count}} to buy",
       "resultsOnLists": "On your lists",
-      "resultsNone": "Nothing on your lists says “{{query}}”"
+      "resultsNone": "Nothing on your lists says “{{query}}”",
+      "alreadyOn": "{{name}} is already on {{list}}."
     },
     "addChoice": {
       "title": "{{name}} is already on this list",
@@ -2015,10 +2013,6 @@
       "amount": "≈{{amount}}",
       "open": "Estimated total, about {{amount}}. See what is behind it.",
       "openExact": "Total, {{amount}}. See what is behind it.",
-      "barLabel": "About {{bought}} bought of about {{total}}",
-      "barLabelExact": "{{bought}} bought of {{total}}",
-      "boughtEnd": "{{amount}} bought",
-      "leftEnd": "{{amount}} left",
       "title": "Estimated total",
       "titleExact": "Total",
       "bought": "Bought",
@@ -2083,9 +2077,12 @@
       "unavailable": "Not available at this shop",
       "instead": "Instead of {{name}}, not available at this shop"
     },
+    "amount": {
+      "label": "Amount of {{name}}: {{amount}}",
+      "listLabel": "{{list}}, amount of {{name}}: {{amount}}"
+    },
     "change": {
-      "one": "Change",
-      "oneLabel": "Change the product for {{name}}",
+      "oneLabel": "Change the product on {{name}}",
       "all": "Change for all lists",
       "openLabel": "There is a cheaper option than {{name}}. Change the product",
       "cheaper": "cheaper option",
