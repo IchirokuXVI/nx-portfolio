@@ -85,7 +85,6 @@ import {
 } from '@portfolio/velista/models';
 import {
   AppResumed,
-  NavChrome,
   NOTIFICATION_TONE,
   PageReturn,
   provideFakeBrowserFacade,
@@ -97,7 +96,6 @@ import {
   LineComposer,
   LineList,
   ListHeader,
-  ToBuyHeading,
   TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
@@ -267,7 +265,6 @@ async function render(options: Options = {}): Promise<{
   /** The route the page was given, whose query a spec can move as the router would. */
   activatedRoute: ReturnType<typeof route>;
   tone: { play: jest.Mock };
-  chrome: { setComposing: jest.Mock };
   profiles: FakeShoppingProfileStore;
   itemNames: FakeItemNames;
   view: ListViewStore;
@@ -359,10 +356,6 @@ async function render(options: Options = {}): Promise<{
     options.search === true ? { search: '1' } : {},
     options.sheetOpen ?? false
   );
-  // The bottom bar's owner, as a double (velista `0117`): the router here is a
-  // fake with no state to read, and what matters is what the page tells it.
-  const chrome = { setComposing: jest.fn() };
-
   await TestBed.configureTestingModule({
     imports: [ListPage, RokuTranslatorTestingModule.forTesting()],
     providers: [
@@ -415,7 +408,6 @@ async function render(options: Options = {}): Promise<{
       { provide: REALTIME_CLIENT, useValue: realtime },
       { provide: AppResumed, useValue: { resumes } },
       { provide: Router, useValue: router },
-      { provide: NavChrome, useValue: chrome },
       { provide: PageReturn, useValue: returns },
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       { provide: ActivatedRoute, useValue: activatedRoute },
@@ -464,7 +456,6 @@ async function render(options: Options = {}): Promise<{
     router,
     activatedRoute,
     tone,
-    chrome,
     profiles,
     itemNames,
     resumes,
@@ -538,6 +529,38 @@ function failedZoneStore(error: unknown) {
 
 function query(fixture: ComponentFixture<ListPage>, selector: string) {
   return fixture.nativeElement.querySelector(selector) as HTMLElement | null;
+}
+
+/**
+ * A finger that goes down on `target` and moves 40px up, as `DragReleasesField` hears
+ * it. jsdom has no `PointerEvent`, so the pointer events are mouse events with the
+ * pointer's fields defined on them, and the touch events carry their `touches`.
+ */
+function touchDrag(target: HTMLElement): void {
+  const pointer = (type: string, y: number) => {
+    const event = new MouseEvent(type, {
+      clientX: 0,
+      clientY: y,
+      bubbles: true,
+    });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'pointerType', { value: 'touch' });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    return event;
+  };
+  const touch = (type: string, y: number | null) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperty(event, 'touches', {
+      value: y === null ? [] : [{ clientX: 0, clientY: y }],
+    });
+    return event;
+  };
+
+  target.dispatchEvent(pointer('pointerdown', 200));
+  target.dispatchEvent(touch('touchstart', 200));
+  target.dispatchEvent(pointer('pointercancel', 200));
+  target.dispatchEvent(touch('touchmove', 160));
+  target.dispatchEvent(touch('touchend', null));
 }
 
 /**
@@ -637,10 +660,11 @@ describe('ListPage', () => {
    * same run of unstyled text floating above a pinned composer.
    *
    * jsdom has no layout, so the sharing of one surface is asserted as the structure
-   * that produces it: the strip and the composer are in the same pinned container.
+   * that produces it: the strip and the composer are in the same pinned container,
+   * and since velista 0189 that container is in the head block, before the column.
    */
   describe('the voice strip shares the composer container', () => {
-    it('puts the strip and the field in one dock', async () => {
+    it('puts the strip and the field in one dock, the strip under the field', async () => {
       const { fixture } = await render();
       fixture.componentInstance.onRecordingFailed();
       fixture.detectChanges();
@@ -652,11 +676,34 @@ describe('ListPage', () => {
       expect(strip).not.toBeNull();
       expect(dock?.contains(strip)).toBe(true);
       expect(dock?.querySelector('lib-line-composer')).not.toBeNull();
-      // On top of the field, which is what "above the composer" means in markup.
+      // Under the field (decision E), which is what "after the composer" means in
+      // markup.
       const composer = dock?.querySelector('lib-line-composer') as Node;
       const relation = strip?.compareDocumentPosition(composer) ?? 0;
 
-      expect(relation & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+      expect(relation & Node.DOCUMENT_POSITION_PRECEDING).not.toBe(0);
+
+      // The head block holds the header and the dock, and comes before the column.
+      const top = query(fixture, '.page-top');
+      expect(top?.querySelector('lib-list-header')).not.toBeNull();
+      expect(top?.contains(dock)).toBe(true);
+      expect(top?.nextElementSibling?.matches('main.page')).toBe(true);
+      expect(query(fixture, 'main.page lib-list-header')).toBeNull();
+      expect(query(fixture, 'main.page .composer-dock')).toBeNull();
+    });
+
+    it('draws no progress, no To buy heading and no reorder action (velista 0189)', async () => {
+      const { fixture } = await render({
+        permissions: ADMIN,
+        lines: [line('ln-1'), line('ln-2', { quantity: 0 })],
+      });
+
+      expect(query(fixture, '.progress-line')).toBeNull();
+      expect(query(fixture, '.progress')).toBeNull();
+      expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
+      expect(query(fixture, '.grip-handle')).toBeNull();
+      expect(query(fixture, '.reorder-done')).toBeNull();
+      expect(rows(fixture).length).toBeGreaterThan(0);
     });
 
     it('colours a failure, so it is not read as a confirmation', async () => {
@@ -926,18 +973,17 @@ describe('ListPage', () => {
       expect(title?.textContent?.trim()).toBe('Weekly shop');
     });
 
-    it('is the only h1 and the only header element, and sits before the scroller', async () => {
+    it('is the only h1 and the only header element, and sits before the head block and the scroller', async () => {
       const { fixture } = await render();
       const host = fixture.nativeElement as HTMLElement;
 
       expect(host.querySelectorAll('h1')).toHaveLength(1);
       expect(host.querySelectorAll('header')).toHaveLength(1);
       expect(query(fixture, 'main lib-page-header')).toBeNull();
-      expect(
-        query(fixture, 'lib-page-header')?.nextElementSibling?.matches(
-          'main.page'
-        )
-      ).toBe(true);
+      // The head block comes between them since velista 0189.
+      const next = query(fixture, 'lib-page-header')?.nextElementSibling;
+      expect(next?.matches('.page-top')).toBe(true);
+      expect(next?.nextElementSibling?.matches('main.page')).toBe(true);
     });
 
     it('goes back through the page, by the name the back button always had', async () => {
@@ -950,18 +996,6 @@ describe('ListPage', () => {
         `/velista/en/zones/${ZONE_ID}`,
         { replaceUrl: true }
       );
-    });
-
-    it('ends reorder mode from the header’s back, without leaving', async () => {
-      const { fixture, router } = await render();
-      fixture.componentInstance.startReorder();
-      fixture.detectChanges();
-
-      backControl(fixture)?.click();
-      await fixture.whenStable();
-
-      expect(fixture.componentInstance.reordering()).toBe(false);
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
     });
 
     it('is drawn while the lines load, with the name when it is cached', async () => {
@@ -1026,18 +1060,6 @@ describe('ListPage', () => {
       expect(filterAction(fixture)).toBeNull();
       // The settings are about the list and not about its lines.
       expect(settingsAction(fixture)).not.toBeNull();
-    });
-
-    it('takes both actions away in reorder mode', async () => {
-      const { fixture } = await render({
-        permissions: ADMIN,
-        lines: [line('ln-1'), line('ln-2')],
-      });
-      fixture.componentInstance.startReorder();
-      fixture.detectChanges();
-
-      expect(filterAction(fixture)).toBeNull();
-      expect(settingsAction(fixture)).toBeNull();
     });
 
     it('opens the filter sheet and the settings sheet from the header', async () => {
@@ -1132,8 +1154,10 @@ describe('ListPage', () => {
         fixture.componentInstance.stepQuantity(press(2, 3));
         fixture.detectChanges();
 
+        // The row's stepper: the composer's own comes first in the page since the
+        // field moved to the top (velista 0189).
         const stepper = (fixture.nativeElement as HTMLElement).querySelector(
-          'lib-quantity-stepper'
+          'lib-line-row lib-quantity-stepper'
         );
         expect(stepper?.getAttribute('data-value')).toBe('3');
       });
@@ -1186,6 +1210,292 @@ describe('ListPage', () => {
         );
         jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
         expect(writes(lines.calls)).toHaveLength(1);
+      });
+
+      it('keeps the row and writes nothing for a minus to 0 and a plus inside the quiet beat (velista 0192)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 1 })],
+        });
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(press(1, 0));
+        fixture.detectChanges();
+        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+
+        page.stepQuantity(press(0, 1));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        fixture.detectChanges();
+
+        expect(writes(lines.calls)).toEqual([]);
+        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+        expect(page.announcement()).toBe('');
+      });
+    });
+
+    describe('a line lowered to 0 is hidden (velista 0192)', () => {
+      const lower = (lineId: string, from: number) => ({
+        lineId,
+        step: { from, to: 0, repeat: false },
+      });
+      const three = () =>
+        render({
+          lines: [
+            line('ln-1', { quantity: 2, position: 1 }),
+            line('ln-2', { content: 'Bananas', quantity: 1, position: 2 }),
+            line('ln-3', { quantity: 3, position: 3 }),
+          ],
+        });
+      const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
+        (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+          `li.line[data-line-id="${id}"]`
+        );
+      const settle = (fixture: ComponentFixture<ListPage>) => {
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        fixture.detectChanges();
+        fixture.detectChanges();
+      };
+
+      afterEach(() => jest.useRealTimers());
+
+      it('leaves the list with one write and nothing deleted, and says it once', async () => {
+        const { fixture, lines } = await three();
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(lines.calls).toEqual([
+          { kind: 'quantity', lineId: 'ln-2', delta: -1 },
+        ]);
+        expect(lines.linesIn(LIST_ID).map((held) => held.id)).toContain('ln-2');
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.hiddenAtZero'
+        );
+      });
+
+      it('moves focus to the same control of the next row', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+      });
+
+      it('moves focus to the previous row when the last row left', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-3')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-3', 3));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-2')?.querySelector('.step.minus')
+        );
+      });
+
+      it('moves focus to the heading when no row is left', async () => {
+        const { fixture } = await render({
+          lines: [line('ln-1', { quantity: 1 })],
+        });
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-1')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-1', 1));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(
+          (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-page-header h1'
+          )
+        );
+      });
+
+      it('leaves focus alone when it was not in the row', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        const other = rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>(
+          '.step.plus'
+        );
+        other?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(other);
+      });
+
+      it('writes an open run to 0 when the page goes away, and still tears the page down', async () => {
+        const { fixture, lines, returns } = await three();
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        expect(() => fixture.destroy()).not.toThrow();
+
+        expect(lines.calls).toEqual([
+          { kind: 'quantity', lineId: 'ln-2', delta: -1 },
+        ]);
+        // The page's own teardown, which runs after the runs are written.
+        expect(returns.keep).toHaveBeenCalled();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('says the sentence again when the same line is lowered to 0 a second time', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+        const region = () =>
+          (fixture.nativeElement as HTMLElement)
+            .querySelector('lib-line-list p.live')
+            ?.textContent?.trim();
+
+        page.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+        expect(region()).toBe('list.line.hiddenAtZero');
+
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        page.stepQuantity({
+          lineId: 'ln-2',
+          step: { from: 0, to: 1, repeat: false },
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        page.onComposerQuery('');
+        fixture.detectChanges();
+        expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+        expect(page.announcement()).toBe('list.line.hiddenAtZero');
+
+        page.stepQuantity(lower('ln-2', 1));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        // Emptied in the render that takes the row away and filled a moment later,
+        // so a screen reader hears a change.
+        fixture.detectChanges();
+        fixture.detectChanges();
+        expect(region()).toBe('');
+        jest.advanceTimersByTime(1_000);
+        fixture.detectChanges();
+        expect(region()).toBe('list.line.hiddenAtZero');
+      });
+
+      it('decides after the write when a unit correction held the step back', async () => {
+        const { fixture, lines } = await three();
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        const write = lines.addQuantity.bind(lines);
+        jest
+          .spyOn(lines, 'addQuantity')
+          .mockImplementation(async (lineId, delta) => {
+            await held;
+            return write(lineId, delta);
+          });
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+        expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+
+        release();
+        for (let turn = 0; turn < 5; turn += 1) {
+          await Promise.resolve();
+        }
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.hiddenAtZero'
+        );
+      });
+
+      it('says nothing and moves no focus for a line another device lowered', async () => {
+        const { fixture, lines } = await three();
+        const minus = rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>(
+          '.step.minus'
+        );
+        minus?.focus();
+
+        lines.set(
+          lines
+            .linesIn(LIST_ID)
+            .map((held) =>
+              held.id === 'ln-2' ? { ...held, quantity: 0, version: 2 } : held
+            )
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('is found by the search at 0, and stepping it up puts it back on the list', async () => {
+        const { fixture } = await render({
+          lines: [
+            line('ln-1', { content: 'Bread', quantity: 2 }),
+            line('ln-2', { content: 'Bananas', quantity: 0 }),
+          ],
+        });
+        const page = fixture.componentInstance;
+        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
+          ['ln-2', 0],
+        ]);
+
+        jest.useFakeTimers();
+        page.stepQuantity({
+          lineId: 'ln-2',
+          step: { from: 0, to: 1, repeat: false },
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        page.onComposerQuery('');
+        fixture.detectChanges();
+
+        expect(page.drawnLines().map((row) => row.id)).toEqual([
+          'ln-1',
+          'ln-2',
+        ]);
+        expect(page.announcement()).toBe('');
+      });
+
+      it('stays drawn in the search results at 0, and says nothing', async () => {
+        const { fixture } = await render({
+          lines: [line('ln-2', { content: 'Bananas', quantity: 1 })],
+        });
+        const page = fixture.componentInstance;
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        jest.useFakeTimers();
+
+        page.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
+          ['ln-2', 0],
+        ]);
+        expect(page.announcement()).toBe('');
       });
     });
 
@@ -1404,6 +1714,351 @@ describe('ListPage', () => {
       );
     });
 
+    /** Velista `0185`: an add that meets a line already asked for adds nothing. */
+    describe('an add that meets a line already on the list (velista 0185)', () => {
+      it('draws no row, marks every line it met, and says the first is already on the list', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: ['ln-bread', 'ln-whole'],
+        });
+        const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        const page = fixture.componentInstance;
+        expect(lines.linesIn().map((held) => held.id)).toEqual([
+          'ln-whole',
+          'ln-other',
+          'ln-bread',
+        ]);
+        expect([...page.tookLines()]).toEqual(['ln-bread', 'ln-whole']);
+        for (const id of ['ln-bread', 'ln-whole']) {
+          expect(
+            (
+              query(
+                fixture,
+                `[data-line-id="${id}"] lib-quantity-stepper`
+              ) as HTMLElement
+            ).classList.contains('is-took')
+          ).toBe(true);
+        }
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+        expect(
+          t.mock.calls.find(([key]) => key === 'list.add.alreadyOn')?.[3]
+        ).toEqual({ name: 'Pan' });
+        // The words go and the search closes, as after any add.
+        expect(field(fixture).value).toBe('');
+        // Every met line is drawn, so nothing is said under the field.
+        expect(page.composerNotice()).toBeNull();
+
+        jest.advanceTimersByTime(TOOK_DURATION_MS);
+        expect(page.tookLines().size).toBe(0);
+      });
+
+      it('scrolls to the first met line that is drawn', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({
+            state: 'alreadyOnList',
+            lineIds: ['ln-bread', 'ln-whole'],
+          });
+          // Out of view: below the column's frame.
+          jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineId'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+
+          await typeAndAdd(fixture, 'Pan');
+          await fixture.whenStable();
+
+          expect(scrolled).toEqual(['ln-bread']);
+        } finally {
+          Element.prototype.scrollIntoView = original;
+          jest.restoreAllMocks();
+        }
+      });
+
+      it('says it under the field when the page draws none of the lines it met', async () => {
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        // A line the page has not loaded, past the pages it read.
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: [],
+          unseen: [line('ln-far', { content: 'Pan de molde', position: 400 })],
+        });
+
+        await typeAndAdd(fixture, 'Pan de molde');
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.composerNotice()).toBe(
+          'list.add.alreadyOn'
+        );
+        expect(
+          query(fixture, 'lib-line-composer .notice-text')?.textContent
+        ).toBe('list.add.alreadyOn');
+        // Said once: the notice speaks in its own region, so the list's does not.
+        expect(fixture.componentInstance.announcement()).not.toBe(
+          'list.add.alreadyOn'
+        );
+
+        // The next words take it away.
+        const input = field(fixture);
+        input.value = 'H';
+        input.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+        expect(fixture.componentInstance.composerNotice()).toBeNull();
+      });
+
+      it('draws no row for a card a loaded line above zero holds (decision I)', async () => {
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-a'])).toBe(
+          false
+        );
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-b'])).toBe(
+          true
+        );
+        fixture.detectChanges();
+      });
+    });
+
+    it('says why under the field when a card the list counts in another unit is refused (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_differs',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            line: {
+              lineId: 'ln-whole',
+              content: 'Leche entera',
+              unit: 'MILLILITER',
+              quantity: 2,
+            },
+            unit: 'UNIT',
+            index: null,
+          },
+        }),
+      });
+      const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+      const composer = fixture.debugElement.query(By.directive(LineComposer))
+        .componentInstance as LineComposer;
+      composer.submitted.emit({
+        content: 'Leche',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-c'],
+        named: false,
+        anchor: plus(fixture),
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.composerNotice()).toBe(
+        'list.error.addUnitDiffers.MILLILITER'
+      );
+      expect(
+        t.mock.calls.find(
+          ([key]) => key === 'list.error.addUnitDiffers.MILLILITER'
+        )?.[3]
+      ).toEqual({ name: 'Leche entera' });
+      // Nothing was made, and the words are back in the field.
+      expect(lines.linesIn().map((held) => held.id)).toEqual([
+        'ln-whole',
+        'ln-other',
+        'ln-bread',
+      ]);
+      expect(field(fixture).value).toBe('Leche');
+      expect(fixture.componentInstance.announcement()).not.toContain(
+        'list.error'
+      );
+    });
+
+    const unitRefusal = () =>
+      new GatewayError({
+        code: 'line_unit_differs',
+        status: 409,
+        correlationId: 'ref',
+        details: {
+          line: {
+            lineId: 'ln-whole',
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 2,
+          },
+          unit: 'UNIT',
+          index: null,
+        },
+      });
+    const sendCard = (fixture: ComponentFixture<ListPage>) =>
+      (
+        fixture.debugElement.query(By.directive(LineComposer))
+          .componentInstance as LineComposer
+      ).submitted.emit({
+        content: 'Leche',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-c'],
+        named: false,
+        anchor: plus(fixture),
+      });
+
+    it('takes the sentence away on the next send, also one that is not drawn and fails (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+      sendCard(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.composerNotice()).not.toBeNull();
+
+      // A name a loaded line carries is not drawn, so `sent()` waits for an answer
+      // that never comes: the send fails. Sent as the composer sends it, with no
+      // new words typed, which would take the sentence away by themselves.
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'internal',
+          status: 500,
+          correlationId: 'ref',
+        }),
+      });
+      (
+        fixture.debugElement.query(By.directive(LineComposer))
+          .componentInstance as LineComposer
+      ).submitted.emit({ content: 'Pan', anchor: plus(fixture) });
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(2);
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+    });
+
+    it('says no refusal on a list the page moved to while the add was out (velista 0185)', async () => {
+      const { fixture, lines, activatedRoute } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.holdAdds();
+      lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+      sendCard(fixture);
+      fixture.detectChanges();
+
+      activatedRoute.setList('list-2');
+      fixture.detectChanges();
+      lines.releaseAdds();
+      // The held answer, then each step of the add after it.
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(1);
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+    });
+
+    it('draws each row of the question from 0 to one step of its own unit (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: [
+          line('ln-a', {
+            content: 'Plátanos',
+            named: false,
+            itemIds: ['item-a'],
+            quantity: 0,
+            unit: 'GRAM',
+            position: 1,
+          }),
+          line('ln-b', {
+            content: 'Plátanos',
+            named: false,
+            itemIds: ['item-b'],
+            quantity: 0,
+            position: 2,
+          }),
+        ],
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_add_needs_choice',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            lines: [
+              {
+                lineId: 'ln-a',
+                content: 'Plátanos',
+                named: false,
+                quantity: 0,
+                unit: 'GRAM',
+                itemIds: ['item-a'],
+                productGroupId: null,
+                approvalStatus: 'APPROVED',
+              },
+              {
+                lineId: 'ln-b',
+                content: 'Plátanos',
+                named: false,
+                quantity: 0,
+                unit: 'UNIT',
+                itemIds: ['item-b'],
+                productGroupId: null,
+                approvalStatus: 'APPROVED',
+              },
+            ],
+          },
+        }),
+      });
+
+      await typeAndAdd(fixture, 'Plátanos');
+
+      expect(
+        choiceRows().map((row) => row.querySelector('.count')?.textContent)
+      ).toEqual([
+        expect.stringMatching(/0 g\s*→\s*25 g/),
+        expect.stringMatching(/0\s*→\s*1/),
+        undefined,
+      ]);
+    });
+
     it('marks the raised row where it stands, for 2.5 s, and says where the units went', async () => {
       jest.useFakeTimers();
       const { fixture, lines } = await render({
@@ -1415,7 +2070,7 @@ describe('ListPage', () => {
       await typeAndAdd(fixture, 'Pan');
 
       const page = fixture.componentInstance;
-      expect(page.tookLine()).toBe('ln-bread');
+      expect([...page.tookLines()]).toEqual(['ln-bread']);
       // No row was drawn for it, and the raised row is where it was.
       expect(lines.linesIn().map((held) => held.id)).toEqual([
         'ln-whole',
@@ -1433,7 +2088,7 @@ describe('ListPage', () => {
       jest.advanceTimersByTime(TOOK_DURATION_MS);
       fixture.detectChanges();
 
-      expect(page.tookLine()).toBeNull();
+      expect(page.tookLines().size).toBe(0);
       expect(raised.classList.contains('is-took')).toBe(false);
     });
 
@@ -1502,6 +2157,88 @@ describe('ListPage', () => {
       expect(itemNames.asked).toContainEqual(['item-a', 'item-b']);
     });
 
+    it('opens the question below the composer’s plus, at the top of the page (velista 0189)', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+
+      await typeAndAdd(fixture, 'Leche entera');
+
+      expect(fixture.componentInstance.choiceSide()).toBe('below');
+      const popover = fixture.debugElement.query(
+        (node) => node.name === 'lib-anchored-popover'
+      );
+      expect(popover.componentInstance.side()).toBe('below');
+    });
+
+    it('brings a new line’s row into view, nearest, once, when it is out of view (velista 0189)', async () => {
+      const scrollIntoView = jest.fn();
+      const originalScroll = Element.prototype.scrollIntoView;
+      const originalRect = HTMLElement.prototype.getBoundingClientRect;
+      Element.prototype.scrollIntoView = scrollIntoView;
+      // The column is 600px tall, and the new line lands below its foot.
+      HTMLElement.prototype.getBoundingClientRect = function (
+        this: HTMLElement
+      ) {
+        const at = (top: number, bottom: number) =>
+          ({
+            top,
+            bottom,
+            left: 0,
+            right: 0,
+            width: 0,
+            height: bottom - top,
+            x: 0,
+            y: top,
+            toJSON: () => ({}),
+          }) as DOMRect;
+        if (this.matches('main.page')) {
+          return at(0, 600);
+        }
+        if (this.dataset['lineId'] === 'server-id') {
+          return at(900, 960);
+        }
+        return at(0, 0);
+      };
+      try {
+        const { fixture } = await render({ lines: MILKS, items: [ITEM_A] });
+
+        await typeAndAdd(fixture, 'Huevos');
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const scrolled = scrollIntoView.mock.contexts as HTMLElement[];
+        expect(scrollIntoView).toHaveBeenCalledTimes(1);
+        expect(scrollIntoView).toHaveBeenCalledWith({
+          block: 'nearest',
+          behavior: 'auto',
+        });
+        expect(scrolled[0].dataset['lineId']).toBe('server-id');
+      } finally {
+        Element.prototype.scrollIntoView = originalScroll;
+        HTMLElement.prototype.getBoundingClientRect = originalRect;
+      }
+    });
+
+    it('leaves the column alone after an add whose row is already in view', async () => {
+      const scrollIntoView = jest.fn();
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = scrollIntoView;
+      try {
+        // jsdom lays nothing out, so every row reads as in view.
+        const { fixture } = await render({ lines: MILKS, items: [ITEM_A] });
+
+        await typeAndAdd(fixture, 'Huevos');
+        await fixture.whenStable();
+
+        expect(scrollIntoView).not.toHaveBeenCalled();
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
     it('sends the chosen line as intoLineId, and a new line as newLine', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
@@ -1514,10 +2251,10 @@ describe('ListPage', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
+      // A typed name states no amount, also as an answer (velista 0185).
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        quantity: 1,
         options: { intoLineId: 'ln-other' },
       });
       expect(choiceRows()).toHaveLength(0);
@@ -1530,7 +2267,6 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        quantity: 1,
         options: { newLine: true },
       });
     });
@@ -1592,13 +2328,11 @@ describe('ListPage', () => {
         {
           kind: 'add',
           content: 'Leche entera',
-          quantity: 1,
           options: { intoLineId: 'ln-other' },
         },
         {
           kind: 'add',
           content: 'Leche entera',
-          quantity: 1,
           options: { askIfAmbiguous: true },
         },
       ]);
@@ -1632,7 +2366,7 @@ describe('ListPage', () => {
       fixture.detectChanges();
 
       expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(3);
-      expect(fixture.componentInstance.tookLine()).toBe('ln-whole');
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
       expect(choiceRows()).toHaveLength(0);
     });
 
@@ -1677,66 +2411,6 @@ describe('ListPage', () => {
       fixture.detectChanges();
 
       expect(field(fixture).value).toBe('Pan');
-    });
-  });
-
-  describe('rule L4: reorder is a mode', () => {
-    it('is off to begin with', async () => {
-      const { fixture } = await render();
-
-      expect(fixture.componentInstance.reordering()).toBe(false);
-    });
-
-    it('back ends the mode rather than leaving the page', async () => {
-      const { fixture, router } = await render();
-      fixture.componentInstance.startReorder();
-
-      await fixture.componentInstance.back();
-
-      expect(fixture.componentInstance.reordering()).toBe(false);
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
-    });
-
-    it('leaves the page once the mode is off', async () => {
-      const { fixture, router } = await render();
-
-      await fixture.componentInstance.back();
-
-      // Replacing rather than pushing, because nothing of ours is behind this page in
-      // the spec's history and the walk to the group stands in for it. See
-      // `page-navigation.spec.ts`, where a push put the list back one press away.
-      expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/zones/${ZONE_ID}`,
-        { replaceUrl: true }
-      );
-    });
-
-    it('sends the whole order when a row is moved by keyboard', async () => {
-      const { fixture, lines } = await render({
-        lines: [
-          line('a', { position: 1 }),
-          line('b', { position: 2 }),
-          line('c', { position: 3 }),
-        ],
-      });
-
-      await fixture.componentInstance.act({ action: 'moveDown', lineId: 'a' });
-
-      expect(lines.calls).toContainEqual({
-        kind: 'reorder',
-        orderedLineIds: ['b', 'a', 'c'],
-      });
-    });
-
-    it('does not move the first row up, or the last row down', async () => {
-      const { fixture, lines } = await render({
-        lines: [line('a', { position: 1 }), line('b', { position: 2 })],
-      });
-
-      await fixture.componentInstance.act({ action: 'moveUp', lineId: 'a' });
-      await fixture.componentInstance.act({ action: 'moveDown', lineId: 'b' });
-
-      expect(lines.calls).toHaveLength(0);
     });
   });
 
@@ -2145,6 +2819,46 @@ describe('ListPage', () => {
       );
     });
 
+    it('centres and marks a row the catalog linked to past the first frame (velista 0185)', async () => {
+      // "See it on the list" opens the list at a line far down it.
+      const scrolled: { id: string; options: unknown }[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (
+        this: HTMLElement,
+        options?: unknown
+      ) {
+        scrolled.push({ id: this.dataset['lineId'] ?? '', options });
+      };
+      const many = Array.from({ length: 40 }, (_, index) =>
+        line(`ln-${index + 1}`, {
+          content: `Line ${index + 1}`,
+          position: index + 1,
+        })
+      );
+      jest
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: HTMLElement) {
+          const index = Number(
+            (this.dataset['lineId'] ?? 'ln-0').replace('ln-', '')
+          );
+          return { top: index * 60, bottom: index * 60 + 56 } as DOMRect;
+        });
+      try {
+        const { fixture } = await render({ line: 'ln-35', lines: many });
+
+        expect(scrolled).toEqual([
+          { id: 'ln-35', options: { block: 'center', behavior: 'auto' } },
+        ]);
+        expect(fixture.componentInstance.markedLine()).toBe('ln-35');
+        expect(
+          query(fixture, '.line.marked')?.getAttribute('data-line-id')
+        ).toBe('ln-35');
+      } finally {
+        Element.prototype.scrollIntoView = original;
+        jest.restoreAllMocks();
+      }
+    });
+
     it('opens no sheet, which is the whole reason it is a query parameter', async () => {
       // All three of this page's line sheets **do** something to a line. A link in a
       // chat message that opened an edit form would have changed what the app is doing
@@ -2263,21 +2977,11 @@ describe('ListPage: searching and viewing one category', () => {
     line('ln-bags', { content: 'Bolsas', position: 3 }),
   ];
 
-  function toBuyHeading(fixture: ComponentFixture<ListPage>) {
-    return fixture.debugElement.query(By.directive(ToBuyHeading))
-      .componentInstance as ToBuyHeading;
-  }
-
-  it('draws the filter in the page header, with no chip row, and not in reorder mode', async () => {
+  it('draws the filter in the page header, with no chip row', async () => {
     const { fixture } = await render({ lines: LINES, items: ITEMS });
 
     expect(filterAction(fixture)).not.toBeNull();
     expect(query(fixture, 'lib-chip-row')).toBeNull();
-
-    fixture.componentInstance.startReorder();
-    fixture.detectChanges();
-
-    expect(filterAction(fixture)).toBeNull();
   });
 
   it('reads the products of the loaded lines with their prices, and only new ones as lines arrive', async () => {
@@ -2685,25 +3389,93 @@ describe('ListPage: searching and viewing one category', () => {
       });
     });
 
-    it('gives the bar’s room to the page while the field has focus or holds words', async () => {
-      const { fixture, chrome } = await render({ lines: LINES, items: ITEMS });
-      const last = () => chrome.setComposing.mock.calls.at(-1)?.[0];
-
-      field(fixture).dispatchEvent(new Event('focus'));
-      fixture.detectChanges();
-      await fixture.whenStable();
-      expect(last()).toBe(true);
-
+    /**
+     * Velista `0189`, section 4: the bar stays while somebody types, and the first
+     * touch drag of the column takes the keyboard down instead. The words, the
+     * results and `?search=1` stay.
+     */
+    it('releases the field on a touch drag of the column, and keeps the words and the results', async () => {
+      const { fixture, router, activatedRoute } = await render({
+        lines: LINES,
+        items: ITEMS,
+      });
       typeInto(fixture, 'le');
-      field(fixture).dispatchEvent(new Event('blur'));
+      activatedRoute.setQuery({ search: '1' });
       fixture.detectChanges();
       await fixture.whenStable();
-      // Still true: the field holds words.
-      expect(last()).toBe(true);
+      field(fixture).focus();
+      router.navigate.mockClear();
+      router.navigateByUrl.mockClear();
 
-      typeInto(fixture, '');
+      touchDrag(query(fixture, '#list-results') as HTMLElement);
+      fixture.detectChanges();
       await fixture.whenStable();
-      expect(last()).toBe(false);
+
+      expect(document.activeElement).not.toBe(field(fixture));
+      expect(field(fixture).value).toBe('le');
+      expect(query(fixture, '#list-results')).not.toBeNull();
+      expect(router.navigate).not.toHaveBeenCalled();
+      expect(router.navigateByUrl).not.toHaveBeenCalled();
+    });
+
+    it('changes nothing on a drag while the field has no focus', async () => {
+      const { fixture } = await render({ lines: LINES, items: ITEMS });
+      typeInto(fixture, 'le');
+      const elsewhere = document.createElement('button');
+      document.body.appendChild(elsewhere);
+      elsewhere.focus();
+
+      touchDrag(query(fixture, '#list-results') as HTMLElement);
+      fixture.detectChanges();
+
+      expect(document.activeElement).toBe(elsewhere);
+      expect(field(fixture).value).toBe('le');
+      expect(query(fixture, '#list-results')).not.toBeNull();
+      elsewhere.remove();
+    });
+
+    it('takes the column to its top when the results first show, and not on a return', async () => {
+      const scrollTo = jest.fn();
+      const original = HTMLElement.prototype.scrollTo;
+      HTMLElement.prototype.scrollTo = scrollTo;
+      try {
+        const { fixture } = await render({ lines: LINES, items: ITEMS });
+        typeInto(fixture, 'le');
+        await fixture.whenStable();
+
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'auto' });
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+
+        // A second character is the same showing.
+        typeInto(fixture, 'lec');
+        await fixture.whenStable();
+        expect(scrollTo).toHaveBeenCalledTimes(1);
+
+        TestBed.resetTestingModule();
+        scrollTo.mockClear();
+        const back = await render({
+          lines: LINES,
+          items: ITEMS,
+          search: true,
+          returned: {
+            view: {
+              state: DEFAULT_LIST_VIEW_STATE,
+              openTrips: new Set<string>(),
+            },
+            words: 'le',
+            dueExpanded: false,
+            scrollTop: 120,
+          },
+        });
+        await back.fixture.whenStable();
+
+        expect(scrollTo).not.toHaveBeenCalledWith({
+          top: 0,
+          behavior: 'auto',
+        });
+      } finally {
+        HTMLElement.prototype.scrollTo = original;
+      }
     });
 
     it('clears the field, drops the results and keeps focus after an add', async () => {
@@ -2795,55 +3567,6 @@ describe('ListPage: searching and viewing one category', () => {
     fixture.detectChanges();
 
     expect(rows(fixture).map((row) => row.id)).toEqual(['ln-milk']);
-  });
-
-  describe('reorder waits for the list order (section 7)', () => {
-    it('holds the action under A to Z, a picked category, and a search', async () => {
-      const { fixture, view } = await render({ lines: LINES, items: ITEMS });
-      expect(toBuyHeading(fixture).reorderHeld()).toBe(false);
-
-      view.setOrder('alpha');
-      fixture.detectChanges();
-      expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
-      view.setOrder('list');
-
-      view.pickCategory('cat-milk');
-      fixture.detectChanges();
-      expect(toBuyHeading(fixture).reorderHeld()).toBe(true);
-      view.reset();
-
-      // A search flattens the page, so there is no To buy heading to hold at all
-      // (velista `0088`, section 6). The hold itself still stands.
-      view.search('leche');
-      fixture.detectChanges();
-      expect(fixture.componentInstance.reorderHeld()).toBe(true);
-      expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
-
-      view.search('');
-      fixture.detectChanges();
-      expect(toBuyHeading(fixture).reorderHeld()).toBe(false);
-    });
-
-    it('moves nothing when the held action is pressed, and says why', async () => {
-      const { fixture, view } = await render({ lines: LINES, items: ITEMS });
-      view.setOrder('alpha');
-      fixture.detectChanges();
-
-      const button = Array.from(
-        fixture.nativeElement.querySelectorAll('lib-to-buy-heading .action')
-      ).find((element) =>
-        (element as HTMLElement).textContent?.includes('list.reorder.enter')
-      ) as HTMLButtonElement;
-      expect(button.getAttribute('aria-disabled')).toBe('true');
-
-      button.click();
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.reordering()).toBe(false);
-      expect(query(fixture, '.held-message')?.textContent).toContain(
-        'list.reorder.unavailable'
-      );
-    });
   });
 
   it('opens the filter sheet under the sheet marker', async () => {
@@ -2960,14 +3683,10 @@ describe('ListPage: the zone list grouped by trip', () => {
     ]);
   });
 
-  it('draws To buy first, a claimed line in its live trip, and a zero line never bought last', async () => {
+  it('draws To buy first and a claimed line in its live trip, and no zero line never bought (velista 0192)', async () => {
     const { fixture } = await grouped();
 
-    expect(rows(fixture).map((row) => row.id)).toEqual([
-      'bread',
-      'eggs',
-      'saffron',
-    ]);
+    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'eggs']);
     const [live] = groups(fixture);
     expect(live.rows?.map((row) => [row.lineId, row.mark])).toEqual([
       ['rice', 'claimed'],
@@ -3021,7 +3740,6 @@ describe('ListPage: the zone list grouped by trip', () => {
     fixture.detectChanges();
 
     expect(groups(fixture)).toEqual([]);
-    expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
     // A line at zero that lives only in an old trip is found, with its reel.
     expect(rows(fixture).map((row) => row.id)).toEqual(['milk']);
 
@@ -3029,23 +3747,6 @@ describe('ListPage: the zone list grouped by trip', () => {
     fixture.detectChanges();
 
     expect(groups(fixture).map((group) => group.open)).toEqual([true, true]);
-  });
-
-  it('shows To buy alone in reorder mode, and keeps every unseen line in its slot (test 12)', async () => {
-    const { fixture, lines } = await grouped();
-
-    fixture.componentInstance.startReorder();
-    fixture.detectChanges();
-
-    expect(groups(fixture)).toEqual([]);
-    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'eggs']);
-
-    await fixture.componentInstance.moveTo({ lineId: 'eggs', to: 0 });
-
-    expect(lines.calls).toContainEqual({
-      kind: 'reorder',
-      orderedLineIds: ['eggs', 'rice', 'milk', 'saffron', 'bread'],
-    });
   });
 
   it('keeps the lines usable when the trips fail, and offers a retry (test 13)', async () => {
@@ -3068,11 +3769,12 @@ describe('ListPage: the zone list grouped by trip', () => {
     expect(tripCalls.heads).toBe(2);
   });
 
-  it('draws nothing under To buy when the list has no history', async () => {
+  it('draws nothing under the lines to buy when the list has no history', async () => {
     const { fixture } = await render({ lines: LINES });
     await settle(fixture);
 
-    expect(query(fixture, 'lib-to-buy-heading')).not.toBeNull();
+    // No heading over them since velista 0189: "To buy" went with the reorder mode.
+    expect(query(fixture, 'lib-to-buy-heading')).toBeNull();
     expect(groups(fixture)).toEqual([]);
     expect(query(fixture, '.trips-older')).toBeNull();
   });
@@ -3167,27 +3869,27 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     )[1] as HTMLButtonElement;
   }
 
-  it('reads the due lines once the lines are in, and draws three between the wanted lines and the zero lines', async () => {
+  it('reads the due lines once the lines are in, and draws three after the wanted lines', async () => {
     const { fixture, dueCalls } = await suggested();
 
     expect(dueCalls.reads).toBe(1);
-    expect(query(fixture, '.due-label')?.tagName).toBe('H3');
+    // An h2 under the page's h1 since velista 0189 (decision J).
+    expect(query(fixture, '.due-label')?.tagName).toBe('H2');
     expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
       'coffee',
       'eggs',
       'yogurt',
     ]);
-    expect(lists(fixture)).toEqual([['bread'], ['saffron']]);
+    // The zero line never bought is not drawn at rest (velista 0192), so nothing
+    // is left for a list below the due rows.
+    expect(lists(fixture)).toEqual([['bread']]);
 
     const section = query(fixture, 'section.due') as HTMLElement;
-    const [wanted, rest] = Array.from(
+    const [wanted] = Array.from(
       fixture.nativeElement.querySelectorAll('lib-line-list')
     ) as HTMLElement[];
     expect(
       wanted.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(
-      section.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 
@@ -3229,14 +3931,9 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     expect(dueRows(fixture)).toHaveLength(3);
   });
 
-  it('draws no section in reorder mode, during a search, or when nothing is due (test 4)', async () => {
+  it('draws no section during a search, or when nothing is due (test 4)', async () => {
     const { fixture, view } = await suggested();
 
-    fixture.componentInstance.startReorder();
-    fixture.detectChanges();
-    expect(query(fixture, 'section.due')).toBeNull();
-    fixture.componentInstance.endReorder();
-    fixture.detectChanges();
     expect(query(fixture, 'section.due')).not.toBeNull();
 
     view.search('coffee');
@@ -3253,10 +3950,10 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
 
     expect(query(fixture, 'section.due')).toBeNull();
     // This list has no trip, so its bought lines at zero stay last in To buy rather
-    // than on neither side (velista 0095, section 5).
+    // than on neither side (velista 0095, section 5). The zero line never bought is
+    // not drawn at rest (velista 0192).
     expect(rows(fixture).map((row) => row.id)).toEqual([
       'bread',
-      'saffron',
       'eggs',
       'coffee',
       'yogurt',
@@ -3285,6 +3982,42 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     expect(lists(fixture)[0]).toEqual(['bread', 'eggs']);
     expect(fixture.componentInstance.announcement()).toBe('list.due.added');
     expect(document.activeElement).toBe(addButton(fixture, 'yogurt'));
+  });
+
+  it('moves focus to the due row of a line lowered to 0 there, and says nothing (velista 0192)', async () => {
+    const { fixture } = await suggested({
+      lines: [
+        line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+        line('eggs', { content: 'Eggs', position: 2, quantity: 1 }),
+        line('milk', { content: 'Milk', position: 3, quantity: 3 }),
+        line('coffee', { content: 'Coffee', position: 4, ...bought }),
+      ],
+      due: [due('eggs'), due('coffee')],
+    });
+    expect(lists(fixture)[0]).toEqual(['bread', 'eggs', 'milk']);
+    jest.useFakeTimers();
+    try {
+      query(fixture, 'li.line[data-line-id="eggs"] .step.minus')?.focus();
+
+      fixture.componentInstance.stepQuantity({
+        lineId: 'eggs',
+        step: { from: 1, to: 0, repeat: false },
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'eggs',
+      'coffee',
+    ]);
+    expect(document.activeElement).toBe(
+      query(fixture, '[data-due-line-id="eggs"] .step.minus')
+    );
+    expect(fixture.componentInstance.announcement()).toBe('');
   });
 
   it('adds the amount chosen on the stepper', async () => {

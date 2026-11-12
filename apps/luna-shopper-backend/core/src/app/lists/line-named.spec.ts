@@ -458,15 +458,20 @@ describe('LineService.addMany writes the flag of each item (plan 0207, section 1
       ],
     });
 
+    // At the first item's amount: a batch never sums (plan 0260 R6).
     expect(w.saved).toHaveLength(1);
     expect(results.map((result) => result.line.named)).toEqual([false, false]);
     expect(results[0].line).toMatchObject({
       content: 'Oat drink',
-      quantity: 2,
+      quantity: 1,
     });
   });
 
-  it('keeps a named item apart from an unnamed one of the same product (plan 0214)', async () => {
+  // Corrected in review round 1 of plan 0260: the named item is not the
+  // identity of the unnamed line, and it still meets that line because the
+  // line holds its product (R5), as two single adds in sequence do. The batch
+  // made a second, named line before.
+  it('meets the unnamed line an earlier item creates with a named item of the same product (plans 0214, 0260 R5, R6)', async () => {
     const w = build();
 
     const results = await w.service.addMany({
@@ -478,8 +483,13 @@ describe('LineService.addMany writes the flag of each item (plan 0207, section 1
       ],
     });
 
-    expect(w.saved).toHaveLength(2);
-    expect(results.map((result) => result.line.named)).toEqual([false, true]);
+    expect(w.saved).toHaveLength(1);
+    expect(results.map((result) => result.outcome)).toEqual([
+      'CREATED',
+      'ALREADY_ON_LIST',
+    ]);
+    expect(results[1].line.id).toBe(results[0].line.id);
+    expect(results.map((result) => result.line.named)).toEqual([false, false]);
   });
 });
 

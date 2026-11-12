@@ -2,7 +2,7 @@ import type { CatalogItem, Line } from './domain';
 import type { LineApprovalStatus } from './enums';
 import { LINE_QUANTITY_MAX } from './limits';
 import { foldName, lineName } from './line-name';
-import type { LineUnit } from './line-unit';
+import { addAmount, type LineUnit } from './line-unit';
 
 /**
  * The most lines a `line_add_needs_choice` refusal names (backend `0228`, section 5).
@@ -18,8 +18,9 @@ export const ADD_CHOICE_MAX = 10;
  *
  * - `askIfAmbiguous`: the caller can draw a question, so two or more lines that hold
  *   a product under the typed name refuse the add and name them.
- * - `intoLineId`: the person chose that line, and the add raises it. It never falls
- *   back to a new line.
+ * - `intoLineId`: the person chose that line. The server raises it when it is at
+ *   zero and leaves it as it is when it holds an amount (backend `0260`). It never
+ *   falls back to a new line.
  * - `newLine`: the person chose a new line.
  */
 export interface AddLineOptions {
@@ -27,6 +28,13 @@ export interface AddLineOptions {
   readonly intoLineId?: string;
   readonly newLine?: true;
 }
+
+/**
+ * What an add did (backend `0260`, R1; velista `0185`): it made a line, it raised a
+ * line kept at zero, or it met a line the list already asks for and changed
+ * nothing. velista's own union of the server's `outcome` (rule D4).
+ */
+export type AddOutcome = 'created' | 'raised' | 'alreadyOnList';
 
 /** One line a `line_add_needs_choice` refusal names, as the server sent it. */
 export interface AddChoiceLine {
@@ -58,12 +66,12 @@ export interface AddChoiceRow {
   readonly product: string | null;
   readonly imageUrl: string | null;
   /**
-   * The line's quantity now, and what the add takes it to. `to` is null for a
-   * line that counts in another unit than the add (backend `0246` M5): the two
-   * amounts cannot be summed, so the row says what the line holds and no more.
+   * The line's quantity now, and what the add takes it to: one step of the line's
+   * own unit more (backend `0260`). The server asks only about lines at zero, so
+   * `from` is 0 in every question it asks today.
    */
   readonly from: number;
-  readonly to: number | null;
+  readonly to: number;
   /** What `from` and `to` count (velista `0182`). */
   readonly unit: LineUnit;
 }
@@ -80,14 +88,14 @@ export interface AddChoiceFacts {
 /**
  * The rows of the question, one per line, in the order the refusal named them.
  *
- * `added` is the composer's quantity. A raise is capped as the server caps it, so the
- * arrow never promises a number the line cannot reach.
+ * Each row says what a choice of it does: the line goes up by one step of its own
+ * unit ({@link addAmount}), the amount a raise of a kept line takes (backend
+ * `0260`, R2 and R4). A raise is capped as the server caps it, so the arrow never
+ * promises a number the line cannot reach.
  */
 export function addChoiceRows(
   choice: AddChoice,
-  added: number,
-  facts: AddChoiceFacts,
-  addedUnit: LineUnit = 'UNIT'
+  facts: AddChoiceFacts
 ): readonly AddChoiceRow[] {
   return choice.lines.map((line) => {
     const name = lineName(
@@ -107,10 +115,7 @@ export function addChoiceRows(
       product: item === null ? null : facts.brandSizeOf(item),
       imageUrl: item?.imageUrl ?? null,
       from: line.quantity,
-      to:
-        line.unit === addedUnit
-          ? Math.min(LINE_QUANTITY_MAX, line.quantity + added)
-          : null,
+      to: Math.min(LINE_QUANTITY_MAX, line.quantity + addAmount(line.unit)),
       unit: line.unit,
     };
   });
@@ -148,4 +153,55 @@ export function addMayMeetLine(
     (line) =>
       line.approvalStatus !== 'REJECTED' && foldName(line.content) === typed
   );
+}
+
+/**
+ * Whether a product add is likely to meet a line the list already asks for
+ * (velista `0185`, decision I): a loaded line, not turned down, with an amount
+ * above zero, holds every product of the add, alone or among others. The server
+ * then adds nothing (backend `0260`, A1 and R5), so no row is drawn before it
+ * answers. A line at zero is raised instead, which draws no new row either way.
+ *
+ * A prediction, as {@link addMayMeetLine} is. The server's answer always wins.
+ */
+export function addMayMeetProduct(
+  lines: readonly Pick<Line, 'itemIds' | 'quantity' | 'approvalStatus'>[],
+  itemIds: readonly string[]
+): boolean {
+  if (itemIds.length === 0) {
+    return false;
+  }
+  return lines.some(
+    (line) =>
+      line.approvalStatus !== 'REJECTED' &&
+      line.quantity > 0 &&
+      itemIds.every((id) => line.itemIds.includes(id))
+  );
+}
+
+/**
+ * A product add the server refused because the list already counts that thing in
+ * another unit (backend `0260`, section 3, `line_unit_differs`). Until a
+ * conversion exists the person changes the amount on that line instead.
+ *
+ * Mapped from the refusal's `details.line`. `name` is the line's own spelling, or
+ * the name of the product that was added when the refusal names none. `unit` is
+ * the line's, null when it is missing or not one velista knows.
+ */
+export interface AddUnitRefusal {
+  readonly lineId: string | null;
+  readonly name: string;
+  readonly unit: LineUnit | null;
+}
+
+/**
+ * The key of the sentence that says a refusal (velista `0185`, section 4): the
+ * unit the list counts the line in, or the one that names no unit when that is not
+ * known. `list` reads "This list"; `basket` names the list, as `{{list}}`.
+ */
+export function addUnitRefusalKey(
+  refusal: AddUnitRefusal,
+  scope: 'list' | 'basket'
+): string {
+  return `${scope}.error.addUnitDiffers.${refusal.unit ?? 'unknown'}`;
 }

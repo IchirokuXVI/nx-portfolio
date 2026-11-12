@@ -290,11 +290,18 @@ export class LineUnitMismatchException extends DomainException {
 }
 
 /**
- * A rename would merge two lines of different units (plan 0246, section 3.3).
- * Nothing was written and the two lines stay.
+ * A rename would merge two lines of different units (plan 0246, section 3.3),
+ * or a product add met only lines of another unit (plan 0260, section 3).
+ * Nothing was written and the lines stay.
+ *
+ * It publishes its details: on an add, `details.line` names the line met
+ * (`lineId`, `content`, `unit`, `quantity`), `details.unit` what the add
+ * counted in and `details.index` the batch item or null. A merge throws it
+ * with no details, and the envelope then carries none.
  */
 export class LineUnitDiffersException extends DomainException {
   readonly code = ERROR_CODES.LINE_UNIT_DIFFERS;
+  override readonly exposesDetails = true;
 }
 
 /**

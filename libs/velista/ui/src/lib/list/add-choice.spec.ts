@@ -38,7 +38,6 @@ async function render(
     rows: readonly AddChoiceRow[];
     scope: 'list' | 'basket';
     back: string | null;
-    added: number;
   }> = {}
 ): Promise<ComponentFixture<AddChoice>> {
   TestBed.resetTestingModule();
@@ -54,9 +53,6 @@ async function render(
   }
   if (inputs.back !== undefined) {
     fixture.componentRef.setInput('back', inputs.back);
-  }
-  if (inputs.added !== undefined) {
-    fixture.componentRef.setInput('added', inputs.added);
   }
   document.body.append(fixture.nativeElement);
   fixture.detectChanges();
@@ -96,15 +92,15 @@ describe('AddChoice', () => {
     expect(drawn[2].querySelector('.dashed lib-plus-icon')).not.toBeNull();
   });
 
-  it('draws a line of another unit as what it holds, with no arrow (velista 0182)', async () => {
+  it('draws a weighed line from 0 to one step in its own unit: "0 g" to "25 g" (velista 0185)', async () => {
     const fixture = await render({
-      rows: [{ ...ROWS[0], from: 1000, to: null, unit: 'GRAM' }],
+      rows: [{ ...ROWS[0], from: 0, to: 25, unit: 'GRAM' }],
     });
 
     const row = rows(fixture)[0];
-    expect(row.querySelector('.count')?.textContent?.trim()).toBe('1 kg');
-    expect(row.querySelector('.to')).toBeNull();
-    expect(row.getAttribute('aria-label')).toBe('list.addChoice.rowHolds');
+    expect(row.querySelector('.count')?.textContent).toMatch(/0 g\s*→\s*25 g/);
+    expect(row.querySelector('.to')?.textContent).toBe('25 g');
+    expect(row.getAttribute('aria-label')).toBe('list.addChoice.row');
   });
 
   it('titles the list and the basket each in their own words', async () => {
@@ -118,7 +114,7 @@ describe('AddChoice', () => {
   });
 
   it('names each row for a screen reader, with what the add makes of it', async () => {
-    const fixture = await render({ added: 2 });
+    const fixture = await render();
 
     expect(rows(fixture)[0].getAttribute('aria-label')).toBe(
       'list.addChoice.row'

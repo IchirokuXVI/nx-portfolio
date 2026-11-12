@@ -62,13 +62,12 @@ import {
   SUGGEST_DEBOUNCE_MS,
 } from '@portfolio/velista/models';
 import {
-  NavChrome,
   PageReturn,
   provideFakeBrowserFacade,
   provideVelistaTesting,
   StorageKeys,
 } from '@portfolio/velista/platform';
-import { LineComposer, NoPricesNote } from '@portfolio/velista/ui';
+import { LineComposer, ListPicker, NoPricesNote } from '@portfolio/velista/ui';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
@@ -451,9 +450,6 @@ function queryOnRoute(initial: Params) {
   };
 }
 
-/** What the page told the bottom bar, per render (velista `0117`). */
-const navChrome = { setComposing: jest.fn() };
-
 async function render(options: Options = {}): Promise<{
   fixture: ComponentFixture<BasketPage>;
   store: FakeStore;
@@ -461,7 +457,6 @@ async function render(options: Options = {}): Promise<{
   returns: { keep: jest.Mock; recall: jest.Mock };
 }> {
   TestBed.resetTestingModule();
-  navChrome.setComposing.mockClear();
 
   const returns = {
     keep: jest.fn(),
@@ -547,7 +542,6 @@ async function render(options: Options = {}): Promise<{
       { provide: RokuLocaleStore, useValue: { locale: signal('en') } },
       // The bottom bar's owner, as a double (velista `0117`): the router here is a
       // fake with no state to read, and what matters is what the page tells it.
-      { provide: NavChrome, useValue: navChrome },
       { provide: PageReturn, useValue: returns },
       {
         provide: Router,
@@ -815,6 +809,38 @@ function field(fixture: ComponentFixture<BasketPage>): HTMLInputElement {
   return found as HTMLInputElement;
 }
 
+/**
+ * A finger that goes down on `target` and moves 40px up, as `DragReleasesField` hears
+ * it. jsdom has no `PointerEvent`, so the pointer events are mouse events with the
+ * pointer's fields defined on them, and the touch events carry their `touches`.
+ */
+function touchDrag(target: HTMLElement): void {
+  const pointer = (type: string, y: number) => {
+    const event = new MouseEvent(type, {
+      clientX: 0,
+      clientY: y,
+      bubbles: true,
+    });
+    Object.defineProperty(event, 'pointerId', { value: 1 });
+    Object.defineProperty(event, 'pointerType', { value: 'touch' });
+    Object.defineProperty(event, 'isPrimary', { value: true });
+    return event;
+  };
+  const touch = (type: string, y: number | null) => {
+    const event = new Event(type, { bubbles: true });
+    Object.defineProperty(event, 'touches', {
+      value: y === null ? [] : [{ clientX: 0, clientY: y }],
+    });
+    return event;
+  };
+
+  target.dispatchEvent(pointer('pointerdown', 200));
+  target.dispatchEvent(touch('touchstart', 200));
+  target.dispatchEvent(pointer('pointercancel', 200));
+  target.dispatchEvent(touch('touchmove', 160));
+  target.dispatchEvent(touch('touchend', null));
+}
+
 /** Type, and let the composer hear it, exactly as a keyboard does. */
 function typeInto(fixture: ComponentFixture<BasketPage>, typed: string): void {
   const input = field(fixture);
@@ -1025,10 +1051,11 @@ describe('the basket header, live', () => {
 
       expect(query(fixture, 'lib-page-header')).not.toBeNull();
       expect(query(fixture, 'main lib-page-header')).toBeNull();
-      // The scroller is still the column the page scrolls.
-      expect(
-        query(fixture, 'lib-page-header')?.nextElementSibling?.tagName
-      ).toBe('MAIN');
+      // The scroller is still the column the page scrolls, after the head block
+      // (velista 0189).
+      const next = query(fixture, 'lib-page-header')?.nextElementSibling;
+      expect(next?.classList).toContain('page-top');
+      expect(next?.nextElementSibling?.tagName).toBe('MAIN');
     });
 
     it('holds the basket’s name as the page’s one title', async () => {
@@ -1686,8 +1713,8 @@ describe('searching the basket', () => {
     });
 
     it('keeps the row and the chips in one bar', async () => {
-      // Velista `0079`, section 2: one sticky bar, so both stay on screen down a long
-      // basket. The lines are not in it; they scroll under it.
+      // Velista `0079`, section 2: one bar, so both stay on screen down a long basket.
+      // The lines are not in it; they scroll in the column under the head block.
       const { fixture } = await render({ lines: threeLines });
       TestBed.inject(BasketViewStore).setOrder('alpha');
       fixture.detectChanges();
@@ -1697,40 +1724,35 @@ describe('searching the basket', () => {
       expect(query(fixture, '.tools-bar lib-basket-row')).toBeNull();
     });
 
-    it('scrolls in its own column in both run modes, with the composer after it', () => {
-      // velista 0106. The app is a frame that never scrolls, so `.page` is the tools
-      // bar's scroll container standalone and mounted alike, and the composer is the
-      // next item of the host rather than a row pinned to the document's foot, which
-      // is the strip the bottom bar covered. jsdom cannot lay any of this out, so the
-      // stylesheet is the half a spec can see.
+    it('scrolls in its own column in both run modes, with the head block before it', async () => {
+      // velista 0106 and 0189. The app is a frame that never scrolls, so `.page` is
+      // the scroll container standalone and mounted alike, and the tools row and the
+      // composer are in the head block, the item of the host before it, rather than
+      // rows inside it. jsdom cannot lay any of this out, so the markup and the
+      // stylesheet are the halves a spec can see.
       const css = readFileSync(join(__dirname, 'basket-page.scss'), 'utf8')
         // Comments out, because the stylesheet says what it used to do.
         .replace(/\/\/.*$/gm, '');
 
       expect(css).not.toContain('.standalone');
       expect(css).not.toMatch(/position:\s*sticky/);
+      expect(css).toMatch(/\.page-top\s*\{[^}]*flex:\s*none/);
       expect(css).toMatch(/\.composer-dock\s*\{[^}]*flex:\s*none/);
-    });
 
-    it('sticks the tools bar over the start padding of its column', () => {
-      // A sticky offset is measured from the content box of the scroller. With a start
-      // padding on `.page` and an offset of zero, the bar stopped that padding short of
-      // the header and the lines showed through the strip above it. So the bar's offset
-      // and its own padding are both the padding of the column, under one token.
-      const css = readFileSync(
-        join(__dirname, 'basket-page.scss'),
-        'utf8'
-      ).replace(/\/\/.*$/gm, '');
-
-      const lead = /\.page\s*\{[^}]*padding-block-start:\s*(var\([^)]+\))/.exec(
-        css
-      )?.[1];
-      const bar = /lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-
-      expect(lead).toBeDefined();
-      expect(bar).toContain(`inset-block-start: calc(${lead} * -1)`);
-      expect(bar).toContain(`margin-block-start: calc(${lead} * -1)`);
-      expect(bar).toContain(`padding-block-start: ${lead}`);
+      const { fixture } = await render({ lines: threeLines, served });
+      const top = query(fixture, '.page-top');
+      expect(top?.querySelector('lib-list-tools')).not.toBeNull();
+      expect(top?.querySelector('.composer-dock')).not.toBeNull();
+      expect(top?.nextElementSibling?.matches('main.page')).toBe(true);
+      expect(query(fixture, 'main.page lib-list-tools')).toBeNull();
+      expect(query(fixture, 'main.page .composer-dock')).toBeNull();
+      // The field sits under the tools row.
+      const tools = top?.querySelector('lib-list-tools') as Node;
+      const dockNode = top?.querySelector('.composer-dock') as Node;
+      expect(
+        tools.compareDocumentPosition(dockNode) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).not.toBe(0);
     });
   });
 
@@ -1790,14 +1812,18 @@ describe('searching the basket', () => {
       );
     });
 
-    it('hides the tools row while the results show', async () => {
+    it('keeps the tools row and the chips while the results show (velista 0189)', async () => {
       const { fixture } = await render({ lines: threeLines, served });
+      TestBed.inject(BasketViewStore).setOrder('alpha');
+      fixture.detectChanges();
 
       typeInto(fixture, 'milk');
-      expect(query(fixture, 'lib-list-tools')).toBeNull();
+      expect(query(fixture, '.tools-bar')).not.toBeNull();
+      expect(query(fixture, '.tools-bar lib-chip-row')).not.toBeNull();
+      expect(query(fixture, '#basket-results')).not.toBeNull();
 
       typeInto(fixture, '');
-      expect(query(fixture, 'lib-list-tools')).not.toBeNull();
+      expect(query(fixture, '.tools-bar')).not.toBeNull();
     });
 
     it('empties the field and shows the basket when back takes search=1 off', async () => {
@@ -1930,19 +1956,40 @@ describe('searching the basket', () => {
       TestBed.resetTestingModule();
     });
 
-    it('gives the bar’s room to the page while the field has focus or holds words', async () => {
+    /**
+     * Velista `0189`, section 4: the bar stays while somebody types, and the first
+     * touch drag of the column takes the keyboard down instead. The words, the
+     * results and `?search=1` stay.
+     */
+    it('releases the field on a touch drag of the column, and keeps the words and the results', async () => {
+      const { fixture, store } = await render({ lines: threeLines, served });
+      typeInto(fixture, 'milk');
+      field(fixture).focus();
+      store.navigate.mockClear();
+
+      touchDrag(query(fixture, '#basket-results') as HTMLElement);
+      fixture.detectChanges();
+      await fixture.whenStable();
+
+      expect(document.activeElement).not.toBe(field(fixture));
+      expect(field(fixture).value).toBe('milk');
+      expect(query(fixture, '#basket-results')).not.toBeNull();
+      expect(store.navigate).not.toHaveBeenCalled();
+    });
+
+    it('changes nothing on a drag while the field has no focus', async () => {
       const { fixture } = await render({ lines: threeLines, served });
-      const last = () => navChrome.setComposing.mock.calls.at(-1)?.[0];
+      typeInto(fixture, 'milk');
+      const elsewhere = document.createElement('button');
+      document.body.appendChild(elsewhere);
+      elsewhere.focus();
 
-      field(fixture).dispatchEvent(new Event('focus'));
+      touchDrag(query(fixture, '#basket-results') as HTMLElement);
       fixture.detectChanges();
-      await fixture.whenStable();
-      expect(last()).toBe(true);
 
-      field(fixture).dispatchEvent(new Event('blur'));
-      fixture.detectChanges();
-      await fixture.whenStable();
-      expect(last()).toBe(false);
+      expect(document.activeElement).toBe(elsewhere);
+      expect(field(fixture).value).toBe('milk');
+      elsewhere.remove();
     });
 
     it('makes the field a search box that controls the results', async () => {
@@ -2043,7 +2090,6 @@ describe('searching the basket', () => {
       // Nothing about the search survives leaving: it is the one thing on this
       // screen that is never remembered (section 4.7).
       expect(view.query()).toBe('');
-      expect(navChrome.setComposing).toHaveBeenLastCalledWith(false);
     });
   });
 
@@ -3321,6 +3367,19 @@ describe('the composer and the list it adds to', () => {
       expect(field(fixture).value).toBe('Batteries');
     });
 
+    it('opens below the composer’s plus, at the top of the page (velista 0189)', async () => {
+      const { fixture } = await render({ served });
+      typeInto(fixture, 'Batteries');
+
+      plus(fixture).click();
+      fixture.detectChanges();
+
+      const picker = fixture.debugElement.query(By.directive(ListPicker))
+        .componentInstance as ListPicker;
+      expect(picker.side()).toBe('below');
+      expect(options()).toHaveLength(2);
+    });
+
     it('opens for a single list too', async () => {
       const { fixture } = await render({ served: [served[0]] });
       typeInto(fixture, 'Batteries');
@@ -3334,7 +3393,6 @@ describe('the composer and the list it adds to', () => {
     it('adds to the picked list, then clears the field and keeps focus in it', async () => {
       const { fixture, store } = await render({ served });
       typeInto(fixture, 'Batteries');
-      composer(fixture).quantity.set(2);
       plus(fixture).click();
       fixture.detectChanges();
 
@@ -3345,13 +3403,11 @@ describe('the composer and the list it adds to', () => {
       expect(store.addLine).toHaveBeenCalledWith({
         targetListId: 'l-parents',
         content: 'Batteries',
-        quantity: 2,
-        unit: 'UNIT',
-        // Typed words say the page can ask which line (velista 0170).
+        // Typed words state no amount and no unit (velista 0185), and say the
+        // page can ask which line (velista 0170).
         askIfAmbiguous: true,
       });
       expect(field(fixture).value).toBe('');
-      expect(composer(fixture).quantity()).toBe(1);
       expect(document.activeElement).toBe(field(fixture));
       expect(options()).toHaveLength(0);
     });
@@ -3547,8 +3603,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           intoLineId: 'zl-b',
         });
         expect(document.querySelector('.pop')).toBeNull();
@@ -3564,8 +3618,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           newLine: true,
         });
       });
@@ -3649,6 +3701,171 @@ describe('the composer and the list it adds to', () => {
         expect(said).toContain('list.addChoice.merged');
         expect(said).toContain('"name":"Whole milk"');
         expect(said).toContain('"quantity":"8"');
+      });
+
+      /** Velista `0185`: an add that met a line already asked for adds nothing. */
+      describe('an add that meets a line already on the list (velista 0185)', () => {
+        const WHOLE_MILK: BasketProduct = {
+          id: 'i-milk',
+          name: { en: 'Whole milk', es: 'Whole milk' },
+          brand: null,
+          imageUrl: null,
+          size: null,
+          unit: null,
+          offer: null,
+          offers: [],
+          atShop: null,
+          productGroupId: null,
+          categories: [],
+          sectionIds: [],
+          approxWeight: null,
+        };
+        const milk = line('Leche entera', {
+          productId: 'i-milk',
+          left: 8,
+          entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+        });
+
+        async function met(lineIds: readonly string[]) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockResolvedValueOnce({
+            entries: lineIds.map((lineId) =>
+              entry(null, lineId, 8, { content: 'Leche entera' })
+            ),
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(rendered.fixture, 'Leche entera');
+          plus(rendered.fixture).click();
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          return rendered;
+        }
+
+        it('finds the row by its lines, marks it, and says it is already on that list', async () => {
+          const { fixture } = await met(['zl-milk']);
+
+          const host = fixture.nativeElement as HTMLElement;
+          const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+          expect(row).not.toBeNull();
+          expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+          const said = query(fixture, '.said')?.textContent ?? '';
+          expect(said).toContain('basket.add.alreadyOn');
+          expect(said).toContain('"name":"Whole milk"');
+          expect(said).toContain('"list":"Weekly shop"');
+          // The words go, as on any add that landed, and nothing is said under the field.
+          expect(field(fixture).value).toBe('');
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+        });
+
+        it('says it under the field when no drawn row holds the line', async () => {
+          const { fixture } = await met(['zl-elsewhere']);
+
+          const notice = (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-line-composer .notice-text'
+          );
+          expect(notice?.textContent).toContain('basket.add.alreadyOn');
+          // Said once: the notice speaks in its own region, so the page's does not.
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
+        it('says nothing on a basket the page followed to while the add was out', async () => {
+          const { fixture, store } = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          let answer: (value: unknown) => void = () => undefined;
+          store.addLine.mockImplementationOnce(
+            () => new Promise((resolve) => (answer = resolve))
+          );
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          fixture.detectChanges();
+
+          const basket = TestBed.inject(BasketStore).basket as unknown as {
+            update: (fn: (value: { id: string }) => { id: string }) => void;
+          };
+          basket.update((value) => ({ ...value, id: 'basket-sunday' }));
+          answer({
+            entries: [entry(null, 'zl-elsewhere', 8, { content: 'Leche' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const host = fixture.nativeElement as HTMLElement;
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+      });
+
+      it('says why under the field when a card the list counts in another unit is refused (velista 0185)', async () => {
+        const { fixture, store } = await render({ served, echoValues: true });
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'line_unit_differs',
+              status: 409,
+              correlationId: 'ref',
+              details: {
+                line: {
+                  lineId: 'zl-milk',
+                  content: 'Leche entera',
+                  unit: 'MILLILITER',
+                  quantity: 1500,
+                },
+                unit: 'UNIT',
+                index: null,
+              },
+            })
+          );
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche',
+          quantity: 1,
+          unit: 'UNIT',
+          itemIds: ['i-milk'],
+          named: false,
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const notice = (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer .notice-text'
+        );
+        expect(notice?.textContent).toContain(
+          'basket.error.addUnitDiffers.MILLILITER'
+        );
+        expect(notice?.textContent).toContain('"name":"Leche entera"');
+        expect(notice?.textContent).toContain('"list":"Weekly shop"');
+        // The words come back, and the generic sentence is not said.
+        expect(field(fixture).value).toBe('Leche');
+        expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+          'basket.error'
+        );
+        card.remove();
       });
 
       it('titles the question with the line as it is stored, not as it was typed', async () => {
@@ -5099,7 +5316,6 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   ];
 
   const NUMBER = 'lib-list-tools lib-basket-total';
-  const BAR = 'lib-list-tools lib-basket-total-bar';
   const NOTE = 'lib-no-prices-note';
 
   // A popover is drawn beside the page and not inside it, so one left open
@@ -5108,7 +5324,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     TestBed.resetTestingModule();
   });
 
-  it('draws the number and the bar with a priced line, and no small row', async () => {
+  it('draws the number with a priced line, no bar, and no small row', async () => {
     const { fixture } = await render({
       lines: lines(),
       products: priced(),
@@ -5117,23 +5333,22 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
 
     // Two at 1.35: the number is the sum of the rows under it.
     expect(query(fixture, NUMBER)?.textContent).toContain('"amount":"€2.70"');
-    expect(query(fixture, BAR)).not.toBeNull();
+    // The bar went with velista 0189; the number stays (decision K).
+    expect(query(fixture, 'lib-basket-total-bar')).toBeNull();
+    expect(query(fixture, '.total-bar')).toBeNull();
     expect(query(fixture, NOTE)).toBeNull();
   });
 
-  it('puts the number before the filter, and the bar under the chips', async () => {
+  it('puts the number before the filter', async () => {
     const { fixture } = await render({ lines: lines(), products: priced() });
     TestBed.inject(BasketViewStore).setOrder('alpha');
     fixture.detectChanges();
 
     const number = query(fixture, NUMBER);
     expect(number?.nextElementSibling?.classList).toContain('tool');
-    expect(query(fixture, BAR)?.previousElementSibling?.tagName).toBe(
-      'LIB-CHIP-ROW'
-    );
   });
 
-  it('keeps the bar and the small row off the edges of the screen', () => {
+  it('keeps the tools row, the chips and the small row off the edges of the screen', () => {
     // The column's inline padding is zero, so its rows reach the edges, and
     // nothing in the tools bar is a row. jsdom lays nothing out, so the
     // stylesheet is the half a spec can see.
@@ -5146,9 +5361,10 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     expect(/lib-list-tools\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
       `padding-inline-start: ${gutter}`
     );
-    expect(/\.chips,\s*\.total-bar\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
+    expect(/\.chips\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
       `margin-inline-end: ${gutter}`
     );
+    expect(css).not.toContain('.total-bar');
     expect(/\.no-prices\s*\{([^}]*)\}/.exec(css)?.[1]).toContain(
       `padding-inline: ${gutter}`
     );
@@ -5161,11 +5377,12 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     });
 
     expect(query(fixture, NUMBER)).toBeNull();
-    expect(query(fixture, BAR)).toBeNull();
 
-    // First in the scroll: under the sticky bar and above the changes banner.
+    // First in the scroll, under the field, and above the changes banner. The tools
+    // row is in the head block since velista 0189, so nothing precedes it.
     const note = query(fixture, NOTE);
-    expect(note?.previousElementSibling?.tagName).toBe('LIB-LIST-TOOLS');
+    expect(note?.parentElement?.matches('main.page')).toBe(true);
+    expect(note?.previousElementSibling).toBeNull();
     expect(note?.nextElementSibling?.tagName).toBe('LIB-CHANGES-BANNER');
   });
 
@@ -5177,7 +5394,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     expect(query(fixture, NOTE)).toBeNull();
   });
 
-  it('draws neither while the composer holds words, with or without a price', async () => {
+  it('keeps the number while the composer holds words, and drops the small row', async () => {
     const withPrice = await render({
       lines: lines(),
       products: priced(),
@@ -5185,7 +5402,8 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
     });
     typeInto(withPrice.fixture, 'yog');
 
-    expect(query(withPrice.fixture, 'lib-basket-total')).toBeNull();
+    // The tools row stays while typing since velista 0189, and the number with it.
+    expect(query(withPrice.fixture, 'lib-basket-total')).not.toBeNull();
     expect(query(withPrice.fixture, 'lib-basket-total-bar')).toBeNull();
 
     const without = await render({ lines: [line('Candles')], served });

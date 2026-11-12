@@ -1,3 +1,15 @@
+> **PR:** [#977](https://github.com/IchirokuXVI/nx-portfolio/pull/977)
+
+> **Withdrawn on 2026-11-12 by the owner.** In his words: "to prevent users from deleting a
+> line by mistake (which also removes the history and other things), a line will only be
+> deleted if you manually delete it from the sheet or line page. Lines with a quantity of 0
+> (or less, just in case) will be hidden and you can only see them when searching. This
+> already happens for lines that have at least 1 buy in the list, but the lines that were
+> never bought will also be hidden. This change of heart comes from the fact that I didn't
+> think about the assistant, users with only edit access, and probably more situations."
+> PR #977 now deletes nothing: it holds this note and specs, unit and real Postgres, that a
+> settle, a delta and a basket demand that take a bare line to 0 leave it standing at 0.
+
 # 0263: a line with nothing to keep is deleted at zero
 
 > Written on 2026-11-11 from the owner's decision of that day (section 7 of the batch

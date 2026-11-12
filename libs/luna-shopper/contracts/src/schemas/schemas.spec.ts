@@ -387,9 +387,12 @@ describe('contract schemas', () => {
     it('line.add response (a free text line, and no trip status on it)', () => {
       expect(
         // The line, and whether the add raised one the list already held rather
-        // than creating it (plan 0091, section 4).
+        // than creating it (plan 0091, section 4), and which of the three
+        // things the add did (plan 0260, section 2).
         validateMessageResponse('line.add', {
           merged: false,
+          outcome: 'CREATED',
+          alreadyOnList: [],
           line: {
             id: 'l',
             listId: 'li',

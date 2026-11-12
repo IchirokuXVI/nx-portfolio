@@ -4,7 +4,6 @@ import {
   lineCategories,
   listCategoryCounts,
   listViewActiveCount,
-  listViewHoldsReorder,
   NO_CATEGORY,
   type ListCategoryPick,
   type ListViewContext,
@@ -297,7 +296,7 @@ describe('listCategoryCounts', () => {
   });
 });
 
-describe('the badge and the reorder hold', () => {
+describe('the badge', () => {
   it('counts A to Z and a picked category, and not a category still unpicked', () => {
     expect(listViewActiveCount(state())).toBe(0);
     expect(listViewActiveCount(state({ order: 'alpha' }))).toBe(1);
@@ -307,15 +306,5 @@ describe('the badge and the reorder hold', () => {
         state({ order: 'alpha', view: 'category', category: 'milk' })
       )
     ).toBe(2);
-  });
-
-  it('holds reorder under A to Z, a picked category, or a search', () => {
-    expect(listViewHoldsReorder(state(), '')).toBe(false);
-    expect(listViewHoldsReorder(state(), '   ')).toBe(false);
-    expect(listViewHoldsReorder(state({ order: 'alpha' }), '')).toBe(true);
-    expect(
-      listViewHoldsReorder(state({ view: 'category', category: 'milk' }), '')
-    ).toBe(true);
-    expect(listViewHoldsReorder(state(), 'milk')).toBe(true);
   });
 });

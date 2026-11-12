@@ -37,8 +37,6 @@ interface Seed {
   readonly detail?: string;
   /** The photo of the row the plus was pressed on. */
   readonly imageUrl?: string;
-  /** How many the list held before the visit. Above zero is a merge. */
-  readonly before?: number;
   /** The line the add made waits for approval. */
   readonly pending?: boolean;
 }
@@ -60,6 +58,15 @@ const BLEACH: Seed = {
   name: 'Bleach',
 };
 
+/** The oil on the weekly shop under its own name, one of it, before the visit. */
+const OIL_LINE: FakeLine = {
+  id: 'line-oil',
+  listId: 'list-weekly',
+  content: 'Extra virgin olive oil',
+  quantity: 1,
+  itemIds: ['item-oil'],
+};
+
 /** The oil again on the weekly shop, under a name somebody typed, one of it. */
 const FRYING_LINE: FakeLine = {
   id: 'line-frying',
@@ -79,7 +86,11 @@ interface Raised {
 interface Options {
   /** What the visit added, in the order it was added. */
   readonly added?: readonly Seed[];
-  /** Lines the lists held before the visit, beside the ones `before` makes. */
+  /**
+   * Lines the lists held before the visit. A plus on a product one of them holds
+   * with an amount adds nothing (backend `0260`), so a visit moves such a line
+   * only through `raised`.
+   */
   readonly lines?: readonly FakeLine[];
   /** The lines the visit raised by one from a row's stepper, after its adds. */
   readonly raised?: readonly Raised[];
@@ -141,22 +152,10 @@ async function render(options: Options = {}): Promise<Harness> {
     dismiss: jest.fn().mockResolvedValue(undefined),
     leaveTo: jest.fn().mockResolvedValue(undefined),
   };
-  // The real store, over doubles of what it reads and writes. A product the list
-  // held before the visit is a line under the product's name, which the add raises.
+  // The real store, over doubles of what it reads and writes.
   const adds = fakeAdds({
     lists: [WEEKLY, CLEANING],
-    lines: [
-      ...added
-        .filter((seed) => (seed.before ?? 0) > 0)
-        .map((seed) => ({
-          id: lineIdOf(seed),
-          listId: seed.listId,
-          content: seed.name,
-          quantity: seed.before ?? 0,
-          itemIds: [seed.itemId],
-        })),
-      ...(options.lines ?? []),
-    ],
+    lines: options.lines ?? [],
     pendingItemIds: added
       .filter((seed) => seed.pending === true)
       .map((seed) => seed.itemId),
@@ -467,12 +466,13 @@ describe('AddedSheet', () => {
   });
 
   describe('a product the visit raised on two lines of one list', () => {
-    // The plus made the line under the product's name, and the stepper of "Oil for
-    // frying" raised that line, which was there before with one.
+    // Both lines were there before the visit with one each, so a plus would have
+    // added nothing (backend `0260`). The stepper under the row raised each of them.
     const twice: Options = {
-      added: [OIL],
-      lines: [FRYING_LINE],
+      added: [],
+      lines: [OIL_LINE, FRYING_LINE],
       raised: [
+        { listId: 'list-weekly', itemId: 'item-oil', lineId: OIL_LINE.id },
         { listId: 'list-weekly', itemId: 'item-oil', lineId: 'line-frying' },
       ],
     };
@@ -488,7 +488,7 @@ describe('AddedSheet', () => {
           quantityIn(one),
         ])
       ).toEqual([
-        ['item-oil', lineIdOf(OIL), 'Extra virgin olive oil', '1'],
+        ['item-oil', OIL_LINE.id, 'Extra virgin olive oil', '2'],
         ['item-oil', 'line-frying', 'Oil for frying', '2'],
       ]);
     });
@@ -514,10 +514,10 @@ describe('AddedSheet', () => {
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
       expect(quantityIn(lineRow(fixture, 'line-frying'))).toBe('3');
-      expect(quantityIn(lineRow(fixture, lineIdOf(OIL)))).toBe('1');
+      expect(quantityIn(lineRow(fixture, OIL_LINE.id))).toBe('2');
     });
 
-    it('takes each line back its own way: the one that was there is lowered, the one the visit made is deleted', async () => {
+    it('takes each line back to what it held before the visit, and deletes neither', async () => {
       const { fixture, lines, sheets, store } = await render(twice);
 
       // "Oil for frying" held one before the visit, so it goes back to one.
@@ -526,17 +526,20 @@ describe('AddedSheet', () => {
 
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1, 'UNIT');
-      expect(lines.deleteLine).not.toHaveBeenCalled();
       expect(lineRow(fixture, 'line-frying')).toBeNull();
-      expect(lineRow(fixture, lineIdOf(OIL))).not.toBeNull();
+      expect(lineRow(fixture, OIL_LINE.id)).not.toBeNull();
       expect(sheets.dismiss).not.toHaveBeenCalled();
 
-      stepsOf(lineRow(fixture, lineIdOf(OIL))).minus?.click();
+      stepsOf(lineRow(fixture, OIL_LINE.id)).minus?.click();
       await quiet(fixture);
 
-      expect(lines.deleteLine).toHaveBeenCalledTimes(1);
-      expect(lines.deleteLine).toHaveBeenCalledWith(lineIdOf(OIL));
-      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(lines.addQuantity).toHaveBeenCalledTimes(2);
+      expect(lines.addQuantity).toHaveBeenLastCalledWith(
+        OIL_LINE.id,
+        -1,
+        'UNIT'
+      );
+      expect(lines.deleteLine).not.toHaveBeenCalled();
       expect(store.count()).toBe(0);
     });
   });
@@ -564,9 +567,14 @@ describe('AddedSheet', () => {
   });
 
   it('takes back no more than the visit added from a line that was there before', async () => {
-    // The list held two, and the visit raised the line to three.
+    // The list held two, and the stepper under the row raised the line to three.
+    // A plus would have added nothing to it (backend `0260`).
     const { fixture, lines } = await render({
-      added: [{ ...OIL, before: 2 }, RICE],
+      added: [RICE],
+      lines: [{ ...OIL_LINE, quantity: 2 }],
+      raised: [
+        { listId: 'list-weekly', itemId: 'item-oil', lineId: OIL_LINE.id },
+      ],
     });
     expect(quantityOf(fixture, 'item-oil')).toBe('3');
 
@@ -575,7 +583,7 @@ describe('AddedSheet', () => {
 
     expect(lines.deleteLine).not.toHaveBeenCalled();
     expect(lines.addQuantity).toHaveBeenCalledTimes(1);
-    expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(OIL), -1, 'UNIT');
+    expect(lines.addQuantity).toHaveBeenCalledWith(OIL_LINE.id, -1, 'UNIT');
     expect(row(fixture, 'item-oil')).toBeNull();
   });
 

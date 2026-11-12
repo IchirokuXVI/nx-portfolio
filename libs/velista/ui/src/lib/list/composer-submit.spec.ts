@@ -83,7 +83,7 @@ describe('the list composers submit the line, not the page', () => {
       const fixture = await render(LineComposer);
       const composer = fixture.componentInstance;
 
-      const emitted: { content: string; quantity: number }[] = [];
+      const emitted: { content: string; quantity?: number }[] = [];
       composer.submitted.subscribe((value) => emitted.push(value));
 
       const field = fixture.nativeElement.querySelector(
@@ -95,9 +95,8 @@ describe('the list composers submit the line, not the page', () => {
 
       const notPrevented = submitForm(fixture);
 
-      expect(emitted).toEqual([
-        { content: 'Sourdough loaf', quantity: 1, unit: 'UNIT' },
-      ]);
+      // Typed words state no amount (velista 0185).
+      expect(emitted).toEqual([{ content: 'Sourdough loaf' }]);
       expect(notPrevented).toBe(false);
     });
 
@@ -117,7 +116,7 @@ describe('the list composers submit the line, not the page', () => {
       expect(notPrevented).toBe(false);
     });
 
-    it('clears the field and resets the quantity, ready for the next one', async () => {
+    it('clears the field, ready for the next one', async () => {
       const fixture = await render(LineComposer);
       const composer = fixture.componentInstance;
 
@@ -126,13 +125,11 @@ describe('the list composers submit the line, not the page', () => {
       ) as HTMLInputElement;
       field.value = 'Tomatoes';
       field.dispatchEvent(new Event('input'));
-      composer.quantity.set(4);
       fixture.detectChanges();
 
       submitForm(fixture);
 
       expect(composer.content()).toBe('');
-      expect(composer.quantity()).toBe(1);
     });
   });
 

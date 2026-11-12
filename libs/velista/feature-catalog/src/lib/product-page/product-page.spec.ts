@@ -1097,6 +1097,39 @@ describe('ProductPage', () => {
       expect(store.count()).toBe(0);
     });
 
+    it('draws the trash on the minus of a line it made at one step, 25 ml of a loose product, and that press takes it back (velista 0185)', async () => {
+      const loose: CatalogItem = { ...OIL, size: null };
+      const { fixture, lines, store } = await render({
+        items: [loose, RICE],
+        lists: [WEEKLY, PARTY],
+      });
+
+      listRow(fixture, 'list-party').main?.plus?.click();
+      await settle(fixture);
+
+      expect(lines.addLineResult).toHaveBeenCalledWith(
+        'list-party',
+        'Extra virgin olive oil',
+        25,
+        ['item-oil'],
+        false,
+        undefined,
+        'MILLILITER'
+      );
+      const made = listRow(fixture, 'list-party').main;
+      expect(made?.quantity).toBe('25');
+      // One press reaches 0, so the minus draws the trash (velista 0188).
+      expect(made?.minus?.classList).toContain('is-clear');
+      expect(made?.minus?.querySelector('lib-trash-icon')).not.toBeNull();
+
+      made?.minus?.click();
+      await quiet(fixture);
+
+      expect(lines.deleteLine).toHaveBeenCalledWith('line-list-party-item-oil');
+      expect(lines.addQuantity).not.toHaveBeenCalled();
+      expect(store.count()).toBe(0);
+    });
+
     it('sets a line that was there before to zero with the minus, and deletes nothing', async () => {
       const { fixture, lines } = await render({
         lines: [{ ...OIL_LINE, quantity: 1 }],

@@ -1,5 +1,6 @@
 import {
   COMMENT_PATTERNS,
+  LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_ITEM_SET_CEILING,
   LINE_ITEM_SET_MAX,
@@ -469,12 +470,21 @@ const commentAudioView = object(
   ['commentId', 'contentType', 'audio']
 );
 
-// What an add did: the line as it now stands, and whether the add raised one
-// that was already there rather than creating it (plan 0091, section 4).
+// What an add did: the line as it now stands, whether it landed on a line that
+// was already there (plan 0091, section 4), which of the three things happened
+// and every wanted line it met and left as it was (plan 0260, section 2).
 const addLineResult = object(
   LIST_SCHEMA_IDS.addLineResult,
-  { line: ref(LIST_SCHEMA_IDS.lineView), merged: boolean() },
-  ['line', 'merged']
+  {
+    line: ref(LIST_SCHEMA_IDS.lineView),
+    merged: boolean(),
+    outcome: ref(ENUM_IDS.addLineOutcome),
+    alreadyOnList: {
+      ...array(ref(LIST_SCHEMA_IDS.lineView)),
+      maxItems: LINE_ADD_CHOICE_MAX,
+    },
+  },
+  ['line', 'merged', 'outcome', 'alreadyOnList']
 );
 
 /**

@@ -39,7 +39,7 @@ function vm(overrides: Partial<LineRowVm> = {}): LineRowVm {
 
 async function render(
   line: LineRowVm,
-  inputs: { reordering?: boolean; pending?: number | null } = {}
+  inputs: { pending?: number | null } = {}
 ): Promise<ComponentFixture<LineRow>> {
   TestBed.resetTestingModule();
 
@@ -49,9 +49,6 @@ async function render(
 
   const fixture = TestBed.createComponent(LineRow);
   fixture.componentRef.setInput('line', line);
-  if (inputs.reordering !== undefined) {
-    fixture.componentRef.setInput('reordering', inputs.reordering);
-  }
   if (inputs.pending !== undefined) {
     fixture.componentRef.setInput('pending', inputs.pending);
   }
@@ -483,16 +480,6 @@ describe('LineRow', () => {
       );
     });
 
-    it('draws a photo that opens nothing in reorder mode', async () => {
-      const fixture = await render(
-        vm({ product: shown({ imageUrl: 'https://img.example/1.jpg' }) }),
-        { reordering: true }
-      );
-
-      expect(query(fixture, 'lib-product-picture img')).not.toBeNull();
-      expect(query(fixture, 'button.zoom')).toBeNull();
-    });
-
     it('draws bones for the picture and line 2 while the product loads, and keeps the name', async () => {
       const fixture = await render(
         vm({ content: 'Leche', named: true, product: { kind: 'loading' } })
@@ -565,15 +552,6 @@ describe('LineRow', () => {
       expect(text(fixture, '.no-product')).toBe('list.row.noProduct');
       expect(query(fixture, 'lib-product-picture')).not.toBeNull();
     });
-
-    it('offers no choice in reorder mode', async () => {
-      const fixture = await render(
-        vm({ product: { kind: 'none', canChoose: true } }),
-        { reordering: true }
-      );
-
-      expect(query(fixture, 'button.choose')).toBeNull();
-    });
   });
 
   describe('the quantity (velista 0188)', () => {
@@ -643,14 +621,6 @@ describe('LineRow', () => {
 
       expect(steps).toEqual([{ from: 1000, to: 1100, repeat: false }]);
     });
-
-    it('goes away in reorder mode', async () => {
-      // A second gesture living inside a row being dragged would fight the first for
-      // the same finger.
-      const fixture = await render(vm(), { reordering: true });
-
-      expect(stepper(fixture)).toBeNull();
-    });
   });
 
   describe('what a tap does', () => {
@@ -676,17 +646,6 @@ describe('LineRow', () => {
 
         expect(opened).toEqual(['ln-1']);
       }
-    });
-
-    it('does nothing at all in reorder mode', async () => {
-      const fixture = await render(vm(), { reordering: true });
-      const opened: string[] = [];
-      fixture.componentInstance.opened.subscribe((id) => opened.push(id));
-
-      row(fixture).click();
-
-      expect(opened).toEqual([]);
-      expect(row(fixture).hasAttribute('role')).toBe(false);
     });
 
     it('does nothing for a row that cannot be opened', async () => {
@@ -781,36 +740,6 @@ describe('LineRow', () => {
         anonymous.nativeElement.querySelector('.notice.overwritten')
           ?.textContent
       ).toContain('overwrittenBySomeone');
-    });
-  });
-
-  describe('reorder mode', () => {
-    it('drops the role rather than keeping one it dishonours', async () => {
-      const fixture = await render(vm(), { reordering: true });
-
-      expect(row(fixture).hasAttribute('role')).toBe(false);
-      expect(row(fixture).hasAttribute('aria-label')).toBe(false);
-    });
-
-    it('grows a focusable grip with real keys on it', async () => {
-      const fixture = await render(vm(), { reordering: true });
-
-      const steps = fixture.nativeElement.querySelectorAll('.grip-step');
-      expect(steps).toHaveLength(2);
-    });
-
-    it('emits a move rather than reordering its own siblings', async () => {
-      const fixture = await render(vm(), { reordering: true });
-      const acted: string[] = [];
-      fixture.componentInstance.act.subscribe((e) => acted.push(e.action));
-
-      const steps = [
-        ...fixture.nativeElement.querySelectorAll('.grip-step'),
-      ] as HTMLElement[];
-      steps[0].click();
-      steps[1].click();
-
-      expect(acted).toEqual(['moveUp', 'moveDown']);
     });
   });
 

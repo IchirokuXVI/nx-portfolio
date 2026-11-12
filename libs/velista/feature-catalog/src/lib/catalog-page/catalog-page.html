@@ -349,7 +349,7 @@
 -->
   <p aria-live="polite" class="add-failed" role="status">
     @if (addFailed()) {
-      {{ 'catalog.add.failed' | rokuT }}
+      {{ addFailedText().key | rokuT: addFailedText().args }}
     }
   </p>
 

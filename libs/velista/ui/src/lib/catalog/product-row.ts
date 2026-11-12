@@ -17,6 +17,7 @@ import {
   BasketIcon,
   ChevronDownIcon,
   ClockIcon,
+  InfoIcon,
   PlusIcon,
 } from '../icons/icons';
 import { ProductPicture } from '../list/product-picture';
@@ -135,7 +136,24 @@ export interface ProductRowAdd {
   readonly label?: string;
   /** The heading over the lines, when the host words it. Absent: "On L". */
   readonly title?: string;
+  /**
+   * Present when the list already asks for this product on a line (velista
+   * `0185`, C1): the plus is switched off, and in place of the heading of the
+   * lines the card says so, with a link that opens the list at that line. The
+   * lines keep their steppers. `lineId` is the first such line in the order the
+   * card draws them, and `path` the list's own URL; the link adds `?line=`.
+   */
+  readonly onList?: ProductRowOnList;
 }
+
+/** Where a product already on the list is: the line, and the list's URL. */
+export interface ProductRowOnList {
+  readonly lineId: string;
+  readonly path: string;
+}
+
+/** Numbers each card's sentence, so two cards on a page never share an id. */
+let onListCount = 0;
 
 /**
  * The radio of a card in the catalog that chooses one product (velista `0140`,
@@ -265,6 +283,7 @@ export type ProductRowExpanded = 'shops' | 'members';
     BasketIcon,
     ChevronDownIcon,
     ClockIcon,
+    InfoIcon,
     NgTemplateOutlet,
     PlusIcon,
     ProductPicture,
@@ -558,8 +577,18 @@ export type ProductRowExpanded = 'shops' | 'members';
 
       @if (slot() === 'add' && add(); as adding) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
+          <!--
+            Switched off for a product the list already asks for (velista 0185,
+            decision G): still a button in its place, with its name, and the
+            sentence under the card that says why as its description. Inert by
+            aria-disabled, not disabled: the first add of a product switches it
+            off under a keyboard's focus, and a disabled button would drop that
+            focus to the page.
+          -->
           <button
-            (click)="pressAdd($event)"
+            (click)="pressAdd($event, adding)"
+            [attr.aria-describedby]="adding.onList ? onListId : null"
+            [attr.aria-disabled]="adding.onList ? 'true' : null"
             [attr.aria-label]="
               adding.label ??
               ('catalog.add.label'
@@ -590,10 +619,30 @@ export type ProductRowExpanded = 'shops' | 'members';
       @if (slot() === 'add' && heldLines().length > 0) {
         <div [attr.role]="grid() ? 'gridcell' : null" class="cell">
           <div class="held">
-            <span class="held-title">{{
-              add()?.title ??
-                ('catalog.held.title' | rokuT: { list: add()?.list })
-            }}</span>
+            @if (add()?.onList; as onList) {
+              <!--
+                Why the plus is off, and the way to the line (velista 0185, C1).
+                Real text, read without a press, and a real link, so it opens in
+                a new tab and is said as one.
+              -->
+              <p [id]="onListId" class="held-onlist">
+                <lib-info-icon aria-hidden="true" class="held-onlist-icon" />
+                <span class="held-onlist-text"
+                  >{{ 'catalog.held.alreadyOn' | rokuT: { list: add()?.list } }}
+                  <a
+                    [queryParams]="{ line: onList.lineId }"
+                    [routerLink]="onList.path"
+                    class="held-onlist-link"
+                    >{{ 'catalog.held.openLine' | rokuT }}</a
+                  ></span
+                >
+              </p>
+            } @else {
+              <span class="held-title">{{
+                add()?.title ??
+                  ('catalog.held.title' | rokuT: { list: add()?.list })
+              }}</span>
+            }
             <ul class="held-lines">
               @for (line of heldLines(); track line.lineId) {
                 <li [attr.data-line]="line.lineId" class="held-line">
@@ -653,6 +702,9 @@ export class ProductRow {
 
   /** The plus, or null for a card that offers none. See {@link ProductRowAdd}. */
   readonly add = input<ProductRowAdd | null>(null);
+
+  /** The id of the sentence a switched off plus is described by. */
+  protected readonly onListId = `product-row-on-list-${++onListCount}`;
 
   /**
    * A radio or a tick in the control slot, for the catalog opened to choose
@@ -767,7 +819,12 @@ export class ProductRow {
     }
   }
 
-  protected pressAdd(event: Event): void {
+  protected pressAdd(event: Event, adding: ProductRowAdd): void {
+    // Switched off by `aria-disabled`, so a click, Enter or Space still reaches
+    // here and does nothing (velista `0185`, decision G).
+    if (adding.onList !== undefined) {
+      return;
+    }
     this.added.emit({
       id: this.row().id,
       anchor: event.currentTarget as HTMLElement,

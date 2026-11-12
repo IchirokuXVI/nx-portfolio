@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import {
   ADD_CHOICE_MAX,
+  addAmount,
   basketEntryPatchOf,
   isOpenBasket,
   LINE_QUANTITY_MAX,
@@ -1584,32 +1585,37 @@ export class BasketMemory implements BasketServiceI {
       throw this._refuse('forbidden', 403, 'You cannot write that list');
     }
 
-    const quantity = Math.max(1, Math.trunc(body.quantity));
     const unit = body.unit ?? 'UNIT';
+    // One step of its unit when the add states no amount (backend `0260`, A2).
+    const quantity =
+      body.quantity === undefined
+        ? addAmount(unit)
+        : Math.max(1, Math.trunc(body.quantity));
     const key = normalizeContent(content);
-    const wanted = productSetKey(body.itemIds ?? []);
-    const held =
-      wanted === ''
-        ? this._typedAddTarget(body, key)
-        : this._lines.find(
-            (line) =>
-              !line.deleted &&
-              line.listId === body.targetListId &&
-              normalizeContent(line.content) === key &&
-              productSetKey(line.itemIds) === wanted
-          );
+    const products = (body.itemIds ?? []).length > 0;
+    const met = products
+      ? this._productAddTargets(body, key, unit)
+      : this._typedAddTargets(body, key);
 
-    if (held !== undefined && (held.unit ?? 'UNIT') !== unit) {
-      // Grams are not added to pieces (backend `0246` M5): the line is answered as
-      // it stands.
-      return this._result([held.id]);
+    // A line already asked for takes nothing (backend `0260`, A1): every one met is
+    // answered as it stands.
+    const asked = met.filter((line) => line.quantity > 0);
+    if (asked.length > 0) {
+      const ids = asked.slice(0, ADD_CHOICE_MAX).map((line) => line.id);
+      return { ...(await this._result(ids)), addOutcome: 'alreadyOnList' };
     }
+    const held = met[0];
     if (held !== undefined) {
-      // Capped as `raiseForAdd` caps it, and as `LineMemory` does.
-      held.quantity = Math.min(LINE_QUANTITY_MAX, held.quantity + quantity);
+      // Kept at zero: raised by the add's amount, or one step of the line's own
+      // unit for a typed name (R2, R4). Capped as `raiseForAdd` caps it.
+      const step =
+        products && body.quantity !== undefined
+          ? quantity
+          : addAmount(held.unit ?? 'UNIT');
+      held.quantity = Math.min(LINE_QUANTITY_MAX, held.quantity + step);
       this._moved(held.id);
       this._announce([held.id], true, false);
-      return this._result([held.id]);
+      return { ...(await this._result([held.id])), addOutcome: 'raised' };
     }
 
     const line: StoredLine = {
@@ -1628,18 +1634,62 @@ export class BasketMemory implements BasketServiceI {
     };
     this._lines.push(line);
     this._announce([line.id], true, false);
-    return this._result([line.id]);
+    return { ...(await this._result([line.id])), addOutcome: 'created' };
   }
 
   /**
-   * Where a typed add lands on its list, or undefined for a new line (backend
-   * `0228`, target 1). Throws what the server would: the not found for a chosen line
-   * that is gone, and the question for two or more lines that hold a product.
+   * The lines a product add meets in its own unit (backend `0260`, section 1): the
+   * same name and products, or a line whose products hold every product of the add.
+   * Throws `line_unit_differs` when only lines of another unit hold it.
    */
-  private _typedAddTarget(
+  private _productAddTargets(
+    body: BasketAddLineRequest,
+    key: string,
+    unit: LineUnit
+  ): readonly StoredLine[] {
+    const wanted = productSetKey(body.itemIds ?? []);
+    const itemIds = body.itemIds ?? [];
+    const met = this._lines.filter(
+      (line) =>
+        !line.deleted &&
+        line.listId === body.targetListId &&
+        ((normalizeContent(line.content) === key &&
+          productSetKey(line.itemIds) === wanted) ||
+          itemIds.every((id) => line.itemIds.includes(id)))
+    );
+    const own = met.filter((line) => (line.unit ?? 'UNIT') === unit);
+    if (own.length === 0 && met.length > 0) {
+      const other = met[0];
+      throw new GatewayError({
+        code: 'line_unit_differs',
+        status: 409,
+        correlationId: 'memory',
+        detail: 'The list counts that product in another unit',
+        details: {
+          line: {
+            lineId: other.id,
+            content: other.content,
+            unit: other.unit ?? 'UNIT',
+            quantity: other.quantity,
+          },
+          unit,
+          index: null,
+        },
+      });
+    }
+    return own;
+  }
+
+  /**
+   * The lines a typed add meets on its list, or none for a new line (backend `0228`,
+   * target 1, as backend `0260` reads it). Throws what the server would: the not
+   * found for a chosen line that is gone, and the question for two or more lines
+   * at zero that hold a product.
+   */
+  private _typedAddTargets(
     body: BasketAddLineRequest,
     key: string
-  ): StoredLine | undefined {
+  ): readonly StoredLine[] {
     const onList = this._lines.filter(
       (line) => !line.deleted && line.listId === body.targetListId
     );
@@ -1649,20 +1699,24 @@ export class BasketMemory implements BasketServiceI {
       if (chosen === undefined) {
         throw this._refuse('not_found', 404, 'That line is not on the list');
       }
-      return chosen;
+      return [chosen];
     }
 
     const named = onList.filter(
       (line) => normalizeContent(line.content) === key
     );
     const text = named.find((line) => line.itemIds.length === 0);
-    if (text !== undefined || body.newLine === true) {
-      return text;
+    if (text !== undefined) {
+      return [text];
+    }
+    if (body.newLine === true) {
+      return [];
     }
 
     const candidates = named.filter((line) => line.itemIds.length > 0);
-    if (candidates.length === 1) {
-      return candidates[0];
+    const asked = candidates.filter((line) => line.quantity > 0);
+    if (asked.length > 0) {
+      return asked;
     }
     if (candidates.length > 1 && body.askIfAmbiguous === true) {
       throw new GatewayError({
@@ -1676,6 +1730,7 @@ export class BasketMemory implements BasketServiceI {
             content: line.content,
             named: true,
             quantity: line.quantity,
+            unit: line.unit ?? 'UNIT',
             itemIds: [...line.itemIds],
             productGroupId: null,
             approvalStatus: line.approved ? 'APPROVED' : 'PENDING',
@@ -1683,7 +1738,8 @@ export class BasketMemory implements BasketServiceI {
         },
       });
     }
-    return undefined;
+    // One kept line, or the earliest of several when nobody can be asked.
+    return candidates.slice(0, 1);
   }
 
   /**

@@ -6,9 +6,18 @@ import {
   LINE_UNITS,
   type AddChoice,
   type AddChoiceLine,
+  type AddOutcome,
+  type AddUnitRefusal,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { isRecord, mapArray, nullableStr, oneOf, str } from './primitives';
+import {
+  isRecord,
+  mapArray,
+  nullableStr,
+  oneOf,
+  oneOfOrNull,
+  str,
+} from './primitives';
 
 /**
  * The question a `line_add_needs_choice` refusal asks, or null for any other failure
@@ -70,4 +79,55 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
       LINE_APPROVAL_STATUS_FALLBACK
     ),
   };
+}
+
+/**
+ * The refusal of a product add that met a line of another unit, or null for any
+ * other failure (velista `0185`, section 4; backend `0260`, section 3).
+ *
+ * Mapped from `details.line` (rule D4). A refusal whose bag is missing or unreadable
+ * is still that refusal: it names no line, `name` falls back to `addedName`, the
+ * product the person added, and the unit is unknown, which draws the sentence that
+ * names no unit. Only a product add reaches this; a merge's `line_unit_differs`
+ * carries no bag and keeps the rename sentence, because its caller never asks here.
+ */
+export function toAddUnitRefusal(
+  error: unknown,
+  addedName: string
+): AddUnitRefusal | null {
+  if (!(error instanceof GatewayError) || error.code !== 'line_unit_differs') {
+    return null;
+  }
+
+  const line = error.details?.['line'];
+  if (!isRecord(line)) {
+    return { lineId: null, name: addedName, unit: null };
+  }
+
+  const lineId = str(line['lineId']);
+  const content = str(line['content'])?.trim() ?? '';
+  return {
+    lineId: lineId === null || lineId === '' ? null : lineId,
+    name: content === '' ? addedName : content,
+    unit: oneOfOrNull(line['unit'], LINE_UNITS),
+  };
+}
+
+/**
+ * The `outcome` of an add's answer, or the `addOutcome` of the basket's (backend
+ * `0260`, R1), in velista's own words. Null for an answer that names none or one
+ * this build does not know: a gateway of before backend `0260`, whose caller then
+ * reads `merged` as it always did.
+ */
+export function toAddOutcome(raw: unknown): AddOutcome | null {
+  switch (raw) {
+    case 'CREATED':
+      return 'created';
+    case 'RAISED':
+      return 'raised';
+    case 'ALREADY_ON_LIST':
+      return 'alreadyOnList';
+    default:
+      return null;
+  }
 }

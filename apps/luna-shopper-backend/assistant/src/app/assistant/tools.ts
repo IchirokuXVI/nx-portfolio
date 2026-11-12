@@ -8,6 +8,7 @@ import {
   ListResolutionBranch,
   SettlementOutcome,
   UsernamePropagation,
+  type AddLineResult,
   type LineUnit,
   type LineView,
 } from '@portfolio/luna-shopper/contracts';
@@ -340,25 +341,36 @@ const upsertLines: AssistantTool = {
         // The batch answers in request order, which is what lets a line be put
         // back against the item that asked for it.
         //
-        // It answers whether each item created a line or raised one already on
-        // the list (plan 0091). Everything here was resolved as new against a
-        // read of the list, so a merge means that read was stale or the person
-        // named one thing twice in one sentence, and either way "one more of
-        // those" is the true report and "added" would not be.
-        //
-        // A batch raises only a line of the item's unit and creates one beside
-        // a line of another unit (plan 0246 M5), so a merge is always a raise.
+        // It answers what each item did (plan 0260, section 2). Everything here
+        // was resolved as new against a read of the list, so a line met means
+        // that read was stale or the person named one thing twice in one
+        // sentence. A line already wanted is left as it was, which is what
+        // this tool reports for a line it found itself: `unchanged`. A line at
+        // zero is raised: `increased`. An answer with no `outcome`, from a core
+        // of before that plan during a deploy, is read from `merged`.
         added.forEach((result, position) => {
           runtime.link.list(list);
           results[fresh[position].index] = describeLine(
-            result.merged ? 'increased' : 'added',
+            batchAction(result),
             result.line
           );
         });
       } catch (error) {
         firstFailure = error;
-        for (const entry of fresh) {
-          results[entry.index] = itemRefused(entry.item.product, error);
+        // A batch refused for one item's unit names that item (plan 0260
+        // R7): it carries the line already on the list, and the others were
+        // only refused alongside it.
+        const index = unitDiffersHelp(error)?.index;
+        for (const [position, entry] of fresh.entries()) {
+          results[entry.index] =
+            typeof index === 'number' && index !== position
+              ? {
+                  product: entry.item.product,
+                  refused: true,
+                  reason:
+                    'nothing was added, because another item of this call was refused',
+                }
+              : itemRefused(entry.item.product, error);
         }
       }
     }
@@ -1138,6 +1150,62 @@ interface ItemResult {
   awaitingApproval?: boolean;
   refused?: true;
   reason?: string;
+  /** The line that already holds this product in another unit (plan 0260). */
+  onList?: MetLine;
+  /** What to do instead, said to the model in plain words (plan 0260). */
+  instead?: string;
+}
+
+/**
+ * The line a refused add met (plan 0260, `line_unit_differs`), described the
+ * way `query_lists` describes a match: the id goes back in a tool argument
+ * and never into the reply.
+ */
+interface MetLine {
+  id: string;
+  product: string;
+  quantity: number;
+  unit: LineUnit;
+}
+
+/**
+ * The line of `details.line` on a `line_unit_differs` an add answered, read
+ * from `unknown` (rule D4), and the instruction that goes with it. Undefined
+ * for any other error, and for a merge's refusal, which carries no details.
+ */
+function unitDiffersHelp(
+  error: unknown
+): { onList: MetLine; instead: string; index: number | null } | undefined {
+  if (
+    !(error instanceof GatewayApiError) ||
+    error.code !== 'line_unit_differs' ||
+    typeof error.details !== 'object' ||
+    error.details === null
+  ) {
+    return undefined;
+  }
+  const details = error.details as Record<string, unknown>;
+  const line =
+    typeof details['line'] === 'object' && details['line'] !== null
+      ? (details['line'] as Record<string, unknown>)
+      : undefined;
+  const unit = line?.['unit'];
+  if (
+    line === undefined ||
+    typeof line['lineId'] !== 'string' ||
+    typeof line['content'] !== 'string' ||
+    typeof line['quantity'] !== 'number' ||
+    (unit !== 'UNIT' && unit !== 'GRAM' && unit !== 'MILLILITER')
+  ) {
+    return undefined;
+  }
+  const product = line['content'];
+  const words = UNIT_WORDS[unit];
+  return {
+    onList: { id: line['lineId'], product, quantity: line['quantity'], unit },
+    instead: `"${product}" is already on the list and counts in ${words}. Do not add it again. Change the amount on that line instead: call upsert_lines with "${product}" and the amount in ${words}.`,
+    index: typeof details['index'] === 'number' ? details['index'] : null,
+  };
 }
 
 /**
@@ -1165,13 +1233,40 @@ function describeLine(
   };
 }
 
+/**
+ * What one slot of a batch add did, as the person is told it (plan 0260,
+ * section 5): `CREATED` is `added`, `RAISED` is `increased` and
+ * `ALREADY_ON_LIST` is `unchanged`. A slot with no `outcome`, from a core of
+ * before that plan, is read from `merged`.
+ */
+function batchAction(
+  result: Pick<AddLineResult, 'merged'> &
+    Partial<Pick<AddLineResult, 'outcome'>>
+): 'added' | 'increased' | 'unchanged' {
+  switch (result.outcome) {
+    case 'CREATED':
+      return 'added';
+    case 'RAISED':
+      return 'increased';
+    case 'ALREADY_ON_LIST':
+      return 'unchanged';
+    default:
+      return result.merged ? 'increased' : 'added';
+  }
+}
+
 function itemRefused(
   product: string,
   error: unknown,
   lineUnit?: LineUnit
 ): ItemResult {
-  const { reason } = refused(error, 'that', lineUnit);
-  return { product, refused: true, reason };
+  const { reason, onList, instead } = refused(error, 'that', lineUnit);
+  return {
+    product,
+    refused: true,
+    reason,
+    ...(onList !== undefined ? { onList, instead } : {}),
+  };
 }
 
 /** How a weight or a volume is written into the name of a free text line. */
@@ -1561,7 +1656,28 @@ function refused(
   error: unknown,
   attempted: string,
   lineUnit?: LineUnit
-): { ok: false; refused: true; attempted: string; reason: string } {
+): {
+  ok: false;
+  refused: true;
+  attempted: string;
+  reason: string;
+  onList?: MetLine;
+  instead?: string;
+} {
+  // An add met the product on a line of another unit (plan 0260). The
+  // owner, 2026-11-12: the answer helps to fix it, so it hands the model the
+  // line already on the list and says to change the amount there.
+  const help = unitDiffersHelp(error);
+  if (help !== undefined && error instanceof GatewayApiError) {
+    return {
+      ok: false,
+      refused: true,
+      attempted,
+      reason: error.apiMessage ?? help.instead,
+      onList: help.onList,
+      instead: help.instead,
+    };
+  }
   // A delta or a settle in another unit than the line's (plan 0246, section
   // 5): said as what to do next, and never retried in the line's unit.
   if (

@@ -16,6 +16,7 @@ import {
 } from '@portfolio/velista/models';
 import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
+import { GatewayError } from '../errors';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
@@ -181,7 +182,7 @@ function setup(world: World) {
   const server = new Map<string, Line>(
     (world.lines ?? []).map((held) => [held.id, held])
   );
-  let failNext = false;
+  let failNext: Error | null = null;
   let failNextRead = false;
   let failNextLists = false;
   let pendingNext = false;
@@ -196,9 +197,10 @@ function setup(world: World) {
     if (holding) {
       await new Promise<void>((resolve) => gates.push(resolve));
     }
-    if (failNext) {
-      failNext = false;
-      throw new Error('refused');
+    if (failNext !== null) {
+      const error = failNext;
+      failNext = null;
+      throw error;
     }
   };
 
@@ -310,19 +312,33 @@ function setup(world: World) {
       addedNamed.push(named);
       units.push(unit);
       await written();
+      // Backend `0260`: a line of the name that asks for some is shown as it is,
+      // and one kept at zero is raised by the add's amount.
       const existing = linesOf(listId).find(
         (held) =>
           held.approvalStatus !== 'REJECTED' &&
-          held.quantity > 0 &&
           fold(held.content) === fold(content)
       );
+      if (existing !== undefined && existing.quantity > 0) {
+        return {
+          line: existing,
+          merged: true,
+          outcome: 'alreadyOnList' as const,
+          alreadyOnList: [existing],
+        };
+      }
       if (existing !== undefined) {
         const raised = {
           ...existing,
           quantity: existing.quantity + (quantity ?? 1),
         };
         server.set(raised.id, raised);
-        return { line: raised, merged: true };
+        return {
+          line: raised,
+          merged: true,
+          outcome: 'raised' as const,
+          alreadyOnList: [],
+        };
       }
       const made = line(`line-${++nextId}`, listId, {
         content,
@@ -333,7 +349,12 @@ function setup(world: World) {
       });
       pendingNext = false;
       server.set(made.id, made);
-      return { line: made, merged: false };
+      return {
+        line: made,
+        merged: false,
+        outcome: 'created' as const,
+        alreadyOnList: [],
+      };
     },
     addQuantity: async (lineId, delta, unit) => {
       calls.push(`quantity:${lineId}:${delta}`);
@@ -417,8 +438,8 @@ function setup(world: World) {
           (held) => held.listId === listId && held.itemIds.includes(itemId)
         )
         .map((held) => held.quantity),
-    failNext: () => {
-      failNext = true;
+    failNext: (error: Error = new Error('refused')) => {
+      failNext = error;
     },
     failNextRead: () => {
       failNextRead = true;
@@ -762,20 +783,20 @@ describe('CatalogAddStore', () => {
       expect(store.count()).toBe(1);
     });
 
-    it('does not put an older quantity back on a line an add raised meanwhile', async () => {
+    it('holds once a line an add met while the read of its list was on its way', async () => {
       const { store, server, drawn, holdReads, releaseRead } = setup(STOCKED);
       await store.ensure();
       holdReads();
       store.choose('mum');
 
       await store.add(MILK);
-      expect(server.get('m-milk')?.quantity).toBe(6);
-      // The read answers the five the line held when it was sent.
+      // Already asked for, so the add changed nothing (velista 0185).
+      expect(server.get('m-milk')?.quantity).toBe(5);
       releaseRead();
       await settled();
 
       expect(store.linesStatus()).toBe('ready');
-      expect(drawn('mum', 'milk')).toEqual([6]);
+      expect(drawn('mum', 'milk')).toEqual([5]);
       expect(
         store.held().filter((held) => held.lineId === 'm-milk')
       ).toHaveLength(1);
@@ -805,15 +826,16 @@ describe('CatalogAddStore', () => {
       unit: 'GRAM' as const,
     };
 
-    it('adds a kilo, in grams, and says so', async () => {
-      const { store, calls, units } = setup(HOME);
+    it('adds one step, 25 g, in grams, and says so (velista 0185)', async () => {
+      const { store, calls, units, drawn } = setup(HOME);
       await store.ensure();
 
       await store.add(BANANAS);
 
-      expect(calls).toContain('add:weekly:Plátanos:1000:bananas');
+      expect(calls).toContain('add:weekly:Plátanos:25:bananas');
       expect(units).toEqual(['GRAM']);
-      expect(store.visit()[0]?.quantity).toBe(1000);
+      expect(store.visit()[0]?.quantity).toBe(25);
+      expect(drawn('weekly', 'bananas')).toEqual([25]);
     });
 
     it('steps by the unit, in the line’s unit', async () => {
@@ -829,7 +851,7 @@ describe('CatalogAddStore', () => {
       expect(units).toEqual(['GRAM', 'GRAM', 'GRAM']);
     });
 
-    it('takes a kilo line the visit made back with one minus at its kilo', async () => {
+    it('takes a weight line the visit made back with one minus at its first step', async () => {
       const { store, calls } = setup(HOME);
       await store.ensure();
       await store.add(BANANAS);
@@ -837,9 +859,8 @@ describe('CatalogAddStore', () => {
       await stepped(store, on('weekly', BANANAS), 'line-1', -1);
 
       // Taken back whole: to nothing here, where the reader may not delete the
-      // line, and never one 25 g step.
-      expect(calls).toContain('quantity:line-1:-1000');
-      expect(calls).not.toContain('quantity:line-1:-25');
+      // line. Its first step is all it held.
+      expect(calls).toContain('quantity:line-1:-25');
       expect(store.visit()).toEqual([]);
     });
 
@@ -1104,7 +1125,7 @@ describe('CatalogAddStore', () => {
       expect(drawn('weekly', 'milk')).toEqual([1]);
     });
 
-    it('draws at once on the line that has the product under its own name', async () => {
+    it('draws at once on the line that has the product under its own name, and takes it off when the line was already asked for', async () => {
       const { store, drawn, holdWrites, releaseNext } = setup({
         ...HOME,
         lines: [line('old', 'weekly', { quantity: 2 })],
@@ -1120,10 +1141,11 @@ describe('CatalogAddStore', () => {
       releaseNext();
       await adding;
 
-      expect(drawn('weekly', 'milk')).toEqual([3]);
+      // The server added nothing (backend 0260, A1), so the line reads what it holds.
+      expect(drawn('weekly', 'milk')).toEqual([2]);
     });
 
-    it('records what a merged line held before', async () => {
+    it('records nothing for a line already asked for (velista 0185)', async () => {
       const { store } = setup({
         ...HOME,
         lines: [line('old', 'weekly', { quantity: 2 })],
@@ -1132,18 +1154,12 @@ describe('CatalogAddStore', () => {
 
       await store.add(MILK);
 
-      expect(store.visit()).toEqual([
-        expect.objectContaining({
-          lineId: 'old',
-          quantity: 3,
-          before: 2,
-          created: false,
-        }),
-      ]);
+      expect(store.visit()).toEqual([]);
+      expect(store.count()).toBe(0);
+      expect(store.failures()).toBe(0);
     });
 
-    it('draws on a line of its own beside a stocked line of that name, and leaves that one at zero', async () => {
-      // The server does not raise a line at zero. It makes a line beside it.
+    it('raises a stocked line of that name, and takes the line drawn beside it away (backend 0260, R2)', async () => {
       const { store, server, drawn, holdWrites, releaseNext } = setup({
         ...HOME,
         lines: [line('stocked', 'weekly', { quantity: 0 })],
@@ -1162,23 +1178,21 @@ describe('CatalogAddStore', () => {
       await adding;
 
       expect(store.held().map((held) => [held.lineId, held.quantity])).toEqual([
-        ['stocked', 0],
-        ['line-1', 1],
+        ['stocked', 1],
       ]);
-      expect(drawn('weekly', 'milk')).toEqual([0, 1]);
-      expect(server.get('stocked')?.quantity).toBe(0);
-      expect(server.get('line-1')?.quantity).toBe(1);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+      expect(server.get('stocked')?.quantity).toBe(1);
       expect(store.visit()).toEqual([
         expect.objectContaining({
-          lineId: 'line-1',
+          lineId: 'stocked',
           quantity: 1,
           before: 0,
-          created: true,
+          created: false,
         }),
       ]);
     });
 
-    it('raises the line the first add made, and not the stocked one, on a second press', async () => {
+    it('raises a stocked line once, and a second press adds nothing', async () => {
       const { store, server, drawn } = setup({
         ...HOME,
         lines: [line('stocked', 'weekly', { quantity: 0 })],
@@ -1188,9 +1202,9 @@ describe('CatalogAddStore', () => {
       await store.add(MILK);
       await store.add(MILK);
 
-      expect(drawn('weekly', 'milk')).toEqual([0, 2]);
-      expect(server.get('stocked')?.quantity).toBe(0);
-      expect(server.get('line-1')?.quantity).toBe(2);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
+      expect(server.get('stocked')?.quantity).toBe(1);
+      expect(server.has('line-1')).toBe(false);
       expect(store.count()).toBe(1);
     });
 
@@ -1200,9 +1214,9 @@ describe('CatalogAddStore', () => {
         lines: [line('old', 'weekly', { quantity: 2 })],
       });
       await store.ensure();
-      // Somebody else brought the line to zero after the catalog read it, so
-      // the store still draws two and the server will make a line beside it.
-      server.set('old', { ...(server.get('old') as Line), quantity: 0 });
+      // Somebody else deleted the line after the catalog read it, so the store
+      // still draws on it and the server makes a new one.
+      server.delete('old');
       holdWrites();
 
       const adding = store.add(MILK);
@@ -1234,7 +1248,7 @@ describe('CatalogAddStore', () => {
         lines: [line('old', 'weekly', { quantity: 2 })],
       });
       await store.ensure();
-      server.set('old', { ...(server.get('old') as Line), quantity: 0 });
+      server.delete('old');
       holdWrites();
 
       const first = store.add(MILK);
@@ -1258,13 +1272,15 @@ describe('CatalogAddStore', () => {
       releaseNext();
       await Promise.all([first, second]);
 
+      // The second met the line the first made, which asks for one now: it added
+      // nothing (velista 0185).
       expect(store.held().map((held) => [held.lineId, held.quantity])).toEqual([
         ['old', 2],
-        ['line-1', 2],
+        ['line-1', 1],
       ]);
-      expect(server.get('line-1')?.quantity).toBe(2);
+      expect(server.get('line-1')?.quantity).toBe(1);
       expect(store.visit()).toEqual([
-        expect.objectContaining({ lineId: 'line-1', quantity: 2, before: 0 }),
+        expect.objectContaining({ lineId: 'line-1', quantity: 1, before: 0 }),
       ]);
     });
 
@@ -1299,7 +1315,7 @@ describe('CatalogAddStore', () => {
       expect(store.held()[0]?.pending).toBe(true);
     });
 
-    it('raises the same line on a second press, and counts it once', async () => {
+    it('adds nothing on a second press once the first made the line (velista 0185)', async () => {
       const { store, calls, drawn } = setup(HOME);
       await store.ensure();
 
@@ -1307,11 +1323,11 @@ describe('CatalogAddStore', () => {
       await store.add(MILK);
 
       expect(calls.filter((call) => call.startsWith('add:'))).toHaveLength(2);
-      expect(drawn('weekly', 'milk')).toEqual([2]);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
       expect(store.visit()).toEqual([
         expect.objectContaining({
           lineId: 'line-1',
-          quantity: 2,
+          quantity: 1,
           before: 0,
           created: true,
         }),
@@ -1344,10 +1360,11 @@ describe('CatalogAddStore', () => {
       releaseNext();
       await Promise.all([first, second]);
 
-      expect(server.get('line-1')?.quantity).toBe(2);
-      expect(drawn('weekly', 'milk')).toEqual([2]);
+      // The second met the line the first made and added nothing (velista 0185).
+      expect(server.get('line-1')?.quantity).toBe(1);
+      expect(drawn('weekly', 'milk')).toEqual([1]);
       expect(store.visit()).toEqual([
-        expect.objectContaining({ lineId: 'line-1', quantity: 2, before: 0 }),
+        expect.objectContaining({ lineId: 'line-1', quantity: 1, before: 0 }),
       ]);
     });
 
@@ -1362,6 +1379,43 @@ describe('CatalogAddStore', () => {
       expect(store.held()).toEqual([]);
       expect(store.count()).toBe(0);
       expect(store.failures()).toBe(1);
+    });
+
+    it('says why when the list counts the product in another unit (velista 0185)', async () => {
+      const { store, drawn, failNext } = setup(HOME);
+      await store.ensure();
+      failNext(
+        new GatewayError({
+          code: 'line_unit_differs',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            line: {
+              lineId: 'w-milk',
+              content: 'Leche entera',
+              unit: 'MILLILITER',
+            },
+            unit: 'UNIT',
+            index: null,
+          },
+        })
+      );
+
+      await store.add(MILK);
+
+      expect(drawn('weekly', 'milk')).toEqual([]);
+      expect(store.failures()).toBe(1);
+      expect(store.refusal()).toEqual({
+        lineId: 'w-milk',
+        name: 'Leche entera',
+        unit: 'MILLILITER',
+      });
+
+      // Any other failure says the generic sentence again.
+      failNext();
+      await store.add(MILK);
+      expect(store.failures()).toBe(2);
+      expect(store.refusal()).toBeNull();
     });
 
     it('puts a line that was there back to what it held when the add is refused', async () => {
@@ -1560,7 +1614,7 @@ describe('CatalogAddStore', () => {
       const { store, calls } = setup(HOME);
       await store.ensure();
       await store.add(MILK);
-      await store.add(MILK);
+      await stepped(store, on('weekly', MILK), 'line-1', 1);
 
       await stepped(store, on('weekly', MILK), 'line-1', -1);
 
@@ -1619,7 +1673,7 @@ describe('CatalogAddStore', () => {
       expect(store.failures()).toBe(1);
     });
 
-    it('sends the open run before an add on the same line, so minus, add, minus ends one lower', async () => {
+    it('sends the open run before an add on the same line, so minus, add, minus ends two lower', async () => {
       const { store, server, drawn } = setup(STOCKED);
       await store.ensure();
 
@@ -1631,8 +1685,10 @@ describe('CatalogAddStore', () => {
       jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
       await settled();
 
-      expect(server.get('old')?.quantity).toBe(1);
-      expect(drawn('weekly', 'milk')).toEqual([1]);
+      // The add met a line that still asked for one, so it added nothing
+      // (velista 0185), and both runs were written.
+      expect(server.get('old')?.quantity).toBe(0);
+      expect(drawn('weekly', 'milk')).toEqual([0]);
     });
 
     it('moves nothing on a line it does not hold', async () => {
@@ -1779,13 +1835,16 @@ describe('CatalogAddStore', () => {
       expect(store.count()).toBe(0);
     });
 
-    it('puts a merged line back to the quantity it had, and no lower', async () => {
+    it('puts a line that was there back to the quantity it had, and no lower', async () => {
       const { store, calls, server, drawn } = setup({
         ...alone(['READ', 'WRITE', 'DECIDE', 'MANAGE']),
         lines: [line('old', 'weekly', { quantity: 2 })],
       });
       await store.ensure();
+      // The add meets the line and adds nothing (velista 0185); the steps are
+      // what the visit did.
       await store.add(MILK);
+      await stepped(store, on('weekly', MILK), 'old', 1);
       await stepped(store, on('weekly', MILK), 'old', 1);
       expect(server.get('old')?.quantity).toBe(4);
 
@@ -1955,18 +2014,18 @@ describe('CatalogAddStore', () => {
       expect(store.count()).toBe(1);
     });
 
-    it('does not put an older quantity back on a line an add raised meanwhile', async () => {
+    it('holds once a line an add met while the read was on its way', async () => {
       const { store, server, drawn, holdReads, releaseRead } = setup(STOCKED);
       holdReads();
       const reading = store.readItem('milk');
 
       await store.add(MILK, 'mum');
-      expect(server.get('m-milk')?.quantity).toBe(3);
-      // The read answers the two the line held when it was sent.
+      // Already asked for, so the add changed nothing (velista 0185).
+      expect(server.get('m-milk')?.quantity).toBe(2);
       releaseRead();
       await reading;
 
-      expect(drawn('mum', 'milk')).toEqual([3, 1]);
+      expect(drawn('mum', 'milk')).toEqual([2, 1]);
       expect(
         store.held().filter((held) => held.lineId === 'm-milk')
       ).toHaveLength(1);

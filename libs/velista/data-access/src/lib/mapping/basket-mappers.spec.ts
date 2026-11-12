@@ -439,6 +439,23 @@ describe('toBasketRowResult', () => {
     ).toBe(2);
   });
 
+  it('reads what a line add did, and nothing on any other write (velista 0185)', () => {
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'ALREADY_ON_LIST' })
+        ?.addOutcome
+    ).toBe('alreadyOnList');
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'CREATED' })?.addOutcome
+    ).toBe('created');
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'RAISED' })?.addOutcome
+    ).toBe('raised');
+    expect(toBasketRowResult(RESULT)).not.toHaveProperty('addOutcome');
+    expect(
+      toBasketRowResult({ ...RESULT, addOutcome: 'SOMETHING_NEW' })
+    ).not.toHaveProperty('addOutcome');
+  });
+
   /** An empty array is an answer: every named line left the basket. */
   it('reads an empty entries array as an answer', () => {
     expect(toBasketRowResult({ entries: [] })?.entries).toEqual([]);

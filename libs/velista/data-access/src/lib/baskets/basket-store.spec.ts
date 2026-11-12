@@ -2536,7 +2536,7 @@ describe('BasketStore: skip, demand and the add', () => {
     expect(store.state()).toBe('ready');
   });
 
-  it('folds an add that merged in place, rather than drawing a second row', async () => {
+  it('folds an add that met a line in place, rather than drawing a second row', async () => {
     // The add goes through the target list\u2019s own rules, so it can land on a
     // line the list already held (backend `0091`). The answer is then a row
     // already on the screen under a key nobody named.
@@ -2544,10 +2544,10 @@ describe('BasketStore: skip, demand and the add', () => {
     await store.open('basket-saturday');
     const rows = store.rows().length;
 
-    await store.addLine({
+    const result = await store.addLine({
       targetListId: 'list-weekly',
       content: 'milk',
-      quantity: 2,
+      quantity: 1,
       // The products that line holds: the name alone is not a match.
       itemIds: [
         'item-milk-hacendado',
@@ -2557,7 +2557,9 @@ describe('BasketStore: skip, demand and the add', () => {
     });
 
     expect(store.rows()).toHaveLength(rows);
-    expect(rowOf(store, 'Milk').entries[0].left).toBe(4);
+    // Already asked for, so nothing was added (velista 0185, backend 0260).
+    expect(result?.addOutcome).toBe('alreadyOnList');
+    expect(rowOf(store, 'Milk').entries[0].left).toBe(2);
   });
 
   it('says when an add is out, and stops when it lands', async () => {
