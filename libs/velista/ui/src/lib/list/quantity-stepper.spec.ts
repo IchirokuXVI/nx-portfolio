@@ -112,7 +112,9 @@ describe('QuantityStepper (velista 0188)', () => {
       const values: number[] = [];
       h.fixture.componentInstance.valueChange.subscribe((v) => values.push(v));
       h.plus.click();
+      h.fixture.detectChanges();
       h.plus.click();
+      h.fixture.detectChanges();
       expect(values).toEqual([4, 4]);
       expect(h.el.getAttribute('data-value')).toBe('3');
     });
@@ -544,6 +546,158 @@ describe('QuantityStepper (velista 0188)', () => {
       type(h, '900');
       h.plus.click();
       expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
+    });
+  });
+
+  describe('the trash where minus reaches 0 (S14)', () => {
+    const trash = (h: Harness) => h.minus.querySelector('lib-trash-icon');
+    const bar = (h: Harness) => h.minus.querySelector('.glyph');
+    const variants = ['row', 'sheet', 'sheet-narrow'] as const;
+
+    describe.each(variants)('in the %s variant', (variant) => {
+      it.each([
+        [1, 'UNIT'],
+        [25, 'GRAM'],
+        [10, 'GRAM'],
+      ])('draws a red trash at %s %s', (value, unit) => {
+        const h = render({ value, unit, variant });
+        expect(trash(h)).not.toBeNull();
+        expect(bar(h)).toBeNull();
+        expect(h.minus.classList).toContain('is-clear');
+      });
+
+      it.each([
+        [2, 'UNIT'],
+        [50, 'GRAM'],
+        [0, 'UNIT'],
+        [0, 'GRAM'],
+      ])('draws the bar at %s %s', (value, unit) => {
+        const h = render({ value, unit, variant });
+        expect(trash(h)).toBeNull();
+        expect(bar(h)).not.toBeNull();
+        expect(h.minus.classList).not.toContain('is-clear');
+      });
+
+      it('never draws it with a floor above 0', () => {
+        expect(trash(render({ value: 1, min: 1, variant }))).toBeNull();
+        expect(
+          trash(render({ value: 25, unit: 'GRAM', min: 25, variant }))
+        ).toBeNull();
+      });
+
+      it('follows value as the caller redraws', () => {
+        const h = render({ value: 2, variant }, { follow: false });
+        expect(trash(h)).toBeNull();
+        h.set('value', 1);
+        expect(trash(h)).not.toBeNull();
+        h.set('value', 0);
+        expect(trash(h)).toBeNull();
+        expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+        h.set('value', 3);
+        expect(trash(h)).toBeNull();
+      });
+    });
+
+    it('keeps the truthful name of the step', () => {
+      const h = render({ value: 25, unit: 'GRAM' });
+      expect(h.minus.getAttribute('aria-label')).toBe(
+        'amount.less:{"step":"25 g","name":"Plátano"}'
+      );
+    });
+
+    it('takes a separate press to 0 after a hold ends on it', () => {
+      const h = render({ value: 3 });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(400 + 300 + 255 + 1000);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([2, 1]);
+      expect(trash(h)).not.toBeNull();
+      fire(h.minus, 'pointerdown');
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([2, 1, 0]);
+    });
+
+    it('draws no button at all for a reader', () => {
+      const h = render({ value: 1, readonly: true });
+      expect(h.el.querySelectorAll('button')).toHaveLength(0);
+      expect(h.el.querySelector('lib-trash-icon')).toBeNull();
+    });
+  });
+
+  describe('presses faster than the caller redraws', () => {
+    it('builds each press in one task on the one before', () => {
+      const h = render(
+        { value: 1000, unit: 'GRAM', variant: 'sheet' },
+        { follow: false }
+      );
+      h.minus.click();
+      h.minus.click();
+      h.minus.click();
+      expect(h.steps).toEqual([
+        { from: 1000, to: 975, repeat: false },
+        { from: 975, to: 950, repeat: false },
+        { from: 950, to: 925, repeat: false },
+      ]);
+      // It draws nothing of its own meanwhile.
+      expect(h.el.getAttribute('data-value')).toBe('1000');
+    });
+
+    it('builds arrow keys in one task on the one before', () => {
+      const h = render(
+        { value: 1000, unit: 'GRAM', variant: 'sheet' },
+        { follow: false }
+      );
+      const input = h.el.querySelector('input') as HTMLInputElement;
+      for (let i = 0; i < 3; i++) {
+        input.dispatchEvent(
+          new KeyboardEvent('keydown', { key: 'ArrowDown', cancelable: true })
+        );
+      }
+      expect(tos(h)).toEqual([975, 950, 925]);
+    });
+
+    it('starts from the caller once it sets an amount of its own', () => {
+      const h = render({ value: 1000, unit: 'GRAM' }, { follow: false });
+      h.minus.click();
+      h.minus.click();
+      h.minus.click();
+      h.set('value', 850);
+      h.minus.click();
+      expect(h.steps.at(-1)).toEqual({ from: 850, to: 825, repeat: false });
+    });
+
+    it('lets the caller win at once when its value moves, even before a render', () => {
+      const h = render({ value: 1000, unit: 'GRAM' }, { follow: false });
+      h.minus.click();
+      h.fixture.componentRef.setInput('value', 950);
+      h.minus.click();
+      expect(h.steps.at(-1)).toEqual({ from: 950, to: 925, repeat: false });
+    });
+
+    it('steps from the kept amount again once a caller that ignores it redraws', () => {
+      const h = render({ value: 1000, unit: 'GRAM' }, { follow: false });
+      h.minus.click();
+      h.fixture.detectChanges();
+      h.minus.click();
+      h.fixture.detectChanges();
+      expect(tos(h)).toEqual([975, 975]);
+    });
+
+    it('stops at an end it reached within one task', () => {
+      const h = render({ value: 1 }, { follow: false });
+      h.minus.click();
+      h.minus.click();
+      expect(tos(h)).toEqual([0]);
+    });
+
+    it('stops plus at the most it reached within one task', () => {
+      const h = render({ value: 98, max: 100 }, { follow: false });
+      h.plus.click();
+      h.plus.click();
+      h.plus.click();
+      expect(tos(h)).toEqual([99, 100]);
     });
   });
 });
