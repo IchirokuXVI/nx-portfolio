@@ -1,3 +1,5 @@
+> **PR:** [#986](https://github.com/IchirokuXVI/nx-portfolio/pull/986)
+
 # 0192: a line that reaches zero with nothing to keep leaves the list
 
 > Decided on 2026-11-11 (section 7 of the batch decisions). Backend `0263` makes core delete a
