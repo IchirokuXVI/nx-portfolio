@@ -9,7 +9,11 @@ import {
   signal,
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
-import { basketMatchRange, type LineRowVm } from '@portfolio/velista/models';
+import {
+  basketMatchRange,
+  type LineRowVm,
+  type QuantityStep,
+} from '@portfolio/velista/models';
 import { LineRow, type LineRowAction } from './line-row';
 
 /** Where a row is, at the moment a drag starts. Read once; the drag never remeasures. */
@@ -87,12 +91,13 @@ interface RowBand {
             (dismiss)="dismiss.emit($event)"
             (grab)="startDrag($event)"
             (opened)="opened.emit($event)"
-            (quantityChanged)="quantityChanged.emit($event)"
+            (quantityStepped)="quantityStepped.emit($event)"
             (retry)="retry.emit($event)"
             [canMoveDown]="!last"
             [canMoveUp]="!first"
             [line]="line"
             [match]="matchOf(line)"
+            [pending]="pending().get(line.id) ?? null"
             [reordering]="reordering()"
             [took]="tookId() === line.id"
           />
@@ -136,6 +141,12 @@ export class LineList {
   readonly tookId = input<string | null>(null);
 
   /**
+   * The amount of each line with an open run of presses (velista `0188`, decision H):
+   * the page's `quantityRuns.pending()`. A row not in it draws its stored amount.
+   */
+  readonly pending = input<ReadonlyMap<string, number>>(new Map());
+
+  /**
    * The search, folded, or the empty string (velista `0082`, section 6).
    *
    * Each row gets the range of its first match in its own name, worked out here with
@@ -151,13 +162,13 @@ export class LineList {
   readonly opened = output<string>();
 
   /**
-   * One settled quantity adjustment, as a signed delta.
+   * Every step of a row's stepper (velista `0188`).
    *
    * Passed straight up. This component owns the **order** of the rows and nothing
    * about what is on one, which is the same division that makes a drag its business
    * and a tap the row's.
    */
-  readonly quantityChanged = output<{ lineId: string; delta: number }>();
+  readonly quantityStepped = output<{ lineId: string; step: QuantityStep }>();
   readonly act = output<{ action: LineRowAction; lineId: string }>();
   readonly retry = output<string>();
   readonly dismiss = output<string>();

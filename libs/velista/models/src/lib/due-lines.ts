@@ -1,4 +1,4 @@
-import { QUANTITY_REEL_IDLE_MS } from './limits';
+import { QUANTITY_STEP_QUIET_MS } from './limits';
 import type { LineUnit } from './line-unit';
 
 /**
@@ -63,9 +63,9 @@ export const DUE_LINE_ADDS_ON_STEP = false;
  *
  * The row leaves the section the moment its line is above zero, so adding on the first
  * press would take the stepper away from somebody who meant to press three times. The
- * reel's own idle window, so both controls commit after the same pause.
+ * stepper's own quiet beat, so every feature writes after the same pause (velista 0188).
  */
-export const DUE_LINE_STEP_QUIET_MS = QUANTITY_REEL_IDLE_MS;
+export const DUE_LINE_STEP_QUIET_MS = QUANTITY_STEP_QUIET_MS;
 
 /** One due row as `lib-due-line-row` draws it. */
 export interface DueLineRowVm {

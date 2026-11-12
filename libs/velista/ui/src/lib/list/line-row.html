@@ -264,17 +264,16 @@
     in reorder mode, where a second gesture inside the row would fight the drag.
   -->
   @if (!reordering()) {
-    <lib-quantity-reel
-      (autoClosed)="onReelAutoClosed()"
+    <lib-quantity-stepper
       (click)="$event.stopPropagation()"
-      (committed)="quantityChanged.emit({ lineId: line().id, delta: $event })"
       (pointerdown)="$event.stopPropagation()"
-      [label]="'list.line.quantityFor' | rokuT: { name: line().content }"
+      (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
+      [name]="line().content"
       [readonly]="!line().adjustable"
       [took]="took()"
       [unit]="line().unit"
-      [value]="line().quantity"
-      #reel
+      [value]="amount()"
+      variant="row"
     />
   }
 </div>
