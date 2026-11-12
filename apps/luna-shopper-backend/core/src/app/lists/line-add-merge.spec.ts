@@ -130,6 +130,12 @@ function build(options: {
    * does, as a delete between the two leaves them.
    */
   goneBeforeLock?: string[];
+  /**
+   * Lines that the read of a few columns still finds and any whole read of
+   * one line no longer does, locked or not, as a delete between them leaves
+   * them.
+   */
+  goneAfterFind?: string[];
 }): Harness {
   const list = {
     id: LIST_ID,
@@ -185,7 +191,8 @@ function build(options: {
       where: { id: string };
       lock?: unknown;
     }) =>
-      lock !== undefined && options.goneBeforeLock?.includes(where.id)
+      (lock !== undefined && options.goneBeforeLock?.includes(where.id)) ||
+      options.goneAfterFind?.includes(where.id)
         ? null
         : (held.find((row) => row.id === where.id) ?? null),
     // What the add folds over to decide whether the name is already on the list.
@@ -1055,13 +1062,25 @@ describe('a product add merges by product (plan 0214, section 1)', () => {
       ],
     });
 
-    // One unnamed line at one, and the named Eggs beside it: a batch meets
-    // the lines the list held before it by their products (R5), not a line
-    // the batch makes.
-    expect(results.map((entry) => entry.merged)).toEqual([false, true, false]);
-    expect(results[0].line.id).toBe(results[1].line.id);
+    // One unnamed line at one, which the named Eggs meets too, because it
+    // holds every product of the item (R5): three single adds in sequence
+    // answer the same. Corrected in review round 1 of plan 0260, where the
+    // batch made a second line for the third item.
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'CREATED',
+      'ALREADY_ON_LIST',
+      'ALREADY_ON_LIST',
+    ]);
+    expect(results.map((entry) => entry.line.id)).toEqual([
+      results[0].line.id,
+      results[0].line.id,
+      results[0].line.id,
+    ]);
     expect(results[0].line).toMatchObject({ content: 'Eggs', quantity: 1 });
-    expect(results[2].line.id).not.toBe(results[0].line.id);
+    expect(results[2].alreadyOnList.map((line) => line.id)).toEqual([
+      results[0].line.id,
+    ]);
+    expect(w.saved).toHaveLength(1);
   });
 });
 
@@ -2025,5 +2044,132 @@ describe('an add that meets a line already on the list adds nothing (plan 0260)'
     expect(w.recorded).toEqual([]);
     expect(w.events).toEqual([]);
     expect(announcer.calls.linesChanged).toEqual([]);
+  });
+
+  // Review round 1: a batch meets what it has itself raised or planned to
+  // create the way a single add meets those lines once they are written.
+  it('meets the candidate an earlier item raised, and raises no earlier kept one (R6)', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-k', content: 'Leche', quantity: 0, position: 1 },
+        { id: 'li-l', content: 'Leche', quantity: 0, position: 2 },
+      ],
+      products: [
+        { lineId: 'li-k', itemId: WHOLE, position: 0 },
+        { lineId: 'li-l', itemId: OAT, position: 0 },
+      ],
+    });
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Leche', itemIds: [OAT] }, { content: 'leche' }],
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'RAISED',
+      'ALREADY_ON_LIST',
+    ]);
+    expect(results[1].line.id).toBe('li-l');
+    expect(results[1].alreadyOnList.map((line) => line.id)).toEqual(['li-l']);
+    expect(w.saved.map((row) => row.id)).toEqual(['li-l']);
+  });
+
+  it('meets the held line an earlier item raised, and raises no earlier kept one (R5, R6)', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-k', content: 'Café con leche', quantity: 0, position: 1 },
+        { id: 'li-l', content: 'Avena', quantity: 0, position: 2 },
+      ],
+      products: [
+        { lineId: 'li-k', itemId: WHOLE, position: 0 },
+        { lineId: 'li-k', itemId: OAT, position: 1 },
+        { lineId: 'li-l', itemId: OAT, position: 0 },
+      ],
+    });
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        { content: 'Avena', itemIds: [OAT] },
+        { content: 'Oat drink', itemIds: [OAT] },
+      ],
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'RAISED',
+      'ALREADY_ON_LIST',
+    ]);
+    expect(results[1].line.id).toBe('li-l');
+    expect(w.saved.map((row) => row.id)).toEqual(['li-l']);
+  });
+
+  it('meets a product line this batch creates with a later item of its name (R6)', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Leche', itemIds: [WHOLE] }, { content: 'leche' }],
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'CREATED',
+      'ALREADY_ON_LIST',
+    ]);
+    expect(results[1].line.id).toBe(results[0].line.id);
+    expect(results[1].alreadyOnList.map((line) => line.id)).toEqual([
+      results[0].line.id,
+    ]);
+    expect(w.saved).toHaveLength(1);
+  });
+
+  it('raises the kept candidate of a typed name when every wanted one is gone', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-w', content: 'Leche', quantity: 2, position: 1 },
+        { id: 'li-k', content: 'Leche', quantity: 0, position: 2 },
+      ],
+      products: [
+        { lineId: 'li-w', itemId: WHOLE, position: 0 },
+        { lineId: 'li-k', itemId: OAT, position: 0 },
+      ],
+      goneAfterFind: ['li-w'],
+    });
+
+    const result = await add(w, 'leche');
+
+    expect(result).toMatchObject({
+      outcome: 'RAISED',
+      line: { id: 'li-k', quantity: 1 },
+    });
+    expect(w.saved.map((row) => row.id)).toEqual(['li-k']);
+  });
+
+  it('raises the kept candidate in a batch too when every wanted one is gone', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-w', content: 'Leche', quantity: 2, position: 1 },
+        { id: 'li-k', content: 'Leche', quantity: 0, position: 2 },
+      ],
+      products: [
+        { lineId: 'li-w', itemId: WHOLE, position: 0 },
+        { lineId: 'li-k', itemId: OAT, position: 0 },
+      ],
+      goneAfterFind: ['li-w'],
+    });
+
+    const [result] = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'leche' }],
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'RAISED',
+      line: { id: 'li-k', quantity: 1 },
+    });
+    expect(w.saved.map((row) => row.id)).toEqual(['li-k']);
   });
 });

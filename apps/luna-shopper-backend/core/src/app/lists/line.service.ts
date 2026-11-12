@@ -313,14 +313,17 @@ type AddOutcome =
   | { kind: 'ALREADY_ON_LIST'; views: LineView[] };
 
 /**
- * What one item of {@link LineService.addMany} did. `met` holds the views of
- * lines that were already wanted; `created` and `raised` name a line this
- * batch writes, met again by a later item as `ALREADY_ON_LIST` (R6).
+ * A line one item of {@link LineService.addMany} met and left as it was: the
+ * view of a line that was already wanted, or a line this batch raises or
+ * creates, whose view exists only once it is written (R6).
  */
-type BatchSlot =
-  | { met: LineView[] }
-  | { created: number; outcome: 'CREATED' | 'ALREADY_ON_LIST' }
-  | { raised: string; outcome: 'RAISED' | 'ALREADY_ON_LIST' };
+type BatchMet = { view: LineView } | { raised: string } | { created: number };
+
+/**
+ * What one item of {@link LineService.addMany} did: met lines and added
+ * nothing (`ALREADY_ON_LIST`), or created or raised the line it names.
+ */
+type BatchSlot = { met: BatchMet[] } | { created: number } | { raised: string };
 
 /** The lines of a list that hold a product or a group, with their products. */
 interface ProductLines {
@@ -1153,21 +1156,27 @@ export class LineService {
         const meet = async (line: ListLine): Promise<AddOutcome> =>
           isWanted(line) ? ((await met([line])) as AddOutcome) : raise(line);
         // A few columns of lines read with no lock: every wanted one is met,
-        // else the earliest kept one is read again locked and raised.
+        // else the earliest kept one is read again locked and raised. Wanted
+        // lines all deleted since the read are no lines, and the kept ones
+        // answer then, as they would have with none wanted.
         const meetAny = async (
           lines: readonly ListLine[]
         ): Promise<AddOutcome | null> => {
           const wanted = lines.filter(isWanted);
           if (wanted.length > 0) {
-            return met(wanted);
+            const answer = await met(wanted);
+            if (answer !== null) {
+              return answer;
+            }
           }
-          if (lines.length === 0) {
+          const kept = lines.find((line) => !isWanted(line));
+          if (kept === undefined) {
             return null;
           }
           const line = await this.lockCandidateLine(
             manager,
             req.listId,
-            lines[0].id
+            kept.id
           );
           return line === null ? null : meet(line);
         };
@@ -1468,41 +1477,75 @@ export class LineService {
         index: number
       ): Promise<BatchSlot> => {
         if (raises.has(line.id)) {
-          return { raised: line.id, outcome: 'ALREADY_ON_LIST' };
+          return { met: [{ raised: line.id }] };
         }
         if (isWanted(line)) {
           const views = await this.viewsOfMet(manager, [line]);
-          return { met: views };
+          return { met: views.map((view) => ({ view })) };
         }
         raises.set(line.id, {
           line,
           delta: amountOnto(line, units[index], quantities[index]),
         });
-        return { raised: line.id, outcome: 'RAISED' };
+        return { raised: line.id };
       };
-      // A few columns of lines read with no lock, as {@link add} meets them.
+      // A few columns of lines read with no lock, as {@link add} meets them,
+      // and the creations this batch planned that the item meets. A line
+      // this batch raises or creates is wanted by then (R6), so it is met
+      // with the wanted ones, before any kept line is raised.
       const meetAny = async (
         lines: readonly ListLine[],
-        index: number
+        index: number,
+        planned: readonly number[]
       ): Promise<BatchSlot | null> => {
-        const wanted = lines.filter(isWanted);
-        if (wanted.length > 0) {
-          const views = await this.viewsOfMet(manager, wanted);
-          return views.length > 0 ? { met: views } : null;
+        const met: BatchMet[] = [];
+        for (const line of lines) {
+          if (met.length >= LINE_ADD_CHOICE_MAX) {
+            break;
+          }
+          if (raises.has(line.id)) {
+            met.push({ raised: line.id });
+          } else if (isWanted(line)) {
+            const [view] = await this.viewsOfMet(manager, [line]);
+            if (view !== undefined) {
+              met.push({ view });
+            }
+          }
         }
-        if (lines.length === 0) {
+        // A planned line is created after every line already on the list,
+        // so it comes last in position order.
+        met.push(...planned.map((created) => ({ created })));
+        if (met.length > 0) {
+          return { met: met.slice(0, LINE_ADD_CHOICE_MAX) };
+        }
+        const kept = lines.find((line) => !isWanted(line));
+        if (kept === undefined) {
           return null;
         }
-        if (raises.has(lines[0].id)) {
-          return { raised: lines[0].id, outcome: 'ALREADY_ON_LIST' };
-        }
-        const line = await this.lockCandidateLine(
-          manager,
-          req.listId,
-          lines[0].id
-        );
+        const line = await this.lockCandidateLine(manager, req.listId, kept.id);
         return line === null ? null : meet(line, index);
       };
+      // The creations this batch planned that a single add of this item
+      // would meet once they were saved: a product line of the typed name
+      // for a free text item (plan 0228), a product line of the item's unit
+      // that holds every product of a product item (R5). A planned line of
+      // another unit is left alone, because it has no row the refusal could
+      // name; the check before the transaction refuses the one case of it
+      // that matters, one product in two units.
+      const plannedFor = (index: number): number[] =>
+        creations.flatMap((creation, planned) => {
+          const set = itemSets[creation.index];
+          if (set.length === 0) {
+            return [];
+          }
+          const meets =
+            itemSets[index].length === 0
+              ? normalizeContent(items[creation.index].content) ===
+                normalizeContent(items[index].content)
+              : units[creation.index] === units[index] &&
+                itemSets[index].every((id) => set.includes(id));
+          return meets ? [planned] : [];
+        });
 
       for (const [index, key] of keys.entries()) {
         const unit = units[index];
@@ -1511,35 +1554,32 @@ export class LineService {
         if (!product) {
           // The free text line of the name, of any unit (R4); then a line
           // this batch creates under it; then the lines that hold a product
-          // under the name, as a single add with no `askIfAmbiguous`.
+          // under the name, those already on the list and those this batch
+          // creates, as a single add with no `askIfAmbiguous`.
           const target = targets.get(key);
           if (target !== undefined) {
             slot = await meet(target, index);
           } else if (byKey.has(key)) {
-            slot = {
-              created: byKey.get(key) as number,
-              outcome: 'ALREADY_ON_LIST',
-            };
+            slot = { met: [{ created: byKey.get(key) as number }] };
           } else {
             const lines = await readProductLines();
             slot = await meetAny(
               namedIn(lines.rows, items[index].content),
-              index
+              index,
+              plannedFor(index)
             );
           }
         } else {
           // The line of the item's unit (plan 0246 M5); then a line this
           // batch creates for the same products, whose unit agrees by the
           // check above; then a line of another unit, which refuses the batch
-          // (R7); then the lines that hold every product (R5).
+          // (R7); then the lines that hold every product (R5), those already
+          // on the list and those this batch creates.
           const target = targets.get(inUnit(key, unit));
           if (target !== undefined) {
             slot = await meet(target, index);
           } else if (byKey.has(key)) {
-            slot = {
-              created: byKey.get(key) as number,
-              outcome: 'ALREADY_ON_LIST',
-            };
+            slot = { met: [{ created: byKey.get(key) as number }] };
           } else {
             const otherUnit = targets.get(key);
             if (otherUnit !== undefined) {
@@ -1548,8 +1588,9 @@ export class LineService {
             const lines = await readProductLines();
             const held = holdingIn(lines, itemSets[index]);
             const inItsUnit = held.filter((line) => unitOf(line) === unit);
-            if (inItsUnit.length > 0) {
-              slot = await meetAny(inItsUnit, index);
+            const planned = plannedFor(index);
+            if (inItsUnit.length > 0 || planned.length > 0) {
+              slot = await meetAny(inItsUnit, index, planned);
             } else if (held.length > 0) {
               throw lineUnitDiffers(held[0], unit, index);
             }
@@ -1557,7 +1598,7 @@ export class LineService {
         }
         if (slot === null) {
           byKey.set(key, creations.length);
-          slot = { created: creations.length, outcome: 'CREATED' };
+          slot = { created: creations.length };
           creations.push({ key, index });
         }
         slots.push(slot);
@@ -1658,25 +1699,28 @@ export class LineService {
 
     // One result per item, in request order. An item that met a line this
     // batch wrote answers with that line, as `ALREADY_ON_LIST`.
+    const viewOf = (ref: BatchMet): LineView =>
+      'view' in ref
+        ? ref.view
+        : 'raised' in ref
+          ? (views.get(ref.raised) as LineView)
+          : (views.get(written.created[ref.created].id) as LineView);
     return written.slots.map((slot): AddLineResult => {
       if ('met' in slot) {
+        const met = slot.met.map(viewOf);
         return {
-          line: slot.met[0],
+          line: met[0],
           merged: true,
           outcome: 'ALREADY_ON_LIST',
-          alreadyOnList: slot.met,
+          alreadyOnList: met,
         };
       }
-      const line = (
-        'raised' in slot
-          ? views.get(slot.raised)
-          : views.get(written.created[slot.created].id)
-      ) as LineView;
+      const raised = 'raised' in slot;
       return {
-        line,
-        merged: slot.outcome !== 'CREATED',
-        outcome: slot.outcome,
-        alreadyOnList: slot.outcome === 'ALREADY_ON_LIST' ? [line] : [],
+        line: viewOf(slot),
+        merged: raised,
+        outcome: raised ? 'RAISED' : 'CREATED',
+        alreadyOnList: [],
       };
     });
   }

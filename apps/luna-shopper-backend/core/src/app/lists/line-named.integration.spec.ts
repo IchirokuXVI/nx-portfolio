@@ -395,6 +395,8 @@ describeIntegration('the flag of a line (real Postgres)', () => {
     source?: LineItemSource;
     productGroupId?: string;
     approvalStatus?: LineApprovalStatus;
+    /** 1 when absent; 0 seeds a kept line, which an add raises (plan 0260 R2). */
+    quantity?: number;
   }): Promise<ListLine> {
     const repo = dataSource.getRepository(ListLine);
     const itemIds = seed.itemIds ?? [];
@@ -403,7 +405,7 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         listId: ids.list,
         content: seed.content,
         named: seed.named ?? true,
-        quantity: 1,
+        quantity: seed.quantity ?? 1,
         position: seed.position,
         itemSetHash: itemSetHash(itemIds),
         productGroupId: seed.productGroupId ?? null,
@@ -533,6 +535,38 @@ describeIntegration('the flag of a line (real Postgres)', () => {
       });
       expect(await row(notNamed.id)).toEqual(before);
       expect(emit).not.toHaveBeenCalled();
+    });
+
+    // Added in review round 1 of plan 0260: the raise of a kept line is the
+    // one write left on this path, and it moves the quantity alone (plan
+    // 0207, section 1.3).
+    it('raises a kept unnamed line from an unnamed add in another language, and keeps its name and flag (plans 0207, 0214, 0260 R2)', async () => {
+      const kept = await seedLine({
+        content: 'Bebida de avena',
+        position: 1,
+        itemIds: [OAT],
+        named: false,
+        quantity: 0,
+      });
+
+      const { line, outcome } = await add({
+        content: 'Oat drink',
+        itemIds: [OAT],
+        named: false,
+      });
+
+      expect(outcome).toBe('RAISED');
+      expect(line).toMatchObject({
+        id: kept.id,
+        content: 'Bebida de avena',
+        quantity: 1,
+        named: false,
+      });
+      expect(await row(kept.id)).toMatchObject({
+        content: 'Bebida de avena',
+        named: false,
+        quantity: 1,
+      });
     });
 
     // Changed on purpose by plan 0260 (R5): a product add meets a line whose
