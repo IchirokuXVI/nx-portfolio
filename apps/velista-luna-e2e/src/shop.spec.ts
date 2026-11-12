@@ -50,8 +50,7 @@ import {
  * (0052), the settle sheet (0044, as velista 0139 drew it around the lists
  * that ask), the amount cell that opens it (0190), a settle and its undo, a row
  * bought whole as its product (0139), the composer in the aisle (0053, 0110),
- * finishing
- * (0057), and what the next basket remembers (0076).
+ * finishing (0057), and what the next basket remembers (0076).
  *
  * The world is set up through the API as absolute values, so the trip starts
  * from the same place on a fresh database and on the run after it. Everything
