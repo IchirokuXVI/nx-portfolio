@@ -66,10 +66,10 @@ export class ListLine extends BaseEntity {
   /**
    * How many of this the household wants right now (plan 0047, section 1).
    *
-   * Zero is a real, ordinary value: it means stocked, not deleted (section
-   * 2.2), for a line that keeps anything a person wrote. Since plan 0263 a
-   * member's write that lowers a line holding nothing of `lineKeeps` from above
-   * 0 to 0 deletes it in the same transaction. A settle never does.
+   * Zero is a real, ordinary value: it means stocked, not deleted. Deleting is a
+   * separate confirmed gesture and it is the only thing that discards the
+   * history (section 2.2). No write deletes a line because it reached 0: plan
+   * 0263 proposed that and the owner withdrew it on 2026-11-12.
    */
   @Column({ type: 'int', default: 1 })
   quantity!: number;

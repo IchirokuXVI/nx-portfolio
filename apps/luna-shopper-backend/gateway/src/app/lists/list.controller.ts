@@ -35,7 +35,6 @@ import {
   type CommentPage,
   type CommentView,
   type LinePage,
-  type LineQuantityResult,
   type LineSettlementPage,
   type LineSettlementResult,
   type LineSettlePickRequest,
@@ -542,10 +541,7 @@ export class LinesController {
    * for the absorbed line arrives anyway.
    */
   @Patch(':id')
-  @ApiContractResponse(LINE_PATTERNS.update, {
-    description:
-      'The line as it now stands. After a merge it is the surviving line and `absorbedLineId` names the line that went. `deleted` is true when the edit lowered the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write (plan 0263); the body is then the line as it stood at 0, and `line.deleted` with `emptied` follows on the socket.',
-  })
+  @ApiContractResponse(LINE_PATTERNS.update)
   @ApiProblemResponses({
     body: true,
     lineMerge: true,
@@ -618,16 +614,14 @@ export class LinesController {
   @Post(':id/quantity')
   @ApiContractResponse(LINE_PATTERNS.addQuantity, {
     status: HttpStatus.CREATED,
-    description:
-      'The line as it now stands. `deleted` is true when the delta took the line from above 0 to 0 and the line kept nothing a person wrote (no typed name, chain, favourite, buy or comment), so it was deleted in the same write (plan 0263); the body is then the line as it stood at 0, with the products it held, and `line.deleted` with `emptied` follows on the socket. Absent on every other answer.',
   })
   @ApiProblemResponses({ body: true, lineUnitMismatch: true })
   addQuantity(
     @AuthUser() user: CurrentUser,
     @UuidParam('id') id: string,
     @Body() dto: AddLineQuantityDto
-  ): Promise<LineQuantityResult> {
-    return this.nats.send<LineQuantityResult>(LINE_PATTERNS.addQuantity, {
+  ): Promise<LineView> {
+    return this.nats.send<LineView>(LINE_PATTERNS.addQuantity, {
       userId: user.userId,
       lineId: id,
       delta: dto.delta,
