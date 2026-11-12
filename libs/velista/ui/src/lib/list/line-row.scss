@@ -601,8 +601,11 @@
   color: var(--app-text-secondary);
 }
 
+// The row of today's `.price` pushes itself to the end of its line; the third fact
+// starts at the column's edge like the two above it.
 .fact.price {
   grid-row: 3;
+  margin-inline-start: 0;
   font-size: var(--app-text-base);
   font-weight: 600;
   line-height: var(--app-line-compact-price-leading);

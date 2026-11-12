@@ -56,6 +56,15 @@ async function size(
   return { width: box.width, height: box.height };
 }
 
+/** Where the text of a fact line starts, which its box alone does not say. */
+async function startOfText(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    return range.getBoundingClientRect().left;
+  });
+}
+
 test.describe('compact rows (velista 0191)', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -130,6 +139,14 @@ test.describe('compact rows (velista 0191)', () => {
       await expect(facts.nth(1)).toContainText('/ kg');
       await expect(facts.nth(2)).toHaveText(/^≈/);
       await expect(facts.nth(2)).toContainText('1.49');
+
+      // The price starts at the column's edge, under the price per kilo, as the
+      // mock draws it: the row of today's `.price` must not push it to the end.
+      const measureStart = await startOfText(facts.nth(1));
+      const priceStart = await startOfText(facts.nth(2));
+      expect(Math.abs(priceStart - measureStart)).toBeLessThanOrEqual(
+        TOLERANCE
+      );
     });
 
     await test.step('a reload keeps it compact', async () => {
