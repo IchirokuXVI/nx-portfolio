@@ -127,6 +127,18 @@
   display: block;
 }
 
+// One press from here takes the amount to 0, where the line leaves its list (the
+// owner's S14): the bar becomes a trash in the danger colour. The glyph changes as
+// well as the colour, and it swaps at once, with nothing to animate.
+.minus.is-clear {
+  color: var(--app-status-danger-fg);
+}
+
+.trash {
+  font-size: var(--app-stepper-glyph);
+  pointer-events: none;
+}
+
 .cell {
   position: relative;
   display: flex;
