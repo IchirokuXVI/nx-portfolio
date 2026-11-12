@@ -1,14 +1,10 @@
-// The tools row, and whatever the page projects under it, held
-// at the top of the scroll (velista 0079, section 2). Moved here from the basket page
-// by velista 0082, unchanged.
+// The tools row, and whatever the page projects under it (velista 0079, section 2).
+// Moved here from the basket page by velista 0082.
 //
-// Sticky on the host, which is the child of the scrolling page. The ground is painted
-// so the lines passing under the bar never show through it. `z-index: 1` puts it over
-// the rows, which set no stacking order of their own.
+// It held itself at the top of the scroll until velista 0189. The page pins it now,
+// in a head block outside its scroller, so nothing scrolls under it and it needs no
+// position of its own. The ground stays painted, the page's own.
 :host {
-  position: sticky;
-  inset-block-start: 0;
-  z-index: 1;
   display: flex;
   flex-direction: column;
   // 8px rather than 4px, which sat the chips almost against the row.

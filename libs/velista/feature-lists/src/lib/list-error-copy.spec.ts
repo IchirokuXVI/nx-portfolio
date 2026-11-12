@@ -59,16 +59,8 @@ describe('listErrorKey', () => {
     });
   });
 
-  describe('the silent one', () => {
-    it('says nothing at all about a refused reorder', () => {
-      // Somebody deleted a line mid drag. Two people editing one list is the normal
-      // case, and the person who dragged has done nothing wrong.
-      expect(
-        listErrorKey(gateway('validation_failed', 400), 'lines.reorder')
-      ).toBeNull();
-    });
-
-    it('still speaks up about a refused write', () => {
+  describe('a refused validation', () => {
+    it('speaks up about a refused write', () => {
       expect(
         listErrorKey(gateway('validation_failed', 400), 'lines.write')
       ).toBe('list.error.failed');
@@ -105,7 +97,6 @@ describe('listErrorKey', () => {
       'lines.read',
       'lines.write',
       'lines.decide',
-      'lines.reorder',
       'comments',
       'list.manage',
     ];
@@ -157,12 +148,6 @@ describe('listErrorEffect', () => {
     expect(listErrorEffect(gateway('forbidden', 403), 'lines.read')).toBe(
       'gone'
     );
-  });
-
-  it('rereads silently after a refused reorder', () => {
-    expect(
-      listErrorEffect(gateway('validation_failed', 400), 'lines.reorder')
-    ).toBe('reread');
   });
 
   it('leaves the page alone for a caller who lost DECIDE', () => {

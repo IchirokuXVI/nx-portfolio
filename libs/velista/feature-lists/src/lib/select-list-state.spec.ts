@@ -91,13 +91,11 @@ function select(overrides: Partial<ListStateInput> = {}): ListPageState {
     zoneName: 'Flat 3B',
     lines: [line()],
     linesState: 'loaded',
-    linesComplete: true,
     writes: new Map(),
     commentCounts: new Map(),
     claims: new Map(),
     caller: { permissions: ADMIN },
     nameOf: () => null,
-    reordering: false,
     viewers: [],
     editorOf: () => null,
     live: true,
@@ -150,14 +148,6 @@ describe('selectListState', () => {
       const without = loaded(select()).lines[0];
 
       expect(withEditor).toEqual({ ...without, editor: 'Ana' });
-    });
-
-    // The sheet cannot be opened from a row in reorder mode, so an indicator there
-    // would be about a screen the reader cannot get to.
-    it('names nobody while the list is being put in order', () => {
-      const state = select({ reordering: true, editorOf: () => 'Ana' });
-
-      expect(loaded(state).lines[0]?.editor).toBeNull();
     });
   });
 
@@ -1144,54 +1134,6 @@ describe('selectListState', () => {
 
     it('reports no write state at all for an untouched row', () => {
       expect(loaded(select()).lines[0].write).toBe('none');
-    });
-  });
-
-  describe('reordering, and rule L4', () => {
-    const two = [
-      line({ id: 'a', position: 1 }),
-      line({ id: 'b', position: 2 }),
-    ];
-
-    it('is available once every page has arrived', () => {
-      expect(loaded(select({ lines: two })).canReorder).toBe(true);
-    });
-
-    it('is unavailable while a page is still outstanding', () => {
-      // `line.reorder` renumbers exactly the lines it names, so reordering a half read
-      // list leaves two lines on the same position.
-      const state = select({ lines: two, linesComplete: false });
-
-      expect(loaded(state).canReorder).toBe(false);
-    });
-
-    it('is unavailable to a reader', () => {
-      const state = select({ lines: two, caller: { permissions: READ_ONLY } });
-
-      expect(loaded(state).canReorder).toBe(false);
-    });
-
-    it('follows WRITE, not the tick', () => {
-      // Reordering rewrites what the list asks for rather than what the shop had, so it
-      // stayed with `canWrite` when ticking moved to `canDecide` (section 4).
-      expect(
-        loaded(select({ lines: two, caller: { permissions: DECIDER } }))
-          .canReorder
-      ).toBe(false);
-      expect(
-        loaded(select({ lines: two, caller: { permissions: WRITER } }))
-          .canReorder
-      ).toBe(true);
-    });
-
-    it('is pointless on a single line and is not offered', () => {
-      expect(loaded(select()).canReorder).toBe(false);
-    });
-
-    it('turns opening off while the mode is on', () => {
-      const state = select({ lines: two, reordering: true });
-
-      expect(loaded(state).lines[0]).toMatchObject({ interactive: false });
     });
   });
 

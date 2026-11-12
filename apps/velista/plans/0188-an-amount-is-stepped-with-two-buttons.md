@@ -1,3 +1,5 @@
+> **PR:** [#978](https://github.com/IchirokuXVI/nx-portfolio/pull/978)
+
 # 0188: an amount is stepped with two buttons
 
 > Decided on 2026-11-10 and 2026-11-11. The owner finds the quantity reel "confusing for most
@@ -250,6 +252,19 @@ the amount once after a run.
 - **S12. Saving is not the component's job.** "It will be done from outside the component, by
   the logic layer in a feature library."
 - **S13. Accessibility is a must**, with the contract that section 3.6 states.
+- **S14 (2026-11-12). Minus becomes a red trash where its next press reaches 0.** "When
+  lowering from 1 to 0, the icon will be a trash, in red. That way the user knows the line will
+  disappear. The trash will always appear going from 1 to 0, even if the line has buys and isn't
+  actually deleted." Read as: on every `lib-quantity-stepper`, in all three variants, while the
+  value is above 0 and `max(min, stepFrom(value, unit, -1)) === 0` (1 for a count, 25 g or
+  anything under one step for a weight; never with `min` above 0, as on a due row or the how
+  many step), minus draws `lib-trash-icon` at the glyph size in `--app-status-danger-fg` in
+  place of its bar. At 0 minus is at its end with the plain bar. The accessible name stays the
+  true step ("Remove 1 from Milk"), because nothing is deleted; the hold is unchanged, so a
+  hold ends on the trash and a separate press goes to 0. The glyph swaps with no animation.
+- **S15 (2026-11-12). Presses faster than the caller redraws each take their own step.** "Fix
+  it." A press builds on the amount the last press emitted until the caller redraws; the
+  caller's `value` wins as soon as it moves or any render runs (section 3.3).
 
 ### The numbers of the hold, proposed with the mock and open to the owner
 
@@ -543,6 +558,11 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
 - **The ends.** Minus is at an end when `value <= min`; plus when `!canStepUp(value, unit,
   max)`. At an end the button carries `aria-disabled="true"` and ignores the press
   (decision D).
+- **The base of a press** (S15). `value` is drawn and is the base, except that a press,
+  repeat, key or typed commit that comes before the caller has redrawn builds on the amount the
+  last one emitted. That amount is never drawn; it is dropped when `value` moves away from the
+  amount it was built over, or after any render, so a refused, clamped or realtime amount wins
+  at once.
 - **The hold.** A primary pointer down on a button that is not at an end starts a timer of
   `QUANTITY_HOLD_DELAY_MS`. When it fires the button steps with `repeat: true` and schedules
   the next step after `QUANTITY_HOLD_FIRST_MS`, each later interval multiplied by
@@ -889,6 +909,14 @@ eighth rows are this plan's, and the builder stops to say so (Action boundaries)
   `0187` U5.
 
 ## Questions for the owner
+
+Answered on 2026-11-12:
+
+- A press while the field holds typed text commits the text and takes no step. Kept.
+- A run is written 800 ms after the last step, even while the finger is still down. Kept.
+- No `MIN_CLIENT_VERSION` raise for builds that still have the reel.
+
+Open:
 
 1. The hold's numbers (400 ms, then 300 ms down to 100 ms by a factor of 0.85): do they feel
    right on the phone?
