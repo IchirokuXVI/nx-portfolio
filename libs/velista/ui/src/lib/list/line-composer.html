@@ -78,8 +78,6 @@
         suggestions above it.
       -->
       <input
-        (blur)="fieldFocused.emit(false)"
-        (focus)="fieldFocused.emit(true)"
         (input)="onInput($event)"
         (keydown.escape)="onEscape($event)"
         [attr.aria-controls]="resultsId()"
@@ -125,7 +123,12 @@
       }
     </div>
 
-    <lib-quantity-stepper [(value)]="quantity" [disabled]="busy()" />
+    <lib-quantity-stepper
+      [(value)]="quantity"
+      [disabled]="busy()"
+      [name]="'amount.newLine' | rokuT"
+      variant="row"
+    />
 
     <!--
     One slot, two jobs, and the empty field decides (plan 0038, section 2). A

@@ -392,10 +392,8 @@ export class LineStore {
   /**
    * Whether every page has arrived.
    *
-   * Rule L4 turns dragging on from exactly this: `line.reorder` renumbers only the
-   * lines it names, so reordering a list the client has not finished reading leaves
-   * two lines on the same position and the order becomes whatever the id tie break
-   * says (section 4.5).
+   * The list order is the server's `position`, read page by page, so a list the client
+   * has not finished reading may still be missing lines at its end (section 4.5).
    */
   isComplete(listId: string): boolean {
     return (this._cursor().get(listId) ?? null) === null;
@@ -466,8 +464,8 @@ export class LineStore {
    * the list** (rule L2). They are two independent calls, and making the lines wait on
    * a title means somebody in an aisle waits for a name before they see what to buy.
    *
-   * Every page is asked for, up to the gateway's maximum, because that is what makes
-   * reordering available on the first frame for every list this product is for.
+   * Every page is asked for, up to the gateway's maximum, so the first frame holds every
+   * line of every list this product is for.
    */
   async load(listId: string): Promise<void> {
     // A stale list is read like any other; the read is what clears the mark.
@@ -505,10 +503,7 @@ export class LineStore {
   /**
    * Reread without dropping the page back to a skeleton.
    *
-   * `ListStore.refresh`'s reason exactly, and this screen has one more: a
-   * `validation_failed` on a reorder means somebody deleted a line mid drag, and the
-   * answer to that is a silent reread rather than a message about somebody else's
-   * perfectly ordinary action (section 5.7).
+   * `ListStore.refresh`'s reason exactly.
    */
   async refresh(listId: string): Promise<void> {
     this._unstale(listId);
@@ -1280,47 +1275,6 @@ export class LineStore {
     }
 
     return { state: 'deleted' };
-  }
-
-  /**
-   * Rewrite the whole order.
-   *
-   * The caller is responsible for having checked {@link isComplete} first: this method
-   * sends what it is given, and rule L4 is a rule about when the control is offered
-   * rather than a check buried here where a reader of the page cannot see it.
-   *
-   * A `validation_failed` is **silent** and rereads. It means the order named a line
-   * the server no longer has, which is somebody deleting one mid drag, and the person
-   * who dragged has done nothing wrong (section 5.7).
-   */
-  async reorder(
-    listId: string,
-    orderedLineIds: readonly string[]
-  ): Promise<'succeeded' | 'failed'> {
-    const before = this._byList().get(listId) ?? [];
-    const byId = new Map(before.map((line) => [line.id, line]));
-
-    this._setLines(
-      listId,
-      orderedLineIds
-        .map((id, index) => {
-          const line = byId.get(id);
-          return line === undefined ? null : { ...line, position: index + 1 };
-        })
-        .filter((line): line is Line => line !== null)
-    );
-
-    const outcome = await this._mutations.run(null, () =>
-      this._lines.reorder(listId, orderedLineIds)
-    );
-
-    if (outcome.state === 'failed') {
-      this._setLines(listId, before);
-      void this.refresh(listId);
-      return 'failed';
-    }
-
-    return 'succeeded';
   }
 
   /**

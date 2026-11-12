@@ -483,9 +483,6 @@ describe('LineMemory refuses what the server would refuse', () => {
       expect(await codeOf(lines.addQuantity('ln-s-03', 1))).toBe('forbidden');
       expect(await codeOf(lines.settle('ln-s-03', 'BOUGHT'))).toBe('forbidden');
       expect(await codeOf(lines.deleteLine('ln-s-03'))).toBe('forbidden');
-      expect(await codeOf(lines.reorder(READ_ONLY, ['ln-s-03']))).toBe(
-        'forbidden'
-      );
     });
   });
 
