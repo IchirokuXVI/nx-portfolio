@@ -885,7 +885,8 @@
       "comments": "Comentarios",
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
-      "failed": "No se ha guardado. Toca para reintentar"
+      "failed": "No se ha guardado. Toca para reintentar",
+      "hiddenAtZero": "{{name}} está a 0 y se oculta. Búscalo para recuperarlo."
     },
     "view": {
       "order": {

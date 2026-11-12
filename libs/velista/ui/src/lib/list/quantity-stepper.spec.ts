@@ -4,7 +4,7 @@ import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
-import { type QuantityStep } from '@portfolio/velista/models';
+import { LINE_QUANTITY_MAX, type QuantityStep } from '@portfolio/velista/models';
 import { QuantityStepper } from './quantity-stepper';
 
 /**
@@ -443,7 +443,9 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(input.getAttribute('inputmode')).toBe('decimal');
       expect(input.getAttribute('aria-valuenow')).toBe('1275');
       expect(input.getAttribute('aria-valuemin')).toBe('0');
-      expect(input.getAttribute('aria-valuemax')).toBe('999999');
+      expect(input.getAttribute('aria-valuemax')).toBe(
+        String(LINE_QUANTITY_MAX)
+      );
       expect(input.getAttribute('aria-valuetext')).toBe('1.275 kilograms');
       expect(input.getAttribute('aria-label')).toBe(
         'amount.group:{"name":"Plátano"}'

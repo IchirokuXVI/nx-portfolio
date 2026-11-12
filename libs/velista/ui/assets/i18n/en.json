@@ -885,7 +885,8 @@
       "comments": "Comments",
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
-      "failed": "That did not save. Tap to try again"
+      "failed": "That did not save. Tap to try again",
+      "hiddenAtZero": "{{name}} is at 0 and hidden. Search for it to bring it back."
     },
     "view": {
       "order": {

@@ -1211,6 +1211,292 @@ describe('ListPage', () => {
         jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
         expect(writes(lines.calls)).toHaveLength(1);
       });
+
+      it('keeps the row and writes nothing for a minus to 0 and a plus inside the quiet beat (velista 0192)', async () => {
+        const { fixture, lines } = await render({
+          lines: [line('ln-1', { quantity: 1 })],
+        });
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+
+        page.stepQuantity(press(1, 0));
+        fixture.detectChanges();
+        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+
+        page.stepQuantity(press(0, 1));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        fixture.detectChanges();
+
+        expect(writes(lines.calls)).toEqual([]);
+        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+        expect(page.announcement()).toBe('');
+      });
+    });
+
+    describe('a line lowered to 0 is hidden (velista 0192)', () => {
+      const lower = (lineId: string, from: number) => ({
+        lineId,
+        step: { from, to: 0, repeat: false },
+      });
+      const three = () =>
+        render({
+          lines: [
+            line('ln-1', { quantity: 2, position: 1 }),
+            line('ln-2', { content: 'Bananas', quantity: 1, position: 2 }),
+            line('ln-3', { quantity: 3, position: 3 }),
+          ],
+        });
+      const rowOf = (fixture: ComponentFixture<ListPage>, id: string) =>
+        (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>(
+          `li.line[data-line-id="${id}"]`
+        );
+      const settle = (fixture: ComponentFixture<ListPage>) => {
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        fixture.detectChanges();
+        fixture.detectChanges();
+      };
+
+      afterEach(() => jest.useRealTimers());
+
+      it('leaves the list with one write and nothing deleted, and says it once', async () => {
+        const { fixture, lines } = await three();
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(lines.calls).toEqual([
+          { kind: 'quantity', lineId: 'ln-2', delta: -1 },
+        ]);
+        expect(lines.linesIn(LIST_ID).map((held) => held.id)).toContain('ln-2');
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.hiddenAtZero'
+        );
+      });
+
+      it('moves focus to the same control of the next row', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+      });
+
+      it('moves focus to the previous row when the last row left', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-3')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-3', 3));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-2')?.querySelector('.step.minus')
+        );
+      });
+
+      it('moves focus to the heading when no row is left', async () => {
+        const { fixture } = await render({
+          lines: [line('ln-1', { quantity: 1 })],
+        });
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-1')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-1', 1));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(
+          (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-page-header h1'
+          )
+        );
+      });
+
+      it('leaves focus alone when it was not in the row', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        const other = rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>(
+          '.step.plus'
+        );
+        other?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(document.activeElement).toBe(other);
+      });
+
+      it('writes an open run to 0 when the page goes away, and still tears the page down', async () => {
+        const { fixture, lines, returns } = await three();
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        expect(() => fixture.destroy()).not.toThrow();
+
+        expect(lines.calls).toEqual([
+          { kind: 'quantity', lineId: 'ln-2', delta: -1 },
+        ]);
+        // The page's own teardown, which runs after the runs are written.
+        expect(returns.keep).toHaveBeenCalled();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('says the sentence again when the same line is lowered to 0 a second time', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+        const region = () =>
+          (fixture.nativeElement as HTMLElement)
+            .querySelector('lib-line-list p.live')
+            ?.textContent?.trim();
+
+        page.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+        expect(region()).toBe('list.line.hiddenAtZero');
+
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        page.stepQuantity({
+          lineId: 'ln-2',
+          step: { from: 0, to: 1, repeat: false },
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        page.onComposerQuery('');
+        fixture.detectChanges();
+        expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+        expect(page.announcement()).toBe('list.line.hiddenAtZero');
+
+        page.stepQuantity(lower('ln-2', 1));
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        // Emptied in the render that takes the row away and filled a moment later,
+        // so a screen reader hears a change.
+        fixture.detectChanges();
+        fixture.detectChanges();
+        expect(region()).toBe('');
+        jest.advanceTimersByTime(1_000);
+        fixture.detectChanges();
+        expect(region()).toBe('list.line.hiddenAtZero');
+      });
+
+      it('decides after the write when a unit correction held the step back', async () => {
+        const { fixture, lines } = await three();
+        let release: () => void = () => undefined;
+        const held = new Promise<void>((resolve) => (release = resolve));
+        const write = lines.addQuantity.bind(lines);
+        jest
+          .spyOn(lines, 'addQuantity')
+          .mockImplementation(async (lineId, delta) => {
+            await held;
+            return write(lineId, delta);
+          });
+        jest.useFakeTimers();
+        rowOf(fixture, 'ln-2')
+          ?.querySelector<HTMLElement>('.step.minus')
+          ?.focus();
+
+        fixture.componentInstance.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+        expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+
+        release();
+        for (let turn = 0; turn < 5; turn += 1) {
+          await Promise.resolve();
+        }
+        fixture.detectChanges();
+        fixture.detectChanges();
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(document.activeElement).toBe(
+          rowOf(fixture, 'ln-3')?.querySelector('.step.minus')
+        );
+        expect(fixture.componentInstance.announcement()).toBe(
+          'list.line.hiddenAtZero'
+        );
+      });
+
+      it('says nothing and moves no focus for a line another device lowered', async () => {
+        const { fixture, lines } = await three();
+        const minus = rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>(
+          '.step.minus'
+        );
+        minus?.focus();
+
+        lines.set(
+          lines
+            .linesIn(LIST_ID)
+            .map((held) =>
+              held.id === 'ln-2' ? { ...held, quantity: 0, version: 2 } : held
+            )
+        );
+        fixture.detectChanges();
+        await fixture.whenStable();
+
+        expect(rowOf(fixture, 'ln-2')).toBeNull();
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('is found by the search at 0, and stepping it up puts it back on the list', async () => {
+        const { fixture } = await render({
+          lines: [
+            line('ln-1', { content: 'Bread', quantity: 2 }),
+            line('ln-2', { content: 'Bananas', quantity: 0 }),
+          ],
+        });
+        const page = fixture.componentInstance;
+        expect(page.drawnLines().map((row) => row.id)).toEqual(['ln-1']);
+
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
+          ['ln-2', 0],
+        ]);
+
+        jest.useFakeTimers();
+        page.stepQuantity({
+          lineId: 'ln-2',
+          step: { from: 0, to: 1, repeat: false },
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        page.onComposerQuery('');
+        fixture.detectChanges();
+
+        expect(page.drawnLines().map((row) => row.id)).toEqual([
+          'ln-1',
+          'ln-2',
+        ]);
+        expect(page.announcement()).toBe('');
+      });
+
+      it('stays drawn in the search results at 0, and says nothing', async () => {
+        const { fixture } = await render({
+          lines: [line('ln-2', { content: 'Bananas', quantity: 1 })],
+        });
+        const page = fixture.componentInstance;
+        page.onComposerQuery('banan');
+        fixture.detectChanges();
+        jest.useFakeTimers();
+
+        page.stepQuantity(lower('ln-2', 1));
+        settle(fixture);
+
+        expect(page.drawnLines().map((row) => [row.id, row.quantity])).toEqual([
+          ['ln-2', 0],
+        ]);
+        expect(page.announcement()).toBe('');
+      });
     });
 
     it('opens the line rather than repeating a write that failed', async () => {
@@ -3395,14 +3681,10 @@ describe('ListPage: the zone list grouped by trip', () => {
     ]);
   });
 
-  it('draws To buy first, a claimed line in its live trip, and a zero line never bought last', async () => {
+  it('draws To buy first and a claimed line in its live trip, and no zero line never bought (velista 0192)', async () => {
     const { fixture } = await grouped();
 
-    expect(rows(fixture).map((row) => row.id)).toEqual([
-      'bread',
-      'eggs',
-      'saffron',
-    ]);
+    expect(rows(fixture).map((row) => row.id)).toEqual(['bread', 'eggs']);
     const [live] = groups(fixture);
     expect(live.rows?.map((row) => [row.lineId, row.mark])).toEqual([
       ['rice', 'claimed'],
@@ -3585,7 +3867,7 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     )[1] as HTMLButtonElement;
   }
 
-  it('reads the due lines once the lines are in, and draws three between the wanted lines and the zero lines', async () => {
+  it('reads the due lines once the lines are in, and draws three after the wanted lines', async () => {
     const { fixture, dueCalls } = await suggested();
 
     expect(dueCalls.reads).toBe(1);
@@ -3596,17 +3878,16 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
       'eggs',
       'yogurt',
     ]);
-    expect(lists(fixture)).toEqual([['bread'], ['saffron']]);
+    // The zero line never bought is not drawn at rest (velista 0192), so nothing
+    // is left for a list below the due rows.
+    expect(lists(fixture)).toEqual([['bread']]);
 
     const section = query(fixture, 'section.due') as HTMLElement;
-    const [wanted, rest] = Array.from(
+    const [wanted] = Array.from(
       fixture.nativeElement.querySelectorAll('lib-line-list')
     ) as HTMLElement[];
     expect(
       wanted.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-    expect(
-      section.compareDocumentPosition(rest) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
   });
 
@@ -3667,10 +3948,10 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
 
     expect(query(fixture, 'section.due')).toBeNull();
     // This list has no trip, so its bought lines at zero stay last in To buy rather
-    // than on neither side (velista 0095, section 5).
+    // than on neither side (velista 0095, section 5). The zero line never bought is
+    // not drawn at rest (velista 0192).
     expect(rows(fixture).map((row) => row.id)).toEqual([
       'bread',
-      'saffron',
       'eggs',
       'coffee',
       'yogurt',
@@ -3699,6 +3980,42 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     expect(lists(fixture)[0]).toEqual(['bread', 'eggs']);
     expect(fixture.componentInstance.announcement()).toBe('list.due.added');
     expect(document.activeElement).toBe(addButton(fixture, 'yogurt'));
+  });
+
+  it('moves focus to the due row of a line lowered to 0 there, and says nothing (velista 0192)', async () => {
+    const { fixture } = await suggested({
+      lines: [
+        line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+        line('eggs', { content: 'Eggs', position: 2, quantity: 1 }),
+        line('milk', { content: 'Milk', position: 3, quantity: 3 }),
+        line('coffee', { content: 'Coffee', position: 4, ...bought }),
+      ],
+      due: [due('eggs'), due('coffee')],
+    });
+    expect(lists(fixture)[0]).toEqual(['bread', 'eggs', 'milk']);
+    jest.useFakeTimers();
+    try {
+      query(fixture, 'li.line[data-line-id="eggs"] .step.minus')?.focus();
+
+      fixture.componentInstance.stepQuantity({
+        lineId: 'eggs',
+        step: { from: 1, to: 0, repeat: false },
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    } finally {
+      jest.useRealTimers();
+    }
+
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'eggs',
+      'coffee',
+    ]);
+    expect(document.activeElement).toBe(
+      query(fixture, '[data-due-line-id="eggs"] .step.minus')
+    );
+    expect(fixture.componentInstance.announcement()).toBe('');
   });
 
   it('adds the amount chosen on the stepper', async () => {
