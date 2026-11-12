@@ -553,8 +553,22 @@ test.describe('a product with a step of its own (velista 0186)', () => {
       .locator('lib-row-entries lib-quantity-stepper')
       .first();
 
-    await stepAmount(field, -3);
-    await expect(field).toHaveAttribute('aria-valuenow', '700');
+    // One key at a time, each drawn before the next: a stepper steps from the
+    // amount it draws, so a key pressed before the sheet draws the last one
+    // repeats it. The run is sent once, after the quiet beat.
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname),
+      { timeout: 10_000 }
+    );
+    await field.focus();
+    for (const amount of ['900', '800', '700']) {
+      await field.press('ArrowDown');
+      await expect(field).toHaveAttribute('aria-valuenow', amount);
+    }
+    await field.blur();
+    await saved;
     await expect(stepper).toHaveAttribute('data-value', '700');
     await expect(
       dialog.getByRole('button', { name: /^Add 100 g to / })
