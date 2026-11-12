@@ -186,6 +186,8 @@ export class AddLinesItemDto {
   @ApiPropertyOptional({
     minimum: LINE_QUANTITY_MIN,
     maximum: LINE_QUANTITY_MAX,
+    description:
+      'The amount of a line the add creates, or of the raise of a line at 0 (plan 0260). Never added to a wanted line: an add that meets one writes nothing and answers outcome ALREADY_ON_LIST. Absent is one step of the unit: 1 piece, 25 g or 25 ml.',
   })
   @IsOptional()
   @IsInt()
@@ -228,11 +230,11 @@ export class AddLinesItemDto {
  * the basket's add, which take them alike because both are `LineService.add`.
  */
 export const ADD_CHOICE_DOCS = {
-  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before.`,
+  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). An add that meets a wanted line writes nothing and answers 201 with outcome ALREADY_ON_LIST and every wanted line it met in alreadyOnList (plan 0260). When a free text name is the name of two or more lines that hold a product and every one is at 0, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, each with its own unit, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false raises the earliest. Never asked about a unit. Ignored on an add that carries itemIds or a productGroupId.`,
   intoLineId:
-    'The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
+    'The line the person chose for a free text add (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Wanted, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised, by one step of its own unit when that is not the unit of the add (plan 0260). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
   newLine:
-    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add.',
+    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId: a product add that meets only lines of another unit answers 409 line_unit_differs whatever this says (plan 0260).',
 } as const;
 
 /**

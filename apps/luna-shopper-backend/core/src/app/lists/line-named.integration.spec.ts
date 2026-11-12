@@ -395,6 +395,8 @@ describeIntegration('the flag of a line (real Postgres)', () => {
     source?: LineItemSource;
     productGroupId?: string;
     approvalStatus?: LineApprovalStatus;
+    /** 1 when absent; 0 seeds a kept line, which an add raises (plan 0260 R2). */
+    quantity?: number;
   }): Promise<ListLine> {
     const repo = dataSource.getRepository(ListLine);
     const itemIds = seed.itemIds ?? [];
@@ -403,7 +405,7 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         listId: ids.list,
         content: seed.content,
         named: seed.named ?? true,
-        quantity: 1,
+        quantity: seed.quantity ?? 1,
         position: seed.position,
         itemSetHash: itemSetHash(itemIds),
         productGroupId: seed.productGroupId ?? null,
@@ -505,35 +507,73 @@ describeIntegration('the flag of a line (real Postgres)', () => {
       expect((await row(line.id)).named).toBe(true);
     });
 
-    it('raises an unnamed line from an unnamed add in another language, and keeps its name and flag (plan 0214)', async () => {
+    // Changed on purpose by plan 0260 (A1): the add still meets the unnamed
+    // line of plan 0214, and now leaves it as it was rather than raising it.
+    it('meets an unnamed line from an unnamed add in another language, and leaves it as it was (plans 0214, 0260)', async () => {
       const notNamed = await seedLine({
         content: 'Bebida de avena',
         position: 1,
         itemIds: [OAT],
         named: false,
       });
+      const before = await row(notNamed.id);
 
-      const { line, merged } = await add({
+      const { line, merged, outcome, alreadyOnList } = await add({
         content: 'Oat drink',
         itemIds: [OAT],
         named: false,
       });
 
       expect(merged).toBe(true);
+      expect(outcome).toBe('ALREADY_ON_LIST');
+      expect(alreadyOnList.map(({ id }) => id)).toEqual([notNamed.id]);
       expect(line).toMatchObject({
         id: notNamed.id,
         content: 'Bebida de avena',
-        quantity: 2,
+        quantity: 1,
         named: false,
       });
-      expect(await row(notNamed.id)).toMatchObject({
+      expect(await row(notNamed.id)).toEqual(before);
+      expect(emit).not.toHaveBeenCalled();
+    });
+
+    // Added in review round 1 of plan 0260: the raise of a kept line is the
+    // one write left on this path, and it moves the quantity alone (plan
+    // 0207, section 1.3).
+    it('raises a kept unnamed line from an unnamed add in another language, and keeps its name and flag (plans 0207, 0214, 0260 R2)', async () => {
+      const kept = await seedLine({
+        content: 'Bebida de avena',
+        position: 1,
+        itemIds: [OAT],
+        named: false,
+        quantity: 0,
+      });
+
+      const { line, outcome } = await add({
+        content: 'Oat drink',
+        itemIds: [OAT],
+        named: false,
+      });
+
+      expect(outcome).toBe('RAISED');
+      expect(line).toMatchObject({
+        id: kept.id,
+        content: 'Bebida de avena',
+        quantity: 1,
+        named: false,
+      });
+      expect(await row(kept.id)).toMatchObject({
         content: 'Bebida de avena',
         named: false,
-        quantity: 2,
+        quantity: 1,
       });
     });
 
-    it('raises a line only when the flags agree, in both directions (plan 0214)', async () => {
+    // Changed on purpose by plan 0260 (R5): a product add meets a line whose
+    // set holds its products, whatever the flags say, so neither add makes a
+    // second line beside a line of the same product. Plan 0214 kept the flags
+    // apart for the identity alone, which still decides a free text add.
+    it('meets the line that holds the product whatever its flag, in both directions (plans 0214, 0260 R5)', async () => {
       const notNamed = await seedLine({
         content: 'Oat drink',
         position: 1,
@@ -547,9 +587,10 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         named: true,
       });
 
-      // No flag means "a person typed it", so it does not meet the line that
-      // is not named. And an add that is not named never lands on a line that
-      // somebody named, even with the same set.
+      // No flag means "a person typed it", so its identity is not the line
+      // that is not named. And an add that is not named is not the identity of
+      // a line somebody named. Both still find the line that holds the
+      // product, and leave it as it was.
       const first = await add({
         content: 'oat drink',
         itemIds: [OAT],
@@ -561,17 +602,39 @@ describeIntegration('the flag of a line (real Postgres)', () => {
         named: false,
       });
 
-      expect(first.merged).toBe(false);
-      expect(first.line).toMatchObject({ named: true, quantity: 2 });
-      expect(first.line.id).not.toBe(notNamed.id);
-      expect(second.merged).toBe(false);
-      expect(second.line).toMatchObject({ named: false, quantity: 1 });
-      expect(second.line.id).not.toBe(named.id);
-      expect(await row(notNamed.id)).toMatchObject({
+      expect(first).toMatchObject({
+        merged: true,
+        outcome: 'ALREADY_ON_LIST',
+      });
+      expect(first.line).toMatchObject({
+        id: notNamed.id,
         named: false,
         quantity: 1,
       });
-      expect(await row(named.id)).toMatchObject({ named: true, quantity: 1 });
+      expect(second).toMatchObject({
+        merged: true,
+        outcome: 'ALREADY_ON_LIST',
+      });
+      expect(second.line).toMatchObject({
+        id: named.id,
+        named: true,
+        quantity: 1,
+      });
+      expect(await row(notNamed.id)).toMatchObject({
+        named: false,
+        quantity: 1,
+        version: 1,
+      });
+      expect(await row(named.id)).toMatchObject({
+        named: true,
+        quantity: 1,
+        version: 1,
+      });
+      const count = await dataSource
+        .getRepository(ListLine)
+        .count({ where: { listId: ids.list } });
+      expect(count).toBe(2);
+      expect(emit).not.toHaveBeenCalled();
     });
   });
 
@@ -632,7 +695,9 @@ describeIntegration('the flag of a line (real Postgres)', () => {
   });
 
   describe('the batch add', () => {
-    it('decides each item by itself, and leaves the flag of a line it raises', async () => {
+    // Changed on purpose by plan 0260 (R6): the item that meets the wanted
+    // milk line adds nothing, where it raised the line before.
+    it('decides each item by itself, and leaves the flag of a line it meets', async () => {
       const milk = await seedLine({
         content: 'Semi milk',
         position: 1,
@@ -654,19 +719,28 @@ describeIntegration('the flag of a line (real Postgres)', () => {
       });
 
       expect(
-        results.map(({ line, merged }) => [line.content, line.named, merged])
+        results.map(({ line, merged, outcome }) => [
+          line.content,
+          line.named,
+          merged,
+          outcome,
+        ])
       ).toEqual([
-        ['Bread', true, false],
-        ['Oat drink', false, false],
+        ['Bread', true, false, 'CREATED'],
+        ['Oat drink', false, false, 'CREATED'],
         // Rule 1: no product, so it is named whatever the item says.
-        ['Eggs', true, false],
-        ['Whole milk', true, false],
-        ['Semi milk', false, true],
+        ['Eggs', true, false, 'CREATED'],
+        ['Whole milk', true, false, 'CREATED'],
+        ['Semi milk', false, true, 'ALREADY_ON_LIST'],
       ]);
       for (const { line } of results) {
         expect((await row(line.id)).named).toBe(line.named);
       }
-      expect(await row(milk.id)).toMatchObject({ named: false, quantity: 2 });
+      expect(await row(milk.id)).toMatchObject({
+        named: false,
+        quantity: 1,
+        version: 1,
+      });
     });
   });
 
