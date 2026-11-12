@@ -1,4 +1,5 @@
 import {
+  afterEveryRender,
   ChangeDetectionStrategy,
   Component,
   computed,
@@ -34,6 +35,7 @@ import {
   typedSymbol,
   type AmountWords,
 } from '@portfolio/velista/platform';
+import { TrashIcon } from '../icons/icons';
 import { AmountFigure } from './amount-figure';
 
 /** The three forms of the stepper (velista `0188`, section 3.1). */
@@ -70,7 +72,7 @@ export const TOOK_DURATION_MS = 2500;
  */
 @Component({
   selector: 'lib-quantity-stepper',
-  imports: [AmountFigure, RokuTranslatorPipe],
+  imports: [AmountFigure, RokuTranslatorPipe, TrashIcon],
   templateUrl: './quantity-stepper.html',
   styleUrl: './quantity-stepper.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -129,10 +131,18 @@ export class QuantityStepper {
       : shortAmount(this.value(), this.unit(), this.locale())
   );
 
-  readonly minusAtEnd = computed(() => this.value() <= this.min());
-  readonly plusAtEnd = computed(
-    () => !canStepUp(this.value(), this.unit(), this.max(), this.step())
-  );
+  readonly minusAtEnd = computed(() => this._minusAtEndOf(this.value()));
+  readonly plusAtEnd = computed(() => this._plusAtEndOf(this.value()));
+
+  /**
+   * Whether one press of minus takes the amount to 0, where the line leaves its list
+   * (the owner's S14): minus then draws a red trash in place of its bar. Never with a
+   * floor above 0 (a due row, the how many step), and never at 0 itself.
+   */
+  readonly minusClears = computed(() => {
+    const value = this.value();
+    return value > 0 && this._down(value) === 0;
+  });
 
   /** What minus moves at the current amount, in short form words ("25 g", "1", "10"). */
   readonly lessStep = computed(() => {
@@ -173,6 +183,16 @@ export class QuantityStepper {
       : typedSymbol(draft, shown, this.unit(), this.locale());
   });
 
+  /**
+   * The amount the last press emitted, over the `value` it was computed from, until
+   * the caller redraws. Presses that arrive before that redraw (a held key on a busy
+   * phone, synthetic keys) each build on the one before instead of repeating its
+   * step. It is never drawn, and it is dropped as soon as `value` moves away from
+   * `over` or any render runs, so the caller's amount wins at once: a refused write,
+   * a realtime update or a clamp that leaves `value` where it was.
+   */
+  private _ahead: { readonly over: number; readonly to: number } | null = null;
+
   private _holdTimer: ReturnType<typeof setTimeout> | null = null;
   private _holdCount = 0;
   private _swallowClick = false;
@@ -180,6 +200,11 @@ export class QuantityStepper {
   private readonly _onScroll = () => this._stopRepeat();
 
   constructor() {
+    // A render means the caller has had its chance to redraw; from here its `value`
+    // is the base again. A plain field, so the hook writes no signal.
+    afterEveryRender(() => {
+      this._ahead = null;
+    });
     inject(DestroyRef).onDestroy(() => {
       this.endHold();
       if (this._announceTimer !== null) {
@@ -322,7 +347,7 @@ export class QuantityStepper {
       this._stopRepeat();
       return;
     }
-    const value = this.value();
+    const value = this._current();
     let next = this._next(direction);
     if (direction === -1) {
       const min = this.min();
@@ -348,14 +373,33 @@ export class QuantityStepper {
     this._holdTimer = setTimeout(() => this._repeat(direction), interval);
   }
 
+  /** The base a press builds on: the last emitted amount until the caller redraws. */
+  private _current(): number {
+    const value = this.value();
+    const ahead = this._ahead;
+    return ahead !== null && ahead.over === value ? ahead.to : value;
+  }
+
+  private _minusAtEndOf(value: number): boolean {
+    return value <= this.min();
+  }
+
+  private _plusAtEndOf(value: number): boolean {
+    return !canStepUp(value, this.unit(), this.max(), this.step());
+  }
+
   private _atEnd(direction: 1 | -1): boolean {
-    return direction === 1 ? this.plusAtEnd() : this.minusAtEnd();
+    const value = this._current();
+    return direction === 1
+      ? this._plusAtEndOf(value)
+      : this._minusAtEndOf(value);
   }
 
   private _next(direction: 1 | -1): number {
+    const value = this._current();
     return direction === 1
-      ? stepFrom(this.value(), this.unit(), 1, this.step())
-      : this._down(this.value());
+      ? stepFrom(value, this.unit(), 1, this.step())
+      : this._down(value);
   }
 
   private _down(value: number): number {
@@ -363,10 +407,12 @@ export class QuantityStepper {
   }
 
   private _emit(to: number, repeat: boolean): boolean {
-    const from = this.value();
+    const from = this._current();
     if (to === from) {
       return false;
     }
+    // Before the outputs: a caller that redraws inside them has already moved on.
+    this._ahead = { over: this.value(), to };
     this.valueChange.emit(to);
     this.stepped.emit({ from, to, repeat });
     return true;

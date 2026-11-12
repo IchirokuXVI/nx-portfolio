@@ -31,7 +31,6 @@ const OPERATIONS: readonly BasketOperation[] = [
   'basket.split',
   'basket.share',
   'basket.people',
-  'basket.outstanding',
   'basket.origins',
 ];
 
@@ -183,10 +182,7 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
   it('says the trip is over rather than that the save failed', () => {
     // Distinct from `alreadyFinished`, which is about one line. This is the basket.
     expect(
-      basketErrorKey(
-        gateway('basket_finished', 409),
-        'basket.outstanding'
-      )
+      basketErrorKey(gateway('basket_finished', 409), 'basket.settle')
     ).toBe('basket.error.basketFinished');
   });
 
@@ -211,12 +207,11 @@ describe('basketErrorKey: the three codes that used to read as a conflict', () =
     'basket.split',
     'basket.share',
     'basket.people',
-    'basket.outstanding',
     'basket.origins',
   ] as const)('names the finished trip on a refused %s', (operation) => {
-    expect(
-      basketErrorKey(gateway('basket_finished', 409), operation)
-    ).toBe('basket.error.basketFinished');
+    expect(basketErrorKey(gateway('basket_finished', 409), operation)).toBe(
+      'basket.error.basketFinished'
+    );
   });
 });
 
@@ -233,14 +228,6 @@ describe('basketErrorKey: raising a list on a line', () => {
       'basket.error.failed'
     );
   });
-
-  it('says the outstanding write met a line somebody else finished', () => {
-    // The row's own number is a settle by another name when it goes down, so a
-    // conflict on it reads exactly as a conflict on the sheet's button does.
-    expect(basketErrorKey(gateway('conflict', 409), 'basket.outstanding')).toBe(
-      'basket.error.alreadyFinished'
-    );
-  });
 });
 
 describe('basketErrorKey: access that moved on the zone surfaces', () => {
@@ -248,10 +235,8 @@ describe('basketErrorKey: access that moved on the zone surfaces', () => {
     // The origins route refuses a guest and a reader who has lost `WRITE` outright
     // rather than answering an empty sheet, so a 403 on it is the same fact the
     // settle already reports.
-    for (const operation of ['basket.outstanding', 'basket.origins'] as const) {
-      expect(basketErrorKey(gateway('forbidden', 403), operation)).toBe(
-        'basket.error.accessChanged'
-      );
-    }
+    expect(basketErrorKey(gateway('forbidden', 403), 'basket.origins')).toBe(
+      'basket.error.accessChanged'
+    );
   });
 });

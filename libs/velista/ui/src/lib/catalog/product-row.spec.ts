@@ -1368,6 +1368,8 @@ describe('ProductRow, the one card', () => {
         ),
       ];
       plus?.click();
+      // The caller keeps the amount; its redraw is the base of the next press.
+      fixture.detectChanges();
       minus?.click();
 
       expect(stepped).toEqual([

@@ -3,6 +3,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  DestroyRef,
   DOCUMENT,
   effect,
   inject,
@@ -294,16 +295,14 @@ export class SettleSheet {
    * The stepper of a line stays live while its save is out.
    */
   protected readonly demandRuns = quantityRuns<string>((lineId, run) => {
-    void this._write(`line:${lineId}`, (waited) =>
+    void this._write(`line:${lineId}`, run.to, (waited) =>
       this.demand(lineId, waited ? this._fromNow(lineId, run) : run)
     );
   });
 
   /** The waiting saves of the lists that do not ask yet, by list id (decision H). */
   protected readonly raiseRuns = quantityRuns<string>((listId, run) => {
-    void this._write(`list:${listId}`, (waited) =>
-      this.raise(listId, run, waited)
-    );
+    void this._write(`list:${listId}`, run.to, () => this.raise(listId, run));
   });
 
   /**
@@ -312,6 +311,35 @@ export class SettleSheet {
    */
   private readonly _writes = new Map<string, Promise<boolean>>();
   private readonly _writesOut = signal(0);
+
+  /**
+   * The amount the last write of each line or list sent, by write key, until
+   * the answer of the last one is back.
+   *
+   * `quantityRuns` drops a run from `pending` the moment it sends it, and
+   * `setDemand` and `addLine` change the row only once the server answers. A
+   * stepper drawn from `pending ?? stored` would show the old amount for the
+   * whole round trip, and a second run would step from that number and
+   * overwrite the first. So the stepper draws `pending ?? sent ?? stored`.
+   */
+  private readonly _sent = signal<ReadonlyMap<string, number>>(new Map());
+
+  /** What each list's stepper draws, by line id: its run, else its write in flight. */
+  protected readonly shownAsks = computed(() =>
+    this._shownOf('line:', this.demandRuns.pending())
+  );
+
+  /** What each list that does not ask yet draws, by list id. */
+  protected readonly shownRaises = computed(() =>
+    this._shownOf('list:', this.raiseRuns.pending())
+  );
+
+  /**
+   * Whether this sheet was destroyed, by `close()` or by a route change such as
+   * the browser's or Android's back. A write that answers after it must not
+   * navigate again.
+   */
+  private _destroyed = false;
 
   /** Whether a step waits for its save, or a save of an amount is out. */
   protected readonly amountSaving = computed(
@@ -385,6 +413,10 @@ export class SettleSheet {
   private _left = false;
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => {
+      this._destroyed = true;
+    });
+
     // A sheet whose row was **re-keyed** follows it, in place (velista `0090`,
     // section 7.3).
     //
@@ -858,11 +890,7 @@ export class SettleSheet {
    * not hold it gets a line named by the product, with that one product. Either
    * way the list then joins the lists that ask, and it leaves this read.
    */
-  protected async raise(
-    listId: string,
-    run: QuantityRun,
-    waited = false
-  ): Promise<boolean> {
+  protected async raise(listId: string, run: QuantityRun): Promise<boolean> {
     const product = this._product();
     const row = this.row();
     // A run that ends at 0 sends nothing: the list still does not ask.
@@ -875,14 +903,16 @@ export class SettleSheet {
         ? read.state.lists.find((held) => held.listId === listId)
         : undefined;
     if (list === undefined) {
-      // A run that waited for the first raise of this list: that one landed, so
-      // the list now asks through a line of the row, and this run moves it.
-      const entry = waited
-        ? row.entries.find((held) => held.listId === listId)
-        : undefined;
-      return entry === undefined
-        ? true
-        : this.demand(entry.lineId, { from: entry.left, to: run.to });
+      // An earlier raise of this list landed, so the list now asks through a
+      // line of the row, and this run moves it. Whether this run waited for that
+      // write or was sent after it does not matter.
+      const entry = row.entries.find((held) => held.listId === listId);
+      if (entry === undefined) {
+        // Nothing to send it to: said, not dropped in silence.
+        this._failedOp.set('basket.demand');
+        return false;
+      }
+      return this.demand(entry.lineId, { from: entry.left, to: run.to });
     }
     const to = run.to;
 
@@ -974,6 +1004,7 @@ export class SettleSheet {
    */
   private _write(
     key: string,
+    to: number,
     send: (waited: boolean) => Promise<boolean>
   ): Promise<boolean> {
     const before = this._writes.get(key);
@@ -982,14 +1013,38 @@ export class SettleSheet {
       () => send(true)
     );
     this._writes.set(key, next);
+    this._sent.update((sent) => new Map(sent).set(key, to));
     this._writesOut.update((count) => count + 1);
     void next.finally(() => {
       this._writesOut.update((count) => count - 1);
       if (this._writes.get(key) === next) {
         this._writes.delete(key);
+        // The answer is in the store now, landed or refused and read again.
+        this._sent.update((sent) => {
+          const left = new Map(sent);
+          left.delete(key);
+          return left;
+        });
       }
     });
     return next;
+  }
+
+  /** The runs of one kind over the writes in flight of the same kind. */
+  private _shownOf(
+    prefix: 'line:' | 'list:',
+    pending: ReadonlyMap<string, number>
+  ): ReadonlyMap<string, number> {
+    const shown = new Map<string, number>();
+    for (const [key, to] of this._sent()) {
+      if (key.startsWith(prefix)) {
+        shown.set(key.slice(prefix.length), to);
+      }
+    }
+    for (const [id, to] of pending) {
+      shown.set(id, to);
+    }
+    return shown;
   }
 
   /**
@@ -1544,7 +1599,10 @@ export class SettleSheet {
           }
         )
       );
-      if (!this._left) {
+      // Not on a sheet already gone: a route change (back) destroys it without
+      // `close()`, its waiting run is sent on destroy, and a second dismissal
+      // would navigate past the basket or pull the person back.
+      if (!this._left && !this._destroyed) {
         this.close();
       }
     }
