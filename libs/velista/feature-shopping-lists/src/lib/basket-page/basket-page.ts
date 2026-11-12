@@ -26,7 +26,6 @@ import {
   GroupMembers,
   ItemNames,
   keepsShopMap,
-  LineStore,
   SessionStore,
   ShopDetailStore,
   ShopSectionsStore,
@@ -255,12 +254,6 @@ function basketReturnKey(live: boolean, id: string): string {
 })
 export class BasketPage {
   private readonly _store = inject(BasketStore);
-  /**
-   * Only to know that a line a demand took to 0 was deleted (velista `0192`): the
-   * `line.deleted` with `emptied` reaches it on the zone room. Optional, so a page
-   * with no line store says what it said before.
-   */
-  private readonly _lineStore = inject(LineStore, { optional: true });
   private readonly _groupMembers = inject(GroupMembers);
   /**
    * What this screen is showing of the basket, as opposed to what is in it.
@@ -2566,31 +2559,13 @@ export class BasketPage {
     }
 
     if (this._store.lineLeft(result, change.holding.lineId)) {
-      // A demand to 0 on a line that kept nothing deletes it (backend `0263`). The
-      // answer cannot say so; the event, which usually comes first, can. Without
-      // it the older sentence stays, and it is still true.
-      const list = change.holding.listName;
-      const deleted =
-        change.to === 0 &&
-        typeof list === 'string' &&
-        (this._lineStore?.deletionOf(change.holding.lineId) ?? null) !== null;
       this._say(
-        deleted && typeof list === 'string'
-          ? this._translator.t(
-              'basket.line.emptied',
-              undefined,
-              this._locale(),
-              {
-                name: change.holding.text,
-                list,
-              }
-            )
-          : this._translator.t(
-              'basket.demand.nothingLeft',
-              undefined,
-              this._locale(),
-              { name: change.holding.text }
-            )
+        this._translator.t(
+          'basket.demand.nothingLeft',
+          undefined,
+          this._locale(),
+          { name: change.holding.text }
+        )
       );
     }
   }

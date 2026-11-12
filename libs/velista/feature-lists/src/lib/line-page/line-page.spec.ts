@@ -1043,66 +1043,6 @@ describe('LinePage', () => {
       expect(page.textContent).toContain('list.gone.byOthers');
     });
 
-    it('leaves to the list, replacing itself, when its minus took the line to 0 and the server deleted it (velista 0192)', async () => {
-      const { fixture, lines, router } = await render();
-      jest
-        .spyOn(lines, 'addQuantity')
-        .mockImplementation(async (lineId: string) => {
-          lines.emptyByMe(lineId);
-          return 'succeeded';
-        });
-      const [fewer] = fixture.debugElement
-        .queryAll(By.css('lib-quantity-stepper button'))
-        .map((element) => element.nativeElement as HTMLButtonElement);
-
-      jest.useFakeTimers();
-      fewer.click();
-      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
-      jest.useRealTimers();
-      await drain(fixture);
-
-      expect(router.navigateByUrl).toHaveBeenCalledWith(
-        `/velista/en/zones/${ZONE_ID}/lists/${LIST_ID}`,
-        { replaceUrl: true }
-      );
-      expect(router.navigateByUrl).toHaveBeenCalledTimes(1);
-      // The list says it, so the notice is left for the list to read.
-      expect(lines.emptiedNotice()?.lineId).toBe(LINE_ID);
-    });
-
-    it('does not say its own deleted line is missing while it leaves (velista 0192)', async () => {
-      const { fixture, lines } = await render();
-
-      lines.emptyByMe(LINE_ID);
-      await drain(fixture);
-
-      expect(textOf(fixture)).not.toContain('list.gone.unavailable');
-      expect(textOf(fixture)).not.toContain('list.gone.emptied');
-    });
-
-    it('drops the notice and says the line is missing when the way to the list did not happen (velista 0192)', async () => {
-      const { fixture, lines, router } = await render();
-      router.navigateByUrl.mockResolvedValue(false);
-
-      lines.emptyByMe(LINE_ID);
-      await drain(fixture);
-
-      expect(router.navigateByUrl).toHaveBeenCalledTimes(1);
-      expect(lines.emptiedNotice()).toBeNull();
-      expect(textOf(fixture)).toContain('list.gone.unavailable');
-    });
-
-    it('says the line reached 0 when another device took it there (velista 0192)', async () => {
-      const { fixture, lines, router } = await render();
-
-      lines.emptyByOthers(LINE_ID);
-      await drain(fixture);
-
-      expect(textOf(fixture)).toContain('list.gone.emptied');
-      expect(textOf(fixture)).not.toContain('list.gone.unavailable');
-      expect(router.navigateByUrl).not.toHaveBeenCalled();
-    });
-
     it('says a line absent from a loaded list is no longer in this list, in both languages', async () => {
       const { fixture } = await render({ lines: [] });
 

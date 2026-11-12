@@ -25,21 +25,6 @@ import { LineApi } from './line-api';
 export interface LineUpdateResult {
   readonly line: Line;
   readonly absorbedLineId: string | null;
-  /**
-   * The edit took the line to 0 and it kept nothing, so the server deleted it
-   * (backend `0263`). `line` is then the line as it stood at 0. False when absent.
-   */
-  readonly deleted: boolean;
-}
-
-/**
- * What a move of a line's quantity answers (backend `0263`): the line, and whether
- * the move took it to 0 with nothing to keep, so the server deleted it. `line` is
- * then the line as it stood at 0.
- */
-export interface LineQuantityResult {
-  readonly line: Line;
-  readonly deleted: boolean;
 }
 
 /**
@@ -188,15 +173,8 @@ export interface LineServiceI {
    *
    * `unit` is the line's (velista `0182`), required: a delta in another unit is
    * refused with `line_unit_mismatch` and changes nothing.
-   *
-   * A move from above 0 to 0 on a line that keeps nothing deletes it, and the answer
-   * says `deleted` (backend `0263`). The server decides; nothing here predicts it.
    */
-  addQuantity(
-    lineId: string,
-    delta: number,
-    unit: LineUnit
-  ): Promise<LineQuantityResult>;
+  addQuantity(lineId: string, delta: number, unit: LineUnit): Promise<Line>;
 
   /**
    * Say what happened to a line on a trip (`POST /v1/lines/:id/settle`).

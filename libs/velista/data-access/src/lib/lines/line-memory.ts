@@ -27,7 +27,6 @@ import { ListMemory } from '../lists/list-memory';
 import { ZoneMemory } from '../zones/zone-memory';
 import type {
   LineAddResult,
-  LineQuantityResult,
   LineServiceI,
   LineUpdateResult,
 } from './line-service';
@@ -490,13 +489,7 @@ export class LineMemory implements LineServiceI {
           }
         : {}),
     }));
-    return {
-      line: updated,
-      absorbedLineId: null,
-      deleted:
-        changes.quantity !== undefined &&
-        this._deleteIfEmptied(line.quantity, updated),
-    };
+    return { line: updated, absorbedLineId: null };
   }
 
   /**
@@ -570,7 +563,7 @@ export class LineMemory implements LineServiceI {
         .filter((current) => current.id !== absorbed.id)
         .map((current) => (current.id === merged.id ? merged : current))
     );
-    return { line: merged, absorbedLineId: absorbed.id, deleted: false };
+    return { line: merged, absorbedLineId: absorbed.id };
   }
 
   /**
@@ -585,7 +578,7 @@ export class LineMemory implements LineServiceI {
     lineId: string,
     delta: number,
     unit: LineUnit
-  ): Promise<LineQuantityResult> {
+  ): Promise<Line> {
     const line = this._lineOrThrow(lineId);
     this._require(line.listId, 'DECIDE');
 
@@ -606,50 +599,11 @@ export class LineMemory implements LineServiceI {
     }
 
     this._maybeFail();
-    const moved = this._patch(lineId, (current) => ({
+    return this._patch(lineId, (current) => ({
       ...current,
       quantity: current.quantity + delta,
       version: current.version + 1,
     }));
-    return {
-      line: moved,
-      deleted: this._deleteIfEmptied(line.quantity, moved),
-    };
-  }
-
-  /**
-   * Backend `0263` over this fake's rows: a member's write from above 0 to 0 on a
-   * line that keeps nothing, by a caller who may delete it, deletes it. True when
-   * it did. The comments live in another fake, so a line with only a comment is
-   * deleted here where the server keeps it.
-   */
-  private _deleteIfEmptied(before: number, after: Line): boolean {
-    if (before <= 0 || after.quantity !== 0) {
-      return false;
-    }
-    const keeps =
-      after.named ||
-      after.preferredSupermarketId !== null ||
-      after.favoriteItemId !== null ||
-      this._settlements.some((row) => row.lineId === after.id);
-    if (keeps || !this._mayDelete(after)) {
-      return false;
-    }
-    this._write(
-      after.listId,
-      this._lines(after.listId).filter((current) => current.id !== after.id)
-    );
-    return true;
-  }
-
-  /** The rule of {@link deleteLine}, as a question. */
-  private _mayDelete(line: Line): boolean {
-    const agreed =
-      line.approvalStatus === 'APPROVED' &&
-      this._lists.listById(line.listId)?.autoApproveLines !== true;
-    return this._permissionsFor(line.listId).includes(
-      agreed ? 'MANAGE' : 'WRITE'
-    );
   }
 
   /**

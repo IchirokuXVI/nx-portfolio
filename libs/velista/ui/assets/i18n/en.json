@@ -884,7 +884,7 @@
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
       "movedTo": "Moved to position {{position}} of {{total}}",
-      "emptied": "{{name}} is off the list"
+      "hiddenAtZero": "{{name}} is at 0 and hidden. Search for it to bring it back."
     },
     "reorder": {
       "enter": "Put them in order",
@@ -997,8 +997,7 @@
     "gone": {
       "byOthers": "This line was deleted by another user",
       "unavailable": "That line is no longer in this list",
-      "close": "Close",
-      "emptied": "This line reached 0 and was removed"
+      "close": "Close"
     },
     "error": {
       "notAvailable": "This list is not available to you. It may have been deleted, or it may no longer be shared with you",
@@ -1650,8 +1649,7 @@
       "boughtFromAnotherList": "Bought from another shopping list",
       "boughtFromTheList": "Bought from the list",
       "alreadyBought": "Already bought",
-      "takenBackAmount": "{{amount}} taken back",
-      "emptied": "{{name}} is off {{list}}"
+      "takenBackAmount": "{{amount}} taken back"
     },
     "outstanding": {
       "label": "{{name}}, still to get",

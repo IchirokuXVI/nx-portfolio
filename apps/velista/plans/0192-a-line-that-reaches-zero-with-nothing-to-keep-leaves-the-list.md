@@ -1,196 +1,149 @@
 > **PR:** [#986](https://github.com/IchirokuXVI/nx-portfolio/pull/986)
 
-# 0192: a line that reaches zero with nothing to keep leaves the list
-
-> Decided on 2026-11-11 (section 7 of the batch decisions). Backend `0263` makes core delete a
-> line whose amount a member lowers to 0 when it keeps nothing (no buys, no label, no chain, no
-> favourite, no comment; the product does not count), answer the write with `deleted: true`, and
-> announce `line.deleted` with `emptied: true`. This plan is the client half: the row leaves the
-> list and the shopping list, an open sheet or line page of that line closes to its fallback, a
-> screen reader hears it, and another device follows.
+> **Rewritten on 2026-11-12 from the owner's decision of that day.** In his words: "to
+> prevent users from deleting a line by mistake (which also removes the history and other
+> things), a line will only be deleted if you manually delete it from the sheet or line page.
+> Lines with a quantity of 0 (or less, just in case) will be hidden and you can only see them
+> when searching. This already happens for lines that have at least 1 buy in the list, but the
+> lines that were never bought will also be hidden. This change of heart comes from the fact
+> that I didn't think about the assistant, users with only edit access, and probably more
+> situations."
 >
-> Needs backend `0263` on the gateway, and PRs #959 to #961 in `dev`. Works with the stepper of
-> velista `0188` and with today's reel alike: both write through `LineStore`.
->
-> Prerequisite reading: backend `0263` in full; velista `0083` (the line gone notice); velista
-> `0187` section 1 (the take back); `CLAUDE.md` "Going back never leaves the app".
->
-> Code anchors, on `origin/feat/velista-0183-line-unit-chip` as of 2026-11-11:
-> `libs/velista/data-access/src/lib/lines/line-api.ts:172` to `:245` (`updateLine`, which reads
-> `absorbedLineId` beside the line), `:247` to `:261` (`addQuantity`);
-> `libs/velista/data-access/src/lib/lines/line-store.ts:64` (`LineDeletion`), `:383`
-> (`deletionOf`), `:881` to `:939` (`addQuantity`), `:1253` to `:1283` (`deleteLine`), `:1430`
-> to `:1489` (`_write`), `:1611` to `:1619` (the `line.deleted` handler);
-> `libs/velista/data-access/src/lib/realtime/realtime-event-mapper.ts:259` to `:268`,
-> `realtime-events.ts:220` to `:224`; `libs/velista/feature-lists/src/lib/line-gone/line-gone.ts:26`,
-> `:51` to `:108`; `libs/velista/feature-lists/src/lib/delete-line-sheet/delete-line-sheet.ts:103`
-> to `:133` (a delete by hand: a confirmation, no undo); `libs/velista/feature-lists/src/lib/line-page/line-page.ts:398`
-> to `:404` and `:555` (`leave`), `line-page.html:69` to `:80`;
-> `libs/velista/feature-lists/src/lib/list-page/list-page.ts:441` (`announcement`), `:1753` to
-> `:1790` (`changeQuantity`); `libs/velista/feature-shopping-lists/src/lib/settle-sheet/settle-sheet.ts:362`
-> to `:384` and `:1308` to `:1311` (a row gone); `basket-page.html:707` (`outstandingSaid`);
-> `libs/velista/data-access/src/lib/catalog/catalog-add-store.ts:507` to `:567`, `:631` to `:676`;
-> `libs/velista/ui/assets/i18n/en.json:886` (`list.line.quantityChanged`), `:996` to `:1000`
-> (`list.gone`).
->
-> Read "Angular conventions" in `CLAUDE.md` before any code, and load `design-taste-frontend`
-> and `antislop` before the template, the styles or the copy.
+> He also decided that the stepper's minus draws a red trash where its next press reaches 0,
+> "that way the user knows the line will disappear". That is velista `0188` (class `is-clear`
+> on the minus) and is not built here.
 
-## Brief for the agent
+# 0192: a line at zero is hidden and found by searching
 
-### Objective
+## 1. Objective
 
-Read `deleted` on the two quantity answers and `emptied` on `line.deleted`, remove the line as
-this reader's own delete or as another device's, close what is open about it to its fallback,
-move focus somewhere sensible, and say it once in the page's polite region.
+On a zone list at rest, a line whose quantity is 0 or less is not drawn, whether or not it was
+ever bought. The page's search draws it at 0, so a person can find it and step it back up, and
+a step above 0 puts it back in To buy. Nothing is deleted: the only delete is the one by hand
+from the line's sheet or its line page, exactly as on `dev`.
 
-### Context
+This is a view rule in velista's own models. The server decides nothing new. Backend `0263`
+was withdrawn on the same day: no answer carries `deleted`, no event carries `emptied`, and a
+write to 0 leaves the line at 0.
 
-- A delete by hand is a confirmation sheet (`delete-line-sheet.ts`) with no undo; the store
-  marks the line `mine` before the request so an open sheet closes quietly (`line-gone.ts`).
-- A `line.deleted` this reader did not make marks `others`, and an open sheet then says "This
-  line was deleted by another user" (`en.json:997`), which is wrong for a line that reached 0.
-- The event can arrive before the answer of the write that caused it.
-- The line page shows "That line is no longer in this list" when its line is missing
-  (`line-page.html:69`), and its own stepper writes through `LineStore.addQuantity` (`:399`).
-- The shopping list already closes a sheet whose row is gone after a demand to 0
-  (`settle-sheet.ts:1308` to `:1311`).
+## 2. What the list did with a line at 0 before this plan
 
-### Target state
+Read on the base of this branch (`dev` plus velista `0188` and backend `0262`/`0263`), in
+`libs/velista/models/src/lib/compose-list-groups.ts`, `select-list-state.ts`, the list page and
+its template.
 
-1. `LineApi.addQuantity` answers `{ line, deleted }`; `updateLine` adds `deleted`. Both read it
-   from `unknown` (rule D4).
-2. `LineStore` removes a line whose answer says `deleted`, marked `mine`, and keeps the reason
-   for the page's sentence (section 2).
-3. A `line.deleted` with `emptied` for a line this store is lowering to 0 is `mine`; otherwise it
-   is the new mark `emptied`, and an open sheet says the line reached 0 (section 3).
-4. The page says it once, and focus lands on a row that still exists (section 4).
-5. `CatalogAddStore` drops a held line answered `deleted` (section 2).
+- `selectListState` passes every line to the page. It hides nothing. The header counts
+  `wantedCount` (quantity above 0) and `lineCount` (every line).
+- `composeListGroups` decides the sections. At rest (no words in the composer's field):
+  - **A line at 0 that was never bought was drawn in To buy**, after the wanted lines and the
+    due rows, in the list below the due section (`restLines`), with its stepper at 0. Rejected
+    ones were drawn last with the rejected lines. This is the case the owner's rule changes.
+  - **A line at 0 with a buy leaves To buy once the trips have loaded and named at least one
+    trip** (velista `0095`, section 5). This is what the owner meant by "already hidden".
+    Three places still draw it at rest, and this plan leaves all three as they are:
+    1. **The trip folds.** Each live and past trip under To buy draws the rows of the lines it
+       holds, at whatever amount they now have. A past trip is folded until somebody opens it;
+       an open fold draws the line (no stepper, only a row that opens the line).
+    2. **The due rows** (velista `0089`, backend `0123`): a line the list suggests is drawn
+       under the wanted lines while it is at 0, not rejected and not claimed, with its own
+       stepper at 0. These are lines with a purchase history.
+    3. **The fallback in To buy**: while the trips have not loaded, after their read failed,
+       and when the read named no trip, a bought line at 0 stays last in To buy "where it can
+       be raised" (velista `0095`, section 5).
+  - Reorder mode already drew no line at 0.
+- During a search the page is flat (`composeListView` over every line) and draws every
+  matching line, at 0 or not. A bought line at 0 that lives only in old trips has always been
+  found this way.
+- The shopping list (basket) draws no row for a line at 0. The catalog tab's held lines and the
+  product page's lists table draw a held line at 0.
 
-### Scope
+## 3. The rule as built
 
-- `libs/velista/data-access`, `libs/velista/models`, `libs/velista/feature-lists`,
-  `libs/velista/feature-shopping-lists`, `libs/velista/feature-catalog`, `libs/velista/ui/assets`.
-- Do NOT touch the stepper itself (velista `0188`), the add rules (`0185`), the shopping list
-  layout (`0190`) or any backend project.
+- `composeListGroups` no longer puts a line at 0 or less that was never bought in To buy, in
+  any state of the trips, rejected or not. The fallback for a bought line now reads
+  `quantity <= 0`. Nothing else in the function changes: the trips, the due rows and the
+  fallback above are untouched.
+- The amount read is the stored one. While a run of stepper presses is open, the row keeps its
+  place (velista `0188`, decision H): a minus to 0 then a plus inside the quiet beat leaves the
+  row where it is and writes nothing. The row leaves when the run's write lands, and the
+  store's optimistic patch counts.
+- The search is unchanged: it draws the line at 0 with its stepper, and a plus there writes the
+  run like any other row. Emptying the field shows the line back in To buy.
+- **When this reader's own run takes a row out of To buy** (`ListPage._writeRun`, the send of
+  the page's `quantityRuns`):
+  - The page reads, while the row is still drawn, whether focus is in it
+    (`leaving-row-focus.ts`). After the next render it focuses the same control of the next
+    row, else of the previous row, else the page's heading (made focusable with
+    `tabindex="-1"`). Focus that was elsewhere is left alone.
+  - It says `list.line.hiddenAtZero` once in the page's polite region:
+    en "{{name}} is at 0 and hidden. Search for it to bring it back.",
+    es "{{name}} está a 0 y se oculta. Búscalo para recuperarlo."
+    The name is the one the row drew.
+  - The stepper's own settled "0" is not drawn: the run's write and the stepper's announce
+    timer both fire after the same quiet beat, the run's first, and the row is removed in the
+    render that would have drawn the stepper's sentence. The stepper is not changed.
+  - A line another device lowered, a line lowered from the sheet or the line page, and a
+    dropped write sent again move no focus and say nothing.
+  - A row that goes from To buy into the due rows says nothing; focus that was in it still
+    moves to the next row.
+- The line page and the line sheet of a line at 0 behave as on `dev`, reached from the search,
+  a link or the shopping list. Their delete by hand is the only delete, and the "deleted by
+  another user" notice is exactly as on `dev`.
+- Checked and unchanged: the header ("3 of 7 pending", "Nothing left" when every line is at 0) stays true. The empty state ("Nothing on this list yet") is drawn only for a list with no
+  line at all, so it never claims that a list with hidden lines is empty. A list whose every
+  line is at 0 and never bought draws the To buy heading with nothing under it, and the trips
+  if it has any; the same screen `dev` already draws when every line is bought and at 0.
+  Under a category whose lines are all hidden, the page says "No lines match." with Reset, as
+  for any category that narrows To buy to nothing. Sorting is unchanged. The basket, the
+  catalog tab and the product page are unchanged.
 
-### Constraints
+## 4. What this branch removed
 
-- The server decides; velista never predicts whether a line keeps anything.
-- Copy through RokuTranslator keys in `en` and `es`, no number in a key, no dashes.
-- Sheets dismiss through `SheetNavigation`; nothing calls `Location.back()` bare.
+The deletion that the first version of this plan built, completely: reading `deleted` on the
+quantity and update answers, `emptied` on `line.deleted`, the store's `_emptying`,
+`emptiedNotice` and `LineEmptied`, the `emptied` deletion mark and its `LineGoneReason` value
+(the type is back to `'byOthers' | 'unavailable'`, as on `dev`), the keys
+`list.gone.emptied`, `list.line.emptied` and `basket.line.emptied`, the line page's leave on
+its own deleting minus, the memory fakes' deletion at 0, `CatalogAddStore` dropping a held line
+answered `deleted`, and their specs. Every one of those files is back to its `0188` base, which
+is `dev` plus the stepper. Kept: the focus rule of section 3, moved from a deleted row to a
+hidden one.
 
-### Action boundaries
+## 5. Specs
 
-- Stop and ask if backend `0263` is not on the gateway of the slot.
-- Build section 5 (the way back) only if the owner answered question 1 yes; otherwise leave it
-  out and say so in the PR.
+- `compose-list-groups.spec.ts`: a line at 0 never bought is not drawn at rest with no trip,
+  with trips not ready, with trips; nor when rejected; nor below 0; the search finds it at 0;
+  above 0 it is back in To buy. The existing cases for bought lines at 0 keep their fallback.
+- `list-page.spec.ts`: one run to 0 makes one write, the row leaves, the line is still held,
+  and the sentence is said; focus moves to the next row's same control, else the previous row,
+  else the heading; focus elsewhere is left alone; a line another device lowered says nothing;
+  the search draws the line at 0 and a plus there brings it back with no sentence; a row lowered
+  inside the search stays drawn and says nothing; a minus to 0 then a plus inside the quiet beat
+  keeps the row and writes nothing. The three older cases that drew a never bought line at 0
+  now expect it hidden.
 
-### Progress evidence
+## 6. Acceptance criteria
 
-Each criterion of section 7 with spec output, `npx nx build velista`, and one walk on a slot with
-backend `0263`: a card added at 25 g, minus once on the list: the row leaves, focus is on the
-next row's stepper, the region reads "Bananas is off the list"; the same line open on a second
-device's line sheet shows "This line reached 0 and was removed"; a line with a chain set stays at
-0.
+1. On a zone list at rest, no line at 0 or less that was never bought is drawn, product or free
+   text.
+2. Typing the line's name in the composer's field draws it in the results with its stepper at
+   0; a plus there and an empty field show it back in To buy.
+3. Lowering a line to 0 with the row's stepper makes one write; the row leaves when the write
+   lands; nothing is deleted.
+4. Focus in the row moves to the same control of the next row, else the previous row, else the
+   heading; the polite region says the sentence once; nothing moves for another device's write.
+5. A minus to 0 and a plus inside the quiet beat keep the row and write nothing.
+6. A line with a buy behaves the same in To buy, and its trip folds and the due rows still draw
+   it as on `dev`.
+7. The line's sheet, opened from the search results, still has its delete by hand.
 
-## 0. Decisions
+## 7. Questions for the owner
 
-### The owner's, fixed
-
-- Backend `0263` section 0, quoted there.
-- **A hold never takes an amount to 0** (owner, 2026-11-11, velista `0188`): a repeat stops at
-  the last amount above 0, and only a separate press goes to 0. A deletion never comes from a
-  finger held a moment too long.
-
-### The writer's, open to the owner
-
-- **A. A plus before the save cancels the 0.** Velista `0188` sends the amount once the presses
-  stop. A minus to 0 then a plus inside that wait sends the net amount (or nothing), so the
-  server never sees 0 and nothing is deleted.
-- **B. No confirmation.** The line keeps nothing, so a re-add is one press, and the owner asked
-  for the deletion to happen at 0.
-- **C. Its own sentence on another device**, not "deleted by another user": nobody deleted it.
-- **D. The way back is proposed, not built by default** (section 5, question 1). Today's delete
-  by hand has none.
-
-## 1. The wire
-
-- `LineApi.addQuantity` returns `LineQuantityResult { line: Line; deleted: boolean }`, `deleted`
-  read as `body['deleted'] === true`. `LineUpdateResult` gains `deleted: boolean` the same way.
-  The memory fakes (`line-memory.ts`) apply backend `0263` section 1 over their own rows.
-- The event mapper reads `emptied: payload['emptied'] === true` onto the `line.deleted` event.
-
-## 2. The store
-
-- Before sending a write whose optimistic result is 0, `LineStore` puts the line in
-  `_emptying`. On the answer: `deleted` true, it marks the line `mine`, removes it
-  (`_removeLine`) and sets `emptiedNotice` (`{ listId, lineId, name }`, a signal the pages read
-  and clear); `deleted` false, the line is taken out of `_emptying`.
-- `addQuantity` and `updateLine` keep their return shapes for their callers: `'succeeded'` with
-  the line gone. `changeQuantity` (`list-page.ts:1753`) no longer announces "now 0" when the line
-  left; the store's notice says it.
-- `CatalogAddStore._step` and the take back of the lower kind drop the held line and its visit
-  entry when the answer says `deleted`, so the card shows the add again.
-
-## 3. Another device
-
-- `line.deleted` with `emptied`: a line in `_emptying` is `mine` (the event beat the answer);
-  otherwise `LineDeletion` gains `'emptied'` and the line is marked so.
-- `watchLineGone` answers the reason `emptied` (`LineGoneReason` gains it); the notice draws
-  `list.gone.emptied`. The line page's missing state draws the same sentence for that mark.
-
-## 4. What the person sees and hears
-
-- **The list page**: the row leaves. If focus was in it, focus moves to the same control of the
-  next row, else the previous row, else the list's heading. `announcement` reads
-  `list.line.emptied`.
-- **The line page**: a minus that deletes leaves to the list with `leave()` (`replaceUrl`), and
-  the list page reads `emptiedNotice` once it has drawn its region.
-- **The list's line sheet**: closes quietly through the `mine` mark, as after a delete by hand,
-  and the list says the sentence.
-- **The shopping list**: the row is gone after the basket's own reread; the sheet closes as it
-  does today, and `outstandingSaid` reads `basket.line.emptied`.
-
-| key | `en` | `es` |
-| --- | --- | --- |
-| `list.line.emptied` | {{name}} is off the list | {{name}} ya no está en la lista |
-| `basket.line.emptied` | {{name}} is off {{list}} | {{name}} ya no está en {{list}} |
-| `list.gone.emptied` | This line reached 0 and was removed | Esta línea llegó a 0 y se quitó |
-
-## 5. The way back (only if the owner says yes)
-
-A strip in the list page's composer dock, the place of the voice strip, with the sentence and
-"Undo" / "Deshacer". It stays until the next write or its close cross, never on a timer. Undo
-sends one add with the line's held `content`, `itemIds`, `unit`, `named` and the amount before
-the last minus. It makes a new line at the end of the list; comments and history there were
-none to lose.
-
-## 6. Specs
-
-- `line-api.spec.ts`: `deleted` read from `unknown`, absent is false.
-- `line-store.spec.ts`: an answer with `deleted` removes the line as `mine` and sets the notice;
-  the event before the answer is `mine`; an event for a line not being lowered is `emptied`.
-- `line-gone.spec.ts`: the `emptied` reason and its sentence.
-- `list-page.spec.ts`: focus moves to the next row, the region reads the sentence once.
-- `line-page.spec.ts`: a deleting minus leaves to the list with `replaceUrl`.
-- `catalog-add-store.spec.ts`: a held line answered `deleted` is dropped.
-- The key parity of `en.json` and `es.json`.
-
-## 7. Acceptance criteria
-
-- [ ] A deleted answer removes the row at once on every page that draws it.
-- [ ] Another device removes it and an open sheet says it reached 0.
-- [ ] A screen reader hears one sentence, and focus is never left on a removed control.
-- [ ] A line the server kept stays at 0 as today.
-- [ ] `npx nx affected -t lint test` is green and `npx nx build velista` builds.
-
-## Not in this plan
-
-- The stepper and its hold (velista `0188`). The rule itself (backend `0263`).
-
-## Questions for the owner
-
-1. Do you want a way back (section 5), an "Undo" after a line leaves at 0? Today's "Borrar
-   línea" has none, behind a confirmation.
-2. Is "{{name}} ya no está en la lista" the sentence you want?
+1. The copy of `list.line.hiddenAtZero` (en and es above).
+2. A bought line at 0 is still drawn at rest in three places (section 2): an open trip fold,
+   the due rows, and To buy itself while the trips are loading, failed, or named no trip. Should
+   any of them stop drawing it?
+3. A list whose lines are all at 0 shows the To buy heading with nothing under it. Should To buy
+   say something there (for example that lines at 0 are found by searching)?
+4. Lowering a line to 0 from its sheet over the list hides its row with no sentence. Should the
+   page say the sentence then too?

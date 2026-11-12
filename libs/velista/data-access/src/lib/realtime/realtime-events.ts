@@ -220,11 +220,6 @@ export type RealtimeEvent =
       readonly type: 'line.deleted';
       readonly lineId: string;
       readonly listId: string;
-      /**
-       * A member's write took the line to 0 and it kept nothing, so the server
-       * deleted it (backend `0263`). False for a delete by hand or a merge.
-       */
-      readonly emptied: boolean;
     }
   | { readonly type: 'comment.added'; readonly comment: Comment }
   /**

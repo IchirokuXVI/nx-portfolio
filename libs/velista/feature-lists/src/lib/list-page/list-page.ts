@@ -29,7 +29,6 @@ import {
   DueLineStore,
   GatewayError,
   ItemNames,
-  type LineEmptied,
   LineStore,
   LIST_SERVICE,
   type ListServiceI,
@@ -146,7 +145,11 @@ import { selectDueLines } from '../select-due-lines';
 import { type ListStateCatalog, selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
-import { focusAfterRemoval, focusEmptied } from './emptied-focus';
+import {
+  focusAfterLeaving,
+  focusLeavingTarget,
+  type LeavingRowFocus,
+} from './leaving-row-focus';
 
 /** What the list page hands the catalog that chooses a product, to know its answer. */
 const LIST_ROW_PICK = 'list-row';
@@ -1752,9 +1755,69 @@ export class ListPage {
    * the stored amount until the run is written. A page that goes away writes its open
    * runs.
    */
-  readonly quantityRuns = quantityRuns<string>((lineId, run) => {
-    void this.changeQuantity({ lineId, delta: run.to - run.from });
-  });
+  readonly quantityRuns = quantityRuns<string>((lineId, run) =>
+    this._writeRun(lineId, run.to - run.from)
+  );
+
+  /**
+   * One run of a row's stepper, written. A run that takes a line To buy draws to 0
+   * hides its row (velista `0192`): the store patches the amount before the request
+   * goes out, so the row is still drawn when this reads where focus is and is gone
+   * when it reads again. A row the search draws stays at 0 and leaves nothing.
+   */
+  private _writeRun(lineId: string, delta: number): void {
+    const column = this._column()?.nativeElement;
+    const drawn = this._drawnAtRest(lineId);
+    const focus =
+      drawn && column !== undefined ? focusAfterLeaving(column, lineId) : null;
+    const line = this._lineById().get(lineId);
+
+    void this.changeQuantity({ lineId, delta });
+
+    if (!drawn || this._drawnAtRest(lineId) || line === undefined) {
+      return;
+    }
+    this._sayHidden(line, focus, column);
+  }
+
+  /** Whether the list at rest draws the line in To buy or its due rows. */
+  private _drawnAtRest(lineId: string): boolean {
+    const shown = this.groups();
+    if (shown === null || shown.kind !== 'groups') {
+      return false;
+    }
+    return (
+      shown.toBuy.some((row) => row.id === lineId) ||
+      shown.due.some((row) => row.id === lineId)
+    );
+  }
+
+  /**
+   * The row this reader lowered to 0 left the list: said once in the page's polite
+   * region, and focus moved to the next row when it was in this one. The stepper's
+   * own settled amount is never drawn, because its row is gone in the same render.
+   */
+  private _sayHidden(
+    line: Line,
+    focus: LeavingRowFocus | null,
+    column: HTMLElement | undefined
+  ): void {
+    const sentence = this._translator.t(
+      'list.line.hiddenAtZero',
+      undefined,
+      undefined,
+      { name: this._lineName(line) }
+    );
+    afterNextRender(
+      () => {
+        this.announcement.set(sentence);
+        if (focus !== null && column !== undefined) {
+          focusLeavingTarget(column, focus);
+        }
+      },
+      { injector: this._injector }
+    );
+  }
 
   /** Every step of a row's stepper, a press or a repeat of a hold (velista `0188`). */
   stepQuantity(event: { lineId: string; step: QuantityStep }): void {
@@ -1791,52 +1854,6 @@ export class ListPage {
       reportDropped: true,
     });
     this._afterWrite(outcome, event.lineId, 'lines.write');
-  }
-
-  /**
-   * A line this reader took to 0 left the list, because it kept nothing (velista
-   * `0192`, section 4). Read from the store and not from the write, because the
-   * event can beat the answer and the line page's own minus lands here too.
-   *
-   * A view effect, so it runs before the rows redraw: the row is still in the
-   * column, and the effect can see whether focus was in it and which rows were its
-   * neighbours.
-   */
-  private readonly _sayEmptied = effect(() => {
-    const emptied = this._lines.emptiedNotice();
-    if (
-      emptied === null ||
-      emptied.listId !== this.listId() ||
-      this.loaded() === null
-    ) {
-      return;
-    }
-    untracked(() => this._emptied(emptied));
-  });
-
-  private _emptied(emptied: LineEmptied): void {
-    this._lines.clearEmptiedNotice(emptied.lineId);
-    const column = this._column()?.nativeElement;
-    const target =
-      column === undefined ? null : focusAfterRemoval(column, emptied.lineId);
-    const sentence = this._translator.t(
-      'list.line.emptied',
-      undefined,
-      undefined,
-      { name: this._lineName(emptied.line) }
-    );
-
-    afterNextRender(
-      () => {
-        // After the region is drawn, so a page that opened on this notice (the
-        // line page left to it) still has it read.
-        this.announcement.set(sentence);
-        if (target !== null && column !== undefined) {
-          focusEmptied(column, target);
-        }
-      },
-      { injector: this._injector }
-    );
   }
 
   /**

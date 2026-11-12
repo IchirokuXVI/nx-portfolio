@@ -4,7 +4,7 @@
  * heading. The control is a stepper button when focus was on one, and the row's own
  * button otherwise.
  */
-export interface EmptiedFocus {
+export interface LeavingRowFocus {
   /** The row to focus, or null for the list's heading. */
   readonly lineId: string | null;
   /** The control in that row, as a selector. */
@@ -19,10 +19,10 @@ const ROW_BUTTON = '.row';
  * Read while the row is still drawn. Null when focus was not in it, so focus is
  * left where it is.
  */
-export function focusAfterRemoval(
+export function focusAfterLeaving(
   column: HTMLElement,
   lineId: string
-): EmptiedFocus | null {
+): LeavingRowFocus | null {
   const rows = Array.from(column.querySelectorAll<HTMLElement>(ROW));
   const at = rows.findIndex((row) => row.dataset['lineId'] === lineId);
   const active = column.ownerDocument.activeElement;
@@ -35,8 +35,11 @@ export function focusAfterRemoval(
   return { lineId: neighbour?.dataset['lineId'] ?? null, control };
 }
 
-/** Focus what {@link focusAfterRemoval} chose, once the rows have redrawn. */
-export function focusEmptied(column: HTMLElement, target: EmptiedFocus): void {
+/** Focus what {@link focusAfterLeaving} chose, once the rows have redrawn. */
+export function focusLeavingTarget(
+  column: HTMLElement,
+  target: LeavingRowFocus
+): void {
   if (target.lineId !== null) {
     const row = Array.from(column.querySelectorAll<HTMLElement>(ROW)).find(
       (candidate) => candidate.dataset['lineId'] === target.lineId

@@ -884,7 +884,7 @@
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
       "failed": "No se ha guardado. Toca para reintentar",
       "movedTo": "Movido a la posición {{position}} de {{total}}",
-      "emptied": "{{name}} ya no está en la lista"
+      "hiddenAtZero": "{{name}} está a 0 y se oculta. Búscalo para recuperarlo."
     },
     "reorder": {
       "enter": "Ponerlas en orden",
@@ -997,8 +997,7 @@
     "gone": {
       "byOthers": "Otra persona borró esta línea",
       "unavailable": "Esa línea ya no está en esta lista",
-      "close": "Cerrar",
-      "emptied": "Esta línea llegó a 0 y se quitó"
+      "close": "Cerrar"
     },
     "error": {
       "notAvailable": "Esta lista no está disponible para ti. Puede que se haya eliminado o que ya no esté compartida contigo",
@@ -1650,8 +1649,7 @@
       "boughtFromAnotherList": "Comprado desde otra lista de la compra",
       "boughtFromTheList": "Comprado desde la lista",
       "alreadyBought": "Ya está comprado",
-      "takenBackAmount": "Devuelto: {{amount}}",
-      "emptied": "{{name}} ya no está en {{list}}"
+      "takenBackAmount": "Devuelto: {{amount}}"
     },
     "outstanding": {
       "label": "{{name}}, aún por conseguir",

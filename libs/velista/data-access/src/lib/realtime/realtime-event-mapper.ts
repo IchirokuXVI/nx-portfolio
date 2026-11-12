@@ -264,13 +264,7 @@ export function toRealtimeEvent(
       const listId = str(payload['listId']);
       return lineId === null || listId === null
         ? null
-        : {
-            type: name,
-            lineId,
-            listId,
-            // Only a JSON `true` (backend `0263`); absent on every other delete.
-            emptied: payload['emptied'] === true,
-          };
+        : { type: name, lineId, listId };
     }
 
     case 'comment.added':
