@@ -203,6 +203,22 @@ describe('selectLinePage', () => {
     });
   });
 
+  it("gives the stepper the product's step, and none for a count (velista 0186)", () => {
+    const chicken = {
+      ...item('chicken', 'Whole chicken', null),
+      size: null,
+      unit: 'KILOGRAM',
+      quantityStep: 250,
+    } as CatalogItem;
+    const weighed = input({
+      line: { ...line(), unit: 'GRAM', quantity: 1000, itemIds: ['chicken'] },
+      itemNameOf: (itemId) => (itemId === 'chicken' ? chicken : null),
+    });
+
+    expect(selectLinePage(weighed)?.step).toBe(250);
+    expect(selectLinePage(input())?.step).toBeNull();
+  });
+
   describe('who added it', () => {
     it('uses the word for the reader', () => {
       expect(selectLinePage(input())?.addedBy).toBe('list.page.you');

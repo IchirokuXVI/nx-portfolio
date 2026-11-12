@@ -52,6 +52,7 @@ import {
   oneOf,
   oneOfOrNull,
   positiveNum,
+  quantityStepOf,
   str,
   strOr,
 } from './primitives';
@@ -614,6 +615,7 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
         approxWeight: positiveNum(raw['approxWeight']),
+        quantityStep: quantityStepOf(raw['quantityStep']),
         offer: toProductOffer(raw['bestOffer']),
         // Every scope's offer (velista `0078`, section 2). Absent for every caller
         // but the basket read, which is the only one that asks backend `0109` for

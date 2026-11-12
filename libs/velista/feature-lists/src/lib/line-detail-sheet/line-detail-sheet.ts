@@ -39,7 +39,7 @@ import {
   lineNameChange,
   lineNameRefused,
   priceWordsText,
-  QUANTITY_STEP,
+  stepAt,
   type BasketShop,
   type Line,
   type LineUnit,
@@ -254,8 +254,13 @@ export class LineDetailSheet {
   /** What the line counts in (velista `0182`), a count while it is not read yet. */
   readonly unit = computed<LineUnit>(() => this.detail()?.unit ?? 'UNIT');
 
-  /** The least the how many step records: one step of the line's unit. */
-  readonly howManyFloor = computed(() => QUANTITY_STEP[this.unit()] ?? 1);
+  /** The product's step (velista `0186`), or null for the unit's default. */
+  readonly productStep = computed(() => this.detail()?.step ?? null);
+
+  /** The least the how many step records: one step of the line's product. */
+  readonly howManyFloor = computed(() =>
+    stepAt(0, this.unit(), this.productStep())
+  );
 
   /** A quantity of this line in words: "3" for a count, "750 g" for a weight. */
   wordsOf(quantity: number): string {

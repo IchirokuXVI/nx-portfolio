@@ -129,6 +129,7 @@
                   (stepped)="step($event)"
                   [disabled]="unitPending()"
                   [name]="line.content"
+                  [step]="line.step"
                   [unit]="line.unit"
                   [value]="quantityRuns.shown(lineId(), line.quantity)"
                   variant="row"

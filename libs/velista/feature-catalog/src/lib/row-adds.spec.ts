@@ -27,6 +27,40 @@ function line(part: Partial<HeldLine> & Pick<HeldLine, 'lineId'>): HeldLine {
   };
 }
 
+describe("rowAdds: the product's step (velista 0186, decision E)", () => {
+  const LOOSE = { unit: 'KILOGRAM', size: null, approxWeight: null };
+  const weighed = line({
+    lineId: 'line-chicken',
+    unit: 'GRAM',
+    quantity: 1000,
+    itemIds: ['item-chicken'],
+  });
+  const rowOf = (adds: ReturnType<typeof rowAdds>) =>
+    adds.byItem.get('item-chicken')?.lines[0];
+
+  it("steps a held row by the page's record of its product", () => {
+    const adds = rowAdds(WEEKLY, [weighed], (itemId) =>
+      itemId === 'item-chicken' ? { ...LOOSE, quantityStep: 250 } : null
+    );
+    expect(rowOf(adds)?.step).toBe(250);
+  });
+
+  it('prefers the step the store read for the line', () => {
+    const adds = rowAdds(WEEKLY, [{ ...weighed, step: 100 }], () => ({
+      ...LOOSE,
+      quantityStep: 250,
+    }));
+    expect(rowOf(adds)?.step).toBe(100);
+  });
+
+  it('says nothing with no record, so the row steps by the default', () => {
+    expect(rowOf(rowAdds(WEEKLY, [weighed], () => null))).not.toHaveProperty(
+      'step'
+    );
+    expect(rowOf(rowAdds(WEEKLY, [weighed]))).not.toHaveProperty('step');
+  });
+});
+
 describe('rowAdds (velista 0134, section 4.1)', () => {
   it('draws no plus at all with no list to add to', () => {
     const adds = rowAdds(null, [line({ lineId: 'line-oil' })]);

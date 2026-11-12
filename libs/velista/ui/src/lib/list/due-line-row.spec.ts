@@ -171,4 +171,15 @@ describe('DueLineRow (velista 0089)', () => {
     fixture.detectChanges();
     expect(fixture.componentInstance.amount()).toBe(6);
   });
+
+  it("steps by the product's step the row carries (velista 0186)", async () => {
+    const fixture = await render(
+      row({ quantity: 1000, unit: 'GRAM', step: 100 })
+    );
+    expect(stepper(fixture).step()).toBe(100);
+
+    press(fixture, 0);
+
+    expect(fixture.componentInstance.amount()).toBe(900);
+  });
 });

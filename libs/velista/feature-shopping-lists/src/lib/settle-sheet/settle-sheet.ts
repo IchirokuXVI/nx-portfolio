@@ -36,6 +36,7 @@ import {
   LINE_CONTENT_MAX_LENGTH,
   lineAmount,
   lineAmountProductOf,
+  lineStepOf,
   priceWordsText,
   shownOffer,
   soldAs,
@@ -526,6 +527,18 @@ export class SettleSheet {
   private readonly _product = computed<BasketProduct | null>(() => {
     const row = this.row();
     return row === null ? null : basketRowProduct(row, this._store.products());
+  });
+
+  /**
+   * The step the steppers of the lists press by: the row's own product's
+   * (velista `0186`, decision C), or null for the unit's default.
+   */
+  protected readonly step = computed(() => {
+    const row = this.row();
+    const product = this._product();
+    return row === null || product === null
+      ? null
+      : lineStepOf({ unit: row.unit, itemIds: [product.id] }, () => product);
   });
 
   /**

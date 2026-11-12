@@ -800,6 +800,32 @@ describe('ListsTable', () => {
     });
   });
 
+  it("hands the product's step to every stepper of the table (velista 0186)", async () => {
+    const weight = held({ quantity: 1000, unit: 'GRAM' });
+    const fixture = await render(
+      only(
+        list('l1', 'Weekly shop', { main: weight }),
+        list('l3', 'Office', {
+          others: [{ ...MACHINE, quantity: 500, unit: 'GRAM' }],
+        })
+      )
+    );
+    fixture.componentRef.setInput('step', 100);
+    fixture.detectChanges();
+
+    const stepped: ListsTableStep[] = [];
+    fixture.componentInstance.lineStepped.subscribe((step) =>
+      stepped.push(step)
+    );
+    steps(rowOf(fixture, 'l1'))[0].click();
+    steps(otherOf(fixture, 'line-machine'))[1].click();
+
+    expect(stepped.map((each) => each.step)).toEqual([
+      { from: 1000, to: 900, repeat: false },
+      { from: 500, to: 600, repeat: false },
+    ]);
+  });
+
   it('never draws a dash for a list that holds none', async () => {
     const fixture = await render();
 

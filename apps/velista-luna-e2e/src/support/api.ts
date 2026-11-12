@@ -601,6 +601,19 @@ export async function ensureItem(
 }
 
 /**
+ * `PATCH /v1/admin/catalog/items/:id` with `quantityStep` (backend `0261`,
+ * section 3): the step a curator gives a product sold by the kilo or the litre,
+ * or null for the default. Absolute, so a run after a failed one starts the same.
+ */
+export async function setQuantityStep(
+  admin: Session,
+  itemId: string,
+  quantityStep: number | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { quantityStep });
+}
+
+/**
  * `POST /v1/admin/catalog/item-prices`: an `ADMIN` price of one product at one
  * scope, observed now. For a product sold by the kilo it is the price of a kilo.
  */

@@ -79,4 +79,6 @@ export interface DueLineRowVm {
   readonly quantity: number;
   /** What {@link quantity} counts, the line's (velista `0182`). */
   readonly unit: LineUnit;
+  /** The step its stepper presses by, the line row's (velista `0186`), or null. */
+  readonly step?: number | null;
 }

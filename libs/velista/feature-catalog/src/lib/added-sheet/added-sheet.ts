@@ -90,6 +90,10 @@ export class AddedSheet {
     const units = new Map(
       this._adds.held().map((line) => [line.lineId, line.unit])
     );
+    // And the step its product says (velista `0186`), off the same lines.
+    const steps = new Map(
+      this._adds.held().map((line) => [line.lineId, line.step ?? null])
+    );
     return visitSections(
       this._adds.visit(),
       this._adds.target()?.listId ?? null
@@ -104,6 +108,7 @@ export class AddedSheet {
         imageUrl: entry.imageUrl,
         quantity: entry.quantity,
         unit: units.get(entry.lineId) ?? 'UNIT',
+        step: steps.get(entry.lineId) ?? null,
         floor: visitFloor(entry, units.get(entry.lineId) ?? 'UNIT'),
         pending: entry.pending,
       })),

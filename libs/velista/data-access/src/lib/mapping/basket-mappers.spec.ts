@@ -559,6 +559,19 @@ describe('toBasket: the weight of a piece (velista 0179)', () => {
   ])('reads %s as no weight', (_, approxWeight) => {
     expect(productOf({ id: 'i-1', approxWeight })?.approxWeight).toBeNull();
   });
+
+  it("reads the product's step (velista 0186, backend 0261)", () => {
+    expect(productOf({ id: 'i-1', quantityStep: 100 })?.quantityStep).toBe(100);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a step off the list', 30],
+    ['a string', '100'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, quantityStep) => {
+    expect(productOf({ id: 'i-1', quantityStep })?.quantityStep).toBeNull();
+  });
 });
 
 describe('toBasket: the shop’s aisles a product is in (velista `0120`)', () => {

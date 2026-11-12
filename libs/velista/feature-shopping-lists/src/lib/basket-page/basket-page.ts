@@ -51,6 +51,7 @@ import {
   countableBasketRows,
   isLinkVisitor,
   lineMemberOf,
+  lineStepOf,
   type LineUnit,
   LINK_VISIT_HOURS,
   productSuggestions,
@@ -2350,6 +2351,7 @@ export class BasketPage {
   protected readonly holdingsOf = computed(() => {
     const rows = this._store.rows();
     const lists = this._store.lists();
+    const products = this._store.products();
     const busy = this.busyRows();
     return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
       if (suggestion.kind !== 'item') {
@@ -2373,6 +2375,11 @@ export class BasketPage {
               this._sending().get(entry.lineId)?.to ?? entry.left
             ),
             unit: entry.unit,
+            // The row's own product (velista `0186`, decision C).
+            step: lineStepOf(
+              { unit: entry.unit, itemIds: [suggestion.item.id] },
+              (itemId) => products.get(itemId) ?? suggestion.item
+            ),
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
           }))

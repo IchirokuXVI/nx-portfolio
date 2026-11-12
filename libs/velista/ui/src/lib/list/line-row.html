@@ -270,6 +270,7 @@
       (stepped)="quantityStepped.emit({ lineId: line().id, step: $event })"
       [name]="line().content"
       [readonly]="!line().adjustable"
+      [step]="line().step ?? null"
       [took]="took()"
       [unit]="line().unit"
       [value]="amount()"

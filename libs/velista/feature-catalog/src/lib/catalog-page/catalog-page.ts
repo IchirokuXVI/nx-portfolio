@@ -679,9 +679,19 @@ export class CatalogPage {
   });
 
   /** The plus of each row and the lines under it, for the chosen list (section 4.1). */
-  private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held())
-  );
+  private readonly _rowAdds = computed(() => {
+    // The records of the rows on the page, so a held line steps by its product's
+    // step (velista `0186`, decision E). A product off the page says nothing.
+    const byId = new Map(
+      this._products().map((product) => [product.id, product] as const)
+    );
+    const names = this._itemNames;
+    return rowAdds(
+      this.addTarget(),
+      this._adds.held(),
+      (itemId) => byId.get(itemId) ?? names?.nameOf(itemId) ?? null
+    );
+  });
 
   /**
    * How many products are drawn, for the count heard on a keystroke. The read is a cursor page with no total, so a list with more

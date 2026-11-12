@@ -18,6 +18,7 @@ import {
   readLine,
   resetAliceWorld,
   setAdminPrice,
+  setQuantityStep,
   type Session,
 } from './support/api';
 import {
@@ -39,6 +40,7 @@ import {
   searchBasket,
   sheet,
   signIn,
+  stepAmount,
 } from './support/app';
 
 /**
@@ -482,6 +484,99 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     expect(
       (await lineSettlements(alice, lineId)).filter((s) => !s.revertedAt)
     ).toEqual([]);
+  });
+});
+
+/**
+ * A product with a step of its own (velista 0186, backend 0261).
+ *
+ * A second loose product, made the way the bananas are, that a curator gave a
+ * step of 100 g through the admin update. A separate product, so the bananas'
+ * numbers above never depend on a step an earlier run left. Its line is made at
+ * a stated kilo through the API, so the test holds whatever a first add asks for.
+ * The settle sheet's stepper presses by 100 g: three down to 700, one up to 800,
+ * and "Got all" then records a buy of the 800 g asked for.
+ */
+test.describe('a product with a step of its own (velista 0186)', () => {
+  const NAME = { en: 'Whole chicken e2e', es: 'Pollo entero e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    await setQuantityStep(admin, itemId, 100);
+    await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 5.49);
+
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('steps by 100 g in the settle sheet, and buys what it asks for', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    const basketId = await generateBasket(
+      page,
+      ['Groceries'],
+      `Stepped ${Date.now()}`
+    );
+
+    const dialog = await openSettleSheet(page, NAME.en);
+    const field = askAmount(dialog, 'Groceries');
+    await expect(field).toHaveAttribute('aria-valuenow', '1000');
+    const stepper = dialog
+      .locator('lib-row-entries lib-quantity-stepper')
+      .first();
+
+    await stepAmount(field, -3);
+    await expect(field).toHaveAttribute('aria-valuenow', '700');
+    await expect(stepper).toHaveAttribute('data-value', '700');
+    await expect(
+      dialog.getByRole('button', { name: /^Add 100 g to / })
+    ).toBeVisible();
+
+    await stepAmount(field, 1);
+    await expect(field).toHaveAttribute('aria-valuenow', '800');
+    await expect
+      .poll(
+        async () => (await readLine(alice, LIST_GROCERIES_ID, lineId)).quantity
+      )
+      .toBe(800);
+
+    await dialog.getByRole('button', { name: /^Got all / }).click();
+    await expectBasketUrl(page, basketId);
+    await expect
+      .poll(async () =>
+        (await lineSettlements(alice, lineId))
+          .filter((s) => !s.revertedAt)
+          .map((s) => s.quantity)
+      )
+      .toEqual([800]);
   });
 });
 

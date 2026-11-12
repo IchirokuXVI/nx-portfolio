@@ -630,6 +630,20 @@ describe('LineRow', () => {
       expect(stepper(fixture)?.getAttribute('data-value')).toBe('6');
     });
 
+    it("steps by the product's step the row carries (velista 0186)", async () => {
+      const fixture = await render(
+        vm({ quantity: 1000, unit: 'GRAM', step: 100 })
+      );
+      const steps: QuantityStep[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((event) =>
+        steps.push(event.step)
+      );
+
+      plus(fixture).click();
+
+      expect(steps).toEqual([{ from: 1000, to: 1100, repeat: false }]);
+    });
+
     it('goes away in reorder mode', async () => {
       // A second gesture living inside a row being dragged would fight the first for
       // the same finger.

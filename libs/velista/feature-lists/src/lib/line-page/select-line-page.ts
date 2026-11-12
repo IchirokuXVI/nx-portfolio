@@ -3,6 +3,7 @@ import {
   LINE_UNITS,
   lineCardOrder,
   lineName,
+  lineStepOf,
   lineUnits,
   type AlsoOnVm,
   type CatalogItem,
@@ -104,6 +105,8 @@ export function selectLinePage(input: LinePageInput): LinePageVm | null {
     quantity: line.quantity,
     unit: line.unit,
     units: offeredUnits(line, input.productOf),
+    // The product's step (velista `0186`), from the same records the cards read.
+    step: lineStepOf(line, input.itemNameOf),
     quantityWords: formatAmount(line.quantity, line.unit, input.locale),
     listName: input.list?.name ?? null,
     zoneName: input.zoneName,

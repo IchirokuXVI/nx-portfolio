@@ -1111,6 +1111,8 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       size: 0.5,
       unit: 'LITER',
       approxWeight: null,
+      // Absent on this fixture, so it has none (velista `0186`).
+      quantityStep: null,
       productGroupId: 'group-milk',
       // Absent on this fixture, so it has none (velista `0118`).
       categories: [],
@@ -1640,6 +1642,34 @@ describe('a piece whose weight varies (velista 0179, backend 0244)', () => {
     expect(mapped?.offer?.piecePrice).toBeNull();
     expect(
       toProductOffer({ ...cheese.bestOffer, piecePrice: value })?.piecePrice
+    ).toBeNull();
+  });
+});
+
+describe("toCatalogItem: the product's step (velista 0186, backend 0261)", () => {
+  const loose = {
+    id: 'item-chicken',
+    name: { es: 'Pollo entero', en: 'Whole chicken' },
+    unitSize: null,
+    defaultUnit: 'KILOGRAM',
+  };
+
+  it('reads one of the ten steps', () => {
+    expect(toCatalogItem({ ...loose, quantityStep: 100 })?.quantityStep).toBe(
+      100
+    );
+    expect(toCatalogItem({ ...loose, quantityStep: 5 })?.quantityStep).toBe(5);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['null', null],
+    ['a step off the list', 30],
+    ['a string', '100'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, value) => {
+    expect(
+      toCatalogItem({ ...loose, quantityStep: value })?.quantityStep
     ).toBeNull();
   });
 });

@@ -126,6 +126,12 @@ export class RowEntries {
   protected readonly unit = computed(() => this.row().unit);
 
   /**
+   * The row's product's step (velista `0186`, decision C), which every stepper
+   * here presses by, or null for the unit's default.
+   */
+  readonly step = input<number | null>(null);
+
+  /**
    * The amount of each line with an open run in the sheet, by line id, so a
    * stepper draws where the presses got to before the save (velista `0190`).
    */

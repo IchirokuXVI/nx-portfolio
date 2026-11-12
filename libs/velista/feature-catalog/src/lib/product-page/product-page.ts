@@ -34,6 +34,7 @@ import {
   catalogName,
   categoryName,
   chainPriceHistories,
+  lineStepOf,
   lineUnitOfProduct,
   PRICE_HISTORY_DEFAULT_RANGE,
   PRICE_HISTORY_READ_DAYS,
@@ -228,6 +229,17 @@ export class ProductPage {
     lineUnitOfProduct(this._item()?.offer ?? null, this._item())
   );
 
+  /**
+   * The product's step (velista `0186`, decision E): `lineStepOf` of a line of this
+   * one product in {@link lineUnit}, or null for the default.
+   */
+  protected readonly step = computed(() => {
+    const item = this._item();
+    return item === null
+      ? null
+      : lineStepOf({ unit: this.lineUnit(), itemIds: [item.id] }, () => item);
+  });
+
   /** `brand · size`, with the row's own rule for when a size is worth saying. */
   protected readonly detail = computed(() => {
     const item = this._item();
@@ -394,9 +406,21 @@ export class ProductPage {
     };
   });
 
-  private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held())
-  );
+  private readonly _rowAdds = computed(() => {
+    // The records of the page and its similar rows, so a held line steps by its
+    // product's step (velista `0186`, decision E).
+    const item = this._item();
+    const groupId = item?.productGroupId ?? null;
+    const entry = groupId === null ? null : this._groupMembers.entry(groupId);
+    const members = new Map(
+      (entry?.status === 'ready' ? entry.members : []).map(
+        (member) => [member.id, member] as const
+      )
+    );
+    return rowAdds(this.addTarget(), this._adds.held(), (itemId) =>
+      item !== null && itemId === item.id ? item : (members.get(itemId) ?? null)
+    );
+  });
 
   constructor() {
     const params = this._route.paramMap.subscribe((map) => {

@@ -59,6 +59,8 @@ export interface SuggestionHolding {
    * steps by: 25 g or 250 g for a weight, one for a count. Absent is a count.
    */
   readonly unit?: LineUnit;
+  /** The step the stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
   /** Whether the stepper may move. A caller who may not change it sees it disabled. */
   readonly editable: boolean;
   /**
@@ -410,6 +412,7 @@ function addOf(
       name: holding.text,
       quantity: holding.quantity,
       unit: holding.unit,
+      step: holding.step,
       editable: holding.editable && holding.busy !== true,
       pending: false,
       list: list === null ? holding.listName : null,

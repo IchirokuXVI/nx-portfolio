@@ -100,6 +100,8 @@ export interface ProductRowHeldLine {
   readonly quantity: number;
   /** What {@link quantity} counts (velista `0182`). Absent is a count. */
   readonly unit?: LineUnit;
+  /** The step its stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
   /** Whether the person may move its quantity. */
   readonly editable: boolean;
   /** The line waits for an owner's approval. */
@@ -153,6 +155,8 @@ export interface ProductRowStepper {
   readonly value: number;
   /** What {@link value} counts (velista `0182`). Absent is a count. */
   readonly unit?: LineUnit;
+  /** The product's step (velista `0186`). Absent is the unit's default. */
+  readonly step?: number | null;
   /** What its amount is of, naming the product (velista `0188`). */
   readonly name: string;
   /** The lowest it goes. Absent is the stepper's own floor. */
@@ -574,6 +578,7 @@ export type ProductRowExpanded = 'shops' | 'members';
             [disabled]="stepping.disabled === true"
             [min]="stepping.min ?? 0"
             [name]="stepping.name"
+            [step]="stepping.step ?? null"
             [unit]="stepping.unit ?? 'UNIT'"
             [value]="stepping.value"
             class="control stepper"
@@ -613,6 +618,7 @@ export type ProductRowExpanded = 'shops' | 'members';
                       ('amount.inList'
                         | rokuT: { name: line.name, list: add()?.list })
                     "
+                    [step]="line.step ?? null"
                     [unit]="line.unit ?? 'UNIT'"
                     [value]="line.quantity"
                     variant="row"

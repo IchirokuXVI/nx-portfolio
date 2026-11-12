@@ -66,6 +66,7 @@ import {
   lineName,
   type LineName,
   type LineRowVm,
+  lineStepOf,
   type ListPageState,
   type ListViewerVm,
   NO_CATEGORY,
@@ -2240,23 +2241,34 @@ export class ListPage {
   readonly holdingsOf = computed(() => {
     const lines = this._lines.linesIn(this.listId());
     const editable = this.loaded()?.abilities.canDecide ?? false;
-    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] =>
-      lines
+    const names = this._itemNames;
+    return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
+      // The page's records, and the card's own product (velista `0186`, decision
+      // E), so a held line steps as its row on the list steps it.
+      const shown = suggestion.kind === 'item' ? suggestion.item : null;
+      const productOf = (itemId: string) =>
+        names.nameOf(itemId) ?? (shown?.id === itemId ? shown : null);
+      return lines
         .filter((line) =>
           suggestion.kind === 'group'
             ? line.productGroupId === suggestion.group.id
             : line.itemIds.includes(suggestion.item.id)
         )
-        .map((line) => ({
-          key: line.id,
-          lineId: line.id,
-          text: line.content,
-          listName: null,
-          // The open run's amount, so a card and the row agree (velista `0188`).
-          quantity: this.quantityRuns.shown(line.id, line.quantity),
-          unit: line.unit,
-          editable,
-        }));
+        .map((line) => {
+          const step = lineStepOf(line, productOf);
+          return {
+            key: line.id,
+            lineId: line.id,
+            text: line.content,
+            listName: null,
+            // The open run's amount, so a card and the row agree (velista `0188`).
+            quantity: this.quantityRuns.shown(line.id, line.quantity),
+            unit: line.unit,
+            ...(step === null ? {} : { step }),
+            editable,
+          };
+        });
+    };
   });
 
   /**

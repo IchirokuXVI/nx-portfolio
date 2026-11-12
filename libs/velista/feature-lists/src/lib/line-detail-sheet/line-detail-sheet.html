@@ -113,6 +113,7 @@
                   (valueChange)="onAmountChanged($event)"
                   [disabled]="saving() || unitPending()"
                   [name]="line.content"
+                  [step]="productStep()"
                   [unit]="unit()"
                   [value]="amount()"
                   variant="sheet"
@@ -417,6 +418,7 @@
             [disabled]="line.busy"
             [min]="howManyFloor()"
             [name]="line.content"
+            [step]="productStep()"
             [unit]="unit()"
             variant="sheet"
           />

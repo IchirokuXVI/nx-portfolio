@@ -7,6 +7,7 @@ import {
   isMeasured,
   isUnsavedLine,
   legacyLineUnit,
+  lineStepOf,
   sameLineName,
   shownLineUnit,
   unsavedLineId,
@@ -205,12 +206,16 @@ export class CatalogAddStore {
     }
     let changed = false;
     const shown = held.map((line) => {
-      const unit = shownLineUnit(line, (itemId) => items.nameOf(itemId));
-      if (unit === line.unit) {
+      const productOf = (itemId: string) => items.nameOf(itemId);
+      const unit = shownLineUnit(line, productOf);
+      // The product's step (velista `0186`, decision A), set only when one is
+      // known: a record not read yet says nothing.
+      const step = lineStepOf({ ...line, unit }, productOf);
+      if (unit === line.unit && step === (line.step ?? null)) {
         return line;
       }
       changed = true;
-      return { ...line, unit };
+      return step === null ? { ...line, unit } : { ...line, unit, step };
     });
     return changed ? shown : held;
   });

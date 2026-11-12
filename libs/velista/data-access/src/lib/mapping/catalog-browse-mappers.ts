@@ -30,6 +30,7 @@ import {
   oneOf,
   oneOfOrNull,
   positiveNum,
+  quantityStepOf,
   str,
 } from './primitives';
 import { toShopChainSummary } from './shop-mappers';
@@ -66,6 +67,7 @@ export function toCatalogProduct(raw: unknown): CatalogProduct | null {
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     approxWeight: positiveNum(raw['approxWeight']),
+    quantityStep: quantityStepOf(raw['quantityStep']),
     categories: toProductCategories(raw['categories']),
     offer,
     // Null with no offer, so a basis can never describe a price that is not there.

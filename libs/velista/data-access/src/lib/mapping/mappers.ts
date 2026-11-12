@@ -96,6 +96,7 @@ import {
   oneOf,
   oneOfOrNull,
   positiveNum,
+  quantityStepOf,
   str,
   strOr,
 } from './primitives';
@@ -741,6 +742,7 @@ export function toCatalogItem(
     size: nullableNum(raw['unitSize']),
     unit: oneOf(raw['defaultUnit'], UNITS_OF_MEASURE, UNIT_OF_MEASURE_FALLBACK),
     approxWeight: positiveNum(raw['approxWeight']),
+    quantityStep: quantityStepOf(raw['quantityStep']),
     productGroupId: nullableStr(raw['productGroupId']),
     // Read since velista `0082`, so the zone list page can show one category at a
     // time, and a list of the tree's rows since `0118`. The rule the basket mapper

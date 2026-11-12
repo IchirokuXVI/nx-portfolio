@@ -1,6 +1,7 @@
 import {
   catalogName,
   lineShownProduct,
+  lineStepOf,
   listCost,
   soldAsOf,
   type CatalogItem,
@@ -319,6 +320,12 @@ function toRow(
         : null,
     quantity: line.quantity,
     unit: line.unit,
+    // The product's step (velista `0186`, decision A), over the records the page
+    // read: a record still loading says nothing, so the row steps by the default.
+    step:
+      input.catalog === undefined
+        ? null
+        : lineStepOf(line, input.catalog.itemOf),
     approvalStatus: line.approvalStatus,
     settled: isSettled(line),
     indicators: indicatorsFor(line, claimedBy),

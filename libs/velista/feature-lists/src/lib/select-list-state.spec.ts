@@ -391,6 +391,31 @@ describe('selectListState', () => {
       ).lines[0];
     }
 
+    it("gives a weight line its product's step, and the default without a record (velista 0186)", () => {
+      const stepped = catalog({
+        itemOf: (itemId) => {
+          const known = ITEMS.get(itemId) ?? null;
+          return known === null ? null : { ...known, quantityStep: 100 };
+        },
+      });
+
+      expect(
+        rowOf(
+          { content: 'Manzana', itemIds: ['apples'], unit: 'GRAM' },
+          { catalog: stepped }
+        ).step
+      ).toBe(100);
+      expect(
+        rowOf({ content: 'Manzana', itemIds: ['apples'], unit: 'GRAM' }).step
+      ).toBeNull();
+      expect(
+        rowOf(
+          { content: 'Manzana', itemIds: ['apples'], unit: 'GRAM' },
+          { catalog: catalog({ itemOf: () => null }) }
+        ).step
+      ).toBeNull();
+    });
+
     it('draws a name and one product', () => {
       const row = rowOf({ content: 'Leche', itemIds: ['milk'] });
 

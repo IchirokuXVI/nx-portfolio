@@ -92,6 +92,7 @@ export interface ListsTableStep {
                       | rokuT: { name: product(), list: list.name }
                   "
                   [readonly]="readOnly(list)"
+                  [step]="step()"
                   [unit]="list.main?.unit ?? unit()"
                   [value]="quantityOf(list)"
                   variant="row"
@@ -122,6 +123,7 @@ export interface ListsTableStep {
                     'amount.inList'
                       | rokuT: { name: line.name, list: list.name }
                   "
+                  [step]="step()"
                   [unit]="line.unit"
                   [value]="line.quantity"
                   variant="row"
@@ -151,6 +153,13 @@ export class ListsTable {
    * sold by the litre reads "0 ml" and names a step of 25 ml.
    */
   readonly unit = input<LineUnit>('UNIT');
+
+  /**
+   * The product's step (velista `0186`, decision E), or null for the default.
+   * Every stepper of the table steps a line that holds this one product, so each
+   * reads it; a stepper that counts pieces ignores it.
+   */
+  readonly step = input<number | null>(null);
 
   /** The plus of a list with no line under the product's name: make that line. */
   readonly added = output<string>();

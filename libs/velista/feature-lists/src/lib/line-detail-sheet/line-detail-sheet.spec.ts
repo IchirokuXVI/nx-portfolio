@@ -1161,6 +1161,22 @@ describe('LineDetailSheet: the unit chip (velista 0183)', () => {
       ),
     ] as HTMLButtonElement[];
 
+  it("steps both steppers and the how many floor by the product's step (velista 0186)", async () => {
+    const stepped: CatalogItem = { ...LOOSE, quantityStep: 100 };
+    const { fixture } = await render({
+      lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 1000 })],
+      itemNames: fakeItemNames({ items: [stepped] }),
+    });
+
+    expect(fixture.componentInstance.productStep()).toBe(100);
+    expect(fixture.componentInstance.howManyFloor()).toBe(100);
+    const steppers = fixture.debugElement
+      .queryAll(By.directive(QuantityStepper))
+      .map((one) => one.componentInstance as QuantityStepper);
+    expect(steppers.length).toBeGreaterThan(0);
+    expect(steppers.every((one) => one.step() === 100)).toBe(true);
+  });
+
   it('draws no chip on a line of one product of one unit', async () => {
     const { fixture } = await render({
       lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 500 })],

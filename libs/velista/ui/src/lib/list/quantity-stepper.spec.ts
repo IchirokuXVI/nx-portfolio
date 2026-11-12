@@ -544,4 +544,72 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
     });
   });
+
+  describe("the product's step (velista 0186, section 3)", () => {
+    const arrow = (h: Harness, name: string) => {
+      const input = h.el.querySelector('input') as HTMLInputElement;
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: name,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      h.fixture.detectChanges();
+    };
+
+    it('moves a press, a repeat and an arrow key by a step of 100', () => {
+      const h = render({ value: 1000, unit: 'GRAM', step: 100 });
+      h.minus.click();
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([
+        { from: 1000, to: 900, repeat: false },
+        { from: 900, to: 800, repeat: true },
+      ]);
+
+      const sheet = render({
+        value: 1000,
+        unit: 'GRAM',
+        step: 100,
+        variant: 'sheet',
+      });
+      arrow(sheet, 'ArrowDown');
+      arrow(sheet, 'ArrowUp');
+      expect(tos(sheet)).toEqual([900, 1000]);
+    });
+
+    it('moves a press at 1000 by 10 on a step of 5 (S7b, decision F)', () => {
+      const h = render({ value: 995, unit: 'GRAM', step: 5 });
+      h.plus.click();
+      h.plus.click();
+      h.minus.click();
+      h.minus.click();
+      expect(tos(h)).toEqual([1000, 1010, 1000, 995]);
+    });
+
+    it('names the step each button moves', () => {
+      const h = render({ value: 1000, unit: 'GRAM', step: 100 });
+      expect(h.minus.getAttribute('aria-label')).toContain('"step":"100 g"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"100 g"');
+      h.set('step', 5);
+      expect(h.minus.getAttribute('aria-label')).toContain('"step":"5 g"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10 g"');
+    });
+
+    it('turns plus off where one step of the product would pass the most', () => {
+      const h = render({ value: 99_950, unit: 'GRAM', step: 100 });
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      h.set('step', null);
+      expect(h.plus.getAttribute('aria-disabled')).toBeNull();
+    });
+
+    it('ignores a step on a count', () => {
+      const h = render({ value: 3, step: 100 });
+      h.plus.click();
+      expect(tos(h)).toEqual([4]);
+    });
+  });
 });

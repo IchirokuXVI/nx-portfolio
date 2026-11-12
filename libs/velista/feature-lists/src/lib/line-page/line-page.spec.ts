@@ -516,6 +516,25 @@ describe('LinePage', () => {
         ),
       ] as HTMLButtonElement[];
 
+    it('steps a weight line by the smallest step its products carry (velista 0186)', async () => {
+      const { fixture } = await render({
+        items: [{ ...LOOSE, quantityStep: 100 }, PIECE],
+        lines: [line({ unit: 'GRAM', quantity: 1000 })],
+      });
+      const fewer = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[0];
+
+      fewer.click();
+      fixture.detectChanges();
+
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('900');
+    });
+
     it('draws no chip on a line whose products offer one unit', async () => {
       // Two counted packs: six eggs and a dozen, which serve a count alone.
       const { fixture } = await render({

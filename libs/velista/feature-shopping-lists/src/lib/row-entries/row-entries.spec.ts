@@ -390,6 +390,22 @@ describe('RowEntries: who may change what a list asks for', () => {
     });
   });
 
+  it("steps a weight row by its product's step (velista 0186, decision C)", async () => {
+    const weighed = entry({ left: 1000, asked: 1000, unit: 'GRAM' });
+    const fixture = await render({ ...row([weighed]), unit: 'GRAM' });
+    fixture.componentRef.setInput('step', 100);
+    fixture.detectChanges();
+    const demanded = jest.fn();
+    fixture.componentInstance.demanded.subscribe(demanded);
+
+    plus(askAmounts(fixture)[0], fixture);
+
+    expect(demanded).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      step: { from: 1000, to: 1100, repeat: false },
+    });
+  });
+
   it('draws the run the sheet holds open for a line', async () => {
     const fixture = await render(row([entry()]));
     fixture.componentRef.setInput('pending', new Map([['zl-1', 5]]));

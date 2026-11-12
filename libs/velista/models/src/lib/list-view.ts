@@ -202,6 +202,12 @@ export interface LineRowVm {
   readonly quantity: number;
   /** What {@link quantity} counts, which the reel steps and draws by (velista `0182`). */
   readonly unit: LineUnit;
+  /**
+   * The step its stepper presses by, `lineStepOf` of the line (velista `0186`), or
+   * null for the unit's default. Optional, so a row built without a catalog steps
+   * by the default.
+   */
+  readonly step?: number | null;
   readonly approvalStatus: LineApprovalStatus;
   /**
    * Whether this line is settled: at zero with a purchase on record.

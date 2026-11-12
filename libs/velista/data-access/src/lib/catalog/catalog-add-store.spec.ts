@@ -103,6 +103,7 @@ interface World {
         readonly unit: string | null;
         readonly size: number | null;
         readonly approxWeight: number | null;
+        readonly quantityStep?: number | null;
       }
     >
   >;
@@ -936,6 +937,66 @@ describe('CatalogAddStore', () => {
 
         expect(calls.some((call) => call.startsWith('update:'))).toBe(false);
         expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+      });
+    });
+
+    describe('a product with a step of its own (velista 0186)', () => {
+      const STEPPED = {
+        unit: 'KILOGRAM',
+        size: null,
+        approxWeight: null,
+        quantityStep: 100,
+      };
+
+      it("carries the product's step on its held lines, and writes a stepper's to", async () => {
+        const { store, calls } = setup({
+          ...HOME,
+          items: { bananas: STEPPED },
+          lines: [
+            line('kilo', 'weekly', {
+              content: 'Plátanos',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas'],
+            }),
+          ],
+        });
+        await store.ensure();
+        expect(store.held()[0]?.step).toBe(100);
+
+        store.step(on('weekly', BANANAS), 'kilo', {
+          from: 1000,
+          to: stepFrom(1000, 'GRAM', -1, 100),
+          repeat: false,
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        await settled();
+
+        expect(calls).toContain('quantity:kilo:-100');
+        expect(store.held()[0]?.quantity).toBe(900);
+      });
+
+      it('still takes a line the visit made back with one minus at its floor', async () => {
+        const { store, calls } = setup({
+          ...HOME,
+          items: { bananas: STEPPED },
+        });
+        await store.ensure();
+        await store.add(BANANAS);
+        const added = store.held()[0]?.quantity ?? 0;
+        expect(store.held()[0]?.step).toBe(100);
+
+        store.step(on('weekly', BANANAS), 'line-1', {
+          from: added,
+          to: stepFrom(added, 'GRAM', -1, 100),
+          repeat: false,
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        await settled();
+
+        // Taken back whole, whatever the first add asked for, never one step.
+        expect(calls).toContain(`quantity:line-1:-${added}`);
+        expect(store.visit()).toEqual([]);
       });
     });
 

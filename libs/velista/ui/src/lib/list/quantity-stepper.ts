@@ -58,7 +58,8 @@ export const TOOK_DURATION_MS = 2500;
  * announced.
  *
  * **One step per unit** through `stepFrom` and `canStepUp` (S7, S7b): 25 g, 25 ml or
- * one, never less than one hundredth of the name the row shows. **The ends are
+ * one, or the product's {@link step} (velista `0186`), never less than one
+ * hundredth of the name the row shows. **The ends are
  * drawn, not hidden** (decision D): an end carries `aria-disabled` and ignores the
  * press, so focus stays on the button. **A hold repeats** after
  * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 100 ms, and never takes an amount to
@@ -87,6 +88,12 @@ export class QuantityStepper {
   /** The amount drawn, in base units. The caller owns it; a press never changes it here. */
   readonly value = input.required<number>();
   readonly unit = input<LineUnit>('UNIT');
+  /**
+   * The product's step in base units, or null for the unit's default (velista
+   * `0186`). Read only for a weight or a volume; `stepAt` keeps the hundredth rule
+   * over it. A container passes `lineStepOf` of its line, never a step it computed.
+   */
+  readonly step = input<number | null>(null);
   /** What the amount is of, translated: "Plátano de Canarias IGP", or with its list. */
   readonly name = input.required<string>();
   readonly variant = input<QuantityStepperVariant>('row');
@@ -124,19 +131,21 @@ export class QuantityStepper {
 
   readonly minusAtEnd = computed(() => this.value() <= this.min());
   readonly plusAtEnd = computed(
-    () => !canStepUp(this.value(), this.unit(), this.max())
+    () => !canStepUp(this.value(), this.unit(), this.max(), this.step())
   );
 
   /** What minus moves at the current amount, in short form words ("25 g", "1", "10"). */
   readonly lessStep = computed(() => {
     const value = this.value();
     const delta = value - this._down(value);
-    return this._stepWords(delta > 0 ? delta : stepAt(value, this.unit()));
+    return this._stepWords(
+      delta > 0 ? delta : stepAt(value, this.unit(), this.step())
+    );
   });
 
   /** What plus moves at the current amount. */
   readonly moreStep = computed(() =>
-    this._stepWords(stepAt(this.value(), this.unit()))
+    this._stepWords(stepAt(this.value(), this.unit(), this.step()))
   );
 
   /** The amount the presses settled on, which the live region says (decision E). */
@@ -345,12 +354,12 @@ export class QuantityStepper {
 
   private _next(direction: 1 | -1): number {
     return direction === 1
-      ? stepFrom(this.value(), this.unit(), 1)
+      ? stepFrom(this.value(), this.unit(), 1, this.step())
       : this._down(this.value());
   }
 
   private _down(value: number): number {
-    return Math.max(this.min(), stepFrom(value, this.unit(), -1));
+    return Math.max(this.min(), stepFrom(value, this.unit(), -1, this.step()));
   }
 
   private _emit(to: number, repeat: boolean): boolean {
