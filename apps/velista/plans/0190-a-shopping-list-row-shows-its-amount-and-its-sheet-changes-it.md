@@ -1,3 +1,5 @@
+> **PR:** [#983](https://github.com/IchirokuXVI/nx-portfolio/pull/983)
+
 # 0190: a shopping list row shows its amount and its sheet changes it
 
 > Decided on 2026-11-11. The owner finds the reel "confusing for most users", and velista
