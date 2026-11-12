@@ -1,5 +1,6 @@
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
+import { LINE_QUANTITY_MAX } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { ApiUrl } from '../api-url';
 import { TokenStore } from '../auth/token-store';
@@ -459,7 +460,9 @@ describe('LineMemory refuses what the server would refuse', () => {
       const { lines } = await build();
 
       expect(
-        await codeOf(lines.updateLine('ln-m-01', { quantity: 100_001 }))
+        await codeOf(
+          lines.updateLine('ln-m-01', { quantity: LINE_QUANTITY_MAX + 1 })
+        )
       ).toBe('validation_failed');
     });
   });
@@ -480,9 +483,6 @@ describe('LineMemory refuses what the server would refuse', () => {
       expect(await codeOf(lines.addQuantity('ln-s-03', 1))).toBe('forbidden');
       expect(await codeOf(lines.settle('ln-s-03', 'BOUGHT'))).toBe('forbidden');
       expect(await codeOf(lines.deleteLine('ln-s-03'))).toBe('forbidden');
-      expect(await codeOf(lines.reorder(READ_ONLY, ['ln-s-03']))).toBe(
-        'forbidden'
-      );
     });
   });
 

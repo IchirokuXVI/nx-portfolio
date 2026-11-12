@@ -13,15 +13,6 @@
   white-space: nowrap;
 }
 
-.reorder-note {
-  margin: 0 0 var(--app-space-3);
-  padding: var(--app-space-2) var(--app-space-3);
-  background: var(--app-status-info-bg);
-  border-radius: var(--app-radius-sm);
-  font-size: var(--app-text-2xs);
-  color: var(--app-status-info-fg);
-}
-
 // Flat rows on hairlines (velista 0145, section 1): no gap between them, and one
 // hairline over the first.
 .lines {
@@ -55,21 +46,4 @@
   transition:
     box-shadow var(--app-motion-slow) var(--app-motion-ease),
     background var(--app-motion-slow) var(--app-motion-ease);
-}
-
-// A row getting out of the way. It animates, because the point of the movement is to
-// be read: a gap that opens instantly is a list that jumped rather than one that made
-// room.
-.line.shifting {
-  transition: transform var(--app-motion-fast) var(--app-motion-ease);
-}
-
-// The row under the finger. Above its neighbours so it passes over them rather than
-// between them, and deliberately without a transition: it has to sit exactly where the
-// finger is, and anything easing it there would lag behind by a visible fraction.
-.line.lifted {
-  position: relative;
-  z-index: 2;
-  box-shadow: var(--app-elevation-2);
-  border-radius: var(--app-card-radius);
 }

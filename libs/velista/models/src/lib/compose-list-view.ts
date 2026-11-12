@@ -199,20 +199,6 @@ export function listViewActiveCount(state: ListViewState): number {
 }
 
 /**
- * Whether the reorder action has to wait (section 7).
- *
- * `line.reorder` takes the whole order, and a drag over a filtered or re-sorted screen
- * would rewrite positions nobody can see. So reordering waits for the list order, all
- * lines and no search.
- */
-export function listViewHoldsReorder(
-  state: ListViewState,
-  query: string
-): boolean {
-  return listViewActiveCount(state) > 0 || foldForSearch(query) !== '';
-}
-
-/**
  * Whether one line answers the search (section 6).
  *
  * Its name, the name of any of its products, or the name of any of its categories

@@ -89,7 +89,7 @@ describe('DueLineRow (velista 0089)', () => {
 
     press(fixture, 0);
     expect(stepper(fixture).value()).toBe(1);
-    expect(stepper(fixture).canDecrease()).toBe(false);
+    expect(stepper(fixture).minusAtEnd()).toBe(true);
   });
 
   it('adds the suggested amount when the button is pressed as it is', async () => {

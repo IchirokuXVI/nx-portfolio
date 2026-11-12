@@ -460,8 +460,7 @@
     },
     "held": {
       "title": "On {{list}}",
-      "titleMany": "On your lists",
-      "stepper": "How many of {{line}} in {{list}}"
+      "titleMany": "On your lists"
     },
     "adding": {
       "to": "Adding to",
@@ -485,7 +484,6 @@
       "note": "Change how many, or take one back with the minus.",
       "none": "Nothing was added in this visit.",
       "pending": "Waiting for approval",
-      "stepper": "How many of {{name}}",
       "takeAll_one": "Take it back",
       "takeAll_other": "Take all {{count}} back",
       "open": "Open {{list}}"
@@ -573,7 +571,6 @@
     "inLists": {
       "title": "In your lists",
       "last": "Last used",
-      "stepper": "How many in {{list}}",
       "other": "Already on this list, with this product",
       "otherPending": "Already on this list, waiting for approval",
       "readOnly": "You can read this list. You cannot add to it.",
@@ -742,16 +739,20 @@
       "copyReference": "Copy reference"
     }
   },
+  "amount": {
+    "group": "Amount of {{name}}",
+    "less": "Remove {{step}} from {{name}}",
+    "more": "Add {{step}} to {{name}}",
+    "settled": "{{name}}, {{amount}}",
+    "inList": "{{name}} on {{list}}",
+    "newLine": "the new line"
+  },
   "list": {
     "header": {
       "title": "List",
       "inGroup": "in {{name}}",
-      "pending": "{{pending}} of {{total}} pending",
-      "done": "Nothing left",
       "notLive": "Not updating right now",
-      "back": "Back to the group",
-      "cost": "About {{cost}} for the lines that have a price",
-      "costExact": "{{cost}} for the lines that have a price"
+      "back": "Back to the group"
     },
     "presence": {
       "one": "{{name}} is on the list",
@@ -771,8 +772,6 @@
       "resultsCatalog": "From the catalog",
       "action": "Add",
       "quantity": "How many",
-      "more": "One more",
-      "fewer": "One fewer",
       "startListening": "Say what you need",
       "stopListening": "Stop listening",
       "clear": "Clear what you typed",
@@ -848,8 +847,7 @@
         "groupMore_other": "and {{count}} more",
         "noMatch": "No products match “{{- query}}”",
         "noMatchFreeText": "You can still add it as written",
-        "alsoCalled": "Also called: {{- synonym}}",
-        "alreadyQuantity": "How many of {{line}}"
+        "alsoCalled": "Also called: {{- synonym}}"
       }
     },
     "addChoice": {
@@ -881,20 +879,7 @@
       "overwritten": "{{name}} changed this while you were editing",
       "overwrittenBySomeone": "Somebody else changed this while you were editing",
       "failed": "That did not save. Tap to try again",
-      "movedTo": "Moved to position {{position}} of {{total}}",
-      "quantityFor": "How many {{name}}",
-      "quantityChanged": "{{name}}, now {{quantity}}"
-    },
-    "reorder": {
-      "enter": "Put them in order",
-      "title": "Put them in order",
-      "body": "Drag by the grip. Ticking off is off while you are in here",
-      "done": "Done",
-      "started": "Putting them in order. Ticking off is off",
-      "ended": "Finished putting them in order",
-      "moveUp": "Move {{name}} up",
-      "moveDown": "Move {{name}} down",
-      "unavailable": "To reorder, use the list order, all lines and no search."
+      "hiddenAtZero": "{{name}} is at 0 and hidden. Search for it to bring it back."
     },
     "view": {
       "order": {
@@ -1169,7 +1154,6 @@
       "keepEditing": "Keep editing"
     },
     "trips": {
-      "toBuy": "To buy",
       "labelNamed": "{{name}} · {{date}}",
       "bought": "{{bought}} of {{total}} bought",
       "lines": "{{count}} lines",
@@ -1197,7 +1181,6 @@
       "staple": "In {{with}} of your last {{seen}} shopping lists",
       "add": "Add {{count}}",
       "addLabel": "Add {{count}} of {{name}} to the list",
-      "quantityLabel": "How many of {{name}}",
       "more": "Show more suggestions",
       "added": "{{name}} added to the list"
     },
@@ -2015,10 +1998,6 @@
       "amount": "≈{{amount}}",
       "open": "Estimated total, about {{amount}}. See what is behind it.",
       "openExact": "Total, {{amount}}. See what is behind it.",
-      "barLabel": "About {{bought}} bought of about {{total}}",
-      "barLabelExact": "{{bought}} bought of {{total}}",
-      "boughtEnd": "{{amount}} bought",
-      "leftEnd": "{{amount}} left",
       "title": "Estimated total",
       "titleExact": "Total",
       "bought": "Bought",

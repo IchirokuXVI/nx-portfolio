@@ -43,7 +43,6 @@ export interface ListGroupsInput<T extends ListViewLine> {
   readonly tripsReady: boolean;
   /** The keys of the trips somebody has open. */
   readonly openKeys: ReadonlySet<string>;
-  readonly reordering: boolean;
   /**
    * The ids of the lines the list suggests, in the server's order (velista `0089`).
    * Absent or empty draws no due line.
@@ -80,7 +79,7 @@ export type ListGroupsView<T extends ListViewLine> =
        * after them and before the lines at zero (velista `0089`, section 2).
        */
       readonly wantedCount: number;
-      /** The due lines to draw, in the server's order. Empty in reorder mode. */
+      /** The due lines to draw, in the server's order. */
       readonly due: readonly T[];
       readonly category: ListCategoryPick | null;
       readonly trips: readonly TripGroup<T>[];
@@ -91,27 +90,27 @@ export type ListGroupsView<T extends ListViewLine> =
  *
  * ## What goes in To buy (section 3)
  *
- * Every wanted line no live trip draws, in list order, then the lines at zero that were
- * never bought, then the lines at zero with purchases that no trip can be trusted to
- * hold, then the rejected lines of either kind. **No line is ever on neither side.**
+ * Every wanted line no live trip draws, in list order, then the lines at zero with
+ * purchases that no trip can be trusted to hold, then the rejected lines of either
+ * kind.
  *
  * - A claimed line leaves To buy only once a live trip's rows that name it have
  *   arrived.
+ * - **A line at 0 or less that was never bought is not drawn at rest** (velista
+ *   `0192`). Nothing deletes it: the search, which is flat, finds it at 0, and a step
+ *   above 0 puts it back in To buy. The amount read is the stored one, so a run of
+ *   stepper presses that is still open keeps its row (velista `0188`, decision H).
  * - A line at zero with purchases leaves To buy only once a heads read succeeded and
  *   named at least one trip (velista `0095`, section 5). Before the heads arrive, after
  *   they failed, and when the list has no trip at all, it stays in To buy, where it
  *   can be raised.
- *
- * ## Reorder mode (section 7)
- *
- * To buy alone, without the lines at zero and without any trip.
  *
  * ## The due lines (velista `0089`, section 2)
  *
  * The lines the list suggests, in the server's order, kept only while the line is held,
  * is at zero, is not rejected and is not claimed. A line raised above zero leaves at
  * once, which is what makes an add feel instant. A category keeps only the due lines in
- * it. None in reorder mode, and none during a search, which is flat.
+ * it. None during a search, which is flat.
  */
 export function composeListGroups<T extends ListViewLine>(
   input: ListGroupsInput<T>,
@@ -140,7 +139,6 @@ export function composeListGroups<T extends ListViewLine>(
     input.tripsReady && input.live.length + input.past.length > 0;
 
   const wanted: T[] = [];
-  const neverBought: T[] = [];
   const boughtAtZero: T[] = [];
   const rejected: T[] = [];
   for (const line of input.lines) {
@@ -153,52 +151,30 @@ export function composeListGroups<T extends ListViewLine>(
 
     const isWanted =
       facts.quantity > 0 && !(facts.claimed && heldByLive.has(line.id));
-    const isNeverBought = facts.quantity === 0 && facts.boughtCount === 0;
-    const isUnheld =
-      !tripsHold && facts.quantity === 0 && facts.boughtCount > 0;
-    if (!isWanted && !isNeverBought && !isUnheld) {
+    const isUnheld = !tripsHold && facts.quantity <= 0 && facts.boughtCount > 0;
+    if (!isWanted && !isUnheld) {
       continue;
     }
 
-    if (input.reordering) {
-      if (isWanted) {
-        wanted.push(line);
-      }
-    } else if (facts.rejected) {
+    if (facts.rejected) {
       rejected.push(line);
     } else if (isWanted) {
       wanted.push(line);
-    } else if (isNeverBought) {
-      neverBought.push(line);
     } else {
       boughtAtZero.push(line);
     }
   }
 
-  const due = input.reordering ? [] : dueLinesOf(input, narrow);
+  const due = dueLinesOf(input, narrow);
   // A due line is drawn in its own section under To buy, so it is held already.
   const dueIds = new Set(due.map((line) => line.id));
 
   const narrowedWanted = narrow(wanted);
-  const toBuy = input.reordering
-    ? narrowedWanted
-    : [
-        ...narrowedWanted,
-        ...narrow(neverBought),
-        ...narrow(boughtAtZero.filter((line) => !dueIds.has(line.id))),
-        ...narrow(rejected),
-      ];
-
-  if (input.reordering) {
-    return {
-      kind: 'groups',
-      toBuy,
-      wantedCount: narrowedWanted.length,
-      due: [],
-      category,
-      trips: [],
-    };
-  }
+  const toBuy = [
+    ...narrowedWanted,
+    ...narrow(boughtAtZero.filter((line) => !dueIds.has(line.id))),
+    ...narrow(rejected),
+  ];
 
   const byId = new Map(input.lines.map((line) => [line.id, line]));
   const trips: TripGroup<T>[] = [];
@@ -284,38 +260,4 @@ function dueLinesOf<T extends ListViewLine>(
   // The view decides membership only. The order stays the server's, most due first.
   const kept = new Set(narrow(offered).map((line) => line.id));
   return offered.filter((line) => kept.has(line.id));
-}
-
-/**
- * The whole order to send after a line moved inside To buy (section 7).
- *
- * The lines To buy shows take, in their new order, the slots they held among all the
- * list's lines, and every other line keeps its slot. So nothing hidden from the person
- * moves. Null when the move changes nothing or the two lists disagree.
- *
- * `visibleIds` must be in the same relative order as `allIds`, which To buy in list
- * order is.
- */
-export function reorderWithinSlots(
-  allIds: readonly string[],
-  visibleIds: readonly string[],
-  lineId: string,
-  to: number
-): readonly string[] | null {
-  const from = visibleIds.indexOf(lineId);
-  if (from < 0 || to < 0 || to >= visibleIds.length || to === from) {
-    return null;
-  }
-
-  const visible = new Set(visibleIds);
-  if (allIds.filter((id) => visible.has(id)).length !== visibleIds.length) {
-    return null;
-  }
-
-  const moved = [...visibleIds];
-  moved.splice(from, 1);
-  moved.splice(to, 0, lineId);
-
-  let next = 0;
-  return allIds.map((id) => (visible.has(id) ? moved[next++] : id));
 }
