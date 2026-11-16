@@ -63,12 +63,13 @@ export interface CatalogAddProduct {
 /**
  * Why a plus did nothing (velista `0185`, owner ruling 46): the card was drawn
  * before another device changed the list, and the server answered that the
- * product is already on it. `onList`: a line of it asks for some. `pickLine`:
- * two or more lines of it stand at zero, and one of them is to be raised with its
- * own stepper. `list` is the list's name, for the sentence.
+ * product is already on it. `onList`: a line of it asks for some. `atZero`:
+ * every line of it stands at zero, and the line is to be raised with its own
+ * stepper (decision 51 of 2026-11-16). `list` is the list's name, for the
+ * sentence.
  */
 export interface CatalogAddMet {
-  readonly kind: 'onList' | 'pickLine';
+  readonly kind: 'onList' | 'atZero';
   readonly list: string;
 }
 
@@ -602,7 +603,7 @@ export class CatalogAddStore {
         this._met.set({
           kind: result.alreadyOnList.some((line) => line.quantity > 0)
             ? 'onList'
-            : 'pickLine',
+            : 'atZero',
           list: this._lists().find((one) => one.listId === listId)?.name ?? '',
         });
         this._failures.update((count) => count + 1);

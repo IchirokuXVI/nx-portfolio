@@ -832,9 +832,7 @@ export class CatalogPage {
     if (this.pickKind !== null) {
       return null;
     }
-    // In the unit the plus adds in (absent is a count, as `CatalogAddStore.add`
-    // reads it), which is the unit the server matches lines of.
-    return this._rowAdds().of(row.id, row.lineUnit ?? 'UNIT');
+    return this._rowAdds().of(row.id);
   }
 
   /**

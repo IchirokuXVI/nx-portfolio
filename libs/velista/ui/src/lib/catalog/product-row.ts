@@ -143,12 +143,13 @@ export interface ProductRowAdd {
    */
   readonly onList?: ProductRowOnList;
   /**
-   * Present when no line asks for this product and two or more saved lines of the
-   * list hold it at zero (the owner's ruling of 2026-11-16): the plus is switched
-   * off as for {@link onList}, and the card says to raise one of the lines under it
-   * with its own stepper. No link, because the list hides its lines at zero.
+   * Present when every saved line of the list that holds this product stands at
+   * zero, one line or several, in any unit (the owner's decisions 51 to 53 of
+   * 2026-11-16): the plus is switched off as for {@link onList}, and the card says
+   * to raise the line under it with its own stepper. No link, because the list
+   * hides its lines at zero.
    */
-  readonly pickLine?: true;
+  readonly atZero?: true;
 }
 
 /** Where a product already on the list is: the line, and the list's URL. */
@@ -642,17 +643,16 @@ export type ProductRowExpanded = 'shops' | 'members';
                   ></span
                 >
               </p>
-            } @else if (add()?.pickLine) {
+            } @else if (add()?.atZero) {
               <!--
-                Two or more lines at zero hold it, and the plus would not know
-                which to raise (the owner's ruling of 2026-11-16). The reason,
-                and the lines below with their own steppers. No link: the list
-                hides its lines at zero.
+                Every line that holds it stands at zero, and the plus is off
+                (the owner's decision 51 of 2026-11-16): the line is raised with
+                its own stepper below. No link: the list hides its lines at zero.
               -->
               <p class="held-onlist">
                 <lib-info-icon aria-hidden="true" class="held-onlist-icon" />
                 <span [id]="onListId" class="held-onlist-text">{{
-                  'catalog.held.pickLine' | rokuT: { list: add()?.list }
+                  'catalog.held.atZero' | rokuT: { list: add()?.list }
                 }}</span>
               </p>
             } @else {
@@ -836,9 +836,9 @@ export class ProductRow {
     }
   }
 
-  /** Whether the plus is switched off: on the list, or a line to pick. */
+  /** Whether the plus is switched off: on the list, above zero or at zero. */
   protected switchedOff(adding: ProductRowAdd): boolean {
-    return adding.onList !== undefined || adding.pickLine === true;
+    return adding.onList !== undefined || adding.atZero === true;
   }
 
   protected pressAdd(event: Event, adding: ProductRowAdd): void {

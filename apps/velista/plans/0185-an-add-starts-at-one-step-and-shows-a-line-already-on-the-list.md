@@ -245,6 +245,20 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   product, whether the line holds it alone or with others. That is the server's rule (backend
   `0260` R2, R5). A product whose only lines are at 0 keeps its plus on: a press raises the kept
   line to one step, as the line's own stepper would.
+  > **Replaced on 2026-11-16 by the owner's decision 51 (corrected), with 52 and 53.** The plus
+  > on a product card is off whenever the chosen list has one or more lines with that product,
+  > at any amount, 0 included, in any unit. This covers the catalog card, the product page and
+  > the similar products rows, which share the card and `rowAdds`. It replaces this decision and
+  > the earlier ruling that the plus goes off only with two or more lines at 0 (decision 46 and
+  > section 5). A line above 0 keeps the sentence `catalog.held.alreadyOn` and its link. Lines
+  > all at 0, one or several, say `catalog.held.atZero` with no link, because the list hides its
+  > lines at 0; the person raises the line with its own stepper under the card, or by typing.
+  > **52 a:** any line of the product counts, whatever its unit, so a product sold by the kilo
+  > with a line of it in pieces has its plus off too, and the card never meets the refusal of
+  > section 4 for a line it draws. **53 b:** permissions stay as built. A member who can add
+  > but not change amounts gets no action on the card for a line at 0; that is accepted, and
+  > permissions are to be revisited later. The composer on the zone list and the basket's
+  > typeahead keep the choice rule of decision 46.
 - **D. The link opens the list with `?line=`**, the mechanism plan `0032` already built and the
   list page still reads. Its target is the first wanted line of the product in the order the card
   draws them (list position). The URL is `appPath(locale, basePath, 'zones', zoneId, 'lists',
@@ -435,10 +449,15 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   reason text only), and in place of the heading of the lines the card says
   `catalog.held.pickLine`, with the info icon and no link, because the list hides its lines at
   0. One line at 0 keeps the plus, which raises it.
+  > **Amended 2026-11-16, decision 51 corrected (decision C):** `rowAdds` sets `atZero: true`
+  > (in place of `pickLine`) whenever the list holds the product on saved lines all at 0, one
+  > line or several, in any unit, and `onList` whenever one of them is above 0, in any unit.
+  > A line an add still on its way drew counts for neither. `rowAdds(...).of(itemId)` no longer
+  > takes the add's unit. The key `catalog.held.pickLine` is replaced by `catalog.held.atZero`.
 
 | key | `en` | `es` |
 | --- | --- | --- |
-| `catalog.held.pickLine` | This is on {{list}} more than once. Raise one of the lines below with its own buttons. | Esto está en {{list}} más de una vez. Sube una de las líneas de abajo con sus propios botones. |
+| `catalog.held.atZero` | This is on {{list}} at 0. Raise it below with its own buttons. | Esto está en {{list}} a 0. Súbelo abajo con sus propios botones. |
 | `list.addChoice.onList` | Already on the list. Choose it to see it. | Ya está en la lista. Elígela para verla. |
 | `list.addChoice.rowOnList` | {{name}}, {{product}}: already on the list with {{amount}}. Choose it to see it on the list | {{name}}, {{product}}: ya está en la lista con {{amount}}. Elígela para verla en la lista |
 | `list.addChoice.rowOnListNoProduct` | {{name}}: already on the list with {{amount}}. Choose it to see it on the list | {{name}}: ya está en la lista con {{amount}}. Elígela para verla en la lista |
@@ -465,7 +484,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - `row-adds.spec.ts`, `product-row.spec.ts`, `catalog-page.spec.ts`: a product held on a wanted
   line has the plus disabled with `aria-describedby`, the sentence, the link with `line` in its
   query, and its lines' steppers enabled; a product held only at 0 keeps its plus; a product held
-  on a line of several products counts.
+  on a line of several products counts. (Since decision 51 of 2026-11-16: a product held only at
+  0, on one line or several, or only on a line of another unit, has its plus off with
+  `catalog.held.atZero` and no link.)
 - `catalog-add-store.spec.ts`: a new line is drawn and answered at 25 g; `visitFloor` of a weight
   line the visit made is 25; an `alreadyOnList` answer takes the drawn amount back.
 - `list-page.spec.ts`: a `?line=` link from the catalog marks and centres the row (the test of plan
@@ -513,6 +534,8 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 
 1. **Decision C.** A product whose only line on the list is at 0 (bought and kept) keeps its plus,
    and a press raises that line to one step. Should it count as "already on the list" instead?
+   *Answered 2026-11-16 (decision 51 corrected): the plus is off for any line of the product, at
+   any amount and in any unit; see decision C.*
 2. **Decision H.** The cards under the composer on the zone list and on the shopping list keep their
    plus: a press on a product already on the list scrolls to its line and marks it. Do you want the
    switched off plus and the sentence there too?

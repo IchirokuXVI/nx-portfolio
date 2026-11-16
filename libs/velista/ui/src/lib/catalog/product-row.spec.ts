@@ -1723,10 +1723,10 @@ describe('ProductRow, a product already on the list', () => {
     ).toBe(false);
   });
 
-  it('keeps the plus and the heading for a product on no line asked for', async () => {
+  it('keeps the plus and the heading while the host sets neither reason, as for an add on its way', async () => {
     const host = await render({
       list: 'Weekly shop',
-      lines: [{ ...LINE, quantity: 0 }],
+      lines: [LINE],
     });
 
     expect(host.querySelector<HTMLButtonElement>('button.add')?.disabled).toBe(
@@ -1742,14 +1742,11 @@ describe('ProductRow, a product already on the list', () => {
     expect(host.querySelector('.held-onlist')).toBeNull();
   });
 
-  it('switches the plus off for two lines at zero, says to raise one below, and links nowhere (the ruling of 2026-11-16)', async () => {
+  it('switches the plus off for one line at zero, says to raise it below, and links nowhere (decision 51 of 2026-11-16)', async () => {
     const host = await render({
       list: 'Weekly shop',
-      lines: [
-        { ...LINE, quantity: 0 },
-        { ...LINE, lineId: 'line-oil-b', name: 'Oil for frying', quantity: 0 },
-      ],
-      pickLine: true,
+      lines: [{ ...LINE, quantity: 0 }],
+      atZero: true,
     });
 
     const plus = host.querySelector<HTMLButtonElement>('button.add');
@@ -1758,7 +1755,34 @@ describe('ProductRow, a product already on the list', () => {
     const reason = host.querySelector(
       `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
     );
-    expect(reason?.textContent?.trim()).toBe('catalog.held.pickLine');
+    expect(reason?.textContent?.trim()).toBe('catalog.held.atZero');
+    expect(host.querySelector('a.held-onlist-link')).toBeNull();
+    expect(host.querySelector('.held-title')).toBeNull();
+    // The line keeps its stepper, which is how it is raised, and its plus works.
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(2);
+    expect(steps[1]?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('switches the plus off the same way for two lines at zero', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [
+        { ...LINE, quantity: 0 },
+        { ...LINE, lineId: 'line-oil-b', name: 'Oil for frying', quantity: 0 },
+      ],
+      atZero: true,
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason?.textContent?.trim()).toBe('catalog.held.atZero');
     expect(host.querySelector('a.held-onlist-link')).toBeNull();
     expect(host.querySelector('.held-title')).toBeNull();
     // Each line keeps its stepper, which is how one is raised.

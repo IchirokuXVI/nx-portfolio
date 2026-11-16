@@ -463,7 +463,7 @@
       "titleMany": "On your lists",
       "alreadyOn": "Already on {{list}}.",
       "openLine": "See it on the list",
-      "pickLine": "This is on {{list}} more than once. Raise one of the lines below with its own buttons."
+      "atZero": "This is on {{list}} at 0. Raise it below with its own buttons."
     },
     "adding": {
       "to": "Adding to",
