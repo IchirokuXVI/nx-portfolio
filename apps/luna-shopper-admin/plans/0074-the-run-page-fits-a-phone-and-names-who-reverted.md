@@ -13,7 +13,7 @@
 > | F. At 390 px a report table scrolls inside its own box, nothing shows that it scrolls, and its last column is cut mid word. | Not as such. The one report table of `dev`, the copies table, has no scroll box at all. Its width at 390 px was not measured. | Yes. PR #972 adds the box (`.scroll`) around its three new tables, and not around the copies table. |
 >
 > Prerequisite reading: admin plan `0071` on the branch of PR #972, admin plan `0072`, admin
-> plan `0073` on the branch `docs/harvester-walk-keeps-decisions-plans` of PR #980, admin plan
+> plan `0073` (written in PR #980, merged into `dev` on 2026-11-16, not built), admin plan
 > `0041` (frame and tokens), `libs/luna-shopper-admin/feature-harvest/src/lib/run-page.ts` and
 > `runs-page.ts`, `libs/luna-shopper-admin/ui/src/lib/page/page-header.ts`,
 > `libs/luna-shopper-admin/ui/src/lib/harvest/run-progress.ts` and
