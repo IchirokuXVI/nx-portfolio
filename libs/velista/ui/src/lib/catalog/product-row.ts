@@ -618,12 +618,15 @@ export type ProductRowExpanded = 'shops' | 'members';
               <!--
                 Why the plus is off, and the way to the line (velista 0185, C1).
                 Real text, read without a press, and a real link, so it opens in
-                a new tab and is said as one.
+                a new tab and is said as one. The plus is described by the reason
+                alone, not by the link's words after it.
               -->
-              <p [id]="onListId" class="held-onlist">
+              <p class="held-onlist">
                 <lib-info-icon aria-hidden="true" class="held-onlist-icon" />
                 <span class="held-onlist-text"
-                  >{{ 'catalog.held.alreadyOn' | rokuT: { list: add()?.list } }}
+                  ><span [id]="onListId">{{
+                    'catalog.held.alreadyOn' | rokuT: { list: add()?.list }
+                  }}</span>
                   <a
                     [queryParams]="{ line: onList.lineId }"
                     [routerLink]="onList.path"

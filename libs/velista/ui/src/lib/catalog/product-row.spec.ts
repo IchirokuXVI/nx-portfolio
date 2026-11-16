@@ -1644,7 +1644,15 @@ describe('ProductRow, a product already on the list', () => {
     expect(plus?.getAttribute('aria-label')).toBe('catalog.add.label');
     const sentence = host.querySelector('.held-onlist');
     expect(sentence).not.toBeNull();
-    expect(plus?.getAttribute('aria-describedby')).toBe(sentence?.id);
+    // The reason alone describes the plus, not the link's words after it.
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason).not.toBeNull();
+    expect(sentence?.contains(reason)).toBe(true);
+    expect(reason?.textContent?.trim()).toContain('catalog.held.alreadyOn');
+    expect(reason?.textContent).not.toContain('catalog.held.openLine');
+    expect(reason?.querySelector('a')).toBeNull();
     expect(
       sentence?.querySelector('lib-info-icon')?.getAttribute('aria-hidden')
     ).toBe('true');
