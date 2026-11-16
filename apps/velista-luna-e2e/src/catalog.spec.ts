@@ -461,6 +461,17 @@ test.describe('a product on the list only at 0', () => {
         card.getByRole('link', { name: 'See it on the list' })
       ).toHaveCount(0);
     }
+    // Every add the page sends from here on: the switched off plus must send none.
+    // A value of 0 alone would pass before a wrong draw showed.
+    const adds: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        /\/v1\/lists\/[^/]+\/lines$/.test(new URL(request.url()).pathname)
+      ) {
+        adds.push(request.url());
+      }
+    });
     await milkPlus.click({ force: true });
     await expect(milkLine.locator('lib-quantity-stepper')).toHaveAttribute(
       'data-value',
@@ -480,6 +491,8 @@ test.describe('a product on the list only at 0', () => {
         card.getByRole('link', { name: 'See it on the list' })
       ).toBeVisible();
     }
+    // The stepper's raise went out as its own write, and the forced press as nothing.
+    expect(adds).toEqual([]);
   });
 });
 

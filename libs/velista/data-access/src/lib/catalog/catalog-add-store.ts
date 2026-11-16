@@ -39,7 +39,7 @@ import {
 import { SessionStore } from '../auth/session-store';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
-import { toAddUnitRefusal } from '../mapping/add-choice-mappers';
+import { toAddUnitRefusal, toRefusedLine } from '../mapping/add-choice-mappers';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { ItemNames } from './item-names';
 
@@ -644,6 +644,26 @@ export class CatalogAddStore {
         } else {
           this._move(drawn.lineId, -amount);
         }
+      }
+      // The refusal names the line of another unit the add met, which another
+      // device saved after the card was drawn. It is held now, so the card switches
+      // its plus off (decision 51) and the next press is not refused again.
+      const refused = toRefusedLine(error);
+      if (refused !== null) {
+        const known = this._held().find(
+          (line) => line.lineId === refused.lineId
+        );
+        this._held.update((held) =>
+          upsert(held, {
+            lineId: refused.lineId,
+            listId,
+            name: refused.content,
+            quantity: refused.quantity,
+            unit: refused.unit,
+            pending: known?.pending ?? false,
+            itemIds: [product.itemId],
+          })
+        );
       }
       this._refusal.set(toAddUnitRefusal(error, product.name));
       this._met.set(null);

@@ -149,7 +149,9 @@ link that opens the list at that line.
 6. The catalog tab (and the product page's similar products, which share `rowAdds`): a product
    that the selected list holds on a wanted line has its plus switched off, with "Ya está en
    {list}." and the link "Ver en la lista" under the card in place of the heading of its lines;
-   the lines keep their steppers. The catalog's own add starts a line at one step.
+   the lines keep their steppers. The catalog's own add starts a line at one step. (Since
+   decision 51 of 2026-11-16: any saved line of the product on that list, at any amount and in
+   any unit, switches the plus off; lines all at 0 say `catalog.held.atZero` with no link.)
 
 ### Scope
 
@@ -235,6 +237,10 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   line holds the product above 0 and two or more saved lines of it are at 0, with a sentence that
   says to raise one of the lines under the card with its own buttons and no link. Section 3.3 and
   section 5. Backend `0260` rules 4 to 7 (PR #984) carry the wire side.
+  > **The catalog half is replaced by decision 51 (corrected, 2026-11-16), decision C.** The
+  > catalog's plus is off whenever the selected list has one or more saved lines of the product,
+  > at any amount, 0 included, in any unit: one line at 0 switches it off as two do. The choice
+  > rule above stands for the composer on the zone list and the basket's add.
 
 ### The writer's, open to the owner
 
@@ -403,6 +409,10 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   in both cases, because it carries the reason and the words and focus came back there.
 - **The catalog.** A refused catalog plus takes back what it drew and reports through
   `catalog.add.failed` with the sentence of the table below in its place.
+  > **Amended 2026-11-16, from review:** the store also holds the line `details.line` names
+  > (`lineId`, `content`, `unit`, `quantity`) as a saved line of that list and product, so the
+  > card switches its plus off by decision 51 and the next press is not refused again. A bag
+  > that does not name all four is held as nothing, as before.
 
 | key | `en` | `es` |
 | --- | --- | --- |
@@ -427,6 +437,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   such line by the order the card draws, `path` from `pathOf(target)`, which the catalog page and
   the product page pass as `appPath(locale, basePath, 'zones', target.zoneId, 'lists',
   target.listId)` (decision D). `held` lines at 0 do not set it (decision C).
+  > **Amended 2026-11-16, decision 51 corrected:** saved lines all at 0 set `atZero` and switch
+  > the plus off too, as the last bullet of this section says. `onList` stays the case of a line
+  > above 0, in any unit.
 - **The card.** With `onList`, the plus (`:550` to `:561`) renders `aria-disabled="true"` (decision G as amended), with
   `aria-describedby` the sentence's id; it keeps its size and place. Under the card, in place of
   the heading of the lines (`catalog.held.title`, `:583` to `:586`), one line: `lib-info-icon`
@@ -525,7 +538,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
       the words and focus, and creates nothing; a rename keeps its old sentence.
 - [ ] On the catalog tab a product on a wanted line of the selected list has its plus off, the
       sentence with the info icon, and a link that opens the list at that line, marked; its lines'
-      steppers work. A product on no wanted line keeps its plus, which adds at one step.
+      steppers work. A product on no saved line of that list keeps its plus, which adds at one
+      step; a product whose saved lines there are all at 0, in any unit, has its plus off with
+      `catalog.held.atZero` and no link (decision 51, 2026-11-16).
 - [ ] Every new key exists in `en` and `es`, with no number inside a key.
 - [ ] `npx nx affected -t lint test` is green, `npx nx build velista` builds, and the e2e tests of
       section 6 pass on a slot with backend `0260`.

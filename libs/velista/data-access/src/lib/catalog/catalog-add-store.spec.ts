@@ -1376,6 +1376,48 @@ describe('CatalogAddStore', () => {
       expect(store.refusal()).toBeNull();
     });
 
+    it('holds the line of another unit a refusal names, so the card turns its plus off (decision 51)', async () => {
+      const { store, drawn, failNext } = setup(HOME);
+      await store.ensure();
+      failNext(
+        new GatewayError({
+          code: 'line_unit_differs',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            line: {
+              lineId: 'w-milk',
+              content: 'Leche entera',
+              unit: 'MILLILITER',
+              quantity: 0,
+            },
+            unit: 'UNIT',
+            index: null,
+          },
+        })
+      );
+
+      await store.add(MILK);
+
+      expect(drawn('weekly', 'milk')).toEqual([0]);
+      expect(store.held()).toEqual([
+        {
+          lineId: 'w-milk',
+          listId: 'weekly',
+          name: 'Leche entera',
+          quantity: 0,
+          unit: 'MILLILITER',
+          pending: false,
+          itemIds: ['milk'],
+        },
+      ]);
+      expect(store.refusal()).toEqual({
+        lineId: 'w-milk',
+        name: 'Leche entera',
+        unit: 'MILLILITER',
+      });
+    });
+
     it('puts a line that was there back to what it held when the add is refused', async () => {
       const { store, drawn, failNext } = setup({
         ...HOME,
