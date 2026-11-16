@@ -415,9 +415,10 @@ describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)',
     expect(w.saved).toHaveLength(0);
   });
 
-  it('refuses a product add that meets only a line of another unit, whatever newLine says (plan 0260 U2)', async () => {
+  it('refuses a product add that meets only a line of another unit, and newLine on it as invalid (plan 0260 U2; the owner, 2026-11-16)', async () => {
     // Changed on purpose by plan 0260: this was the question, and `newLine:
-    // true` then created a second line of one product in another unit.
+    // true` then created a second line of one product in another unit. Since
+    // 2026-11-16 `newLine` on a product add is a validation error of its own.
     const w = build({
       holds: [
         { id: WHOLE_LINE, content: 'Bananas', quantity: 750, unit: 'GRAM' },
@@ -437,7 +438,11 @@ describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)',
       newLine: true,
     }).catch((error: unknown) => error);
 
-    for (const error of [refused, answered]) {
+    expect(answered).toBeInstanceOf(ValidationException);
+    expect((answered as ValidationException).messageArgs).toEqual({
+      field: 'newLine',
+    });
+    for (const error of [refused]) {
       expect(error).toBeInstanceOf(LineUnitDiffersException);
       const exception = error as LineUnitDiffersException;
       expect(exception.code).toBe(ERROR_CODES.LINE_UNIT_DIFFERS);
@@ -1453,7 +1458,10 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(result.line.id).toBe('li1');
   });
 
-  it('lets the free text line of the name win, as plan 0091 decided (D3)', async () => {
+  it('counts the free text line of the name as one more match, never a winner (the owner, 2026-11-16)', async () => {
+    // Changed on purpose by the owner's ruling of 2026-11-16: the free text
+    // line of the name took the add here (D3), and the product line was not
+    // looked at.
     const w = build({
       holds: [
         { id: 'li-product', content: 'Leche entera', position: 1 },
@@ -1462,12 +1470,28 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
       products: [{ lineId: 'li-product', itemId: WHOLE, position: 0 }],
     });
 
-    const result = await add(w, 'Leche entera', { askIfAmbiguous: true });
+    const asked = await add(w, 'Leche entera', { askIfAmbiguous: true }).catch(
+      (error: unknown) => error
+    );
+    const answered = await add(w, 'Leche entera');
 
-    expect(result.merged).toBe(true);
-    expect(result.line.id).toBe('li-text');
-    expect(result.alreadyOnList.map((line) => line.id)).toEqual(['li-text']);
-    expect(result.line.quantity).toBe(1);
+    expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+    expect(
+      (
+        (asked as LineAddNeedsChoiceException)
+          .details as unknown as LineAddNeedsChoiceDetails
+      ).lines.map((line) => line.lineId)
+    ).toEqual(['li-product', 'li-text']);
+    expect(answered).toMatchObject({
+      merged: true,
+      outcome: 'ALREADY_ON_LIST',
+      line: { id: 'li-product' },
+    });
+    expect(answered.alreadyOnList.map((line) => line.id)).toEqual([
+      'li-product',
+      'li-text',
+    ]);
+    expect(w.saved).toEqual([]);
   });
 
   it('lets the free text line of the name take a newLine answer too', async () => {
@@ -1536,6 +1560,10 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           itemIds: [WHOLE],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.APPROVED,
+          // The add said one piece and the line counts grams: one step of
+          // grams (plan 0260 R4).
+          outcome: 'RAISED',
+          resultingQuantity: 25,
         },
         {
           lineId: OAT_LINE,
@@ -1546,6 +1574,8 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           itemIds: [OAT],
           productGroupId: null,
           approvalStatus: LineApprovalStatus.PENDING,
+          outcome: 'RAISED',
+          resultingQuantity: 1,
         },
         {
           lineId: 'li-group',
@@ -1556,6 +1586,8 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
           itemIds: [],
           productGroupId: GROUP,
           approvalStatus: LineApprovalStatus.APPROVED,
+          outcome: 'RAISED',
+          resultingQuantity: 1,
         },
       ],
     });
@@ -1591,52 +1623,118 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     );
   });
 
-  it('meets every wanted line of the name, with no question, when two hold a product (plan 0260 R3)', async () => {
-    // Changed on purpose by plan 0260: without `askIfAmbiguous` this created
-    // a line, and with it the add asked.
-    for (const askIfAmbiguous of [false, true]) {
-      const w = build(twoMilks);
+  it('asks about two wanted lines of the name, and answers both without the flag (the owner, 2026-11-16)', async () => {
+    // Changed on purpose by the owner's ruling of 2026-11-16: R3 marked every
+    // wanted line and asked nothing.
+    const w = build(twoMilks);
 
-      const result = await add(w, 'Leche entera', { askIfAmbiguous });
+    const asked = await add(w, 'Leche entera', { askIfAmbiguous: true }).catch(
+      (error: unknown) => error
+    );
+    const result = await add(w, 'Leche entera');
 
-      expect(result).toMatchObject({
-        merged: true,
+    expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+    expect(
+      (
+        (asked as LineAddNeedsChoiceException)
+          .details as unknown as LineAddNeedsChoiceDetails
+      ).lines.map(({ lineId, outcome, quantity, resultingQuantity }) => ({
+        lineId,
+        outcome,
+        quantity,
+        resultingQuantity,
+      }))
+    ).toEqual([
+      {
+        lineId: WHOLE_LINE,
         outcome: 'ALREADY_ON_LIST',
-        line: { id: WHOLE_LINE },
-      });
-      expect(result.alreadyOnList.map((line) => line.id)).toEqual([
-        WHOLE_LINE,
-        OAT_LINE,
-      ]);
-      expect(w.saved).toEqual([]);
-      expect(w.events).toEqual([]);
-    }
+        quantity: 2,
+        resultingQuantity: 2,
+      },
+      {
+        lineId: OAT_LINE,
+        outcome: 'ALREADY_ON_LIST',
+        quantity: 1,
+        resultingQuantity: 1,
+      },
+    ]);
+    expect(result).toMatchObject({
+      merged: true,
+      outcome: 'ALREADY_ON_LIST',
+      line: { id: WHOLE_LINE },
+    });
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([
+      WHOLE_LINE,
+      OAT_LINE,
+    ]);
+    expect(w.saved).toEqual([]);
+    expect(w.events).toEqual([]);
+    expect(w.recorded).toEqual([]);
+    expect(announcer.calls.linesChanged).toEqual([]);
   });
 
-  it('meets the one wanted line among kept ones, with no question (plan 0260 R3)', async () => {
+  it('asks about a wanted line and a kept one alike, each with what choosing it does (the owner, 2026-11-16)', async () => {
+    // Changed on purpose by the owner's ruling of 2026-11-16: R3 marked the
+    // wanted line alone and asked nothing.
     const w = build({
       ...twoMilks,
       holds: [{ ...twoMilks.holds[0], quantity: 0 }, twoMilks.holds[1]],
     });
 
-    const result = await add(w, 'Leche entera', { askIfAmbiguous: true });
+    const asked = await add(w, 'Leche entera', {
+      askIfAmbiguous: true,
+      quantity: 3,
+    }).catch((error: unknown) => error);
 
-    expect(result.outcome).toBe('ALREADY_ON_LIST');
-    expect(result.alreadyOnList.map((line) => line.id)).toEqual([OAT_LINE]);
+    expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+    expect(
+      (
+        (asked as LineAddNeedsChoiceException)
+          .details as unknown as LineAddNeedsChoiceDetails
+      ).lines.map(({ lineId, outcome, quantity, resultingQuantity }) => ({
+        lineId,
+        outcome,
+        quantity,
+        resultingQuantity,
+      }))
+    ).toEqual([
+      {
+        lineId: WHOLE_LINE,
+        outcome: 'RAISED',
+        quantity: 0,
+        resultingQuantity: 3,
+      },
+      {
+        lineId: OAT_LINE,
+        outcome: 'ALREADY_ON_LIST',
+        quantity: 1,
+        resultingQuantity: 1,
+      },
+    ]);
     expect(w.saved).toEqual([]);
+    expect(w.events).toEqual([]);
   });
 
-  it('raises the earliest of two kept lines when the caller cannot ask (plan 0260 R3)', async () => {
+  it('answers every kept line and raises none when the caller cannot ask (the owner, 2026-11-16)', async () => {
+    // Changed on purpose by the owner's ruling of 2026-11-16: R3 raised the
+    // earliest of them.
     const w = build(keptMilks);
 
     const result = await add(w, 'Leche entera', { quantity: 2 });
 
-    // The earliest counts grams and the 2 was said in pieces: one step.
     expect(result).toMatchObject({
-      outcome: 'RAISED',
-      line: { id: WHOLE_LINE, quantity: 25, unit: 'GRAM' },
+      merged: true,
+      outcome: 'ALREADY_ON_LIST',
+      line: { id: WHOLE_LINE, quantity: 0, version: 4 },
     });
-    expect(w.saved.map((row) => row.id)).toEqual([WHOLE_LINE]);
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([
+      WHOLE_LINE,
+      OAT_LINE,
+    ]);
+    expect(w.saved).toEqual([]);
+    expect(w.events).toEqual([]);
+    expect(w.recorded).toEqual([]);
+    expect(announcer.calls.linesChanged).toEqual([]);
   });
 
   it('creates a line when no line holds the name', async () => {
@@ -1668,7 +1766,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(w.events.map((e) => e.event)).toEqual([RealtimeEvent.LineAdded]);
   });
 
-  it('raises the kept line the person chose, whatever its name', async () => {
+  it('raises the kept line the person chose among the matches', async () => {
     const w = build({
       ...twoMilks,
       holds: [
@@ -1680,7 +1778,7 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
 
     // Chosen over the free text line of the name, because the person picked
     // it (target 1.1).
-    const result = await add(w, 'Leche', {
+    const result = await add(w, 'Leche entera', {
       intoLineId: OAT_LINE,
       quantity: 2,
     });
@@ -1693,10 +1791,25 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(w.saved.map((row) => row.id)).toEqual([OAT_LINE]);
   });
 
+  it('refuses a chosen line the add does not meet (the owner, 2026-11-16)', async () => {
+    // Changed on purpose by the owner's ruling of 2026-11-16: a chosen line
+    // need not have carried the typed name (target 4).
+    const w = build({
+      ...twoMilks,
+      holds: [twoMilks.holds[0], { ...twoMilks.holds[1], quantity: 0 }],
+    });
+
+    await expect(
+      add(w, 'Leche', { intoLineId: OAT_LINE, quantity: 2 })
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(w.saved).toEqual([]);
+    expect(w.events).toEqual([]);
+  });
+
   it('meets the wanted line the person chose, and writes nothing (plan 0260)', async () => {
     const w = build(twoMilks);
 
-    const result = await add(w, 'Leche', { intoLineId: OAT_LINE });
+    const result = await add(w, 'Leche entera', { intoLineId: OAT_LINE });
 
     expect(result).toMatchObject({
       outcome: 'ALREADY_ON_LIST',
@@ -1762,17 +1875,22 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
     expect(w.saved).toEqual([]);
   });
 
-  it('leaves a product add as it was, whatever the three fields say', async () => {
+  it('reads the fields on a product add too, by its own matches (the owner, 2026-11-16)', async () => {
+    // Changed on purpose by the owner's ruling of 2026-11-16: a product add
+    // ignored the three fields.
     const w = build(twoMilks);
 
-    // Two product lines of the name and a third product: the add creates,
-    // with no question and with no regard for the chosen line.
+    // A third product meets no line: the flag asks nothing, and a chosen
+    // line that is not a match is refused.
     const third = await add(w, 'Leche entera', {
       itemIds: [GROUP],
       askIfAmbiguous: true,
-      intoLineId: WHOLE_LINE,
     });
-    // The product of a line of the name, met by plan 0091's identities.
+    const chosenElsewhere = await add(w, 'Leche entera', {
+      itemIds: [GROUP],
+      intoLineId: WHOLE_LINE,
+    }).catch((error: unknown) => error);
+    // The product of one line of the name is one match: no question.
     const same = await add(w, 'Leche entera', {
       itemIds: [WHOLE],
       askIfAmbiguous: true,
@@ -1781,7 +1899,8 @@ describe('a typed name meets the line that holds that product (plan 0228)', () =
 
     expect(third.merged).toBe(false);
     expect(third.line.itemIds).toEqual([GROUP]);
-    expect(same.merged).toBe(true);
+    expect(chosenElsewhere).toBeInstanceOf(NotFoundException);
+    expect(same).toMatchObject({ merged: true, outcome: 'ALREADY_ON_LIST' });
     expect(same.line.id).toBe(WHOLE_LINE);
   });
 
@@ -2194,16 +2313,22 @@ describe('an add that meets a line already on the list adds nothing (plan 0260)'
       items: [{ content: 'Leche', itemIds: [OAT] }, { content: 'leche' }],
     });
 
+    // The second item meets both lines, one raised by this batch and one
+    // kept: two matches, so it is answered with both and raises neither (the
+    // owner, 2026-11-16).
     expect(results.map((entry) => entry.outcome)).toEqual([
       'RAISED',
       'ALREADY_ON_LIST',
     ]);
-    expect(results[1].line.id).toBe('li-l');
-    expect(results[1].alreadyOnList.map((line) => line.id)).toEqual(['li-l']);
+    expect(results[1].line.id).toBe('li-k');
+    expect(results[1].alreadyOnList.map((line) => line.id)).toEqual([
+      'li-k',
+      'li-l',
+    ]);
     expect(w.saved.map((row) => row.id)).toEqual(['li-l']);
   });
 
-  it('meets the held line an earlier item raised, and raises no earlier kept one (R5, R6)', async () => {
+  it('answers both kept lines that hold a product in a batch, and raises neither (R5; the owner, 2026-11-16)', async () => {
     const w = build({
       holds: [
         { id: 'li-k', content: 'Café con leche', quantity: 0, position: 1 },
@@ -2225,12 +2350,18 @@ describe('an add that meets a line already on the list adds nothing (plan 0260)'
       ],
     });
 
+    // The first item meets li-l by its identity and li-k by holding OAT: two
+    // matches, so nothing is raised for it (the owner, 2026-11-16). The
+    // second meets the same two and is answered with both.
     expect(results.map((entry) => entry.outcome)).toEqual([
-      'RAISED',
+      'ALREADY_ON_LIST',
       'ALREADY_ON_LIST',
     ]);
-    expect(results[1].line.id).toBe('li-l');
-    expect(w.saved.map((row) => row.id)).toEqual(['li-l']);
+    expect(results[1].alreadyOnList.map((line) => line.id)).toEqual([
+      'li-k',
+      'li-l',
+    ]);
+    expect(w.saved).toEqual([]);
   });
 
   it('meets a product line this batch creates with a later item of its name (R6)', async () => {
@@ -2292,6 +2423,428 @@ describe('an add that meets a line already on the list adds nothing (plan 0260)'
       userId: ADDER,
       listId: LIST_ID,
       items: [{ content: 'leche' }],
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'RAISED',
+      line: { id: 'li-k', quantity: 1 },
+    });
+    expect(w.saved.map((row) => row.id)).toEqual(['li-k']);
+  });
+});
+
+// Review round 3 of PR #984: a batch is the sequence of single adds it stands
+// for, also where two of its items meet each other, and an answer of
+// `ALREADY_ON_LIST` names every wanted line of the add's unit that holds the
+// product.
+describe('a batch as the sequence of its single adds (plan 0260 R7, review round 3)', () => {
+  const batch = (
+    w: Harness,
+    items: {
+      content: string;
+      itemIds?: string[];
+      unit?: LineUnit;
+      named?: boolean;
+    }[]
+  ) =>
+    w.service
+      .addMany({ userId: ADDER, listId: LIST_ID, items })
+      .catch((error: unknown) => error);
+
+  it.each([
+    [
+      'two names of one product',
+      [
+        { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' as LineUnit },
+        { content: 'Milk', itemIds: [WHOLE], unit: 'UNIT' as LineUnit },
+      ],
+    ],
+    [
+      'a named and an unnamed item of one product',
+      [
+        { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' as LineUnit },
+        {
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'UNIT' as LineUnit,
+          named: false,
+        },
+      ],
+    ],
+    [
+      'a later item whose products an earlier one holds',
+      [
+        {
+          content: 'Desayuno',
+          itemIds: [WHOLE, OAT],
+          unit: 'MILLILITER' as LineUnit,
+        },
+        { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' as LineUnit },
+      ],
+    ],
+  ])(
+    'refuses %s created in two units with the 400 on items',
+    async (_, items) => {
+      const w = build({});
+
+      const refused = await batch(w, items);
+
+      expect(refused).toBeInstanceOf(ValidationException);
+      expect(refused).toMatchObject({ messageArgs: { field: 'items' } });
+      expect((refused as Error).message).toBe(
+        'items 0 and 1 name one product in two units'
+      );
+      expect(w.saved).toEqual([]);
+      expect(w.events).toEqual([]);
+      expect(announcer.calls.linesChanged).toEqual([]);
+    }
+  );
+
+  it('creates both when the earlier line does not hold every product of the later one, as two single adds do', async () => {
+    const w = build({});
+
+    const results = (await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Desayuno', itemIds: [WHOLE, OAT], unit: 'UNIT' },
+    ])) as { outcome: string }[];
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'CREATED',
+      'CREATED',
+    ]);
+    expect(w.saved).toHaveLength(2);
+  });
+
+  it('lets two units of one product through when the list already holds a wanted line in each', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-ml', content: 'Leche', quantity: 500, unit: 'MILLILITER' },
+        { id: 'li-ud', content: 'Leche', quantity: 2 },
+      ],
+      products: [
+        { lineId: 'li-ml', itemId: WHOLE, position: 0 },
+        { lineId: 'li-ud', itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const results = (await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' },
+    ])) as { outcome: string; line: LineView }[];
+
+    expect(results.map((entry) => [entry.outcome, entry.line.id])).toEqual([
+      ['ALREADY_ON_LIST', 'li-ml'],
+      ['ALREADY_ON_LIST', 'li-ud'],
+    ]);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('lets them through when the list keeps a line in each, and raises both', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-ml', content: 'Leche', quantity: 0, unit: 'MILLILITER' },
+        { id: 'li-ud', content: 'Leche', quantity: 0 },
+      ],
+      products: [
+        { lineId: 'li-ml', itemId: WHOLE, position: 0 },
+        { lineId: 'li-ud', itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const results = (await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' },
+    ])) as { outcome: string; line: LineView }[];
+
+    expect(
+      results.map((entry) => [
+        entry.outcome,
+        entry.line.id,
+        entry.line.quantity,
+      ])
+    ).toEqual([
+      ['RAISED', 'li-ml', 25],
+      ['RAISED', 'li-ud', 1],
+    ]);
+  });
+
+  it('refuses the later item with line_unit_differs when only the earlier unit is on the list', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-ml', content: 'Leche', quantity: 500, unit: 'MILLILITER' },
+      ],
+      products: [{ lineId: 'li-ml', itemId: WHOLE, position: 0 }],
+    });
+
+    const refused = await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' },
+    ]);
+
+    expect(refused).toBeInstanceOf(LineUnitDiffersException);
+    expect((refused as LineUnitDiffersException).details).toMatchObject({
+      line: { lineId: 'li-ml' },
+      unit: 'UNIT',
+      index: 1,
+    });
+    expect(w.saved).toEqual([]);
+  });
+});
+
+describe('an add of a product meets every line of its unit that holds it, kept ones included (the owner, 2026-11-16)', () => {
+  // Changed on purpose by the owner's ruling of 2026-11-16: this describe
+  // named the wanted lines alone, and a kept identity line was raised before
+  // any held line was looked at (section 1 step 3, review round 3).
+  /**
+   * "Desayuno" at position 1 holds WHOLE and OAT; "Leche" at 2 is the
+   * identity line of WHOLE; "Merienda" at 3 holds both, kept; "Carton" at 4
+   * holds WHOLE in pieces. All but the last count millilitres.
+   */
+  const shelf = {
+    holds: [
+      {
+        id: 'li-desayuno',
+        content: 'Desayuno',
+        quantity: 300,
+        unit: 'MILLILITER' as LineUnit,
+      },
+      {
+        id: 'li-leche',
+        content: 'Leche',
+        quantity: 500,
+        unit: 'MILLILITER' as LineUnit,
+      },
+      {
+        id: 'li-merienda',
+        content: 'Merienda',
+        quantity: 0,
+        unit: 'MILLILITER' as LineUnit,
+      },
+      { id: 'li-carton', content: 'Carton', quantity: 2 },
+    ],
+    products: [
+      { lineId: 'li-desayuno', itemId: WHOLE, position: 0 },
+      { lineId: 'li-desayuno', itemId: OAT, position: 1 },
+      { lineId: 'li-leche', itemId: WHOLE, position: 0 },
+      { lineId: 'li-merienda', itemId: WHOLE, position: 0 },
+      { lineId: 'li-merienda', itemId: OAT, position: 1 },
+      { lineId: 'li-carton', itemId: WHOLE, position: 0 },
+    ],
+  };
+  const inItsUnit = ['li-desayuno', 'li-leche', 'li-merienda'];
+
+  it('answers all of them on a single add that cannot ask, in position order', async () => {
+    const w = build(shelf);
+
+    const result = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+    });
+
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual(inItsUnit);
+    expect(result.line.id).toBe('li-desayuno');
+    expect(w.saved).toEqual([]);
+    expect(w.events).toEqual([]);
+    expect(w.recorded).toEqual([]);
+  });
+
+  it('asks about all of them on a single add that can ask', async () => {
+    const w = build(shelf);
+
+    const asked = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+      askIfAmbiguous: true,
+    }).catch((error: unknown) => error);
+
+    expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+    expect(
+      (
+        (asked as LineAddNeedsChoiceException)
+          .details as unknown as LineAddNeedsChoiceDetails
+      ).lines.map(({ lineId, unit, outcome, resultingQuantity }) => ({
+        lineId,
+        unit,
+        outcome,
+        resultingQuantity,
+      }))
+    ).toEqual([
+      {
+        lineId: 'li-desayuno',
+        unit: 'MILLILITER',
+        outcome: 'ALREADY_ON_LIST',
+        resultingQuantity: 300,
+      },
+      {
+        lineId: 'li-leche',
+        unit: 'MILLILITER',
+        outcome: 'ALREADY_ON_LIST',
+        resultingQuantity: 500,
+      },
+      {
+        lineId: 'li-merienda',
+        unit: 'MILLILITER',
+        outcome: 'RAISED',
+        resultingQuantity: 25,
+      },
+    ]);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('answers all of them in a batch, in position order', async () => {
+    const w = build(shelf);
+
+    const [result] = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' }],
+    });
+
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual(inItsUnit);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('raises a kept identity line no more than any other match', async () => {
+    const w = build({
+      ...shelf,
+      holds: shelf.holds.map((seed) =>
+        seed.id === 'li-leche' ? { ...seed, quantity: 0 } : seed
+      ),
+    });
+
+    const result = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+    });
+
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual(inItsUnit);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('raises the kept line chosen among them, and meets a wanted one (rule 6)', async () => {
+    // `intoLineId` is a uuid, so three of the lines take one.
+    const uuids: Record<string, string> = {
+      'li-merienda': WHOLE_LINE,
+      'li-desayuno': OAT_LINE,
+      'li-carton': ELSEWHERE_LINE,
+    };
+    const idOf = (id: string) => uuids[id] ?? id;
+    const w = build({
+      holds: shelf.holds.map((seed) => ({ ...seed, id: idOf(seed.id) })),
+      products: shelf.products.map((row) => ({
+        ...row,
+        lineId: idOf(row.lineId),
+      })),
+    });
+
+    const raised = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+      quantity: 200,
+      intoLineId: WHOLE_LINE,
+    });
+    const met = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+      intoLineId: OAT_LINE,
+    });
+    // A line of another unit that holds the product is no match.
+    const other = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+      intoLineId: ELSEWHERE_LINE,
+    }).catch((error: unknown) => error);
+
+    expect(raised).toMatchObject({
+      outcome: 'RAISED',
+      merged: true,
+      line: { id: WHOLE_LINE, quantity: 200, unit: 'MILLILITER' },
+      alreadyOnList: [],
+    });
+    expect(met).toMatchObject({
+      outcome: 'ALREADY_ON_LIST',
+      line: { id: OAT_LINE, quantity: 300 },
+    });
+    expect(met.alreadyOnList.map((line) => line.id)).toEqual([OAT_LINE]);
+    expect(other).toBeInstanceOf(NotFoundException);
+    expect(w.saved.map((row) => row.id)).toEqual([WHOLE_LINE]);
+  });
+
+  it('refuses newLine on a product add under newLine, and on a group add (rule 7)', async () => {
+    const w = build(shelf);
+
+    for (const extra of [
+      { itemIds: [WHOLE] },
+      { productGroupId: GROUP },
+    ] as const) {
+      const refused = await add(w, 'Leche', {
+        ...extra,
+        unit: 'MILLILITER',
+        newLine: true,
+      }).catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(ValidationException);
+      expect((refused as ValidationException).messageArgs).toEqual({
+        field: 'newLine',
+      });
+    }
+    expect(w.saved).toEqual([]);
+  });
+});
+
+describe('a batch never guesses between two matches (the owner, 2026-11-16)', () => {
+  it('answers every match, a line this batch creates included, and raises none', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-k', content: 'Leche', quantity: 0, position: 1 },
+        { id: 'li-t', content: 'leche', quantity: 0, position: 2 },
+      ],
+      products: [{ lineId: 'li-k', itemId: WHOLE, position: 0 }],
+    });
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        // Meets li-k alone (its identity) and raises it.
+        { content: 'Leche', itemIds: [WHOLE] },
+        // Meets the free text line li-t and li-k by name: two matches.
+        { content: 'LECHE' },
+      ],
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'RAISED',
+      'ALREADY_ON_LIST',
+    ]);
+    expect(results[1].alreadyOnList.map((line) => line.id)).toEqual([
+      'li-k',
+      'li-t',
+    ]);
+    // The kept free text line is named in the answer at 0, and not raised.
+    expect(results[1].alreadyOnList[1]).toMatchObject({ quantity: 0 });
+    expect(w.saved.map((row) => row.id)).toEqual(['li-k']);
+    expect(announcer.calls.linesChanged).toEqual([
+      { listId: LIST_ID, lineIds: ['li-k'] },
+    ]);
+  });
+});
+
+describe('a kept line is raised whatever its named flag (the owner, 2026-11-12, ruling 1)', () => {
+  it.each([
+    ['a named line by an unnamed add', true, false],
+    ['an unnamed line by a named add', false, true],
+  ])('raises %s', async (_, lineNamed, addNamed) => {
+    const w = build({
+      holds: [{ id: 'li-k', content: 'Leche', quantity: 0, named: lineNamed }],
+      products: [{ lineId: 'li-k', itemId: WHOLE, position: 0 }],
+    });
+
+    const result = await add(w, 'Leche entera Hacendado', {
+      itemIds: [WHOLE],
+      named: addNamed,
     });
 
     expect(result).toMatchObject({

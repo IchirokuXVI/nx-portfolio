@@ -472,7 +472,9 @@ const commentAudioView = object(
 
 // What an add did: the line as it now stands, whether it landed on a line that
 // was already there (plan 0091, section 4), which of the three things happened
-// and every wanted line it met and left as it was (plan 0260, section 2).
+// and every line it met and left as it was (plan 0260, section 2): one wanted
+// line, or two or more lines of any amount it could not choose between (the
+// owner, 2026-11-16).
 const addLineResult = object(
   LIST_SCHEMA_IDS.addLineResult,
   {

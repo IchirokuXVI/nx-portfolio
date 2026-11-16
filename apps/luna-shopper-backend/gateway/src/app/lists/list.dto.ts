@@ -230,11 +230,11 @@ export class AddLinesItemDto {
  * the basket's add, which take them alike because both are `LineService.add`.
  */
 export const ADD_CHOICE_DOCS = {
-  askIfAmbiguous: `The client can ask which line a typed name means (plan 0228). An add that meets a wanted line writes nothing and answers 201 with outcome ALREADY_ON_LIST and every wanted line it met in alreadyOnList (plan 0260). When a free text name is the name of two or more lines that hold a product and every one is at 0, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, each with its own unit, at most ${LINE_ADD_CHOICE_MAX} of them, in list position order; absent or false raises the earliest. Never asked about a unit. Ignored on an add that carries itemIds or a productGroupId.`,
+  askIfAmbiguous: `The client can ask which line an add means (plan 0228). An add that meets one line above 0 writes nothing and answers 201 with outcome ALREADY_ON_LIST and that line in alreadyOnList; one line at 0 is raised and answers RAISED (plan 0260). An add that meets two or more lines, above 0 or at 0, a product add included: true refuses it with 409 line_add_needs_choice and every one of them in details.lines, at most ${LINE_ADD_CHOICE_MAX}, in list position order, each with its own unit, its quantity, the outcome choosing it answers (ALREADY_ON_LIST for a line above 0, which nothing changes; RAISED for a line at 0) and the resultingQuantity; absent or false writes nothing and answers 201 ALREADY_ON_LIST with every one of them in alreadyOnList, lines at 0 included (the owner, 2026-11-16). Never asked about a unit.`,
   intoLineId:
-    'The line the person chose for a free text add (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. Wanted, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised, by one step of its own unit when that is not the unit of the add (plan 0260). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId.',
+    'The line the person chose, the answer to line_add_needs_choice (plan 0228), on a free text add or a product add. It must be one of the lines the add meets; any other id, a line of another list and a REJECTED line answer 404 not_found, and the add never falls back to a new line. Above 0, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised by the add amount, or by one step of its own unit when that is not the unit of the add, and answers RAISED (plan 0260). Refused beside newLine true.',
   newLine:
-    'The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. Ignored on an add that carries itemIds or a productGroupId: a product add that meets only lines of another unit answers 409 line_unit_differs whatever this says (plan 0260).',
+    'The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16).',
 } as const;
 
 /**
@@ -256,6 +256,37 @@ export function NotBesideNewLine(): PropertyDecorator {
         },
         defaultMessage(args: ValidationArguments): string {
           return `${args.property} cannot be sent beside newLine true`;
+        },
+      },
+    });
+  };
+}
+
+/**
+ * `newLine: true` answers the question of a typed name alone (the owner,
+ * 2026-11-16), so a body that sends it beside products or a group is refused
+ * under `newLine`. Core refuses it too, for a caller that is not this route.
+ */
+export function OnTypedNameOnly(): PropertyDecorator {
+  return (target, propertyName) => {
+    registerDecorator({
+      name: 'onTypedNameOnly',
+      target: target.constructor,
+      propertyName: propertyName as string,
+      validator: {
+        validate(value: unknown, args: ValidationArguments): boolean {
+          const body = args.object as {
+            itemIds?: unknown;
+            productGroupId?: unknown;
+          };
+          return (
+            value !== true ||
+            ((!Array.isArray(body.itemIds) || body.itemIds.length === 0) &&
+              body.productGroupId === undefined)
+          );
+        },
+        defaultMessage(args: ValidationArguments): string {
+          return `${args.property} true is an answer for a typed name alone`;
         },
       },
     });
@@ -304,6 +335,7 @@ export class AddLineDto extends AddLinesItemDto {
   @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['newLine'])
   @IsOptional()
   @IsBoolean()
+  @OnTypedNameOnly()
   newLine?: boolean;
 }
 

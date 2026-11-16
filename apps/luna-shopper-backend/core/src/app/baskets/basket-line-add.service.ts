@@ -124,8 +124,10 @@ export class BasketLineAddService {
     //
     // The entries name every line the add met when it met wanted ones, so the
     // shopping list can find the rows to mark, and `addOutcome` says which of
-    // the three things happened (plan 0260, section 2). A line it met is
-    // wanted, so it is a basket row.
+    // the three things happened (plan 0260, section 2). An add that meets two
+    // or more lines asks with `askIfAmbiguous` as the list's add does, and
+    // without it names them all, lines at zero included (the owner,
+    // 2026-11-16); one with no buy that keeps it a row has no entry.
     const lineIds =
       added.outcome === 'ALREADY_ON_LIST' && added.alreadyOnList.length > 0
         ? added.alreadyOnList.map((line) => line.id)
