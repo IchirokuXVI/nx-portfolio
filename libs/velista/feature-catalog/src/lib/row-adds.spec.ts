@@ -33,6 +33,7 @@ function line(part: Partial<HeldLine> & Pick<HeldLine, 'lineId'>): HeldLine {
     listId: 'list-weekly',
     name: 'Extra virgin olive oil',
     quantity: 1,
+    unit: 'UNIT',
     pending: false,
     itemIds: ['item-oil'],
     ...part,
@@ -44,14 +45,14 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
     const adds = rowAdds(null, [line({ lineId: 'line-oil' })]);
 
     expect(adds.plain).toBeNull();
-    expect(adds.byItem.size).toBe(0);
+    expect(adds.of('item-oil', 'UNIT')).toBeNull();
   });
 
   it('gives a product the list does not hold the plus alone, and the same one to every such row', () => {
     const adds = rowAdds(WEEKLY, [line({ lineId: 'line-oil' })]);
 
     expect(adds.plain).toEqual({ list: 'Weekly shop', lines: [] });
-    expect(adds.byItem.has('item-rice')).toBe(false);
+    expect(adds.of('item-rice', 'UNIT')).toBe(adds.plain);
     // One object for all of them, so a row is redrawn only when its own lines move.
     expect(rowAdds(WEEKLY, []).plain).toEqual(adds.plain);
   });
@@ -63,7 +64,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       line({ lineId: 'line-frying', name: 'Oil for frying', quantity: 3 }),
     ]);
 
-    expect(adds.byItem.get('item-oil')).toEqual({
+    expect(adds.of('item-oil', 'UNIT')).toEqual({
       list: 'Weekly shop',
       onList: {
         lineId: 'line-oil',
@@ -74,6 +75,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
           lineId: 'line-oil',
           name: 'Extra virgin olive oil',
           quantity: 2,
+          unit: 'UNIT',
           editable: true,
           pending: false,
         },
@@ -81,13 +83,14 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
           lineId: 'line-frying',
           name: 'Oil for frying',
           quantity: 3,
+          unit: 'UNIT',
           editable: true,
           pending: false,
         },
       ],
     });
     expect(
-      adds.byItem.get('item-rice')?.lines.map((row) => row.lineId)
+      adds.of('item-rice', 'UNIT')?.lines.map((row) => row.lineId)
     ).toEqual(['line-rice']);
   });
 
@@ -96,7 +99,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       line({ lineId: 'line-party', listId: 'list-party' }),
     ]);
 
-    expect(adds.byItem.size).toBe(0);
+    expect(adds.of('item-oil', 'UNIT')).toBe(adds.plain);
   });
 
   it('puts a line that holds several products under each of them', () => {
@@ -108,9 +111,9 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       }),
     ]);
 
-    expect(adds.byItem.get('item-oil')?.lines).toHaveLength(1);
-    expect(adds.byItem.get('item-oil-other')?.lines).toEqual(
-      adds.byItem.get('item-oil')?.lines
+    expect(adds.of('item-oil', 'UNIT')?.lines).toHaveLength(1);
+    expect(adds.of('item-oil-other', 'UNIT')?.lines).toEqual(
+      adds.of('item-oil', 'UNIT')?.lines
     );
   });
 
@@ -119,7 +122,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       line({ lineId: unsavedLineId('list-weekly', 'item-oil') }),
     ]);
 
-    expect(adds.byItem.get('item-oil')?.lines[0]).toMatchObject({
+    expect(adds.of('item-oil', 'UNIT')?.lines[0]).toMatchObject({
       quantity: 1,
       editable: false,
     });
@@ -134,13 +137,13 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
         line({ lineId: 'line-frying', quantity: 3 }),
       ]);
 
-      expect(adds.byItem.get('item-oil')?.onList).toEqual({
+      expect(adds.of('item-oil', 'UNIT')?.onList).toEqual({
         lineId: 'line-oil',
         path: '/en/zones/zone-home/lists/list-weekly',
       });
       // The lines keep their steppers.
       expect(
-        adds.byItem.get('item-oil')?.lines.map((row) => row.editable)
+        adds.of('item-oil', 'UNIT')?.lines.map((row) => row.editable)
       ).toEqual([true, true, true]);
     });
 
@@ -152,7 +155,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
         }),
       ]);
 
-      expect(adds.byItem.get('item-bananas')?.onList?.lineId).toBe(
+      expect(adds.of('item-bananas', 'UNIT')?.onList?.lineId).toBe(
         'line-fruit'
       );
     });
@@ -166,9 +169,9 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
         }),
       ]);
 
-      expect(adds.byItem.get('item-oil')?.onList).toBeUndefined();
-      expect(adds.byItem.get('item-oil')?.pickLine).toBeUndefined();
-      expect(adds.byItem.get('item-rice')?.onList).toBeUndefined();
+      expect(adds.of('item-oil', 'UNIT')?.onList).toBeUndefined();
+      expect(adds.of('item-oil', 'UNIT')?.pickLine).toBeUndefined();
+      expect(adds.of('item-rice', 'UNIT')?.onList).toBeUndefined();
     });
 
     it('switches the plus off with no link for two or more saved lines at zero (the ruling of 2026-11-16)', () => {
@@ -177,7 +180,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
         line({ lineId: 'line-kept-b', quantity: 0, name: 'Oil for frying' }),
       ]);
 
-      const oil = adds.byItem.get('item-oil');
+      const oil = adds.of('item-oil', 'UNIT');
       expect(oil?.pickLine).toBe(true);
       expect(oil?.onList).toBeUndefined();
       // Both lines stay under the card, each with its own stepper.
@@ -192,15 +195,53 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
         line({ lineId: 'line-kept', quantity: 0 }),
         line({ lineId: unsavedLineId('list-weekly', 'item-oil'), quantity: 0 }),
       ]);
-      expect(unsaved.byItem.get('item-oil')?.pickLine).toBeUndefined();
+      expect(unsaved.of('item-oil', 'UNIT')?.pickLine).toBeUndefined();
 
       const wanted = rowAdds(WEEKLY, [
         line({ lineId: 'line-kept-a', quantity: 0 }),
         line({ lineId: 'line-kept-b', quantity: 0 }),
         line({ lineId: 'line-wanted', quantity: 2 }),
       ]);
-      expect(wanted.byItem.get('item-oil')?.pickLine).toBeUndefined();
-      expect(wanted.byItem.get('item-oil')?.onList?.lineId).toBe('line-wanted');
+      expect(wanted.of('item-oil', 'UNIT')?.pickLine).toBeUndefined();
+      expect(wanted.of('item-oil', 'UNIT')?.onList?.lineId).toBe('line-wanted');
+    });
+
+    it('counts only the lines in the unit the plus adds in, as the server matches them (backend 0260)', () => {
+      // Sold by the kilo, so the plus adds in GRAM: one GRAM line at zero is the
+      // one match the server raises, and the UNIT line at zero is no match.
+      const held = [
+        line({ lineId: 'line-grams', quantity: 0, unit: 'GRAM' }),
+        line({ lineId: 'line-pieces', quantity: 0, unit: 'UNIT' }),
+      ];
+      const byWeight = rowAdds(WEEKLY, held).of('item-oil', 'GRAM');
+      expect(byWeight?.pickLine).toBeUndefined();
+      expect(byWeight?.onList).toBeUndefined();
+      // Both lines are still drawn under the card.
+      expect(byWeight?.lines.map((row) => row.lineId)).toEqual([
+        'line-grams',
+        'line-pieces',
+      ]);
+
+      // A wanted line of another unit is no line already on the list: the
+      // server answers line_unit_differs, so the plus stays on and the press
+      // says that sentence.
+      const other = rowAdds(WEEKLY, [
+        line({ lineId: 'line-pieces', quantity: 2, unit: 'UNIT' }),
+      ]).of('item-oil', 'GRAM');
+      expect(other?.onList).toBeUndefined();
+      expect(other?.pickLine).toBeUndefined();
+
+      // Two at zero in the plus's own unit still switch it off.
+      const two = rowAdds(WEEKLY, [
+        ...held,
+        line({ lineId: 'line-grams-b', quantity: 0, unit: 'GRAM' }),
+      ]).of('item-oil', 'GRAM');
+      expect(two?.pickLine).toBe(true);
+    });
+
+    it('answers the same object for the same product and unit, so a row is not redrawn', () => {
+      const adds = rowAdds(WEEKLY, [line({ lineId: 'line-oil' })]);
+      expect(adds.of('item-oil', 'UNIT')).toBe(adds.of('item-oil', 'UNIT'));
     });
   });
 
@@ -211,7 +252,7 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
     ];
     const editable = (permissions: AddTargetList['permissions']) =>
       rowAdds({ ...WEEKLY, permissions }, held)
-        .byItem.get('item-oil')
+        .of('item-oil', 'UNIT')
         ?.lines.map((row) => row.editable);
 
     expect(editable(['READ', 'WRITE'])).toEqual([false, true]);
@@ -271,5 +312,20 @@ describe('addFailedCopy (velista 0185, section 4)', () => {
     expect(addFailedCopy({ lineId: null, name: 'Leche', unit: null }).key).toBe(
       'list.error.addUnitDiffers.unknown'
     );
+  });
+
+  it('says why a stale card’s plus did nothing, in the card’s own words', () => {
+    expect(
+      addFailedCopy(null, { kind: 'pickLine', list: 'Weekly shop' })
+    ).toEqual({
+      key: 'catalog.held.pickLine',
+      args: { list: 'Weekly shop' },
+    });
+    expect(
+      addFailedCopy(null, { kind: 'onList', list: 'Weekly shop' })
+    ).toEqual({
+      key: 'catalog.held.alreadyOn',
+      args: { list: 'Weekly shop' },
+    });
   });
 });

@@ -442,6 +442,11 @@ interface StoredLine {
   unit?: LineUnit;
   /** The products this line names, first one first. */
   itemIds: readonly string[];
+  /**
+   * Where the line stands on its list. Absent is where it was made: the array is
+   * oldest first and a new line goes last, as on a list.
+   */
+  position?: number;
   /** The favourite of the line (backend `0199`), or null. */
   favoriteItemId?: string | null;
   /** Whether the household has agreed to it yet. */
@@ -1649,13 +1654,11 @@ export class BasketMemory implements BasketServiceI {
           },
         });
       }
-      // Nothing is written (rule 5). The entries are the matches that are rows: a
-      // line at zero with no buy has none.
-      const rows = shown.filter((held) => held.quantity > 0);
+      // Nothing is written (rule 5). The entries are the matches that are rows,
+      // which `_result` reads off the rows: a line at zero with no buy has none,
+      // and an answer whose every match is such a line has no entry at all.
       return {
-        ...(await this._result(
-          (rows.length > 0 ? rows : shown).map((h) => h.id)
-        )),
+        ...(await this._result(shown.map((h) => h.id))),
         addOutcome: 'alreadyOnList',
       };
     }
@@ -1707,13 +1710,15 @@ export class BasketMemory implements BasketServiceI {
   ): readonly StoredLine[] {
     const wanted = productSetKey(body.itemIds ?? []);
     const itemIds = body.itemIds ?? [];
-    const met = this._lines.filter(
-      (line) =>
-        !line.deleted &&
-        line.listId === body.targetListId &&
-        ((normalizeContent(line.content) === key &&
-          productSetKey(line.itemIds) === wanted) ||
-          itemIds.every((id) => line.itemIds.includes(id)))
+    const met = this._inPositionOrder(
+      this._lines.filter(
+        (line) =>
+          !line.deleted &&
+          line.listId === body.targetListId &&
+          ((normalizeContent(line.content) === key &&
+            productSetKey(line.itemIds) === wanted) ||
+            itemIds.every((id) => line.itemIds.includes(id)))
+      )
     );
     const own = met.filter((line) => (line.unit ?? 'UNIT') === unit);
     if (own.length === 0 && met.length > 0) {
@@ -1747,13 +1752,26 @@ export class BasketMemory implements BasketServiceI {
     body: BasketAddLineRequest,
     key: string
   ): readonly StoredLine[] {
-    return this._lines.filter(
-      (line) =>
-        !line.deleted &&
-        line.listId === body.targetListId &&
-        normalizeContent(line.content) === key &&
-        (line.itemIds.length === 0 || body.newLine !== true)
+    return this._inPositionOrder(
+      this._lines.filter(
+        (line) =>
+          !line.deleted &&
+          line.listId === body.targetListId &&
+          normalizeContent(line.content) === key &&
+          (line.itemIds.length === 0 || body.newLine !== true)
+      )
     );
+  }
+
+  /**
+   * Lines in the order their list draws them (backend `0260`, `isEarlierLine`): by
+   * {@link StoredLine.position}, and a line with none where it was made.
+   */
+  private _inPositionOrder(
+    lines: readonly StoredLine[]
+  ): readonly StoredLine[] {
+    const at = (line: StoredLine) => line.position ?? this._lines.indexOf(line);
+    return [...lines].sort((a, b) => at(a) - at(b));
   }
 
   /**

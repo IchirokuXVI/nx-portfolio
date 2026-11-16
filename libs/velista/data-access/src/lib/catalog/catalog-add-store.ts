@@ -60,6 +60,18 @@ export interface CatalogAddProduct {
   readonly unit?: LineUnit;
 }
 
+/**
+ * Why a plus did nothing (velista `0185`, owner ruling 46): the card was drawn
+ * before another device changed the list, and the server answered that the
+ * product is already on it. `onList`: a line of it asks for some. `pickLine`:
+ * two or more lines of it stand at zero, and one of them is to be raised with its
+ * own stepper. `list` is the list's name, for the sentence.
+ */
+export interface CatalogAddMet {
+  readonly kind: 'onList' | 'pickLine';
+  readonly list: string;
+}
+
 /** Where a read is: not asked for, on its way, answered, or not answered. */
 export type CatalogAddStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
@@ -129,6 +141,7 @@ export class CatalogAddStore {
   private readonly _visit = signal<CatalogVisit>([]);
   private readonly _failures = signal(0);
   private readonly _refusal = signal<AddUnitRefusal | null>(null);
+  private readonly _met = signal<CatalogAddMet | null>(null);
   private readonly _held = signal<readonly HeldLine[]>([]);
   private readonly _lineReads = signal<ReadonlyMap<string, CatalogAddStatus>>(
     new Map()
@@ -226,8 +239,9 @@ export class CatalogAddStore {
   readonly count = computed(() => this._visit().length);
 
   /**
-   * How many writes have failed in this visit. A page says so once for each, in
-   * its live region, by watching this number move.
+   * How many writes have failed in this visit, or did nothing because the card
+   * was stale ({@link met}). A page says so once for each, in its live region, by
+   * watching this number move.
    */
   readonly failures = this._failures.asReadonly();
 
@@ -237,6 +251,13 @@ export class CatalogAddStore {
    * in place of the generic one. Null after any other failure.
    */
   readonly refusal = this._refusal.asReadonly();
+
+  /**
+   * Why the last plus that counted in {@link failures} did nothing, when the
+   * server answered that the product is already on the list: the page says that
+   * sentence in place of the failure. Null after any other failure.
+   */
+  readonly met = this._met.asReadonly();
 
   /**
    * Read the lists the person can write to, once for the visit (section 4.3):
@@ -573,7 +594,18 @@ export class CatalogAddStore {
       if (result.outcome === 'alreadyOnList') {
         // The list already asked for it, so nothing was added (backend `0260`,
         // A1): what was drawn came off with the server's quantity above, and the
-        // visit records nothing to take back.
+        // visit records nothing to take back. The card offered the plus, so it was
+        // drawn before another device changed the list: every line the answer met
+        // is held now, which redraws the card, and the reason is said once, or the
+        // press would visibly do nothing.
+        this._refusal.set(null);
+        this._met.set({
+          kind: result.alreadyOnList.some((line) => line.quantity > 0)
+            ? 'onList'
+            : 'pickLine',
+          list: this._lists().find((one) => one.listId === listId)?.name ?? '',
+        });
+        this._failures.update((count) => count + 1);
         return;
       }
       this._visit.update((visit) =>
@@ -613,6 +645,7 @@ export class CatalogAddStore {
         }
       }
       this._refusal.set(toAddUnitRefusal(error, product.name));
+      this._met.set(null);
       this._failures.update((count) => count + 1);
     }
   }
@@ -668,6 +701,7 @@ export class CatalogAddStore {
       if (generation === this._generation) {
         this._move(lineId, -delta);
         this._refusal.set(null);
+        this._met.set(null);
         this._failures.update((count) => count + 1);
       }
     }
@@ -751,6 +785,7 @@ export class CatalogAddStore {
       if (generation === this._generation) {
         replace(line);
         this._refusal.set(null);
+        this._met.set(null);
         this._failures.update((count) => count + 1);
       }
     }
@@ -807,6 +842,7 @@ export class CatalogAddStore {
         ]);
         this._held.set(before);
         this._refusal.set(null);
+        this._met.set(null);
         this._failures.update((count) => count + 1);
       }
     }

@@ -2108,11 +2108,22 @@ export class ListPage {
       ) {
         // The chosen line went while the question was open, or is no longer one the
         // add meets (backend `0260`, rule 6). The question is already shut; the
-        // words stay, and the add's own failure is said, so a press of the plus
-        // asks again with the lines as they are now.
-        if (listId === this.listId()) {
-          this._announce(this._translator.t('list.error.failed'));
+        // words stay, and the add's own failure is drawn under the field where a
+        // refused add says why, so a press of the plus asks again with the lines as
+        // they are now. That region is a polite live one, so it is said once.
+        if (listId !== this.listId()) {
+          return;
         }
+        // An add that names its line draws no row and leaves the field alone. Typed
+        // words cleared meanwhile come back; a card's name never goes into the
+        // field, because it is not what was typed.
+        if (
+          (entry.itemIds ?? []).length === 0 &&
+          (this._composer()?.content().trim() ?? '') === ''
+        ) {
+          this._composer()?.restore(entry.content);
+        }
+        this._setNotice(this._translator.t('list.error.failed'));
         return;
       }
       const choice = toAddChoice(outcome.error);

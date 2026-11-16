@@ -2685,8 +2685,15 @@ describe('ListPage', () => {
         options: { intoLineId: 'ln-other' },
       });
       expect(choiceRows()).toHaveLength(0);
-      // The add's own failure, never the list being gone.
-      expect(fixture.componentInstance.announcement()).toBe(
+      // The add's own failure, never the list being gone, drawn under the field
+      // where a refused add says why, and said once by that region alone.
+      expect(fixture.componentInstance.composerNotice()).toBe(
+        'list.error.failed'
+      );
+      expect(
+        query(fixture, 'lib-line-composer .notice-text')?.textContent
+      ).toContain('list.error.failed');
+      expect(fixture.componentInstance.announcement()).not.toBe(
         'list.error.failed'
       );
       expect(field(fixture).value).toBe('Leche entera');

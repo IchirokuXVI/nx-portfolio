@@ -3868,6 +3868,93 @@ describe('the composer and the list it adds to', () => {
         expect(field(fixture).value).toBe('Leche entera');
       });
 
+      describe('a card found by typed words', () => {
+        async function cardAsked() {
+          const rendered = await render({ served });
+          const { fixture, store } = rendered;
+          store.addLine.mockImplementationOnce(() => {
+            store.error.set(refusal());
+            return Promise.resolve(null);
+          });
+          // The search words stay in the field: picking a card does not clear it.
+          typeInto(fixture, 'lech');
+          const card = document.createElement('button');
+          document.body.append(card);
+          composer(fixture).submitted.emit({
+            content: 'Leche entera Pascual',
+            quantity: 1,
+            itemIds: ['item-a'],
+            anchor: card,
+          });
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+          return { ...rendered, card };
+        }
+
+        const queryOf = (fixture: ComponentFixture<BasketPage>) =>
+          (
+            fixture.componentInstance as unknown as { _query: () => string }
+          )._query();
+
+        it('goes back to the lists with the typed words in the field and the typeahead on them, never the card’s name', async () => {
+          const { fixture, store, card } = await cardAsked();
+          expect(choiceRows()).toHaveLength(2);
+
+          (document.querySelector('.pop .back') as HTMLButtonElement).click();
+          fixture.detectChanges();
+
+          expect(field(fixture).value).toBe('lech');
+          // The search is still the one that found the card, as before the pick.
+          expect(queryOf(fixture)).toBe('lech');
+          expect(
+            options().map((one) => one.querySelector('.name')?.textContent)
+          ).toEqual(['Weekly shop', 'Groceries']);
+          card.remove();
+
+          // A plus now adds the typed words, not the card's name with no product.
+          store.addLine.mockClear();
+          (
+            fixture.componentInstance as unknown as { dismissPicker(): void }
+          ).dismissPicker();
+          fixture.detectChanges();
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          expect(store.addLine).toHaveBeenLastCalledWith(
+            expect.objectContaining({ content: 'lech' })
+          );
+          expect(store.addLine.mock.lastCall?.[0]).not.toHaveProperty(
+            'itemIds'
+          );
+        });
+
+        it('puts the typed words back, not the card’s name, when the chosen line fails', async () => {
+          const { fixture, store, card } = await cardAsked();
+          store.addLine.mockImplementationOnce(() => {
+            store.error.set(
+              new GatewayError({
+                code: 'not_found',
+                status: 404,
+                correlationId: 'gone',
+              })
+            );
+            return Promise.resolve(null);
+          });
+
+          choiceRows()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          expect(document.querySelector('.pop')).toBeNull();
+          expect(field(fixture).value).toBe('lech');
+          expect(queryOf(fixture)).toBe('lech');
+          card.remove();
+        });
+      });
+
       it('marks the row of the line a raise went to', async () => {
         const raised = line('zl-a');
         const { fixture, store } = await render({ served, lines: [raised] });
@@ -4217,8 +4304,10 @@ describe('the composer and the list it adds to', () => {
         );
         expect(notice?.textContent).toContain('"name":"Leche entera"');
         expect(notice?.textContent).toContain('"list":"Weekly shop"');
-        // The words come back, and the generic sentence is not said.
-        expect(field(fixture).value).toBe('Leche');
+        // The typed words come back, which here were none: never the card's
+        // name, which a plus would add as words with no product. The generic
+        // sentence is not said.
+        expect(field(fixture).value).toBe('');
         expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
           'basket.error'
         );

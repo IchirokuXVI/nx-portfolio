@@ -599,6 +599,13 @@ describe('LineStore', () => {
           intoLineId: 'milk',
         })
       ).toBe(false);
+      // A product add that names its line draws none either (backend 0260, rule 6),
+      // also for a product no loaded line holds.
+      expect(
+        store.drawsBeforeAnswer(LIST, 'Pan', ['item-bread'], {
+          intoLineId: 'milk',
+        })
+      ).toBe(false);
     });
 
     it('draws no row for a product a loaded line holds, at any amount (velista 0185, decision I)', async () => {
