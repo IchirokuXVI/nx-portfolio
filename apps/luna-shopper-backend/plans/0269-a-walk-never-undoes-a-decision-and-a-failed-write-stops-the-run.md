@@ -1,3 +1,5 @@
+> **PR:** [#998](https://github.com/IchirokuXVI/nx-portfolio/pull/998)
+
 # 0269: a walk never undoes a decision, and a failed write stops the run
 
 > Found by the review of PR #973 (plan `0267`, Carrefour and El Jamón), and checked against
