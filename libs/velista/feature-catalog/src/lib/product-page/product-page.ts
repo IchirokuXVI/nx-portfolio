@@ -438,7 +438,7 @@ export class ProductPage {
 
   /** The sentence of a failed add, as the catalog says it (velista `0185`). */
   protected readonly addFailedText = computed(() =>
-    addFailedCopy(this._adds.refusal())
+    addFailedCopy(this._adds.refusal(), this._adds.met())
   );
 
   constructor() {
@@ -476,9 +476,10 @@ export class ProductPage {
   }
 
   /** What a similar row's trailing control draws, or null with no plus. */
-  protected addOf(itemId: string): ProductRowAdd | null {
-    const adds = this._rowAdds();
-    return adds.byItem.get(itemId) ?? adds.plain;
+  protected addOf(row: ProductRowView): ProductRowAdd | null {
+    // In the unit the plus adds in (absent is a count, as `CatalogAddStore.add`
+    // reads it), which is the unit the server matches lines of.
+    return this._rowAdds().of(row.id, row.lineUnit ?? 'UNIT');
   }
 
   protected addProduct(row: ProductRowView): void {

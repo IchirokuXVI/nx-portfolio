@@ -2179,6 +2179,12 @@ export class BasketPage {
     readonly listId: string;
     readonly listName: string | null;
     readonly entry: LineComposerSubmit;
+    /**
+     * The words in the field when the list was picked. For a card they are the
+     * search that found it, not the card's name, which is `entry.content`: the
+     * field goes back to them, and the typeahead stays open on them.
+     */
+    readonly words: string;
     readonly choice: AddChoice;
   } | null>(null);
 
@@ -2292,7 +2298,12 @@ export class BasketPage {
     if (asked === null || this.adding()) {
       return;
     }
-    await this._addTo(asked.listId, asked.entry, { intoLineId: lineId });
+    await this._addTo(
+      asked.listId,
+      asked.entry,
+      { intoLineId: lineId },
+      asked.words
+    );
   }
 
   /** "A new line" was chosen. */
@@ -2307,18 +2318,26 @@ export class BasketPage {
       // products.
       return;
     }
-    await this._addTo(asked.listId, asked.entry, { newLine: true });
+    await this._addTo(
+      asked.listId,
+      asked.entry,
+      { newLine: true },
+      asked.words
+    );
   }
 
   /**
    * Back from the second question to the lists, unchanged. Focus goes back into the
-   * field, where it was while the lists were asked.
+   * field, where it was while the lists were asked, with the words that were typed
+   * there: for a card, the search that found it and never the card's name, which a
+   * plus would then add as typed words with no product. The query is left on those
+   * words, so the typeahead stays open on them as it was before the pick.
    */
   protected backToLists(): void {
     const asked = this._choice();
     this._choice.set(null);
     if (asked !== null) {
-      this._composer()?.restore(asked.entry.content);
+      this._composer()?.restore(asked.words);
     }
   }
 
@@ -2718,12 +2737,14 @@ export class BasketPage {
   private async _addTo(
     listId: string,
     entry: LineComposerSubmit,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    askedWords?: string
   ): Promise<void> {
     const itemIds = entry.itemIds ?? [];
-    // The words in the field as the add goes: a card's name is not what the field
-    // holds, so a landed card clears the field only while it still holds these.
-    const words = this._composer()?.content().trim() ?? '';
+    // The words in the field as the add goes, or as the question was asked: a
+    // card's name is not what the field holds, so a landed card clears the field
+    // only while it still holds these, and a failed one puts these back.
+    const words = askedWords ?? this._composer()?.content().trim() ?? '';
     // The basket the add was sent from. A sentence about it is not said on another
     // one the page has followed to since (velista `0185`).
     const basketId = this._store.basket()?.id ?? null;
@@ -2775,6 +2796,7 @@ export class BasketPage {
           listId,
           listName: listName === '' ? null : listName,
           entry,
+          words: typed ? entry.content : words,
           choice,
         });
         return;
@@ -2796,9 +2818,16 @@ export class BasketPage {
       if (asking || this._fieldIsEmpty()) {
         // The words go back, and focus with them, into a field nobody has typed
         // in since: newer words are a newer add and stay, with their suggestions.
-        this._query.set('');
-        this.suggestions.set([]);
-        this._composer()?.restore(entry.content);
+        // A card's are the search that found it, never the card's name, and the
+        // typeahead stays on them as before the pick.
+        if (typed) {
+          this._query.set('');
+          this.suggestions.set([]);
+          this._composer()?.restore(entry.content);
+        } else {
+          this._query.set(words);
+          this._composer()?.restore(words);
+        }
       }
       const refusal = typed
         ? null

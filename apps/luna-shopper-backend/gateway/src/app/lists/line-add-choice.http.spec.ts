@@ -236,6 +236,17 @@ describe('POST /v1/lists/:id/lines asks which line (plan 0228)', () => {
     expect(plain.status).toBe(201);
     expect(app.sent).toHaveLength(1);
   });
+
+  it('takes newLine true beside a null group, which core reads as free text', async () => {
+    const response = await post({
+      content: 'leche',
+      newLine: true,
+      productGroupId: null,
+    });
+
+    expect(response.status).toBe(201);
+    expect(app.sent[0].payload).toMatchObject({ newLine: true });
+  });
 });
 
 describe('POST /v1/baskets/:id/lines takes the same fields (plan 0228)', () => {
@@ -268,6 +279,12 @@ describe('POST /v1/baskets/:id/lines takes the same fields (plan 0228)', () => {
     ).toEqual(['newLine']);
     expect(
       await errors({ ...base, itemIds: [ITEM], unit: 'UNIT', newLine: false })
+    ).toEqual([]);
+  });
+
+  it('takes newLine true beside a null group, as the list add does', async () => {
+    expect(
+      await errors({ ...base, productGroupId: null, newLine: true })
     ).toEqual([]);
   });
 

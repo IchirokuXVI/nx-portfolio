@@ -166,7 +166,13 @@ export class LineMemory implements LineServiceI {
       throw memoryFailure('validation_failed', 400);
     }
     const matches = products
-      ? this._productAddTargets(listId, content, itemIds ?? [], unit ?? 'UNIT')
+      ? this._productAddTargets(
+          listId,
+          content,
+          itemIds ?? [],
+          named,
+          unit ?? 'UNIT'
+        )
       : this._typedAddTargets(listId, content, options);
 
     // What the add raises a line at zero by: its own amount when the units agree,
@@ -260,30 +266,37 @@ export class LineMemory implements LineServiceI {
   }
 
   /**
-   * The lines a product add meets in its own unit, in list position order: a line of
-   * the same name, of exactly the same products, or holding every product of the add
-   * (backend `0260`, R5). Throws the refusal the server sends when only lines of
-   * another unit hold it.
+   * The lines a product add meets in its own unit, in list position order (backend
+   * `0260`, the matches of an add): its identity lines, by the backend's
+   * `lineIdentities` ({@link lineIdentities} below), and every line that holds every
+   * product of the add. A free text line of the same name is no match, and neither
+   * is a line of that name that holds other products. Throws the refusal the server
+   * sends when only lines of another unit would match.
    */
   private _productAddTargets(
     listId: string,
     content: string,
     itemIds: readonly string[],
+    named: false | undefined,
     unit: LineUnit
   ): readonly Line[] {
-    const name = content.trim().toLocaleLowerCase();
-    const set = [...itemIds].sort().join(',');
+    const own = lineIdentities({
+      content,
+      // `namedOnAdd`: an add that holds products is named unless it says not.
+      named: named !== false,
+      itemIds,
+      productGroupId: null,
+    });
     const met = this._lines(listId)
       .filter(
         (held) =>
           held.approvalStatus !== 'REJECTED' &&
-          (held.content.trim().toLocaleLowerCase() === name ||
-            [...held.itemIds].sort().join(',') === set ||
+          (lineIdentities(held).some((key) => own.includes(key)) ||
             itemIds.every((id) => held.itemIds.includes(id)))
       )
       .sort((a, b) => a.position - b.position);
-    const own = met.filter((held) => (held.unit ?? 'UNIT') === unit);
-    if (own.length === 0 && met.length > 0) {
+    const inUnit = met.filter((held) => (held.unit ?? 'UNIT') === unit);
+    if (inUnit.length === 0 && met.length > 0) {
       const other = met[0];
       throw new GatewayError({
         code: 'line_unit_differs',
@@ -302,7 +315,7 @@ export class LineMemory implements LineServiceI {
         },
       });
     }
-    return own;
+    return inUnit;
   }
 
   /**
@@ -1188,4 +1201,37 @@ function namedAfter(
     return false;
   }
   return changes.content !== undefined ? true : line.named;
+}
+
+/**
+ * What an add has to share with a line to land on it, as the backend decides it
+ * (`apps/luna-shopper-backend/core/src/app/lists/line-content.ts`,
+ * `lineIdentities`), with the product set written out where the backend hashes it.
+ * A line that is not named and holds products is met by them alone; a named line
+ * and a free text line keep their folded name in every key, so the two shapes
+ * never meet.
+ */
+function lineIdentities(line: {
+  readonly content: string;
+  readonly named: boolean;
+  readonly itemIds: readonly string[];
+  readonly productGroupId: string | null;
+}): string[] {
+  const set =
+    line.itemIds.length === 0
+      ? null
+      : [...new Set(line.itemIds)].sort().join(',');
+  const byProduct =
+    line.named === false && (set !== null || line.productGroupId !== null);
+  const name = byProduct ? '' : `${foldName(line.content)}\u0000`;
+  const identities: string[] = [];
+  if (line.productGroupId !== null) {
+    identities.push(`${name}group:${line.productGroupId}`);
+  }
+  if (set !== null) {
+    identities.push(`${name}set:${set}`);
+  } else if (line.productGroupId === null) {
+    identities.push(`${name}text`);
+  }
+  return identities;
 }

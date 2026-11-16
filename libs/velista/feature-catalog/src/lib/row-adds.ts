@@ -1,13 +1,16 @@
 import type { ActivatedRouteSnapshot } from '@angular/router';
+import type { CatalogAddMet } from '@portfolio/velista/data-access';
 import {
   addUnitRefusalKey,
   canStepLine,
   isUnsavedLine,
+  LINE_UNIT_FALLBACK,
   lineStepOf,
   type AddTargetList,
   type AddUnitRefusal,
   type HeldLine,
   type HoldingRow,
+  type LineUnit,
   type LineUnitProduct,
 } from '@portfolio/velista/models';
 import type { ProductRowAdd } from '@portfolio/velista/ui';
@@ -20,8 +23,12 @@ export interface RowAdds {
    * list to add to, which draws no plus at all.
    */
   readonly plain: ProductRowAdd | null;
-  /** The rows whose product the chosen list holds, by product. */
-  readonly byItem: ReadonlyMap<string, ProductRowAdd>;
+  /**
+   * What the plus of one row draws, for a product the plus adds in `unit`: the
+   * same object for the same product and unit until the lines move, so a row is
+   * redrawn only when its own lines do. Null with no list to add to.
+   */
+  readonly of: (itemId: string, unit: LineUnit) => ProductRowAdd | null;
 }
 
 /**
@@ -44,6 +51,13 @@ export interface RowAdds {
  * card with its own stepper. No link then: the list hides its lines at zero. One
  * line at zero keeps the plus, which raises it.
  *
+ * Both count only the lines in the unit the plus adds in, the `unit` the row hands
+ * the add (`lineUnitOfProduct`, carried as `ProductRowView.lineUnit`), because the
+ * server matches a product add against the lines of its own unit alone (backend
+ * `0260`, the matches of an add). A line of another unit is still drawn under the
+ * card with its stepper; a press then meets no line of its unit and is refused with
+ * the sentence of section 4, never answered as already on the list.
+ *
  * `productOf` is the page's records of the products it shows (velista `0186`,
  * decision E): each held row steps by `lineStepOf` over them, so a row of a
  * product stepped at 100 g steps its lines by 100 g. Absent, every row steps by
@@ -55,9 +69,8 @@ export function rowAdds(
   pathOf: (target: AddTargetList) => string,
   productOf?: (itemId: string) => LineUnitProduct | null | undefined
 ): RowAdds {
-  const byItem = new Map<string, ProductRowAdd>();
   if (target === null) {
-    return { plain: null, byItem };
+    return { plain: null, of: () => null };
   }
 
   const lines = new Map<string, HoldingRow[]>();
@@ -86,11 +99,27 @@ export function rowAdds(
     }
   }
   const path = pathOf(target);
-  for (const [itemId, rows] of lines) {
-    const saved = rows.filter((row) => !isUnsavedLine(row.lineId));
+  const plain: ProductRowAdd = { list: target.name, lines: [] };
+  const drawn = new Map<string, ProductRowAdd>();
+  const of = (itemId: string, unit: LineUnit): ProductRowAdd => {
+    const rows = lines.get(itemId);
+    if (rows === undefined) {
+      return plain;
+    }
+    const key = `${unit}/${itemId}`;
+    const known = drawn.get(key);
+    if (known !== undefined) {
+      return known;
+    }
+    const saved = rows.filter(
+      (row) =>
+        !isUnsavedLine(row.lineId) &&
+        // A line read with no unit counts pieces, as every mapper reads it.
+        (row.unit ?? LINE_UNIT_FALLBACK) === unit
+    );
     const wanted = saved.find((row) => row.quantity > 0);
     const kept = saved.filter((row) => row.quantity <= 0).length;
-    byItem.set(itemId, {
+    const add: ProductRowAdd = {
       list: target.name,
       lines: rows,
       ...(wanted !== undefined
@@ -98,24 +127,44 @@ export function rowAdds(
         : kept > 1
           ? { pickLine: true as const }
           : {}),
-    });
-  }
+    };
+    drawn.set(key, add);
+    return add;
+  };
 
-  return { plain: { list: target.name, lines: [] }, byItem };
+  return { plain, of };
 }
 
 /**
  * The sentence a failed add says (velista `0134`, section 4.1), as a key and its
  * arguments: why, for a product the list counts in another unit (velista `0185`,
- * section 4), and the generic sentence for any other failure.
+ * section 4); why, for a plus the server answered with a line already on the list
+ * (`met`, a card drawn before another device changed the list), in the card's own
+ * words; and the generic sentence for any other failure.
  */
-export function addFailedCopy(refusal: AddUnitRefusal | null): {
+export function addFailedCopy(
+  refusal: AddUnitRefusal | null,
+  met: CatalogAddMet | null = null
+): {
   readonly key: string;
   readonly args: Record<string, unknown>;
 } {
-  return refusal === null
-    ? { key: 'catalog.add.failed', args: {} }
-    : { key: addUnitRefusalKey(refusal, 'list'), args: { name: refusal.name } };
+  if (refusal !== null) {
+    return {
+      key: addUnitRefusalKey(refusal, 'list'),
+      args: { name: refusal.name },
+    };
+  }
+  if (met !== null) {
+    return {
+      key:
+        met.kind === 'onList'
+          ? 'catalog.held.alreadyOn'
+          : 'catalog.held.pickLine',
+      args: { list: met.list },
+    };
+  }
+  return { key: 'catalog.add.failed', args: {} };
 }
 
 /**

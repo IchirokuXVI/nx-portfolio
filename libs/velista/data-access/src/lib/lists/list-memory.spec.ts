@@ -780,6 +780,38 @@ describe('LineMemory mirrors where an add lands (backend 0228, 0260, velista 017
     });
   });
 
+  it('meets a product add on its identity and the lines that hold it, never on the name alone (backend 0260)', async () => {
+    const { lines } = await build();
+    // A free text line of the name, and a line of the name holding another product.
+    await lines.addLine(OWNED_LIST, 'Leche entera', 2);
+    await lines.addLine(OWNED_LIST, 'Leche entera', 0, ['item-milk-b'], false);
+
+    const result = await lines.addLineResult(
+      OWNED_LIST,
+      'Leche entera',
+      1,
+      ['item-milk-a'],
+      false,
+      { askIfAmbiguous: true }
+    );
+
+    // Neither is a match, so the add makes its own line.
+    expect(result.outcome).toBe('created');
+    expect(result.line.itemIds).toEqual(['item-milk-a']);
+
+    // The same product again meets that line, whatever name it is sent under.
+    const again = await lines.addLineResult(
+      OWNED_LIST,
+      'Whole milk',
+      1,
+      ['item-milk-a'],
+      false,
+      { askIfAmbiguous: true }
+    );
+    expect(again.outcome).toBe('alreadyOnList');
+    expect(again.line.id).toBe(result.line.id);
+  });
+
   it('raises a line at zero by one step of its own unit', async () => {
     const { lines } = await build();
     const bananas = await lines.addLine(

@@ -711,7 +711,7 @@ export class CatalogPage {
    * in another unit (velista `0185`, section 4), and the generic one otherwise.
    */
   protected readonly addFailedText = computed(() =>
-    addFailedCopy(this._adds.refusal())
+    addFailedCopy(this._adds.refusal(), this._adds.met())
   );
 
   /**
@@ -839,12 +839,13 @@ export class CatalogPage {
    * What a row's trailing control draws, or null for a row with no plus. The
    * catalog that chooses draws none: nothing on it adds to a list.
    */
-  protected addOf(itemId: string): ProductRowAdd | null {
+  protected addOf(row: ProductRowView): ProductRowAdd | null {
     if (this.pickKind !== null) {
       return null;
     }
-    const adds = this._rowAdds();
-    return adds.byItem.get(itemId) ?? adds.plain;
+    // In the unit the plus adds in (absent is a count, as `CatalogAddStore.add`
+    // reads it), which is the unit the server matches lines of.
+    return this._rowAdds().of(row.id, row.lineUnit ?? 'UNIT');
   }
 
   /**

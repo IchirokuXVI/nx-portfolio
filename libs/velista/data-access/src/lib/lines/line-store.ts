@@ -729,11 +729,13 @@ export class LineStore {
     itemIds?: readonly string[],
     options?: AddLineOptions
   ): boolean {
-    if (itemIds !== undefined && itemIds.length > 0) {
-      return !addMayMeetProduct(this._byList().get(listId) ?? [], itemIds);
-    }
+    // First: an add that names its line, a product's as much as a typed name's,
+    // lands on that line or nowhere, and never draws a new row.
     if (options?.intoLineId !== undefined) {
       return false;
+    }
+    if (itemIds !== undefined && itemIds.length > 0) {
+      return !addMayMeetProduct(this._byList().get(listId) ?? [], itemIds);
     }
     return !addMayMeetLine(this._byList().get(listId) ?? [], content);
   }

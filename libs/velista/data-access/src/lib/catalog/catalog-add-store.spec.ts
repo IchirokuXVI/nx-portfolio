@@ -183,6 +183,10 @@ function setup(world: World) {
     (world.lines ?? []).map((held) => [held.id, held])
   );
   let failNext: Error | null = null;
+  /** The answer of the next add, in place of the fake's own rule. */
+  let answerNext:
+    | ((listId: string) => Awaited<ReturnType<LineServiceI['addLineResult']>>)
+    | null = null;
   let failNextRead = false;
   let failNextLists = false;
   let pendingNext = false;
@@ -312,6 +316,11 @@ function setup(world: World) {
       addedNamed.push(named);
       units.push(unit);
       await written();
+      if (answerNext !== null) {
+        const answer = answerNext(listId);
+        answerNext = null;
+        return answer;
+      }
       // Backend `0260`: a line of the name that asks for some is shown as it is,
       // and one kept at zero is raised by the add's amount.
       const existing = linesOf(listId).find(
@@ -443,6 +452,14 @@ function setup(world: World) {
     },
     failNextRead: () => {
       failNextRead = true;
+    },
+    /** Answer the next add with this, as a server another device changed would. */
+    answerNext: (
+      answer: (
+        listId: string
+      ) => Awaited<ReturnType<LineServiceI['addLineResult']>>
+    ) => {
+      answerNext = answer;
     },
     failNextLists: () => {
       failNextLists = true;
@@ -1253,7 +1270,58 @@ describe('CatalogAddStore', () => {
 
       expect(store.visit()).toEqual([]);
       expect(store.count()).toBe(0);
-      expect(store.failures()).toBe(0);
+      // The card offered the plus, so it was stale: the press says why once.
+      expect(store.failures()).toBe(1);
+      expect(store.refusal()).toBeNull();
+      expect(store.met()).toEqual({ kind: 'onList', list: 'weekly' });
+    });
+
+    it('holds every line a stale card met and says why, when another device made a second line at zero (owner ruling 46)', async () => {
+      const kept = line('kept', 'weekly', { quantity: 0 });
+      const { store, server, answerNext, drawn } = setup({
+        ...HOME,
+        lines: [kept],
+      });
+      await store.ensure();
+      expect(drawn('weekly', 'milk')).toEqual([0]);
+
+      // Another device made a second line of it at zero since the card was drawn.
+      const other = line('other', 'weekly', {
+        quantity: 0,
+        content: 'Leche entera',
+      });
+      server.set(other.id, other);
+      answerNext(() => ({
+        line: kept,
+        merged: true,
+        outcome: 'alreadyOnList',
+        alreadyOnList: [kept, other],
+      }));
+
+      await store.add(MILK);
+
+      // Both lines are held as the server holds them, so the card redraws with
+      // its plus off and the sentence to pick a line.
+      expect(
+        store
+          .held()
+          .filter((held) => held.listId === 'weekly')
+          .map((held) => [held.lineId, held.quantity])
+      ).toEqual([
+        ['kept', 0],
+        ['other', 0],
+      ]);
+      expect(store.visit()).toEqual([]);
+      expect(store.failures()).toBe(1);
+      expect(store.met()).toEqual({ kind: 'pickLine', list: 'weekly' });
+
+      // Any other failure says its own sentence, not this one.
+      answerNext(() => {
+        throw new Error('refused');
+      });
+      await store.add(MILK);
+      expect(store.failures()).toBe(2);
+      expect(store.met()).toBeNull();
     });
 
     it('raises a stocked line of that name, and takes the line drawn beside it away (backend 0260, R2)', async () => {
