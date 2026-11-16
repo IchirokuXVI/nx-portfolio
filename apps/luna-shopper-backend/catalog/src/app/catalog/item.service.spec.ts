@@ -2022,7 +2022,7 @@ describe('ItemService', () => {
       ).rejects.toBeInstanceOf(ItemApproxWeightBesideSizeException);
     });
 
-    it('sets, changes and clears a step with an update, and audits each move', async () => {
+    it('sets a step with an update and audits it, and an update to null on an unstepped row audits nothing', async () => {
       const { service, audit } = build({
         items: items({ ...CHICKEN, quantityStep: null }),
       });
