@@ -1,18 +1,5 @@
 @use './row-surface' as surface;
 
-// Visually hidden and still announced. `display: none` would take it out of the
-// accessibility tree entirely, which is the usual way a live region ends up silent.
-.live {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 // Flat rows on hairlines (velista 0145, section 1): no gap between them, and one
 // hairline over the first.
 .lines {
