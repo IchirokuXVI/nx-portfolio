@@ -281,6 +281,7 @@ From 2026-11-12 (the owner's rulings on the build, PR #984):
   transaction; the assistant reads a refused batch as a refusal and reports it (`tools.ts:1560`).
   Two items of one product in two units in one batch are a 400 before the transaction, with
   `messageArgs.field` `items` (R4 of 2026-11-09, unchanged).
+  _Note of 2026-11-16: only when both would create a line, decided in the plan loop (section 4)._
 - **R8. `defaultQuantityOf` changes in place rather than a second function.** Core uses it only
   for an add that states no amount (`line.service.ts:978`, `:1225`, `:1420`). The update route
   never computes it; its doc comment (`list.messages.ts:866`) says what the client sends on a unit
@@ -321,6 +322,11 @@ as above. Only when neither exists is the add refused with `line_unit_differs`, 
 earliest by position of the identity target of another unit and the held lines of another unit,
 whatever `newLine` says. An identity target of another unit no longer refuses before
 `findLinesHolding` runs. `addMany` follows the same order per item (section 4)._
+
+_Note of 2026-11-16 (review round 3): a wanted identity target of the add's unit answers
+`ALREADY_ON_LIST` with every wanted held line of that unit beside it, in position order, as
+step 3 says; `line` is the first of them. A kept identity target is still raised before any
+held line is looked at._
 4. **A free text add's candidates** (`0228` target 1.4, `findNamedProductLines`), skipped when
    `newLine` is true, as today. Every candidate, whatever its unit (R4).
    - One or more wanted: `ALREADY_ON_LIST` with every wanted candidate (R3).
@@ -438,6 +444,14 @@ Unchanged from 2026-11-09 in shape; only a product add reaches it now (R4).
   this batch answers that line with `ALREADY_ON_LIST`.
 - An `ALREADY_ON_LIST` item emits nothing. The basket nudge at `:1373` names only lines that were
   created or raised.
+
+_Note of 2026-11-16 (review round 3): the check before the transaction is gone. Two items of
+one product in two units are the 400 on `items` only when both would create a line: a later
+product item that finds no line of its unit, and that a creation of this batch in another unit
+holds (by product, whatever the names or the `named` flag), is refused, because a single add of
+it would be. An item that meets a line of its own unit already on the list stands, so a list
+that holds the product in both units takes both items. A line of another unit already on the
+list still refuses with `line_unit_differs` and `details.index`, before the 400 is asked._
 
 ## 5. The gateway, the assistant and the documents
 

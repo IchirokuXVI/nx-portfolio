@@ -6,7 +6,9 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   LineAddNeedsChoiceException,
+  LineUnitDiffersException,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -48,6 +50,11 @@ import { ListAccessService } from './list-access.service';
  * **An add that meets a wanted line leaves the row byte for byte** (plan
  * 0260, section 7.1): quantity, version and `updatedAt` as they were, and no
  * `list_line_changes` row. A mock can only say `save` was not called.
+ *
+ * **A product add finds the held line of its unit** beside an identity line of
+ * another unit (the owner, 2026-11-12), through the product rows of the list,
+ * and a batch that would create one product in two units is refused as the
+ * second of two single adds is.
  *
  * The rest are the reads a mock cannot prove: the products in the refusal's
  * `details` come from an `In` query, and a chosen line of another list or a
@@ -361,6 +368,87 @@ describeIntegration(
 
       expect((await stored()).map((row) => row.id)).toEqual([gone]);
       expect((await stored(ids.other)).map((row) => row.quantity)).toEqual([1]);
+    });
+
+    // The owner's ruling of 2026-11-12 ("only"): the identity line counts in
+    // another unit, and the line of the add's unit that holds the product is
+    // found by the read of `findLinesHolding`, which has to run before the
+    // refusal does.
+    it('lands a product add on the held line of its unit beside an identity line of another unit', async () => {
+      const leche = await productLine('Leche', WHOLE);
+      const { line: desayuno } = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Desayuno',
+        itemIds: [WHOLE, OAT],
+        unit: 'MILLILITER',
+        quantity: 300,
+      });
+      const before = (await stored()).find((row) => row.id === desayuno.id);
+      const milk = {
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Leche',
+        itemIds: [WHOLE],
+        unit: 'MILLILITER' as const,
+      };
+
+      const met = await lines.add(milk);
+      const [batched] = await lines.addMany({
+        userId: ids.owner,
+        listId: ids.list,
+        items: [milk],
+      });
+
+      for (const answer of [met, batched]) {
+        expect(answer).toMatchObject({
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: desayuno.id, quantity: 300, unit: 'MILLILITER' },
+        });
+        expect(answer.alreadyOnList.map((line) => line.id)).toEqual([
+          desayuno.id,
+        ]);
+      }
+      const after = (await stored()).find((row) => row.id === desayuno.id);
+      expect(after?.version).toBe(before?.version);
+      expect((await stored()).map((row) => row.id)).toEqual([
+        leche,
+        desayuno.id,
+      ]);
+
+      await keep(desayuno.id);
+      const raised = await lines.add(milk);
+
+      expect(raised).toMatchObject({
+        outcome: 'RAISED',
+        line: { id: desayuno.id, quantity: 25, unit: 'MILLILITER' },
+      });
+      expect((await stored()).map((row) => row.quantity)).toEqual([1, 25]);
+    });
+
+    it('refuses a batch that would create one product in two units under two names, as two single adds refuse the second', async () => {
+      const items = [
+        {
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER' as const,
+        },
+        { content: 'Milk', itemIds: [WHOLE], unit: 'UNIT' as const },
+      ];
+
+      const refused = await lines
+        .addMany({ userId: ids.owner, listId: ids.list, items })
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(ValidationException);
+      expect(refused).toMatchObject({ messageArgs: { field: 'items' } });
+      expect(await stored()).toEqual([]);
+
+      await lines.add({ userId: ids.owner, listId: ids.list, ...items[0] });
+      await expect(
+        lines.add({ userId: ids.owner, listId: ids.list, ...items[1] })
+      ).rejects.toBeInstanceOf(LineUnitDiffersException);
+      expect(await stored()).toHaveLength(1);
     });
   }
 );

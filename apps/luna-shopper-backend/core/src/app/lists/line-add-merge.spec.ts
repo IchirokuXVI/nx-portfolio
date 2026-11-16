@@ -2301,3 +2301,276 @@ describe('an add that meets a line already on the list adds nothing (plan 0260)'
     expect(w.saved.map((row) => row.id)).toEqual(['li-k']);
   });
 });
+
+// Review round 3 of PR #984: a batch is the sequence of single adds it stands
+// for, also where two of its items meet each other, and an answer of
+// `ALREADY_ON_LIST` names every wanted line of the add's unit that holds the
+// product.
+describe('a batch as the sequence of its single adds (plan 0260 R7, review round 3)', () => {
+  const batch = (
+    w: Harness,
+    items: {
+      content: string;
+      itemIds?: string[];
+      unit?: LineUnit;
+      named?: boolean;
+    }[]
+  ) =>
+    w.service
+      .addMany({ userId: ADDER, listId: LIST_ID, items })
+      .catch((error: unknown) => error);
+
+  it.each([
+    [
+      'two names of one product',
+      [
+        { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' as LineUnit },
+        { content: 'Milk', itemIds: [WHOLE], unit: 'UNIT' as LineUnit },
+      ],
+    ],
+    [
+      'a named and an unnamed item of one product',
+      [
+        { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' as LineUnit },
+        {
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'UNIT' as LineUnit,
+          named: false,
+        },
+      ],
+    ],
+    [
+      'a later item whose products an earlier one holds',
+      [
+        {
+          content: 'Desayuno',
+          itemIds: [WHOLE, OAT],
+          unit: 'MILLILITER' as LineUnit,
+        },
+        { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' as LineUnit },
+      ],
+    ],
+  ])(
+    'refuses %s created in two units with the 400 on items',
+    async (_, items) => {
+      const w = build({});
+
+      const refused = await batch(w, items);
+
+      expect(refused).toBeInstanceOf(ValidationException);
+      expect(refused).toMatchObject({ messageArgs: { field: 'items' } });
+      expect((refused as Error).message).toBe(
+        'items 0 and 1 name one product in two units'
+      );
+      expect(w.saved).toEqual([]);
+      expect(w.events).toEqual([]);
+      expect(announcer.calls.linesChanged).toEqual([]);
+    }
+  );
+
+  it('creates both when the earlier line does not hold every product of the later one, as two single adds do', async () => {
+    const w = build({});
+
+    const results = (await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Desayuno', itemIds: [WHOLE, OAT], unit: 'UNIT' },
+    ])) as { outcome: string }[];
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'CREATED',
+      'CREATED',
+    ]);
+    expect(w.saved).toHaveLength(2);
+  });
+
+  it('lets two units of one product through when the list already holds a wanted line in each', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-ml', content: 'Leche', quantity: 500, unit: 'MILLILITER' },
+        { id: 'li-ud', content: 'Leche', quantity: 2 },
+      ],
+      products: [
+        { lineId: 'li-ml', itemId: WHOLE, position: 0 },
+        { lineId: 'li-ud', itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const results = (await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' },
+    ])) as { outcome: string; line: LineView }[];
+
+    expect(results.map((entry) => [entry.outcome, entry.line.id])).toEqual([
+      ['ALREADY_ON_LIST', 'li-ml'],
+      ['ALREADY_ON_LIST', 'li-ud'],
+    ]);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('lets them through when the list keeps a line in each, and raises both', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-ml', content: 'Leche', quantity: 0, unit: 'MILLILITER' },
+        { id: 'li-ud', content: 'Leche', quantity: 0 },
+      ],
+      products: [
+        { lineId: 'li-ml', itemId: WHOLE, position: 0 },
+        { lineId: 'li-ud', itemId: WHOLE, position: 0 },
+      ],
+    });
+
+    const results = (await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' },
+    ])) as { outcome: string; line: LineView }[];
+
+    expect(
+      results.map((entry) => [
+        entry.outcome,
+        entry.line.id,
+        entry.line.quantity,
+      ])
+    ).toEqual([
+      ['RAISED', 'li-ml', 25],
+      ['RAISED', 'li-ud', 1],
+    ]);
+  });
+
+  it('refuses the later item with line_unit_differs when only the earlier unit is on the list', async () => {
+    const w = build({
+      holds: [
+        { id: 'li-ml', content: 'Leche', quantity: 500, unit: 'MILLILITER' },
+      ],
+      products: [{ lineId: 'li-ml', itemId: WHOLE, position: 0 }],
+    });
+
+    const refused = await batch(w, [
+      { content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' },
+      { content: 'Leche', itemIds: [WHOLE], unit: 'UNIT' },
+    ]);
+
+    expect(refused).toBeInstanceOf(LineUnitDiffersException);
+    expect((refused as LineUnitDiffersException).details).toMatchObject({
+      line: { lineId: 'li-ml' },
+      unit: 'UNIT',
+      index: 1,
+    });
+    expect(w.saved).toEqual([]);
+  });
+});
+
+describe('an add that meets a wanted identity line names every wanted line of its unit (plan 0260 section 1 step 3)', () => {
+  /**
+   * "Desayuno" at position 1 holds WHOLE and OAT; "Leche" at 2 is the
+   * identity line of WHOLE; "Merienda" at 3 holds both, kept; "Carton" at 4
+   * holds WHOLE in pieces. All but the last count millilitres.
+   */
+  const shelf = {
+    holds: [
+      {
+        id: 'li-desayuno',
+        content: 'Desayuno',
+        quantity: 300,
+        unit: 'MILLILITER' as LineUnit,
+      },
+      {
+        id: 'li-leche',
+        content: 'Leche',
+        quantity: 500,
+        unit: 'MILLILITER' as LineUnit,
+      },
+      {
+        id: 'li-merienda',
+        content: 'Merienda',
+        quantity: 0,
+        unit: 'MILLILITER' as LineUnit,
+      },
+      { id: 'li-carton', content: 'Carton', quantity: 2 },
+    ],
+    products: [
+      { lineId: 'li-desayuno', itemId: WHOLE, position: 0 },
+      { lineId: 'li-desayuno', itemId: OAT, position: 1 },
+      { lineId: 'li-leche', itemId: WHOLE, position: 0 },
+      { lineId: 'li-merienda', itemId: WHOLE, position: 0 },
+      { lineId: 'li-merienda', itemId: OAT, position: 1 },
+      { lineId: 'li-carton', itemId: WHOLE, position: 0 },
+    ],
+  };
+
+  it('on a single add, in position order', async () => {
+    const w = build(shelf);
+
+    const result = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+    });
+
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([
+      'li-desayuno',
+      'li-leche',
+    ]);
+    expect(result.line.id).toBe('li-desayuno');
+    expect(w.saved).toEqual([]);
+  });
+
+  it('in a batch, in position order', async () => {
+    const w = build(shelf);
+
+    const [result] = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [{ content: 'Leche', itemIds: [WHOLE], unit: 'MILLILITER' }],
+    });
+
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([
+      'li-desayuno',
+      'li-leche',
+    ]);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('still raises a kept identity line before any held line', async () => {
+    const w = build({
+      ...shelf,
+      holds: shelf.holds.map((seed) =>
+        seed.id === 'li-leche' ? { ...seed, quantity: 0 } : seed
+      ),
+    });
+
+    const result = await add(w, 'Leche', {
+      itemIds: [WHOLE],
+      unit: 'MILLILITER',
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'RAISED',
+      line: { id: 'li-leche', quantity: 25 },
+    });
+  });
+});
+
+describe('a kept line is raised whatever its named flag (the owner, 2026-11-12, ruling 1)', () => {
+  it.each([
+    ['a named line by an unnamed add', true, false],
+    ['an unnamed line by a named add', false, true],
+  ])('raises %s', async (_, lineNamed, addNamed) => {
+    const w = build({
+      holds: [{ id: 'li-k', content: 'Leche', quantity: 0, named: lineNamed }],
+      products: [{ lineId: 'li-k', itemId: WHOLE, position: 0 }],
+    });
+
+    const result = await add(w, 'Leche entera Hacendado', {
+      itemIds: [WHOLE],
+      named: addNamed,
+    });
+
+    expect(result).toMatchObject({
+      outcome: 'RAISED',
+      line: { id: 'li-k', quantity: 1 },
+    });
+    expect(w.saved.map((row) => row.id)).toEqual(['li-k']);
+  });
+});

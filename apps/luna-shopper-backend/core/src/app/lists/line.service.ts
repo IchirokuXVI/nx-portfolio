@@ -385,6 +385,20 @@ function earliestLine(
 }
 
 /**
+ * These lines once each by id, in list position order (plan 0260, section 1
+ * step 3): the order an answer of `ALREADY_ON_LIST` names them in.
+ */
+function inPositionOrder(lines: readonly ListLine[]): ListLine[] {
+  const byId = new Map<string, ListLine>();
+  for (const line of lines) {
+    if (!byId.has(line.id)) {
+      byId.set(line.id, line);
+    }
+  }
+  return [...byId.values()].sort((a, b) => (isEarlierLine(a, b) ? -1 : 1));
+}
+
+/**
  * The product lines whose name {@link normalizeContent} folds to the typed
  * name's (plan 0228, target 1.4), in the order they were read.
  */
@@ -1229,7 +1243,8 @@ export class LineService {
           const sameUnit = earliest(
             identities.map((identity) => inUnit(identity, unit))
           );
-          if (sameUnit !== undefined) {
+          // A kept identity line takes the add before any held line does.
+          if (sameUnit !== undefined && !isWanted(sameUnit)) {
             return meet(sameUnit);
           }
           const held = await this.findLinesHolding(
@@ -1238,6 +1253,15 @@ export class LineService {
             itemIds
           );
           const inItsUnit = held.filter((line) => unitOf(line) === unit);
+          // A wanted identity line is met with every wanted line of its unit
+          // that holds the product, in position order (section 1 step 3).
+          if (sameUnit !== undefined) {
+            return (
+              (await met(
+                inPositionOrder([sameUnit, ...inItsUnit.filter(isWanted)])
+              )) ?? meet(sameUnit)
+            );
+          }
           if (inItsUnit.length > 0) {
             const answer = await meetAny(inItsUnit);
             if (answer !== null) {
@@ -1435,22 +1459,10 @@ export class LineService {
           productGroupId: null,
         })[0]
     );
-    // Two items of one product in two units cannot both be honoured: the
-    // second would meet the first's line in another unit (plan 0260 R7).
-    const unitOfKey = new Map<string, LineUnit>();
-    for (const [index, key] of keys.entries()) {
-      if (itemSets[index].length === 0) {
-        continue;
-      }
-      const seen = unitOfKey.get(key);
-      if (seen !== undefined && seen !== units[index]) {
-        throw new ValidationException(
-          'two items of one product name two units',
-          { messageArgs: { field: 'items' } }
-        );
-      }
-      unitOfKey.set(key, units[index]);
-    }
+    // Two items of one product in two units are refused in the plan loop
+    // below, and only when both would create a line: an item that meets a
+    // line of its own unit already on the list stands, as a single add of it
+    // would (plan 0260 R7).
     const actor = actorOf(req);
 
     const written = await this.dataSource.transaction(async (manager) => {
@@ -1532,9 +1544,9 @@ export class LineService {
       // would meet once they were saved: a product line of the typed name
       // for a free text item (plan 0228), a product line of the item's unit
       // that holds every product of a product item (R5). A planned line of
-      // another unit is left alone, because it has no row the refusal could
-      // name; the check before the transaction refuses the one case of it
-      // that matters, one product in two units.
+      // another unit is left alone here, because it has no row the refusal
+      // could name: {@link clashOf} refuses an item that would create beside
+      // it.
       const plannedFor = (index: number): number[] =>
         creations.flatMap((creation, planned) => {
           const set = itemSets[creation.index];
@@ -1549,6 +1561,17 @@ export class LineService {
                 itemSets[index].every((id) => set.includes(id));
           return meets ? [planned] : [];
         });
+      // The earliest creation this batch planned in another unit that holds
+      // every product of a product item: a single add of the item after it
+      // would be refused for its unit (plan 0260 U2), and that line has no id
+      // yet, so the two items cannot both stand (R7).
+      const clashOf = (index: number) =>
+        creations.find(
+          (creation) =>
+            itemSets[creation.index].length > 0 &&
+            units[creation.index] !== units[index] &&
+            itemSets[index].every((id) => itemSets[creation.index].includes(id))
+        );
 
       for (const [index, key] of keys.entries()) {
         const unit = units[index];
@@ -1573,22 +1596,28 @@ export class LineService {
             );
           }
         } else {
-          // The line of the item's unit (plan 0246 M5); then a line this
-          // batch creates for the same products, whose unit agrees by the
-          // check above; then the lines of its unit that hold every product
-          // (R5), those already on the list and those this batch creates.
+          // The line of the item's unit (plan 0246 M5), raised when it is
+          // kept and this batch has not raised it; else every line of its
+          // unit that holds every product (R5), the identity line among
+          // them, those already on the list and those this batch creates.
           // Only when no line of its unit holds the product does a line of
-          // another unit answer, and it refuses the batch (R7; the owner,
-          // 2026-11-12).
+          // another unit answer: one already on the list refuses the batch
+          // with `line_unit_differs` (R7; the owner, 2026-11-12), and one
+          // this batch creates with the 400 on `items`.
           const target = targets.get(inUnit(key, unit));
-          if (target !== undefined) {
+          if (
+            target !== undefined &&
+            !raises.has(target.id) &&
+            !isWanted(target)
+          ) {
             slot = await meet(target, index);
-          } else if (byKey.has(key)) {
-            slot = { met: [{ created: byKey.get(key) as number }] };
           } else {
             const lines = await readProductLines();
             const held = holdingIn(lines, itemSets[index]);
-            const inItsUnit = held.filter((line) => unitOf(line) === unit);
+            const inItsUnit = inPositionOrder([
+              ...(target === undefined ? [] : [target]),
+              ...held.filter((line) => unitOf(line) === unit),
+            ]);
             const planned = plannedFor(index);
             if (inItsUnit.length > 0 || planned.length > 0) {
               slot = await meetAny(inItsUnit, index, planned);
@@ -1600,6 +1629,13 @@ export class LineService {
               ]);
               if (refused !== undefined) {
                 throw lineUnitDiffers(refused, unit, index);
+              }
+              const clash = clashOf(index);
+              if (clash !== undefined) {
+                throw new ValidationException(
+                  `items ${clash.index} and ${index} name one product in two units`,
+                  { messageArgs: { field: 'items' } }
+                );
               }
             }
           }
