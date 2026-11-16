@@ -3925,6 +3925,34 @@ describe('the composer and the list it adds to', () => {
           expect(host.querySelector('lib-line-composer .notice')).toBeNull();
         });
 
+        it('says it again when the same add meets the same line a second time', async () => {
+          const { fixture, store } = await met(['zl-milk']);
+          expect(query(fixture, '.said')?.textContent ?? '').toContain(
+            'basket.add.alreadyOn'
+          );
+
+          store.addLine.mockResolvedValueOnce({
+            entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+          // The same text twice is no change to the region: it is emptied first and
+          // filled again after a short gap.
+          expect(query(fixture, '.said')?.textContent?.trim() ?? '').toBe('');
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          fixture.detectChanges();
+          expect(query(fixture, '.said')?.textContent ?? '').toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
         it('says it under the field when no drawn row holds the line', async () => {
           const { fixture } = await met(['zl-elsewhere']);
 

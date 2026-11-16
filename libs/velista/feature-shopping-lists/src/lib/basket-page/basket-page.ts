@@ -144,6 +144,13 @@ import { SeenTarget } from './seen-target';
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
 /**
+ * How long the polite region stays empty before a sentence it already holds is said
+ * again, as on the list page. Long enough for a screen reader to see the region
+ * change, short enough to read as the answer to the press.
+ */
+const REPEAT_SAY_GAP_MS = 150;
+
+/**
  * What the basket showed when somebody left it for another page, handed back when
  * they come back to it (`PageReturn`).
  */
@@ -1113,6 +1120,7 @@ export class BasketPage {
       if (this._tookTimer !== null) {
         clearTimeout(this._tookTimer);
       }
+      this._cancelSay();
     });
   }
 
@@ -1162,7 +1170,7 @@ export class BasketPage {
     this._reopenFailed.set(false);
     this._statusBusy.set(false);
     this._notice.set(null);
-    this.outstandingSaid.set('');
+    this._say('');
     this.uncoveredInfoOpen.set(false);
 
     // The words in the field were a search of the old basket's rows and a question
@@ -1595,8 +1603,34 @@ export class BasketPage {
     this._say(this._translator.t(key, undefined, this._locale(), { count }));
   }
 
+  /** A repeated sentence waiting for its gap, which any newer message drops. */
+  private _sayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The one writer of the basket's polite region. The same sentence a second time is
+   * no change a screen reader hears, so the region is emptied now and filled again
+   * after a short gap, as on the list page (velista `0192`). A newer message, the page
+   * going away or another basket opening drops a sentence still waiting.
+   */
   private _say(sentence: string): void {
-    this.outstandingSaid.set(sentence);
+    this._cancelSay();
+    const repeat = sentence !== '' && this.outstandingSaid() === sentence;
+    if (!repeat) {
+      this.outstandingSaid.set(sentence);
+      return;
+    }
+    this.outstandingSaid.set('');
+    this._sayTimer = setTimeout(() => {
+      this._sayTimer = null;
+      this.outstandingSaid.set(sentence);
+    }, REPEAT_SAY_GAP_MS);
+  }
+
+  private _cancelSay(): void {
+    if (this._sayTimer !== null) {
+      clearTimeout(this._sayTimer);
+      this._sayTimer = null;
+    }
   }
 
   /**

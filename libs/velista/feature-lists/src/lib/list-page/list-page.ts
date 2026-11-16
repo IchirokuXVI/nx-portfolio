@@ -1932,13 +1932,20 @@ export class ListPage {
     }
   }
 
-  /** Say a sentence in the page's polite region, after a gap when it repeats. */
-  private _say(sentence: string, repeat: boolean): void {
+  /**
+   * Say a sentence in the page's polite region, after a gap when it repeats: the region
+   * is emptied now and filled again a moment later, because the same text a second
+   * time is no change a screen reader hears.
+   */
+  private _say(
+    sentence: string,
+    repeat = this.announcement() === sentence
+  ): void {
     if (!repeat) {
       this._announce(sentence);
       return;
     }
-    this._cancelSay();
+    this._announce('');
     this._sayTimer = setTimeout(() => {
       this._sayTimer = null;
       this._announcement.set(sentence);
@@ -2186,7 +2193,8 @@ export class ListPage {
             return;
           }
           if (shown) {
-            this._announce(sentence);
+            // A second identical add says it again (`_say` leaves a gap).
+            this._say(sentence);
           } else {
             this._setNotice(sentence);
           }
@@ -2200,7 +2208,6 @@ export class ListPage {
       // page shows it and marks its quantity (target 4).
       this._markTook([outcome.line.id]);
       this._announce(
-
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
           // In the line's unit: "1,25 kg", not "1250" (velista `0182`).

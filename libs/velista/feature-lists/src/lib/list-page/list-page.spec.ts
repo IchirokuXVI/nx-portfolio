@@ -1964,6 +1964,32 @@ describe('ListPage', () => {
         expect(page.tookLines().size).toBe(0);
       });
 
+      it('says it again when the same add meets the same line a second time', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-bread'] });
+        const page = fixture.componentInstance;
+
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+
+        lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-bread'] });
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+        // The same text twice is no change to the region: it is emptied first and
+        // filled again after a short gap.
+        expect(page.announcement()).toBe('');
+
+        jest.advanceTimersByTime(1_000);
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+      });
+
       it('scrolls to the first met line that is drawn', async () => {
         const original = Element.prototype.scrollIntoView;
         const scrolled: string[] = [];
