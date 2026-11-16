@@ -40,6 +40,7 @@ import {
   catalogToolsView,
   categoryName,
   chainOfScope,
+  lineStepOf,
   productSetChange,
   productSetChanged,
   scopesOfChain,
@@ -1092,6 +1093,10 @@ export class CatalogPage {
   /** The plus on a row: one of this product on the chosen list. */
   protected addProduct(row: ProductRowView): void {
     this.addFailed.set(false);
+    const record =
+      this._products().find((product) => product.id === row.id) ??
+      this._itemNames?.nameOf(row.id) ??
+      null;
     void this._adds.add({
       itemId: row.id,
       name: row.name,
@@ -1099,6 +1104,11 @@ export class CatalogPage {
       imageUrl: row.imageUrl,
       // A product sold by the kilo is asked for by weight (velista `0182`).
       unit: row.lineUnit,
+      // At one step of its own (velista `0186`, ruling 43).
+      step: lineStepOf(
+        { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
+        () => record
+      ),
     });
   }
 

@@ -20,6 +20,7 @@ import {
   catalogName,
   LINE_CONTENT_COUNTER_FROM,
   LINE_CONTENT_MAX_LENGTH,
+  lineStepOf,
   lineUnitOfProduct,
   type CatalogSuggestion,
   type LineUnit,
@@ -48,7 +49,7 @@ export interface LineComposerSubmit {
   readonly content: string;
   /**
    * In {@link unit}: one step of it for a chosen card, {@link addAmount} (velista
-   * `0185`). Absent for typed text, which states no amount: the server makes a line
+   * `0185`), of the product's own step when it has one (velista `0186`). Absent for typed text, which states no amount: the server makes a line
    * of one piece, or shows the line that already carries the name.
    */
   readonly quantity?: number;
@@ -457,10 +458,19 @@ export class LineComposer {
       suggestion.kind === 'group'
         ? 'UNIT'
         : lineUnitOfProduct(suggestion.item.offer, suggestion.item);
+    // One product is added at one step of its own (velista `0186`, ruling 43):
+    // `lineStepOf` of a line of it alone, null for a count or a product with none.
+    const step =
+      suggestion.kind === 'group'
+        ? null
+        : lineStepOf(
+            { unit, itemIds: [suggestion.item.id] },
+            () => suggestion.item
+          );
 
     // The card's name is still sent, because the server needs a name and the
     // catalog reads it, but the line is not named after it.
-    this._send(content, itemIds, anchor, false, unit);
+    this._send(content, itemIds, anchor, false, unit, step);
   }
 
   /** The one button, pressed. */
@@ -741,7 +751,8 @@ export class LineComposer {
    * A typed name goes with no amount and no unit, so the server decides both (velista
    * `0185`): a new line counts one piece (U1), and a line that already carries the
    * name is shown rather than raised. A chosen card goes at one step of its unit,
-   * {@link addAmount}: 25 g, 25 ml or one piece.
+   * {@link addAmount}: 25 g, 25 ml or one piece, or one step of the product's own
+   * (velista `0186`, ruling 43).
    *
    * The field is cleared **here**, before the request resolves, because the add is
    * optimistic and the row is already on screen: leaving the text in the field until a
@@ -759,13 +770,14 @@ export class LineComposer {
     itemIds: readonly string[] | undefined,
     anchor: HTMLElement | undefined,
     named?: false,
-    unit: LineUnit = 'UNIT'
+    unit: LineUnit = 'UNIT',
+    step: number | null = null
   ): void {
     const hold = this.holdOnSend();
     const products = itemIds !== undefined && itemIds.length > 0;
     this.submitted.emit({
       content,
-      ...(products ? { quantity: addAmount(unit), unit, itemIds } : {}),
+      ...(products ? { quantity: addAmount(unit, step), unit, itemIds } : {}),
       ...(products && named === false ? { named } : {}),
       ...(hold && anchor !== undefined ? { anchor } : {}),
     });

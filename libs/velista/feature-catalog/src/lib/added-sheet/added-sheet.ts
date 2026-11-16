@@ -109,7 +109,12 @@ export class AddedSheet {
         quantity: entry.quantity,
         unit: units.get(entry.lineId) ?? 'UNIT',
         step: steps.get(entry.lineId) ?? null,
-        floor: visitFloor(entry, units.get(entry.lineId) ?? 'UNIT'),
+        // A line the visit made starts at one step of its product (ruling 43).
+        floor: visitFloor(
+          entry,
+          units.get(entry.lineId) ?? 'UNIT',
+          steps.get(entry.lineId) ?? null
+        ),
         pending: entry.pending,
       })),
     }));

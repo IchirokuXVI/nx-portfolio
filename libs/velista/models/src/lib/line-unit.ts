@@ -117,9 +117,14 @@ export function defaultQuantity(unit: LineUnit): number {
  *
  * Not the stepper's step: a count steps by ten from a thousand, which a first
  * add never reaches.
+ *
+ * `step` is the product's own step (velista `0186`, the owner's ruling 43 of
+ * 2026-11-16, which fixes `0185` A2): a chosen product sold by the kilo or the
+ * litre is added at one step of it, `stepAt(0, unit, step)`, so a whole chicken
+ * stepped at 1000 is added at 1 kg. Null, absent, or a count is the default.
  */
-export function addAmount(unit: LineUnit): number {
-  return isMeasured(unit) ? 25 : 1;
+export function addAmount(unit: LineUnit, step?: number | null): number {
+  return isMeasured(unit) ? stepAt(0, unit, step) : 1;
 }
 
 /**

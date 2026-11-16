@@ -59,6 +59,13 @@ export interface CatalogAddProduct {
    * `addAmount` of it, one piece, 25 g or 25 ml (velista `0185`).
    */
   readonly unit?: LineUnit;
+  /**
+   * The step a line of this product alone presses by, `lineStepOf` over the
+   * page's record (velista `0186`). An add starts at one step of it (the owner's
+   * ruling 43): a whole chicken stepped at 1000 is added at 1 kg. Absent or null
+   * is the unit's default.
+   */
+  readonly step?: number | null;
 }
 
 /** Where a read is: not asked for, on its way, answered, or not answered. */
@@ -154,6 +161,13 @@ export class CatalogAddStore {
   private readonly _adding = new Map<string, number>();
 
   /**
+   * How much each of those adds asks for, by the same key: one step of the
+   * product's own when it has one (velista `0186`, ruling 43), else one step of
+   * its unit. Absent before the first add, which is the unit's default.
+   */
+  private readonly _addEach = new Map<string, number>();
+
+  /**
    * The open run of each line a stepper moves (velista `0188`, decision G): the
    * presses gather here, drawn at once, and after `QUANTITY_STEP_QUIET_MS` with no
    * step the run is written as one change. Every open run is written when the app
@@ -208,28 +222,67 @@ export class CatalogAddStore {
     if (items === null) {
       return held;
     }
+    const before = this._shownHeld;
     let changed = false;
-    const shown = held.map((line) => {
+    const shown = held.map((line, at) => {
       const productOf = (itemId: string) => items.nameOf(itemId);
       const unit = shownLineUnit(line, productOf);
       // The product's step (velista `0186`, decision A). A record not read yet
       // says nothing (decision B), so null is only known to be the default once
       // every product of the line has answered; until then the step is absent,
-      // and a screen that knows a product's step may step by it meanwhile.
+      // or the step a first add of its one product was sent at, and a screen
+      // that knows a product's step may step by it meanwhile.
       const found = lineStepOf({ ...line, unit }, productOf);
       const step =
         found !== null ||
         line.itemIds.every((itemId) => items.sizingOf(itemId) !== undefined)
           ? found
-          : undefined;
+          : line.itemIds.length === 1
+            ? this._addStep.get(line.itemIds[0])
+            : undefined;
       if (unit === line.unit && step === line.step) {
         return line;
       }
       changed = true;
-      return { ...line, unit, step };
+      // The same line read the same way keeps the object the last read drew, so
+      // a recompute that changed nothing redraws no row (a raw line has no
+      // `step`, and a known default is null).
+      const last = before?.lines[at] === line ? before.shown[at] : undefined;
+      return last !== undefined && last.unit === unit && last.step === step
+        ? last
+        : { ...line, unit, step };
     });
-    return changed ? shown : held;
+    if (!changed) {
+      this._shownHeld = null;
+      return held;
+    }
+    if (
+      before !== null &&
+      before.shown.length === shown.length &&
+      before.shown.every((line, at) => line === shown[at])
+    ) {
+      return before.shown;
+    }
+    this._shownHeld = { lines: held, shown };
+    return shown;
   });
+
+  /**
+   * What {@link held} answered last, over the raw lines it read, so a recompute
+   * that changed nothing answers the same array and the same rows.
+   */
+  private _shownHeld: {
+    readonly lines: readonly HeldLine[];
+    readonly shown: readonly HeldLine[];
+  } | null = null;
+
+  /**
+   * The step each product was last added at, by product (velista `0186`, ruling
+   * 43): what {@link held} names for a line of that one product while its record
+   * is still on its way, so the sheet of the visit and the take back read the
+   * step the line was made at.
+   */
+  private readonly _addStep = new Map<string, number | null>();
 
   /** What this visit added, in the order it was added. */
   readonly visit = this._visit.asReadonly();
@@ -368,6 +421,10 @@ export class CatalogAddStore {
         this._flush(line.lineId);
       }
     }
+    this._addEach.set(key, addAmount(product.unit ?? 'UNIT', product.step));
+    if (product.step !== undefined) {
+      this._addStep.set(product.itemId, product.step);
+    }
     const drawnOn = this._drawAdd(to, product);
     this._adding.set(key, (this._adding.get(key) ?? 0) + 1);
     return this._queued(key, (generation) =>
@@ -414,7 +471,13 @@ export class CatalogAddStore {
       entry !== null &&
       entry.created &&
       (step.to === 0 ||
-        (isMeasured(line.unit) && step.from === visitFloor(entry, line.unit)))
+        (isMeasured(line.unit) &&
+          step.from ===
+            visitFloor(
+              entry,
+              line.unit,
+              this.held().find((held) => held.lineId === lineId)?.step
+            )))
     ) {
       if (step.repeat) {
         return;
@@ -488,6 +551,8 @@ export class CatalogAddStore {
     this._lineReads.set(new Map());
     this._rights.clear();
     this._adding.clear();
+    this._addEach.clear();
+    this._addStep.clear();
   }
 
   /**
@@ -505,7 +570,9 @@ export class CatalogAddStore {
     );
     const unit = product.unit ?? 'UNIT';
     if (own !== null) {
-      this._move(own.lineId, addAmount(own.unit));
+      // The server raises the line by the amount the add sends, so that is what
+      // is drawn: the step of the product in the unit the add states.
+      this._move(own.lineId, addAmount(unit, product.step));
       return own.lineId;
     }
     const lineId = unsavedLineId(listId, product.itemId);
@@ -515,7 +582,7 @@ export class CatalogAddStore {
         lineId,
         listId,
         name: product.name,
-        quantity: addAmount(unit),
+        quantity: addAmount(unit, product.step),
         unit,
         pending: false,
         itemIds: [product.itemId],
@@ -537,9 +604,10 @@ export class CatalogAddStore {
     generation: number
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
-    // One step of the product's unit, 25 g, 25 ml or one piece (velista `0185`).
+    // One step of the product's unit, 25 g, 25 ml or one piece (velista `0185`),
+    // or one step of its own when it has one (velista `0186`, ruling 43).
     const unit = product.unit ?? 'UNIT';
-    const amount = addAmount(unit);
+    const amount = addAmount(unit, product.step);
     try {
       // Not named: the words are the product's (velista `0144`, section 3), and
       // they are still sent, because the server needs them and `sameLineName`
@@ -565,7 +633,7 @@ export class CatalogAddStore {
       if (elsewhere) {
         this._move(drawnOn, -amount);
       }
-      const answered = heldOf(result.line, elsewhere ? 0 : ahead);
+      const answered = heldOf(result.line, elsewhere ? 0 : ahead, amount);
       // A stepper's run still open on the line stays drawn on top of the answer.
       // Every other line the add met is read as the server holds it.
       const met = result.alreadyOnList.filter(
@@ -665,8 +733,12 @@ export class CatalogAddStore {
       if (generation !== this._generation) {
         return;
       }
-      const ahead = this._adding.get(keyOf(product.listId, product.itemId));
-      const held = heldOf(answer, ahead ?? 0);
+      const key = keyOf(product.listId, product.itemId);
+      const held = heldOf(
+        answer,
+        this._adding.get(key) ?? 0,
+        this._addEach.get(key)
+      );
       // A run opened on the line since this one closed is drawn on top.
       this._held.update((all) =>
         upsert(all, {
@@ -745,9 +817,16 @@ export class CatalogAddStore {
       if (generation !== this._generation) {
         return;
       }
-      const ahead = this._adding.get(keyOf(product.listId, product.itemId));
+      const key = keyOf(product.listId, product.itemId);
       this._held.update((held) =>
-        upsert(held, heldOf(answer.line, ahead ?? 0))
+        upsert(
+          held,
+          heldOf(
+            answer.line,
+            this._adding.get(key) ?? 0,
+            this._addEach.get(key)
+          )
+        )
       );
       // From nothing the visit added the kilo, which taking back lowers again.
       // Over pieces there is no amount in the new unit to go back to, so the
@@ -1047,13 +1126,18 @@ function stateOf(line: Line) {
 }
 
 /** A line as the store holds it, with the adds still on their way drawn in. */
-function heldOf(line: Line, ahead: number): HeldLine {
+function heldOf(
+  line: Line,
+  ahead: number,
+  each: number = addAmount(line.unit)
+): HeldLine {
   return {
     lineId: line.id,
     listId: line.listId,
     name: line.content,
-    // Each add on its way is one step of the line's unit (velista `0185`).
-    quantity: line.quantity + ahead * addAmount(line.unit),
+    // Each add on its way is what it asked for: one step of the line's unit
+    // (velista `0185`), or of the product's own (velista `0186`, ruling 43).
+    quantity: line.quantity + ahead * each,
     unit: line.unit,
     pending: line.approvalStatus === 'PENDING',
     itemIds: line.itemIds,

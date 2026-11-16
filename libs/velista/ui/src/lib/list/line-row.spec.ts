@@ -863,6 +863,21 @@ describe('LineRow', () => {
       ).map((fact) => fact.textContent?.trim() ?? '');
     }
 
+    it("steps by the product's step the row carries, as the row of today does (velista 0186)", async () => {
+      const fixture = await compact(
+        vm({ quantity: 1000, unit: 'GRAM', step: 100, product: loose() })
+      );
+      const steps: QuantityStep[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((event) =>
+        steps.push(event.step)
+      );
+
+      plus(fixture).click();
+
+      expect(row(fixture).classList).toContain('compact');
+      expect(steps).toEqual([{ from: 1000, to: 1100, repeat: false }]);
+    });
+
     it('carries .compact and draws none of the row of today', async () => {
       const fixture = await compact(vm({ product: pack() }));
 

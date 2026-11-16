@@ -483,6 +483,12 @@ export class ProductPage {
 
   protected addProduct(row: ProductRowView): void {
     this.addFailed.set(false);
+    const groupId = this._item()?.productGroupId ?? null;
+    const entry = groupId === null ? null : this._groupMembers.entry(groupId);
+    const record =
+      entry?.status === 'ready'
+        ? (entry.members.find((member) => member.id === row.id) ?? null)
+        : null;
     void this._adds.add({
       itemId: row.id,
       name: row.name,
@@ -490,6 +496,11 @@ export class ProductPage {
       imageUrl: row.imageUrl,
       // A product sold by the kilo is asked for by weight (velista `0182`).
       unit: row.lineUnit,
+      // At one step of its own (velista `0186`, ruling 43).
+      step: lineStepOf(
+        { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
+        () => record
+      ),
     });
   }
 
@@ -526,6 +537,8 @@ export class ProductPage {
         imageUrl: this.imageUrl(),
         // A product sold by the kilo is asked for by weight (velista `0182`).
         unit: this.lineUnit(),
+        // At one step of its own (velista `0186`, ruling 43).
+        step: this.step(),
       },
       listId
     );

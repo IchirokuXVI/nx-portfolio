@@ -105,6 +105,13 @@ export class QuantityStepper {
    * step.
    */
   readonly min = input(LINE_QUANTITY_MIN);
+  /**
+   * The lowest amount a typed commit keeps, when it is not {@link min}: the owner's
+   * ruling 44 of 2026-11-16, "typing accepts any amount; the step only moves the
+   * buttons". The how many step floors its buttons at one step and its typing at
+   * one base unit. Null, the default, is {@link min}, as before.
+   */
+  readonly typedMin = input<number | null>(null);
   readonly max = input(LINE_QUANTITY_MAX);
   /** A write is in flight: both buttons and the field ignore input, and say so. */
   readonly disabled = input(false);
@@ -455,7 +462,7 @@ export class QuantityStepper {
       draft,
       shown,
       this.unit(),
-      this.min(),
+      this.typedMin() ?? this.min(),
       this.max()
     );
     if (amount !== null) {

@@ -91,6 +91,25 @@ describe('QuantityStepper (velista 0188)', () => {
 
   const tos = (h: Harness) => h.steps.map((step) => step.to);
 
+  /** The sheet's field, and typing and keys on it. */
+  const field = (h: Harness) => h.el.querySelector('input') as HTMLInputElement;
+  const type = (h: Harness, text: string) => {
+    const input = field(h);
+    input.value = text;
+    fire(input, 'input');
+    h.fixture.detectChanges();
+  };
+  const key = (h: Harness, name: string) => {
+    const event = new KeyboardEvent('keydown', {
+      key: name,
+      bubbles: true,
+      cancelable: true,
+    });
+    field(h).dispatchEvent(event);
+    h.fixture.detectChanges();
+    return event;
+  };
+
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => {
     jest.useRealTimers();
@@ -434,25 +453,6 @@ describe('QuantityStepper (velista 0188)', () => {
   });
 
   describe('the sheets (section 3.5)', () => {
-    const field = (h: Harness) =>
-      h.el.querySelector('input') as HTMLInputElement;
-    const type = (h: Harness, text: string) => {
-      const input = field(h);
-      input.value = text;
-      fire(input, 'input');
-      h.fixture.detectChanges();
-    };
-    const key = (h: Harness, name: string) => {
-      const event = new KeyboardEvent('keydown', {
-        key: name,
-        bubbles: true,
-        cancelable: true,
-      });
-      field(h).dispatchEvent(event);
-      h.fixture.detectChanges();
-      return event;
-    };
-
     it('is a spinbutton with its four values and the exact form', () => {
       const h = render({ value: 1275, unit: 'GRAM', variant: 'sheet' });
       const input = field(h);
@@ -696,6 +696,63 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 3, step: 100 });
       h.plus.click();
       expect(tos(h)).toEqual([4]);
+    });
+
+    describe('typing accepts any amount (the owner, ruling 44 of 2026-11-16)', () => {
+      it('takes 10 g on a step of 50 down to 0 with the trash, or up to 60', () => {
+        const down = render({ value: 10, unit: 'GRAM', step: 50 });
+        expect(down.minus.classList).toContain('is-clear');
+        expect(down.minus.querySelector('lib-trash-icon')).not.toBeNull();
+        down.minus.click();
+        expect(tos(down)).toEqual([0]);
+
+        const up = render({ value: 10, unit: 'GRAM', step: 50 });
+        up.plus.click();
+        expect(tos(up)).toEqual([60]);
+      });
+
+      it('keeps a typed amount under one step on a step of 50', () => {
+        const h = render({ value: 50, unit: 'GRAM', step: 50, variant: 'sheet' });
+        type(h, '10');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([10]);
+      });
+
+      it('keeps a typed amount under the floor of the buttons with a typed floor', () => {
+        const h = render({
+          value: 100,
+          unit: 'GRAM',
+          step: 100,
+          min: 100,
+          typedMin: 1,
+          variant: 'sheet',
+        });
+        type(h, '10');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([10]);
+        type(h, '0');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([10, 1]);
+        // The buttons still stop at their floor: minus at 1 is at its end.
+        expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+        h.minus.click();
+        expect(tos(h)).toEqual([10, 1]);
+        expect(field(h).getAttribute('aria-valuemin')).toBe('1');
+      });
+
+      it('holds a typed amount to the floor of the buttons without one, as before', () => {
+        const h = render({
+          value: 100,
+          unit: 'GRAM',
+          step: 100,
+          min: 100,
+          variant: 'sheet',
+        });
+        type(h, '10');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([]);
+        expect(field(h).getAttribute('aria-valuemin')).toBe('100');
+      });
     });
 
     describe('where minus reaches 0 and quick presses (velista 0188 S14)', () => {
