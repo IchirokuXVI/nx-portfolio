@@ -1496,7 +1496,7 @@ describe('AssistantService', () => {
         const api = new RecordingApi();
         api.linesByList.set('list-flat', [
           line('line-a', 'list-flat', 'Leche', 2),
-          line('line-b', 'list-flat', 'Leche entera', 0),
+          line('line-b', 'list-flat', 'LECHE', 0),
         ]);
         const provider = new FakeModelProvider([
           FakeModelProvider.calls('upsert_lines', {
@@ -1506,13 +1506,13 @@ describe('AssistantService', () => {
         ]);
         const service = build(provider, api);
 
-        await service.turn(turnRequest('la entera, tres'));
+        await service.turn(turnRequest('la segunda, tres'));
 
         expect(api.of('addLines')).toHaveLength(0);
         expect(api.of('updateLine')).toHaveLength(1);
         expect(api.of('updateLine')[0].detail).toEqual({
           lineId: 'line-b',
-          content: 'Leche entera',
+          content: 'LECHE',
           quantity: 3,
         });
       });
@@ -1599,12 +1599,13 @@ describe('AssistantService', () => {
       it('leaves exactly one match as before: it changes that line', async () => {
         const api = new RecordingApi();
         api.linesByList.set('list-flat', [
-          line('line-a', 'list-flat', 'leche', 2),
-          // A rejected line is no match, as core never meets one either.
+          // A rejected line is no match, as core never meets one either. It
+          // comes first, so a lookup that kept it would pick it.
           {
             ...line('line-b', 'list-flat', 'leche', 1),
             approvalStatus: LineApprovalStatus.REJECTED,
           },
+          line('line-a', 'list-flat', 'leche', 2),
         ]);
         const provider = new FakeModelProvider([
           FakeModelProvider.calls('upsert_lines', {
@@ -1644,6 +1645,182 @@ describe('AssistantService', () => {
           { content: 'leche', quantity: 2 },
         ]);
         expect(firstItem(provider).action).toBe('added');
+      });
+
+      it('refuses a lineId that names a rejected line, as one the list does not have', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-a', 'list-flat', 'leche', 2),
+          {
+            ...line('line-b', 'list-flat', 'leche', 1),
+            approvalStatus: LineApprovalStatus.REJECTED,
+          },
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 3, lineId: 'line-b' }],
+          }),
+          FakeModelProvider.says('Lo miro otra vez.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon tres de leche'));
+
+        wroteNothing(api);
+        const item = firstItem(provider);
+        expect(item).toMatchObject({ product: 'leche', refused: true });
+        expect(item.reason).toContain('not a line of this list');
+      });
+
+      it('refuses a lineId of a line that does not match the product', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-a', 'list-flat', 'leche', 2),
+          line('line-b', 'list-flat', 'leche', 0),
+          line('line-c', 'list-flat', 'pan', 1),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 3, lineId: 'line-c' }],
+          }),
+          FakeModelProvider.says('Lo miro otra vez.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon tres de leche'));
+
+        wroteNothing(api);
+        const item = firstItem(provider);
+        expect(item).toMatchObject({ product: 'leche', refused: true });
+        expect(item.reason).toContain('does not match');
+        expect(item.instead).toContain('without lineId');
+      });
+
+      it('accepts a lineId whose line matches the product with its amount taken off', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-a', 'list-flat', 'queso 300 g', 1),
+          line('line-b', 'list-flat', 'queso 500 g', 1),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              { product: 'queso', quantity: 2, mode: 'add', lineId: 'line-b' },
+            ],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('dos más del de 500'));
+
+        expect(api.of('addLineQuantity')).toHaveLength(1);
+        expect(api.of('addLineQuantity')[0].detail['lineId']).toBe('line-b');
+      });
+
+      it('keeps the whole name of a free text line a targeted count changes', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-a', 'list-flat', 'queso 300 g', 1),
+          line('line-b', 'list-flat', 'queso 300 g', 0),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'queso 300 g', quantity: 2, lineId: 'line-a' }],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('dos de la primera'));
+
+        expect(api.of('updateLine')).toHaveLength(1);
+        expect(api.of('updateLine')[0].detail).toEqual({
+          lineId: 'line-a',
+          content: 'queso 300 g',
+          quantity: 2,
+        });
+      });
+
+      it('writes the new amount in place of the old on a targeted weight', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-a', 'list-flat', 'queso 300 g', 1),
+          line('line-b', 'list-flat', 'queso 200 g', 1),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              {
+                product: 'queso',
+                quantity: 500,
+                unit: 'GRAM',
+                lineId: 'line-a',
+              },
+            ],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('el de 300, que sean 500 g'));
+
+        expect(api.of('updateLine')[0].detail).toEqual({
+          lineId: 'line-a',
+          content: 'queso 500 g',
+          quantity: 1,
+        });
+      });
+
+      it('folds an item found by name and an item with a lineId that land on one line', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-a', 'list-flat', 'leche', 1),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              { product: 'leche', quantity: 2 },
+              { product: 'leche', quantity: 3, lineId: 'line-a' },
+            ],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('leche, dos, no, tres'));
+
+        expect(api.of('addLineQuantity')).toHaveLength(0);
+        expect(api.of('updateLine')).toHaveLength(1);
+        expect(api.of('updateLine')[0].detail).toEqual({
+          lineId: 'line-a',
+          content: 'leche',
+          quantity: 3,
+        });
+      });
+
+      it('says how many it shows when more lines match than it hands over', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set(
+          'list-flat',
+          Array.from({ length: 12 }, (_, at) =>
+            line(`line-${at}`, 'list-flat', 'leche', at)
+          )
+        );
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 3 }],
+          }),
+          FakeModelProvider.says('¿Cuál?'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon tres de leche'));
+
+        wroteNothing(api);
+        const item = firstItem(provider);
+        expect(item.matches).toHaveLength(10);
+        expect(item.reason).toContain('showing 10 of 12');
       });
     });
 

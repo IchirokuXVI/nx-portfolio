@@ -272,9 +272,13 @@ From 2026-11-16, decision 50 (the owner approved it on 2026-11-16):
   of `upsert_lines` whose name fits two or more lines of the list (lines at 0 included,
   rejected lines never, as M1) writes nothing and answers the lines as `matches` (id, name,
   amount, unit) with an `instead` sentence telling the model to ask which one. The item gains
-  an optional `lineId`; with it the item changes exactly that line, under the line's own name,
-  and a `lineId` that is no line of the list is a refused item the model reads, never a throw.
-  One match and no match behave as before. Why: a guess between two lines is the wrong write
+  an optional `lineId`; with it the item changes exactly that line, under the line's own name
+  (only a weight or a volume with a number rewrites the amount folded into a free text name).
+  A `lineId` is accepted only for a line the product fits by either name tier, as core's
+  `intoLineId` refuses a line that is no match: an id that is no line of the list, a rejected
+  line, or a line of another product is a refused item the model reads, never a throw. Two
+  items that land on one line, one by name and one by its id, fold into one write by the rule
+  of plan 0040 section 7.3. One match and no match behave as before. Why: a guess between two lines is the wrong write
   the screens already refuse to make, and the assistant must not be the one way around the
   rule. `remove_lines` and `settle_lines` already name lines by id, so they did not change;
   core and the gateway did not change.

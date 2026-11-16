@@ -346,16 +346,30 @@ const upsertLines: AssistantTool = {
     }[] = [];
     items.forEach((item, index) => {
       if (item.lineId !== undefined) {
-        const target = lines.find((line) => line.id === item.lineId);
-        if (target === undefined) {
+        // A rejected line is no line to choose, as it is no match by name
+        // either; and a line the product does not fit is not one of the
+        // lines the model was handed, as core's `intoLineId` refuses it.
+        const target = lines.find(
+          (line) =>
+            line.id === item.lineId &&
+            line.approvalStatus !== LineApprovalStatus.REJECTED
+        );
+        if (target === undefined || !fitsName(target, item.product)) {
           runtime.noteForRecord({ refused: true });
-          results[index] = notALineOfTheList(item.product);
+          results[index] = notALineOfTheList(
+            item.product,
+            target === undefined ? 'unknown' : 'other_product'
+          );
           return;
         }
         // The line they chose keeps its own name: the product the model
-        // passed beside the id only found the lines to choose from.
+        // passed beside the id only found the lines to choose from. Only a
+        // weight or a volume said of it rewrites the amount folded into it.
         planned.push({
-          item: { ...item, product: nameOf(target) },
+          item: {
+            ...item,
+            product: foldsAmount(item) ? nameOf(target) : target.content,
+          },
           index,
           existing: target,
         });
@@ -373,6 +387,11 @@ const upsertLines: AssistantTool = {
         existing: matches[0] ?? findSameProduct(lines, item.product),
       });
     });
+    // Two items can reach one line by two roads, one by name and one by its
+    // id, and two writes against one read is the lost update the fold of
+    // `foldDuplicates` exists to prevent. So they fold again here, once the
+    // line of each is known, by the same rule.
+    foldOntoLines(planned);
 
     const fresh = planned.filter((entry) => !entry.existing);
     if (fresh.length > 0) {
@@ -1310,7 +1329,11 @@ function severalMatches(
   return {
     product,
     refused: true,
-    reason: `nothing was written, because ${lines.length} lines on the list match it`,
+    reason:
+      `nothing was written, because ${lines.length} lines on the list match it` +
+      (lines.length > LINE_ADD_CHOICE_MAX
+        ? ` (showing ${LINE_ADD_CHOICE_MAX} of ${lines.length})`
+        : ''),
     matches: lines.slice(0, LINE_ADD_CHOICE_MAX).map((line) => ({
       id: line.id,
       product: line.content,
@@ -1322,15 +1345,22 @@ function severalMatches(
 }
 
 /**
- * An item whose `lineId` names no line of the list this call read (decision
- * 50): a stale or invented id. Nothing is written for it, and the model is told
- * how to get a real one rather than handed an exception.
+ * An item whose `lineId` names no line it may write (decision 50): a stale or
+ * invented id, a rejected line (`unknown`), or a line the product does not fit
+ * (`other_product`). Nothing is written for it, and the model is told how to
+ * get a real one rather than handed an exception.
  */
-function notALineOfTheList(product: string): ItemResult {
+function notALineOfTheList(
+  product: string,
+  why: 'unknown' | 'other_product'
+): ItemResult {
   return {
     product,
     refused: true,
-    reason: 'nothing was written, because lineId is not a line of this list',
+    reason:
+      why === 'unknown'
+        ? 'nothing was written, because lineId is not a line of this list'
+        : `nothing was written, because the line lineId names does not match "${product}"`,
     instead:
       'Never write an id yourself. Call upsert_lines again without lineId: if several lines match, the result gives you their ids, and you pass one of those.',
   };
@@ -1511,29 +1541,64 @@ function foldDuplicates(items: UpsertItem[]): UpsertItem[] {
       folded.push({ ...item });
       continue;
     }
-
-    const held = folded[index];
-    if (item.mode === 'set') {
-      if (item.quantity !== undefined) {
-        folded[index] = { ...item };
-      }
-      continue;
-    }
-    if (held.mode === 'set' && held.quantity !== undefined) {
-      held.quantity += item.quantity ?? 1;
-      continue;
-    }
-    folded[index] = {
-      product: held.product,
-      mode: 'add',
-      quantity:
-        (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
-      unit: held.unit,
-      lineId: held.lineId,
-    };
+    folded[index] = foldItem(folded[index], item);
   }
 
   return folded;
+}
+
+/**
+ * One item folded onto the one held before it, by the rule of
+ * {@link foldDuplicates}: a `set` with a number supersedes, an `add` sums, and
+ * a `set` with no number leaves what is held.
+ */
+function foldItem(held: UpsertItem, item: UpsertItem): UpsertItem {
+  if (item.mode === 'set') {
+    return item.quantity !== undefined ? { ...item } : held;
+  }
+  if (held.mode === 'set' && held.quantity !== undefined) {
+    return { ...held, quantity: held.quantity + (item.quantity ?? 1) };
+  }
+  return {
+    product: held.product,
+    mode: 'add',
+    quantity:
+      (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
+    unit: held.unit,
+    lineId: held.lineId,
+  };
+}
+
+/**
+ * The planned items of a call folded once more, by the line each one lands on
+ * (decision 50): an item found by name and an item that named the same line by
+ * its id are one write, as two items of one name are. Units stay apart as
+ * {@link foldDuplicates} keeps them. The folded item keeps the slot of the
+ * first, so the report holds one result for the line. In place.
+ */
+function foldOntoLines(
+  planned: { item: UpsertItem; index: number; existing: LineView | undefined }[]
+): void {
+  const at = new Map<string, number>();
+  for (let position = 0; position < planned.length; ) {
+    const entry = planned[position];
+    if (entry.existing === undefined) {
+      position += 1;
+      continue;
+    }
+    const key = `${entry.existing.id}\u0000${entry.item.unit ?? 'UNIT'}`;
+    const held = at.get(key);
+    if (held === undefined) {
+      at.set(key, position);
+      position += 1;
+      continue;
+    }
+    planned[held] = {
+      ...planned[held],
+      item: foldItem(planned[held].item, entry.item),
+    };
+    planned.splice(position, 1);
+  }
 }
 
 function describeList(list: ContextList): { list: string; zone: string } {
@@ -1714,12 +1779,7 @@ function findSameProduct(
   const wanted = normalize(product);
   return (
     lines.find((line) => normalize(line.content) === wanted) ??
-    lines.find(
-      (line) =>
-        isFreeText(line) &&
-        FOLDED_AMOUNT.test(line.content) &&
-        normalize(line.content.replace(FOLDED_AMOUNT, '')) === wanted
-    )
+    lines.find((line) => fitsFoldedName(line, wanted))
   );
 }
 
@@ -1740,12 +1800,39 @@ function findMatchingLines(lines: LineView[], product: string): LineView[] {
   const whole = open.filter((line) => normalize(line.content) === wanted);
   return whole.length > 0
     ? whole
-    : open.filter(
-        (line) =>
-          isFreeText(line) &&
-          FOLDED_AMOUNT.test(line.content) &&
-          normalize(line.content.replace(FOLDED_AMOUNT, '')) === wanted
-      );
+    : open.filter((line) => fitsFoldedName(line, wanted));
+}
+
+/** A free text line whose name, its folded amount taken off, is `wanted`. */
+function fitsFoldedName(line: LineView, wanted: string): boolean {
+  return (
+    isFreeText(line) &&
+    FOLDED_AMOUNT.test(line.content) &&
+    normalize(line.content.replace(FOLDED_AMOUNT, '')) === wanted
+  );
+}
+
+/**
+ * Whether the product fits the line in either tier of
+ * {@link findMatchingLines}, which is what a `lineId` must name (decision 50):
+ * one of the lines the model could have been handed for that product.
+ */
+function fitsName(line: LineView, product: string): boolean {
+  const wanted = normalize(product);
+  return normalize(line.content) === wanted || fitsFoldedName(line, wanted);
+}
+
+/**
+ * An item that writes its amount into the name of a free text line: a weight
+ * or a volume with a number, as {@link lineEdit} folds it. Any other item
+ * leaves the name of the line it changes as it is.
+ */
+function foldsAmount(item: UpsertItem): boolean {
+  return (
+    item.unit !== undefined &&
+    item.unit !== 'UNIT' &&
+    item.quantity !== undefined
+  );
 }
 
 /**
