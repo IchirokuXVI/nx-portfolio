@@ -445,6 +445,39 @@ describe('LinePage', () => {
       ]);
     });
 
+    it('writes a run 800 ms after its last step while the finger is still down (velista 0188)', async () => {
+      // The owner, 2026-11-12: kept. A minus hold from 3 repeats to 2 and 1 and stops
+      // there (S8b); the finger never lifts, and the run is written all the same.
+      const { fixture, lines } = await render();
+      const fewer = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[0];
+      const quantityCalls = () =>
+        lines.calls.filter((call) => call.kind === 'quantity');
+      jest.useFakeTimers();
+
+      fewer.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      // The repeats land at 400 and 700 ms; the next one would reach 0 and stops.
+      jest.advanceTimersByTime(700);
+      fixture.detectChanges();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
+      fixture.detectChanges();
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('1');
+      expect(quantityCalls()).toEqual([]);
+
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+      await drain(fixture);
+
+      expect(quantityCalls()).toEqual([
+        { kind: 'quantity', lineId: LINE_ID, delta: -2 },
+      ]);
+    });
+
     it('sends a run back to where it started as nothing', async () => {
       const { fixture, lines } = await render();
       const [fewer, more] = fixture.debugElement
