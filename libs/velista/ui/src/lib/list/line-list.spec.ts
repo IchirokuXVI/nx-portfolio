@@ -78,3 +78,42 @@ describe('LineList', () => {
     ).toEqual([false, true, false]);
   });
 });
+
+/** Velista `0191`: the layout the device chose reaches every row. */
+describe('LineList layout (velista 0191)', () => {
+  function drawn(layout?: 'default' | 'compact') {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({
+      imports: [LineList, RokuTranslatorTestingModule.forTesting()],
+    });
+    const fixture = TestBed.createComponent(LineList);
+    fixture.componentRef.setInput('lines', LINES);
+    if (layout !== undefined) {
+      fixture.componentRef.setInput('layout', layout);
+    }
+    fixture.detectChanges();
+    return Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll(
+        'lib-line-row .row'
+      )
+    );
+  }
+
+  it('draws the row of today by default', () => {
+    const drawnRows = drawn();
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.some((row) => row.classList.contains('compact'))).toBe(
+      false
+    );
+  });
+
+  it('passes compact to every row', () => {
+    const drawnRows = drawn('compact');
+
+    expect(drawnRows).toHaveLength(LINES.length);
+    expect(drawnRows.every((row) => row.classList.contains('compact'))).toBe(
+      true
+    );
+  });
+});

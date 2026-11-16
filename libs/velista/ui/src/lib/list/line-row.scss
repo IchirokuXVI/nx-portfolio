@@ -408,3 +408,233 @@
     transition: none;
   }
 }
+
+// ------------------------------------------------------------- The compact row
+//
+// Velista 0191, section 3. One grid on the row element: the picture down the start,
+// line 1 across the rest, and under it the facts and the stepper. The stepper is a
+// shared child of the row in both layouts, so it is placed here by its area rather
+// than drawn twice. 12 + 22 + 52 + 12 and the hairline: 99px.
+.row.compact {
+  --app-line-picture-size: var(--app-line-compact-picture-size);
+  --app-line-picture-radius: var(--app-radius-md);
+  --app-line-picture-glyph: var(--app-icon-lg);
+
+  display: grid;
+  grid-template-columns:
+    var(--app-line-compact-picture-size)
+    minmax(0, 1fr)
+    auto;
+  grid-template-rows:
+    var(--app-line-compact-label-leading)
+    var(--app-line-compact-facts-height);
+  grid-template-areas:
+    'picture line1 line1'
+    'picture facts stepper';
+  align-items: stretch;
+  column-gap: var(--app-space-4);
+  row-gap: 0;
+  min-height: 0;
+  padding-block: var(--app-space-4);
+
+  > .picture {
+    grid-area: picture;
+    align-self: start;
+  }
+
+  // The 0188 row stepper, 155 by 48, centred on the 52px of facts. It never shrinks:
+  // the facts give way instead (weak point 5).
+  > lib-quantity-stepper {
+    grid-area: stepper;
+    align-self: center;
+  }
+}
+
+.compact-line-1 {
+  grid-area: line1;
+  display: flex;
+  align-items: baseline;
+  gap: var(--app-space-3);
+  min-inline-size: 0;
+  overflow: hidden;
+  line-height: var(--app-line-compact-label-leading);
+  white-space: nowrap;
+}
+
+// Every label is in the heavier weight (decision E). It gives way first: it starts
+// from nothing and grows into the room the brand and the marks leave, up to its own
+// width, so the brand gives way only once the label is gone and the marks still need
+// room (section 3.3). A shrink weight cannot do this: flex shrinks every item in
+// proportion to its width too, and the brand's share, however small, fires its
+// ellipsis while the label still has room.
+.compact-line-1 > .label {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  max-inline-size: max-content;
+  font-weight: 600;
+}
+
+.brand {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  max-inline-size: var(--app-line-compact-brand-max);
+  overflow: hidden;
+  font-size: var(--app-text-sm);
+  text-overflow: ellipsis;
+  color: var(--app-text-secondary);
+}
+
+// A line of several products: the star, the brand and "+N" in the brand's room, and
+// only the brand's own text gives way inside it.
+.brand.multi {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--app-space-2);
+}
+
+.brand-text {
+  flex: 0 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.brand.multi > .more {
+  color: var(--app-text-secondary);
+}
+
+.brand-bone {
+  flex: none;
+  align-self: center;
+  inline-size: var(--app-line-compact-brand-max);
+  block-size: var(--app-text-sm);
+  border-radius: var(--app-radius-sm);
+}
+
+// The editor's initial, the comment count and the status word end line 1 (decision
+// F), and none of them crops.
+.marks {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  align-self: center;
+  gap: var(--app-space-3);
+  margin-inline-start: auto;
+  font-size: var(--app-text-xs);
+}
+
+.marks > .status {
+  margin-inline-start: 0;
+}
+
+// The facts: three fixed lines. An empty line keeps its height, so the slots line up
+// down the list and a missing fact reads as missing, not as a moved price.
+.facts {
+  grid-area: facts;
+  display: grid;
+  grid-template-rows:
+    var(--app-line-compact-fact-leading)
+    var(--app-line-compact-fact-leading)
+    var(--app-line-compact-price-leading);
+  min-inline-size: 0;
+}
+
+.fact {
+  display: block;
+  min-inline-size: 0;
+  overflow: hidden;
+  font-size: var(--app-text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--app-line-compact-fact-leading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--app-text-secondary);
+}
+
+// The row of today's `.price` pushes itself to the end of its line; the third fact
+// starts at the column's edge like the two above it.
+.fact.price {
+  grid-row: 3;
+  margin-inline-start: 0;
+  font-size: var(--app-text-base);
+  font-weight: 600;
+  line-height: var(--app-line-compact-price-leading);
+  color: var(--app-text-primary);
+}
+
+.fact.price.none {
+  font-size: var(--app-text-xs);
+  font-weight: 400;
+  color: var(--app-text-muted);
+}
+
+// The saving mark in the price's place (the owner's decision of 2026-11-12): the
+// app's spinner, in the quiet voice of the two lines above, centred on the price's
+// 20px line so the row keeps its height. It turns on a motion token, so under
+// `prefers-reduced-motion` it stands still as every spinner here does.
+.fact.price.saving {
+  display: flex;
+  align-items: center;
+  color: var(--app-text-secondary);
+}
+
+.saving-mark {
+  font-size: var(--app-icon-sm);
+}
+
+.fact.no-product {
+  color: var(--app-text-muted);
+}
+
+// A product still loading: three bones of one line each, at the widths of the facts
+// they stand for, with the pulse of the row of today.
+.fact-bone {
+  align-self: center;
+  block-size: 1em;
+  border-radius: var(--app-radius-sm);
+}
+
+.size-bone {
+  inline-size: 60%;
+}
+
+.measure-bone {
+  inline-size: 45%;
+}
+
+.price-bone {
+  inline-size: 40%;
+}
+
+// A free text line: one quiet button fills the facts column, on a 44px target that
+// may wrap onto two lines. The ring sits inside the button so the row cannot clip it.
+.facts.free {
+  display: flex;
+  align-items: center;
+}
+
+.compact-choose {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  inline-size: 100%;
+  min-block-size: var(--app-touch-target);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: none;
+  font: inherit;
+  font-size: var(--app-text-sm);
+  font-weight: 600;
+  line-height: var(--app-line-compact-choose-leading);
+  text-align: start;
+  white-space: normal;
+  color: var(--app-action-quiet-fg);
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: calc(var(--app-focus-ring-width) * -1);
+  }
+}
