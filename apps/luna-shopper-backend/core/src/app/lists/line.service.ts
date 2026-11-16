@@ -1512,17 +1512,22 @@ export class LineService {
           );
           return line === null ? null : meet(line, index);
         }
+        // A line this batch raised or creates is always named, because it is
+        // the one the caller just made; the lines already on the list fill
+        // what the cap leaves.
+        const ownCount =
+          lines.filter((line) => raises.has(line.id)).length + planned.length;
+        const room = Math.max(LINE_ADD_CHOICE_MAX - ownCount, 0);
         const met: BatchMet[] = [];
+        let viewed = 0;
         for (const line of lines) {
-          if (met.length >= LINE_ADD_CHOICE_MAX) {
-            break;
-          }
           if (raises.has(line.id)) {
             met.push({ raised: line.id });
-          } else {
+          } else if (viewed < room) {
             const [view] = await this.viewsOfMet(manager, [line]);
             if (view !== undefined) {
               met.push({ view });
+              viewed += 1;
             }
           }
         }
@@ -2060,14 +2065,19 @@ export class LineService {
    * Read the way {@link writeEdit} reads one, through the transaction's
    * manager, with no save, no change record and no event. Each line is read
    * again whole, because the reads that find candidates ask for a few columns.
-   * A line deleted since is left out.
+   * A line deleted since is left out before the cap, so a deleted line never
+   * takes the place of a later match, and one view comes back only when one
+   * match is left.
    */
   private async viewsOfMet(
     manager: EntityManager,
     lines: readonly ListLine[]
   ): Promise<LineView[]> {
     const views: LineView[] = [];
-    for (const met of lines.slice(0, LINE_ADD_CHOICE_MAX)) {
+    for (const met of lines) {
+      if (views.length >= LINE_ADD_CHOICE_MAX) {
+        break;
+      }
       const line = await manager
         .getRepository(ListLine)
         .findOne({ where: { id: met.id, listId: met.listId } });

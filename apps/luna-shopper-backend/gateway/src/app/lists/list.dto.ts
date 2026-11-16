@@ -279,10 +279,13 @@ export function OnTypedNameOnly(): PropertyDecorator {
             itemIds?: unknown;
             productGroupId?: unknown;
           };
+          // An explicit null group is no group, as core reads it: that add
+          // is free text, so newLine true answers it.
           return (
             value !== true ||
             ((!Array.isArray(body.itemIds) || body.itemIds.length === 0) &&
-              body.productGroupId === undefined)
+              (body.productGroupId === undefined ||
+                body.productGroupId === null))
           );
         },
         defaultMessage(args: ValidationArguments): string {
