@@ -2832,6 +2832,95 @@ describe('a batch never guesses between two matches (the owner, 2026-11-16)', ()
   });
 });
 
+// Review of the choice rule, PR #984: the cap of an answer is taken after the
+// deleted lines are dropped, and never cuts the line a batch itself made.
+describe('the cap of an answer (plan 0260, review of the choice rule)', () => {
+  /** Product id `n`, a uuid like the others of this file. */
+  const product = (n: number) =>
+    `3f1a0c5e-2b7d-4a6f-8c91-${String(100 + n).padStart(12, '0')}`;
+  /** `count` product lines named "Leche", each of its own product, wanted. */
+  const lecheLines = (count: number) => ({
+    holds: Array.from({ length: count }, (_, i) => ({
+      id: `li-${i + 1}`,
+      content: 'Leche',
+      quantity: 2,
+      position: i + 1,
+    })),
+    products: Array.from({ length: count }, (_, i) => ({
+      lineId: `li-${i + 1}`,
+      itemId: product(i + 1),
+      position: 0,
+    })),
+  });
+
+  it('drops deleted lines before the cap, so a later match still counts as a match', async () => {
+    const shelf = lecheLines(11);
+    // The first line is kept at 0, and the next nine are deleted since the
+    // read: two matches are left, the first and the eleventh.
+    shelf.holds[0].quantity = 0;
+    const w = build({
+      ...shelf,
+      goneAfterFind: shelf.holds.slice(1, 10).map((line) => line.id),
+    });
+
+    const result = await add(w, 'leche');
+
+    expect(result.outcome).toBe('ALREADY_ON_LIST');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([
+      'li-1',
+      'li-11',
+    ]);
+    expect(w.saved).toEqual([]);
+  });
+
+  it('names a line this batch created among the matches, past the cap', async () => {
+    const w = build(lecheLines(LINE_ADD_CHOICE_MAX));
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        // Its own product: meets nothing, and creates.
+        { content: 'Leche', itemIds: [product(99)] },
+        // Meets the ten lines on the list and the one just created.
+        { content: 'leche' },
+      ],
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'CREATED',
+      'ALREADY_ON_LIST',
+    ]);
+    const named = results[1].alreadyOnList.map((line) => line.id);
+    expect(named).toHaveLength(LINE_ADD_CHOICE_MAX);
+    expect(named).toContain(results[0].line.id);
+  });
+
+  it('names a line this batch raised among the matches, past the cap', async () => {
+    const shelf = lecheLines(LINE_ADD_CHOICE_MAX + 1);
+    // The last line is kept at 0, and the first item raises it.
+    shelf.holds[LINE_ADD_CHOICE_MAX].quantity = 0;
+    const w = build(shelf);
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        { content: 'Leche', itemIds: [product(LINE_ADD_CHOICE_MAX + 1)] },
+        { content: 'leche' },
+      ],
+    });
+
+    expect(results.map((entry) => entry.outcome)).toEqual([
+      'RAISED',
+      'ALREADY_ON_LIST',
+    ]);
+    const named = results[1].alreadyOnList.map((line) => line.id);
+    expect(named).toHaveLength(LINE_ADD_CHOICE_MAX);
+    expect(named).toContain(`li-${LINE_ADD_CHOICE_MAX + 1}`);
+  });
+});
+
 describe('a kept line is raised whatever its named flag (the owner, 2026-11-12, ruling 1)', () => {
   it.each([
     ['a named line by an unnamed add', true, false],
