@@ -122,7 +122,11 @@ the count of changed rows for each chain in the PR.
   `size.spec.ts`.
 - `harvester/src/app/harvest/file-import.runner.ts` only if a spec there pins a wash size.
 - No change to Mercadona, catalog, curation, the leaflet prompts, `entryKey`,
-  `normalizeName`, `size-check.ts` or `unit-basis.ts`. No migration and no release task.
+  `normalizeName`, `size-check.ts` or `unit-basis.ts`. No migration and no release task. The
+  products already made from wash rows are corrected by plan `0271`, a release task of its
+  own (D2). The leaflet prompts change in a later leaflet plan (D3).
+- If the owner answers O2 with 28b, the re-key of section 5 joins this scope. Until then it is
+  out of it.
 
 ### Constraints
 
@@ -145,12 +149,13 @@ the count of changed rows for each chain in the PR.
   code and replay again.
 - Stop and report if the replay shows an `ACTIVE` row whose key stays and whose item changes,
   or a chain whose changed rows are more than twice the count the PR body expected.
-- Do not touch stored rows. A correction of stored rows is open question O1.
+- Do not touch stored rows. Plan `0271` corrects the stored products (D2), after this plan is
+  merged.
 
 ### Progress evidence
 
 The spec output, the replay table of section 4 before and after, and the counts by `status` of
-the DEZA rows whose key moves.
+the rows whose key moves, per chain, with the `ACTIVE` count on its own line (O2).
 
 ## 1. The count words
 
@@ -185,13 +190,13 @@ C1). Only the number goes.
 
 | Chain | Count words (1) | Wash (2) | Capital `X` (3) |
 | --- | --- | --- | --- |
-| DEZA | Add the seven words to `DEZA_SIZE_UNITS`. A name that ends in one now splits, so its key moves and it becomes a new entry (plan `0266` D1). `3 pares` is 3 `UNIT`. `2x3 pares` is 6 `UNIT` with a pack count of 2. | `lavado` and `lavados` stay in `DEZA_SIZE_UNITS`, so the split and the key stay. `statedSize` answers no size, because `sourceSizeOf` does. `2x40 lavados` states no pack count. | `QUANTITY` joins by `[xX+]`. A name that ends in `2X100 g` now splits, so its key moves. |
+| DEZA | Add the seven words to `DEZA_SIZE_UNITS`. A name that ends in one now splits, so its key moves and it becomes a new entry (plan `0266` D1, section 5). `3 pares` is 3 `UNIT`. `2x3 pares` is 6 `UNIT` with a pack count of 2. | `lavado` and `lavados` stay in `DEZA_SIZE_UNITS`, so the split and the key stay. `statedSize` answers no size, because `sourceSizeOf` does. `2x40 lavados` states no size and no pack count (D1). | `QUANTITY` joins by `[xX+]`. A name that ends in `2X100 g` now splits, so its key moves. |
 | Carrefour | Add the seven words to `UNITS` as `{ base: 'ud', factor: 1 }`. A card measuring in `ud` splits them. A card measuring in `kg` or `l` refuses them, by `ACCEPTED_FAMILIES`. The row keeps its key. | `lavado` and `lavados` become `{ base: 'ud' }` with no factor. `statedSize` then answers no size (its `factor === undefined` branch), the split stays. `packCountIn` reads `measuresContent`, so `2x40 lavados` states no pack count. | Already read. A spec pins it. |
 | DIA | Add the seven words to `UNITS`. The row keeps its key. | `lavados` stays in `UNITS`. `sourceSizeOf` answers no size. `packCount` is null by `measuresContent`. | Already read. A spec pins it. |
 | El Jamón | Add the seven words to `UNITS`. The row keeps its key. | `lavados` stays in `UNITS`. The branch near line 156 answers no size through `sourceSizeOf`, and no pack count. | Already read (lower cased). A spec pins it. |
 | LIDL | No change. Its table holds no count word of decision 1 and the decision names the shared table (choice C2). | No change. It holds no wash. | `PRINTED_SIZE` joins by `[xX×]`. The row keeps its key. |
 | Mercadona | No change. The chain prints a unit token (`ud`), not a word. | No change. | No change. |
-| Leaflet import | `size.unit` `pares` now reads as `UNIT`. | `size.unit` `lavados` now reads as no size. The DEZA and DIA prompts tell the model to write a wash count as `ud` (open question O3). | No change. |
+| Leaflet import | `size.unit` `pares` now reads as `UNIT`. | `size.unit` `lavados` now reads as no size. The DEZA and DIA prompts tell the model to write a wash count as `ud`, so a leaflet still writes a wash as a count until the leaflet follow-up of D3. | No change. |
 
 **Is `2x3 pares` as 6 `UNIT` with a pack of 2 right?** Yes, by the rule the table already
 follows. `2x10 sobres` is 20 `UNIT` with a pack of 2 today. Two packs of three pairs is six
@@ -207,8 +212,8 @@ A new row with no size is created as `UNIT` with no size, unless the person name
 appear on it. The replay counts them.
 
 **What stays.** A product made from a wash row before this plan keeps its stored 40 `UNIT`,
-because a walk never rewrites a product's size. Its comparable price stays a price per wash
-until a person or a release task changes the size (open question O1).
+because a walk never rewrites a product's size. This plan does not change it. Its comparable
+price stays a price per wash until plan `0271`, the release task of D2, runs.
 
 ## 4. The replay
 
@@ -230,9 +235,112 @@ Quote three names for each reason and chain. Then assert, on the same rows, that
 key stays has a new `itemId`. Nothing in the ingest changes an `itemId` on a size change, so
 the assertion is a check of the replay, and a failure stops the build.
 
-**The DEZA rows whose key moves.** By plan `0266` D1 such a row becomes a new entry and the old
-one ages out as unseen. An `ACTIVE` old row keeps its product. The new row waits in the queue
-again. The PR gives that count by `status`. It is open question O2 if any are `ACTIVE`.
+**The rows whose key moves.** By plan `0266` D1 such a row becomes a new entry and the old one
+ages out as unseen. An `ACTIVE` old row keeps its product. The new row waits in the queue
+again. The PR gives that count **per chain** and by `status`, with the `ACTIVE` count of each
+chain on its own line. Only DEZA can move a key (section 5), so every other chain must read 0,
+and the replay asserts it. The replay also counts the two collision shapes of section 5.3:
+old keys that yield two new keys, and new keys that two old keys yield, each by `status`. If
+the `ACTIVE` count is 0 for every chain, O2 costs nothing and the PR says so.
+
+## 5. The key of a DEZA row, and what O2 asks
+
+### 5.1 What the key is made of
+
+The DEZA runner keys a row on `entryKey(row.name, row.sizeFormat)` (`deza-catalog.runner.ts`,
+`record`, near line 813 on the branch of PR #970). `entryKey` is the SHA-1 hex of
+`entryNameKey(name, sizeFormat)`, which is
+`normalizeName(name) + '|' + normalizeName(sizeFormat ?? '')` (`matching.ts`, near lines 69 to
+89). `normalizeName` removes accents, lower cases, and turns every run of characters outside
+`a-z0-9` into one space, then trims. `name` and `sizeFormat` both come from one call of
+`splitSize(description)` in `rows.ts` (near line 80), where `description` is the text of the
+`wpdz-row-col-desc` cell. `splitSize` collapses white space, then cuts the trailing size off at
+one space.
+
+So the key is the hash of the description **with a pipe where the split falls**. Moving the
+split moves text across the pipe: `Calcetines 3 pares` is `calcetines 3 pares|` under the rule
+of `dev` and `calcetines|3 pares` under this plan. The two strings differ, so the hashes
+differ, so the row is a new `externalId`. The same holds for `Yogur 2X125 g`
+(`yogur 2x125 g|` before, `yogur|2x125 g` after). A wash row does not move (choice C1), because
+its split does not change.
+
+### 5.2 The key moves once, not on every walk
+
+`splitSize` is a pure function of the description. It reads no section, no shop, no attribute
+and no state of the run, and `record` builds the key from its answer alone. Leaflet rows are
+not affected at all: a leaflet keys on the document's own `name` and `size.label` or
+`size.unit` (`file-import.runner.ts`, near lines 216 to 218), which no size table changes.
+
+So the first walk on the new code writes each moved row under its new key, and every later
+walk computes the same key from the same printed description and finds that row. The new key
+is stable for as long as the chain prints the same description and no later plan changes the
+split again. Verified on the code, not assumed: the builder adds one spec to
+`deza-catalog.runner.spec.ts` (or the nearest spec of `record`) that records the same row
+twice through two `Crawl` instances and asserts one key, and the replay of section 4 computes
+the new key twice per row and asserts equality.
+
+Two cases change the picture, and the replay counts both:
+
+- A capital `X` row can land on a row that already exists. `Yogur 2X125 g` and
+  `Yogur 2x125 g` were two rows before (different keys). After this plan both are
+  `yogur|2x125 g`, so the first joins the row of the second, and its own old row ages out.
+- A moved row whose new key is new waits in the queue with no proposal. Rung 4 does not
+  propose it to the old product, because the old row's size text is empty and the new row's is
+  not (`wordOrderKey` keeps the size).
+
+### 5.3 How reliable carrying a decision across would be
+
+The design under evaluation: during a walk the runner still holds `row.description`. It runs
+the split of `dev` on the same string, builds the key that rule gives, and looks for an entry
+of the same chain under that old key. If it finds one and no entry holds the new key yet, that
+entry is the same printed row.
+
+- **The match is exact.** It compares the SHA-1 of two strings that one deterministic function
+  built from the same printed bytes. No similarity, no threshold and no word order is involved.
+  An entry found this way is the row the code of `dev` would have written for this very
+  description, which is the row a person decided on.
+- **Many printed descriptions to one old key is not a new collision.** `normalizeName` is
+  lossy (case, accents, punctuation), so `Calcetines 3 pares.` and `calcetines 3 pares` give one
+  old key. They are one row today already, and carrying its decision across keeps what is true
+  now.
+- **One old key to two new keys can happen in principle.** Two descriptions that normalize
+  equal can split differently under the new rule: `Calcetines 3 pares` splits and
+  `Calcetines 3-pares` does not (the hyphen sits where `TRAILING_SIZE` wants a space). Both
+  were one row before. Rule: when one walk meets two descriptions with one old key and two new
+  keys, it carries the decision to neither, and both wait. The replay counts these, and 0 is
+  expected.
+- **Two old keys to one new key happens for a capital `X`** (section 5.2). The new key already
+  holds a row, so there is nothing to carry: the existing row keeps its own decision, and the
+  other old row ages out as under 28a.
+- **What must be computed or stored.** Nothing new is stored. The runner must keep the split of
+  `dev` as a frozen copy (the unit list and `QUANTITY` of before this plan, named for this
+  plan), and remove it once a walk re-keys nothing. The same match can also be computed once
+  from stored rows, with no walk: a stored `name`, one space and the stored `sizeFormat` give
+  back the collapsed description byte for byte, because `splitSize` cuts one collapsed string at
+  one space. That holds for every row where `isNameKeyed` is true, which proves the stored pair
+  is the pair its key was built from.
+- **Re-key in place, not a copy.** The builder would update `externalId` of the existing row to
+  the new key, and the normal upsert then writes the new `name`, `sizeFormat` and size. The row
+  keeps its id, its `status`, its `itemId`, its availability and its history. A copy would make
+  a second row and write an `itemId` onto it by machine, and leave the first row aged out with
+  the same `itemId`. The unique key on chain and `externalId` refuses a re-key whose new key is
+  taken, which is the case of the capital `X` above.
+- **The harvester rule.** "No automated match ever binds a printed name to a product" (plan
+  `0081`) forbids a machine from deciding that two printed names are one product. A re-key in
+  place makes no such decision: the printed bytes are the same, the row is the same, and no
+  binding is written. Only the way the code spells the row's identity changed. A copy of the
+  decision onto a new row is closer to the letter of the rule, which is one more reason for the
+  re-key in place.
+- **Its relation to plan `0266` D1.** D1 says the key follows the new split, and it still would.
+  28b keeps the row's identity, not the old split. If the owner picks 28b, the same question
+  holds for the keys that plan `0266` moves, and the frozen rule would then be the rule before
+  `0266`.
+
+**Recommendation.** Let the count of section 4 decide. If no moved row is `ACTIVE`, the
+question costs nothing: take 28a and build nothing. If a few are, 28a is still cheaper: a
+person accepts them again in the queue, and no frozen rule lives in the runner. 28b pays for
+itself only when the `ACTIVE` count is more than a person clears in one sitting (about 25), and
+then the re-key in place above is exact and safe.
 
 ## Tests
 
@@ -247,6 +355,8 @@ again. The PR gives that count by `status`. It is open question O2 if any are `A
   (refused), a wash name (split, no size), a `2X100 g` name.
 - DIA and El Jamón specs: a count word, a wash, a capital `X`.
 - LIDL `size.spec.ts`: `2X100 g` is 200 g with a count of 2.
+- The DEZA runner spec: `Calcetines 3 pares` recorded by two `Crawl` instances gives one key,
+  and that key is not the key of `dev` for the same description (section 5.2).
 
 ## Acceptance criteria
 
@@ -256,6 +366,8 @@ again. The PR gives that count by `status`. It is open question O2 if any are `A
 - [ ] `2X100 g` reads as `2x100 g` on every chain that prints a multiplier.
 - [ ] The PR holds the replay before and after, for each chain, with counts by `status`.
 - [ ] No row whose key stays changes its item.
+- [ ] The PR states the moved `ACTIVE` rows per chain, and the two collision counts of
+      section 5.3.
 - [ ] No migration, no release task, no change to a stored row.
 
 ## Verification
@@ -285,23 +397,36 @@ row.
 Carrefour, DIA and El Jamón, not only the shared table, because those lists decide the split.
 LIDL is left alone, because its table names no count word but `ud` and `piezas`.
 
-**C3 (builder choice, for the owner):** `2x40 lavados` states no pack count. One predicate,
-`measuresContent`, decides the `NxQ` rule, and a wash measures nothing. The two boxes are still
-in `sizeFormat` for the curator.
+**D1 (owner, answered 2026-11-16, was C3):** `2x40 lavados` states no size and no pack count.
+One predicate, `measuresContent`, decides the `NxQ` rule, and a wash measures nothing. The two
+boxes are still in `sizeFormat` for the curator.
+
+**D2 (owner, answered 2026-11-16, was O1):** the products already made from wash rows are
+corrected by a release task in a plan of its own, plan `0271`
+(`0271-a-release-task-takes-the-wash-count-off-products.md`). It builds after this plan is
+merged. This plan rewrites no stored product.
+
+**D3 (owner, answered 2026-11-16, was O3):** the DEZA leaflet prompt maps `44 lavados` to
+`unitSize 44, sizeFormat "ud"` (`libs/luna-shopper/tools/leaflet/chains/src/deza/prompt.txt`,
+near line 106), and the DIA prompt example does the same (`dia/prompt.txt`, near line 256).
+They change in a later leaflet plan, not here and not now. **Named follow-up:** a leaflet plan
+that makes the DEZA and DIA prompts write a wash count as the printed label and not as `ud`.
+No plan file is written for it yet. Until it lands, a leaflet still writes a wash as a count,
+and plan `0271` does not catch such a product, because its `sizeFormat` reads `ud`.
 
 ## Open questions
 
-**O1 (owner):** products made from a wash row keep a stored size of N `UNIT`, and their
-comparable price stays a price per wash. Leave them for the curator, or correct them? A
-correction of rows a harvest or a person wrote is a release task under `k8s/release-tasks`,
-never a migration, and it would be a plan of its own.
+**O2 (owner, still open):** DEZA rows whose key moves (count words and capital `X`) become new
+entries by plan `0266` D1. Section 5 answers the owner's two questions as facts: the key moves
+once, on the first walk on the new code, and stays stable after (5.2). A decision can be
+carried across exactly, with no similarity, by a re-key of the same row in place (5.3). The
+replay of section 4 counts the moved `ACTIVE` rows per chain. If that count is 0, the question
+costs nothing.
 
-**O2 (owner):** DEZA rows whose key moves (count words and capital `X`) become new entries by
-plan `0266` D1. If the replay finds `ACTIVE` ones, the owner's brief "no `ACTIVE` entry changes
-its product" holds only in the sense that the old row keeps its product and the new one waits.
-Accept that, or keep the key of a moved row?
+- **28a:** accept. The old row keeps its product and ages out, the new row waits in the queue.
+  Nothing more is built.
+- **28b:** the row keeps its identity through the key change. The runner re-keys the old row in
+  place, as section 5.3 describes, and the re-key joins the scope of this plan.
 
-**O3 (owner):** the DEZA leaflet prompt maps `44 lavados` to `unitSize 44, sizeFormat "ud"`
-(`libs/luna-shopper/tools/leaflet/chains/src/deza/prompt.txt`, near line 106), and the DIA
-prompt example does the same (`dia/prompt.txt`, near line 256). A leaflet thus still writes a
-wash as a count, past this plan. Change the prompts in a leaflet plan?
+Recommendation: 28a, unless the moved `ACTIVE` count is more than a person clears in one
+sitting (about 25). Then 28b.

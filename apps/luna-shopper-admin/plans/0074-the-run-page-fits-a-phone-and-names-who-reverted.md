@@ -19,14 +19,15 @@
 > `libs/luna-shopper-admin/ui/src/lib/harvest/run-progress.ts` and
 > `libs/luna-shopper-admin/feature-people/src/lib/admins.ts`.
 >
-> Mock: none (open question O1).
+> Mock: none (D2). Screenshots at 1360 px and 390 px are the proof.
 
 ## Brief for the agent
 
 ### Objective
 
-On the run page at 390 px, show the status and the revert of a run in full words. Show the
-phase of a run only while it runs. Name the admin who reverted a run instead of the uuid. Make
+On the run page at 390 px, show the status and the revert of a run in full words. Hide the
+phase of a run that completed or was reverted, and keep it on a run that stopped short. Name
+the admin who reverted a run instead of the uuid. Make
 every report table show that it scrolls, with no word cut in half. Follow the "Angular
 conventions" section of `CLAUDE.md`, and load the `design-taste-frontend`, `antislop`,
 `antislop-ui` and `antislop-layoutmobile` skills.
@@ -47,9 +48,14 @@ conventions" section of `CLAUDE.md`, and load the `design-taste-frontend`, `anti
   last phase too, not only the seed. The seed has `stageLabel: 'Fetching products'` on
   `run-catalog-reverted` and on `run-catalog-completed`, and null on `run-catalog-failed` and
   `run-import-completed` (`data-access/src/lib/harvest/harvest-seed.ts`), which is why two
-  finished runs showed no phase. `isTerminalRun` (`models/src/lib/harvest/harvest-run.ts`,
-  near line 33) answers whether a run has finished. The runs list draws the same component
-  (`runs-page.ts`, near line 200).
+  finished runs showed no phase. The run status enum (`HarvestRunStatus`,
+  `contracts/src/lib/enums/harvest.enums.ts`, near line 113) has six values: `PENDING`,
+  `RUNNING`, `COMPLETED`, `FAILED`, `ABORTED` and `STALE`. The last four are terminal
+  (`TERMINAL_RUN_STATUSES`, `models/src/lib/harvest/harvest-run.ts`, near line 25).
+  **Reverted is not a status.** It is `revertedAt` on a terminal run, read by `isReverted`
+  (same file, near line 127), and `canRevert` allows a revert of any terminal run of a mode
+  that writes prices, so a `FAILED`, `ABORTED` or `STALE` run can be reverted too. The runs
+  list draws the same component (`runs-page.ts`, near line 200).
 - **E, the name.** The wire view of a run carries `revertedByUserId` and no name
   (`wire-types.ts`, near line 4842). The harvester stores the id the gateway passes, which is
   `admin.adminId` (`gateway/src/app/admin/admin-credential.ts`, near line 21). The gateway
@@ -71,8 +77,8 @@ conventions" section of `CLAUDE.md`, and load the `design-taste-frontend`, `anti
 
 1. At 390 px on `run-catalog-reverted`, the status and the revert read in full words, and the
    header is no taller than on any other page (section 1).
-2. A run whose status is terminal shows no phase, on the run page and in the runs list. A run
-   that is not terminal shows it as today.
+2. A `COMPLETED` run and a reverted run, whatever its status, show no phase, on the run page
+   and in the runs list. Every other run shows it as today (the table of section 1b).
 3. "Reverted by" names the admin: `displayName`, else `username`. An id the list does not hold
    reads as the words of section 4, never as the uuid alone. The runs list hover says the same.
 4. Every table of the report section sits in one scroll box that shows when more is to its
@@ -95,6 +101,10 @@ conventions" section of `CLAUDE.md`, and load the `design-taste-frontend`, `anti
 - Read the admins answer from `unknown` (rule D4) and draw nothing it does not hold.
 - No dash as punctuation in any copy.
 - The scroll cue is CSS only, with no script and no scroll listener.
+- This plan changes no cell content of a table, only its box and its wrapping. The warnings
+  table keeps the rule of PR #972: the bold name of a warning is hidden for `LISTING_UNREAD`
+  and `LISTING_SHORT` only, and drawn for every other code. Nothing here hides or draws a
+  name on another rule.
 - Run `npx nx build luna-shopper-admin`. The PR checks never build the admin app.
 
 ### Action boundaries
@@ -119,6 +129,25 @@ stay in the header (choice C1).
 The line is part of the page and not of the header, so it may wrap, and it costs one line on a
 screen that has room below the header. The scheduled chip of admin plan `0067` moves with the
 other two, so the three stay together.
+
+## 1b. D: which run shows its phase
+
+`RunProgressView` draws `run.stageLabel` by one predicate in `run-progress.ts`: hide it when
+the run is `COMPLETED` or `isReverted(run)` is true, and draw it otherwise when it is set. The
+run page and the runs list both draw that component, so both follow.
+
+| Status | Not reverted | Reverted | Whose rule |
+| --- | --- | --- | --- |
+| `PENDING` | phase, as today | cannot happen (`canRevert` needs a terminal run) | today |
+| `RUNNING` | phase, as today | cannot happen | today |
+| `COMPLETED` | no phase | no phase | the owner (D1) |
+| `FAILED` | the phase it died in | no phase | the owner (D1) |
+| `ABORTED` | the phase it was stopped in | no phase | builder choice C5 |
+| `STALE` | the phase its heartbeat stopped in | no phase | builder choice C5 |
+
+The error line of a `FAILED` run stays above the phase, as today. A reverted run of any status
+hides the phase, because its writes are taken back and the phase it reached no longer says
+anything about the data.
 
 ## 2. E: the reader of admin names
 
@@ -172,8 +201,10 @@ from `dev` after the one before it merges.
 
 ## Tests
 
-- `run-progress.spec.ts`: a `COMPLETED`, `FAILED`, `ABORTED` and `STALE` run with a
-  `stageLabel` draws no phase. A `RUNNING` and a `PENDING` run draw it.
+- `run-progress.spec.ts`, each with a `stageLabel`: a `COMPLETED` run draws no phase. A
+  reverted `COMPLETED`, `FAILED`, `ABORTED` and `STALE` run draws no phase. A `FAILED`,
+  `ABORTED` and `STALE` run that is not reverted draws it. A `RUNNING` and a `PENDING` run
+  draw it.
 - `run-page.spec.ts`: with the viewport compact, the chips are in the overview line and not in
   the header. With it wide, they are in the header.
 - `run-page.spec.ts`: "Reverted by" reads the seed admin's `displayName`, the `username` when
@@ -187,7 +218,8 @@ from `dev` after the one before it merges.
 
 - [ ] At 390 px on `run-catalog-reverted`, "Completed" and "Reverted" read in full.
 - [ ] The header of the run page is as tall as on any other page, at both widths.
-- [ ] No finished run shows a phase. A running run does.
+- [ ] A completed run and a reverted run show no phase. A running run and a failed, aborted or
+      stale run that is not reverted show it.
 - [ ] "Reverted by" names an admin, and never shows only a uuid.
 - [ ] Every report table shows that it scrolls at 390 px and breaks no word.
 - [ ] No gateway, backend, `openapi.json` or `wire-types.ts` change.
@@ -205,29 +237,37 @@ npx nx affected -t lint test
 
 ## Decisions
 
-**C1 (builder choice, for the owner):** on a phone the run page moves its chips out of the
-header into the first line of the overview, and the shared header rule stays. The other
-answer, to let chips take their full width on every page, changes the header of the whole
-back office for one page.
+All four builder choices were accepted by the owner on 2026-11-16, with C2 narrowed by his
+answer to O2.
 
-**C2 (builder choice, for the owner):** the phase is hidden in the admin app for a terminal
-run, and the harvester keeps writing what it writes. The other answer, to clear `stage` and
-`stageLabel` in the harvester when a run ends, is a backend change and loses the last phase of
-a failed run, which tells a person where it stopped.
+**C1 (owner, accepted 2026-11-16):** on a phone the run page moves its chips out of the header
+into the first line of the overview tab, and the shared header rule stays. The other answer,
+to let chips take their full width on every page, changes the header of the whole back office
+for one page.
 
-**C3 (builder choice, for the owner):** the name comes from `GET /v1/admin/admins`, which
-exists. The other answer, a `revertedByName` on the run view, needs the harvester to ask auth
-for a name it does not hold, a gateway DTO, and a regenerated `openapi.json` and
-`wire-types.ts`.
+**C2 and D1 (owner, answered 2026-11-16, was C2 and O2):** the phase is hidden in the admin app
+for `COMPLETED` runs and reverted runs only. A `FAILED` run keeps the phase it died in, because
+it tells a person where it stopped. The harvester keeps writing what it writes: clearing
+`stage` and `stageLabel` there is a backend change and would lose that phase. Section 1b holds
+the table.
 
-**C4 (builder choice, for the owner):** a table keeps its columns and scrolls, with a shadow on
+**C3 (owner, accepted 2026-11-16):** the name comes from `GET /v1/admin/admins`, which exists.
+The other answer, a `revertedByName` on the run view, needs the harvester to ask auth for a
+name it does not hold, a gateway DTO, and a regenerated `openapi.json` and `wire-types.ts`.
+
+**C4 (owner, accepted 2026-11-16):** a table keeps its columns and scrolls, with a shadow on
 the side that has more. The other answer, a table that turns into a list of rows on a phone, is
 more work and changes the four tables of PR #972.
 
+**D2 (owner, answered 2026-11-16, was O1):** no mock. Screenshots at 1360 px and 390 px in the
+PR are the proof, as for admin plan `0071` (its D3).
+
+**C5 (builder choice, for the owner):** the owner's answer names `COMPLETED`, reverted and
+`FAILED`. It does not name `ABORTED` and `STALE`. Both keep their phase when they are not
+reverted, as `FAILED` does: an aborted run stopped where a person stopped it, and a stale run
+stopped where its process died, and in both the phase says where that was. A reverted one of
+either hides it, as every reverted run does.
+
 ## Open questions
 
-**O1 (owner):** no mock. Screenshots at both widths in the PR stand in for one, as for admin
-plan `0071` (its D3). Is that enough here?
-
-**O2 (owner):** should C2 apply to a `FAILED` run too? Its last phase says where it stopped.
-This plan hides it with every other terminal status, and the error line above it stays.
+None. C5 stands unless the owner overrules it.
