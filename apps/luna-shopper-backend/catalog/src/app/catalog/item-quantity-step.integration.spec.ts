@@ -178,8 +178,13 @@ describeIntegration('the step of a product (real Postgres)', () => {
         const ran = (await dataSource.query(
           `SELECT name FROM "${SCHEMA}".migrations ORDER BY id DESC LIMIT 1`
         )) as { name: string }[];
+        if (ran.length === 0) {
+          throw new Error(
+            `the migrations table of ${SCHEMA} is empty and never held ${name}`
+          );
+        }
         await dataSource.undoLastMigration();
-        if (ran[0]?.name === name) {
+        if (ran[0].name === name) {
           break;
         }
       }

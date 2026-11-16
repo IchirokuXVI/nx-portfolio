@@ -354,8 +354,13 @@ describeIntegration('the comparable price of plan 0245 (real Postgres)', () => {
         const [last] = (await dataSource.query(
           `SELECT name FROM "${SCHEMA}".migrations ORDER BY id DESC LIMIT 1`
         )) as { name: string }[];
+        if (!last) {
+          throw new Error(
+            `the migrations table of ${SCHEMA} is empty and never held SupermarketItemComparablePrice1759400000000`
+          );
+        }
         await dataSource.undoLastMigration();
-        if (last?.name === 'SupermarketItemComparablePrice1759400000000') {
+        if (last.name === 'SupermarketItemComparablePrice1759400000000') {
           break;
         }
       }
