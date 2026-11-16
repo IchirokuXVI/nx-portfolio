@@ -241,8 +241,8 @@ $app-landing-short: 700px;
   // start to give way (section 3).
   --app-line-product-name-min: 4ch;
   // The compact row of a list (velista 0191, section 3): the label and the brand on
-  // one 22px line, then three fact lines (the size and the price per measure on 16px
-  // lines, the price on a 20px one) beside the stepper. The picture is as tall as
+  // one 22px line, then three fact lines (the size and the unit price on 16px lines,
+  // the total on a 20px one) beside the stepper. The picture is as tall as
   // the text, 74px, and the brand never takes more than 96px of the first line.
   --app-line-compact-label-leading: 22px;
   --app-line-compact-fact-leading: 16px;
