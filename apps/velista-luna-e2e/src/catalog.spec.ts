@@ -446,7 +446,10 @@ test.describe('a product on the list only at 0', () => {
     await expect(page.locator(`[id="${reasonId}"]`)).toHaveText(sentence);
 
     // Milk, on one line at 0: the same, and a press of the plus raises nothing.
-    const milk = products(page, 'Milk');
+    // By the card's own name: the Bread card draws the Milk line under it too.
+    const milk = page.locator('lib-product-row').filter({
+      has: page.locator('span.name', { hasText: /^\s*Milk\s*$/ }),
+    });
     const milkPlus = milk.locator('button.add');
     const milkLine = milk.locator('.held-line');
     await expect(milkLine).toHaveCount(1);
