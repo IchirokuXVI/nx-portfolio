@@ -142,6 +142,13 @@ export interface ProductRowAdd {
    * card draws them, and `path` the list's own URL; the link adds `?line=`.
    */
   readonly onList?: ProductRowOnList;
+  /**
+   * Present when no line asks for this product and two or more saved lines of the
+   * list hold it at zero (the owner's ruling of 2026-11-16): the plus is switched
+   * off as for {@link onList}, and the card says to raise one of the lines under it
+   * with its own stepper. No link, because the list hides its lines at zero.
+   */
+  readonly pickLine?: true;
 }
 
 /** Where a product already on the list is: the line, and the list's URL. */
@@ -583,8 +590,8 @@ export type ProductRowExpanded = 'shops' | 'members';
           -->
           <button
             (click)="pressAdd($event, adding)"
-            [attr.aria-describedby]="adding.onList ? onListId : null"
-            [attr.aria-disabled]="adding.onList ? 'true' : null"
+            [attr.aria-describedby]="switchedOff(adding) ? onListId : null"
+            [attr.aria-disabled]="switchedOff(adding) ? 'true' : null"
             [attr.aria-label]="
               adding.label ??
               ('catalog.add.label'
@@ -634,6 +641,19 @@ export type ProductRowExpanded = 'shops' | 'members';
                     >{{ 'catalog.held.openLine' | rokuT }}</a
                   ></span
                 >
+              </p>
+            } @else if (add()?.pickLine) {
+              <!--
+                Two or more lines at zero hold it, and the plus would not know
+                which to raise (the owner's ruling of 2026-11-16). The reason,
+                and the lines below with their own steppers. No link: the list
+                hides its lines at zero.
+              -->
+              <p class="held-onlist">
+                <lib-info-icon aria-hidden="true" class="held-onlist-icon" />
+                <span [id]="onListId" class="held-onlist-text">{{
+                  'catalog.held.pickLine' | rokuT: { list: add()?.list }
+                }}</span>
               </p>
             } @else {
               <span class="held-title">{{
@@ -816,10 +836,15 @@ export class ProductRow {
     }
   }
 
+  /** Whether the plus is switched off: on the list, or a line to pick. */
+  protected switchedOff(adding: ProductRowAdd): boolean {
+    return adding.onList !== undefined || adding.pickLine === true;
+  }
+
   protected pressAdd(event: Event, adding: ProductRowAdd): void {
     // Switched off by `aria-disabled`, so a click, Enter or Space still reaches
     // here and does nothing (velista `0185`, decision G).
-    if (adding.onList !== undefined) {
+    if (this.switchedOff(adding)) {
       return;
     }
     this.added.emit({

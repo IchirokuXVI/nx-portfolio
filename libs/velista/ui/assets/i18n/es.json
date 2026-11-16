@@ -462,7 +462,8 @@
       "title": "En {{list}}",
       "titleMany": "En tus listas",
       "alreadyOn": "Ya está en {{list}}.",
-      "openLine": "Ver en la lista"
+      "openLine": "Ver en la lista",
+      "pickLine": "Esto está en {{list}} más de una vez. Sube una de las líneas de abajo con sus propios botones."
     },
     "adding": {
       "to": "Se añade a",
@@ -864,6 +865,9 @@
       "newLine": "Una línea nueva",
       "row": "Añadir {{added}} a {{name}}, {{product}}: de {{from}} a {{to}}",
       "rowNoProduct": "Añadir {{added}} a {{name}}: de {{from}} a {{to}}",
+      "onList": "Ya está en la lista. Elígela para verla.",
+      "rowOnList": "{{name}}, {{product}}: ya está en la lista con {{amount}}. Elígela para verla en la lista",
+      "rowOnListNoProduct": "{{name}}: ya está en la lista con {{amount}}. Elígela para verla en la lista",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {

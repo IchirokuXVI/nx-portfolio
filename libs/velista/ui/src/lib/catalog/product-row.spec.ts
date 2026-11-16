@@ -1741,4 +1741,30 @@ describe('ProductRow, a product already on the list', () => {
     expect(host.querySelector('.held-title')).not.toBeNull();
     expect(host.querySelector('.held-onlist')).toBeNull();
   });
+
+  it('switches the plus off for two lines at zero, says to raise one below, and links nowhere (the ruling of 2026-11-16)', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [
+        { ...LINE, quantity: 0 },
+        { ...LINE, lineId: 'line-oil-b', name: 'Oil for frying', quantity: 0 },
+      ],
+      pickLine: true,
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason?.textContent?.trim()).toBe('catalog.held.pickLine');
+    expect(host.querySelector('a.held-onlist-link')).toBeNull();
+    expect(host.querySelector('.held-title')).toBeNull();
+    // Each line keeps its stepper, which is how one is raised.
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(4);
+  });
 });

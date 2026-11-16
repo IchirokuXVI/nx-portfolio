@@ -2,7 +2,7 @@ import type { CatalogItem, Line } from './domain';
 import type { LineApprovalStatus } from './enums';
 import { LINE_QUANTITY_MAX } from './limits';
 import { foldName, lineName } from './line-name';
-import { addAmount, type LineUnit } from './line-unit';
+import type { LineUnit } from './line-unit';
 
 /**
  * The most lines a `line_add_needs_choice` refusal names (backend `0228`, section 5).
@@ -36,6 +36,13 @@ export interface AddLineOptions {
  */
 export type AddOutcome = 'created' | 'raised' | 'alreadyOnList';
 
+/**
+ * What choosing a line of the question does (backend `0260`, rule 4): a line at
+ * zero is raised, a line that holds an amount is only shown, because the list
+ * already asks for it. velista's own union of the server's `outcome` (rule D4).
+ */
+export type AddChoiceOutcome = 'raised' | 'alreadyOnList';
+
 /** One line a `line_add_needs_choice` refusal names, as the server sent it. */
 export interface AddChoiceLine {
   readonly lineId: string;
@@ -47,6 +54,13 @@ export interface AddChoiceLine {
   readonly itemIds: readonly string[];
   readonly productGroupId: string | null;
   readonly approvalStatus: LineApprovalStatus;
+  /** What choosing it does (the owner's ruling of 2026-11-16). */
+  readonly outcome: AddChoiceOutcome;
+  /**
+   * The line's quantity once it is chosen: {@link quantity} for a line already on
+   * the list, the raised amount for a line at zero.
+   */
+  readonly resultingQuantity: number;
 }
 
 /**
@@ -66,12 +80,14 @@ export interface AddChoiceRow {
   readonly product: string | null;
   readonly imageUrl: string | null;
   /**
-   * The line's quantity now, and what the add takes it to: one step of the line's
-   * own unit more (backend `0260`). The server asks only about lines at zero, so
-   * `from` is 0 in every question it asks today.
+   * The line's quantity now, and what choosing it leaves it at: the server's
+   * `resultingQuantity`. The same number for a line already on the list, which a
+   * choice only shows.
    */
   readonly from: number;
   readonly to: number;
+  /** What choosing the row does (the owner's ruling of 2026-11-16). */
+  readonly outcome: AddChoiceOutcome;
   /** What `from` and `to` count (velista `0182`). */
   readonly unit: LineUnit;
 }
@@ -88,10 +104,10 @@ export interface AddChoiceFacts {
 /**
  * The rows of the question, one per line, in the order the refusal named them.
  *
- * Each row says what a choice of it does: the line goes up by one step of its own
- * unit ({@link addAmount}), the amount a raise of a kept line takes (backend
- * `0260`, R2 and R4). A raise is capped as the server caps it, so the arrow never
- * promises a number the line cannot reach.
+ * Each row says what a choice of it does, as the server said it (backend `0260`,
+ * rule 4): a line at zero goes up to `resultingQuantity`, and a line that holds an
+ * amount stays as it is and is shown. Held to the cap the server raises to, so the
+ * arrow never promises a number the line cannot reach.
  */
 export function addChoiceRows(
   choice: AddChoice,
@@ -115,8 +131,12 @@ export function addChoiceRows(
       product: item === null ? null : facts.brandSizeOf(item),
       imageUrl: item?.imageUrl ?? null,
       from: line.quantity,
-      to: Math.min(LINE_QUANTITY_MAX, line.quantity + addAmount(line.unit)),
+      to:
+        line.outcome === 'alreadyOnList'
+          ? line.quantity
+          : Math.min(LINE_QUANTITY_MAX, line.resultingQuantity),
       unit: line.unit,
+      outcome: line.outcome,
     };
   });
 }

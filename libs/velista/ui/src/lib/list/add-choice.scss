@@ -155,6 +155,15 @@
   line-height: 1.35;
 }
 
+// A line already on the list: choosing it only shows it. Words under the name, so
+// the row reads differently without its colour.
+.state {
+  color: var(--app-text-secondary);
+  font-size: var(--app-text-xs);
+  font-style: italic;
+  line-height: 1.35;
+}
+
 // What the add makes of the line. It never shrinks: the name gives way first.
 .count {
   flex: none;

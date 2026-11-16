@@ -2042,10 +2042,10 @@ export class ListPage {
    * the defect plan 0030 section 5 exists to remove.
    */
   async add(entry: LineComposerSubmit): Promise<void> {
-    // Typed words say the page can ask which line (backend `0228`). A card says
-    // nothing new: its products already decide where it lands.
-    const typed = (entry.itemIds ?? []).length === 0;
-    await this._send(entry, typed ? { askIfAmbiguous: true } : undefined);
+    // Every add from the composer can be asked about, typed words and a chosen card
+    // alike: two or more lines it meets are a question, never a guess (the owner's
+    // ruling of 2026-11-16, backend `0260` rule 4).
+    await this._send(entry, { askIfAmbiguous: true });
   }
 
   /**
@@ -2106,12 +2106,13 @@ export class ListPage {
         outcome.error instanceof GatewayError &&
         outcome.error.code === 'not_found'
       ) {
-        // The chosen line went while the question was open (backend `0228`, section
-        // 3). The list is still there, so the same add asks again, once: the
-        // question redraws with the lines left, the one line left is raised, or a
-        // line is made. A list that went too answers `not_found` again, and that
-        // one is said as the list being gone.
-        await this._send(entry, { askIfAmbiguous: true }, listId);
+        // The chosen line went while the question was open, or is no longer one the
+        // add meets (backend `0260`, rule 6). The question is already shut; the
+        // words stay, and the add's own failure is said, so a press of the plus
+        // asks again with the lines as they are now.
+        if (listId === this.listId()) {
+          this._announce(this._translator.t('list.error.failed'));
+        }
         return;
       }
       const choice = toAddChoice(outcome.error);
@@ -2187,11 +2188,15 @@ export class ListPage {
       // way it is said once: the list's live region speaks for a drawn row, the
       // notice's own region for one that is not.
       const met = outcome.alreadyOnList;
+      // Named after a line the list draws: an answer to an add nobody could be asked
+      // about can name lines kept at 0 too (backend `0260`, rule 5), which are not
+      // drawn and are passed over by the mark.
+      const named = met.find((line) => line.quantity > 0) ?? met[0];
       const sentence = this._translator.t(
         'list.add.alreadyOn',
         undefined,
         this._locale(),
-        { name: this._lineName(met[0] ?? outcome.line) }
+        { name: this._lineName(named ?? outcome.line) }
       );
       this._markTook(
         met.map((line) => line.id),
@@ -2262,6 +2267,14 @@ export class ListPage {
     return anchor?.closest('.composer-dock') ? 'below' : 'above';
   });
 
+  /**
+   * Whether the question offers "A new line": for typed words alone (the owner's
+   * ruling of 2026-11-16). A chosen product never makes a second line of itself.
+   */
+  readonly choiceOffersNewLine = computed(
+    () => (this.addChoice()?.entry.itemIds ?? []).length === 0
+  );
+
   /** The name the question's title says, as the first line stores it. */
   readonly choiceName = computed(() => {
     const asked = this.addChoice();
@@ -2304,7 +2317,9 @@ export class ListPage {
   /** "A new line" was chosen: the same add, as a line of its own. */
   chooseNewLine(): void {
     const asked = this.addChoice();
-    if (asked === null) {
+    if (asked === null || (asked.entry.itemIds ?? []).length > 0) {
+      // Offered for typed words alone; the gateway refuses `newLine` beside
+      // products.
       return;
     }
     this.addChoice.set(null);

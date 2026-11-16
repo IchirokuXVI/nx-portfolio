@@ -35,6 +35,8 @@ const CHOICE: AddChoice = {
       itemIds: ['item-a'],
       productGroupId: null,
       approvalStatus: 'APPROVED',
+      outcome: 'alreadyOnList',
+      resultingQuantity: 2,
     },
     {
       lineId: 'line-b',
@@ -45,6 +47,8 @@ const CHOICE: AddChoice = {
       itemIds: ['item-missing'],
       productGroupId: null,
       approvalStatus: 'APPROVED',
+      outcome: 'raised',
+      resultingQuantity: 1,
     },
   ],
 };
@@ -66,9 +70,12 @@ describe('addChoiceRows', () => {
         name: 'Whole milk',
         product: 'Hacendado · 1 L',
         imageUrl: 'https://img/milk.jpg',
+        // Already on the list: a choice shows it and leaves it as it is (the
+        // owner's ruling of 2026-11-16).
         from: 2,
-        to: 3,
+        to: 2,
         unit: 'UNIT',
+        outcome: 'alreadyOnList',
       },
       {
         lineId: 'line-b',
@@ -80,36 +87,83 @@ describe('addChoiceRows', () => {
         from: 0,
         to: 1,
         unit: 'UNIT',
+        outcome: 'raised',
       },
     ]);
   });
 
   it('caps the raise as the server caps it', () => {
     const rows = addChoiceRows(
-      { lines: [{ ...CHOICE.lines[0], quantity: LINE_QUANTITY_MAX }] },
+      {
+        lines: [
+          {
+            ...CHOICE.lines[1],
+            resultingQuantity: LINE_QUANTITY_MAX + 5,
+          },
+        ],
+      },
       facts
     );
 
     expect(rows[0].to).toBe(LINE_QUANTITY_MAX);
   });
 
-  it('takes each row up one step of its own unit: 0 to 25 g, 0 to 25 ml, 0 to 1 (velista 0185)', () => {
+  it('takes a row at zero to the amount the server names, in its own unit (the ruling of 2026-11-16)', () => {
     const rows = addChoiceRows(
       {
         lines: [
-          { ...CHOICE.lines[0], lineId: 'g', quantity: 0, unit: 'GRAM' },
-          { ...CHOICE.lines[0], lineId: 'ml', quantity: 0, unit: 'MILLILITER' },
-          { ...CHOICE.lines[0], lineId: 'u', quantity: 0, unit: 'UNIT' },
+          {
+            ...CHOICE.lines[1],
+            lineId: 'g',
+            unit: 'GRAM',
+            resultingQuantity: 25,
+          },
+          {
+            ...CHOICE.lines[1],
+            lineId: 'ml',
+            unit: 'MILLILITER',
+            resultingQuantity: 250,
+          },
+          {
+            ...CHOICE.lines[1],
+            lineId: 'u',
+            unit: 'UNIT',
+            resultingQuantity: 1,
+          },
         ],
       },
       facts
     );
 
-    expect(rows.map(({ from, to, unit }) => ({ from, to, unit }))).toEqual([
-      { from: 0, to: 25, unit: 'GRAM' },
-      { from: 0, to: 25, unit: 'MILLILITER' },
-      { from: 0, to: 1, unit: 'UNIT' },
+    expect(
+      rows.map(({ from, to, unit, outcome }) => ({ from, to, unit, outcome }))
+    ).toEqual([
+      { from: 0, to: 25, unit: 'GRAM', outcome: 'raised' },
+      { from: 0, to: 250, unit: 'MILLILITER', outcome: 'raised' },
+      { from: 0, to: 1, unit: 'UNIT', outcome: 'raised' },
     ]);
+  });
+
+  it('leaves a line already on the list at its amount, whatever it would be raised to', () => {
+    const rows = addChoiceRows(
+      {
+        lines: [
+          {
+            ...CHOICE.lines[0],
+            quantity: 750,
+            unit: 'GRAM',
+            resultingQuantity: 775,
+          },
+        ],
+      },
+      facts
+    );
+
+    expect(rows[0]).toMatchObject({
+      from: 750,
+      to: 750,
+      outcome: 'alreadyOnList',
+    });
   });
 });
 

@@ -3574,7 +3574,7 @@ describe('the composer and the list it adds to', () => {
       expect(options()).toHaveLength(0);
     });
 
-    it('sends a card’s product set as itemIds', async () => {
+    it('sends a card’s product set as itemIds, and lets it be asked about (the ruling of 2026-11-16)', async () => {
       const { fixture, store } = await render({ served });
       const card = document.createElement('button');
       document.body.append(card);
@@ -3594,6 +3594,7 @@ describe('the composer and the list it adds to', () => {
         content: 'Milk',
         quantity: 1,
         itemIds: ['i-1', 'i-2'],
+        askIfAmbiguous: true,
       });
       card.remove();
     });
@@ -3678,6 +3679,8 @@ describe('the composer and the list it adds to', () => {
                 itemIds: ['item-a'],
                 productGroupId: null,
                 approvalStatus: 'APPROVED',
+                outcome: 'ALREADY_ON_LIST',
+                resultingQuantity: 2,
               },
               {
                 lineId: 'zl-b',
@@ -3687,6 +3690,8 @@ describe('the composer and the list it adds to', () => {
                 itemIds: ['item-b'],
                 productGroupId: null,
                 approvalStatus: 'APPROVED',
+                outcome: 'RAISED',
+                resultingQuantity: 1,
               },
             ],
           },
@@ -3744,8 +3749,13 @@ describe('the composer and the list it adds to', () => {
         );
         // One row per line and "A new line" last.
         expect(choiceRows()).toHaveLength(3);
-        expect(choiceRows()[0].querySelector('.count')?.textContent).toMatch(
-          /2\s*→\s*3/
+        // Above zero: already on the list, said in words (the ruling of 2026-11-16).
+        expect(
+          choiceRows()[0].querySelector('.count')?.textContent?.trim()
+        ).toBe('2');
+        expect(choiceRows()[0].querySelector('.state')).not.toBeNull();
+        expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
+          /0\s*→\s*1/
         );
         expect(choiceRows()[2].classList.contains('new')).toBe(true);
         // One lookup of the products named, for their brand and size.
@@ -3781,6 +3791,68 @@ describe('the composer and the list it adds to', () => {
           content: 'Leche entera',
           newLine: true,
         });
+      });
+
+      it('closes the question and says the add failed when the chosen line went', async () => {
+        const { fixture, store } = await asked();
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'not_found',
+              status: 404,
+              correlationId: 'gone',
+            })
+          );
+          return Promise.resolve(null);
+        });
+
+        choiceRows()[1]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(document.querySelector('.pop')).toBeNull();
+        const said = query(fixture, '.said')?.textContent ?? '';
+        // The add's own failure, not the basket being gone.
+        expect(said).not.toContain('basket.error.gone');
+        expect(said).toContain('basket.error');
+        expect(field(fixture).value).toBe('Leche entera');
+      });
+
+      it('asks about a card too, with no new line to offer, and never sends one', async () => {
+        const rendered = await render({ served });
+        const { fixture, store } = rendered;
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(refusal());
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(choiceRows()).toHaveLength(2);
+        expect(choiceRows().some((row) => row.classList.contains('new'))).toBe(
+          false
+        );
+
+        choiceRows()[0]?.click();
+        await fixture.whenStable();
+        expect(store.addLine).toHaveBeenLastCalledWith({
+          targetListId: 'l-weekly',
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          intoLineId: 'zl-a',
+        });
+        card.remove();
       });
 
       it('goes back to the lists, unchanged, and keeps the words', async () => {

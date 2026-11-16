@@ -21,6 +21,7 @@ import {
   readLine,
   resetAliceWorld,
   setAdminPrice,
+  setLineQuantity,
   type LineView,
   type Session,
 } from './support/api';
@@ -556,6 +557,111 @@ test.describe('a typed name already on the list (velista 0185)', () => {
     );
     expect(held).toHaveLength(1);
     expect(held[0]).toMatchObject({ id: lineId, quantity: 1000, unit: 'GRAM' });
+  });
+});
+
+/**
+ * A typed name two lines meet asks which (velista 0185, the owner's ruling of
+ * 2026-11-16; backend 0260, rule 4).
+ *
+ * The loose product on a line of its own, kept at 0, and a free text line of the
+ * same name asking for one. The composer types the name and presses add: nothing
+ * is written, and the question names both lines, the one above 0 as already on the
+ * list, and offers a new line because the add is typed. Choosing the line at 0
+ * raises it by one step of its unit, 25 g. The two lines are made per run and
+ * deleted after.
+ */
+test.describe('a typed name two lines meet (velista 0185, 2026-11-16)', () => {
+  const NAME = { en: 'Loose bananas e2e', es: 'Plátanos a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let productLine = '';
+  let textLine = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    const kept = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    productLine = kept.id;
+    await setLineQuantity(alice, productLine, 0);
+    const typed = await alice.post<{ line: LineView }>(
+      `/v1/lists/${LIST_GROCERIES_ID}/lines`,
+      { content: NAME.en, newLine: true }
+    );
+    textLine = typed.line.id;
+    expect(textLine).not.toBe(productLine);
+  });
+
+  test.afterAll(async () => {
+    for (const id of [productLine, textLine]) {
+      if (id !== '') await deleteLine(alice, id);
+    }
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('asks which line, shows the one already on the list, and raises the one at 0', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+
+    await composerField(page).fill(NAME.en);
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+
+    const question = page.locator('lib-add-choice');
+    await expect(question).toBeVisible();
+    const choices = question.locator('button.row');
+    // Both lines and a new line, for typed words.
+    await expect(choices).toHaveCount(3);
+    await expect(question.locator('button.row.new')).toHaveCount(1);
+    await expect(
+      question.getByRole('button', {
+        name: new RegExp(`already on the list with 1\\. Choose it to see it`),
+      })
+    ).toHaveCount(1);
+    await expect(question.locator('.state')).toHaveText([
+      'Already on the list. Choose it to see it.',
+    ]);
+    // The words wait in the field, and nothing was written.
+    await expect(composerField(page)).toHaveValue(NAME.en);
+    expect(
+      (await listLines(alice, LIST_GROCERIES_ID)).filter(
+        (one) => one.content === NAME.en
+      )
+    ).toHaveLength(2);
+
+    // The line at 0: raised by one step of its unit.
+    await question.getByRole('button', { name: /0 g to 25 g/ }).click();
+    await expect(question).toHaveCount(0);
+    await expect
+      .poll(
+        async () =>
+          (await readLine(alice, LIST_GROCERIES_ID, productLine)).quantity
+      )
+      .toBe(25);
+    expect(await readLine(alice, LIST_GROCERIES_ID, textLine)).toMatchObject({
+      quantity: 1,
+    });
   });
 });
 

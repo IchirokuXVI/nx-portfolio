@@ -1050,6 +1050,75 @@ describe('BasketMemory: adding a line', () => {
     expect(['zl-1', secondId]).not.toContain(fresh.entries[0].lineId);
   });
 
+  it('asks about a chosen product two lines hold, above zero too, and refuses a new line beside it (the ruling of 2026-11-16)', async () => {
+    const memory = new BasketMemory();
+    const second = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Oat milk',
+      quantity: 1,
+      itemIds: ['item-milk-hacendado', 'item-milk-oat'],
+    });
+    const secondId = second.entries[0].lineId;
+    await memory.setDemand(BASKET, { lineId: secondId, quantity: 0, from: 1 });
+
+    let refusal: unknown = null;
+    try {
+      await memory.addLine(BASKET, {
+        targetListId: 'list-weekly',
+        content: 'Milk',
+        quantity: 1,
+        itemIds: ['item-milk-hacendado'],
+        askIfAmbiguous: true,
+      });
+    } catch (error) {
+      refusal = error;
+    }
+    expect(refusal).toMatchObject({ code: 'line_add_needs_choice' });
+    const lines = (
+      refusal as {
+        details: {
+          lines: {
+            lineId: string;
+            outcome: string;
+            resultingQuantity: number;
+          }[];
+        };
+      }
+    ).details.lines;
+    expect(lines).toEqual([
+      expect.objectContaining({
+        lineId: 'zl-1',
+        outcome: 'ALREADY_ON_LIST',
+      }),
+      expect.objectContaining({
+        lineId: secondId,
+        outcome: 'RAISED',
+        resultingQuantity: 1,
+      }),
+    ]);
+
+    expect(
+      await codeOf(
+        memory.addLine(BASKET, {
+          targetListId: 'list-weekly',
+          content: 'Milk',
+          quantity: 1,
+          itemIds: ['item-milk-hacendado'],
+          newLine: true,
+        })
+      )
+    ).toBe('validation_failed');
+
+    const shown = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-milk-hacendado'],
+      intoLineId: 'zl-1',
+    });
+    expect(shown.addOutcome).toBe('alreadyOnList');
+  });
+
   it('refuses an add on a finished trip', async () => {
     const memory = new BasketMemory();
     memory.status = 'FINISHED';

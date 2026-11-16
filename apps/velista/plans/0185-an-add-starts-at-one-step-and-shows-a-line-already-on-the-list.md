@@ -111,7 +111,9 @@ link that opens the list at that line.
 - Backend `0260` answers an add that met a wanted line with 201, `merged: true`, `outcome:
   'ALREADY_ON_LIST'` and `alreadyOnList` (the lines, unchanged, same `version`). It raises a line
   kept at 0 by the add's amount (`RAISED`), creates at one step when nothing is met (`CREATED`),
-  and asks `line_add_needs_choice` only when a typed name meets two or more lines all at 0. A
+  and asks `line_add_needs_choice` when an add with `askIfAmbiguous` meets two or more lines, at
+  any amount, typed or a product (ruling 46 of 2026-11-16; the sentence of 2026-11-11 said only
+  a typed name meeting lines all at 0). A
   free text add is never refused for a unit; a product add that meets only lines of another unit
   is `line_unit_differs` with `details.line`. A line of the add's own unit that holds the product
   takes the add even when an earlier line of another unit holds it too (2026-11-12).
@@ -137,8 +139,11 @@ link that opens the list at that line.
    "{name} is already on the list". On the shopping list the same, through `addOutcome`, with the
    rows found by a new `data-line-ids` attribute. A met line the page does not draw is said as a
    sentence on the composer instead.
-4. The duplicate question, now asked only about lines at 0, draws each row as "0 → 25 g" in the
-   row's own unit.
+4. The duplicate question is asked whenever an interactive add meets two or more lines, a typed
+   name or a chosen product, at any amount (ruling 46 of 2026-11-16). A row at 0 draws "0 → 25 g"
+   in its own unit, up to the server's `resultingQuantity`; a row above 0 draws its amount and says
+   in words that it is already on the list and that choosing it shows it. "A new line" is offered
+   for a typed name only.
 5. A product add refused with `line_unit_differs` draws one sentence above the composer row, keeps
    the words and focus, and creates nothing.
 6. The catalog tab (and the product page's similar products, which share `rowAdds`): a product
@@ -219,6 +224,17 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - **45. A refusal for another unit shows the line it names** (2026-11-16): scrolled to and
   marked as an add already on the list is, or the sentence alone for a line the page does not
   draw. Section 4.
+- **46. The server accepts no ambiguous add; the person picks the line** (2026-11-16). In the
+  owner's words: "If more than one line matches (it will also match if the line's amount is at
+  0), the user needs to pick one line. The server will return the possible lines to pick from
+  and on client side a choice will be shown to the user. If the line is filled and has an
+  amount, it won't step when selecting it, only scroll to it and highlight the line." His further
+  choices: every interactive add asks (the composer on the zone list, typed or a chosen card, and
+  the basket's add), also when every line it meets is above 0; "A new line" stays in the choice
+  for a typed name only, never for a chosen product; the catalog's plus is switched off when no
+  line holds the product above 0 and two or more saved lines of it are at 0, with a sentence that
+  says to raise one of the lines under the card with its own buttons and no link. Section 3.3 and
+  section 5. Backend `0260` rules 4 to 7 (PR #984) carry the wire side.
 
 ### The writer's, open to the owner
 
@@ -256,6 +272,8 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - **H. The composer's cards on the zone list and the shopping list keep their plus on.** C1 names
   the catalog tab. A card's plus that meets a wanted line is answered `ALREADY_ON_LIST` and the
   page shows the line (target 3). Asked in section 9.
+  > **Amended 2026-11-16, owner ruling 46:** a card's plus that meets two or more lines asks
+  > which, as typed words do, with no "A new line".
 - **I. No optimistic row for a product a loaded wanted line holds.** `drawsBeforeAnswer` answers
   true for every product add today; it now answers false when a loaded wanted line of the list
   holds every product of the add, so a row that would vanish is never drawn.
@@ -327,6 +345,21 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 
 ### 3.3 The question
 
+> **Owner ruling 46 of 2026-11-16.** The question is no longer "asked only about lines at 0".
+> Every interactive add sends `askIfAmbiguous`, a chosen product too, and two or more lines it
+> meets are always a question. Each entry of `details.lines` carries `outcome` (`RAISED` or
+> `ALREADY_ON_LIST`) and `resultingQuantity`, mapped into velista's own `AddChoiceLine`; an
+> entry without them (an older backend) reads `quantity > 0` as already on the list. A row whose
+> outcome is `RAISED` draws "from → to" up to `resultingQuantity`. A row already on the list
+> draws its amount and the words `list.addChoice.onList`, and its accessible name is
+> `list.addChoice.rowOnList` (or `rowOnListNoProduct`). Choosing a row sends the add again with
+> `intoLineId`: `ALREADY_ON_LIST` scrolls to the line, marks it and says the sentence once;
+> `RAISED` is today's raise; a 404 `not_found` closes the question and says the add's generic
+> failure, never a second question. "A new line" is drawn only for a typed name, and `newLine`
+> is never sent beside products (the gateway answers 400). An answer `ALREADY_ON_LIST` to an add
+> nobody could be asked about (rule 5) marks the lines the list draws and passes over those at 0.
+> The bullets below stand where this does not replace them.
+
 - `addChoiceRows(choice, facts)` loses `added` and `addedUnit`. Each row's `to` is
   `min(LINE_QUANTITY_MAX, from + addAmount(line.unit))`, a plain number; `from` is 0 in every
   question the server now asks.
@@ -396,6 +429,20 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   the correction of adds still on their way (`:883`). `_correctUnit` (`:586`) is a unit change and
   stays. An answer `alreadyOnList` (a race: another device made the line) takes back what was
   drawn, records nothing in the visit, and lets the held line read the server's quantity.
+- **Two or more lines at 0** (owner ruling 46 of 2026-11-16): with no line of the product above
+  0 and two or more saved lines of it at 0 on the selected list, `rowAdds` sets `pickLine: true`.
+  The plus is switched off exactly as for `onList` (`aria-disabled`, `aria-describedby` on the
+  reason text only), and in place of the heading of the lines the card says
+  `catalog.held.pickLine`, with the info icon and no link, because the list hides its lines at
+  0. One line at 0 keeps the plus, which raises it.
+
+| key | `en` | `es` |
+| --- | --- | --- |
+| `catalog.held.pickLine` | This is on {{list}} more than once. Raise one of the lines below with its own buttons. | Esto está en {{list}} más de una vez. Sube una de las líneas de abajo con sus propios botones. |
+| `list.addChoice.onList` | Already on the list. Choose it to see it. | Ya está en la lista. Elígela para verla. |
+| `list.addChoice.rowOnList` | {{name}}, {{product}}: already on the list with {{amount}}. Choose it to see it on the list | {{name}}, {{product}}: ya está en la lista con {{amount}}. Elígela para verla en la lista |
+| `list.addChoice.rowOnListNoProduct` | {{name}}: already on the list with {{amount}}. Choose it to see it on the list | {{name}}: ya está en la lista con {{amount}}. Elígela para verla en la lista |
+
 - **The product page** passes `pathOf` the same way for its similar products. Its own lists table
   is velista `0187`; this plan does not touch it.
 

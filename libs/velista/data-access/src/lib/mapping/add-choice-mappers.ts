@@ -1,11 +1,14 @@
 import {
   ADD_CHOICE_MAX,
+  addAmount,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
+  LINE_QUANTITY_MAX,
   LINE_UNIT_FALLBACK,
   LINE_UNITS,
   type AddChoice,
   type AddChoiceLine,
+  type AddChoiceOutcome,
   type AddOutcome,
   type AddUnitRefusal,
 } from '@portfolio/velista/models';
@@ -62,6 +65,22 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
     return null;
   }
 
+  // Backend `0246`: a line of another unit is named alone. Absent is a count.
+  const unit = oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK);
+  // What choosing it does (backend `0260`, rule 4). A server of before the ruling of
+  // 2026-11-16 names no outcome, and then a line that holds an amount is one the
+  // list already asks for, and a line at zero is raised.
+  const outcome =
+    toAddChoiceOutcome(raw['outcome']) ??
+    (quantity > 0 ? 'alreadyOnList' : 'raised');
+  const resulting = raw['resultingQuantity'];
+  const resultingQuantity =
+    outcome === 'alreadyOnList'
+      ? quantity
+      : typeof resulting === 'number' && Number.isFinite(resulting)
+        ? resulting
+        : Math.min(LINE_QUANTITY_MAX, quantity + addAmount(unit));
+
   return {
     lineId,
     content,
@@ -69,8 +88,9 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
     // reading that never shows a product's name over somebody's typing.
     named: raw['named'] !== false,
     quantity,
-    // Backend `0246`: a line of another unit is named alone. Absent is a count.
-    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
+    unit,
+    outcome,
+    resultingQuantity,
     itemIds: mapArray(raw['itemIds'], str),
     productGroupId: nullableStr(raw['productGroupId']),
     approvalStatus: oneOf(
@@ -79,6 +99,18 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
       LINE_APPROVAL_STATUS_FALLBACK
     ),
   };
+}
+
+/** The `outcome` of one line of the question, or null for one this build does not know. */
+function toAddChoiceOutcome(raw: unknown): AddChoiceOutcome | null {
+  switch (raw) {
+    case 'RAISED':
+      return 'raised';
+    case 'ALREADY_ON_LIST':
+      return 'alreadyOnList';
+    default:
+      return null;
+  }
 }
 
 /**

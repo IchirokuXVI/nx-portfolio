@@ -1780,7 +1780,7 @@ describe('ListPage', () => {
       ]);
     });
 
-    it('sends nothing new for a card, whose products decide where it lands', async () => {
+    it('lets a card be asked about too, as typed words are (the ruling of 2026-11-16)', async () => {
       const { fixture, lines } = await render({ permissions: ADMIN });
 
       await fixture.componentInstance.add({
@@ -1797,6 +1797,7 @@ describe('ListPage', () => {
           quantity: 1,
           itemIds: ['item-a'],
           named: false,
+          options: { askIfAmbiguous: true },
         },
       ]);
     });
@@ -1853,6 +1854,8 @@ describe('ListPage', () => {
             itemIds: held.itemIds,
             productGroupId: null,
             approvalStatus: 'APPROVED',
+            outcome: held.quantity > 0 ? 'ALREADY_ON_LIST' : 'RAISED',
+            resultingQuantity: held.quantity > 0 ? held.quantity : 1,
           })),
         },
       });
@@ -1962,6 +1965,39 @@ describe('ListPage', () => {
 
         jest.advanceTimersByTime(TOOK_DURATION_MS);
         expect(page.tookLines().size).toBe(0);
+      });
+
+      it('names a drawn line and passes over lines at 0 it is not drawing, for an answer nobody was asked (rule 5)', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        // A replayed add: every match, the one at 0 first.
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: ['ln-other', 'ln-whole'],
+        });
+        const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+        await typeAndAdd(fixture, 'Leche entera');
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        const page = fixture.componentInstance;
+        // The drawn line is marked, the one at 0 is not drawn and nothing says it.
+        expect(
+          query(
+            fixture,
+            '[data-line-id="ln-whole"] lib-quantity-stepper'
+          )?.classList.contains('is-took')
+        ).toBe(true);
+        expect(query(fixture, '[data-line-id="ln-other"]')).toBeNull();
+        expect(
+          t.mock.calls.find(([key]) => key === 'list.add.alreadyOn')?.[3]
+        ).toEqual({ name: 'Whole milk' });
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+        expect(page.composerNotice()).toBeNull();
       });
 
       it('says it again when the same add meets the same line a second time', async () => {
@@ -2456,11 +2492,18 @@ describe('ListPage', () => {
       expect(first.querySelector('.product')).not.toBeNull();
       // A product this page does not hold has no product line yet.
       expect(choiceRows()[1].querySelector('.product')).toBeNull();
-      expect(first.querySelector('.count')?.textContent).toMatch(/2\s*→\s*3/);
-      // A bought line counts, from 0 (D2).
+      // Above zero: already on the list, its amount alone, and words that say so
+      // (the ruling of 2026-11-16).
+      expect(first.querySelector('.count')?.textContent?.trim()).toBe('2');
+      expect(first.querySelector('.state')?.textContent?.trim()).toBe(
+        'list.addChoice.onList'
+      );
+      expect(first.getAttribute('aria-label')).toBe('list.addChoice.rowOnList');
+      // A bought line counts, from 0 (D2), and is raised.
       expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
         /0\s*→\s*1/
       );
+      expect(choiceRows()[1].querySelector('.state')).toBeNull();
       expect(choiceRows()[2].classList.contains('new')).toBe(true);
       // Focus moves to the first row, and the words wait in the field.
       expect(document.activeElement).toBe(first);
@@ -2614,7 +2657,7 @@ describe('ListPage', () => {
       expect(fixture.componentInstance.choiceName()).toBe('Leche entera');
     });
 
-    it('asks again, once, when the chosen line went while the question was open', async () => {
+    it('closes the question and says the add failed when the chosen line went (the ruling of 2026-11-16)', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
         items: [ITEM_A],
@@ -2622,7 +2665,7 @@ describe('ListPage', () => {
       lines.answerAddWith({ state: 'failed', error: refusal() });
       await typeAndAdd(fixture, 'Leche entera');
 
-      // Backend 0228, section 3: an answer onto a deleted line is the not found.
+      // Backend 0260, rule 6: a chosen line the add no longer meets is the not found.
       lines.answerAddWith({
         state: 'failed',
         error: new GatewayError({
@@ -2631,32 +2674,25 @@ describe('ListPage', () => {
           correlationId: 'gone',
         }),
       });
-      lines.answerAddWith({ state: 'failed', error: refusal() });
       choiceRows()[1]?.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(lines.calls.slice(-2)).toEqual([
-        {
-          kind: 'add',
-          content: 'Leche entera',
-          options: { intoLineId: 'ln-other' },
-        },
-        {
-          kind: 'add',
-          content: 'Leche entera',
-          options: { askIfAmbiguous: true },
-        },
-      ]);
-      // The question is drawn again, and the list is not said to be gone.
-      expect(choiceRows()).toHaveLength(3);
-      expect(fixture.componentInstance.announcement()).not.toBe(
-        'list.error.notAvailable'
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(2);
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        options: { intoLineId: 'ln-other' },
+      });
+      expect(choiceRows()).toHaveLength(0);
+      // The add's own failure, never the list being gone.
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.error.failed'
       );
       expect(field(fixture).value).toBe('Leche entera');
     });
 
-    it('raises the one line left when the chosen one went', async () => {
+    it('shows and marks a chosen line already on the list, and says so once', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
         items: [ITEM_A],
@@ -2664,22 +2700,82 @@ describe('ListPage', () => {
       lines.answerAddWith({ state: 'failed', error: refusal() });
       await typeAndAdd(fixture, 'Leche entera');
 
-      lines.answerAddWith({
-        state: 'failed',
-        error: new GatewayError({
-          code: 'not_found',
-          status: 404,
-          correlationId: 'gone',
-        }),
+      lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-whole'] });
+      choiceRows()[0]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        options: { intoLineId: 'ln-whole' },
       });
-      lines.answerAddWith({ state: 'raised', lineId: 'ln-whole' });
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.add.alreadyOn'
+      );
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+      expect(
+        lines.linesIn().find((held) => held.id === 'ln-whole')?.quantity
+      ).toBe(2);
+    });
+
+    it('raises and marks a chosen line at zero', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-other' });
       choiceRows()[1]?.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(3);
-      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-other']);
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.addChoice.merged'
+      );
       expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('asks about a chosen product too, with no new line to offer', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      const card = document.createElement('button');
+      document.body.append(card);
+
+      await fixture.componentInstance.add({
+        content: 'Leche entera',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-a'],
+        named: false,
+        anchor: card,
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toMatchObject({
+        itemIds: ['item-a'],
+        options: { askIfAmbiguous: true },
+      });
+      // Two lines, and no "A new line" for a product.
+      expect(choiceRows()).toHaveLength(2);
+      expect(choiceRows().some((row) => row.classList.contains('new'))).toBe(
+        false
+      );
+
+      // A new line is never sent for it, whatever asks.
+      const before = lines.calls.length;
+      fixture.componentInstance.chooseNewLine();
+      await fixture.whenStable();
+      expect(lines.calls).toHaveLength(before);
     });
 
     it('closes the question when the page moves to another list', async () => {

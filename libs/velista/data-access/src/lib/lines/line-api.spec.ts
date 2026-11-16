@@ -44,6 +44,16 @@ describe('addLineOptionsRequest', () => {
   it('never sends an empty id', () => {
     expect(addLineOptionsRequest({ intoLineId: '' })).toEqual({});
   });
+
+  it('asks and chooses beside products too, and never sends a new line there (the ruling of 2026-11-16)', () => {
+    expect(addLineOptionsRequest({ askIfAmbiguous: true }, true)).toEqual({
+      askIfAmbiguous: true,
+    });
+    expect(addLineOptionsRequest({ intoLineId: 'line-a' }, true)).toEqual({
+      intoLineId: 'line-a',
+    });
+    expect(addLineOptionsRequest({ newLine: true }, true)).toEqual({});
+  });
 });
 
 /**
@@ -124,6 +134,29 @@ describe('LineApi, the unit on every write (velista 0182)', () => {
     expect('unit' in second.request.body).toBe(false);
     second.flush({ line: { ...LINE, unit: 'UNIT' }, merged: false });
     await typed;
+  });
+
+  it('sends the question flag with a product add (the ruling of 2026-11-16)', async () => {
+    const asked = api.addLineResult(
+      'list-1',
+      'Plátanos',
+      25,
+      ['item-bananas'],
+      false,
+      { askIfAmbiguous: true },
+      'GRAM'
+    );
+    const req = next();
+    expect(req.request.body).toEqual({
+      content: 'Plátanos',
+      quantity: 25,
+      unit: 'GRAM',
+      itemIds: ['item-bananas'],
+      named: false,
+      askIfAmbiguous: true,
+    });
+    req.flush({ line: LINE, merged: false });
+    await asked;
   });
 
   it('sends a typed name with neither amount nor unit, also as an answer to the question (velista 0185)', async () => {

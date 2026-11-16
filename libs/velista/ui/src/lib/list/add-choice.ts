@@ -13,7 +13,7 @@ import {
   RokuLocaleStore,
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
-import { addAmount, type AddChoiceRow } from '@portfolio/velista/models';
+import type { AddChoiceRow } from '@portfolio/velista/models';
 import { formatAmount, handleBackWhile } from '@portfolio/velista/platform';
 import { ChevronLeftIcon, PlusIcon } from '../icons/icons';
 import { ProductPicture } from './product-picture';
@@ -30,8 +30,10 @@ let choiceCount = 0;
  *
  * The content of an `AnchoredPopover` held against the plus that was pressed. One
  * row per line the server named, in its order: the line's thumb, its name, the
- * product's brand and size, and what its quantity goes from and to. "A new line"
- * comes last. A row is the answer, so a press sends the add again.
+ * product's brand and size, and what choosing it does: a line at zero goes from
+ * and to an amount, a line that holds one says it is already on the list. "A new
+ * line" comes last, for typed words only. A row is the answer, so a press sends the
+ * add again.
  *
  * ## The title wraps and the count does not shrink
  *
@@ -89,28 +91,50 @@ let choiceCount = 0;
               @if (row.product !== null) {
                 <span class="product">{{ row.product }}</span>
               }
+              @if (row.outcome === 'alreadyOnList') {
+                <!--
+                  A line the list already asks for: choosing it shows it and
+                  changes nothing (the owner's ruling of 2026-11-16). Said in
+                  words, so it never rests on the count's colour alone.
+                -->
+                <span class="state">{{ 'list.addChoice.onList' | rokuT }}</span>
+              }
             </span>
-            <!--
-              What a choice of the row does, in the row's own unit: one step more,
-              "0 g" to "25 g" (velista 0185).
-            -->
-            <span aria-hidden="true" class="count"
-              >{{ amount(row.from, row) }} &rarr;
-              <b class="to">{{ amount(row.to, row) }}</b></span
-            >
+            @if (row.outcome === 'alreadyOnList') {
+              <!-- The amount it holds, which a choice leaves as it is. -->
+              <span aria-hidden="true" class="count"
+                ><b class="to">{{ amount(row.from, row) }}</b></span
+              >
+            } @else {
+              <!--
+                What a choice of the row does, in the row's own unit, from its
+                amount to what the server raises it to: "0 g" to "25 g".
+              -->
+              <span aria-hidden="true" class="count"
+                >{{ amount(row.from, row) }} &rarr;
+                <b class="to">{{ amount(row.to, row) }}</b></span
+              >
+            }
           </button>
         </li>
       }
-      <li>
-        <button (click)="newLine.emit()" #option class="row new" type="button">
-          <span aria-hidden="true" class="thumb dashed">
-            <lib-plus-icon class="dashed-glyph" />
-          </span>
-          <span class="text">
-            <span class="name">{{ 'list.addChoice.newLine' | rokuT }}</span>
-          </span>
-        </button>
-      </li>
+      @if (offerNewLine()) {
+        <li>
+          <button
+            (click)="newLine.emit()"
+            #option
+            class="row new"
+            type="button"
+          >
+            <span aria-hidden="true" class="thumb dashed">
+              <lib-plus-icon class="dashed-glyph" />
+            </span>
+            <span class="text">
+              <span class="name">{{ 'list.addChoice.newLine' | rokuT }}</span>
+            </span>
+          </button>
+        </li>
+      }
     </ul>
   `,
   styleUrl: './add-choice.scss',
@@ -127,6 +151,13 @@ export class AddChoice {
   readonly rows = input.required<readonly AddChoiceRow[]>();
 
   readonly scope = input<AddChoiceScope>('list');
+
+  /**
+   * Whether "A new line" is offered: for typed words alone. A chosen product never
+   * makes a second line of itself (the owner's ruling of 2026-11-16), and the
+   * gateway refuses `newLine` beside products.
+   */
+  readonly offerNewLine = input(true);
 
   /**
    * The list the basket's picker chose, drawn as the way back to it, or null. An
@@ -174,6 +205,11 @@ export class AddChoice {
   }
 
   protected rowLabel(row: AddChoiceRow): string {
+    if (row.outcome === 'alreadyOnList') {
+      return row.product === null
+        ? 'list.addChoice.rowOnListNoProduct'
+        : 'list.addChoice.rowOnList';
+    }
     return row.product === null
       ? 'list.addChoice.rowNoProduct'
       : 'list.addChoice.row';
@@ -181,12 +217,14 @@ export class AddChoice {
 
   protected rowArgs(row: AddChoiceRow): Record<string, unknown> {
     return {
-      // One step of the row's own unit, "25 g" or "1" (velista 0185).
-      added: this.amount(addAmount(row.unit), row),
+      // What the raise adds, in the row's own unit: "25 g" or "1".
+      added: this.amount(Math.max(0, row.to - row.from), row),
       name: row.name,
       product: row.product ?? '',
       from: this.amount(row.from, row),
       to: this.amount(row.to, row),
+      // What a line already on the list holds, which a choice leaves as it is.
+      amount: this.amount(row.from, row),
     };
   }
 }

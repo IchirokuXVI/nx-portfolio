@@ -25,6 +25,7 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  GatewayError,
   GroupMembers,
   ItemNames,
   keepsShopMap,
@@ -2262,6 +2263,8 @@ export class BasketPage {
     return {
       name: addChoiceName(asked.choice, asked.entry.content),
       listName: asked.listName,
+      // For typed words alone (the owner's ruling of 2026-11-16).
+      offerNewLine: (asked.entry.itemIds ?? []).length === 0,
       rows: addChoiceRows(asked.choice, {
         itemOf: (itemId) => this._itemNames.nameOf(itemId),
         // The basket holds no favourite, so a row shows the line's first product.
@@ -2342,20 +2345,11 @@ export class BasketPage {
     if (entry === null || this.adding()) {
       return;
     }
-    if ((entry.itemIds ?? []).length > 0) {
-      // A card's products decide where it lands, so nothing can come back as a
-      // question. Cleared now, as an unheld send is: the add is not optimistic, but
-      // the words go back into the field if it fails (see `_addTo`), and a field
-      // that kept them while the request was out would invite pressing the plus
-      // again.
-      this._closePicker();
-      this._composer()?.sent();
-      await this._addTo(listId, entry);
-      return;
-    }
-    // Typed words can come back as a question about them (velista `0170`), asked in
-    // this same popover, so it stays open and the words stay in the field until the
-    // answer. The plus waits meanwhile, because the add is in flight.
+    // An add can come back as a question about it (velista `0170`), a card's too
+    // since the owner's ruling of 2026-11-16, asked in this same popover. So it stays
+    // open until the answer, and the words stay in the field: clearing them would
+    // close it, because new words are a new line. The plus waits meanwhile, because
+    // the add is in flight.
     await this._addTo(listId, entry, { askIfAmbiguous: true });
   }
 
@@ -2371,7 +2365,13 @@ export class BasketPage {
   /** "A new line" was chosen. */
   protected async chooseNewLine(): Promise<void> {
     const asked = this._choice();
-    if (asked === null || this.adding()) {
+    if (
+      asked === null ||
+      this.adding() ||
+      (asked.entry.itemIds ?? []).length > 0
+    ) {
+      // Offered for typed words alone; the gateway refuses `newLine` beside
+      // products.
       return;
     }
     await this._addTo(asked.listId, asked.entry, { newLine: true });
@@ -2776,6 +2776,9 @@ export class BasketPage {
     options?: AddLineOptions
   ): Promise<void> {
     const itemIds = entry.itemIds ?? [];
+    // The words in the field as the add goes: a card's name is not what the field
+    // holds, so a landed card clears the field only while it still holds these.
+    const words = this._composer()?.content().trim() ?? '';
     // The basket the add was sent from. A sentence about it is not said on another
     // one the page has followed to since (velista `0185`).
     const basketId = this._store.basket()?.id ?? null;
@@ -2795,15 +2798,22 @@ export class BasketPage {
       ...(itemIds.length > 0 ? { itemIds } : {}),
       // A chosen card is not named (velista `0144`, section 3).
       ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
-      // What typed words say about a name the list holds (backend `0228`).
-      ...(itemIds.length > 0 ? {} : (options ?? {})),
+      // What the add says about lines the list holds (backend `0228`), for a
+      // product too since the owner's ruling of 2026-11-16, and never `newLine`
+      // beside products (backend `0260`, rule 7).
+      ...(options?.askIfAmbiguous === true ? { askIfAmbiguous: true } : {}),
+      ...(options?.intoLineId === undefined
+        ? {}
+        : { intoLineId: options.intoLineId }),
+      ...(options?.newLine === true && itemIds.length === 0
+        ? { newLine: true }
+        : {}),
     });
 
-    // Typed words were held in the field while the add was out; a card's were
-    // cleared when its list was picked. Whether the popover that sent typed words is
-    // still open for them is read off the add itself, never off the anchor alone: a
-    // press outside closes it while the add is in flight, and the answer still
-    // belongs to these words.
+    // The words were held in the field while the add was out, a card's too. Whether
+    // the popover that sent them is still open for them is read off the add itself,
+    // never off the anchor alone: a press outside closes it while the add is in
+    // flight, and the answer still belongs to these words.
     const typed = itemIds.length === 0;
     const asking = this._waiting === entry && this.pickerAnchor() !== null;
 
@@ -2833,6 +2843,11 @@ export class BasketPage {
       if (asking) {
         this._closePicker();
       }
+      const failure = this._store.error();
+      const lineGone =
+        options?.intoLineId !== undefined &&
+        failure instanceof GatewayError &&
+        failure.code === 'not_found';
       if (asking || this._fieldIsEmpty()) {
         // The words go back, and focus with them, into a field nobody has typed
         // in since: newer words are a newer add and stay, with their suggestions.
@@ -2867,7 +2882,13 @@ export class BasketPage {
       }
       this._say(
         this._translator.t(
-          basketErrorKey(this._store.error(), 'basket.addLine'),
+          // A chosen line that went while the question was open, or is no longer
+          // one the add meets (backend `0260`, rule 6): the add's own failure, not
+          // the basket being gone. The plus asks again with the lines as they are.
+          basketErrorKey(
+            lineGone ? null : this._store.error(),
+            'basket.addLine'
+          ),
           undefined,
           this._locale()
         )
@@ -2880,7 +2901,7 @@ export class BasketPage {
     if (asking) {
       this._closePicker();
     }
-    if (typed && this._fieldHolds(entry.content)) {
+    if (this._fieldHolds(typed ? entry.content : words)) {
       this._composer()?.sent();
     }
     // The dropdown goes with the words that produced it. Clearing it here rather
