@@ -861,6 +861,86 @@ describe('RunPage, what a walk did not read', () => {
     fixture.componentInstance.watch.stop();
   });
 
+  it('draws a dash, never a 0, for the queries of a section that threw', async () => {
+    const fixture = await render(
+      walk({
+        incompleteSections: [
+          { code: 'S3', name: 'Mascotas', queries: null, stoppedBy: null },
+        ],
+        sections: [
+          {
+            code: 'S1',
+            name: 'Droguería',
+            products: 412,
+            queries: 0,
+            stoppedBy: 'COMPLETE',
+            openQueries: [],
+          },
+          {
+            code: 'S3',
+            name: 'Mascotas',
+            products: 259,
+            queries: null,
+            stoppedBy: null,
+            openQueries: [],
+          },
+        ],
+      })
+    );
+
+    const cells = [
+      ...drawn(fixture, '[data-sections]').querySelectorAll('[data-queries]'),
+    ];
+    // Mascotas first, as the unfinished one.
+    expect(cells[0].querySelector('[aria-hidden="true"]')?.textContent).toBe(
+      '–'
+    );
+    expect(cells[0].textContent).toContain(
+      'harvest.run.report.sections.queriesNotStated'
+    );
+    expect(cells[0].textContent).not.toContain('0');
+    // A section that stated 0 queries still reads 0.
+    expect(cells[1].textContent?.trim()).toBe('0');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws a part that was not read alike, whether the runner named it or not', async () => {
+    const fixture = await render(
+      run({
+        status: 'COMPLETED',
+        finishedAt: '2026-09-03T09:30:00.000Z',
+        warnings: [
+          {
+            code: 'LISTING_UNREAD',
+            offerId: null,
+            page: null,
+            name: 'Mascotas',
+            message: 'Section 07 Mascotas failed: Error: socket hang up',
+          },
+          {
+            code: 'LISTING_UNREAD',
+            offerId: null,
+            page: null,
+            name: null,
+            message:
+              'Category cat21449123 Congelados was refused twice and was not read.',
+          },
+        ],
+      })
+    );
+
+    const items = [
+      ...fixture.nativeElement.querySelectorAll('.warnings li'),
+    ] as HTMLElement[];
+    expect(items).toHaveLength(2);
+    expect(items.map((item) => item.querySelector('strong'))).toEqual([
+      null,
+      null,
+    ]);
+    expect(items[0].textContent).toContain('Section 07 Mascotas failed');
+    fixture.componentInstance.watch.stop();
+  });
+
   it('draws an El Jamón run: the categories that read short, and the detail sentence', async () => {
     const fixture = await render(
       walk({

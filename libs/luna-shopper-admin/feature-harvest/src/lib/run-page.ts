@@ -362,7 +362,19 @@ import {
                           }
                         </th>
                         <td class="number">{{ section.products }}</td>
-                        <td class="number">{{ section.queries ?? '' }}</td>
+                        <!-- A section that threw states no count. A dash
+                             stands for it, never a 0 the run did not say. -->
+                        <td class="number" data-queries>
+                          @if (section.queries === null) {
+                            <span aria-hidden="true">–</span>
+                            <span class="sr-only">{{
+                              'harvest.run.report.sections.queriesNotStated'
+                                | rokuT
+                            }}</span>
+                          } @else {
+                            {{ section.queries }}
+                          }
+                        </td>
                         <td>
                           @if (section.failed) {
                             {{ 'harvest.run.report.stoppedBy.FAILED' | rokuT }}
@@ -707,6 +719,15 @@ import {
     .count {
       font-variant-numeric: tabular-nums;
       color: var(--admin-ink-muted);
+    }
+
+    .sr-only {
+      position: absolute;
+      overflow: hidden;
+      clip-path: inset(50%);
+      inline-size: 1px;
+      block-size: 1px;
+      white-space: nowrap;
     }
 
     .warnings {

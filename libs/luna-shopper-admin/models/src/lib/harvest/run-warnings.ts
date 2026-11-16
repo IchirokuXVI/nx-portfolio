@@ -21,7 +21,10 @@ export interface RunWarningRow {
   readonly offerId: string;
   /** The page, or `''` where the warning names none. */
   readonly page: string;
-  /** What the leaflet printed, where the warning carries it. */
+  /**
+   * What the leaflet printed, where the warning carries it, or `''` when the
+   * message already names it.
+   */
   readonly name: string;
   /** The harvester's own sentence, shown as it came. */
   readonly message: string;
@@ -44,6 +47,13 @@ export function isFileImportRun(run: HarvestRun | null): boolean {
  * A `null` page or offer becomes `''` rather than the word "null", because the
  * cell is drawn when it has something in it and left out when it does not, the
  * same rule the run's own facts follow.
+ *
+ * A name the message already holds becomes `''` too. A walk's warning about a
+ * part it did not read names the part in its sentence ("Section 07 Mascotas
+ * failed"), and a runner may or may not also set `name`: drawing the name
+ * beside such a sentence repeats it on one run and not on the next. An
+ * import's warning keeps its name, because its sentence speaks of the product
+ * without naming it.
  */
 export function runWarningRows(
   run: HarvestRun | null
@@ -57,9 +67,18 @@ export function runWarningRows(
     code: warning.code,
     offerId: warning.offerId ?? '',
     page: warning.page === null ? '' : String(warning.page),
-    name: warning.name ?? '',
+    name: nameBesides(warning.name, warning.message),
     message: warning.message,
   }));
+}
+
+/** The name, unless the message already says it. */
+function nameBesides(name: string | null, message: string): string {
+  const trimmed = (name ?? '').trim();
+  return trimmed === '' ||
+    message.toLocaleLowerCase().includes(trimmed.toLocaleLowerCase())
+    ? ''
+    : trimmed;
 }
 
 /**
