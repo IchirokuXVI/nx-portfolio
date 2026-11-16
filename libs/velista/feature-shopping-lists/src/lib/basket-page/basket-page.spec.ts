@@ -3412,7 +3412,7 @@ describe('the composer and the list it adds to', () => {
       expect(options()).toHaveLength(0);
     });
 
-    it('sends a card’s product set as itemIds', async () => {
+    it('sends a card’s product set as itemIds, and lets it be asked about (the ruling of 2026-11-16)', async () => {
       const { fixture, store } = await render({ served });
       const card = document.createElement('button');
       document.body.append(card);
@@ -3432,6 +3432,7 @@ describe('the composer and the list it adds to', () => {
         content: 'Milk',
         quantity: 1,
         itemIds: ['i-1', 'i-2'],
+        askIfAmbiguous: true,
       });
       card.remove();
     });
@@ -3516,6 +3517,8 @@ describe('the composer and the list it adds to', () => {
                 itemIds: ['item-a'],
                 productGroupId: null,
                 approvalStatus: 'APPROVED',
+                outcome: 'ALREADY_ON_LIST',
+                resultingQuantity: 2,
               },
               {
                 lineId: 'zl-b',
@@ -3525,6 +3528,8 @@ describe('the composer and the list it adds to', () => {
                 itemIds: ['item-b'],
                 productGroupId: null,
                 approvalStatus: 'APPROVED',
+                outcome: 'RAISED',
+                resultingQuantity: 1,
               },
             ],
           },
@@ -3583,8 +3588,13 @@ describe('the composer and the list it adds to', () => {
         );
         // One row per line and "A new line" last.
         expect(choiceRows()).toHaveLength(3);
-        expect(choiceRows()[0].querySelector('.count')?.textContent).toMatch(
-          /2\s*→\s*3/
+        // Above zero: already on the list, said in words (the ruling of 2026-11-16).
+        expect(
+          choiceRows()[0].querySelector('.count')?.textContent?.trim()
+        ).toBe('2');
+        expect(choiceRows()[0].querySelector('.state')).not.toBeNull();
+        expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
+          /0\s*→\s*1/
         );
         expect(choiceRows()[2].classList.contains('new')).toBe(true);
         // One lookup of the products named, for their brand and size.
@@ -3620,6 +3630,68 @@ describe('the composer and the list it adds to', () => {
           content: 'Leche entera',
           newLine: true,
         });
+      });
+
+      it('closes the question and says the add failed when the chosen line went', async () => {
+        const { fixture, store } = await asked();
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'not_found',
+              status: 404,
+              correlationId: 'gone',
+            })
+          );
+          return Promise.resolve(null);
+        });
+
+        choiceRows()[1]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(document.querySelector('.pop')).toBeNull();
+        const said = query(fixture, '.said')?.textContent ?? '';
+        // The add's own failure, not the basket being gone.
+        expect(said).not.toContain('basket.error.gone');
+        expect(said).toContain('basket.error');
+        expect(field(fixture).value).toBe('Leche entera');
+      });
+
+      it('asks about a card too, with no new line to offer, and never sends one', async () => {
+        const rendered = await render({ served });
+        const { fixture, store } = rendered;
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(refusal());
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(choiceRows()).toHaveLength(2);
+        expect(choiceRows().some((row) => row.classList.contains('new'))).toBe(
+          false
+        );
+
+        choiceRows()[0]?.click();
+        await fixture.whenStable();
+        expect(store.addLine).toHaveBeenLastCalledWith({
+          targetListId: 'l-weekly',
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          intoLineId: 'zl-a',
+        });
+        card.remove();
       });
 
       it('goes back to the lists, unchanged, and keeps the words', async () => {
@@ -3763,6 +3835,131 @@ describe('the composer and the list it adds to', () => {
           // The words go, as on any add that landed, and nothing is said under the field.
           expect(field(fixture).value).toBe('');
           expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+        });
+
+        it('says it again when the same add meets the same line a second time', async () => {
+          const { fixture, store } = await met(['zl-milk']);
+          expect(query(fixture, '.said')?.textContent ?? '').toContain(
+            'basket.add.alreadyOn'
+          );
+
+          store.addLine.mockResolvedValueOnce({
+            entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+          // The same text twice is no change to the region: it is emptied first and
+          // filled again after a short gap.
+          expect(query(fixture, '.said')?.textContent?.trim() ?? '').toBe('');
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          fixture.detectChanges();
+          expect(query(fixture, '.said')?.textContent ?? '').toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
+        /** Owner ruling 45 of 2026-11-16: the refusal shows the line it names. */
+        async function refused(lineId: string) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockImplementationOnce(() => {
+            rendered.store.error.set(
+              new GatewayError({
+                code: 'line_unit_differs',
+                status: 409,
+                correlationId: 'ref',
+                details: {
+                  line: {
+                    lineId,
+                    content: 'Leche entera',
+                    unit: 'MILLILITER',
+                    quantity: 1500,
+                  },
+                  unit: 'UNIT',
+                  index: null,
+                },
+              })
+            );
+            return Promise.resolve(null);
+          });
+          const card = document.createElement('button');
+          document.body.append(card);
+          composer(rendered.fixture).submitted.emit({
+            content: 'Leche',
+            quantity: 1,
+            unit: 'UNIT',
+            itemIds: ['i-milk'],
+            named: false,
+            anchor: card,
+          });
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          card.remove();
+          return rendered;
+        }
+
+        it('marks and scrolls to the line a refusal for another unit names', async () => {
+          const original = Element.prototype.scrollIntoView;
+          const scrolled: string[] = [];
+          Element.prototype.scrollIntoView = function (this: HTMLElement) {
+            scrolled.push(this.dataset['lineIds'] ?? '');
+          };
+          const rect = jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineIds'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+          try {
+            const { fixture } = await refused('zl-milk');
+
+            const host = fixture.nativeElement as HTMLElement;
+            const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+            expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+            expect(scrolled).toEqual(['zl-milk']);
+            expect(
+              host.querySelector('lib-line-composer .notice-text')?.textContent
+            ).toContain('basket.error.addUnitDiffers.MILLILITER');
+          } finally {
+            Element.prototype.scrollIntoView = original;
+            rect.mockRestore();
+          }
+        });
+
+        it('says the refusal alone when no drawn row holds the line it names', async () => {
+          const original = Element.prototype.scrollIntoView;
+          const scrolled: string[] = [];
+          Element.prototype.scrollIntoView = function (this: HTMLElement) {
+            scrolled.push(this.dataset['lineIds'] ?? '');
+          };
+          try {
+            const { fixture } = await refused('zl-elsewhere');
+
+            const host = fixture.nativeElement as HTMLElement;
+            expect(host.querySelector('.took, .is-took')).toBeNull();
+            expect(scrolled).toEqual([]);
+            expect(
+              host.querySelector('lib-line-composer .notice-text')?.textContent
+            ).toContain('basket.error.addUnitDiffers.MILLILITER');
+          } finally {
+            Element.prototype.scrollIntoView = original;
+          }
         });
 
         it('says it under the field when no drawn row holds the line', async () => {

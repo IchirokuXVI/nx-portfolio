@@ -323,6 +323,23 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([98, 99, 100]);
     });
 
+    it.each([
+      ['a second finger', { isPrimary: false }],
+      ['a button that is not the main one', { button: 2 }],
+    ])('keeps the swallow of a stopped hold when %s goes down', (_, extra) => {
+      const h = render({ value: 3 });
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(400 + 300 + 255 + 1000);
+      expect(tos(h)).toEqual([2, 1]);
+      const other = new Event('pointerdown', { bubbles: true });
+      Object.assign(other, extra);
+      h.plus.dispatchEvent(other);
+      jest.advanceTimersByTime(2000);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(tos(h)).toEqual([2, 1]);
+    });
+
     it('starts no hold on a button at an end', () => {
       const h = render({ value: 0 });
       fire(h.minus, 'pointerdown');
@@ -546,6 +563,71 @@ describe('QuantityStepper (velista 0188)', () => {
       type(h, '900');
       h.plus.click();
       expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
+    });
+
+    describe('a pointer press while text is typed (the owner, 2026-11-12)', () => {
+      /** Types into a focused field, as a person does. */
+      const typeFocused = (h: Harness, text: string) => {
+        field(h).focus();
+        type(h, text);
+      };
+      /** Down, then the focus moves to the button and the field blurs. */
+      const downAndFocus = (h: Harness, button: HTMLButtonElement) => {
+        fire(button, 'pointerdown');
+        button.focus();
+        h.fixture.detectChanges();
+      };
+
+      it('commits the text and takes no step, in the real event order', () => {
+        const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+        typeFocused(h, '900');
+        downAndFocus(h, h.plus);
+        expect(tos(h)).toEqual([900]);
+        fire(h.plus, 'pointerup');
+        pointerClick(h.plus);
+        expect(tos(h)).toEqual([900]);
+      });
+
+      it('commits the text and takes no step when the button takes no focus', () => {
+        const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+        typeFocused(h, '900');
+        fire(h.plus, 'pointerdown');
+        fire(h.plus, 'pointerup');
+        pointerClick(h.plus);
+        expect(tos(h)).toEqual([900]);
+      });
+
+      it('starts no hold from that press', () => {
+        const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+        typeFocused(h, '900');
+        downAndFocus(h, h.minus);
+        jest.advanceTimersByTime(3000);
+        fire(h.minus, 'pointerup');
+        pointerClick(h.minus);
+        expect(tos(h)).toEqual([900]);
+      });
+
+      it('steps on the next pointer press', () => {
+        const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+        typeFocused(h, '900');
+        downAndFocus(h, h.plus);
+        fire(h.plus, 'pointerup');
+        pointerClick(h.plus);
+        fire(h.plus, 'pointerdown');
+        fire(h.plus, 'pointerup');
+        pointerClick(h.plus);
+        expect(tos(h)).toEqual([900, 925]);
+      });
+
+      it('steps on a key click after Tab left the field, which committed it', () => {
+        const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+        typeFocused(h, '900');
+        h.plus.focus();
+        h.fixture.detectChanges();
+        expect(tos(h)).toEqual([900]);
+        keyClick(h.plus);
+        expect(tos(h)).toEqual([900, 925]);
+      });
     });
   });
 
@@ -792,6 +874,37 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(tos(h)).toEqual([975, 950, 925]);
     });
 
+    it('builds a press on a typed commit in the same task', () => {
+      const h = render(
+        { value: 750, unit: 'GRAM', variant: 'sheet' },
+        { follow: false }
+      );
+      const input = h.el.querySelector('input') as HTMLInputElement;
+      input.value = '900';
+      fire(input, 'input');
+      h.fixture.detectChanges();
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
+      );
+      h.plus.click();
+      expect(h.steps).toEqual([
+        { from: 750, to: 900, repeat: false },
+        { from: 900, to: 925, repeat: false },
+      ]);
+    });
+
+    it('builds each repeat of a hold on the one before', () => {
+      const h = render({ value: 2 }, { follow: false });
+      fire(h.plus, 'pointerdown');
+      jest.advanceTimersByTime(400 + 300 + 255);
+      expect(h.steps).toEqual([
+        { from: 2, to: 3, repeat: true },
+        { from: 3, to: 4, repeat: true },
+        { from: 4, to: 5, repeat: true },
+      ]);
+    });
+
+    // Not S15 proof: a caller's new value is the base with or without the kept amount.
     it('starts from the caller once it sets an amount of its own', () => {
       const h = render({ value: 1000, unit: 'GRAM' }, { follow: false });
       h.minus.click();

@@ -137,7 +137,9 @@ describe('ListPicker', () => {
           product: 'Hacendado · 1 L',
           imageUrl: null,
           from: 2,
-          to: 3,
+          to: 2,
+          unit: 'UNIT' as const,
+          outcome: 'alreadyOnList' as const,
         },
         {
           lineId: 'line-b',
@@ -146,8 +148,11 @@ describe('ListPicker', () => {
           imageUrl: null,
           from: 0,
           to: 1,
+          unit: 'UNIT' as const,
+          outcome: 'raised' as const,
         },
       ],
+      offerNewLine: true,
     };
     const lines = () => [
       ...document.querySelectorAll<HTMLButtonElement>('.pop .row'),

@@ -6,7 +6,9 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   LineAddNeedsChoiceException,
+  LineUnitDiffersException,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -48,6 +50,11 @@ import { ListAccessService } from './list-access.service';
  * **An add that meets a wanted line leaves the row byte for byte** (plan
  * 0260, section 7.1): quantity, version and `updatedAt` as they were, and no
  * `list_line_changes` row. A mock can only say `save` was not called.
+ *
+ * **A product add finds the held line of its unit** beside an identity line of
+ * another unit (the owner, 2026-11-12), through the product rows of the list,
+ * and a batch that would create one product in two units is refused as the
+ * second of two single adds is.
  *
  * The rest are the reads a mock cannot prove: the products in the refusal's
  * `details` come from an `In` query, and a chosen line of another list or a
@@ -361,6 +368,251 @@ describeIntegration(
 
       expect((await stored()).map((row) => row.id)).toEqual([gone]);
       expect((await stored(ids.other)).map((row) => row.quantity)).toEqual([1]);
+    });
+
+    // The owner's ruling of 2026-11-12 ("only"): the identity line counts in
+    // another unit, and the line of the add's unit that holds the product is
+    // found by the read of `findLinesHolding`, which has to run before the
+    // refusal does.
+    it('lands a product add on the held line of its unit beside an identity line of another unit', async () => {
+      const leche = await productLine('Leche', WHOLE);
+      const { line: desayuno } = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Desayuno',
+        itemIds: [WHOLE, OAT],
+        unit: 'MILLILITER',
+        quantity: 300,
+      });
+      const before = (await stored()).find((row) => row.id === desayuno.id);
+      const milk = {
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Leche',
+        itemIds: [WHOLE],
+        unit: 'MILLILITER' as const,
+      };
+
+      const met = await lines.add(milk);
+      const [batched] = await lines.addMany({
+        userId: ids.owner,
+        listId: ids.list,
+        items: [milk],
+      });
+
+      for (const answer of [met, batched]) {
+        expect(answer).toMatchObject({
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: desayuno.id, quantity: 300, unit: 'MILLILITER' },
+        });
+        expect(answer.alreadyOnList.map((line) => line.id)).toEqual([
+          desayuno.id,
+        ]);
+      }
+      const after = (await stored()).find((row) => row.id === desayuno.id);
+      expect(after?.version).toBe(before?.version);
+      expect((await stored()).map((row) => row.id)).toEqual([
+        leche,
+        desayuno.id,
+      ]);
+
+      await keep(desayuno.id);
+      const raised = await lines.add(milk);
+
+      expect(raised).toMatchObject({
+        outcome: 'RAISED',
+        line: { id: desayuno.id, quantity: 25, unit: 'MILLILITER' },
+      });
+      expect((await stored()).map((row) => row.quantity)).toEqual([1, 25]);
+    });
+
+    // The owner's ruling of 2026-11-16: two or more matches are never guessed
+    // between, wanted and kept alike.
+    describe('two or more matches (the owner, 2026-11-16)', () => {
+      it('asks about a kept line and a wanted one, each with what choosing it does, and writes nothing (rule 4)', async () => {
+        const whole = await productLine('Leche entera', WHOLE);
+        const oat = await productLine('Leche entera', OAT);
+        await keep(whole);
+        const before = await stored();
+
+        const refused = await lines
+          .add({
+            userId: ids.owner,
+            listId: ids.list,
+            content: 'leche entera',
+            quantity: 2,
+            askIfAmbiguous: true,
+          })
+          .catch((error: unknown) => error);
+
+        expect(refused).toBeInstanceOf(LineAddNeedsChoiceException);
+        const details = (refused as LineAddNeedsChoiceException)
+          .details as unknown as LineAddNeedsChoiceDetails;
+        expect(
+          details.lines.map((line) => ({
+            lineId: line.lineId,
+            itemIds: line.itemIds,
+            quantity: line.quantity,
+            unit: line.unit,
+            outcome: line.outcome,
+            resultingQuantity: line.resultingQuantity,
+          }))
+        ).toEqual([
+          {
+            lineId: whole,
+            itemIds: [WHOLE],
+            quantity: 0,
+            unit: 'UNIT',
+            outcome: 'RAISED',
+            resultingQuantity: 2,
+          },
+          {
+            lineId: oat,
+            itemIds: [OAT],
+            quantity: 1,
+            unit: 'UNIT',
+            outcome: 'ALREADY_ON_LIST',
+            resultingQuantity: 1,
+          },
+        ]);
+        const after = await stored();
+        expect(after.map((row) => [row.quantity, row.version])).toEqual(
+          before.map((row) => [row.quantity, row.version])
+        );
+        expect(await changesOf(whole)).toBe(1);
+        expect(await changesOf(oat)).toBe(1);
+      });
+
+      it('answers every kept match of a batch item and raises none (rule 5)', async () => {
+        const whole = await productLine('Leche entera', WHOLE);
+        const oat = await productLine('Leche entera', OAT);
+        await keep(whole);
+        await keep(oat);
+        const before = await stored();
+
+        const [result] = await lines.addMany({
+          userId: ids.owner,
+          listId: ids.list,
+          items: [{ content: 'LECHE ENTERA', quantity: 3 }],
+        });
+
+        expect(result).toMatchObject({
+          merged: true,
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: whole, quantity: 0 },
+        });
+        expect(
+          result.alreadyOnList.map((line) => [line.id, line.quantity])
+        ).toEqual([
+          [whole, 0],
+          [oat, 0],
+        ]);
+        const after = await stored();
+        expect(after).toHaveLength(2);
+        expect(after.map((row) => [row.quantity, row.version])).toEqual(
+          before.map((row) => [row.quantity, row.version])
+        );
+        expect(await changesOf(whole)).toBe(1);
+        expect(await changesOf(oat)).toBe(1);
+      });
+
+      it('takes intoLineId on a product add: raises the kept match chosen, meets the wanted one (rule 6)', async () => {
+        const { line: leche } = await lines.add({
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER',
+          quantity: 500,
+        });
+        const { line: desayuno } = await lines.add({
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Desayuno',
+          itemIds: [WHOLE, OAT],
+          unit: 'MILLILITER',
+          quantity: 300,
+        });
+        await keep(leche.id);
+        const milk = {
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER' as const,
+          quantity: 200,
+        };
+
+        const asked = await lines
+          .add({ ...milk, askIfAmbiguous: true })
+          .catch((error: unknown) => error);
+        expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+        expect(
+          (
+            (asked as LineAddNeedsChoiceException)
+              .details as unknown as LineAddNeedsChoiceDetails
+          ).lines.map((line) => [line.lineId, line.outcome])
+        ).toEqual([
+          [leche.id, 'RAISED'],
+          [desayuno.id, 'ALREADY_ON_LIST'],
+        ]);
+
+        const met = await lines.add({ ...milk, intoLineId: desayuno.id });
+        const raised = await lines.add({ ...milk, intoLineId: leche.id });
+
+        expect(met).toMatchObject({
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: desayuno.id, quantity: 300, version: desayuno.version },
+        });
+        expect(raised).toMatchObject({
+          outcome: 'RAISED',
+          line: { id: leche.id, quantity: 200, unit: 'MILLILITER' },
+        });
+        expect((await stored()).map((row) => row.quantity)).toEqual([200, 300]);
+      });
+
+      it('refuses newLine on a product add under newLine, and writes nothing (rule 7)', async () => {
+        await productLine('Leche entera', WHOLE);
+
+        const refused = await lines
+          .add({
+            userId: ids.owner,
+            listId: ids.list,
+            content: 'Leche entera',
+            itemIds: [WHOLE],
+            newLine: true,
+          })
+          .catch((error: unknown) => error);
+
+        expect(refused).toBeInstanceOf(ValidationException);
+        expect(refused).toMatchObject({ messageArgs: { field: 'newLine' } });
+        expect((await stored()).map((row) => row.quantity)).toEqual([1]);
+      });
+    });
+
+    it('refuses a batch that would create one product in two units under two names, as two single adds refuse the second', async () => {
+      const items = [
+        {
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER' as const,
+        },
+        { content: 'Milk', itemIds: [WHOLE], unit: 'UNIT' as const },
+      ];
+
+      const refused = await lines
+        .addMany({ userId: ids.owner, listId: ids.list, items })
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(ValidationException);
+      expect(refused).toMatchObject({ messageArgs: { field: 'items' } });
+      expect(await stored()).toEqual([]);
+
+      await lines.add({ userId: ids.owner, listId: ids.list, ...items[0] });
+      await expect(
+        lines.add({ userId: ids.owner, listId: ids.list, ...items[1] })
+      ).rejects.toBeInstanceOf(LineUnitDiffersException);
+      expect(await stored()).toHaveLength(1);
     });
   }
 );

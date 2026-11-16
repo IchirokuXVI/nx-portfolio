@@ -33,6 +33,7 @@ import {
   ADD_CHOICE_DOCS,
   LINE_UNIT_DOCS,
   NotBesideNewLine,
+  OnTypedNameOnly,
   RequiredLineUnit,
 } from '../lists/list.dto';
 
@@ -322,6 +323,7 @@ export class AddBasketLineDto {
   @Transform(({ obj }: { obj: Record<string, unknown> }) => obj?.['newLine'])
   @IsOptional()
   @IsBoolean()
+  @OnTypedNameOnly()
   newLine?: boolean;
 }
 

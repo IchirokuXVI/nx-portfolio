@@ -718,7 +718,8 @@ export class LineStore {
    * Yes for a product add no loaded line asks for, and for a typed name no loaded
    * line carries. No for a typed name a loaded line already carries, since the answer
    * is then likely that line or a question and a drawn row would vanish; no for a
-   * product a loaded line above zero already holds (velista `0185`, decision I); and
+   * product a loaded line already holds at any amount, met above zero or raised from
+   * a kept zero, hidden or not (velista `0185`, decision I; velista `0192`); and
    * no for a line the person chose. The page reads it too, to know whether the list
    * follows a new row to its end or waits for the answer to say where the add went.
    */

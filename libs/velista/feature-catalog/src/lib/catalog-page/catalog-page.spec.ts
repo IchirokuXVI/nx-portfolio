@@ -1033,7 +1033,12 @@ describe('CatalogPage', () => {
       expect(switchedOff(plus)).toBe(true);
       const held = rowOf(fixture, OIL).querySelector('.held');
       const sentence = held?.querySelector('.held-onlist');
-      expect(plus?.getAttribute('aria-describedby')).toBe(sentence?.id);
+      // Described by the reason inside the sentence, not by the link after it.
+      const reason = sentence?.querySelector(
+        `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+      );
+      expect(reason?.textContent).toContain('catalog.held.alreadyOn');
+      expect(reason?.textContent).not.toContain('catalog.held.openLine');
       expect(sentence?.textContent).toContain('catalog.held.alreadyOn');
       expect(held?.querySelector('.held-title')).toBeNull();
       // The first line in the order drawn, on the list's own URL.

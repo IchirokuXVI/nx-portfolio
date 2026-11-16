@@ -25,6 +25,20 @@
   padding-block-start: var(--app-space-4);
 }
 
+// The page's polite region: visually hidden and still announced. `display: none` would
+// take it out of the accessibility tree entirely, which is the usual way a live region
+// ends up silent. Absolute, so it is no item of the column's layout.
+.live {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 // The head block (velista 0189, decisions B and C): "en Casa", the viewers and the stale
 // band, then the field. An item of the host's column and not a row of the scroller, so
 // the field is reachable whatever the scroll, which is the one thing the foot gave it.

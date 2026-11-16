@@ -227,6 +227,43 @@ From 2026-11-12 (the owner's rulings on the build, PR #984):
 - **Backend `0263` was withdrawn.** No write deletes a line because it reached 0; velista hides
   a line at 0 outside a search. Every line at 0 is a kept line (R2).
 
+From 2026-11-16 (the owner). In his words: "The backend won't accept ambiguous lines. If more
+than one line matches (it will also match if the line's amount is at 0), the user needs to pick
+one line. The server will return the possible lines to pick from and on client side a choice
+will be shown to the user. If the line is filled and has an amount, it won't step when selecting
+it, only scroll to it and highlight the line." This **replaces R3** and the order "a kept
+identity line is raised before held lines" of section 1 (steps 2 and 3, their amendment of
+2026-11-12 and the note of review round 3). As rules:
+
+- **M1. The matches of an add** are every line it could land on, wanted and kept alike, never a
+  rejected one. A product add: the identity targets and the held lines (`findLinesHolding`) of
+  the add's unit, once each. A free text add: the identity target and the named candidates
+  (`findNamedProductLines`), of any unit (R4). `newLine: true` leaves out the named candidates
+  and never the free text line of the name (`0228` target 1.2). Order: `isEarlierLine`.
+- **M2. No match** creates. A product add with no match in its unit and a line of the product
+  in another unit is refused with `line_unit_differs`, as before.
+- **M3. One match**: wanted answers `ALREADY_ON_LIST` and writes nothing; kept is raised
+  (`RAISED`).
+- **M4. Two or more, with `askIfAmbiguous`**: `line_add_needs_choice` listing all of them (up to
+  `LINE_ADD_CHOICE_MAX`), on a product add too. Each entry gains `outcome` (`ALREADY_ON_LIST`
+  for a wanted line, which choosing leaves as it is; `RAISED` for a kept one) and
+  `resultingQuantity` (the line's own quantity, or what the raise makes it). Nothing is written.
+- **M5. Two or more, without `askIfAmbiguous`** (a batch item, a replayed add): nothing is
+  written and the answer is `ALREADY_ON_LIST` with every match in `alreadyOnList`, kept ones
+  included. This replaces "raise the earliest".
+- **M6. `intoLineId`** works on a product add too. The chosen line must be one of the add's
+  matches; any other is the line not found refusal (`0228` B3). Wanted: `ALREADY_ON_LIST`;
+  kept: raised by `amountOnto`.
+- **M7. `newLine: true`** is an answer for a typed name alone. On an add of a product or a
+  group it is a 400 validation error with `messageArgs.field` `newLine`, at the gateway (list
+  add and basket add) and in core. The batch carries no `newLine`.
+- **M8. `addMany`** follows M1 to M5 per item, counting the lines this batch creates or raises
+  as matches. The basket add is `LineService.add` and passes `askIfAmbiguous` through, so it
+  can ask.
+- **M9. The assistant**: a batch slot answering `ALREADY_ON_LIST` with two or more lines is
+  reported as not added, with the lines (`matches`: id, name, quantity, unit) and an `instead`
+  sentence telling the model to ask which one.
+
 ### The writer's, open to the owner
 
 - **R1. The answer of an add that adds nothing is 201 with `outcome: 'ALREADY_ON_LIST'`, and
@@ -249,7 +286,8 @@ From 2026-11-12 (the owner's rulings on the build, PR #984):
   _Note of 2026-11-12: backend `0263` was withdrawn by the owner. No write deletes a line at 0,
   so every line at 0 is a kept line, and an add that meets only kept lines raises one. The code
   needed no change for it._
-- **R3. The duplicate question of `0228` survives only where an add would write.** When a typed
+- **R3 (replaced on 2026-11-16 by the owner's M1 to M9, section 0). The duplicate question of
+  `0228` survives only where an add would write.** When a typed
   name meets two or more candidates and at least one is wanted, nothing is written, so there is
   nothing to choose: the add answers `ALREADY_ON_LIST` with every wanted candidate, and the client
   marks them all. A question here would cost a tap to choose which line to look at, which the
@@ -281,6 +319,7 @@ From 2026-11-12 (the owner's rulings on the build, PR #984):
   transaction; the assistant reads a refused batch as a refusal and reports it (`tools.ts:1560`).
   Two items of one product in two units in one batch are a 400 before the transaction, with
   `messageArgs.field` `items` (R4 of 2026-11-09, unchanged).
+  _Note of 2026-11-16: only when both would create a line, decided in the plan loop (section 4)._
 - **R8. `defaultQuantityOf` changes in place rather than a second function.** Core uses it only
   for an add that states no amount (`line.service.ts:978`, `:1225`, `:1420`). The update route
   never computes it; its doc comment (`list.messages.ts:866`) says what the client sends on a unit
@@ -296,6 +335,10 @@ a raise of a line that counts in another unit than the request (a free text add,
 
 `add` (`line.service.ts:960`) resolves in this order, inside the existing transaction and lock.
 "Met lines" go to section 2's answer.
+
+_Note of 2026-11-16 (the owner): the order below, steps 1 to 4 with their amendments, is
+replaced by M1 to M9 of section 0. An add collects its matches, then creates (none), meets or
+raises (one), or asks or answers all of them (two or more)._
 
 1. **`intoLineId`** (free text only, `0228` B3). The chosen line, locked. Wanted: answer
    `ALREADY_ON_LIST` with it. Kept: raise it by `defaultQuantityOf(chosen.unit)` (R2, R4),
@@ -321,6 +364,11 @@ as above. Only when neither exists is the add refused with `line_unit_differs`, 
 earliest by position of the identity target of another unit and the held lines of another unit,
 whatever `newLine` says. An identity target of another unit no longer refuses before
 `findLinesHolding` runs. `addMany` follows the same order per item (section 4)._
+
+_Note of 2026-11-16 (review round 3): a wanted identity target of the add's unit answers
+`ALREADY_ON_LIST` with every wanted held line of that unit beside it, in position order, as
+step 3 says; `line` is the first of them. A kept identity target is still raised before any
+held line is looked at._
 4. **A free text add's candidates** (`0228` target 1.4, `findNamedProductLines`), skipped when
    `newLine` is true, as today. Every candidate, whatever its unit (R4).
    - One or more wanted: `ALREADY_ON_LIST` with every wanted candidate (R3).
@@ -438,6 +486,14 @@ Unchanged from 2026-11-09 in shape; only a product add reaches it now (R4).
   this batch answers that line with `ALREADY_ON_LIST`.
 - An `ALREADY_ON_LIST` item emits nothing. The basket nudge at `:1373` names only lines that were
   created or raised.
+
+_Note of 2026-11-16 (review round 3): the check before the transaction is gone. Two items of
+one product in two units are the 400 on `items` only when both would create a line: a later
+product item that finds no line of its unit, and that a creation of this batch in another unit
+holds (by product, whatever the names or the `named` flag), is refused, because a single add of
+it would be. An item that meets a line of its own unit already on the list stands, so a list
+that holds the product in both units takes both items. A line of another unit already on the
+list still refuses with `line_unit_differs` and `details.index`, before the 400 is asked._
 
 ## 5. The gateway, the assistant and the documents
 

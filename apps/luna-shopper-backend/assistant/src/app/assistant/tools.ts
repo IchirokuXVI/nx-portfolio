@@ -348,12 +348,15 @@ const upsertLines: AssistantTool = {
         // this tool reports for a line it found itself: `unchanged`. A line at
         // zero is raised: `increased`. An answer with no `outcome`, from a core
         // of before that plan during a deploy, is read from `merged`.
+        //
+        // An item that met two or more lines wrote nothing, because a batch
+        // cannot ask which one (the owner, 2026-11-16): the model is handed
+        // the lines and told to ask.
         added.forEach((result, position) => {
           runtime.link.list(list);
-          results[fresh[position].index] = describeLine(
-            batchAction(result),
-            result.line
-          );
+          results[fresh[position].index] =
+            severalMatches(fresh[position].item.product, result) ??
+            describeLine(batchAction(result), result.line);
         });
       } catch (error) {
         firstFailure = error;
@@ -1152,6 +1155,11 @@ interface ItemResult {
   reason?: string;
   /** The line that already holds this product in another unit (plan 0260). */
   onList?: MetLine;
+  /**
+   * The lines this item met when it met two or more, and nothing was added
+   * (the owner, 2026-11-16).
+   */
+  matches?: MetLine[];
   /** What to do instead, said to the model in plain words (plan 0260). */
   instead?: string;
 }
@@ -1230,6 +1238,33 @@ function describeLine(
     // person who asked deserves to be told their milk is waiting rather than to
     // find out in the shop.
     awaitingApproval: line.approvalStatus === LineApprovalStatus.PENDING,
+  };
+}
+
+/**
+ * A slot of a batch add that met two or more lines and wrote nothing (the
+ * owner, 2026-11-16), as the model can act on it: the item was not added,
+ * these lines match, ask which one. Undefined for any other slot.
+ */
+function severalMatches(
+  product: string,
+  result: Partial<Pick<AddLineResult, 'outcome' | 'alreadyOnList'>>
+): ItemResult | undefined {
+  const lines = result.alreadyOnList ?? [];
+  if (result.outcome !== 'ALREADY_ON_LIST' || lines.length < 2) {
+    return undefined;
+  }
+  return {
+    product,
+    refused: true,
+    reason: `nothing was added, because ${lines.length} lines on the list match it`,
+    matches: lines.map((line) => ({
+      id: line.id,
+      product: line.content,
+      quantity: line.quantity,
+      unit: line.unit ?? 'UNIT',
+    })),
+    instead: `Do not add "${product}" again. Ask the person which of these lines they meant, naming each with its amount, then change the amount on that line if they want it changed.`,
   };
 }
 

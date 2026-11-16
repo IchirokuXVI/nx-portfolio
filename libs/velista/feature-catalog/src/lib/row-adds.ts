@@ -38,6 +38,12 @@ export interface RowAdds {
  * zero does not count, because a press raises it, and neither does the line an
  * add still on its way drew, which has no id the list knows.
  *
+ * Two or more saved lines at zero and none above switch the plus off too (the
+ * owner's ruling of 2026-11-16): the server would ask which one, and the card asks
+ * nothing. `pickLine` says so, and the person raises one of the lines under the
+ * card with its own stepper. No link then: the list hides its lines at zero. One
+ * line at zero keeps the plus, which raises it.
+ *
  * `productOf` is the page's records of the products it shows (velista `0186`,
  * decision E): each held row steps by `lineStepOf` over them, so a row of a
  * product stepped at 100 g steps its lines by 100 g. Absent, every row steps by
@@ -81,15 +87,17 @@ export function rowAdds(
   }
   const path = pathOf(target);
   for (const [itemId, rows] of lines) {
-    const wanted = rows.find(
-      (row) => row.quantity > 0 && !isUnsavedLine(row.lineId)
-    );
+    const saved = rows.filter((row) => !isUnsavedLine(row.lineId));
+    const wanted = saved.find((row) => row.quantity > 0);
+    const kept = saved.filter((row) => row.quantity <= 0).length;
     byItem.set(itemId, {
       list: target.name,
       lines: rows,
-      ...(wanted === undefined
-        ? {}
-        : { onList: { lineId: wanted.lineId, path } }),
+      ...(wanted !== undefined
+        ? { onList: { lineId: wanted.lineId, path } }
+        : kept > 1
+          ? { pickLine: true as const }
+          : {}),
     });
   }
 

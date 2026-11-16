@@ -1120,7 +1120,7 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
 
     /**
      * As the real store reads it: whether the loaded lines carry the typed name, or
-     * a line above zero holds every product of the add (velista `0185`).
+     * a loaded line holds every product of the add, at any amount (velista `0185`).
      */
     drawsBeforeAnswer: (
       _listId: string,

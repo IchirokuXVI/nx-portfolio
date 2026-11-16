@@ -56,6 +56,7 @@ function compose(
     rows?: Readonly<Record<string, readonly TripRow[]>>;
     open?: readonly string[];
     tripsReady?: boolean;
+    tripsLoading?: boolean;
     state?: Partial<ListViewState>;
     query?: string;
     due?: readonly string[];
@@ -82,6 +83,7 @@ function compose(
     past: options.past ?? [],
     rowsOf: (key) => options.rows?.[key],
     tripsReady: options.tripsReady ?? true,
+    tripsLoading: options.tripsLoading,
     openKeys: new Set(options.open ?? []),
     dueLineIds: options.due,
   };
@@ -165,7 +167,47 @@ describe('composeListGroups (velista 0088)', () => {
       { id: 'bread', quantity: 2 },
     ];
 
-    it('stays last in To buy while the trips have not loaded or failed', () => {
+    it('is not drawn in To buy while the first heads read is out, and its due row stays (velista 0192, owner ruling)', () => {
+      const view = groups(
+        compose(
+          [
+            ...seeds,
+            { id: 'rum', quantity: 0, boughtCount: 1, rejected: true },
+          ],
+          { tripsReady: false, tripsLoading: true, due: ['eggs'] }
+        )
+      );
+
+      expect(ids(view.toBuy)).toEqual(['bread']);
+      expect(ids(view.due)).toEqual(['eggs']);
+
+      const notDue = groups(
+        compose(seeds, { tripsReady: false, tripsLoading: true })
+      );
+      expect(ids(notDue.toBuy)).toEqual(['bread']);
+    });
+
+    it('keeps its trip rows while the first heads read is out (velista 0192, owner ruling)', () => {
+      const past = trip('s1', { kind: 'SESSION' });
+      const view = groups(
+        compose(seeds, {
+          past: [past],
+          rows: {
+            [tripKey(past)]: [tripRow('eggs', { left: 0, bought: 3 })],
+          },
+          open: [tripKey(past)],
+          tripsReady: false,
+          tripsLoading: true,
+        })
+      );
+
+      expect(ids(view.toBuy)).toEqual(['bread']);
+      expect(view.trips[0].rows?.map((joined) => joined.line.id)).toEqual([
+        'eggs',
+      ]);
+    });
+
+    it('stays last in To buy after the trips failed', () => {
       const view = groups(
         compose(seeds, {
           past: [trip('s1', { kind: 'SESSION' })],

@@ -80,6 +80,7 @@ import {
   selectAbilities,
 } from '../select-list-state';
 import { BoughtShopPane } from './bought-shop-pane';
+import { LineSheetEvents } from './line-sheet-events';
 import { selectLineDetail } from './select-line-detail';
 
 /**
@@ -170,6 +171,7 @@ export class LineDetailSheet {
   private readonly _realtime = inject<RealtimeClientI>(REALTIME_CLIENT);
   private readonly _injector = inject(Injector);
   private readonly _boughtShop = inject(BoughtShopMemory);
+  private readonly _events = inject(LineSheetEvents);
 
   readonly zoneId = zoneIdOf(this._route);
   readonly listId = listIdOf(this._route);
@@ -538,7 +540,11 @@ export class LineDetailSheet {
   constructor() {
     // The announcement ends with the component, however the sheet closed. The route's
     // services are never destroyed, so this is the one hook every exit reaches.
-    inject(DestroyRef).onDestroy(() => this._stopEditing());
+    inject(DestroyRef).onDestroy(() => {
+      this._stopEditing();
+      // The page under it moves focus off a row that left while the sheet was open.
+      this._events.closed(this.lineId());
+    });
   }
 
   /**
@@ -899,6 +905,18 @@ export class LineDetailSheet {
     this.name.set(field);
     this.amount.set(outcome.line.quantity);
     this._shown = { field, quantity: outcome.line.quantity };
+
+    // An accepted save that lowered the line to 0 is said by the page under the sheet,
+    // which hides the row (velista `0192`, owner ruling of 2026-11-16). A merge keeps a
+    // line with the summed amount, so it never lowers one.
+    if (
+      'quantity' in changes &&
+      line.quantity > 0 &&
+      outcome.line.quantity <= 0 &&
+      outcome.line.id === this.lineId()
+    ) {
+      this._events.lowered(outcome.line.id);
+    }
 
     if (outcome.line.id !== this.lineId()) {
       // This line was the one absorbed. The survivor is the line that remains, so the

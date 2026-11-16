@@ -103,6 +103,7 @@ import {
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
+import { LineSheetEvents } from '../line-detail-sheet/line-sheet-events';
 import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -220,8 +221,11 @@ interface Options {
   readonly items?: readonly CatalogItem[];
   /** Products whose read failed (velista `0145`, section 7). */
   readonly failedItems?: readonly string[];
-  /** The first page of trips, or a failure (velista `0088`). None by default. */
-  readonly trips?: TripPage | 'fail';
+  /**
+   * The first page of trips, or a failure (velista `0088`), or `'pending'` for a read
+   * that never answers. None by default.
+   */
+  readonly trips?: TripPage | 'fail' | 'pending';
   /** Each trip's rows, by trip id. */
   readonly tripRows?: Readonly<Record<string, readonly TripRow[]>>;
   /** What the list suggests, or a failure (velista `0089`). Nothing by default. */
@@ -322,6 +326,9 @@ async function render(options: Options = {}): Promise<{
       tripCalls.heads += 1;
       if (options.trips === 'fail') {
         throw new Error('offline');
+      }
+      if (options.trips === 'pending') {
+        return new Promise<never>(() => undefined);
       }
       return options.trips ?? { live: [], items: [], nextCursor: null };
     },
@@ -1359,18 +1366,27 @@ describe('ListPage', () => {
         expect(fixture.componentInstance.announcement()).toBe('');
       });
 
-      it('says the sentence again when the same line is lowered to 0 a second time', async () => {
-        const { fixture } = await three();
-        jest.useFakeTimers();
-        const page = fixture.componentInstance;
-        const region = () =>
-          (fixture.nativeElement as HTMLElement)
-            .querySelector('lib-line-list p.live')
-            ?.textContent?.trim();
+      /** The text of every polite region on the page, trimmed. */
+      const politeRegions = (fixture: ComponentFixture<ListPage>) =>
+        Array.from(
+          (fixture.nativeElement as HTMLElement).querySelectorAll(
+            '[aria-live="polite"]'
+          )
+        ).map((region) => region.textContent?.trim() ?? '');
+      const region = (fixture: ComponentFixture<ListPage>) =>
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('main > p.live')
+          ?.textContent?.trim();
 
+      /**
+       * Lowers ln-2 to 0, raises it again through the search, and lowers it a second
+       * time, so the same sentence waits for its gap in an emptied region.
+       */
+      const repeatWaiting = (fixture: ComponentFixture<ListPage>) => {
+        const page = fixture.componentInstance;
         page.stepQuantity(lower('ln-2', 1));
         settle(fixture);
-        expect(region()).toBe('list.line.hiddenAtZero');
+        expect(region(fixture)).toBe('list.line.hiddenAtZero');
 
         page.onComposerQuery('banan');
         fixture.detectChanges();
@@ -1390,10 +1406,197 @@ describe('ListPage', () => {
         // so a screen reader hears a change.
         fixture.detectChanges();
         fixture.detectChanges();
-        expect(region()).toBe('');
+        expect(region(fixture)).toBe('');
+      };
+
+      it('says the sentence again when the same line is lowered to 0 a second time', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+
+        repeatWaiting(fixture);
         jest.advanceTimersByTime(1_000);
         fixture.detectChanges();
-        expect(region()).toBe('list.line.hiddenAtZero');
+        expect(region(fixture)).toBe('list.line.hiddenAtZero');
+      });
+
+      it('drops the waiting repeat when the page goes away inside the gap', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+
+        repeatWaiting(fixture);
+        fixture.destroy();
+        jest.advanceTimersByTime(1_000);
+
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('drops the waiting repeat for a newer sentence inside the gap', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+        page.stepQuantity(lower('ln-1', 2));
+        settle(fixture);
+        expect(page.announcement()).toBe('list.line.hiddenAtZero');
+
+        // Both runs are written on the same beat: the first is the same sentence
+        // again and waits for its gap, the second is said at once.
+        const set = jest.spyOn(page['_announcement'], 'set');
+        page.stepQuantity(lower('ln-2', 1));
+        page.stepQuantity(lower('ln-3', 3));
+        settle(fixture);
+        const said = set.mock.calls.length;
+        expect(page.announcement()).toBe('list.line.hiddenAtZero');
+
+        jest.advanceTimersByTime(1_000);
+        expect(set.mock.calls.length).toBe(said);
+      });
+
+      it('drops the waiting repeat when another message is said inside the gap', async () => {
+        const { fixture, trips } = await three();
+        jest.useFakeTimers();
+        jest
+          .spyOn(trips, 'loadMore')
+          .mockResolvedValue({ state: 'failed', added: 0 } as never);
+        const page = fixture.componentInstance;
+
+        repeatWaiting(fixture);
+        await page.loadOlderTrips();
+        expect(page.announcement()).toBe('list.trips.olderFailed');
+
+        jest.advanceTimersByTime(1_000);
+        fixture.detectChanges();
+        expect(page.announcement()).toBe('list.trips.olderFailed');
+        expect(region(fixture)).toBe('list.trips.olderFailed');
+      });
+
+      it('says the sentence when the last row a view setting left is lowered', async () => {
+        const { fixture, view } = await render({
+          lines: [line('ln-1', { content: 'Bananas', quantity: 1 })],
+        });
+        view.setOrder('alpha');
+        fixture.detectChanges();
+        // The region is there before anything is said, so its text is a change.
+        expect(politeRegions(fixture)).toContain('');
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(lower('ln-1', 1));
+        settle(fixture);
+
+        expect(query(fixture, '.state-title')?.textContent?.trim()).toBe(
+          'list.view.none'
+        );
+        expect(
+          politeRegions(fixture).filter(
+            (text) => text === 'list.line.hiddenAtZero'
+          )
+        ).toHaveLength(1);
+      });
+
+      describe('from the line sheet (velista 0192, owner ruling of 2026-11-16)', () => {
+        /** The sheet's accepted save to 0, as the store and the sheet report it. */
+        const savedToZero = (
+          fixture: ComponentFixture<ListPage>,
+          lines: FakeLineStore,
+          lineId: string
+        ) => {
+          lines.set(
+            lines
+              .linesIn(LIST_ID)
+              .map((held) =>
+                held.id === lineId ? { ...held, quantity: 0, version: 2 } : held
+              )
+          );
+          fixture.detectChanges();
+          TestBed.inject(LineSheetEvents).lowered(lineId);
+          fixture.detectChanges();
+          fixture.detectChanges();
+        };
+        const closeSheet = (
+          fixture: ComponentFixture<ListPage>,
+          lineId: string
+        ) => {
+          (document.activeElement as HTMLElement | null)?.blur();
+          TestBed.inject(LineSheetEvents).closed(lineId);
+          fixture.detectChanges();
+          fixture.detectChanges();
+        };
+
+        it('says the sentence once, and focus that went back to the gone row moves to the next row', async () => {
+          const { fixture, lines } = await three();
+          rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row')?.focus();
+          fixture.componentInstance.openLine('ln-2');
+
+          savedToZero(fixture, lines, 'ln-2');
+
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(fixture.componentInstance.announcement()).toBe(
+            'list.line.hiddenAtZero'
+          );
+          expect(region(fixture)).toBe('list.line.hiddenAtZero');
+
+          closeSheet(fixture, 'ln-2');
+          expect(document.activeElement).toBe(
+            rowOf(fixture, 'ln-3')?.querySelector('.row')
+          );
+
+          // Said once: the closing sheet says nothing more.
+          expect(fixture.componentInstance.announcement()).toBe(
+            'list.line.hiddenAtZero'
+          );
+        });
+
+        it('moves focus to the previous row, else the heading, when no row follows', async () => {
+          const { fixture, lines } = await render({
+            lines: [line('ln-1', { quantity: 1 })],
+          });
+          rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>('.row')?.focus();
+          fixture.componentInstance.openLine('ln-1');
+
+          savedToZero(fixture, lines, 'ln-1');
+          closeSheet(fixture, 'ln-1');
+
+          expect(document.activeElement).toBe(
+            (fixture.nativeElement as HTMLElement).querySelector(
+              'lib-page-header h1'
+            )
+          );
+        });
+
+        it('says nothing and moves no focus when the save did not lower the line', async () => {
+          const { fixture } = await three();
+          rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row')?.focus();
+          fixture.componentInstance.openLine('ln-2');
+
+          // A failed save tells the page nothing; the sheet just closes.
+          closeSheet(fixture, 'ln-2');
+
+          expect(fixture.componentInstance.announcement()).toBe('');
+          expect(document.activeElement).toBe(document.body);
+        });
+
+        it('says nothing for a sheet opened from the search, whose row stays drawn', async () => {
+          const { fixture, lines } = await three();
+          const page = fixture.componentInstance;
+          page.onComposerQuery('banan');
+          fixture.detectChanges();
+          page.openLine('ln-2');
+
+          savedToZero(fixture, lines, 'ln-2');
+
+          expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+          expect(page.announcement()).toBe('');
+        });
+      });
+
+      it('says it through one polite region of its own, outside the lists', async () => {
+        const { fixture } = await three();
+
+        expect(
+          (fixture.nativeElement as HTMLElement).querySelectorAll(
+            'lib-line-list > [aria-live]'
+          )
+        ).toHaveLength(0);
+        expect(region(fixture)).toBe('');
       });
 
       it('decides after the write when a unit correction held the step back', async () => {
@@ -1583,7 +1786,7 @@ describe('ListPage', () => {
       ]);
     });
 
-    it('sends nothing new for a card, whose products decide where it lands', async () => {
+    it('lets a card be asked about too, as typed words are (the ruling of 2026-11-16)', async () => {
       const { fixture, lines } = await render({ permissions: ADMIN });
 
       await fixture.componentInstance.add({
@@ -1600,6 +1803,7 @@ describe('ListPage', () => {
           quantity: 1,
           itemIds: ['item-a'],
           named: false,
+          options: { askIfAmbiguous: true },
         },
       ]);
     });
@@ -1657,6 +1861,8 @@ describe('ListPage', () => {
             itemIds: held.itemIds,
             productGroupId: null,
             approvalStatus: 'APPROVED',
+            outcome: held.quantity > 0 ? 'ALREADY_ON_LIST' : 'RAISED',
+            resultingQuantity: held.quantity > 0 ? held.quantity : 1,
           })),
         },
       });
@@ -1768,6 +1974,65 @@ describe('ListPage', () => {
         expect(page.tookLines().size).toBe(0);
       });
 
+      it('names a drawn line and passes over lines at 0 it is not drawing, for an answer nobody was asked (rule 5)', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        // A replayed add: every match, the one at 0 first.
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: ['ln-other', 'ln-whole'],
+        });
+        const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+        await typeAndAdd(fixture, 'Leche entera');
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        const page = fixture.componentInstance;
+        // The drawn line is marked, the one at 0 is not drawn and nothing says it.
+        expect(
+          query(
+            fixture,
+            '[data-line-id="ln-whole"] lib-quantity-stepper'
+          )?.classList.contains('is-took')
+        ).toBe(true);
+        expect(query(fixture, '[data-line-id="ln-other"]')).toBeNull();
+        expect(
+          t.mock.calls.find(([key]) => key === 'list.add.alreadyOn')?.[3]
+        ).toEqual({ name: 'Whole milk' });
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+        expect(page.composerNotice()).toBeNull();
+      });
+
+      it('says it again when the same add meets the same line a second time', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-bread'] });
+        const page = fixture.componentInstance;
+
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+
+        lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-bread'] });
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+        // The same text twice is no change to the region: it is emptied first and
+        // filled again after a short gap.
+        expect(page.announcement()).toBe('');
+
+        jest.advanceTimersByTime(1_000);
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+      });
+
       it('scrolls to the first met line that is drawn', async () => {
         const original = Element.prototype.scrollIntoView;
         const scrolled: string[] = [];
@@ -1839,7 +2104,7 @@ describe('ListPage', () => {
         expect(fixture.componentInstance.composerNotice()).toBeNull();
       });
 
-      it('draws no row for a card a loaded line above zero holds (decision I)', async () => {
+      it('draws no row for a card a loaded line holds, at any amount (decision I)', async () => {
         const { fixture, lines } = await render({
           lines: MILKS,
           items: [ITEM_A],
@@ -1848,7 +2113,11 @@ describe('ListPage', () => {
         expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-a'])).toBe(
           false
         );
+        // A line kept at zero is raised where it stands, so no row is drawn either.
         expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-b'])).toBe(
+          false
+        );
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-z'])).toBe(
           true
         );
         fixture.detectChanges();
@@ -1913,14 +2182,14 @@ describe('ListPage', () => {
       );
     });
 
-    const unitRefusal = () =>
+    const unitRefusal = (lineId = 'ln-whole') =>
       new GatewayError({
         code: 'line_unit_differs',
         status: 409,
         correlationId: 'ref',
         details: {
           line: {
-            lineId: 'ln-whole',
+            lineId,
             content: 'Leche entera',
             unit: 'MILLILITER',
             quantity: 2,
@@ -1929,6 +2198,86 @@ describe('ListPage', () => {
           index: null,
         },
       });
+
+    /** Owner ruling 45 of 2026-11-16: the refusal shows the line it names. */
+    describe('a refusal for another unit shows the line it names', () => {
+      it('marks the line and scrolls to it, and keeps the sentence under the field', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+          jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineId'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+
+          sendCard(fixture);
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const page = fixture.componentInstance;
+          expect([...page.tookLines()]).toEqual(['ln-whole']);
+          expect(
+            (
+              query(
+                fixture,
+                '[data-line-id="ln-whole"] lib-quantity-stepper'
+              ) as HTMLElement
+            ).classList.contains('is-took')
+          ).toBe(true);
+          expect(scrolled).toEqual(['ln-whole']);
+          expect(page.composerNotice()).toBe(
+            'list.error.addUnitDiffers.MILLILITER'
+          );
+        } finally {
+          Element.prototype.scrollIntoView = original;
+          jest.restoreAllMocks();
+        }
+      });
+
+      it('says the sentence alone for a line the page does not draw, hidden at 0', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({
+            state: 'failed',
+            error: unitRefusal('ln-other'),
+          });
+
+          sendCard(fixture);
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          expect(query(fixture, '[data-line-id="ln-other"]')).toBeNull();
+          expect(scrolled).toEqual([]);
+          expect(fixture.componentInstance.composerNotice()).toBe(
+            'list.error.addUnitDiffers.MILLILITER'
+          );
+        } finally {
+          Element.prototype.scrollIntoView = original;
+        }
+      });
+    });
+
     const sendCard = (fixture: ComponentFixture<ListPage>) =>
       (
         fixture.debugElement.query(By.directive(LineComposer))
@@ -2150,11 +2499,18 @@ describe('ListPage', () => {
       expect(first.querySelector('.product')).not.toBeNull();
       // A product this page does not hold has no product line yet.
       expect(choiceRows()[1].querySelector('.product')).toBeNull();
-      expect(first.querySelector('.count')?.textContent).toMatch(/2\s*→\s*3/);
-      // A bought line counts, from 0 (D2).
+      // Above zero: already on the list, its amount alone, and words that say so
+      // (the ruling of 2026-11-16).
+      expect(first.querySelector('.count')?.textContent?.trim()).toBe('2');
+      expect(first.querySelector('.state')?.textContent?.trim()).toBe(
+        'list.addChoice.onList'
+      );
+      expect(first.getAttribute('aria-label')).toBe('list.addChoice.rowOnList');
+      // A bought line counts, from 0 (D2), and is raised.
       expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
         /0\s*→\s*1/
       );
+      expect(choiceRows()[1].querySelector('.state')).toBeNull();
       expect(choiceRows()[2].classList.contains('new')).toBe(true);
       // Focus moves to the first row, and the words wait in the field.
       expect(document.activeElement).toBe(first);
@@ -2308,7 +2664,7 @@ describe('ListPage', () => {
       expect(fixture.componentInstance.choiceName()).toBe('Leche entera');
     });
 
-    it('asks again, once, when the chosen line went while the question was open', async () => {
+    it('closes the question and says the add failed when the chosen line went (the ruling of 2026-11-16)', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
         items: [ITEM_A],
@@ -2316,7 +2672,7 @@ describe('ListPage', () => {
       lines.answerAddWith({ state: 'failed', error: refusal() });
       await typeAndAdd(fixture, 'Leche entera');
 
-      // Backend 0228, section 3: an answer onto a deleted line is the not found.
+      // Backend 0260, rule 6: a chosen line the add no longer meets is the not found.
       lines.answerAddWith({
         state: 'failed',
         error: new GatewayError({
@@ -2325,32 +2681,25 @@ describe('ListPage', () => {
           correlationId: 'gone',
         }),
       });
-      lines.answerAddWith({ state: 'failed', error: refusal() });
       choiceRows()[1]?.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(lines.calls.slice(-2)).toEqual([
-        {
-          kind: 'add',
-          content: 'Leche entera',
-          options: { intoLineId: 'ln-other' },
-        },
-        {
-          kind: 'add',
-          content: 'Leche entera',
-          options: { askIfAmbiguous: true },
-        },
-      ]);
-      // The question is drawn again, and the list is not said to be gone.
-      expect(choiceRows()).toHaveLength(3);
-      expect(fixture.componentInstance.announcement()).not.toBe(
-        'list.error.notAvailable'
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(2);
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        options: { intoLineId: 'ln-other' },
+      });
+      expect(choiceRows()).toHaveLength(0);
+      // The add's own failure, never the list being gone.
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.error.failed'
       );
       expect(field(fixture).value).toBe('Leche entera');
     });
 
-    it('raises the one line left when the chosen one went', async () => {
+    it('shows and marks a chosen line already on the list, and says so once', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
         items: [ITEM_A],
@@ -2358,22 +2707,82 @@ describe('ListPage', () => {
       lines.answerAddWith({ state: 'failed', error: refusal() });
       await typeAndAdd(fixture, 'Leche entera');
 
-      lines.answerAddWith({
-        state: 'failed',
-        error: new GatewayError({
-          code: 'not_found',
-          status: 404,
-          correlationId: 'gone',
-        }),
+      lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-whole'] });
+      choiceRows()[0]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        options: { intoLineId: 'ln-whole' },
       });
-      lines.answerAddWith({ state: 'raised', lineId: 'ln-whole' });
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.add.alreadyOn'
+      );
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+      expect(
+        lines.linesIn().find((held) => held.id === 'ln-whole')?.quantity
+      ).toBe(2);
+    });
+
+    it('raises and marks a chosen line at zero', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-other' });
       choiceRows()[1]?.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(3);
-      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-other']);
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.addChoice.merged'
+      );
       expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('asks about a chosen product too, with no new line to offer', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      const card = document.createElement('button');
+      document.body.append(card);
+
+      await fixture.componentInstance.add({
+        content: 'Leche entera',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-a'],
+        named: false,
+        anchor: card,
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toMatchObject({
+        itemIds: ['item-a'],
+        options: { askIfAmbiguous: true },
+      });
+      // Two lines, and no "A new line" for a product.
+      expect(choiceRows()).toHaveLength(2);
+      expect(choiceRows().some((row) => row.classList.contains('new'))).toBe(
+        false
+      );
+
+      // A new line is never sent for it, whatever asks.
+      const before = lines.calls.length;
+      fixture.componentInstance.chooseNewLine();
+      await fixture.whenStable();
+      expect(lines.calls).toHaveLength(before);
     });
 
     it('closes the question when the page moves to another list', async () => {
@@ -3968,6 +4377,19 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     ]);
   });
 
+  it('draws no line at 0 in To buy while the trips are loading, and keeps the due rows (velista 0192, owner ruling)', async () => {
+    const loading = await suggested({ trips: 'pending', due: 'fail' });
+    expect(rows(loading.fixture).map((row) => row.id)).toEqual(['bread']);
+
+    const withDue = await suggested({ trips: 'pending' });
+    expect(dueRows(withDue.fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'eggs',
+      'yogurt',
+    ]);
+    expect(lists(withDue.fixture)).toEqual([['bread']]);
+  });
+
   it('adds the suggested amount through the reel write, and the row goes at once (test 6)', async () => {
     const { fixture, lines } = await suggested();
 
@@ -4024,6 +4446,49 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
       query(fixture, '[data-due-line-id="eggs"] .step.minus')
     );
     expect(fixture.componentInstance.announcement()).toBe('');
+  });
+
+  it('says the sentence for a line lowered to 0 into a due row past the few drawn, and focuses the next row (velista 0192)', async () => {
+    const { fixture } = await suggested({
+      lines: [
+        line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+        line('coffee', { content: 'Coffee', position: 2, ...bought }),
+        line('yogurt', { content: 'Yogurt', position: 3, ...bought }),
+        line('butter', { content: 'Butter', position: 4, ...bought }),
+        line('eggs', { content: 'Eggs', position: 5, quantity: 1 }),
+        line('milk', { content: 'Milk', position: 6, quantity: 3 }),
+      ],
+      due: [due('coffee'), due('yogurt'), due('butter'), due('eggs')],
+    });
+    expect(lists(fixture)[0]).toEqual(['bread', 'eggs', 'milk']);
+    jest.useFakeTimers();
+    try {
+      query(fixture, 'li.line[data-line-id="eggs"] .step.minus')?.focus();
+
+      fixture.componentInstance.stepQuantity({
+        lineId: 'eggs',
+        step: { from: 1, to: 0, repeat: false },
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // Due now, behind "Show more suggestions", so not on screen.
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'yogurt',
+      'butter',
+    ]);
+    expect(query(fixture, '.due-more')).not.toBeNull();
+    expect(fixture.componentInstance.announcement()).toBe(
+      'list.line.hiddenAtZero'
+    );
+    expect(document.activeElement).toBe(
+      query(fixture, 'li.line[data-line-id="milk"] .step.minus')
+    );
   });
 
   it('adds the amount chosen on the stepper', async () => {

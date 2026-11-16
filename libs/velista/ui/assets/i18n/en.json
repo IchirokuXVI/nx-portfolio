@@ -462,7 +462,8 @@
       "title": "On {{list}}",
       "titleMany": "On your lists",
       "alreadyOn": "Already on {{list}}.",
-      "openLine": "See it on the list"
+      "openLine": "See it on the list",
+      "pickLine": "This is on {{list}} more than once. Raise one of the lines below with its own buttons."
     },
     "adding": {
       "to": "Adding to",
@@ -864,6 +865,9 @@
       "newLine": "A new line",
       "row": "Add {{added}} to {{name}}, {{product}}: {{from}} to {{to}}",
       "rowNoProduct": "Add {{added}} to {{name}}: {{from}} to {{to}}",
+      "onList": "Already on the list. Choose it to see it.",
+      "rowOnList": "{{name}}, {{product}}: already on the list with {{amount}}. Choose it to see it on the list",
+      "rowOnListNoProduct": "{{name}}: already on the list with {{amount}}. Choose it to see it on the list",
       "merged": "{{name}}, {{quantity}}"
     },
     "empty": {

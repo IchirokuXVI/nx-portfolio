@@ -40,6 +40,7 @@ import {
 import { QuantityStepper, SheetShell } from '@portfolio/velista/ui';
 import { BehaviorSubject } from 'rxjs';
 import { LineDetailSheet } from './line-detail-sheet';
+import { LineSheetEvents } from './line-sheet-events';
 
 /**
  * The sheet, at the DOM, for the four things velista plan `0047` puts on it.
@@ -525,6 +526,68 @@ describe('LineDetailSheet', () => {
         kind: 'update',
         lineId: LINE_ID,
         quantity: 7,
+      });
+    });
+
+    describe('a save that lowers the line to 0 (velista 0192, owner ruling of 2026-11-16)', () => {
+      const typeAmount = (
+        fixture: ComponentFixture<LineDetailSheet>,
+        to: string
+      ) => {
+        const input = fixture.debugElement
+          .query(By.directive(QuantityStepper))
+          .nativeElement.querySelector(
+            'input[role="spinbutton"]'
+          ) as HTMLInputElement;
+        input.focus();
+        input.value = to;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        fixture.detectChanges();
+      };
+
+      it('tells the page under it once, after the write is accepted', async () => {
+        const { fixture, lines } = await render();
+        const lowered = jest.spyOn(TestBed.inject(LineSheetEvents), 'lowered');
+
+        typeAmount(fixture, '0');
+        saveButton(fixture)?.click();
+        await settle(fixture);
+
+        expect(lines.calls.at(-1)).toEqual({
+          kind: 'update',
+          lineId: LINE_ID,
+          quantity: 0,
+        });
+        expect(lowered.mock.calls).toEqual([[LINE_ID]]);
+      });
+
+      it('tells it nothing for a failed save, or a save that leaves an amount', async () => {
+        const failed = await render();
+        const lowered = jest.spyOn(TestBed.inject(LineSheetEvents), 'lowered');
+        failed.lines.answerNextUpdate({
+          state: 'failed',
+          error: new Error('offline'),
+        });
+        typeAmount(failed.fixture, '0');
+        saveButton(failed.fixture)?.click();
+        await settle(failed.fixture);
+        expect(lowered).not.toHaveBeenCalled();
+
+        const raised = await render();
+        const told = jest.spyOn(TestBed.inject(LineSheetEvents), 'lowered');
+        typeAmount(raised.fixture, '7');
+        saveButton(raised.fixture)?.click();
+        await settle(raised.fixture);
+        expect(told).not.toHaveBeenCalled();
+      });
+
+      it('tells it the sheet closed, however it closed', async () => {
+        const { fixture } = await render();
+        const closed = jest.spyOn(TestBed.inject(LineSheetEvents), 'closed');
+
+        fixture.destroy();
+
+        expect(closed.mock.calls).toEqual([[LINE_ID]]);
       });
     });
 

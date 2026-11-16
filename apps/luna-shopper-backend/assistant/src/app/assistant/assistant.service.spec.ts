@@ -92,7 +92,7 @@ class RecordingApi {
    * `merged` alone.
    */
   nextBatchAnswer:
-    | Partial<Pick<AddLineResult, 'outcome' | 'merged'>>[]
+    | Partial<Pick<AddLineResult, 'outcome' | 'merged' | 'alreadyOnList'>>[]
     | undefined;
 
   async listZones(caller: ApiCaller): Promise<MyZoneView[]> {
@@ -148,7 +148,9 @@ class RecordingApi {
           ? {}
           : {
               outcome: answer.outcome,
-              alreadyOnList: answer.outcome === 'ALREADY_ON_LIST' ? [view] : [],
+              alreadyOnList:
+                answer.alreadyOnList ??
+                (answer.outcome === 'ALREADY_ON_LIST' ? [view] : []),
             }),
       } as AddLineResult;
     });
@@ -1300,6 +1302,63 @@ describe('AssistantService', () => {
         ['leche', 'increased'],
         ['huevos', 'unchanged'],
       ]);
+    });
+
+    it('hands the model the lines of a slot that met two or more, and tells it to ask (the owner, 2026-11-16)', async () => {
+      const api = new RecordingApi();
+      api.nextBatchAnswer = [
+        {
+          outcome: 'ALREADY_ON_LIST',
+          alreadyOnList: [
+            line('line-a', 'list-flat', 'Leche entera', 2),
+            {
+              ...line('line-b', 'list-flat', 'Leche entera', 0),
+              unit: 'MILLILITER',
+            },
+          ],
+        },
+      ];
+      const provider = new FakeModelProvider([
+        FakeModelProvider.calls('upsert_lines', {
+          items: [{ product: 'leche entera' }],
+        }),
+        FakeModelProvider.says('¿Cuál?'),
+      ]);
+      const service = build(provider, api);
+
+      await service.turn(turnRequest('pon leche entera'));
+
+      const items = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+        ?.result as {
+        items?: {
+          product: string;
+          action?: string;
+          refused?: boolean;
+          matches?: unknown[];
+          instead?: string;
+        }[];
+      };
+      const [item] = items.items ?? [];
+      expect(item).toMatchObject({
+        product: 'leche entera',
+        refused: true,
+        matches: [
+          {
+            id: 'line-a',
+            product: 'Leche entera',
+            quantity: 2,
+            unit: 'UNIT',
+          },
+          {
+            id: 'line-b',
+            product: 'Leche entera',
+            quantity: 0,
+            unit: 'MILLILITER',
+          },
+        ],
+      });
+      expect(item.action).toBeUndefined();
+      expect(item.instead).toContain('Ask the person which');
     });
 
     it('reads a slot with no outcome from merged, as a core of before plan 0260 answers', async () => {

@@ -721,6 +721,18 @@ describe('LineMemory keeps the two rules of backend 0207 (velista 0144)', () => 
 });
 
 describe('LineMemory mirrors where an add lands (backend 0228, 0260, velista 0170, 0185)', () => {
+  /** The refusal an add answered, or null when it landed. */
+  async function refusalOf(
+    added: Promise<unknown>
+  ): Promise<GatewayError | null> {
+    try {
+      await added;
+      return null;
+    } catch (error) {
+      return error instanceof GatewayError ? error : null;
+    }
+  }
+
   /** Two lines that hold a product under one name, on the owned list, both at zero. */
   async function twoMilks() {
     const built = await build();
@@ -823,30 +835,124 @@ describe('LineMemory mirrors where an add lands (backend 0228, 0260, velista 017
     ]);
   });
 
-  it('asks nothing when one of them is asked for, and shows that one', async () => {
-    const { lines, other } = await twoMilks();
+  it('asks also when one of them is asked for, and says what choosing each does (the ruling of 2026-11-16)', async () => {
+    const { lines, whole, other } = await twoMilks();
     await lines.updateLine(other.id, { quantity: 3 });
 
-    const result = await lines.addLineResult(
-      OWNED_LIST,
-      'Leche entera',
-      undefined,
-      undefined,
-      undefined,
-      { askIfAmbiguous: true }
+    const failure = await refusalOf(
+      lines.addLineResult(
+        OWNED_LIST,
+        'Leche entera',
+        undefined,
+        undefined,
+        undefined,
+        { askIfAmbiguous: true }
+      )
     );
 
-    expect(result.outcome).toBe('alreadyOnList');
-    expect(result.alreadyOnList.map((line) => line.id)).toEqual([other.id]);
+    expect(failure?.code).toBe('line_add_needs_choice');
+    expect(failure?.details?.['lines']).toEqual([
+      expect.objectContaining({
+        lineId: whole.id,
+        quantity: 0,
+        outcome: 'RAISED',
+        resultingQuantity: 1,
+      }),
+      expect.objectContaining({
+        lineId: other.id,
+        quantity: 3,
+        outcome: 'ALREADY_ON_LIST',
+        resultingQuantity: 3,
+      }),
+    ]);
   });
 
-  it('raises the earliest when two at zero match and the caller cannot ask', async () => {
-    const { lines, whole } = await twoMilks();
+  it('asks about a chosen product that two lines hold, and offers no new line for it', async () => {
+    const { lines } = await build();
+    const first = await lines.addLine(OWNED_LIST, 'Pan', 0, ['item-bread']);
+    const second = await lines.addLine(OWNED_LIST, 'Pan de molde', 2, [
+      'item-bread',
+      'item-toast',
+    ]);
+
+    const failure = await refusalOf(
+      lines.addLineResult(
+        OWNED_LIST,
+        'Pan',
+        1,
+        ['item-bread'],
+        false,
+        { askIfAmbiguous: true },
+        'UNIT'
+      )
+    );
+    expect(
+      (failure?.details?.['lines'] as { lineId: string }[]).map(
+        (line) => line.lineId
+      )
+    ).toEqual([first.id, second.id]);
+
+    // newLine beside products is the gateway's 400 (backend 0260, rule 7).
+    expect(
+      await codeOf(
+        lines.addLineResult(
+          OWNED_LIST,
+          'Pan',
+          1,
+          ['item-bread'],
+          false,
+          { newLine: true },
+          'UNIT'
+        )
+      )
+    ).toBe('validation_failed');
+
+    // Choosing the line above zero changes nothing and shows it.
+    const shown = await lines.addLineResult(
+      OWNED_LIST,
+      'Pan',
+      1,
+      ['item-bread'],
+      false,
+      { intoLineId: second.id },
+      'UNIT'
+    );
+    expect(shown).toMatchObject({
+      outcome: 'alreadyOnList',
+      line: { id: second.id, quantity: 2, version: 1 },
+    });
+  });
+
+  it('shows every line it meets, at zero too, and writes nothing when nobody can be asked (rule 5)', async () => {
+    const { lines, whole, other } = await twoMilks();
 
     const result = await lines.addLineResult(OWNED_LIST, 'Leche entera');
 
-    expect(result.outcome).toBe('raised');
-    expect(result.line).toMatchObject({ id: whole.id, quantity: 1 });
+    expect(result.outcome).toBe('alreadyOnList');
+    expect(result.alreadyOnList.map((line) => line.id)).toEqual([
+      whole.id,
+      other.id,
+    ]);
+    expect(result.alreadyOnList.map((line) => line.quantity)).toEqual([0, 0]);
+  });
+
+  it('refuses a chosen line the add does not meet', async () => {
+    const { lines, whole } = await twoMilks();
+    const bread = await lines.addLine(OWNED_LIST, 'Pan', 0, ['item-bread']);
+
+    expect(
+      await codeOf(
+        lines.addLineResult(
+          OWNED_LIST,
+          'Leche entera',
+          undefined,
+          undefined,
+          undefined,
+          { intoLineId: bread.id }
+        )
+      )
+    ).toBe('not_found');
+    expect(whole.quantity).toBe(0);
   });
 
   it('raises the line the person chose, and makes one when they asked for a new one', async () => {

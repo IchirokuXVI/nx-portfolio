@@ -205,7 +205,40 @@ describe('rowAdds (velista 0134, section 4.1)', () => {
       ]);
 
       expect(adds.byItem.get('item-oil')?.onList).toBeUndefined();
+      expect(adds.byItem.get('item-oil')?.pickLine).toBeUndefined();
       expect(adds.byItem.get('item-rice')?.onList).toBeUndefined();
+    });
+
+    it('switches the plus off with no link for two or more saved lines at zero (the ruling of 2026-11-16)', () => {
+      const adds = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept-a', quantity: 0 }),
+        line({ lineId: 'line-kept-b', quantity: 0, name: 'Oil for frying' }),
+      ]);
+
+      const oil = adds.byItem.get('item-oil');
+      expect(oil?.pickLine).toBe(true);
+      expect(oil?.onList).toBeUndefined();
+      // Both lines stay under the card, each with its own stepper.
+      expect(oil?.lines.map((held) => [held.lineId, held.editable])).toEqual([
+        ['line-kept-a', true],
+        ['line-kept-b', true],
+      ]);
+    });
+
+    it('counts no add still on its way among the lines at zero, and a line above zero wins', () => {
+      const unsaved = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept', quantity: 0 }),
+        line({ lineId: unsavedLineId('list-weekly', 'item-oil'), quantity: 0 }),
+      ]);
+      expect(unsaved.byItem.get('item-oil')?.pickLine).toBeUndefined();
+
+      const wanted = rowAdds(WEEKLY, [
+        line({ lineId: 'line-kept-a', quantity: 0 }),
+        line({ lineId: 'line-kept-b', quantity: 0 }),
+        line({ lineId: 'line-wanted', quantity: 2 }),
+      ]);
+      expect(wanted.byItem.get('item-oil')?.pickLine).toBeUndefined();
+      expect(wanted.byItem.get('item-oil')?.onList?.lineId).toBe('line-wanted');
     });
   });
 

@@ -44,14 +44,59 @@ describe('toAddChoice', () => {
           itemIds: ['item-a'],
           productGroupId: null,
           approvalStatus: 'APPROVED',
+          // No outcome from an older backend: an amount is already on the list.
+          outcome: 'alreadyOnList',
+          resultingQuantity: 2,
         },
         expect.objectContaining({
           lineId: 'line-b',
           named: false,
           quantity: 0,
+          // ...and a line at zero is raised by one step of its unit.
+          outcome: 'raised',
+          resultingQuantity: 1,
         }),
       ],
     });
+  });
+
+  it('reads what choosing each line does, as the server says it (the ruling of 2026-11-16)', () => {
+    const choice = toAddChoice(
+      refusal({
+        lines: [
+          {
+            ...ENTRY,
+            lineId: 'line-z',
+            quantity: 0,
+            unit: 'GRAM',
+            outcome: 'RAISED',
+            resultingQuantity: 250,
+          },
+          {
+            ...ENTRY,
+            lineId: 'line-w',
+            quantity: 750,
+            unit: 'GRAM',
+            outcome: 'ALREADY_ON_LIST',
+            resultingQuantity: 750,
+          },
+          // An outcome this build does not know falls back to the amount.
+          { ...ENTRY, lineId: 'line-u', quantity: 0, outcome: 'MERGED' },
+        ],
+      })
+    );
+
+    expect(
+      choice?.lines.map(({ lineId, outcome, resultingQuantity }) => ({
+        lineId,
+        outcome,
+        resultingQuantity,
+      }))
+    ).toEqual([
+      { lineId: 'line-z', outcome: 'raised', resultingQuantity: 250 },
+      { lineId: 'line-w', outcome: 'alreadyOnList', resultingQuantity: 750 },
+      { lineId: 'line-u', outcome: 'raised', resultingQuantity: 1 },
+    ]);
   });
 
   it('reads the unit of a line, a count when it is absent or unknown (velista 0182)', () => {

@@ -42,7 +42,9 @@ its template.
     ones were drawn last with the rejected lines. This is the case the owner's rule changes.
   - **A line at 0 with a buy leaves To buy once the trips have loaded and named at least one
     trip** (velista `0095`, section 5). This is what the owner meant by "already hidden".
-    Three places still draw it at rest, and this plan leaves all three as they are:
+    Three places still draw it at rest. This plan leaves the first two as they are, and the
+    owner's ruling of 2026-11-16 takes the third away while the trips are loading
+    (section 3):
     1. **The trip folds.** Each live and past trip under To buy draws the rows of the lines it
        holds, at whatever amount they now have. A past trip is folded until somebody opens it;
        an open fold draws the line (no stepper, only a row that opens the line).
@@ -63,8 +65,13 @@ its template.
 
 - `composeListGroups` no longer puts a line at 0 or less that was never bought in To buy, in
   any state of the trips, rejected or not. The fallback for a bought line now reads
-  `quantity <= 0`. Nothing else in the function changes: the trips, the due rows and the
-  fallback above are untouched.
+  `quantity <= 0`. The trips and the due rows are untouched.
+- **While the first read of the trips is out, To buy draws no line at 0 or less** (owner
+  ruling of 2026-11-16, below). A bought line at 0 used to flash in To buy and leave once
+  the trips arrived. The page passes `tripsLoading` (the trip store has not answered about
+  this list yet, or its first read is out again after Retry) and the fallback waits for it.
+  After a failed read and when the read named no trip, the fallback draws the line as
+  before. Wanted lines above 0, the due rows and the trip folds draw as before.
 - The amount read is the stored one. While a run of stepper presses is open, the row keeps its
   place (velista `0188`, decision H): a minus to 0 then a plus inside the quiet beat leaves the
   row where it is and writes nothing. The row leaves when the run's write lands, and the
@@ -84,12 +91,18 @@ its template.
   - The stepper's own settled "0" is not drawn: the run's write and the stepper's announce
     timer both fire after the same quiet beat, the run's first, and the row is removed in the
     render that would have drawn the stepper's sentence. The stepper is not changed.
-  - A line another device lowered, a line lowered from the sheet or the line page, and a
-    dropped write sent again move no focus and say nothing.
-  - A row that goes from To buy into the due rows says nothing, because the line is still on
-    screen. Focus that was in it moves to the same control of that due row (the minus, the
-    plus, or the due row's own button for the row's button); when that due row is not drawn
-    (past the first few), to the next row as for a hidden line.
+  - A line another device lowered, a line lowered from the line page, and a dropped write
+    sent again move no focus and say nothing.
+  - A row that goes from To buy into a due row the section draws says nothing, because the
+    line is still on screen. Focus that was in it moves to the same control of that due row
+    (the minus, the plus, or the due row's own button for the row's button). When that due
+    row is not drawn (past the first few, behind "Show more suggestions"), the line is not on
+    screen: the sentence is said and focus moves to the next row, as for a hidden line.
+  - The polite region belongs to the page and sits outside every state of it, so it is in
+    the DOM from the first render and is still there when "No lines match." replaces the
+    lines in the render that takes the last row away. Every message of the page goes through
+    one method that also drops a repeated sentence still waiting for its gap, so that
+    sentence never replaces a newer message.
   - Focus is moved only when it fell out of the page with the row. Focus somebody put
     elsewhere in the meantime is left alone.
   - The same sentence a second time is said again: when the polite region already holds it,
@@ -109,18 +122,32 @@ its template.
     "that did not save" note, so for that moment the sentence was untrue. Saying it only once
     the write lands would delay the sentence on a slow connection after focus has moved, so it
     is left as is.
+- **When a save from the line's sheet over the list lowers the line to 0** (owner ruling of
+  2026-11-16, below). The sheet tells the page through `LineSheetEvents` (root provided, in
+  `line-detail-sheet/`) once its write is accepted: an `updateLine` that sent a quantity,
+  on a line that was above 0, answered at 0 or less, and not a merge. A failed save tells
+  nothing. When the page opened that sheet from a row in To buy and the row is now gone, it
+  says `list.line.hiddenAtZero` once through the same polite region; a line now drawn as a
+  due row says nothing, as for the stepper. `openLine` reads, while the row is still drawn,
+  where focus goes if it leaves. The sheet stays open on Saved; when it closes (any exit,
+  through its destroy hook) and the focus it handed back fell out of the page with the
+  row, focus moves to the same row control of the next row, else the previous row, else
+  the heading, or to the due row. A sheet opened from the search, whose row stays drawn,
+  says nothing. While the sheet is open, a screen reader that honours `aria-modal` may
+  hold the sentence until the sheet closes, since the region is outside the dialog.
 - The line page and the line sheet of a line at 0 behave as on `dev`, reached from the search,
   a link or the shopping list. Their delete by hand is the only delete, and the "deleted by
   another user" notice is exactly as on `dev`.
 - Checked and unchanged: the header ("3 of 7 pending", "Nothing left" when every line is at 0)
   stays true. The empty state ("Nothing on this list yet") is drawn only for a list with no
   line at all, so it never claims that a list with hidden lines is empty. A list whose every
-  line is at 0 and never bought draws the To buy heading with nothing under it, and the trips
-  if it has any; the same screen `dev` already draws when every line is bought and at 0.
+  line is at 0 and never bought draws nothing under the field (To buy has no heading
+  since velista `0189`), only the trips if it has any; the same screen `dev` already draws
+  when every line is bought and at 0.
   Under a category whose lines are all hidden, the page says "No lines match." with Reset, as
   for any category that narrows To buy to nothing. With any view setting on and every line at
-  0, the page draws the same "No lines match." with Reset, and Reset brings nothing back
-  (question 5). Sorting is unchanged. The basket, the
+  0, the page draws the same "No lines match." with Reset, and Reset brings nothing back.
+  The owner kept both screens as they are (question 3 and 5). Sorting is unchanged. The basket, the
   catalog tab and the product page are unchanged.
 
 ## 4. What this branch removed
@@ -149,7 +176,17 @@ hidden one.
   nothing throws and the page's teardown runs; the same line lowered to 0 a second time is said
   again; a step held back by a unit correction is decided after its write; a row that becomes a
   due row moves focus to the due row's same control and says nothing. The three older cases that drew a never bought line at 0
-  now expect it hidden.
+  now expect it hidden. The last row a view setting left, lowered to 0, is said in the
+  page's region under "No lines match."; a row lowered into a due row past the few drawn is
+  said and focuses the next row; a repeat waiting for its gap is dropped on destroy, by a
+  newer sentence and by another message. While the trips load, To buy draws no line at 0
+  and the due rows stay; a save to 0 from the sheet is said once and focus that went back to
+  the gone row moves to the next row, else the heading; a sheet that saved nothing, or that
+  was opened from the search, says nothing.
+- `compose-list-groups.spec.ts`: with `tripsLoading` a bought line at 0 is not in To buy,
+  its due row and its trip rows stay.
+- `line-detail-sheet.spec.ts`: a save to 0 tells `LineSheetEvents` once after the write is
+  accepted; a failed save and a save above 0 tell nothing; the destroy hook tells it closed.
 
 ## 6. Acceptance criteria
 
@@ -170,14 +207,23 @@ hidden one.
 
 ## 7. Questions for the owner
 
-1. The copy of `list.line.hiddenAtZero` (en and es above).
+1. The copy of `list.line.hiddenAtZero` (en and es above). Open.
 2. A bought line at 0 is still drawn at rest in three places (section 2): an open trip fold,
    the due rows, and To buy itself while the trips are loading, failed, or named no trip. Should
    any of them stop drawing it?
-3. A list whose lines are all at 0 shows the To buy heading with nothing under it. Should To buy
-   say something there (for example that lines at 0 are found by searching)?
+   **Owner ruling, 2026-11-16:** the trip folds and the due rows keep it. While the trips are
+   loading, To buy draws no line at 0: "rows shouldn't be shown to the user while trips are
+   loading". Built in section 3.
+3. A list whose lines are all at 0 draws nothing under the field, only the trips
+   if it has any. Should the page say something there (for example that lines at 0 are found
+   by searching)?
+   **Owner ruling, 2026-11-16:** left as it is, an empty page.
 4. Lowering a line to 0 from its sheet over the list hides its row with no sentence. Should the
    page say the sentence then too?
+   **Owner ruling, 2026-11-16:** yes, the same sentence through the same region, once, after
+   the sheet's write is accepted and never on a failed save; focus goes where it goes for a
+   row that left. Built in section 3.
 5. With any view setting on and every line at 0, the page says "No lines match." with Reset,
    and Reset brings nothing back, because the rule of this plan hides the lines and not the
    view. Should that screen say something else?
+   **Owner ruling, 2026-11-16:** left as it is, "No lines match." with its Reset.
