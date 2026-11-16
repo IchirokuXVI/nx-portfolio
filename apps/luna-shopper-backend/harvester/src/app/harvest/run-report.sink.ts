@@ -10,6 +10,7 @@ import {
   type PackCountFill,
   type SupermarketItemAvailabilityEntry,
 } from '@portfolio/luna-shopper/contracts';
+import { describeError } from '@portfolio/luna-shopper/platform';
 import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
@@ -52,10 +53,29 @@ import type { SourceLocationService } from './source-location.service';
  *
  * Every `RunReport` method here is synchronous and returns nothing (D1). The
  * work they name is appended to one serial promise chain, so declarations,
- * chunks and places are written in the order the runner produced them and a
- * failure in any of them surfaces at {@link drain}. A runner cannot await the
- * chain and cannot see what it decided.
+ * chunks and places are written in the order the runner produced them. A
+ * runner cannot await the chain and cannot see what it decided.
+ *
+ * **The first failure on the chain stops the run** (plan 0269, section 1).
+ * The chain keeps it, runs no later work, and calls `onWriteFailed` once,
+ * which aborts the run through the signal every runner already reads. The
+ * chain itself never rejects: a walk goes on with network I/O after a chunk
+ * is queued, and a rejection nobody handles in that time exits the process,
+ * with every run in it. {@link drain} then rejects with the failure it kept.
  */
+
+/**
+ * The reason a run was aborted when a write of what it read failed (plan
+ * 0269, section 1). The first failure is its `cause`.
+ */
+export class ReportWriteFailedError extends Error {
+  constructor(readonly cause: unknown) {
+    super(
+      `A write of what the run read failed: ${describeError(cause).message}`
+    );
+    this.name = 'ReportWriteFailedError';
+  }
+}
 
 /** How many products go into one ingest push. */
 const PRODUCT_CHUNK = 400;
@@ -308,8 +328,10 @@ export interface RunReportResult {
 export class RunReportSink implements RunReport {
   private readonly logger = new Logger(RunReportSink.name);
 
-  /** Everything queued, in order. A failure anywhere surfaces at `drain`. */
+  /** Everything queued, in order. It never rejects: see {@link queue}. */
   private chain: Promise<void> = Promise.resolve();
+  /** The first failure on the chain, kept for `drain` (plan 0269). */
+  private firstFailure: { error: unknown } | null = null;
   private session: SourceIngestSession | null = null;
 
   private products: ReportedObservation[] = [];
@@ -403,10 +425,23 @@ export class RunReportSink implements RunReport {
       entries: Repository<SourceCatalogEntry>;
       /** Where per shop claims are kept, and what sends them (plan 0182). */
       availability: SourceEntryAvailabilityWriter;
+      /**
+       * Told once, with the first failure, when a queued write fails (plan
+       * 0269, section 1). The executor aborts the run with it.
+       */
+      onWriteFailed?: (error: unknown) => void;
     }
   ) {}
 
+  /** The first write that failed, or null while none has. */
+  get failure(): unknown {
+    return this.firstFailure?.error ?? null;
+  }
+
   scope(declaration: ScopeDeclaration): void {
+    if (this.firstFailure) {
+      return;
+    }
     const resolver = this.deps.scopes;
     if (!resolver) {
       // A run with no chain has nowhere to put a scope. Nothing declares one
@@ -424,6 +459,11 @@ export class RunReportSink implements RunReport {
   }
 
   product(observation: ReportedObservation): void {
+    // After a failed write the runner is stopping, and nothing it says can
+    // be written.
+    if (this.firstFailure) {
+      return;
+    }
     this.products.push(observation);
     this.observedIds.add(observation.externalId);
     if (this.products.length >= PRODUCT_CHUNK) {
@@ -434,6 +474,9 @@ export class RunReportSink implements RunReport {
   }
 
   place(place: ObservedPlace): void {
+    if (this.firstFailure) {
+      return;
+    }
     this.places.push(place);
     if (this.places.length >= PLACE_CHUNK) {
       const chunk = this.places;
@@ -518,6 +561,11 @@ export class RunReportSink implements RunReport {
       this.queue(() => this.writePlaces(chunk));
     }
     await this.chain;
+    // A failed chunk wrote nothing after it, and the drain writes nothing
+    // either: no close, no whole listing, no availability (plan 0269).
+    if (this.firstFailure) {
+      throw this.firstFailure.error;
+    }
 
     if (this.session) {
       // The ingest already counted every price this run wrote, and the close
@@ -557,6 +605,7 @@ export class RunReportSink implements RunReport {
     // A run that writes prices only states no stock, per shop or per scope, and
     // its copies state none either (plan 0119, section 7).
     if (this.input.writes !== HarvestRunWrites.PRICES) {
+      await this.refreshActiveItems();
       await this.writeShopAvailability();
       await this.writeScopeAvailability();
       await this.writePricelessOffers();
@@ -713,9 +762,45 @@ export class RunReportSink implements RunReport {
       : (this.deps.scopes?.idFor(scopeKey) ?? null);
   }
 
-  /** Append to the serial chain, so writes happen in the order reported. */
+  /**
+   * Append to the serial chain, so writes happen in the order reported.
+   *
+   * Work runs only while no failure is kept, and a failure is caught here, so
+   * the chain never holds a rejection (plan 0269, section 1).
+   */
   private queue(work: () => Promise<void>): void {
-    this.chain = this.chain.then(work);
+    this.chain = this.chain.then(async () => {
+      if (this.firstFailure) {
+        return;
+      }
+      try {
+        await work();
+      } catch (error) {
+        this.fail(error);
+      }
+    });
+  }
+
+  /** Keep the first failure, log it, and tell the executor, all once. */
+  private fail(error: unknown): void {
+    if (this.firstFailure) {
+      return;
+    }
+    this.firstFailure = { error };
+    this.logger.error(
+      `Run ${this.context.runId}: a write of what the run read failed, so ` +
+        `the run stops here: ${describeError(error).message}`
+    );
+    try {
+      this.deps.onWriteFailed?.(error);
+    } catch (callbackError) {
+      // The callback aborts a controller, which does not throw. If it ever
+      // did, the drain still rejects with the failure kept above.
+      this.logger.error(
+        `Run ${this.context.runId}: telling the executor about the failed ` +
+          `write failed too: ${describeError(callbackError).message}`
+      );
+    }
   }
 
   private async pushProducts(
@@ -778,6 +863,34 @@ export class RunReportSink implements RunReport {
     // A place is the unit of a store discovery, unless the runner counts its
     // own (plan 0217, section 4). Then this adds nothing.
     await this.context.advance(chunk.length);
+  }
+
+  /**
+   * The item of each `ACTIVE` row, read again before the drain states
+   * availability (plan 0269, section 5).
+   *
+   * A chunk kept the item its row resolved to when it was written, and a
+   * person may have decided the row since. A row that is no longer `ACTIVE`
+   * states nothing for the product it left, and a row a person moved to
+   * another product states availability for that one.
+   */
+  private async refreshActiveItems(): Promise<void> {
+    if (!this.session || this.activeItemByExternalId.size === 0) {
+      return;
+    }
+    const entryIds = [...this.activeItemByExternalId.keys()]
+      .map((externalId) => this.entryIdByExternalId.get(externalId))
+      .filter((id): id is string => id !== undefined);
+    const decided = await this.session.activeItemsOf(entryIds);
+    for (const [externalId] of [...this.activeItemByExternalId]) {
+      const entryId = this.entryIdByExternalId.get(externalId);
+      const itemId = entryId === undefined ? null : decided.get(entryId);
+      if (itemId) {
+        this.activeItemByExternalId.set(externalId, itemId);
+      } else {
+        this.activeItemByExternalId.delete(externalId);
+      }
+    }
   }
 
   /**

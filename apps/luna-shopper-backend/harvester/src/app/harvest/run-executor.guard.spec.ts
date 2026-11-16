@@ -18,7 +18,12 @@ import { RunExecutor, SHUTDOWN_STOPPED_RUN } from './run-executor.service';
 import { RunReportSink } from './run-report.sink';
 import type { SupermarketSourceService } from './supermarket-source.service';
 
-jest.mock('./run-report.sink', () => ({ RunReportSink: jest.fn() }));
+// The sink is a fake, and the error a failed write aborts with is the real
+// one (plan 0269), because the executor tells it apart by its class.
+jest.mock('./run-report.sink', () => ({
+  ...jest.requireActual('./run-report.sink'),
+  RunReportSink: jest.fn(),
+}));
 
 /**
  * How a run ends when the chain keeps refusing it (plan 0215, sections 5 to 7).

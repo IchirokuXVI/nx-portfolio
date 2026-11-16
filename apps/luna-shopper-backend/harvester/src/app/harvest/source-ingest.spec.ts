@@ -13,8 +13,12 @@ import { DEZA_RENAMES_2026_10_16 } from './__fixtures__/deza-renames-2026-10-16'
 import type { CatalogClient } from './catalog-client.service';
 import { entryKey } from './matching';
 import type { RunContext } from './run-context';
+import { withEntryWrites } from './source-entry-writes.fake';
 import {
+  DECIDED_COLUMNS,
+  SEE_COLUMNS,
   SourceIngest,
+  TOUCH_COLUMNS,
   type PartialSourceObservation,
   type ReportedObservation,
   type SourceObservation,
@@ -92,20 +96,32 @@ function build(options: {
   const saved: SourceCatalogEntry[] = [];
   let created = 0;
 
-  const entries = {
-    // Filtered as the real query is: a session loads one chain's rows only.
-    find: jest.fn(async (query: { where: { supermarketId: string } }) =>
+  // Filtered as the real query is: a session loads one chain's rows only.
+  // The read of the decided columns again (plan 0269) is the wrapper's.
+  const chainReads = jest.fn(
+    async (query: { where: { supermarketId: string } }) =>
       stored.filter((row) => row.supermarketId === query.where.supermarketId)
-    ),
-    create: jest.fn((row: SourceCatalogEntry) => {
-      created += 1;
-      return { id: `new-${created}`, ...row };
-    }),
-    save: jest.fn(async (row: SourceCatalogEntry) => {
-      saved.push(row);
-      return row;
-    }),
-  } as unknown as Repository<SourceCatalogEntry>;
+  );
+  const entries = withEntryWrites(
+    {
+      find: chainReads,
+      create: jest.fn((row: SourceCatalogEntry) => {
+        created += 1;
+        return { id: `new-${created}`, ...row };
+      }),
+      save: jest.fn(async (row: SourceCatalogEntry) => {
+        saved.push(row);
+        return row;
+      }),
+    },
+    // A known row is one the session loaded or one this run created.
+    () => [...stored, ...saved],
+    (row, plain) => {
+      if (plain) {
+        saved.push(row);
+      }
+    }
+  ) as unknown as Repository<SourceCatalogEntry>;
 
   const priceRows: PriceRow[] = [];
   const prices = {
@@ -164,6 +180,7 @@ function build(options: {
     ingest,
     context,
     entries,
+    chainReads,
     saved,
     stored,
     priceRows,
@@ -975,7 +992,7 @@ describe('SourceIngest, rung 1 and an EAN that has just arrived', () => {
  */
 describe('SourceIngestSession, the indexes held across chunks', () => {
   it('loads the chain and the catalog once, however many chunks are pushed', async () => {
-    const { ingest, context, entries, catalog } = build({});
+    const { ingest, context, chainReads, catalog } = build({});
 
     const session = await ingest.open(context, {
       supermarketId: CHAIN,
@@ -989,7 +1006,7 @@ describe('SourceIngestSession, the indexes held across chunks', () => {
 
     // Three chunks, one read of each index. Calling `ingest` per chunk would
     // have made this three and three.
-    expect(entries.find).toHaveBeenCalledTimes(1);
+    expect(chainReads).toHaveBeenCalledTimes(1);
     expect(catalog.searchItems).toHaveBeenCalledTimes(1);
     expect(result.outcomes).toHaveLength(3);
     expect(result.counters.created).toBe(3);
@@ -4158,5 +4175,262 @@ describe('SourceIngest, a size its own unit price disproves (plan 0249)', () => 
 
     expect(outcomes[0]).toMatchObject({ rung: 4 });
     expect(saved[0]).toMatchObject({ candidateEntryId: 'walk-row' });
+  });
+});
+
+/**
+ * A walk never undoes a decision (plan 0269, sections 2 and 3).
+ *
+ * The session caches the chain's rows at open. Here the cache holds copies,
+ * as a real read does, and `stored` is the database: a person's decision is
+ * written to it between the open and a chunk, or between the read of the
+ * decisions and the walk's own write.
+ */
+describe('SourceIngest, a decision made while the walk runs (plan 0269)', () => {
+  const EAN = '8411327052016';
+  const waiting = {
+    id: 'entry-w',
+    externalId: 'w1',
+    name: 'Agua mineral',
+    ean: EAN,
+    status: SourceEntryStatus.UNRESOLVED,
+    itemId: null,
+  };
+  const water = {
+    id: 'item-water',
+    name: { es: 'Agua mineral', en: null },
+    brand: null,
+    ean: EAN,
+    unitSize: null,
+  };
+  /** What `SourceEntryService.reject` writes. */
+  const rejectIn = (row: SourceCatalogEntry) =>
+    Object.assign(row, {
+      status: SourceEntryStatus.REJECTED,
+      itemId: null,
+      candidateEntryId: null,
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      decidedAt: new Date('2026-11-11T12:00:00.000Z'),
+    });
+
+  function walk(rows: Partial<SourceCatalogEntry>[]) {
+    const built = build({
+      rows,
+      items: [water],
+      batch: { inserted: 1, confirmed: 0 },
+    });
+    // The session caches what it read, not the rows themselves.
+    built.chainReads.mockImplementation(async () =>
+      built.stored.map((row) => ({ ...row }) as SourceCatalogEntry)
+    );
+    return built;
+  }
+
+  const open = (built: ReturnType<typeof walk>) =>
+    built.ingest.open(built.context, {
+      supermarketId: CHAIN,
+      defaultPriceScopeId: SCOPE,
+      sourceKind: PriceSourceKind.OFFICIAL_API,
+    });
+
+  const seen = () =>
+    observation({
+      externalId: 'w1',
+      name: 'Agua mineral',
+      ean: EAN,
+      price: PRICE,
+    });
+
+  it('binds a waiting row by its EAN when nobody decided it', async () => {
+    const built = walk([waiting]);
+    const session = await open(built);
+
+    const [outcome] = await session.push([seen()]);
+
+    expect(outcome).toMatchObject({ rung: 2, itemId: 'item-water' });
+    expect(built.stored[0]).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.EAN,
+      itemId: 'item-water',
+    });
+  });
+
+  it('reads the decision again before the chunk, so a row rejected since the open stays rejected and is owed no price', async () => {
+    const built = walk([waiting]);
+    const session = await open(built);
+    rejectIn(built.stored[0]);
+
+    const [outcome] = await session.push([seen()]);
+
+    expect(outcome).toMatchObject({ rung: 1, itemId: null });
+    expect(outcome.entry.status).toBe(SourceEntryStatus.REJECTED);
+    expect(built.stored[0]).toMatchObject({
+      status: SourceEntryStatus.REJECTED,
+      matchedBy: ItemSourceMatch.MANUAL,
+      itemId: null,
+    });
+    expect(built.catalog.addPrices).not.toHaveBeenCalled();
+  });
+
+  it('changes no row when a person decides after that read, and builds the outcome from the row read again', async () => {
+    const built = walk([waiting]);
+    const session = await open(built);
+    // The reject lands between the read of the decisions and the bind.
+    const read = built.entries.find.bind(built.entries);
+    let rejected = false;
+    built.entries.find = (async (options: {
+      where?: Record<string, unknown>;
+    }) => {
+      // Copies, as a real read answers: what the database held then.
+      const answer = (await read(options as never)).map(
+        (row) => ({ ...row }) as SourceCatalogEntry
+      );
+      if (options.where && 'externalId' in options.where && !rejected) {
+        rejected = true;
+        rejectIn(built.stored[0]);
+      }
+      return answer;
+    }) as typeof built.entries.find;
+
+    const [outcome] = await session.push([seen()]);
+
+    expect(rejected).toBe(true);
+    expect(outcome).toMatchObject({ rung: 1, itemId: null });
+    expect(outcome.entry).toMatchObject({
+      status: SourceEntryStatus.REJECTED,
+      matchedBy: ItemSourceMatch.MANUAL,
+    });
+    expect(built.stored[0]).toMatchObject({
+      status: SourceEntryStatus.REJECTED,
+      itemId: null,
+    });
+    expect(built.catalog.addPrices).not.toHaveBeenCalled();
+  });
+
+  it('keeps an accept made since the open, and its price goes to the product the person chose', async () => {
+    const built = walk([waiting]);
+    const session = await open(built);
+    Object.assign(built.stored[0], {
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-chosen',
+      matchedBy: ItemSourceMatch.MANUAL,
+      confidence: 1,
+      decidedAt: new Date('2026-11-11T12:00:00.000Z'),
+    });
+
+    const [outcome] = await session.push([seen()]);
+
+    expect(outcome).toMatchObject({ rung: 1, itemId: 'item-chosen' });
+    expect(built.stored[0]).toMatchObject({
+      status: SourceEntryStatus.ACTIVE,
+      matchedBy: ItemSourceMatch.MANUAL,
+      itemId: 'item-chosen',
+    });
+    expect(built.catalog.addPrices).toHaveBeenCalledWith(
+      SCOPE,
+      [expect.objectContaining({ itemId: 'item-chosen' })],
+      RUN,
+      PriceSourceKind.OFFICIAL_API,
+      null
+    );
+  });
+
+  it('forgets a row deleted since the open: a full observation creates it again', async () => {
+    const built = walk([waiting]);
+    const session = await open(built);
+    built.stored.splice(0, 1);
+
+    const [outcome] = await session.push([seen()]);
+
+    expect(outcome.created).toBe(true);
+  });
+
+  it('names no decided column in any plain write, and each decision of the walk is guarded', async () => {
+    const built = walk([
+      waiting,
+      {
+        id: 'entry-a',
+        externalId: 'a1',
+        name: 'Leche entera',
+        status: SourceEntryStatus.ACTIVE,
+        itemId: 'item-milk',
+        matchedBy: ItemSourceMatch.MANUAL,
+        confidence: 1,
+        decidedAt: new Date('2026-09-01T00:00:00.000Z'),
+      },
+      {
+        id: 'entry-p',
+        externalId: 'p1',
+        name: 'Pan',
+        status: SourceEntryStatus.UNRESOLVED,
+      },
+    ]);
+    const writes: Array<[Record<string, unknown>, Record<string, unknown>]> =
+      [];
+    const update = built.entries.update.bind(built.entries);
+    built.entries.update = (async (
+      criteria: Record<string, unknown>,
+      values: Record<string, unknown>
+    ) => {
+      writes.push([criteria, values]);
+      return update(criteria as never, values as never);
+    }) as typeof built.entries.update;
+    const session = await open(built);
+
+    await session.push([
+      seen(),
+      observation({ externalId: 'a1', name: 'Leche entera', price: PRICE }),
+      {
+        externalId: 'p1',
+        detailFetched: false,
+        observedAt: new Date('2026-09-05T10:00:00.000Z'),
+        prices: [],
+      },
+    ]);
+
+    const decided: readonly string[] = DECIDED_COLUMNS;
+    const plain = writes.filter(
+      ([criteria]) => Object.keys(criteria).join() === 'id'
+    );
+    expect(plain.map(([criteria]) => criteria['id']).sort()).toEqual([
+      'entry-a',
+      'entry-p',
+      'entry-w',
+    ]);
+    for (const [, values] of plain) {
+      expect(
+        Object.keys(values).filter((key) => decided.includes(key))
+      ).toEqual([]);
+      expect(typeof values['timesSeen']).toBe('function');
+    }
+    // A partial observation writes what `see` owns and nothing else.
+    const [, partialWrite] = plain.find(
+      ([criteria]) => criteria['id'] === 'entry-p'
+    ) as [Record<string, unknown>, Record<string, unknown>];
+    expect(Object.keys(partialWrite).sort()).toEqual(
+      ['timesSeen', ...SEE_COLUMNS].sort()
+    );
+    // The full observations write the source group, the seen fields and the
+    // doubt: the walk's own columns.
+    const [, fullWrite] = plain.find(
+      ([criteria]) => criteria['id'] === 'entry-a'
+    ) as [Record<string, unknown>, Record<string, unknown>];
+    expect(Object.keys(fullWrite).sort()).toEqual(
+      ['timesSeen', ...TOUCH_COLUMNS.group].sort()
+    );
+    // The one decision of the walk, the bind by EAN, is guarded on the row
+    // still waiting.
+    const guarded = writes.filter(
+      ([criteria]) => Object.keys(criteria).join() !== 'id'
+    );
+    expect(guarded).toHaveLength(1);
+    expect(guarded[0][0]).toMatchObject({ id: 'entry-w' });
+    expect(Object.keys(guarded[0][0]).sort()).toEqual([
+      'decidedAt',
+      'id',
+      'status',
+    ]);
+    expect(Object.keys(guarded[0][1]).sort()).toEqual([...decided].sort());
   });
 });

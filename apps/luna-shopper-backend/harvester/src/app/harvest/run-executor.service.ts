@@ -49,7 +49,11 @@ import { HarvestRunStore } from './harvest-run.store';
 import { PriceScopeResolver } from './price-scope-resolver';
 import { refusalPolicyOf, stopSentence } from './refusal-policy';
 import { RunContext } from './run-context';
-import { RunReportSink, type RunReportResult } from './run-report.sink';
+import {
+  ReportWriteFailedError,
+  RunReportSink,
+  type RunReportResult,
+} from './run-report.sink';
 import { sourceKindOf } from './run-source-kind';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceIngest, type SourceIngestCounters } from './source-ingest';
@@ -383,6 +387,8 @@ export class RunExecutor implements OnApplicationShutdown {
       });
     }, 2000);
 
+    // Outside the try, so the catch below can read what failed in it.
+    let sink: RunReportSink | null = null;
     try {
       await this.store.markRunning(runId, 'START', 'Starting');
       if (source) {
@@ -409,7 +415,7 @@ export class RunExecutor implements OnApplicationShutdown {
       // The write half of the run, and the only thing that has one (plan 0103,
       // section 2.3). Everything a runner has to say goes into this, and
       // everything that has to be done about it is done here.
-      const sink =
+      sink =
         run.mode === HarvestRunMode.FILE_IMPORT
           ? null
           : new RunReportSink(
@@ -446,6 +452,10 @@ export class RunExecutor implements OnApplicationShutdown {
                 catalog: this.catalog,
                 entries: this.entries,
                 availability: this.availability,
+                // A failed write stops the run as the guard does, through the
+                // signal every runner reads (plan 0269, section 1).
+                onWriteFailed: (error) =>
+                  controller.abort(new ReportWriteFailedError(error)),
               }
             );
 
@@ -608,11 +618,12 @@ export class RunExecutor implements OnApplicationShutdown {
       // The guard's stop is read before the abort it came with, so a stopped
       // run ends FAILED with its reason and a person's abort still ends
       // ABORTED (plan 0215, section 6.2). A stop wins over the ratio too.
-      const status = guard?.stop
-        ? HarvestRunStatus.FAILED
-        : controller.signal.aborted
-          ? HarvestRunStatus.ABORTED
-          : this.verdict(finished.failed, finished.totalPlanned, settings);
+      const status =
+        guard?.stop || writeFailureOf(controller.signal, sink)
+          ? HarvestRunStatus.FAILED
+          : controller.signal.aborted
+            ? HarvestRunStatus.ABORTED
+            : this.verdict(finished.failed, finished.totalPlanned, settings);
       // After the verdict, so only a COMPLETED walk counts a miss (plan 0220,
       // section 4.4), and before the finish, so the report says what it did.
       if (run.mode === HarvestRunMode.CATALOG_DISCOVERY && sink) {
@@ -635,6 +646,7 @@ export class RunExecutor implements OnApplicationShutdown {
       const error =
         this.shutdownSentence(runId, status) ??
         stopSentenceOf(guard, finished) ??
+        writeFailedSentenceOf(controller.signal, sink) ??
         (status === HarvestRunStatus.FAILED
           ? `${finished.failed} of ${finished.totalPlanned ?? '?'} items failed, ` +
             `which is over the ${settings.failureRatio} threshold.`
@@ -654,8 +666,12 @@ export class RunExecutor implements OnApplicationShutdown {
       // Whatever the run managed before it died is still worth keeping.
       await context.flush().catch(() => undefined);
       await this.recordRefusals(runId, guard).catch(() => undefined);
+      // A failed write ends FAILED although it aborted the run (plan 0269,
+      // section 1), as a stop of the guard does.
       const status =
-        guard?.stop || !controller.signal.aborted
+        guard?.stop ||
+        writeFailureOf(controller.signal, sink) ||
+        !controller.signal.aborted
           ? HarvestRunStatus.FAILED
           : HarvestRunStatus.ABORTED;
       const finished = guard?.stop
@@ -664,6 +680,7 @@ export class RunExecutor implements OnApplicationShutdown {
       const sentence =
         this.shutdownSentence(runId, status) ??
         stopSentenceOf(guard, finished) ??
+        writeFailedSentenceOf(controller.signal, sink) ??
         describeError(error).message;
       const [stopReason] = stopReasonOf(guard);
       const alert = await this.alertOf(run, finished, source, status, {
@@ -1132,6 +1149,41 @@ function stopSentenceOf(
     stop,
     guard.policy.coolDowns > 0,
     typeof written === 'number' && written > 0 ? written : null
+  );
+}
+
+/**
+ * The first write of the run that failed, or null (plan 0269, section 1).
+ *
+ * The reason of the abort names it, and the sink keeps it too: a write that
+ * fails after a person's abort is still a failed write, and its run ends
+ * `FAILED` rather than `ABORTED`.
+ */
+function writeFailureOf(
+  signal: AbortSignal,
+  sink: Pick<RunReportSink, 'failure'> | null
+): { cause: unknown } | null {
+  if (signal.reason instanceof ReportWriteFailedError) {
+    return { cause: signal.reason.cause };
+  }
+  const failure = sink?.failure ?? null;
+  return failure === null ? null : { cause: failure };
+}
+
+/** The `error` of a run a failed write stopped, else null (plan 0269). */
+function writeFailedSentenceOf(
+  signal: AbortSignal,
+  sink: Pick<RunReportSink, 'failure'> | null
+): string | null {
+  const failure = writeFailureOf(signal, sink);
+  if (!failure) {
+    return null;
+  }
+  return (
+    'Stopped: writing a chunk of the products the run read failed ' +
+    `(${describeError(failure.cause).message}), so the walk stopped there ` +
+    'and wrote nothing after it. The rows of the chunks written before it ' +
+    'are kept.'
   );
 }
 
