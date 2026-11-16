@@ -22,8 +22,9 @@ export interface RunWarningRow {
   /** The page, or `''` where the warning names none. */
   readonly page: string;
   /**
-   * What the leaflet printed, where the warning carries it, or `''` when the
-   * message already names it.
+   * What the leaflet printed, where the warning carries it. `''` for a blank
+   * name and for `LISTING_UNREAD` and `LISTING_SHORT`, whose sentence always
+   * names the part.
    */
   readonly name: string;
   /** The harvester's own sentence, shown as it came. */
@@ -48,12 +49,14 @@ export function isFileImportRun(run: HarvestRun | null): boolean {
  * cell is drawn when it has something in it and left out when it does not, the
  * same rule the run's own facts follow.
  *
- * A name the message already holds becomes `''` too. A walk's warning about a
- * part it did not read names the part in its sentence ("Section 07 Mascotas
- * failed"), and a runner may or may not also set `name`: drawing the name
- * beside such a sentence repeats it on one run and not on the next. An
- * import's warning keeps its name, because its sentence speaks of the product
- * without naming it.
+ * The name is decided by code, never by reading the sentence (admin plan
+ * 0071, D7). The two walk warnings in `CODES_WHOSE_SENTENCE_NAMES_THE_PART`
+ * always state their subject in the sentence ("Section 07 Mascotas failed"),
+ * and a runner may or may not also set `name`, so their name is `''` either
+ * way and the row reads the same on every run. Every other warning keeps its
+ * name, also when its sentence quotes it: an import's list then has the bold
+ * product name on every row that has one, and can be scanned by product. A
+ * blank name is `''`, so no empty `<strong>` is drawn.
  */
 export function runWarningRows(
   run: HarvestRun | null
@@ -67,19 +70,22 @@ export function runWarningRows(
     code: warning.code,
     offerId: warning.offerId ?? '',
     page: warning.page === null ? '' : String(warning.page),
-    name: nameBesides(warning.name, warning.message),
+    name: CODES_WHOSE_SENTENCE_NAMES_THE_PART.has(warning.code)
+      ? ''
+      : (warning.name ?? '').trim(),
     message: warning.message,
   }));
 }
 
-/** The name, unless the message already says it. */
-function nameBesides(name: string | null, message: string): string {
-  const trimmed = (name ?? '').trim();
-  return trimmed === '' ||
-    message.toLocaleLowerCase().includes(trimmed.toLocaleLowerCase())
-    ? ''
-    : trimmed;
-}
+/**
+ * The walk warnings whose sentence always names the part it is about.
+ *
+ * Typed against the wire union, so a code the gateway renames fails the build
+ * here. The admin libraries read the codes from the wire types and have no
+ * runtime enum to import.
+ */
+const CODES_WHOSE_SENTENCE_NAMES_THE_PART: ReadonlySet<Wire.EnumsHarvestWarningCode> =
+  new Set<Wire.EnumsHarvestWarningCode>(['LISTING_UNREAD', 'LISTING_SHORT']);
 
 /**
  * How many products this run put in front of a person.

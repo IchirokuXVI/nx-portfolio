@@ -67,6 +67,11 @@ function run(over: Partial<HarvestRun> = {}): HarvestRun {
   };
 }
 
+/** The harvester's sentence for `DUPLICATE_KEY` (`file-import.runner.ts`). */
+const DUPLICATE_SENTENCE =
+  'Two products in this document have the same name and size, so ' +
+  'neither wrote a price.';
+
 /** A file import that finished, with one warning of each shape. */
 function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
   return run({
@@ -88,7 +93,7 @@ function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
         offerId: 'p36-o01',
         page: 36,
         name: 'Champu Elvive',
-        message: 'Two products share one key. The second won.',
+        message: DUPLICATE_SENTENCE,
       },
       {
         // The producer's own lost tile, carried through, so what it lost and
@@ -312,7 +317,7 @@ describe('RunPage, for a file import', () => {
         offerId: 'p36-o01',
         page: '36',
         name: 'Champu Elvive',
-        message: 'Two products share one key. The second won.',
+        message: DUPLICATE_SENTENCE,
       },
       {
         key: '1',
@@ -911,10 +916,12 @@ describe('RunPage, what a walk did not read', () => {
         finishedAt: '2026-09-03T09:30:00.000Z',
         warnings: [
           {
+            // The runner set a name the sentence does not quote as it came:
+            // the code alone hides it.
             code: 'LISTING_UNREAD',
             offerId: null,
             page: null,
-            name: 'Mascotas',
+            name: 'Mascotas y animales',
             message: 'Section 07 Mascotas failed: Error: socket hang up',
           },
           {
@@ -938,6 +945,30 @@ describe('RunPage, what a walk did not read', () => {
       null,
     ]);
     expect(items[0].textContent).toContain('Section 07 Mascotas failed');
+    expect(items[0].textContent).not.toContain('Mascotas y animales');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the bold product name of an import warning whose sentence quotes it', async () => {
+    const fixture = await render(
+      importRun({
+        warnings: [
+          {
+            code: 'NO_MATCH',
+            offerId: 'p04-o02',
+            page: 4,
+            name: 'Yogur natural',
+            message:
+              '"Yogur natural" matched nothing, so it is queued for a person.',
+          },
+        ],
+      })
+    );
+
+    const [item] = [
+      ...fixture.nativeElement.querySelectorAll('.warnings li'),
+    ] as HTMLElement[];
+    expect(item.querySelector('strong')?.textContent).toBe('Yogur natural');
     fixture.componentInstance.watch.stop();
   });
 

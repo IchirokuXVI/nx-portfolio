@@ -201,3 +201,10 @@ page draws the sizes part for it and none of the chain parts.
 stopped" cell (`harvest.run.report.stoppedBy.FAILED`). The runner names such a section in
 `incompleteSections` with a null `stoppedBy`. An unknown stop word on a finished section stays
 an empty cell.
+
+**D7 (owner, answered 2026-11-16):** the bold name of a warning is hidden by code, not by
+reading the sentence. Only `LISTING_UNREAD` and `LISTING_SHORT` hide it, because their
+sentence always states the part they are about and a runner may or may not also set `name`.
+Every other warning that has a name keeps its bold name, also when its sentence quotes the
+name. A leaflet import list thus has a bold product name on every row that has one, and the
+operator can scan it by product. A blank name draws no `<strong>`.
