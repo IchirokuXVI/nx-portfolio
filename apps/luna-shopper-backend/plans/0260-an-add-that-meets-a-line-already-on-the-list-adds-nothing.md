@@ -264,6 +264,21 @@ identity line is raised before held lines" of section 1 (steps 2 and 3, their am
   reported as not added, with the lines (`matches`: id, name, quantity, unit) and an `instead`
   sentence telling the model to ask which one.
 
+From 2026-11-16, decision 50 (the owner approved it on 2026-11-16):
+
+- **The assistant asks too.** M1 to M9 held for the screens and for a batch slot, but the
+  assistant matched names itself before it wrote: `upsert_lines` took the first line of the
+  name it found and changed it, and it had no way to name one line among several. Now an item
+  of `upsert_lines` whose name fits two or more lines of the list (lines at 0 included,
+  rejected lines never, as M1) writes nothing and answers the lines as `matches` (id, name,
+  amount, unit) with an `instead` sentence telling the model to ask which one. The item gains
+  an optional `lineId`; with it the item changes exactly that line, under the line's own name,
+  and a `lineId` that is no line of the list is a refused item the model reads, never a throw.
+  One match and no match behave as before. Why: a guess between two lines is the wrong write
+  the screens already refuse to make, and the assistant must not be the one way around the
+  rule. `remove_lines` and `settle_lines` already name lines by id, so they did not change;
+  core and the gateway did not change.
+
 ### The writer's, open to the owner
 
 - **R1. The answer of an add that adds nothing is 201 with `outcome: 'ALREADY_ON_LIST'`, and
