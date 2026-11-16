@@ -1398,6 +1398,41 @@ describe('ProductPage', () => {
       expect(stepperIn(line())?.quantity).toBe('3');
     });
 
+    it('switches the plus of a similar product held only at zero off, and says so (decision 51)', async () => {
+      const { fixture, lines } = await render({
+        ...group,
+        lines: [
+          {
+            id: 'line-carbonell',
+            listId: 'list-weekly',
+            content: 'Carbonell olive oil',
+            quantity: 0,
+            itemIds: ['item-oil-other'],
+          },
+        ],
+      });
+      const row = similar(fixture)[0];
+      const plus = row?.querySelector<HTMLButtonElement>('button.add');
+
+      expect(plus?.getAttribute('aria-disabled')).toBe('true');
+      const reason = row?.querySelector(
+        `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+      );
+      expect(reason?.textContent).toContain('catalog.held.atZero');
+      // No link: the list hides its lines at zero.
+      expect(row?.querySelector('a.held-onlist-link')).toBeNull();
+      // The other similar product, on no line, keeps its plus.
+      expect(
+        similar(fixture)[1]
+          ?.querySelector('button.add')
+          ?.hasAttribute('aria-disabled')
+      ).toBe(false);
+
+      plus?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+    });
+
     it('opens the page of a similar product when its row is pressed', async () => {
       const { fixture } = await render(group);
       const navigate = navigateSpy();

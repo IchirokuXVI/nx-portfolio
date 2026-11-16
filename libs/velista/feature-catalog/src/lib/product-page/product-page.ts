@@ -477,9 +477,7 @@ export class ProductPage {
 
   /** What a similar row's trailing control draws, or null with no plus. */
   protected addOf(row: ProductRowView): ProductRowAdd | null {
-    // In the unit the plus adds in (absent is a count, as `CatalogAddStore.add`
-    // reads it), which is the unit the server matches lines of.
-    return this._rowAdds().of(row.id, row.lineUnit ?? 'UNIT');
+    return this._rowAdds().of(row.id);
   }
 
   protected addProduct(row: ProductRowView): void {

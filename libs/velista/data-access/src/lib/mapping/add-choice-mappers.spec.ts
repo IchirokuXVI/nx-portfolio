@@ -1,6 +1,10 @@
 import { ADD_CHOICE_MAX } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { toAddChoice, toAddUnitRefusal } from './add-choice-mappers';
+import {
+  toAddChoice,
+  toAddUnitRefusal,
+  toRefusedLine,
+} from './add-choice-mappers';
 
 function refusal(details: Record<string, unknown> | undefined): GatewayError {
   return new GatewayError({
@@ -241,5 +245,66 @@ describe('toAddUnitRefusal', () => {
         'Leche'
       )
     ).toBeNull();
+  });
+});
+
+/** Velista `0185`, decision 51: the line a refusal of another unit names, held by the card. */
+describe('toRefusedLine', () => {
+  function differs(details?: Record<string, unknown>): GatewayError {
+    return new GatewayError({
+      code: 'line_unit_differs',
+      status: 409,
+      correlationId: 'ref',
+      details,
+    });
+  }
+
+  it('reads the whole line the add met, a line at zero included', () => {
+    expect(
+      toRefusedLine(
+        differs({
+          line: {
+            lineId: 'line-milk',
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 0,
+          },
+          unit: 'UNIT',
+          index: null,
+        })
+      )
+    ).toEqual({
+      lineId: 'line-milk',
+      content: 'Leche entera',
+      unit: 'MILLILITER',
+      quantity: 0,
+    });
+  });
+
+  it('is null for a bag that does not name the line in full', () => {
+    expect(toRefusedLine(differs(undefined))).toBeNull();
+    expect(
+      toRefusedLine(
+        differs({ line: { lineId: 'l1', content: 'Pan', unit: 'UNIT' } })
+      )
+    ).toBeNull();
+    expect(
+      toRefusedLine(
+        differs({
+          line: { lineId: 'l1', content: 'Pan', unit: 'LITRE', quantity: 2 },
+        })
+      )
+    ).toBeNull();
+    expect(
+      toRefusedLine(
+        differs({
+          line: { lineId: '', content: 'Pan', unit: 'UNIT', quantity: 2 },
+        })
+      )
+    ).toBeNull();
+  });
+
+  it('is null for any other failure', () => {
+    expect(toRefusedLine(new Error('boom'))).toBeNull();
   });
 });

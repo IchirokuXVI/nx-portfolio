@@ -1276,20 +1276,17 @@ describe('CatalogAddStore', () => {
       expect(store.met()).toEqual({ kind: 'onList', list: 'weekly' });
     });
 
-    it('holds every line a stale card met and says why, when another device made a second line at zero (owner ruling 46)', async () => {
-      const kept = line('kept', 'weekly', { quantity: 0 });
-      const { store, server, answerNext, drawn } = setup({
-        ...HOME,
-        lines: [kept],
-      });
+    it('holds every line a stale card met and says why, when another device made lines at zero (decision 51)', async () => {
+      const { store, server, answerNext } = setup(HOME);
       await store.ensure();
-      expect(drawn('weekly', 'milk')).toEqual([0]);
 
-      // Another device made a second line of it at zero since the card was drawn.
+      // Another device made two lines of it at zero since the card was drawn.
+      const kept = line('kept', 'weekly', { quantity: 0 });
       const other = line('other', 'weekly', {
         quantity: 0,
         content: 'Leche entera',
       });
+      server.set(kept.id, kept);
       server.set(other.id, other);
       answerNext(() => ({
         line: kept,
@@ -1301,7 +1298,7 @@ describe('CatalogAddStore', () => {
       await store.add(MILK);
 
       // Both lines are held as the server holds them, so the card redraws with
-      // its plus off and the sentence to pick a line.
+      // its plus off and the sentence to raise a line with its own stepper.
       expect(
         store
           .held()
@@ -1313,7 +1310,7 @@ describe('CatalogAddStore', () => {
       ]);
       expect(store.visit()).toEqual([]);
       expect(store.failures()).toBe(1);
-      expect(store.met()).toEqual({ kind: 'pickLine', list: 'weekly' });
+      expect(store.met()).toEqual({ kind: 'atZero', list: 'weekly' });
 
       // Any other failure says its own sentence, not this one.
       answerNext(() => {
@@ -1581,6 +1578,48 @@ describe('CatalogAddStore', () => {
       await store.add(MILK);
       expect(store.failures()).toBe(2);
       expect(store.refusal()).toBeNull();
+    });
+
+    it('holds the line of another unit a refusal names, so the card turns its plus off (decision 51)', async () => {
+      const { store, drawn, failNext } = setup(HOME);
+      await store.ensure();
+      failNext(
+        new GatewayError({
+          code: 'line_unit_differs',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            line: {
+              lineId: 'w-milk',
+              content: 'Leche entera',
+              unit: 'MILLILITER',
+              quantity: 0,
+            },
+            unit: 'UNIT',
+            index: null,
+          },
+        })
+      );
+
+      await store.add(MILK);
+
+      expect(drawn('weekly', 'milk')).toEqual([0]);
+      expect(store.held()).toEqual([
+        {
+          lineId: 'w-milk',
+          listId: 'weekly',
+          name: 'Leche entera',
+          quantity: 0,
+          unit: 'MILLILITER',
+          pending: false,
+          itemIds: ['milk'],
+        },
+      ]);
+      expect(store.refusal()).toEqual({
+        lineId: 'w-milk',
+        name: 'Leche entera',
+        unit: 'MILLILITER',
+      });
     });
 
     it('puts a line that was there back to what it held when the add is refused', async () => {

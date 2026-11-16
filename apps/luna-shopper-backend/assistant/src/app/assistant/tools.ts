@@ -1,5 +1,6 @@
 import {
   isLineUnit,
+  LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
@@ -142,6 +143,12 @@ interface UpsertItem {
    * 0246, section 5). Absent is pieces or packs.
    */
   unit: LineUnit | undefined;
+  /**
+   * The one line this item changes, when a name met two or more lines and the
+   * person said which one they meant (owner decision 50, plan 0260). Absent,
+   * the item finds its line by name as before.
+   */
+  lineId: string | undefined;
 }
 
 /**
@@ -196,6 +203,11 @@ const upsertItemsParameter = {
         description:
           '"set" is the default and means the list should end up with this many. Send "add" when they asked for more of something on top of what is already there: "two more", "another", "a couple extra". Never work out the new total yourself.',
       },
+      lineId: {
+        type: 'string',
+        description:
+          'The id of the one line to change, only after a result of this tool in this turn handed you several lines that match this product and the person has told you which one they meant. Copy the id exactly from that result. Omit it otherwise.',
+      },
     },
     required: ['product'],
   },
@@ -205,7 +217,7 @@ const upsertLines: AssistantTool = {
   declaration: {
     name: 'upsert_lines',
     description:
-      "Put things on one of this person's shopping lists, or change how many of something is on it. Use it whenever they ask for something to be added. Pass every product they named in one call: ten things is one call with ten items, never ten calls. Give each product exactly as they said it, without the quantity. Only name a list or a zone that appears in the context you were given; if they did not say which list and the context does not make it obvious, call this anyway with no list and you will be told to ask.",
+      "Put things on one of this person's shopping lists, or change how many of something is on it. Use it whenever they ask for something to be added. Pass every product they named in one call: ten things is one call with ten items, never ten calls. Give each product exactly as they said it, without the quantity. When a product matches two or more lines already on the list, nothing is written for it and you are handed those lines: ask which one they meant, then call this again with lineId set to the id of that line. Only name a list or a zone that appears in the context you were given; if they did not say which list and the context does not make it obvious, call this anyway with no list and you will be told to ask.",
     parameters: {
       type: 'object',
       properties: {
@@ -239,7 +251,7 @@ const upsertLines: AssistantTool = {
   scopedDeclaration: {
     name: 'upsert_lines',
     description:
-      'Put things on the list this person is looking at, or change how many of something is on it. Use it whenever they ask for something to be added. Pass every product they named in one call: ten things is one call with ten items, never ten calls. Give each product exactly as they said it, without the quantity. There is one list and it is the one they are looking at. Never ask which list they meant.',
+      'Put things on the list this person is looking at, or change how many of something is on it. Use it whenever they ask for something to be added. Pass every product they named in one call: ten things is one call with ten items, never ten calls. Give each product exactly as they said it, without the quantity. When a product matches two or more lines already on the list, nothing is written for it and you are handed those lines: ask which one they meant, then call this again with lineId set to the id of that line. There is one list and it is the one they are looking at. Never ask which list they meant.',
     parameters: {
       type: 'object',
       properties: {
@@ -315,19 +327,71 @@ const upsertLines: AssistantTool = {
       return refused(error, 'read that list');
     }
 
-    const planned = items.map((item, index) => ({
-      item,
-      index,
-      existing: findSameProduct(lines, item.product),
-    }));
-
     // One slot per item, filled by index rather than appended, so the report
     // comes back in the order the person said things even though the writes are
     // grouped: the new ones go in one request and the rest one at a time.
-    const results: (ItemResult | undefined)[] = new Array(planned.length);
+    const results: (ItemResult | undefined)[] = new Array(items.length);
     let firstFailure: unknown;
     let firstFailureUnit: LineUnit | undefined;
     let wrote = false;
+
+    // Owner decision 50 (plan 0260): a name that two or more lines of the
+    // list fit is a question, never a guess, lines at 0 included. The item
+    // writes nothing and the model is handed the lines to ask about; the
+    // answer comes back as `lineId`, which names exactly one line.
+    const planned: {
+      item: UpsertItem;
+      index: number;
+      existing: LineView | undefined;
+    }[] = [];
+    items.forEach((item, index) => {
+      if (item.lineId !== undefined) {
+        // A rejected line is no line to choose, as it is no match by name
+        // either; and a line the product does not fit is not one of the
+        // lines the model was handed, as core's `intoLineId` refuses it.
+        const target = lines.find(
+          (line) =>
+            line.id === item.lineId &&
+            line.approvalStatus !== LineApprovalStatus.REJECTED
+        );
+        if (target === undefined || !fitsName(target, item.product)) {
+          runtime.noteForRecord({ refused: true });
+          results[index] = notALineOfTheList(
+            item.product,
+            target === undefined ? 'unknown' : 'other_product'
+          );
+          return;
+        }
+        // The line they chose keeps its own name: the product the model
+        // passed beside the id only found the lines to choose from. Only a
+        // weight or a volume said of it rewrites the amount folded into it.
+        planned.push({
+          item: {
+            ...item,
+            product: foldsAmount(item) ? nameOf(target) : target.content,
+          },
+          index,
+          existing: target,
+        });
+        return;
+      }
+      const matches = findMatchingLines(lines, item.product);
+      const ask = severalMatches(item.product, matches);
+      if (ask !== undefined) {
+        results[index] = ask;
+        return;
+      }
+      planned.push({
+        item,
+        index,
+        existing: matches[0] ?? findSameProduct(lines, item.product),
+      });
+    });
+    // Two items can reach one line by two roads, one by name and one by its
+    // id, and two writes against one read is the lost update the fold of
+    // `foldDuplicates` exists to prevent. So they fold again here, once the
+    // line of each is known, by the same rule.
+    foldOntoLines(planned);
 
     const fresh = planned.filter((entry) => !entry.existing);
     if (fresh.length > 0) {
@@ -355,8 +419,12 @@ const upsertLines: AssistantTool = {
         added.forEach((result, position) => {
           runtime.link.list(list);
           results[fresh[position].index] =
-            severalMatches(fresh[position].item.product, result) ??
-            describeLine(batchAction(result), result.line);
+            (result.outcome === 'ALREADY_ON_LIST'
+              ? severalMatches(
+                  fresh[position].item.product,
+                  result.alreadyOnList ?? []
+                )
+              : undefined) ?? describeLine(batchAction(result), result.line);
         });
       } catch (error) {
         firstFailure = error;
@@ -1242,29 +1310,59 @@ function describeLine(
 }
 
 /**
- * A slot of a batch add that met two or more lines and wrote nothing (the
- * owner, 2026-11-16), as the model can act on it: the item was not added,
- * these lines match, ask which one. Undefined for any other slot.
+ * An item that two or more lines of the list fit, and that wrote nothing (the
+ * owner, 2026-11-16, decision 50), as the model can act on it: these lines
+ * match, ask which one, then name it with `lineId`. Undefined for fewer than
+ * two lines.
+ *
+ * Both halves of `upsert_lines` reach it: the lines this tool found by name
+ * before writing, and the `alreadyOnList` of a batch slot core answered
+ * `ALREADY_ON_LIST` with two or more lines, because a batch cannot ask.
  */
 function severalMatches(
   product: string,
-  result: Partial<Pick<AddLineResult, 'outcome' | 'alreadyOnList'>>
+  lines: readonly LineView[]
 ): ItemResult | undefined {
-  const lines = result.alreadyOnList ?? [];
-  if (result.outcome !== 'ALREADY_ON_LIST' || lines.length < 2) {
+  if (lines.length < 2) {
     return undefined;
   }
   return {
     product,
     refused: true,
-    reason: `nothing was added, because ${lines.length} lines on the list match it`,
-    matches: lines.map((line) => ({
+    reason:
+      `nothing was written, because ${lines.length} lines on the list match it` +
+      (lines.length > LINE_ADD_CHOICE_MAX
+        ? ` (showing ${LINE_ADD_CHOICE_MAX} of ${lines.length})`
+        : ''),
+    matches: lines.slice(0, LINE_ADD_CHOICE_MAX).map((line) => ({
       id: line.id,
       product: line.content,
       quantity: line.quantity,
       unit: line.unit ?? 'UNIT',
     })),
-    instead: `Do not add "${product}" again. Ask the person which of these lines they meant, naming each with its amount, then change the amount on that line if they want it changed.`,
+    instead: `Do not guess which line "${product}" means. Ask the person which of these lines they meant, naming each by its name and its amount and never by its id. When they answer, call upsert_lines again with this product, the amount they want if they said one, and lineId set to the id of the line they chose. An id is good for this turn only, so if they answer in a later message, call upsert_lines once without lineId to get these lines again and then once with it.`,
+  };
+}
+
+/**
+ * An item whose `lineId` names no line it may write (decision 50): a stale or
+ * invented id, a rejected line (`unknown`), or a line the product does not fit
+ * (`other_product`). Nothing is written for it, and the model is told how to
+ * get a real one rather than handed an exception.
+ */
+function notALineOfTheList(
+  product: string,
+  why: 'unknown' | 'other_product'
+): ItemResult {
+  return {
+    product,
+    refused: true,
+    reason:
+      why === 'unknown'
+        ? 'nothing was written, because lineId is not a line of this list'
+        : `nothing was written, because the line lineId names does not match "${product}"`,
+    instead:
+      'Never write an id yourself. Call upsert_lines again without lineId: if several lines match, the result gives you their ids, and you pass one of those.',
   };
 }
 
@@ -1409,6 +1507,7 @@ function readItems(value: unknown): UpsertItem[] {
       mode,
       quantity: mode === 'add' ? (quantity ?? 1) : quantity,
       unit: readUnit(bag['unit']),
+      lineId: readString(bag['lineId']),
     });
   }
   return items;
@@ -1433,35 +1532,73 @@ function foldDuplicates(items: UpsertItem[]): UpsertItem[] {
   for (const item of items) {
     // Two amounts in two units are not summed (plan 0246): "a kilo of
     // apples and two apples" stays two items, and the list decides.
-    const key = `${normalize(item.product)}\u0000${item.unit ?? 'UNIT'}`;
+    // Two items that name two lines are two items however alike their names
+    // are (decision 50): "the first milk to two, the second to three".
+    const key = `${normalize(item.product)}\u0000${item.unit ?? 'UNIT'}\u0000${item.lineId ?? ''}`;
     const index = at.get(key);
     if (index === undefined) {
       at.set(key, folded.length);
       folded.push({ ...item });
       continue;
     }
-
-    const held = folded[index];
-    if (item.mode === 'set') {
-      if (item.quantity !== undefined) {
-        folded[index] = { ...item };
-      }
-      continue;
-    }
-    if (held.mode === 'set' && held.quantity !== undefined) {
-      held.quantity += item.quantity ?? 1;
-      continue;
-    }
-    folded[index] = {
-      product: held.product,
-      mode: 'add',
-      quantity:
-        (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
-      unit: held.unit,
-    };
+    folded[index] = foldItem(folded[index], item);
   }
 
   return folded;
+}
+
+/**
+ * One item folded onto the one held before it, by the rule of
+ * {@link foldDuplicates}: a `set` with a number supersedes, an `add` sums, and
+ * a `set` with no number leaves what is held.
+ */
+function foldItem(held: UpsertItem, item: UpsertItem): UpsertItem {
+  if (item.mode === 'set') {
+    return item.quantity !== undefined ? { ...item } : held;
+  }
+  if (held.mode === 'set' && held.quantity !== undefined) {
+    return { ...held, quantity: held.quantity + (item.quantity ?? 1) };
+  }
+  return {
+    product: held.product,
+    mode: 'add',
+    quantity:
+      (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
+    unit: held.unit,
+    lineId: held.lineId,
+  };
+}
+
+/**
+ * The planned items of a call folded once more, by the line each one lands on
+ * (decision 50): an item found by name and an item that named the same line by
+ * its id are one write, as two items of one name are. Units stay apart as
+ * {@link foldDuplicates} keeps them. The folded item keeps the slot of the
+ * first, so the report holds one result for the line. In place.
+ */
+function foldOntoLines(
+  planned: { item: UpsertItem; index: number; existing: LineView | undefined }[]
+): void {
+  const at = new Map<string, number>();
+  for (let position = 0; position < planned.length; ) {
+    const entry = planned[position];
+    if (entry.existing === undefined) {
+      position += 1;
+      continue;
+    }
+    const key = `${entry.existing.id}\u0000${entry.item.unit ?? 'UNIT'}`;
+    const held = at.get(key);
+    if (held === undefined) {
+      at.set(key, position);
+      position += 1;
+      continue;
+    }
+    planned[held] = {
+      ...planned[held],
+      item: foldItem(planned[held].item, entry.item),
+    };
+    planned.splice(position, 1);
+  }
 }
 
 function describeList(list: ContextList): { list: string; zone: string } {
@@ -1642,13 +1779,71 @@ function findSameProduct(
   const wanted = normalize(product);
   return (
     lines.find((line) => normalize(line.content) === wanted) ??
-    lines.find(
-      (line) =>
-        isFreeText(line) &&
-        FOLDED_AMOUNT.test(line.content) &&
-        normalize(line.content.replace(FOLDED_AMOUNT, '')) === wanted
-    )
+    lines.find((line) => fitsFoldedName(line, wanted))
   );
+}
+
+/**
+ * Every line of the list that the name fits, in list order (decision 50, plan
+ * 0260), in the two tiers {@link findSameProduct} reads: the lines of the
+ * whole name, or when there is none, the free text lines under the name with
+ * their folded amount taken off. A whole name still wins over a folded one, as
+ * plan 0246 W1 made it. Lines at 0 count, as core counts them; rejected lines
+ * do not, because the household already said no to them and core never meets
+ * one either.
+ */
+function findMatchingLines(lines: LineView[], product: string): LineView[] {
+  const wanted = normalize(product);
+  const open = lines.filter(
+    (line) => line.approvalStatus !== LineApprovalStatus.REJECTED
+  );
+  const whole = open.filter((line) => normalize(line.content) === wanted);
+  return whole.length > 0
+    ? whole
+    : open.filter((line) => fitsFoldedName(line, wanted));
+}
+
+/** A free text line whose name, its folded amount taken off, is `wanted`. */
+function fitsFoldedName(line: LineView, wanted: string): boolean {
+  return (
+    isFreeText(line) &&
+    FOLDED_AMOUNT.test(line.content) &&
+    normalize(line.content.replace(FOLDED_AMOUNT, '')) === wanted
+  );
+}
+
+/**
+ * Whether the product fits the line in either tier of
+ * {@link findMatchingLines}, which is what a `lineId` must name (decision 50):
+ * one of the lines the model could have been handed for that product.
+ */
+function fitsName(line: LineView, product: string): boolean {
+  const wanted = normalize(product);
+  return normalize(line.content) === wanted || fitsFoldedName(line, wanted);
+}
+
+/**
+ * An item that writes its amount into the name of a free text line: a weight
+ * or a volume with a number, as {@link lineEdit} folds it. Any other item
+ * leaves the name of the line it changes as it is.
+ */
+function foldsAmount(item: UpsertItem): boolean {
+  return (
+    item.unit !== undefined &&
+    item.unit !== 'UNIT' &&
+    item.quantity !== undefined
+  );
+}
+
+/**
+ * The name of a line as an item states it: a free text line's own name with
+ * the amount {@link freshLine} folded into it taken off, so an edit through
+ * {@link lineEdit} writes the new amount in its place.
+ */
+function nameOf(line: LineView): string {
+  return isFreeText(line) && FOLDED_AMOUNT.test(line.content)
+    ? line.content.replace(FOLDED_AMOUNT, '')
+    : line.content;
 }
 
 function mentionsProduct(line: LineView, item: string): boolean {

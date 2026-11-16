@@ -1055,17 +1055,49 @@ describe('CatalogPage', () => {
       expect(plusOf(fixture, RICE)?.hasAttribute('aria-disabled')).toBe(false);
     });
 
-    it('keeps the plus of a product held only at zero, which a press raises to one step', async () => {
+    it('switches the plus off for a product held only at zero, and the line is raised with its own stepper (decision 51)', async () => {
       const { fixture, lines } = await render('priced', {
         lines: [{ ...OIL_LINE, quantity: 0 }],
       });
 
-      expect(plusOf(fixture, OIL)?.disabled).toBe(false);
-      expect(switchedOff(plusOf(fixture, OIL))).toBe(false);
-      expect(rowOf(fixture, OIL).querySelector('.held-onlist')).toBeNull();
-      plusOf(fixture, OIL)?.click();
+      const plus = plusOf(fixture, OIL);
+      expect(switchedOff(plus)).toBe(true);
+      const held = rowOf(fixture, OIL).querySelector('.held');
+      const reason = held?.querySelector(
+        `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+      );
+      expect(reason?.textContent).toContain('catalog.held.atZero');
+      // No link: the list hides its lines at zero.
+      expect(held?.querySelector('a.held-onlist-link')).toBeNull();
+
+      plus?.click();
       await settle(fixture);
-      expect(lines.addLineResult).toHaveBeenCalledTimes(1);
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+
+      heldLines(fixture, OIL)[0]?.plus?.click();
+      await quiet(fixture);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1, 'UNIT');
+      expect(heldLines(fixture, OIL)[0]?.quantity).toBe('1');
+      // Above zero now, so the card says it is on the list, with its link.
+      expect(
+        rowOf(fixture, OIL).querySelector('a.held-onlist-link')
+      ).not.toBeNull();
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+    });
+
+    it('switches the plus off for a product held only on a line of another unit (decision 52 a)', async () => {
+      const { fixture, lines } = await render('priced', {
+        lines: [{ ...OIL_LINE, quantity: 0, unit: 'GRAM' }],
+      });
+
+      const plus = plusOf(fixture, OIL);
+      expect(switchedOff(plus)).toBe(true);
+      expect(
+        rowOf(fixture, OIL).querySelector('.held-onlist')?.textContent
+      ).toContain('catalog.held.atZero');
+      plus?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).not.toHaveBeenCalled();
     });
 
     it('shows under a row the lines of the chosen list that already hold the product, each with its quantity', async () => {

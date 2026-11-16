@@ -11,6 +11,7 @@ import {
   type AddChoiceOutcome,
   type AddOutcome,
   type AddUnitRefusal,
+  type LineUnit,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
 import {
@@ -143,6 +144,46 @@ export function toAddUnitRefusal(
     name: content === '' ? addedName : content,
     unit: oneOfOrNull(line['unit'], LINE_UNITS),
   };
+}
+
+/** The line a `line_unit_differs` refusal of an add names, as `details.line` carries it. */
+export interface RefusedLine {
+  readonly lineId: string;
+  readonly content: string;
+  readonly unit: LineUnit;
+  readonly quantity: number;
+}
+
+/**
+ * The line a product add's `line_unit_differs` refusal met (backend `0260`,
+ * section 3), or null for any other failure and for a bag that does not name all
+ * four fields in a shape this build reads (rule D4). Only a line known in full is
+ * returned, because its caller holds it as a saved line of the list.
+ */
+export function toRefusedLine(error: unknown): RefusedLine | null {
+  if (!(error instanceof GatewayError) || error.code !== 'line_unit_differs') {
+    return null;
+  }
+  const line = error.details?.['line'];
+  if (!isRecord(line)) {
+    return null;
+  }
+  const lineId = str(line['lineId']);
+  const content = str(line['content']);
+  const unit = oneOfOrNull(line['unit'], LINE_UNITS);
+  const quantity = line['quantity'];
+  if (
+    lineId === null ||
+    lineId === '' ||
+    content === null ||
+    unit === null ||
+    typeof quantity !== 'number' ||
+    !Number.isFinite(quantity) ||
+    quantity < 0
+  ) {
+    return null;
+  }
+  return { lineId, content, unit, quantity };
 }
 
 /**
