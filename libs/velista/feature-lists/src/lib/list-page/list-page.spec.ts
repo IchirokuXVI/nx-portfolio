@@ -2061,7 +2061,7 @@ describe('ListPage', () => {
         expect(fixture.componentInstance.composerNotice()).toBeNull();
       });
 
-      it('draws no row for a card a loaded line above zero holds (decision I)', async () => {
+      it('draws no row for a card a loaded line holds, at any amount (decision I)', async () => {
         const { fixture, lines } = await render({
           lines: MILKS,
           items: [ITEM_A],
@@ -2070,7 +2070,11 @@ describe('ListPage', () => {
         expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-a'])).toBe(
           false
         );
+        // A line kept at zero is raised where it stands, so no row is drawn either.
         expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-b'])).toBe(
+          false
+        );
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-z'])).toBe(
           true
         );
         fixture.detectChanges();

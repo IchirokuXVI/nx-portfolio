@@ -601,7 +601,7 @@ describe('LineStore', () => {
       ).toBe(false);
     });
 
-    it('draws no row for a product a loaded line above zero holds (velista 0185, decision I)', async () => {
+    it('draws no row for a product a loaded line holds, at any amount (velista 0185, decision I)', async () => {
       const { store } = await build([
         milk(),
         line('fruit', {
@@ -618,16 +618,18 @@ describe('LineStore', () => {
       );
       // Whatever its name, and also among other products.
       expect(store.drawsBeforeAnswer(LIST, 'Milk', ['item-milk'])).toBe(false);
-      // A line at zero is raised, and a product no line holds is new.
+      // A line kept at zero is raised where it stands, so no row is drawn for it
+      // either; a product no line holds is new.
       expect(store.drawsBeforeAnswer(LIST, 'Plátanos', ['item-bananas'])).toBe(
-        true
+        false
       );
       expect(store.drawsBeforeAnswer(LIST, 'Pan', ['item-bread'])).toBe(true);
     });
 
-    it('leaves no placeholder behind when an optimistic add is answered as a raise', async () => {
-      // A product add on a line at zero draws at once and meets that line (backend
-      // 0091, 0260): the placeholder goes and the held line takes the units.
+    it('draws no placeholder for a product add onto a line kept at zero, which is raised in place', async () => {
+      // A product add on a line at zero meets that line (backend 0091, 0260), hidden
+      // or not (velista 0192): no row is drawn that would leave again, and the held
+      // line takes the units.
       const { store, lines } = await build([
         milk({ quantity: 0 }),
         line('bread', { content: 'Pan', position: 2 }),
@@ -644,7 +646,7 @@ describe('LineStore', () => {
         ['item-milk'],
         false
       );
-      expect(store.linesIn(LIST)).toHaveLength(3);
+      expect(store.linesIn(LIST)).toHaveLength(2);
       await adding;
 
       expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['milk', 'bread']);

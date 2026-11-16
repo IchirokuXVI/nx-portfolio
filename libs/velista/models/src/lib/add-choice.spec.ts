@@ -146,8 +146,11 @@ describe('addMayMeetProduct (velista 0185, decision I)', () => {
     expect(addMayMeetProduct(held, ['apples', 'bananas'])).toBe(true);
   });
 
-  it('does not meet a line at zero, a turned down line, a partial set or nothing', () => {
-    expect(addMayMeetProduct(held, ['bread'])).toBe(false);
+  it('meets a line kept at zero, which the add raises in place of a new row', () => {
+    expect(addMayMeetProduct(held, ['bread'])).toBe(true);
+  });
+
+  it('does not meet a turned down line, a partial set or nothing', () => {
     expect(addMayMeetProduct(held, ['milk'])).toBe(false);
     expect(addMayMeetProduct(held, ['bananas', 'pears'])).toBe(false);
     expect(addMayMeetProduct(held, [])).toBe(false);

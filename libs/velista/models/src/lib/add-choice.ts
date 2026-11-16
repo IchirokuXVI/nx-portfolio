@@ -156,16 +156,17 @@ export function addMayMeetLine(
 }
 
 /**
- * Whether a product add is likely to meet a line the list already asks for
- * (velista `0185`, decision I): a loaded line, not turned down, with an amount
- * above zero, holds every product of the add, alone or among others. The server
- * then adds nothing (backend `0260`, A1 and R5), so no row is drawn before it
- * answers. A line at zero is raised instead, which draws no new row either way.
+ * Whether a product add is likely to land on a line the list already holds
+ * (velista `0185`, decision I): a loaded line, not turned down, holds every product
+ * of the add, alone or among others, at any amount. A line above zero is met and the
+ * server adds nothing (backend `0260`, A1 and R5); a line kept at zero, hidden or
+ * not, is raised where it stands. Neither makes a new line, so no row is drawn
+ * before the server answers: a drawn row would only be taken away again.
  *
  * A prediction, as {@link addMayMeetLine} is. The server's answer always wins.
  */
 export function addMayMeetProduct(
-  lines: readonly Pick<Line, 'itemIds' | 'quantity' | 'approvalStatus'>[],
+  lines: readonly Pick<Line, 'itemIds' | 'approvalStatus'>[],
   itemIds: readonly string[]
 ): boolean {
   if (itemIds.length === 0) {
@@ -174,7 +175,6 @@ export function addMayMeetProduct(
   return lines.some(
     (line) =>
       line.approvalStatus !== 'REJECTED' &&
-      line.quantity > 0 &&
       itemIds.every((id) => line.itemIds.includes(id))
   );
 }
