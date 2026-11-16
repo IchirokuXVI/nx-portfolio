@@ -740,40 +740,43 @@ export interface AddLineRequest {
   /** The same flag {@link AddLinesItem} carries. */
   named?: boolean;
   /**
-   * The caller can ask the person which line a typed name means (plan 0228,
-   * section 1; plan 0260 R3). An add that meets a wanted line writes nothing
-   * and answers `ALREADY_ON_LIST`, so the question is asked only when the name
-   * is the name of two or more lines that hold a product and every one is at
-   * zero: the add is refused with `line_add_needs_choice` and
-   * {@link LineAddNeedsChoiceDetails}. Absent or false, the earliest of them is
-   * raised. It is never asked about a unit.
-   *
-   * Read on a free text add only, as are {@link intoLineId} and
-   * {@link newLine}: an add that carries products or a group ignores them.
+   * The caller can ask the person which line an add means (plan 0228; the
+   * owner, 2026-11-16). An add that meets two or more lines, wanted and kept
+   * alike, is then refused with `line_add_needs_choice` and
+   * {@link LineAddNeedsChoiceDetails} naming all of them, and nothing is
+   * written. Absent or false, the add writes nothing and answers
+   * `ALREADY_ON_LIST` with all of them in `alreadyOnList`, never a guess at
+   * which to raise. It is never asked about a unit, and it is read on a
+   * product add too.
    */
   askIfAmbiguous?: boolean;
   /**
-   * The line the person chose (plan 0228). A line of the same list that is not
-   * `REJECTED`; any other id is the line not found refusal, and the add never
+   * The line the person chose, the answer to `line_add_needs_choice` (plan
+   * 0228; the owner, 2026-11-16), on a free text add or a product add. It must
+   * be one of the lines the add meets; any other id, a line of another list
+   * and a `REJECTED` line are the line not found refusal, and the add never
    * falls back to a new line. Wanted, the add writes nothing and answers
-   * `ALREADY_ON_LIST`; at zero, it is raised by one step of its own unit when
-   * that is not the unit of the add (plan 0260 R2, R4). Refused beside
-   * `newLine: true`.
+   * `ALREADY_ON_LIST`; at zero or below, it is raised by the add's amount, or
+   * by one step of its own unit when that is not the unit of the add (plan
+   * 0260 R2, R4). Refused beside `newLine: true`.
    */
   intoLineId?: string;
   /**
    * The person chose a new line over the lines that hold a product under this
-   * name (plan 0228). A free text line of the same name still meets the add,
-   * because a list holds one free text line per name (plan 0091). It never
-   * creates beside a line of another unit (plan 0260 U2).
+   * typed name (plan 0228). A free text line of the same name still meets the
+   * add, because a list holds one free text line per name (plan 0091). Refused
+   * as a validation error under `newLine` on an add that carries products or a
+   * group (the owner, 2026-11-16): a second line of one product in one unit is
+   * what plan 0260 prevents.
    */
   newLine?: boolean;
 }
 
 /**
  * One line a `line_add_needs_choice` refusal offers (plan 0228, section 3),
- * as it stood when the add was refused. The client draws the product from its
- * own catalog read of {@link itemIds}.
+ * as it stood when the add was refused, and what choosing it does (the owner,
+ * 2026-11-16). The client draws the product from its own catalog read of
+ * {@link itemIds}.
  */
 export interface LineAddChoice {
   lineId: string;
@@ -782,19 +785,34 @@ export interface LineAddChoice {
   quantity: number;
   /**
    * What {@link quantity} counts (plan 0246, section 3.1), the line's own, so
-   * a client can say what each line becomes: zero to one step of this unit
-   * (plan 0260 R3).
+   * a client can say what each line becomes in its own unit.
    */
   unit: LineUnit;
   itemIds: string[];
   productGroupId: string | null;
   approvalStatus: LineApprovalStatus;
+  /**
+   * What the add answers when this line is chosen (the owner, 2026-11-16).
+   * `ALREADY_ON_LIST` for a line above zero: nothing changes, and the client
+   * only scrolls to the line and marks it. `RAISED` for a line at zero or
+   * below: it is raised to {@link resultingQuantity}.
+   */
+  outcome: LineAddChoiceOutcome;
+  /**
+   * The line's quantity once it is chosen, in {@link unit}: {@link quantity}
+   * itself for `ALREADY_ON_LIST`, and the raised amount for `RAISED`.
+   */
+  resultingQuantity: number;
 }
+
+/** What choosing one line of a `line_add_needs_choice` refusal does. */
+export type LineAddChoiceOutcome = 'RAISED' | 'ALREADY_ON_LIST';
 
 /**
  * The `details` a `line_add_needs_choice` refusal carries (plan 0228,
- * section 3): the candidate lines in list position order, at most
- * {@link LINE_ADD_CHOICE_MAX} of them.
+ * section 3): every line the add meets, wanted and kept alike (the owner,
+ * 2026-11-16), in list position order, at most {@link LINE_ADD_CHOICE_MAX} of
+ * them.
  */
 export interface LineAddNeedsChoiceDetails {
   lines: LineAddChoice[];
@@ -813,7 +831,8 @@ export const ADD_LINE_OUTCOMES = [
 /**
  * What an add did (plan 0260, R1). `CREATED` made a line at the add's amount.
  * `RAISED` met only a line kept at zero and raised it (R2). `ALREADY_ON_LIST`
- * met a wanted line and wrote nothing (A1).
+ * met a wanted line, or two or more lines it could not choose between, and
+ * wrote nothing (A1; the owner, 2026-11-16).
  */
 export type AddLineOutcome = (typeof ADD_LINE_OUTCOMES)[number];
 
@@ -840,9 +859,12 @@ export interface AddLineResult {
   merged: boolean;
   outcome: AddLineOutcome;
   /**
-   * Every wanted line the add met and left as it was, in list position order,
-   * at most {@link LINE_ADD_CHOICE_MAX}. Empty unless {@link outcome} is
-   * `ALREADY_ON_LIST`; then {@link line} is its first.
+   * Every line the add met and left as it was, in list position order, at
+   * most {@link LINE_ADD_CHOICE_MAX}. Empty unless {@link outcome} is
+   * `ALREADY_ON_LIST`; then {@link line} is its first. One entry is a wanted
+   * line. Two or more are every line the add met, lines at zero included,
+   * when the add could not ask which one (no `askIfAmbiguous`, or a batch
+   * item): nothing was written for it (the owner, 2026-11-16).
    */
   alreadyOnList: LineView[];
 }

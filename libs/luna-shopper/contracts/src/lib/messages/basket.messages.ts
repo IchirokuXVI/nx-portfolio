@@ -1115,7 +1115,10 @@ export interface BasketRowResult {
   /**
    * What the add did (plan 0260, section 2). Set by the line add alone and
    * absent on every other row write. On `ALREADY_ON_LIST` the entries name
-   * every line the add met, so the shopping list can find the rows to mark.
+   * every line the add met that is a row, so the shopping list can find the
+   * rows to mark. Two or more matches name lines at zero too when the add
+   * could not ask (the owner, 2026-11-16), and one with no buy that keeps it
+   * a row has no entry.
    */
   addOutcome?: AddLineOutcome;
 }

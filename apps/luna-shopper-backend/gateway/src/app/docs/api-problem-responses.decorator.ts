@@ -78,12 +78,11 @@ export interface ProblemResponseOptions {
    */
   lineMerge?: boolean;
   /**
-   * The route adds a line, so a typed name that two or more lines hold with a
-   * product can answer 409 with a code of its own when the body set
-   * `askIfAmbiguous` (plan 0228). It is told apart from a plain conflict
-   * because the client asks the person which line, from `details.lines`. It
-   * is asked only when every such line is at zero (plan 0260 R3), and never
-   * about a unit.
+   * The route adds a line, so an add that meets two or more lines, wanted or
+   * at zero, can answer 409 with a code of its own when the body set
+   * `askIfAmbiguous` (plan 0228; the owner, 2026-11-16). It is told apart
+   * from a plain conflict because the client asks the person which line,
+   * from `details.lines`. It is never asked about a unit.
    */
   lineAddChoice?: boolean;
   /**
