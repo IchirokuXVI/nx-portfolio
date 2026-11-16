@@ -216,6 +216,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   says why and a link: "Ya está en Compra semanal." and "Ver en la lista", which opens the list
   scrolled to that line. The message is real text with the app's info icon. The list's lines of
   that product stay under the card, each with its own stepper, and those steppers work.
+- **45. A refusal for another unit shows the line it names** (2026-11-16): scrolled to and
+  marked as an add already on the list is, or the sentence alone for a line the page does not
+  draw. Section 4.
 
 ### The writer's, open to the owner
 
@@ -256,6 +259,9 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - **I. No optimistic row for a product a loaded wanted line holds.** `drawsBeforeAnswer` answers
   true for every product add today; it now answers false when a loaded wanted line of the list
   holds every product of the add, so a row that would vanish is never drawn.
+  > **Amended 2026-11-16, from review:** any loaded line, not turned down, that holds every
+  > product, at any amount. A kept line at 0 that holds it is raised where it stands (hidden or
+  > not, velista `0192`), so a row drawn for it would vanish too.
 
 ## 1. The composer
 
@@ -289,8 +295,8 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
 - `BasketRowResult` in velista gains `addOutcome` with the same three values, mapped in
   `basket-mappers.ts`, absent on every other write.
 - `drawsBeforeAnswer` (decision I): `addMayMeetLine` gains a product twin,
-  `addMayMeetProduct(lines, itemIds)`, true when a loaded line, not rejected, with quantity above 0,
-  holds every id.
+  `addMayMeetProduct(lines, itemIds)`, true when a loaded line, not rejected, at any amount, holds
+  every id (decision I as amended).
 - The in memory fakes follow backend `0260` section 1: a wanted line met answers `alreadyOnList`
   and writes nothing; a kept line met is raised by the add's amount; two or more kept candidates of
   a typed name with `askIfAmbiguous` refuse with `line_add_needs_choice`; a product add meets the
@@ -341,6 +347,13 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   sentence.
 - **The pages.** They do not call `sent()`, remove an optimistic row if one was drawn, and set the
   notice. The notice clears on the next `queryChanged`, the next submit, and `noticeDismissed`.
+- **The line it names is shown** (owner ruling 45, 2026-11-16). The sentence names the line
+  already on the list, and the page also scrolls to that line and marks it, exactly as an add
+  already on the list does (A1): the same took mark, the same scroll to the centre when the row
+  is out of view, on the zone list and on the shopping list. A line the page does not draw (a
+  filter, a collapsed section, a line past the loaded pages, or a line hidden at 0 by velista
+  `0192`) is not hunted: the sentence under the field alone. The sentence stays under the field
+  in both cases, because it carries the reason and the words and focus came back there.
 - **The catalog.** A refused catalog plus takes back what it drew and reports through
   `catalog.add.failed` with the sentence of the table below in its place.
 

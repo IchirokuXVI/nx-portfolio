@@ -2857,6 +2857,12 @@ export class BasketPage {
             { name: refusal.name, list: this._listNameOf(listId) }
           )
         );
+        // The line the sentence names is marked and brought into view, as an add
+        // already on the list does (velista `0185`, owner ruling 45 of 2026-11-16).
+        // No drawn row holds it (a filter, a line at 0): the sentence alone.
+        if (refusal.lineId !== null) {
+          this._markTook([refusal.lineId]);
+        }
         return;
       }
       this._say(

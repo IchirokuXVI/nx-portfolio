@@ -3953,6 +3953,103 @@ describe('the composer and the list it adds to', () => {
           );
         });
 
+        /** Owner ruling 45 of 2026-11-16: the refusal shows the line it names. */
+        async function refused(lineId: string) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockImplementationOnce(() => {
+            rendered.store.error.set(
+              new GatewayError({
+                code: 'line_unit_differs',
+                status: 409,
+                correlationId: 'ref',
+                details: {
+                  line: {
+                    lineId,
+                    content: 'Leche entera',
+                    unit: 'MILLILITER',
+                    quantity: 1500,
+                  },
+                  unit: 'UNIT',
+                  index: null,
+                },
+              })
+            );
+            return Promise.resolve(null);
+          });
+          const card = document.createElement('button');
+          document.body.append(card);
+          composer(rendered.fixture).submitted.emit({
+            content: 'Leche',
+            quantity: 1,
+            unit: 'UNIT',
+            itemIds: ['i-milk'],
+            named: false,
+            anchor: card,
+          });
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          card.remove();
+          return rendered;
+        }
+
+        it('marks and scrolls to the line a refusal for another unit names', async () => {
+          const original = Element.prototype.scrollIntoView;
+          const scrolled: string[] = [];
+          Element.prototype.scrollIntoView = function (this: HTMLElement) {
+            scrolled.push(this.dataset['lineIds'] ?? '');
+          };
+          const rect = jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineIds'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+          try {
+            const { fixture } = await refused('zl-milk');
+
+            const host = fixture.nativeElement as HTMLElement;
+            const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+            expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+            expect(scrolled).toEqual(['zl-milk']);
+            expect(
+              host.querySelector('lib-line-composer .notice-text')?.textContent
+            ).toContain('basket.error.addUnitDiffers.MILLILITER');
+          } finally {
+            Element.prototype.scrollIntoView = original;
+            rect.mockRestore();
+          }
+        });
+
+        it('says the refusal alone when no drawn row holds the line it names', async () => {
+          const original = Element.prototype.scrollIntoView;
+          const scrolled: string[] = [];
+          Element.prototype.scrollIntoView = function (this: HTMLElement) {
+            scrolled.push(this.dataset['lineIds'] ?? '');
+          };
+          try {
+            const { fixture } = await refused('zl-elsewhere');
+
+            const host = fixture.nativeElement as HTMLElement;
+            expect(host.querySelector('.took, .is-took')).toBeNull();
+            expect(scrolled).toEqual([]);
+            expect(
+              host.querySelector('lib-line-composer .notice-text')?.textContent
+            ).toContain('basket.error.addUnitDiffers.MILLILITER');
+          } finally {
+            Element.prototype.scrollIntoView = original;
+          }
+        });
+
         it('says it under the field when no drawn row holds the line', async () => {
           const { fixture } = await met(['zl-elsewhere']);
 

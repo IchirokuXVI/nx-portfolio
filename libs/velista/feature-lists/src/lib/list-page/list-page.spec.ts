@@ -2139,14 +2139,14 @@ describe('ListPage', () => {
       );
     });
 
-    const unitRefusal = () =>
+    const unitRefusal = (lineId = 'ln-whole') =>
       new GatewayError({
         code: 'line_unit_differs',
         status: 409,
         correlationId: 'ref',
         details: {
           line: {
-            lineId: 'ln-whole',
+            lineId,
             content: 'Leche entera',
             unit: 'MILLILITER',
             quantity: 2,
@@ -2155,6 +2155,86 @@ describe('ListPage', () => {
           index: null,
         },
       });
+
+    /** Owner ruling 45 of 2026-11-16: the refusal shows the line it names. */
+    describe('a refusal for another unit shows the line it names', () => {
+      it('marks the line and scrolls to it, and keeps the sentence under the field', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+          jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineId'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+
+          sendCard(fixture);
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const page = fixture.componentInstance;
+          expect([...page.tookLines()]).toEqual(['ln-whole']);
+          expect(
+            (
+              query(
+                fixture,
+                '[data-line-id="ln-whole"] lib-quantity-stepper'
+              ) as HTMLElement
+            ).classList.contains('is-took')
+          ).toBe(true);
+          expect(scrolled).toEqual(['ln-whole']);
+          expect(page.composerNotice()).toBe(
+            'list.error.addUnitDiffers.MILLILITER'
+          );
+        } finally {
+          Element.prototype.scrollIntoView = original;
+          jest.restoreAllMocks();
+        }
+      });
+
+      it('says the sentence alone for a line the page does not draw, hidden at 0', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({
+            state: 'failed',
+            error: unitRefusal('ln-other'),
+          });
+
+          sendCard(fixture);
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          expect(query(fixture, '[data-line-id="ln-other"]')).toBeNull();
+          expect(scrolled).toEqual([]);
+          expect(fixture.componentInstance.composerNotice()).toBe(
+            'list.error.addUnitDiffers.MILLILITER'
+          );
+        } finally {
+          Element.prototype.scrollIntoView = original;
+        }
+      });
+    });
+
     const sendCard = (fixture: ComponentFixture<ListPage>) =>
       (
         fixture.debugElement.query(By.directive(LineComposer))

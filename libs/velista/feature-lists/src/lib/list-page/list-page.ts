@@ -2155,6 +2155,13 @@ export class ListPage {
             { name: refusal.name }
           )
         );
+        // The line the sentence names is marked and brought into view, as an add
+        // already on the list does (owner ruling 45 of 2026-11-16). A line the page
+        // does not draw (a filter, a section shut, a line hidden at 0): the sentence
+        // alone.
+        if (refusal.lineId !== null) {
+          this._markTook([refusal.lineId]);
+        }
         return;
       }
       if (drawn) {
