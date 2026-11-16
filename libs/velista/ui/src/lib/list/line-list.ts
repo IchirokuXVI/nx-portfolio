@@ -12,14 +12,14 @@ import {
 import { LineRow, type LineRowAction } from './line-row';
 
 /**
- * The lines, in order, and the one live region they all announce through.
+ * The lines, in order.
  *
- * ## Why the live region is here and not on the row
+ * ## No live region here
  *
- * There is exactly one of it. A live region per row would mean twelve regions on a
- * loaded list, and a screen reader given twelve competing polite regions announces them
- * in an order nobody chose. One region, owned by the thing that owns the collection, is
- * the only arrangement that produces a single sentence per event (section 7).
+ * The page that draws these lists owns the one polite region they are spoken about
+ * through (velista `0192`). A region per row would mean twelve competing regions on a
+ * loaded list, and a region per list was removed together with its list in the render
+ * that emptied it, so the sentence about the last row was never heard.
  *
  * ## Rows are tracked by id
  *
@@ -32,15 +32,6 @@ import { LineRow, type LineRowAction } from './line-row';
   selector: 'lib-line-list',
   imports: [LineRow],
   template: `
-    <!--
-      One polite region for the whole list. Failed and overwritten notices are
-      announced here once and are not repeated on a re-render: the container sets the
-      message and clears it.
-    -->
-    <p aria-atomic="true" aria-live="polite" class="live">
-      {{ announcement() }}
-    </p>
-
     <ul class="lines">
       @for (line of lines(); track line.id) {
         <li
@@ -69,9 +60,6 @@ import { LineRow, type LineRowAction } from './line-row';
 })
 export class LineList {
   readonly lines = input.required<readonly LineRowVm[]>();
-
-  /** What the live region currently says. Empty announces nothing. */
-  readonly announcement = input('');
 
   /**
    * The line a link asked for, marked while somebody finds it (plan 0032, section 8).

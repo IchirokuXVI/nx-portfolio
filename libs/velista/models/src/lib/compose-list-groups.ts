@@ -41,6 +41,13 @@ export interface ListGroupsInput<T extends ListViewLine> {
    * while the first read is out and after it failed.
    */
   readonly tripsReady: boolean;
+  /**
+   * Whether the first heads read for this list has not answered yet (velista `0192`,
+   * owner ruling of 2026-11-16). While it is out, no line at 0 or less is drawn in To
+   * buy, so a bought line at 0 does not flash there and leave once the trips arrive.
+   * Absent reads as false.
+   */
+  readonly tripsLoading?: boolean;
   /** The keys of the trips somebody has open. */
   readonly openKeys: ReadonlySet<string>;
   /**
@@ -101,9 +108,10 @@ export type ListGroupsView<T extends ListViewLine> =
  *   above 0 puts it back in To buy. The amount read is the stored one, so a run of
  *   stepper presses that is still open keeps its row (velista `0188`, decision H).
  * - A line at zero with purchases leaves To buy only once a heads read succeeded and
- *   named at least one trip (velista `0095`, section 5). Before the heads arrive, after
- *   they failed, and when the list has no trip at all, it stays in To buy, where it
- *   can be raised.
+ *   named at least one trip (velista `0095`, section 5). After the heads failed, and
+ *   when the list has no trip at all, it stays in To buy, where it can be raised.
+ *   While the first heads read is out it is not drawn there at all (velista `0192`,
+ *   owner ruling of 2026-11-16): it would only flash and leave once the trips arrive.
  *
  * ## The due lines (velista `0089`, section 2)
  *
@@ -151,7 +159,11 @@ export function composeListGroups<T extends ListViewLine>(
 
     const isWanted =
       facts.quantity > 0 && !(facts.claimed && heldByLive.has(line.id));
-    const isUnheld = !tripsHold && facts.quantity <= 0 && facts.boughtCount > 0;
+    const isUnheld =
+      !tripsHold &&
+      input.tripsLoading !== true &&
+      facts.quantity <= 0 &&
+      facts.boughtCount > 0;
     if (!isWanted && !isUnheld) {
       continue;
     }

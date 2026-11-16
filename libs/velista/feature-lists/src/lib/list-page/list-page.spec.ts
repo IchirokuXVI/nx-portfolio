@@ -102,6 +102,7 @@ import {
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { BehaviorSubject } from 'rxjs';
+import { LineSheetEvents } from '../line-detail-sheet/line-sheet-events';
 import { ListPage } from './list-page';
 
 const ZONE_ID = '8f14e45f-ceea-4e2c-9e0b-9c1a6a3f2b71';
@@ -219,8 +220,11 @@ interface Options {
   readonly items?: readonly CatalogItem[];
   /** Products whose read failed (velista `0145`, section 7). */
   readonly failedItems?: readonly string[];
-  /** The first page of trips, or a failure (velista `0088`). None by default. */
-  readonly trips?: TripPage | 'fail';
+  /**
+   * The first page of trips, or a failure (velista `0088`), or `'pending'` for a read
+   * that never answers. None by default.
+   */
+  readonly trips?: TripPage | 'fail' | 'pending';
   /** Each trip's rows, by trip id. */
   readonly tripRows?: Readonly<Record<string, readonly TripRow[]>>;
   /** What the list suggests, or a failure (velista `0089`). Nothing by default. */
@@ -319,6 +323,9 @@ async function render(options: Options = {}): Promise<{
       tripCalls.heads += 1;
       if (options.trips === 'fail') {
         throw new Error('offline');
+      }
+      if (options.trips === 'pending') {
+        return new Promise<never>(() => undefined);
       }
       return options.trips ?? { live: [], items: [], nextCursor: null };
     },
@@ -1353,18 +1360,27 @@ describe('ListPage', () => {
         expect(fixture.componentInstance.announcement()).toBe('');
       });
 
-      it('says the sentence again when the same line is lowered to 0 a second time', async () => {
-        const { fixture } = await three();
-        jest.useFakeTimers();
-        const page = fixture.componentInstance;
-        const region = () =>
-          (fixture.nativeElement as HTMLElement)
-            .querySelector('lib-line-list p.live')
-            ?.textContent?.trim();
+      /** The text of every polite region on the page, trimmed. */
+      const politeRegions = (fixture: ComponentFixture<ListPage>) =>
+        Array.from(
+          (fixture.nativeElement as HTMLElement).querySelectorAll(
+            '[aria-live="polite"]'
+          )
+        ).map((region) => region.textContent?.trim() ?? '');
+      const region = (fixture: ComponentFixture<ListPage>) =>
+        (fixture.nativeElement as HTMLElement)
+          .querySelector('main > p.live')
+          ?.textContent?.trim();
 
+      /**
+       * Lowers ln-2 to 0, raises it again through the search, and lowers it a second
+       * time, so the same sentence waits for its gap in an emptied region.
+       */
+      const repeatWaiting = (fixture: ComponentFixture<ListPage>) => {
+        const page = fixture.componentInstance;
         page.stepQuantity(lower('ln-2', 1));
         settle(fixture);
-        expect(region()).toBe('list.line.hiddenAtZero');
+        expect(region(fixture)).toBe('list.line.hiddenAtZero');
 
         page.onComposerQuery('banan');
         fixture.detectChanges();
@@ -1384,10 +1400,197 @@ describe('ListPage', () => {
         // so a screen reader hears a change.
         fixture.detectChanges();
         fixture.detectChanges();
-        expect(region()).toBe('');
+        expect(region(fixture)).toBe('');
+      };
+
+      it('says the sentence again when the same line is lowered to 0 a second time', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+
+        repeatWaiting(fixture);
         jest.advanceTimersByTime(1_000);
         fixture.detectChanges();
-        expect(region()).toBe('list.line.hiddenAtZero');
+        expect(region(fixture)).toBe('list.line.hiddenAtZero');
+      });
+
+      it('drops the waiting repeat when the page goes away inside the gap', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+
+        repeatWaiting(fixture);
+        fixture.destroy();
+        jest.advanceTimersByTime(1_000);
+
+        expect(fixture.componentInstance.announcement()).toBe('');
+      });
+
+      it('drops the waiting repeat for a newer sentence inside the gap', async () => {
+        const { fixture } = await three();
+        jest.useFakeTimers();
+        const page = fixture.componentInstance;
+        page.stepQuantity(lower('ln-1', 2));
+        settle(fixture);
+        expect(page.announcement()).toBe('list.line.hiddenAtZero');
+
+        // Both runs are written on the same beat: the first is the same sentence
+        // again and waits for its gap, the second is said at once.
+        const set = jest.spyOn(page['_announcement'], 'set');
+        page.stepQuantity(lower('ln-2', 1));
+        page.stepQuantity(lower('ln-3', 3));
+        settle(fixture);
+        const said = set.mock.calls.length;
+        expect(page.announcement()).toBe('list.line.hiddenAtZero');
+
+        jest.advanceTimersByTime(1_000);
+        expect(set.mock.calls.length).toBe(said);
+      });
+
+      it('drops the waiting repeat when another message is said inside the gap', async () => {
+        const { fixture, trips } = await three();
+        jest.useFakeTimers();
+        jest
+          .spyOn(trips, 'loadMore')
+          .mockResolvedValue({ state: 'failed', added: 0 } as never);
+        const page = fixture.componentInstance;
+
+        repeatWaiting(fixture);
+        await page.loadOlderTrips();
+        expect(page.announcement()).toBe('list.trips.olderFailed');
+
+        jest.advanceTimersByTime(1_000);
+        fixture.detectChanges();
+        expect(page.announcement()).toBe('list.trips.olderFailed');
+        expect(region(fixture)).toBe('list.trips.olderFailed');
+      });
+
+      it('says the sentence when the last row a view setting left is lowered', async () => {
+        const { fixture, view } = await render({
+          lines: [line('ln-1', { content: 'Bananas', quantity: 1 })],
+        });
+        view.setOrder('alpha');
+        fixture.detectChanges();
+        // The region is there before anything is said, so its text is a change.
+        expect(politeRegions(fixture)).toContain('');
+        jest.useFakeTimers();
+
+        fixture.componentInstance.stepQuantity(lower('ln-1', 1));
+        settle(fixture);
+
+        expect(query(fixture, '.state-title')?.textContent?.trim()).toBe(
+          'list.view.none'
+        );
+        expect(
+          politeRegions(fixture).filter(
+            (text) => text === 'list.line.hiddenAtZero'
+          )
+        ).toHaveLength(1);
+      });
+
+      describe('from the line sheet (velista 0192, owner ruling of 2026-11-16)', () => {
+        /** The sheet's accepted save to 0, as the store and the sheet report it. */
+        const savedToZero = (
+          fixture: ComponentFixture<ListPage>,
+          lines: FakeLineStore,
+          lineId: string
+        ) => {
+          lines.set(
+            lines
+              .linesIn(LIST_ID)
+              .map((held) =>
+                held.id === lineId ? { ...held, quantity: 0, version: 2 } : held
+              )
+          );
+          fixture.detectChanges();
+          TestBed.inject(LineSheetEvents).lowered(lineId);
+          fixture.detectChanges();
+          fixture.detectChanges();
+        };
+        const closeSheet = (
+          fixture: ComponentFixture<ListPage>,
+          lineId: string
+        ) => {
+          (document.activeElement as HTMLElement | null)?.blur();
+          TestBed.inject(LineSheetEvents).closed(lineId);
+          fixture.detectChanges();
+          fixture.detectChanges();
+        };
+
+        it('says the sentence once, and focus that went back to the gone row moves to the next row', async () => {
+          const { fixture, lines } = await three();
+          rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row')?.focus();
+          fixture.componentInstance.openLine('ln-2');
+
+          savedToZero(fixture, lines, 'ln-2');
+
+          expect(rowOf(fixture, 'ln-2')).toBeNull();
+          expect(fixture.componentInstance.announcement()).toBe(
+            'list.line.hiddenAtZero'
+          );
+          expect(region(fixture)).toBe('list.line.hiddenAtZero');
+
+          closeSheet(fixture, 'ln-2');
+          expect(document.activeElement).toBe(
+            rowOf(fixture, 'ln-3')?.querySelector('.row')
+          );
+
+          // Said once: the closing sheet says nothing more.
+          expect(fixture.componentInstance.announcement()).toBe(
+            'list.line.hiddenAtZero'
+          );
+        });
+
+        it('moves focus to the previous row, else the heading, when no row follows', async () => {
+          const { fixture, lines } = await render({
+            lines: [line('ln-1', { quantity: 1 })],
+          });
+          rowOf(fixture, 'ln-1')?.querySelector<HTMLElement>('.row')?.focus();
+          fixture.componentInstance.openLine('ln-1');
+
+          savedToZero(fixture, lines, 'ln-1');
+          closeSheet(fixture, 'ln-1');
+
+          expect(document.activeElement).toBe(
+            (fixture.nativeElement as HTMLElement).querySelector(
+              'lib-page-header h1'
+            )
+          );
+        });
+
+        it('says nothing and moves no focus when the save did not lower the line', async () => {
+          const { fixture } = await three();
+          rowOf(fixture, 'ln-2')?.querySelector<HTMLElement>('.row')?.focus();
+          fixture.componentInstance.openLine('ln-2');
+
+          // A failed save tells the page nothing; the sheet just closes.
+          closeSheet(fixture, 'ln-2');
+
+          expect(fixture.componentInstance.announcement()).toBe('');
+          expect(document.activeElement).toBe(document.body);
+        });
+
+        it('says nothing for a sheet opened from the search, whose row stays drawn', async () => {
+          const { fixture, lines } = await three();
+          const page = fixture.componentInstance;
+          page.onComposerQuery('banan');
+          fixture.detectChanges();
+          page.openLine('ln-2');
+
+          savedToZero(fixture, lines, 'ln-2');
+
+          expect(rowOf(fixture, 'ln-2')).not.toBeNull();
+          expect(page.announcement()).toBe('');
+        });
+      });
+
+      it('says it through one polite region of its own, outside the lists', async () => {
+        const { fixture } = await three();
+
+        expect(
+          (fixture.nativeElement as HTMLElement).querySelectorAll(
+            'lib-line-list > [aria-live]'
+          )
+        ).toHaveLength(0);
+        expect(region(fixture)).toBe('');
       });
 
       it('decides after the write when a unit correction held the step back', async () => {
@@ -3578,6 +3781,19 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
     ]);
   });
 
+  it('draws no line at 0 in To buy while the trips are loading, and keeps the due rows (velista 0192, owner ruling)', async () => {
+    const loading = await suggested({ trips: 'pending', due: 'fail' });
+    expect(rows(loading.fixture).map((row) => row.id)).toEqual(['bread']);
+
+    const withDue = await suggested({ trips: 'pending' });
+    expect(dueRows(withDue.fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'eggs',
+      'yogurt',
+    ]);
+    expect(lists(withDue.fixture)).toEqual([['bread']]);
+  });
+
   it('adds the suggested amount through the reel write, and the row goes at once (test 6)', async () => {
     const { fixture, lines } = await suggested();
 
@@ -3634,6 +3850,49 @@ describe('ListPage: the lines the list suggests (velista 0089)', () => {
       query(fixture, '[data-due-line-id="eggs"] .step.minus')
     );
     expect(fixture.componentInstance.announcement()).toBe('');
+  });
+
+  it('says the sentence for a line lowered to 0 into a due row past the few drawn, and focuses the next row (velista 0192)', async () => {
+    const { fixture } = await suggested({
+      lines: [
+        line('bread', { content: 'Bread', position: 1, quantity: 2 }),
+        line('coffee', { content: 'Coffee', position: 2, ...bought }),
+        line('yogurt', { content: 'Yogurt', position: 3, ...bought }),
+        line('butter', { content: 'Butter', position: 4, ...bought }),
+        line('eggs', { content: 'Eggs', position: 5, quantity: 1 }),
+        line('milk', { content: 'Milk', position: 6, quantity: 3 }),
+      ],
+      due: [due('coffee'), due('yogurt'), due('butter'), due('eggs')],
+    });
+    expect(lists(fixture)[0]).toEqual(['bread', 'eggs', 'milk']);
+    jest.useFakeTimers();
+    try {
+      query(fixture, 'li.line[data-line-id="eggs"] .step.minus')?.focus();
+
+      fixture.componentInstance.stepQuantity({
+        lineId: 'eggs',
+        step: { from: 1, to: 0, repeat: false },
+      });
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      fixture.detectChanges();
+      fixture.detectChanges();
+    } finally {
+      jest.useRealTimers();
+    }
+
+    // Due now, behind "Show more suggestions", so not on screen.
+    expect(dueRows(fixture).map((row) => row.lineId)).toEqual([
+      'coffee',
+      'yogurt',
+      'butter',
+    ]);
+    expect(query(fixture, '.due-more')).not.toBeNull();
+    expect(fixture.componentInstance.announcement()).toBe(
+      'list.line.hiddenAtZero'
+    );
+    expect(document.activeElement).toBe(
+      query(fixture, 'li.line[data-line-id="milk"] .step.minus')
+    );
   });
 
   it('adds the amount chosen on the stepper', async () => {
