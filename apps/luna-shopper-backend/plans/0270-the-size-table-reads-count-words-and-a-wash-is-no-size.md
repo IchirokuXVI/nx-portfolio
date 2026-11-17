@@ -16,6 +16,10 @@
 >    compare prices on.
 > 3. **A capital `X` multiplies.** `2X100 g` is read as `2x100 g` is.
 >
+> The owner answered O2 on 2026-11-17 (D4): a DEZA row whose key moves becomes a new entry and
+> nothing carries its decision. The build produces a review list of those rows for him
+> (section 4.1).
+>
 > Prerequisite reading: plan `0177` (a source size states its own unit), plan `0183` (a length
 > is no size, the `NxQ` rule), plan `0162` (pack counts), plan `0245` (the comparable price),
 > plan `0249` (the size doubt), plan `0264` on the branch of PR #974, plan `0266` on the branch
@@ -113,6 +117,8 @@ the count of changed rows for each chain in the PR.
 4. `2X100 g` reads as `2x100 g` on DEZA and on LIDL.
 5. The PR holds the replay table of section 4, and no `ACTIVE` row whose key stays changes its
    item.
+6. The review list of section 4.1 exists as a scratch file, and the PR body gives its counts
+   under the heading "To review after the first walk".
 
 ### Scope
 
@@ -125,8 +131,10 @@ the count of changed rows for each chain in the PR.
   `normalizeName`, `size-check.ts` or `unit-basis.ts`. No migration and no release task. The
   products already made from wash rows are corrected by plan `0271`, a release task of its
   own (D2). The leaflet prompts change in a later leaflet plan (D3).
-- If the owner answers O2 with 28b, the re-key of section 5 joins this scope. Until then it is
-  out of it.
+- No re-key and no carry of a decision from an old key to a new one (D4). A row whose key
+  moves is a new entry, and the review list of section 4.1 is the whole answer to it.
+- No change to the identity of a DEZA row beyond the split itself. Question 39 (a key that a
+  change of the split never moves) is a follow-up plan, not part of this one.
 
 ### Constraints
 
@@ -154,8 +162,9 @@ the count of changed rows for each chain in the PR.
 
 ### Progress evidence
 
-The spec output, the replay table of section 4 before and after, and the counts by `status` of
-the rows whose key moves, per chain, with the `ACTIVE` count on its own line (O2).
+The spec output, the replay table of section 4 before and after, the counts by `status` of the
+rows whose key moves, per chain, with the `ACTIVE` count on its own line, and the review list
+of section 4.1 with its path.
 
 ## 1. The count words
 
@@ -223,7 +232,12 @@ unlock or start slot 4. If it is not up, restore a dump of it into an ephemeral 
 
 For each chain, read every `source_catalog_entries` row and rebuild the printed text the adapter
 split: `name` and `sizeFormat` joined by a space (El Jamón joins by `, `). Run the parser of
-`dev` and the parser of the branch over it, in a script outside the repository. Count:
+`dev` and the parser of the branch over it, in a script outside the repository.
+
+**Where the outputs go.** Every output of the replay is a file under `tmp/plan-0270/` of the
+main checkout, not of a worktree: `tmp` is ignored by git, and a worktree is removed when its
+work is cleaned up. The files are `replay-before.tsv`, `replay-after.tsv` and
+`moved-rows.tsv` (section 4.1). None of them is committed. Count:
 
 - rows whose split changes, and of them rows whose key changes (DEZA and name keyed leaflet
   rows only), by `status`;
@@ -235,15 +249,53 @@ Quote three names for each reason and chain. Then assert, on the same rows, that
 key stays has a new `itemId`. Nothing in the ingest changes an `itemId` on a size change, so
 the assertion is a check of the replay, and a failure stops the build.
 
-**The rows whose key moves.** By plan `0266` D1 such a row becomes a new entry and the old one
-ages out as unseen. An `ACTIVE` old row keeps its product. The new row waits in the queue
-again. The PR gives that count **per chain** and by `status`, with the `ACTIVE` count of each
-chain on its own line. Only DEZA can move a key (section 5), so every other chain must read 0,
-and the replay asserts it. The replay also counts the two collision shapes of section 5.3:
-old keys that yield two new keys, and new keys that two old keys yield, each by `status`. If
-the `ACTIVE` count is 0 for every chain, O2 costs nothing and the PR says so.
+**The rows whose key moves.** By plan `0266` D1 and the owner's D4, such a row becomes a new
+entry and the old one ages out as unseen. The old row keeps its `status` and its product. The
+new row waits in the queue. No decision is carried and no key is renamed. The PR gives that
+count **per chain** and by `status`, with the `ACTIVE` count of each chain on its own line.
+Only DEZA can move a key (section 5), so every other chain must read 0, and the replay asserts
+it. The replay also counts the two collision shapes: old keys that yield two new keys, and new
+keys that two old keys yield (the capital `X` case of section 5.2), each by `status`.
 
-## 5. The key of a DEZA row, and what O2 asks
+### 4.1 The review list (required)
+
+The owner's words of 2026-11-17: "a note to review the old products and link them with the new
+ones". Nothing links them for him, so the build gives him the list.
+
+The replay writes `tmp/plan-0270/moved-rows.tsv`, one line for every row whose key moves, with
+these columns:
+
+| Column | What it holds |
+| --- | --- |
+| `chain` | The chain's slug. |
+| `old_entry_id` | The `id` of the stored `source_catalog_entries` row. |
+| `old_name`, `old_size_format` | Its stored `name` and `sizeFormat`, as printed. |
+| `old_status` | Its `status`. |
+| `item_id`, `item_name` | The product it is bound to, and that product's Spanish name read from the catalog database of the same copy. Empty when the row has no `itemId`. |
+| `new_key` | The `entryKey` the code of the branch builds for the same description. |
+| `new_name`, `new_size_format` | The `name` and `sizeFormat` the branch splits it into. |
+| `new_key_holder` | The id of a stored row that already holds `new_key` (the capital `X` case), or empty. |
+
+The lines are grouped by chain, and inside a chain the `ACTIVE` rows come first, then
+`CANDIDATE`, then every other status, each group ordered by `old_name`.
+
+The PR body carries a heading **"To review after the first walk"**. Under it: the path of the
+file, its counts per chain and by `old_status`, the `ACTIVE` count of each chain on its own
+line, and how the owner links a pair (below). The file is not attached to the PR. It holds
+product names of the copy, and the counts are enough to find it.
+
+**How the owner links a pair today.** After the first walk on the new code, the new row is in
+the queue of source products of the back office (Harvest, then Review) as an `UNRESOLVED` row
+of its chain. He opens
+it, chooses "Pick another product", picks the product that `item_name` names, and confirms
+with "Yes, it is this product". That is `sourceEntry.accept` with the row and the product, the
+ordinary acceptance of plan `0086`. Nothing does it for him: no rung proposes the old product
+(section 5.2), and this plan builds no tool for it.
+
+The list is read from the copy. A walk in a cluster can move a few rows the copy does not hold.
+Those reach the queue as `UNRESOLVED` rows in the same way, and are not on the list.
+
+## 5. The key of a DEZA row, and what moves it
 
 ### 5.1 What the key is made of
 
@@ -288,59 +340,34 @@ Two cases change the picture, and the replay counts both:
   propose it to the old product, because the old row's size text is empty and the new row's is
   not (`wordOrderKey` keeps the size).
 
-### 5.3 How reliable carrying a decision across would be
+### 5.3 Does this touch only old rows, and is a DEZA product found again?
 
-The design under evaluation: during a walk the runner still holds `row.description`. It runs
-the split of `dev` on the same string, builds the key that rule gives, and looks for an entry
-of the same chain under that old key. If it finds one and no entry holds the new key yet, that
-entry is the same printed row.
+The owner asked both on 2026-11-17. The answers are facts of the code and of the site.
 
-- **The match is exact.** It compares the SHA-1 of two strings that one deterministic function
-  built from the same printed bytes. No similarity, no threshold and no word order is involved.
-  An entry found this way is the row the code of `dev` would have written for this very
-  description, which is the row a person decided on.
-- **Many printed descriptions to one old key is not a new collision.** `normalizeName` is
-  lossy (case, accents, punctuation), so `Calcetines 3 pares.` and `calcetines 3 pares` give one
-  old key. They are one row today already, and carrying its decision across keeps what is true
-  now.
-- **One old key to two new keys can happen in principle.** Two descriptions that normalize
-  equal can split differently under the new rule: `Calcetines 3 pares` splits and
-  `Calcetines 3-pares` does not (the hyphen sits where `TRAILING_SIZE` wants a space). Both
-  were one row before. Rule: when one walk meets two descriptions with one old key and two new
-  keys, it carries the decision to neither, and both wait. The replay counts these, and 0 is
-  expected.
-- **Two old keys to one new key happens for a capital `X`** (section 5.2). The new key already
-  holds a row, so there is nothing to carry: the existing row keeps its own decision, and the
-  other old row ages out as under 28a.
-- **What must be computed or stored.** Nothing new is stored. The runner must keep the split of
-  `dev` as a frozen copy (the unit list and `QUANTITY` of before this plan, named for this
-  plan), and remove it once a walk re-keys nothing. The same match can also be computed once
-  from stored rows, with no walk: a stored `name`, one space and the stored `sizeFormat` give
-  back the collapsed description byte for byte, because `splitSize` cuts one collapsed string at
-  one space. That holds for every row where `isNameKeyed` is true, which proves the stored pair
-  is the pair its key was built from.
-- **Re-key in place, not a copy.** The builder would update `externalId` of the existing row to
-  the new key, and the normal upsert then writes the new `name`, `sizeFormat` and size. The row
-  keeps its id, its `status`, its `itemId`, its availability and its history. A copy would make
-  a second row and write an `itemId` onto it by machine, and leave the first row aged out with
-  the same `itemId`. The unique key on chain and `externalId` refuses a re-key whose new key is
-  taken, which is the case of the capital `X` above.
-- **The harvester rule.** "No automated match ever binds a printed name to a product" (plan
-  `0081`) forbids a machine from deciding that two printed names are one product. A re-key in
-  place makes no such decision: the printed bytes are the same, the row is the same, and no
-  binding is written. Only the way the code spells the row's identity changed. A copy of the
-  decision onto a new row is closer to the letter of the rule, which is one more reason for the
-  re-key in place.
-- **Its relation to plan `0266` D1.** D1 says the key follows the new split, and it still would.
-  28b keeps the row's identity, not the old split. If the owner picks 28b, the same question
-  holds for the keys that plan `0266` moves, and the frozen rule would then be the rule before
-  `0266`.
+- **The site carries no id of a product** (plan `0085` section 6). In the fixture
+  `libs/luna-shopper/deza/src/lib/__fixtures__/landing-page.html`, a row (`wpdz-row`) holds
+  three things: the description, as the text of `wpdz-row-col-desc`
+  (`Vino blanco DON SIMON brik 1 L`); the attribute icons in `wpdz-row-col-icons`, read by
+  their `alt` and `title` (`Andaluz`); and a popup whose title repeats the description and
+  whose `<strong>` elements name the shops that carry it, each by the shop's code in `id`
+  (`T1` to `T7`, `C1`, `C2`, `Z1`) and its printed name. The only other `id` in a row is
+  `wpdz-popup-trigger`, the same on every row, and the only link is `href='#'`. There is no
+  product id, no EAN, no product link and no product image. `parseRow` in `rows.ts` reads
+  exactly these, and `DezaProductRow` (`types.ts`) states it: "There is no product id, no EAN
+  and no product URL either."
+- **So the key is ours, not DEZA's.** It is `entryKey(name, sizeFormat)`: the SHA-1 of the
+  normalized name and size text that **our** split produces (section 5.1).
+- **Only the rows stored before this plan move.** A row that a walk writes after this plan is
+  keyed by the split of this plan. The next walk reads the same printed description, the same
+  pure function splits it the same way, and the key is the same, so the walk finds the same
+  row (section 5.2). The rows of this plan move once, on the first walk on the new code.
+- **When a key moves again.** Only in two cases: a later plan changes the split for that
+  printed text (as plan `0266` and this plan do), or DEZA rewords the description. A change of
+  case, accents or punctuation does not move it, because `normalizeName` removes them.
 
-**Recommendation.** Let the count of section 4 decide. If no moved row is `ACTIVE`, the
-question costs nothing: take 28a and build nothing. If a few are, 28a is still cheaper: a
-person accepts them again in the queue, and no frozen rule lives in the runner. 28b pays for
-itself only when the `ACTIVE` count is more than a person clears in one sitting (about 25), and
-then the re-key in place above is exact and safe.
+The owner's wish of the same day: "I don't want a computed key from name + size, the actual key
+of the deza product should be saved for future use." The site has no such key to save.
+Question 39 asks what to do instead. It is a follow-up plan and not part of this one.
 
 ## Tests
 
@@ -367,7 +394,10 @@ then the re-key in place above is exact and safe.
 - [ ] The PR holds the replay before and after, for each chain, with counts by `status`.
 - [ ] No row whose key stays changes its item.
 - [ ] The PR states the moved `ACTIVE` rows per chain, and the two collision counts of
-      section 5.3.
+      section 4.
+- [ ] `tmp/plan-0270/moved-rows.tsv` exists in the main checkout with the columns of
+      section 4.1, and the PR body has the heading "To review after the first walk" with its
+      counts.
 - [ ] No migration, no release task, no change to a stored row.
 
 ## Verification
@@ -414,19 +444,93 @@ that makes the DEZA and DIA prompts write a wash count as the printed label and 
 No plan file is written for it yet. Until it lands, a leaflet still writes a wash as a count,
 and plan `0271` does not catch such a product, because its `sizeFormat` reads `ud`.
 
+**D4 (owner, answered 2026-11-17, decision 28a, was O2):** a DEZA row whose key moves (count
+words and capital `X`) becomes a new entry by plan `0266` D1. The old row keeps its product and
+the new row waits in the queue. No decision is carried and no key is renamed, whatever the
+count of moved `ACTIVE` rows is. The owner chose 28a outright, so there is no threshold. With
+it comes a required deliverable, in his words "a note to review the old products and link them
+with the new ones": the review list of section 4.1, kept as `tmp/plan-0270/moved-rows.tsv` and
+stated in the PR body under "To review after the first walk". He links each pair himself in the
+back office (section 4.1).
+
+**C3 (planner choice, for the owner):** every output of the replay lives under
+`tmp/plan-0270/` of the main checkout (section 4). The plan named no place before, and a
+worktree is removed when it is cleaned up. The review list is not attached to the PR, which
+carries its counts.
+
 ## Open questions
 
-**O2 (owner, still open):** DEZA rows whose key moves (count words and capital `X`) become new
-entries by plan `0266` D1. Section 5 answers the owner's two questions as facts: the key moves
-once, on the first walk on the new code, and stays stable after (5.2). A decision can be
-carried across exactly, with no similarity, by a re-key of the same row in place (5.3). The
-replay of section 4 counts the moved `ACTIVE` rows per chain. If that count is 0, the question
-costs nothing.
+**39 (owner, open; a follow-up plan, not part of this one):** the owner wants the real key of
+a DEZA product saved, not a key computed from name and size (section 5.3). The site has no such
+key. What should a source with no id be keyed on?
 
-- **28a:** accept. The old row keeps its product and ages out, the new row waits in the queue.
-  Nothing more is built.
-- **28b:** the row keeps its identity through the key change. The runner re-keys the old row in
-  place, as section 5.3 describes, and the re-key joins the scope of this plan.
+- **39a:** leave the key as it is, the name and size split. Each future change of the split
+  moves the keys it touches once, and each time the owner reviews a list like the one of
+  section 4.1. A rewording by DEZA moves a key too.
+- **39b:** key a source with no id on the **whole printed description** as the chain printed
+  it, normalized, and store that description verbatim on the entry. A change of the split then
+  never moves a key. Only a rewording by DEZA does, which no key can survive on a site with no
+  id.
 
-Recommendation: 28a, unless the moved `ACTIVE` count is more than a person clears in one
-sitting (about 25). Then 28b.
+What 39b costs, checked on the code of `origin/dev` on 2026-11-17:
+
+- **Plan `0085` section 7 chose the `name|size` shape** so that a crawl row and a leaflet row
+  build keys of one shape. That meeting is rung 1: a file import row with no `external_id`
+  keys on `entryKey(product.name, size.label ?? size.unit)` (`file-import.runner.ts`, near
+  lines 216 and 445), the function the walk uses, so a DEZA leaflet and the DEZA walk land on
+  one row (`source-snapshot.ts`, near line 180). Under 39b the file import must key on
+  `normalizeName(name + ' ' + label)` in the same release. `normalizeName` turns each run of
+  characters outside `a-z0-9` into one space and trims, so that string equals the walk's
+  normalized description whenever the two texts agree, wherever each side put the split. The
+  meeting survives and becomes wider. A walk that changed alone would stop meeting every
+  leaflet.
+- **`isNameKeyed`** (`matching.ts`, near line 310) tests
+  `externalId === entryKey(name, sizeFormat)`. The word order rung of plan `0221` asks it
+  (`source-ingest.ts`, near lines 1447 and 1967). It must test the new key. It stays exact,
+  because a chain id never equals a SHA-1.
+- **Rung 4 does not depend on the shape of the key.** `siblingKey` and `wordOrderKey` build
+  their keys from the stored `name` and `sizeFormat` through `entryNameKey`, unhashed, and never
+  read `externalId`. They keep working. The comment on `siblingKey` that `entryNameKey` must not
+  change, because hashed it is the identity, would move to the new identity function.
+- **The DEZA runner** uses the key as an opaque id for its in run dedupe and word index
+  (`deza-catalog.runner.ts`, `record`, near lines 423, 608 and 810). It follows the function.
+- **`source_aliases` no longer exists.** Migration `1756900000000-OneSourceProduct.ts` moved
+  each alias into `source_catalog_entries` under `sha1(aliasKey)`, which was
+  `entryKey(printedName, printedFormat)`, and dropped the table. Nothing reads an alias key
+  today. The mention of the table in `CLAUDE.md` is older text, not code.
+- **Catalog holds no DEZA key.** The one `externalId` outside the harvester is
+  `createdFromEntry` in a `CREATE` audit row, which only release task `0006` sends, for
+  Mercadona rows. A DEZA re-key touches none of them.
+- **The existing rows can be re-keyed exactly.** `splitSize` (`deza/src/lib/size.ts`, near
+  lines 120 to 138) collapses white space, trims, and cuts the result at one space: `name` is
+  the text before it and `sizeFormat` the text after it, or `name` is the whole text and
+  `sizeFormat` is null. So the stored `name`, one space and the stored `sizeFormat` (or `name`
+  alone) give back the description as the parser read it, byte for byte. Where `isNameKeyed`
+  holds, the stored pair is the pair the key was built from. A walk owns the text of its row
+  (plan `0190`), so a leaflet never rewrote it. "Verbatim" means the text after `textOf`
+  decoded entities and white space was collapsed, which is all the code ever held. For a row
+  that only a leaflet wrote, the joined text is the model's name and label, and it re-keys the
+  way the new file import would key it, so it still meets.
+- **Two stored rows can join to one text.** `Yogur 2X125 g` with no size and `Yogur` with
+  `2x125 g` both give `yogur 2x125 g`. The unique key on chain and `externalId` refuses the
+  second, so a re-key must fold one row into the other. After the first walk on the code of
+  this plan, **every** moved pair of section 4.1 is such a pair: the old row and the new row
+  join to one text. A re-key landed after that walk would thus link each pair by machine, which
+  D4 declined. Landed before that walk, no pair exists, and the split of this plan moves no key
+  at all.
+- **A release task, not a migration.** The re-key rewrites `externalId` of rows that a harvest
+  wrote and must fold colliding rows, and the repository rule sends a change that removes such
+  rows to a release task. It also cannot be SQL: `normalizeName` is an NFD decomposition, a
+  removal of the combining marks and a JS regular expression, and the earlier migration could
+  hash in SQL only because the alias key was stored already normalized. So it is a node command
+  that a release task runs, as task `0006` runs `kilo-pieces.js`. The one schema part, a
+  nullable column for the printed description, is a migration that adds the column and nothing
+  more.
+
+**Recommendation: 39b**, as its own plan, deployed before the first DEZA walk on the code of
+this plan. The split changed twice in this one round of plans (`0266` and `0270`), and it changes
+again whenever a size table grows. Under 39a each such change moves keys and sends `ACTIVE`
+rows back to the queue for the owner. Under 39b none of it moves a key, and only a rewording by
+DEZA does, which nothing can prevent. Landed before that walk, it also makes the moved rows of
+this plan stay on their rows in the clusters. D4 and the review list of section 4.1 stand until
+the owner answers.
