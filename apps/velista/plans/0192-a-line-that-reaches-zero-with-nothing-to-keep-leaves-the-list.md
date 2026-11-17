@@ -86,8 +86,12 @@ its template.
     `tabindex="-1"`). Focus that was elsewhere is left alone.
   - It says `list.line.hiddenAtZero` once in the page's polite region:
     en "{{name}} is at 0 and hidden. Search for it to bring it back.",
-    es "{{name}} está a 0 y se oculta. Búscalo para recuperarlo."
+    es "{{name}} está a 0 y se oculta. Busca la línea para recuperarla."
     The name is the one the row drew.
+
+    > Note of 2026-11-17, approved by the owner: the Spanish was "Búscalo para
+    > recuperarlo.", whose "lo" is masculine whatever the name is ("la leche"). It now
+    > names the line, so no word agrees with the name, and the meaning is kept.
   - The stepper's own settled "0" is not drawn: the run's write and the stepper's announce
     timer both fire after the same quiet beat, the run's first, and the row is removed in the
     render that would have drawn the stepper's sentence. The stepper is not changed.

@@ -293,3 +293,10 @@ endings; regenerate, never format.
    minus there moves a line above 100 000 down to 100 000. Raise `MIN_CLIENT_VERSION` to the
    first build with the stepper, or accept it, since such a line needs a newer device to write
    it first?
+
+   Answered by the owner on 2026-11-12 (noted 2026-11-17): no raise of `MIN_CLIENT_VERSION`; N4
+   stands. Velista itself stops a weight or a volume line at 99 000 (99 kg, 99 l) since the
+   owner's ruling of 2026-11-17 (velista `0188`, S6, S10 and decision K,
+   `LINE_MEASURED_QUANTITY_MAX`), below the backend's 999 999, which stays the ceiling the server
+   accepts; a count keeps 999 999, and a line the server already holds above 99 000 draws as it
+   is and steps down.

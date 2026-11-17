@@ -652,13 +652,24 @@ a merge across units waits for a conversion.
 1. **R2.** A typed name or a product whose only line is at 0 (bought, kept) is raised to one
    step rather than left at 0 and shown. Is that what you want, or should a kept line also be
    "already on the list" and stay at 0?
+
+   _Answered on 2026-11-17 by the choice rule of 2026-11-16 (section 0, the owner's, rules M1
+   to M9): one kept match is raised (M3), and two or more matches are a choice (M4)._
 2. **R3.** When a typed name meets several lines and at least one is wanted, nothing is asked:
    every wanted line is marked. The question with "A new line" is asked only when every line is
    at 0. Is losing the "A new line" choice in the first case acceptable?
+
+   _Answered on 2026-11-17 by the choice rule of 2026-11-16 (section 0, the owner's, rules M1
+   to M9), which replaces R3: two or more matches are a choice with every match listed (M4)._
 3. **R5.** A product on a line of several products counts as already on the list, so the add
    writes nothing there. Should it instead create a line of that product alone?
    _Answered on 2026-11-12: R5 stands (section 0)._
 4. **R6.** A pasted list that names one thing twice now makes one line at the first amount, not
    the sum. Is that right?
+
+   _Answered on 2026-11-17: R6 stands as built. A batch never sums; a second item of one thing
+   adds nothing (M8)._
 5. **R7.** Is a whole batch refusal still acceptable for the assistant, or should a later plan
    teach the batch to skip and report?
+
+   _Answered on 2026-11-17: reviewed by the owner, stands as built._

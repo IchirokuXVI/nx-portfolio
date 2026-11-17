@@ -111,6 +111,13 @@ opens a short sheet saying why that order and a line's cheapest mark can differ.
   first, then the comparable figure within one basis, then the pack price
   (`product-group.ts:17` to `:61`). A line orders its products by `lineMemberCost`, the cost
   of the line's amount (`line-products.ts:28` to `:42`).
+
+  > Note of 2026-11-17, from the review of the stepper batch: as built, each Similar products
+  > row is the catalog's `ProductRow`, so a product the chosen list already holds shows its
+  > plus switched off with the sentence under the card, "Already on <list>." and its link,
+  > or `catalog.held.atZero` when every line of it is at 0 (velista `0185`, decision 51 of
+  > 2026-11-16). The review found the reason and the link run together with no space; that
+  > is fixed (velista `0185` C1).
 - Velista has one info button already: beside "Any of these will do" on the line page, a
   `lib-info-icon` in a plain button that opens `LineProductsInfoSheet`, a child route
   `about-products` under the `sheet` marker (velista `0137` section 3).

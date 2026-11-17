@@ -604,6 +604,9 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   a six character short form. Symbol 12 px, 400, `--app-text-secondary`. An amount of 0 draws
   its number in `--app-text-secondary` and its minus at an end, so 0 is never told by colour
   alone.
+
+  > Note of 2026-11-17, from the review of the stepper batch: the narrow sheet variant was
+  > first built with the row's 4 px; both sheet variants now pad the cell by 6.
 - The sheets' field: the number is an `<input>` laid over a hidden copy of its text, so the
   field takes the width of what it holds, 17 px when focused (never under 16), its focus ring
   around the whole cell.
@@ -833,6 +836,15 @@ branch (`:136` to `:144`) is unchanged.
   product is velista `0187`'s (U5), which builds on this event shape.
 - `VisitAdded` (`visit-added.ts:80`) passes the step through `VisitAddedStep.step`, and keeps
   `min: row.floor - 1` so the minus at the floor stays pressable.
+
+  > Note of 2026-11-17, from the review of the stepper batch: `row.floor - 1` held a weight
+  > line the visit made at 24 g under its 25 g floor, so its minus was named "Remove 1 g",
+  > drew the plain bar and still took the line back. A row now carries `min`: 0 for a line the
+  > visit made, and what a line that was there before held. The minus of a line the visit made
+  > therefore reaches 0 like every other stepper, draws the trash (S14) and is named for what
+  > it removes ("Remove 25 g from Bananas"). The take back is unchanged: on a line the visit
+  > made it still deletes the line (velista `0185`, note of 2026-11-12), which `step.to === 0`
+  > already meets.
 - `CatalogAddStore.step(product, lineId, step: QuantityStep)` replaces `by: 1 | -1`:
   - A press (`repeat: false`) going down on a line the visit created that meets today's take
     back rule (`catalog-add-store.ts:531` to `:541`: `step.to === 0`, or a measured line

@@ -280,6 +280,12 @@ stepping 25 g.
 - The in memory catalog, line and basket fakes carry `quantityStep: null` on every product
   and two products with a step (100 g and 5 g) for the specs.
 
+  > Note of 2026-11-17, from the review of the stepper batch: the two stepped products were
+  > missing. `CatalogMemory` now holds loose round rice by the kilo stepped by 100 g and loose
+  > coffee beans stepped by 5 g (`catalog-memory.spec.ts`), which a backend-less run reads through
+  > `ItemNames`. The basket fake keeps `quantityStep: null` on its four products: a
+  > stepped product there would need a basket row of its own.
+
 ## 2. The rule
 
 ```ts
@@ -375,6 +381,12 @@ export function canStepUp(value: number, unit: LineUnit, max: number, step?: num
   to 700 (the host's `data-value` 700, `0188` decision L) and up once to 800, and records a buy
   of 200 g. It is a separate product so that the bananas' numbers never depend on a step left
   by an earlier run.
+
+  > Note of 2026-11-17, from the review of the stepper batch: the test was first built in the
+  > settle sheet. It now steps on the zone list row, as this section and the progress evidence
+  > say: three presses of minus to 700, one of plus to 800. "Records a buy of 200 g" is stale:
+  > since velista `0190` (the owner, 2026-11-11, its question 1) no part of a row is bought from
+  > the shopping list, so "Got all" records the 800 g the line asks for.
 
 ## 5. Not changed
 

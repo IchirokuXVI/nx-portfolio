@@ -230,6 +230,11 @@ section 3.
   is now deleted by the server when a minus takes it to 0, where `0187` says such a line "is
   never deleted". That sentence of `0187` is superseded for a line with nothing to keep. Velista
   `0192` reads the answer.
+  > Note of 2026-11-17, from the review of the stepper batch: this take back is the only delete
+  > a minus makes, and it stays (velista `0185`, note of 2026-11-12). The catalog's added sheet
+  > now draws it like every other minus that reaches 0: the trash, and a name for what the press
+  > removes. Its weight lines reached the take back from a floor of one gram under their first
+  > step, with the plain bar and "Remove 1 g" (velista `0188`, section 5.5, note of 2026-11-17).
 - **The assistant.** `upsert_lines` in `set` mode with quantity 0 sends the `PATCH`
   (`tools.ts:397`); when the answer says `deleted`, the item reports `action: 'removed'` (a new
   member of `ItemResult.action`, `:1134`) and `describeLine` reads it. Its free text lines are

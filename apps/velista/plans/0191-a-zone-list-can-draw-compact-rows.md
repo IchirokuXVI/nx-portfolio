@@ -324,11 +324,14 @@ kilo piece, a line at zero and a long brand.
 | key | `en` | `es` |
 | --- | --- | --- |
 | `account.listRows.label` | Compact rows | Filas compactas |
-| `account.listRows.hint` | Lists show the size, the price and the total on every row. Only on this phone. | Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono. |
+| `account.listRows.hint` | Lists show the size, the price and the total on every row. Only on this device. | Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este dispositivo. |
 
 The hint was "the size and the price per kilo" until the owner's answer of 2026-11-12
 (decision D) took the price per kilo off a pack's row; the words now say what the row
 draws.
+
+On 2026-11-17 the owner approved "Only on this device" / "Solo en este dispositivo" in place
+of "Only on this phone" / "Solo en este teléfono".
 
 ## 2. The view model
 
@@ -606,6 +609,9 @@ The owner asked for these to be stated; the plan does not fix them.
    px at 390, 90 at 375, 75 at 360, 35 at 320. At 320 every fact crops to a few characters.
    A line waiting for approval loses 12 px more to its edge and padding
    (`line-row.scss:42` to `:46`). Question 6.
+
+   > Note of 2026-11-17, from the review of the stepper batch: at 320 px the words "Choose a
+   > product" of a compact row wrap onto a second line. The owner accepted that for the trial.
 6. **The search results get less.** The mock measured, on the default row (velista `0189`), that
    with the keyboard open the results show one row of the list and one product. A compact
    row is 31 px taller; whether one product still fits whole was not measured. The walk
