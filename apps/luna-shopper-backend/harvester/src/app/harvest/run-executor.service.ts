@@ -69,6 +69,18 @@ import { SupermarketSourceService } from './supermarket-source.service';
 export const SHUTDOWN_STOPPED_RUN = 'Stopped because the harvester shut down.';
 
 /**
+ * The reason the run's signal is aborted with once its runner threw with no
+ * abort (plan 0269, D11), so the runner's other workers stop. It is not a
+ * person's abort and not a failed write, and nothing reads it as either.
+ */
+export class RunnerFailedError extends Error {
+  constructor(readonly cause: unknown) {
+    super(`The runner failed: ${describeError(cause).message}`);
+    this.name = 'RunnerFailedError';
+  }
+}
+
+/**
  * Dispatches a run to its runner, and owns everything they have in common:
  * the shared token bucket, the abort signal, and the finalizer.
  *
@@ -599,6 +611,12 @@ export class RunExecutor implements OnApplicationShutdown {
           // queued is not written, because the run failed (plan 0269, D11).
           // No timeout: this waits as long as the queued writes take, as the
           // drain of any run does.
+          //
+          // The signal is aborted first, so the other workers of the runner
+          // stop on it rather than walk on and queue more (D11, 2026-11-17).
+          // The reason is neither a person's abort nor a failed write, and
+          // `runnerFailed` keeps the status and the sentence the runner's.
+          controller.abort(new RunnerFailedError(error));
           if (sink) {
             await sink.settle();
             writesSettled = true;
@@ -1231,13 +1249,16 @@ function writeFailureOf(
  */
 function writeFailedSentenceOf(
   signal: AbortSignal,
-  sink: Pick<RunReportSink, 'failure' | 'failedWork'> | null
+  sink: Pick<RunReportSink, 'failure' | 'failedWork' | 'importsPlaces'> | null
 ): string | null {
   const failure = writeFailureOf(signal, sink);
   if (!failure) {
     return null;
   }
   const message = describeError(failure.cause).message;
+  // A chunk of places of a trusted chain imports its shops too, each with a
+  // STORE price scope when it names none (plan 0107, section 3.3).
+  const imports = sink?.importsPlaces === true;
   switch (sink?.failedWork ?? null) {
     case 'products':
       return (
@@ -1254,7 +1275,23 @@ function writeFailedSentenceOf(
         `(${message}), so the walk stopped there and wrote nothing after it. ` +
         'The places of the chunks written before it are kept, and the report ' +
         'counts them. The chunk that failed may have written part of its ' +
-        'places before it failed, and the report does not count those.'
+        (imports
+          ? 'places, and imported part of its shops into the catalog with ' +
+            'the price scopes they were given, before it failed. How many is ' +
+            'not known, and the report does not count those.'
+          : 'places before it failed. How many is not known, and the report ' +
+            'does not count those.')
+      );
+    case 'placesCounted':
+      return (
+        `Stopped: recording the progress of the run failed (${message}) ` +
+        'after a chunk of the places the run read was written, so the walk ' +
+        'stopped there and wrote nothing after it. The places of that chunk ' +
+        'and of the chunks before it are kept, and the report counts them' +
+        (imports
+          ? ', and the shops they imported into the catalog. Those shops ' +
+            'keep the price scopes they were given.'
+          : '.')
       );
     case 'scope':
       return (

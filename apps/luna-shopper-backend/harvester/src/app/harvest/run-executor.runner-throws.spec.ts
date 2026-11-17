@@ -74,7 +74,16 @@ function gate(): { opened: Promise<void>; open: () => void } {
   return { opened, open };
 }
 
-function build(mode: HarvestRunMode) {
+interface BuildOptions {
+  /** The chain's trust switch (plan 0107), which makes a place chunk import. */
+  autoImport?: boolean;
+  /** The place write lands, and the counter flush after it fails. */
+  placesLandThenFlushFails?: boolean;
+  /** The catalog discovery runner, in place of the default one. */
+  catalogRunner?: (context: RunContext, report: RunReport) => Promise<void>;
+}
+
+function build(mode: HarvestRunMode, options: BuildOptions = {}) {
   /** What happened, in order, for the assertions on the order. */
   const events: string[] = [];
 
@@ -95,7 +104,11 @@ function build(mode: HarvestRunMode) {
     markRunning: jest.fn(async () => undefined),
     isAbortRequested: jest.fn(async () => false),
     touchHeartbeat: jest.fn(async () => events.push('heartbeat')),
-    addCounters: jest.fn(async () => undefined),
+    addCounters: jest.fn(async () => {
+      if (options.placesLandThenFlushFails) {
+        throw new Error('could not write the counters');
+      }
+    }),
     addWarnings: jest.fn(async () => undefined),
     setStage: jest.fn(async () => undefined),
     setTotalPlanned: jest.fn(async () => undefined),
@@ -116,6 +129,7 @@ function build(mode: HarvestRunMode) {
     workers: 4,
     config: {},
     consecutiveFailures: 0,
+    autoImportPlaces: options.autoImport ?? false,
   } as unknown as SupermarketSource;
   const sources = {
     findBySupermarket: jest.fn(async () => source),
@@ -124,7 +138,7 @@ function build(mode: HarvestRunMode) {
   } as unknown as SupermarketSourceService;
 
   /** One gate per product chunk, opened by the spec. */
-  const pushGates = [gate(), gate()];
+  const pushGates = [gate(), gate(), gate()];
   const pushed: number[] = [];
   const close = jest.fn();
   const ingest = {
@@ -175,8 +189,17 @@ function build(mode: HarvestRunMode) {
   /** The place write fails, after a while, as a database that went away. */
   const placeGate = gate();
   const places = {
-    observe: jest.fn(async () => {
+    observe: jest.fn(async (chunk: readonly ObservedPlace[]) => {
       await placeGate.opened;
+      if (options.placesLandThenFlushFails) {
+        // Every place of the chunk is written, and imported when trusted.
+        return {
+          created: chunk.length,
+          refreshed: 0,
+          imported: options.autoImport ? chunk.length : 0,
+          blocked: [],
+        };
+      }
       throw new Error('could not write the places');
     }),
   } as unknown as DiscoveredPlaceService;
@@ -210,12 +233,15 @@ function build(mode: HarvestRunMode) {
 
   /** A runner that queues two whole chunks, keeps a partial one and throws. */
   const catalogDiscovery = {
-    run: jest.fn(async (_context: RunContext, report: RunReport) => {
-      for (let n = 0; n < 850; n += 1) {
-        report.product(observation(`p${n}`));
-      }
-      throw new Error('the listing page could not be parsed');
-    }),
+    run: jest.fn(
+      options.catalogRunner ??
+        (async (_context: RunContext, report: RunReport) => {
+          for (let n = 0; n < 850; n += 1) {
+            report.product(observation(`p${n}`));
+          }
+          throw new Error('the listing page could not be parsed');
+        })
+    ),
   } as unknown as CatalogDiscoveryRunner;
 
   /**
@@ -275,7 +301,15 @@ function build(mode: HarvestRunMode) {
     close,
     catalog,
     declared,
+    sources: sources as SupermarketSourceService & {
+      recordRunFinished: jest.Mock;
+    },
   };
+}
+
+/** A while, for the fakes' gates and the workers' timers to move. */
+function tick(ms = 10): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 describe('RunExecutor and a runner that throws while its writes are queued (plan 0269, D11)', () => {
@@ -343,6 +377,87 @@ describe('RunExecutor and a runner that throws while its writes are queued (plan
       expect.objectContaining({ productsWritten: 400 })
     );
   });
+
+  it('stops the other workers of a runner that threw, awaits the chunk one of them queued while it settled, and writes nothing after the finish', async () => {
+    /** Whether the second worker saw the signal aborted when it looked. */
+    let secondSawAbort: boolean | null = null;
+    const { executor, store, events, pushGates, pushed, sources } = build(
+      HarvestRunMode.CATALOG_DISCOVERY,
+      {
+        // Two workers of one pool: the first queues a chunk and throws; the
+        // second, already past its signal check, queues one more chunk after
+        // the throw, then looks at the signal before it reads the next page.
+        catalogRunner: async (context, report) => {
+          const first = async () => {
+            for (let n = 0; n < 400; n += 1) {
+              report.product(observation(`a${n}`));
+            }
+            throw new Error('the listing page could not be parsed');
+          };
+          const second = async () => {
+            await tick(1);
+            for (let n = 0; n < 400; n += 1) {
+              report.product(observation(`b${n}`));
+            }
+            await tick(20);
+            secondSawAbort = context.signal.aborted;
+            if (context.signal.aborted) {
+              return;
+            }
+            for (let n = 0; n < 400; n += 1) {
+              report.product(observation(`c${n}`));
+            }
+          };
+          await Promise.all([first(), second()]);
+        },
+      }
+    );
+    // A third chunk, if one is ever queued, writes at once.
+    pushGates[2].open();
+
+    const done = executor.runToCompletion('run-1');
+    await tick(10);
+    // The first worker threw and the second queued its chunk meanwhile.
+    expect(store.finish).not.toHaveBeenCalled();
+    pushGates[0].open();
+    await tick(5);
+    expect(store.finish).not.toHaveBeenCalled();
+    pushGates[1].open();
+
+    await expect(done).resolves.toBe(HarvestRunStatus.FAILED);
+    // Long enough for the second worker to look at the signal and, on the
+    // old path, to queue and write a third chunk after the finish.
+    await tick(40);
+
+    expect(secondSawAbort).toBe(true);
+    // Both queued chunks landed while the run held its chain, before the
+    // finish, and nothing landed after it.
+    expect(pushed).toEqual([400, 400]);
+    expect(events.filter((event) => event !== 'heartbeat')).toEqual([
+      'push 1 written, running true',
+      'push 2 written, running true',
+      'finish',
+    ]);
+    expect(store.finish).toHaveBeenCalledTimes(1);
+    const [, status, error] = store.finish.mock.calls[0];
+    expect(status).toBe(HarvestRunStatus.FAILED);
+    expect(error).toBe('the listing page could not be parsed');
+    // The report names both chunks that landed.
+    expect((await store.load('run-1')).report).toEqual(
+      expect.objectContaining({
+        productsWritten: 800,
+        pricesRecorded: 4,
+        pricesPublished: 2,
+      })
+    );
+    // One failure of the chain.
+    expect(sources.recordRunFinished).toHaveBeenCalledTimes(1);
+    expect(sources.recordRunFinished).toHaveBeenCalledWith(
+      expect.anything(),
+      false
+    );
+    expect(executor.isRunning('run-1')).toBe(false);
+  });
 });
 
 describe('RunExecutor and a store discovery whose place chunk fails (plan 0269, D11)', () => {
@@ -372,5 +487,50 @@ describe('RunExecutor and a store discovery whose place chunk fails (plan 0269, 
     expect(error).toContain('a chunk of the places the run read failed');
     expect(error).toContain('could not write the places');
     expect(error).not.toMatch(/product/);
+  });
+
+  it('names the shops and price scopes a failed chunk may have imported when the chain is trusted, and says how many is not known', async () => {
+    const { executor, store } = build(HarvestRunMode.STORE_DISCOVERY, {
+      autoImport: true,
+    });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.FAILED
+    );
+
+    const [, , error] = store.finish.mock.calls[0];
+    expect(error).toContain('a chunk of the places the run read failed');
+    expect(error).toContain('shops');
+    expect(error).toContain('price scopes');
+    expect(error).toContain('How many is not known');
+    expect((await store.load('run-1')).report).toEqual(
+      expect.objectContaining({ placesCreated: 0, placesImported: 0 })
+    );
+  });
+
+  it('counts a place chunk that was written when the flush after it fails, and says the report counts it', async () => {
+    const { executor, store } = build(HarvestRunMode.STORE_DISCOVERY, {
+      autoImport: true,
+      placesLandThenFlushFails: true,
+    });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.FAILED
+    );
+
+    const [, status, error] = store.finish.mock.calls[0];
+    expect(status).toBe(HarvestRunStatus.FAILED);
+    // The chunk's 100 places and shops landed, and the report states them.
+    expect((await store.load('run-1')).report).toEqual(
+      expect.objectContaining({ placesCreated: 100, placesImported: 100 })
+    );
+    // The sentence agrees: it names the progress write and says the chunk is
+    // counted, never that it is not.
+    expect(error).toContain('recording the progress of the run failed');
+    expect(error).toContain('could not write the counters');
+    expect(error).toContain('The places of that chunk');
+    expect(error).toContain('the report counts them');
+    expect(error).toContain('shops they imported');
+    expect(error).not.toContain('does not count');
   });
 });

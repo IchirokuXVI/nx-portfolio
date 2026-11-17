@@ -470,6 +470,25 @@ PR #998 found three places where D9 did not hold yet.
    the sentence of each kind says what was kept and what may have been written in part. A
    sink that cannot say gets words that are true of all three. No contract field changes.
 
+The third review of PR #998 found two more (2026-11-17).
+
+4. **A chunk of places whose progress write fails is counted, and its sentence says so.** The
+   sink counts a chunk of places as soon as `observe()` answers, and only then reports its
+   counters and its progress, which can flush to the store and fail. The places of that chunk
+   are written, so the report counts them, and the failure is kept as its own kind whose
+   sentence says the chunk is kept and counted, with the shops it imported for a trusted
+   chain. A failure inside `observe()` leaves the count unknown: its sentence says so and
+   names what may exist, the places, and for a trusted chain the shops and their price
+   scopes. The products and the scope declarations count only after their last write, so
+   they need no such kind.
+5. **The other workers of a runner that threw stop, and the settle waits until the chain is
+   quiet.** The executor aborts the run's signal before it settles, with a reason that is
+   neither a person's abort nor a failed write, so the workers the runner left behind stop
+   on it. `settle()` awaits the chain again until no chunk was queued while it waited, and
+   after that the sink takes no more work, so nothing lands after the run is finished. The
+   run still ends `FAILED` with the runner's own error, one finish, one alert and one
+   failure of the chain.
+
 The other early exits of a run, as built: a stop of the refusal guard and a person's abort
 both abort the signal, so the runner's throw takes the abort path and the drain runs as for
 any run. An error before the sink exists leaves nothing queued. The reaper runs outside the

@@ -82,8 +82,26 @@ export class ReportWriteFailedError extends Error {
  * The kind of queued work that failed (plan 0269, D11): a chunk of products,
  * a chunk of places, or the declaration of a price scope. The stop sentence
  * of the run names it.
+ *
+ * `placesCounted` is a chunk of places that was written and counted, whose
+ * progress write after it failed (D11, 2026-11-17). Its places are in the
+ * report, so its sentence must not say they are not.
  */
-export type FailedWriteKind = 'products' | 'places' | 'scope';
+export type FailedWriteKind = 'products' | 'places' | 'placesCounted' | 'scope';
+
+/**
+ * A failure after a queued work's own writes landed and were counted, which
+ * the chain keeps under `kind` rather than the kind the work was queued as.
+ */
+class FailedAfterWrite extends Error {
+  constructor(
+    readonly kind: FailedWriteKind,
+    readonly cause: unknown
+  ) {
+    super(describeError(cause).message);
+    this.name = 'FailedAfterWrite';
+  }
+}
 
 /** How many products go into one ingest push. */
 const PRODUCT_CHUNK = 400;
@@ -361,6 +379,8 @@ export class RunReportSink implements RunReport {
   private session: SourceIngestSession | null = null;
   /** Whether the totals of a run that closes no session were taken. */
   private totalsTaken = false;
+  /** Whether {@link settle} answered, after which no work is queued. */
+  private settled = false;
 
   private products: ReportedObservation[] = [];
   private places: ObservedPlace[] = [];
@@ -469,6 +489,15 @@ export class RunReportSink implements RunReport {
   /** What kind of work the first failed write was, or null while none has. */
   get failedWork(): FailedWriteKind | null {
     return this.firstFailure?.kind ?? null;
+  }
+
+  /**
+   * Whether a chunk of places also imports shops into the catalog, each with
+   * a price scope when it names none (plan 0107), so the stop sentence can
+   * name those rows too.
+   */
+  get importsPlaces(): boolean {
+    return this.input.autoImportPlaces === true;
   }
 
   scope(declaration: ScopeDeclaration): void {
@@ -658,10 +687,20 @@ export class RunReportSink implements RunReport {
    * run failed. A chunk that fails while it settles is kept as any failure is,
    * and the result counts the chunks before it. **It never rejects**, so the
    * executor can always finish the run after it.
+   *
+   * It waits until the chain is quiet, not for one snapshot of it: another
+   * worker of the runner may queue a chunk while it waits, and that chunk is
+   * awaited too. Once quiet, the sink takes no more work, so nothing a late
+   * worker says lands after the run is finished (D11, 2026-11-17).
    */
   async settle(): Promise<RunReportResult> {
     try {
-      await this.chain;
+      let awaited: Promise<void>;
+      do {
+        awaited = this.chain;
+        await awaited;
+      } while (awaited !== this.chain);
+      this.settled = true;
       this.takeTotals();
     } catch (error) {
       // The chain never rejects and the totals are a read of counters, so
@@ -868,6 +907,15 @@ export class RunReportSink implements RunReport {
    * the chain never holds a rejection (plan 0269, section 1).
    */
   private queue(kind: FailedWriteKind, work: () => Promise<void>): void {
+    if (this.settled) {
+      // The run failed and is finished, or about to be: a worker that was
+      // still going says this after it, and nothing of it is written (D11).
+      this.logger.warn(
+        `Run ${this.context.runId}: work of kind ${kind} came after the run ` +
+          'settled its writes, and was not written.'
+      );
+      return;
+    }
     this.chain = this.chain.then(async () => {
       if (this.firstFailure) {
         return;
@@ -875,7 +923,11 @@ export class RunReportSink implements RunReport {
       try {
         await work();
       } catch (error) {
-        this.fail(error, kind);
+        if (error instanceof FailedAfterWrite) {
+          this.fail(error.cause, error.kind);
+        } else {
+          this.fail(error, kind);
+        }
       }
     });
   }
@@ -955,13 +1007,20 @@ export class RunReportSink implements RunReport {
     this.result.placesRefreshed += written.refreshed;
     this.result.placesImported += written.imported;
     this.result.placesNotImported.push(...written.blocked);
-    await this.context.report({
-      created: written.created,
-      unchanged: written.refreshed,
-    });
-    // A place is the unit of a store discovery, unless the runner counts its
-    // own (plan 0217, section 4). Then this adds nothing.
-    await this.context.advance(chunk.length);
+    // The chunk is written and counted above. Either call below can flush the
+    // run's counters and fail, and then the report rightly counts this chunk,
+    // so the failure is kept as a kind whose sentence says so (D9 and D11).
+    try {
+      await this.context.report({
+        created: written.created,
+        unchanged: written.refreshed,
+      });
+      // A place is the unit of a store discovery, unless the runner counts
+      // its own (plan 0217, section 4). Then this adds nothing.
+      await this.context.advance(chunk.length);
+    } catch (error) {
+      throw new FailedAfterWrite('placesCounted', error);
+    }
   }
 
   /**
