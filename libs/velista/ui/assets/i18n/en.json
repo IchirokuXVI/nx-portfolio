@@ -452,7 +452,7 @@
     "countMore": "More than {{count}} products",
     "row": {
       "noPrice": "no price",
-      "priceAt": "{{price}} at {{chain}}"
+      "priceAt": "{{- price}} at {{- chain}}"
     },
     "add": {
       "label": "Add {{name}} to {{list}}",
@@ -1123,7 +1123,7 @@
       "sellsIt": "Sells it",
       "sellsNot": "Does not sell it",
       "notNear": "Not near you",
-      "from": "from {{price}}",
+      "from": "from {{- price}}",
       "other": "Another supermarket",
       "loading": "Looking for the supermarkets near you",
       "noContext": "The supermarkets near you could not be loaded.",
@@ -1771,7 +1771,7 @@
       "close": "Close"
     },
     "price": {
-      "cheaperAt": "{{price}} at {{chain}}"
+      "cheaperAt": "{{- price}} at {{- chain}}"
     },
     "group": {
       "noCategory": "No category",
@@ -2121,10 +2121,10 @@
       "toGet_other": "{{count}} to get",
       "got_one": "Got {{count}} today.",
       "got_other": "Got {{count}} today.",
-      "gotAt_one": "Got {{count}} today at {{price}}.",
-      "gotAt_other": "Got {{count}} today at {{price}}.",
-      "gotAtShop_one": "Got {{count}} today at {{price}}, at {{shop}}.",
-      "gotAtShop_other": "Got {{count}} today at {{price}}, at {{shop}}.",
+      "gotAt_one": "Got {{count}} today at {{- price}}.",
+      "gotAt_other": "Got {{count}} today at {{- price}}.",
+      "gotAtShop_one": "Got {{count}} today at {{- price}}, at {{- shop}}.",
+      "gotAtShop_other": "Got {{count}} today at {{- price}}, at {{- shop}}.",
       "askedOn_one": "Asked for on 1 list",
       "askedOn_other": "Asked for on {{count}} lists",
       "addElsewhere": "Add it to another list",
@@ -2138,8 +2138,8 @@
       "toGetAmount": "{{amount}} to get",
       "about": "≈ {{price}}",
       "gotAmount": "Got {{amount}} today.",
-      "gotAtAmount": "Got {{amount}} today at {{price}}.",
-      "gotAtShopAmount": "Got {{amount}} today at {{price}}, at {{shop}}.",
+      "gotAtAmount": "Got {{amount}} today at {{- price}}.",
+      "gotAtShopAmount": "Got {{amount}} today at {{- price}}, at {{- shop}}.",
       "gotAllAmount": "Got all {{amount}}",
       "gotOtherAmount": "Got the other {{amount}}"
     }

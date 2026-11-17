@@ -435,45 +435,93 @@ describe('productRowView', () => {
 
       expect(view.summary).toBe(
         'Hacendado · list.add.size.LITER {"size":"1"} · ' +
-          'catalog.row.priceAt {"price":"€8.45","chain":"Mercadona","interpolation":{"escapeValue":false}}'
+          'catalog.row.priceAt {"price":"€8.45","chain":"Mercadona"}'
       );
     });
 
-    it('writes a price per kilo with its slash, not "&#x2F;", through i18next itself (2026-11-17)', async () => {
-      const i18n = i18next.createInstance();
-      await i18n.init({
-        lng: 'en',
-        resources: {
-          en: {
-            translation: {
-              catalog: {
-                row: { priceAt: '{{price}} at {{chain}}' },
-                per: { KILOGRAM: '/ kg' },
-              },
-            },
+    /**
+     * The real copy through i18next itself (2026-11-17): a price per kilo is words
+     * with a "/", which i18next escaped to "&#x2F;" in a sentence. The sentences
+     * that carry a price, a chain or a shop write them unescaped (`{{- price}}`),
+     * because Angular escapes the text when it draws it.
+     */
+    describe('through i18next and the real copy', () => {
+      const copy = (locale: 'en' | 'es') =>
+        JSON.parse(
+          readFileSync(
+            join(
+              __dirname,
+              '..',
+              '..',
+              '..',
+              'assets',
+              'i18n',
+              `${locale}.json`
+            ),
+            'utf8'
+          )
+        ) as Record<string, unknown>;
+
+      async function translator(locale: 'en' | 'es') {
+        const i18n = i18next.createInstance();
+        await i18n.init({
+          lng: locale,
+          showSupportNotice: false,
+          resources: { [locale]: { translation: copy(locale) } },
+        } as Parameters<typeof i18n.init>[0]);
+        return i18n;
+      }
+
+      it('writes the added sheet price line with its slash, not "&#x2F;"', async () => {
+        const i18n = await translator('en');
+        const loose: CatalogProduct = {
+          ...OIL,
+          size: null,
+          unit: 'KILOGRAM',
+          unitBasis: 'KILOGRAM',
+          offer: {
+            ...OFFER,
+            price: 2.49,
+            unitPrice: 2.49,
+            unitPriceLabel: 'EUR/kg',
           },
-        },
+        };
+
+        const view = productRowView(
+          loose,
+          options({ translate: (key, args) => i18n.t(key, args) })
+        );
+
+        expect(view.summary).toContain('€2.49 / kg at Mercadona');
+        expect(view.summary).not.toContain('&#x2F;');
       });
-      const loose: CatalogProduct = {
-        ...OIL,
-        size: null,
-        unit: 'KILOGRAM',
-        unitBasis: 'KILOGRAM',
-        offer: {
-          ...OFFER,
-          price: 2.49,
-          unitPrice: 2.49,
-          unitPriceLabel: 'EUR/kg',
-        },
-      };
 
-      const view = productRowView(
-        loose,
-        options({ translate: (key, args) => i18n.t(key, args) })
+      it.each(['en', 'es'] as const)(
+        'leaves a price, a chain and a shop unescaped in every price sentence (%s)',
+        async (locale) => {
+          const i18n = await translator(locale);
+          const values = {
+            price: '1,99 € / kg',
+            chain: 'M&S',
+            shop: "Calle O'Donnell",
+            count: 2,
+            amount: '750 g',
+          };
+          for (const key of [
+            'catalog.row.priceAt',
+            'basket.price.cheaperAt',
+            'list.supermarket.from',
+            'basket.sheet.gotAt',
+            'basket.sheet.gotAtShop',
+            'basket.sheet.gotAtAmount',
+            'basket.sheet.gotAtShopAmount',
+          ]) {
+            const text = i18n.t(key, values);
+            expect(text).toContain('1,99 € / kg');
+            expect(text).not.toMatch(/&#|&amp;/);
+          }
+        }
       );
-
-      expect(view.summary).toContain('€2.49 / kg at Mercadona');
-      expect(view.summary).not.toContain('&#x2F;');
     });
 
     it('says the price alone while one chain is chosen', () => {

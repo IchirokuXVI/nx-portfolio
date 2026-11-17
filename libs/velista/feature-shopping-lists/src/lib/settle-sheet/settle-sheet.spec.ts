@@ -2420,7 +2420,7 @@ describe('SettleSheet: a product row (velista 0139, section 3)', () => {
       });
 
       expect(text(fixture)).toContain(
-        'basket.sheet.gotAt:{"count":2,"price":"€20.94","shop":"","interpolation":{"escapeValue":false}}'
+        'basket.sheet.gotAt:{"count":2,"price":"€20.94","shop":""}'
       );
       expect(text(fixture)).not.toContain('13.42');
     });

@@ -265,7 +265,7 @@ describe('BasketRowComponent: prices from one shop', () => {
       });
 
       expect(caption(fixture)).toContain(
-        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia","interpolation":{"escapeValue":false}}'
+        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia"}'
       );
     });
 
@@ -278,7 +278,7 @@ describe('BasketRowComponent: prices from one shop', () => {
       });
 
       expect(caption(fixture)).toContain(
-        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia","interpolation":{"escapeValue":false}}'
+        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia"}'
       );
     });
 
@@ -299,7 +299,7 @@ describe('BasketRowComponent: prices from one shop', () => {
       });
 
       expect(caption(fixture)).toContain(
-        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia","interpolation":{"escapeValue":false}}'
+        'basket.price.cheaperAt:{"price":"€0.79 catalog.per.KILOGRAM","chain":"Dia"}'
       );
     });
 
@@ -311,7 +311,7 @@ describe('BasketRowComponent: prices from one shop', () => {
       });
 
       expect(caption(fixture)).toContain(
-        'basket.price.cheaperAt:{"price":"€0.79","chain":"Dia","interpolation":{"escapeValue":false}}'
+        'basket.price.cheaperAt:{"price":"€0.79","chain":"Dia"}'
       );
     });
   });
