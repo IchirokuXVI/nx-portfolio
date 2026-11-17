@@ -561,7 +561,7 @@ describe('QuantityStepper (velista 0188)', () => {
       type(h, '1,5');
       expect(h.steps).toEqual([]);
       key(h, 'Enter');
-      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false }]);
+      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false, typed: true }]);
       expect(field(h).value).toBe('1.5');
       expect(h.el.querySelector('.symbol')?.textContent).toBe('l');
     });
@@ -607,7 +607,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
       type(h, '900');
       h.plus.click();
-      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
+      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false, typed: true }]);
     });
 
     describe('a typed weight turns between grams and kilos (the owner, 2026-11-17)', () => {
@@ -644,7 +644,7 @@ describe('QuantityStepper (velista 0188)', () => {
           expect(state(h)).toBe('1 kg');
           expect(h.steps).toEqual([]);
           key(h, 'Enter');
-          expect(h.steps).toEqual([{ from: 500, to: 1000, repeat: false }]);
+          expect(h.steps).toEqual([{ from: 500, to: 1000, repeat: false, typed: true }]);
           expect(state(h)).toBe('1 kg');
           expect(turned(h)).toBe('');
         }
@@ -1142,7 +1142,7 @@ describe('QuantityStepper (velista 0188)', () => {
       );
       h.plus.click();
       expect(h.steps).toEqual([
-        { from: 750, to: 900, repeat: false },
+        { from: 750, to: 900, repeat: false, typed: true },
         { from: 900, to: 925, repeat: false },
       ]);
     });
