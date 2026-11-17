@@ -123,7 +123,6 @@ const UNIT_BASIS_WORDS: Readonly<Record<string, string>> = {
   LITER: 'L',
   UNIT: 'unit',
   DOZEN: 'dozen',
-  WASH: 'wash',
 };
 
 /**
