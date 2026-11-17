@@ -605,8 +605,11 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   its number in `--app-text-secondary` and its minus at an end, so 0 is never told by colour
   alone.
 
-  > Note of 2026-11-17, from the review of the stepper batch: the narrow sheet variant was
-  > first built with the row's 4 px; both sheet variants now pad the cell by 6.
+  > Note of 2026-11-17, from the review of the stepper batch: the narrow sheet variant keeps
+  > the row's 4 px, as built, and this sentence's "6 in the sheets" holds for the wide one
+  > only. Measured by the fit test (`stepper-fit.spec.ts`): "999,999" in the field is 63 px,
+  > and the 72 px cell less 6 on each side leaves 60, so the field would scroll; with 4 it
+  > leaves 64.
 - The sheets' field: the number is an `<input>` laid over a hidden copy of its text, so the
   field takes the width of what it holds, 17 px when focused (never under 16), its focus ring
   around the whole cell.

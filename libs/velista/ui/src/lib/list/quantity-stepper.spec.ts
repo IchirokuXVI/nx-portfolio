@@ -1221,13 +1221,15 @@ describe('QuantityStepper (velista 0188)', () => {
   });
 
   describe('the look (section 3.2)', () => {
-    it('pads the cell by 6 in both sheets, the narrow one too', () => {
+    it('pads the wide sheet by 6 and keeps 4 in the narrow one, where "999,999" needs the room', () => {
+      // The fit test of velista-luna-e2e measures the narrow field: 63 px of
+      // "999,999" in 72 less 6 on each side would scroll (2026-11-17).
       const scss = readFileSync(join(__dirname, 'quantity-stepper.scss'), 'utf8');
       const rule = /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
         scss
       );
       expect(rule?.[1]).toContain(':host(.variant-sheet) .cell');
-      expect(rule?.[1]).toContain(':host(.variant-sheet-narrow) .cell');
+      expect(rule?.[1]).not.toContain('variant-sheet-narrow');
     });
   });
 });

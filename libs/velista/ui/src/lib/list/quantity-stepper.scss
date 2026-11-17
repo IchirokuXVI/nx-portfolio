@@ -155,9 +155,9 @@
   white-space: nowrap;
 }
 
-// Both sheets, the wide and the narrow, pad their cell by 6 (section 3.2).
-:host(.variant-sheet) .cell,
-:host(.variant-sheet-narrow) .cell {
+// The wide sheet pads its cell by 6 (section 3.2). The narrow one keeps the row's 4:
+// "999,999" in the field is 63 px, and 72 less 6 on each side leaves 60.
+:host(.variant-sheet) .cell {
   padding-inline: var(--app-stepper-cell-pad-sheet);
 }
 
