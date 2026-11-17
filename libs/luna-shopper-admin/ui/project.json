@@ -5,6 +5,7 @@
   "prefix": "lib",
   "projectType": "library",
   "tags": [],
+  "implicitDependencies": ["luna-shopper-backend-gateway"],
   "targets": {
     "test": {
       "executor": "@nx/jest:jest",
