@@ -607,7 +607,8 @@ test.describe('a weight line on the product page (velista 0187)', () => {
         unit: 'GRAM',
       });
       expect(response.ok()).toBe(true);
-      await expect(page.locator('.add-failed')).toHaveCount(0);
+      // The live region is always there; a refused write fills it.
+      await expect(page.locator('.add-failed')).toHaveText('');
       await expect(count).toHaveAttribute('data-value', '1700');
     });
 
