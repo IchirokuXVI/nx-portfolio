@@ -399,7 +399,7 @@ export const ERROR_CODES = {
   ITEM_APPROX_WEIGHT_BESIDE_SIZE: 'item_approx_weight_beside_size',
   /**
    * A product write would store a step off the list, or a step on a product
-   * that is not sold by the kilo or the litre (plan 0261, section 2.2). An
+   * that is not sold by the kilo (plan 0261, section 2.2 and S3). An
    * edit that makes a stepped product a pack or a piece sends a null step
    * with it. The step, the allowed steps, the unit, the size and the weight
    * travel in `details`.

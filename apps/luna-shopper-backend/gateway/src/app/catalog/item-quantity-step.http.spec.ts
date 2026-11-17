@@ -21,7 +21,7 @@ import { AdminCatalogItemsController } from './catalog-admin.controller';
  *
  * The validation pipe refuses a step off the list before anything crosses the
  * broker, and the global filter answers catalog's refusal of a step on a
- * product that is not sold by the kilo or the litre with its code and its
+ * product that is not sold by the kilo with its code and its
  * details. Catalog's own rule is proven against Postgres in
  * `item-quantity-step.integration.spec.ts`.
  */

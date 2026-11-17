@@ -604,8 +604,43 @@ export async function ensureItem(
 }
 
 /**
+ * `GET /v1/admin/catalog/product-groups?query=`, then `POST` when no group
+ * carries this slug: one group, created once and kept across runs, as
+ * {@link ensureItem} keeps its products.
+ */
+export async function ensureProductGroup(
+  admin: Session,
+  slug: string,
+  name: { en: string; es: string },
+  referenceUnit: 'UNIT' | 'KILOGRAM' | 'LITER'
+): Promise<string> {
+  const page = await admin.get<{ items: { id: string; slug: string }[] }>(
+    `/v1/admin/catalog/product-groups?query=${encodeURIComponent(name.en)}`
+  );
+  const held = page.items.find((one) => one.slug === slug);
+  if (held) return held.id;
+  const made = await admin.post<{ id: string }>(
+    '/v1/admin/catalog/product-groups',
+    { name, slug, referenceUnit }
+  );
+  return made.id;
+}
+
+/**
+ * `PATCH /v1/admin/catalog/items/:id` with `productGroupId`: the group a
+ * product is compared in (backend `0048`). Absolute, as {@link setQuantityStep}.
+ */
+export async function setProductGroup(
+  admin: Session,
+  itemId: string,
+  productGroupId: string | null
+): Promise<void> {
+  await admin.patch(`/v1/admin/catalog/items/${itemId}`, { productGroupId });
+}
+
+/**
  * `PATCH /v1/admin/catalog/items/:id` with `quantityStep` (backend `0261`,
- * section 3): the step a curator gives a product sold by the kilo or the litre,
+ * section 3): the step a curator gives a product sold by the kilo,
  * or null for the default. Absolute, so a run after a failed one starts the same.
  */
 export async function setQuantityStep(

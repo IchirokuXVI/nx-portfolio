@@ -540,7 +540,7 @@ export class ItemService {
     });
     // A base unit, and no size on a kilogram (plan 0237, section 3.3). Then
     // a weight only beside no size (plan 0244, section 3.2), then a step only
-    // on a product sold by the kilo or the litre (plan 0261, section 2.2).
+    // on a product sold by the kilo (plan 0261, section 2.2).
     requireBaseUnit(draft, {});
     requireWeightBesideNoSize(draft, {});
     requireStepOnLooseProduct(draft, {});
@@ -4165,8 +4165,9 @@ export function requireWeightBesideNoSize(
 
 /**
  * Refuse a product that would hold a step off {@link QUANTITY_STEPS}, or a
- * step on a product that is not sold by the kilo or the litre (plan 0261,
- * section 2.2 and S3), with `item_quantity_step_not_allowed`.
+ * step on a product that is not sold by the kilo (plan 0261, section 2.2 and
+ * S3), with `item_quantity_step_not_allowed`. `carriesQuantityStep` says
+ * why a legacy `LITER` row still passes.
  *
  * It reads the row as it will be saved, as {@link requireBaseUnit} does, so
  * an edit that gives a stepped product a size, a weight or another unit is
@@ -4203,9 +4204,9 @@ export function requireStepOnLooseProduct(
   throw new ItemQuantityStepNotAllowedException(
     !listed
       ? `A step is one of ${QUANTITY_STEPS.join(', ')}, and ${step} is not.`
-      : 'Only a product sold by the kilo or the litre has a step: no size, ' +
-          'no weight, and a KILOGRAM or LITER unit. Send a null step with ' +
-          'an edit that makes it a pack or a piece.',
+      : 'Only a product sold by the kilo has a step: no size, no weight, ' +
+          'and a KILOGRAM unit. Send a null step with an edit that makes it ' +
+          'a pack or a piece.',
     {
       details: {
         ...where,

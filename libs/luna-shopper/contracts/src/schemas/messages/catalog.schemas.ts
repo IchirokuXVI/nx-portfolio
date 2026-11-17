@@ -743,7 +743,7 @@ export const itemViewProperties: Record<string, JsonSchema> = {
   approxWeight: numberOrNull(),
   // Who wrote the weight, for the back office. Not required either.
   approxWeightSetBy: { anyOf: [approxWeightSetBy(), { type: 'null' }] },
-  // Plan 0261: the step of a product sold by the kilo or the litre. Stated
+  // Plan 0261: the step of a product sold by the kilo. Stated
   // but not required, so a reader built before it keeps validating.
   quantityStep: quantityStepOrNull(),
   packCount: packCountOrNull(),
@@ -1547,7 +1547,9 @@ const createItemRequest = withRule(
       approxWeight: numberOrNull(),
       approxWeightSetBy: approxWeightSetBy(),
       // Plan 0261. Catalog refuses a step off the list, or on a product not
-      // sold by the kilo or the litre, with `item_quantity_step_not_allowed`.
+      // sold by the kilo, with `item_quantity_step_not_allowed`. No product
+      // by the litre carries one: a liquid is stored in millilitres with a
+      // size, a pack (the owner's ruling of 2026-11-17).
       quantityStep: integerOrNull(),
       // Plan 0244, section 7.4: recorded in the audit row only.
       createdFromEntry: nonEmptyString(),

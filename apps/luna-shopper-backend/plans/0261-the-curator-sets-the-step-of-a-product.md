@@ -2,6 +2,18 @@
 
 # 0261: the curator sets the step of a product
 
+> Amended on 2026-11-17 (the owner's ruling): **no product by the litre carries a step.**
+> `LITER` is not a base unit: a write that names it is refused with `item_unit_not_base`, and
+> a liquid is stored in `MILLILITER` with a size, which makes it a pack counted in pieces. So
+> the step is for a product sold by the kilo. As built (PR #976), `carriesQuantityStep` and the
+> check `item_quantity_step_on_loose` still admit `BY_THE_LITRE`; that admits only a legacy
+> `LITER` row with no size and no weight, on an edit that names no unit and no size. No
+> behaviour changed with this amendment: the comments and the sentence of
+> `item_quantity_step_not_allowed` now say "by the kilo" (the fix noted in velista `0187` on
+> 2026-11-17), as the gateway's description of `quantityStep` already did. S3 and section 9
+> say so. The rest of this plan still reads "the kilo or the litre" where it was written
+> before the ruling; S3 is the rule.
+>
 > Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no
 > larger step from 1000, and a count steps by 1 below 1000 and by 10 from 1000 (owner,
 > 2026-11-11); the most an amount can be is 999 999 (backend `0262`). Nothing else changed.
@@ -143,9 +155,15 @@ The writer's, open to the owner:
   which replaces `0246` M4), so its first value is on the grid of any step. A list rather than "any divisor" keeps the back office a choice of ten and
   leaves out steps nobody asks for at a counter (2, 4, 8, 20, 40, 125). The maximum is 1000:
   a product bought by the several kilos is still asked for in kilos.
-- **S3. Only a product sold by the kilo or the litre carries a step** (`BY_THE_KILO` and
-  `BY_THE_LITRE` of `0246` section 1: `KILOGRAM` or `LITER`, no size, no weight). A pack and a
-  kilo piece count pieces on their own line, so a step means nothing there. On a line with
+- **S3. Only a product sold by the kilo carries a step** (amended 2026-11-17, the owner's
+  ruling; written as "by the kilo or the litre"). As built, `carriesQuantityStep` reads
+  `BY_THE_KILO` and `BY_THE_LITRE` of `0246` section 1 (`KILOGRAM` or `LITER`, no size, no
+  weight), and the check `item_quantity_step_on_loose` names both units. No product by the
+  litre carries one in practice: `LITER` is not a base unit, a write that names it is refused
+  with `item_unit_not_base`, and a liquid is stored in `MILLILITER` with a size, a pack
+  counted in pieces. The `LITER` branch admits only a legacy row with no size and no weight,
+  on an edit that names no unit and no size. A pack and a kilo piece count pieces on their own
+  line, so a step means nothing there. On a line with
   several products that counts grams, velista steps by its rule whatever serves the line
   (`stepAt` reads no product, `line-unit.ts:142`), and whole packs and pieces appear only in
   the cost (`lineAmountOf`'s `pieces`); a step on a pack would thus be a second rule for one
@@ -338,8 +356,10 @@ an amount the assistant or an older build wrote stays valid.
 ## 9. Questions for the owner
 
 1. **S2.** Are the ten steps right? Chicken at 100 g and saffron at 1 g are in; 125 g, 2 kg and
-   any step above a kilo are out.
+   any step above a kilo are out. **Reviewed by the owner, stands as built (2026-11-17).**
 2. **S5.** A line with several products takes the smallest step among them. Is that right, or
-   should a favourite member's step win when it has one?
+   should a favourite member's step win when it has one? **Reviewed by the owner, stands as
+   built (2026-11-17).**
 3. **S6.** When a run states a weight for a loose product a curator stepped, the run skips the
-   weight. Should it instead turn the product into a kilo piece and drop the step?
+   weight. Should it instead turn the product into a kilo piece and drop the step? **Reviewed
+   by the owner, stands as built (2026-11-17).**

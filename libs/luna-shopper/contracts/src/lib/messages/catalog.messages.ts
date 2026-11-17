@@ -1494,9 +1494,12 @@ export interface ItemView {
    * How far one step moves a line of this product, in grams or millilitres,
    * or null for the default steps (plan 0261).
    *
-   * One of {@link QUANTITY_STEPS}, and only on a product sold by the kilo or
-   * the litre (`KILOGRAM` or `LITER`, no size, no weight). A curator writes
-   * it, and no run does. Velista reads it to step a line; no server code
+   * One of {@link QUANTITY_STEPS}, and only on a product sold by the kilo
+   * (`KILOGRAM`, no size, no weight). No product by the litre carries one:
+   * `LITER` is not a base unit, and a liquid is stored in millilitres with a
+   * size, a pack counted in pieces (the owner's ruling of 2026-11-17). Only a
+   * legacy `LITER` row with no size, which no write can make, still passes
+   * {@link carriesQuantityStep}. A curator writes it, and no run does. Velista reads it to step a line; no server code
    * steps an amount by it, and an amount off its grid stays valid.
    */
   quantityStep: number | null;
@@ -2457,7 +2460,7 @@ export interface CreateItemRequest extends AdminCredential {
    */
   createdFromEntry?: string;
   /**
-   * The step of a product sold by the kilo or the litre (plan 0261). See
+   * The step of a product sold by the kilo (plan 0261). See
    * {@link ItemView.quantityStep}. A value off {@link QUANTITY_STEPS}, or a
    * step on any other product, is refused with
    * `item_quantity_step_not_allowed`. A run never sends one.
@@ -2546,7 +2549,7 @@ export interface UpdateItemRequest extends AdminCredential {
   approxWeightSetBy?: ApproxWeightSetBy;
   /**
    * Set, change or (with `null`) clear the step of a product sold by the kilo
-   * or the litre (plan 0261, section 2.2). See {@link ItemView.quantityStep}.
+   * (plan 0261, section 2.2). See {@link ItemView.quantityStep}.
    *
    * An edit that makes a stepped product a pack or a piece (a size, a weight
    * or another unit) must send `quantityStep: null` with it, or it is refused

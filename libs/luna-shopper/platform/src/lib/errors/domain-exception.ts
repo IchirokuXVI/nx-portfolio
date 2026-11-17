@@ -652,7 +652,7 @@ export const ITEM_QUANTITY_STEPS_ALLOWED_DETAIL = 'allowed';
 
 /**
  * A product write would store a step off the list, or a step on a product
- * that is not sold by the kilo or the litre (plan 0261, section 2.2). The
+ * that is not sold by the kilo (plan 0261, section 2.2 and S3). The
  * details are public: the step under {@link ITEM_QUANTITY_STEP_DETAIL}, the
  * allowed steps under {@link ITEM_QUANTITY_STEPS_ALLOWED_DETAIL}, the unit
  * under `defaultUnit`, the size under {@link ITEM_UNIT_SIZE_DETAIL} and the
