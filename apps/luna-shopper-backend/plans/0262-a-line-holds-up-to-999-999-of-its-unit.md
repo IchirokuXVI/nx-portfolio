@@ -1,4 +1,5 @@
 > **PR:** [#975](https://github.com/IchirokuXVI/nx-portfolio/pull/975)
+> **PR (amendment of 2026-11-17):** [#1002](https://github.com/IchirokuXVI/nx-portfolio/pull/1002)
 
 # 0262: a line holds up to 999 999 of its unit
 
