@@ -1,4 +1,6 @@
 > **PR:** [#978](https://github.com/IchirokuXVI/nx-portfolio/pull/978)
+>
+> **PR:** [#1003](https://github.com/IchirokuXVI/nx-portfolio/pull/1003), the owner's rulings of 2026-11-17 on typing and the ceiling
 
 # 0188: an amount is stepped with two buttons
 
