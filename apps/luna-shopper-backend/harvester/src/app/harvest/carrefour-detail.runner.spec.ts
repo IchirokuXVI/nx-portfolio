@@ -18,6 +18,7 @@ import type { BackfillEntry } from './catalog-runner';
 import type { HarvestRunStore } from './harvest-run.store';
 import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { withEntryWrites } from './source-entry-writes.fake';
 import { SourceIngest } from './source-ingest';
 
 /**
@@ -297,14 +298,17 @@ describe('CarrefourDetailRunner, with the ingest', () => {
   }
 
   function ingestOver(rows: SourceCatalogEntry[]): SourceIngest {
-    const entries = {
-      find: jest.fn(async () => rows),
-      create: jest.fn((created: SourceCatalogEntry) => ({
-        id: `new-${created.externalId}`,
-        ...created,
-      })),
-      save: jest.fn(async (saved: SourceCatalogEntry) => saved),
-    } as unknown as Repository<SourceCatalogEntry>;
+    const entries = withEntryWrites(
+      {
+        find: jest.fn(async () => rows),
+        create: jest.fn((created: SourceCatalogEntry) => ({
+          id: `new-${created.externalId}`,
+          ...created,
+        })),
+        save: jest.fn(async (saved: SourceCatalogEntry) => saved),
+      },
+      () => rows
+    ) as unknown as Repository<SourceCatalogEntry>;
     const prices = {
       upsert: jest.fn(async () => undefined),
     } as unknown as Repository<SourceEntryPrice>;

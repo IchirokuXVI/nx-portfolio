@@ -18,6 +18,7 @@ import { FileImportRunner, unpayableForOne } from './file-import.runner';
 import { entryKey } from './matching';
 import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
+import { withEntryWrites } from './source-entry-writes.fake';
 import { SourceIngest } from './source-ingest';
 
 /**
@@ -77,19 +78,22 @@ function build(options: {
   const saved: SourceCatalogEntry[] = [];
   let created = 0;
 
-  const entries = {
-    find: jest.fn(async () => stored),
-    create: jest.fn((row: SourceCatalogEntry) => {
-      created += 1;
-      return { id: `new-${created}`, ...row };
-    }),
-    save: jest.fn(async (row: SourceCatalogEntry) => {
-      if (!saved.includes(row) && !stored.includes(row)) {
-        saved.push(row);
-      }
-      return row;
-    }),
-  } as unknown as Repository<SourceCatalogEntry>;
+  const entries = withEntryWrites(
+    {
+      find: jest.fn(async () => stored),
+      create: jest.fn((row: SourceCatalogEntry) => {
+        created += 1;
+        return { id: `new-${created}`, ...row };
+      }),
+      save: jest.fn(async (row: SourceCatalogEntry) => {
+        if (!saved.includes(row) && !stored.includes(row)) {
+          saved.push(row);
+        }
+        return row;
+      }),
+    },
+    () => [...stored, ...saved]
+  ) as unknown as Repository<SourceCatalogEntry>;
 
   const priceRows: Record<string, unknown>[] = [];
   const prices = {

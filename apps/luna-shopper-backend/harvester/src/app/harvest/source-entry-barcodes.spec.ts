@@ -31,6 +31,7 @@ import type { RunContext } from './run-context';
 import { SourceEntryAvailabilityWriter } from './source-entry-availability';
 import { SourceEntryBatchService } from './source-entry-batch.service';
 import { SourceEntryPriceWriter } from './source-entry-write';
+import { withEntryWrites } from './source-entry-writes.fake';
 import { SourceEntryService } from './source-entry.service';
 import {
   SourceIngest,
@@ -401,14 +402,17 @@ async function ingestFirstSight(
   ean: string
 ) {
   const saved: SourceCatalogEntry[] = [];
-  const entries = {
-    find: jest.fn(async () => []),
-    create: jest.fn((row: SourceCatalogEntry) => ({ id: 'new-1', ...row })),
-    save: jest.fn(async (row: SourceCatalogEntry) => {
-      saved.push(row);
-      return row;
-    }),
-  } as unknown as Repository<SourceCatalogEntry>;
+  const entries = withEntryWrites(
+    {
+      find: jest.fn(async () => []),
+      create: jest.fn((row: SourceCatalogEntry) => ({ id: 'new-1', ...row })),
+      save: jest.fn(async (row: SourceCatalogEntry) => {
+        saved.push(row);
+        return row;
+      }),
+    },
+    () => saved
+  ) as unknown as Repository<SourceCatalogEntry>;
   const prices = {
     upsert: jest.fn(async () => undefined),
   } as unknown as Repository<SourceEntryPrice>;
@@ -1326,14 +1330,31 @@ describe('a waiting row is matched again after a barcode is taught (plan 0185)',
     observations: (SourceObservation | PartialSourceObservation)[]
   ) {
     const saved: SourceCatalogEntry[] = [];
-    const entries = {
-      find: jest.fn(async () => rows),
-      create: jest.fn((row: SourceCatalogEntry) => ({ id: 'new-1', ...row })),
-      save: jest.fn(async (row: SourceCatalogEntry) => {
+    // The row as written, once per row: a plain write and a decision of the
+    // walk are two statements since plan 0269.
+    const record = (row: SourceCatalogEntry) => {
+      const at = saved.findIndex((each) => each.id === row.id);
+      if (at === -1) {
         saved.push({ ...row });
-        return row;
-      }),
-    } as unknown as Repository<SourceCatalogEntry>;
+      } else {
+        saved[at] = { ...row };
+      }
+    };
+    const entries = withEntryWrites(
+      {
+        find: jest.fn(async () => rows),
+        create: jest.fn((row: SourceCatalogEntry) => ({
+          id: 'new-1',
+          ...row,
+        })),
+        save: jest.fn(async (row: SourceCatalogEntry) => {
+          saved.push({ ...row });
+          return row;
+        }),
+      },
+      () => rows,
+      record
+    ) as unknown as Repository<SourceCatalogEntry>;
     const prices = {
       upsert: jest.fn(async () => undefined),
     } as unknown as Repository<SourceEntryPrice>;
