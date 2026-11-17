@@ -237,6 +237,13 @@ class RokuTranslator {
           // is what makes the two coexist. Measured, not assumed: without it the
           // read callback is never invoked.
           partialBundledLanguages: true,
+          // A value goes into the sentence as written. The i18next default escapes
+          // it as HTML, and every consumer then draws the sentence as text, so the
+          // entities reached the screen: "O'Brien's" drew as `O&#39;Brien&#39;s`
+          // and "€2.49 / kg" as `€2.49 &#x2F; kg`. Angular's interpolation and
+          // attribute bindings escape on their own. A sentence that is ever drawn
+          // as markup must escape its values at that site, not here.
+          interpolation: { escapeValue: false },
           // debug: true,
         },
         (err) => {
