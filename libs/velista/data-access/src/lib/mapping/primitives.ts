@@ -68,8 +68,8 @@ export function positiveNum(value: unknown): number | null {
 
 /**
  * A product's step (backend `0261`, velista `0186`): one of `QUANTITY_STEPS`, else
- * null. A step on a product the client reads as not sold by the kilo or the litre
- * is kept as served; `lineStepOf` ignores it.
+ * null. A step on a product the client reads as not sold loose by the kilo is kept
+ * as served; `lineStepOf` ignores it.
  */
 export function quantityStepOf(value: unknown): number | null {
   return isQuantityStep(value) ? value : null;

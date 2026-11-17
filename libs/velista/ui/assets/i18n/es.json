@@ -896,7 +896,7 @@
       "overwritten": "{{name}} cambió esto mientras lo editabas",
       "overwrittenBySomeone": "Otra persona cambió esto mientras lo editabas",
       "failed": "No se ha guardado. Toca para reintentar",
-      "hiddenAtZero": "{{name}} está a 0 y se oculta. Búscalo para recuperarlo."
+      "hiddenAtZero": "{{name}} está a 0 y se oculta. Busca la línea para recuperarla."
     },
     "view": {
       "order": {
@@ -1328,7 +1328,7 @@
     },
     "listRows": {
       "label": "Filas compactas",
-      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono."
+      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este dispositivo."
     }
   },
   "install": {

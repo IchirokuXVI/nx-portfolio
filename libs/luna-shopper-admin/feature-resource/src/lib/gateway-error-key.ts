@@ -111,7 +111,7 @@ export function gatewayErrorKey(error: GatewayError | null): string | null {
       // A weight beside a size, or a weight of zero or less. Typing either
       // clears the other in the form, so the fix is to clear one.
       return 'resource.error.itemApproxWeightBesideSize';
-    // A step on a product not sold by the kilo or the litre (backend plan
+    // A step on a product not sold loose by the kilo (backend plan
     // 0261, admin plan 0070). The form hides the step for one, so this is a
     // screen that is behind or a request from elsewhere.
     case 'item_quantity_step_not_allowed':

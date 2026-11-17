@@ -139,8 +139,8 @@ function approxWeightNote(
 type WireStep = NonNullable<Wire.CatalogItemView['quantityStep']>;
 
 /**
- * The steps a curator may give a product sold by the kilo or the litre, in
- * grams or millilitres (backend plan 0261 S2, admin plan 0070). Typed against
+ * The steps a curator may give a loose product sold by the kilo, in grams
+ * (backend plan 0261 S2, admin plan 0070). Typed against
  * the generated union, and `catalog-descriptors.spec.ts` asserts that every
  * member of it is here, so a step the gateway adds fails a spec and not a
  * curator's save.
@@ -159,8 +159,11 @@ function blank(value: unknown): boolean {
  * kilo, millilitres for one sold by the litre, and `null` for a product that
  * carries no step (backend plan 0261 S3, admin plan 0070 section 2.1).
  *
- * Only a product with no size and no weight is sold by the kilo or the litre:
- * a weight makes it a piece, and a size a pack. The rule is the server's
+ * Only a product with no size and no weight is sold by the kilo: a weight makes
+ * it a piece, and a size a pack. No product by the litre carries a step (the
+ * owner, 2026-11-17): a write that names `LITER` is refused, and a liquid is
+ * stored in millilitres with a size. A legacy `LITER` row with no size still
+ * reads as `ml` here, as the server's rule admits it. The rule is the server's
  * `carriesQuantityStep`, kept here as `0068` kept its own, and read over the
  * row as the form holds it. `shown`, the unit, the options and the default
  * line all read this one rule.
@@ -323,8 +326,8 @@ export const ITEMS = defineResource<Item>({
       note: approxWeightNote,
     },
     {
-      // How far one press moves a shopper's amount of a product sold by the
-      // kilo or the litre (backend plan 0261, admin plan 0070). Empty is the
+      // How far one press moves a shopper's amount of a loose product sold
+      // by the kilo (backend plan 0261, admin plan 0070). Empty is the
       // default step.
       kind: 'number',
       name: 'quantityStep',
@@ -332,7 +335,7 @@ export const ITEMS = defineResource<Item>({
       help: 'catalog.items.quantityStepHelp',
       nullable: true,
       integer: true,
-      // Only a product sold by the kilo or the litre carries one. Hidden, it
+      // Only a loose product sold by the kilo carries one. Hidden, it
       // holds its empty value, so the edit that makes the product a pack or a
       // piece sends `quantityStep: null` beside it, which the server asks of
       // that edit.
