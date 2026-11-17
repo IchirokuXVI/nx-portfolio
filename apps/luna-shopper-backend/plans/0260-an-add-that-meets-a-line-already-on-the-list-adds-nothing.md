@@ -12,6 +12,14 @@
 > amount at a repeat add (the median of the amounts bought) is backlog `0025`, not built here.
 > The title changed with it; the file name is the old one.
 >
+> **Amended on 2026-11-17 (the owner): a free text line counts in any unit.** U1 ("a free
+> text line counts pieces") is replaced: the owner ruled on 2026-11-17 that a free text line (no product) may be created and edited in `UNIT`, `GRAM` or `MILLILITER`, and stores and returns the unit it was given. The gateway no longer refuses it
+> (`0246` M3). R4's "always `UNIT`" is replaced by "in the unit the add states, `UNIT` when
+> it states none". The matching rules are unchanged: an add meets a line by name whatever the
+> unit, no add raises a wanted line, and a raise of a line at 0 takes the amount from that
+> line's own unit (`amountOnto`). Core needed no change for it; the gateway's check was the
+> one refusal. Velista still creates a free text line in `UNIT`.
+>
 > It amends `0246` M4, M5 and section 3.3 in their add half, and `0228` target 1 (the raise of
 > one candidate, the question). The merge half of `0246` (a rename onto a line of another unit,
 > `line_unit_differs`) stays as `0246` built it. It records U1, which closes the first bullet of
@@ -178,6 +186,9 @@ From 2026-11-09:
 
 - **U1. A free text line counts pieces.** To count in another unit a line needs a product.
   This closes the first bullet of `0246` section 9. W1 of `0246` stands.
+  _Replaced on 2026-11-17 by the owner: a free text line may be created and edited in
+  `UNIT`, `GRAM` or `MILLILITER`, and keeps the unit it was given. A line with products keeps
+  the rule of `0246` M3._
 - **U2. A conversion between units is wanted at an add and at a merge, and not now.** Until a
   conversion plan is built, an add or a merge that meets a line of another unit is an error,
   never a choice and never a silent new line. The conversion is backlog `0024`.
@@ -322,6 +333,11 @@ From 2026-11-16, decision 50 (the owner approved it on 2026-11-16):
   stated `unit` and `quantity` of a free text add only shape a line it creates (always `UNIT`,
   U1). This also keeps every installed velista working: it sends `unit: 'UNIT'` and a
   `quantity` on every typed name (velista `0182`).
+  _Note of 2026-11-17 (the owner): the line a free text add creates counts in the add's
+  `unit`, any of the three, and no longer always `UNIT` (U1 replaced). Core already stored the
+  unit it was given; the gateway refused it with `line_unit_not_offered` and no longer does.
+  The rest of R4 stands: the unit filters no match, and a raise of a kept line of another
+  unit is one step of that line's own unit._
 - **R5. A product add meets a line whose product set holds every product of the add.** A line of
   several products (velista `0183`) that holds the product is the product "already on the list"
   in the owner's words, and the catalog tab of velista `0185` switches its plus off for exactly
@@ -641,7 +657,7 @@ a merge across units waits for a conversion.
 - The usual amount at a repeat add, the median of the amounts bought (backlog `0025`).
 - A conversion between units at an add or a merge (backlog `0024`).
 - The per product step (backend `0261`, velista `0186`).
-- The limit of 999 999 (backend `0262`).
+- The limit of 999 999 (backend `0262`; 99 999 since the owner's ruling of 2026-11-17).
 - The deletion of a line with nothing to keep at 0 (backend `0263`, velista `0192`). _Note of
   2026-11-12: `0263` was withdrawn by the owner; no write deletes a line at 0._
 - The merge and the rename planner (`0246` section 3.3 stands).

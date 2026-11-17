@@ -156,9 +156,10 @@ interface UpsertItem {
  * for both tools, so `upsert_lines` and `settle_lines` cannot disagree.
  *
  * The last sentence is W1 over section 5: a new line from this tool names no
- * product, a free text line counts pieces, so {@link freshLine} and
- * {@link lineEdit} write the amount into the name rather than sending a unit
- * the gateway refuses.
+ * product, and this tool keeps a free text line in pieces, so
+ * {@link freshLine} and {@link lineEdit} write the amount into the name
+ * rather than sending a unit. The gateway takes any unit on a free text line
+ * since the owner's ruling of 2026-11-17; the assistant was left as it was.
  */
 const UNIT_PARAMETER = {
   type: 'string',
@@ -1411,12 +1412,13 @@ const UNIT_SYMBOLS: Record<Exclude<LineUnit, 'UNIT'>, string> = {
 /**
  * The batch item of a new line (plan 0246, W1 and section 9).
  *
- * Every line this tool creates is free text: it names no product. A free text
- * line counts pieces, and the gateway refuses another unit on it with
- * `line_unit_not_offered`. So a weight or a volume the person said is folded
- * into the name and sent with no unit and no quantity: "300 g of cheese" is a
- * line called "queso 300 g" at one, as plan 0246 section 9 states. A unit is
- * sent only on a line that already exists, in its own unit.
+ * Every line this tool creates is free text: it names no product. This tool
+ * creates it in pieces, as plan 0246 section 9 states, so a weight or a volume
+ * the person said is folded into the name and sent with no unit and no
+ * quantity: "300 g of cheese" is a line called "queso 300 g" at one. The
+ * gateway would take the unit on a free text line since the owner's ruling of
+ * 2026-11-17, and the assistant was left as it was. A unit is sent only on a
+ * line that already exists, in its own unit.
  */
 function freshLine(item: UpsertItem): { content: string; quantity?: number } {
   if (item.unit !== undefined && item.unit !== 'UNIT') {
@@ -1439,10 +1441,11 @@ function freshLine(item: UpsertItem): { content: string; quantity?: number } {
  *
  * A line with products counts in a unit they offer, so the unit is sent beside
  * its quantity, and only beside one: the gateway refuses a unit change with no
- * amount to start from. A free text line counts pieces and refuses any other
- * unit with `line_unit_not_offered`, so a weight or a volume said of it is
- * written into its name the way {@link freshLine} writes a new one: "pon 300 g
- * de queso" over "queso" is "queso 300 g" at one, and no unit is sent.
+ * amount to start from. On a free text line this tool keeps pieces, so a
+ * weight or a volume said of it is written into its name the way
+ * {@link freshLine} writes a new one: "pon 300 g de queso" over "queso" is
+ * "queso 300 g" at one, and no unit is sent. The gateway would take the unit
+ * since the owner's ruling of 2026-11-17; the assistant was left as it was.
  */
 function lineEdit(
   line: LineView,
@@ -1462,7 +1465,7 @@ function lineEdit(
   };
 }
 
-/** A line that names no product and follows no group: it counts pieces (W1). */
+/** A line that names no product and follows no group (W1). */
 function isFreeText(line: LineView): boolean {
   return line.itemIds.length === 0 && line.productGroupId === null;
 }

@@ -122,7 +122,7 @@ describe('the line unit vocabulary (plan 0246, section 1)', () => {
     ]);
   });
 
-  it('answers UNIT alone for an empty set, which is a free text line (W1)', () => {
+  it('answers UNIT alone for an empty set, a line whose products the catalog names none of', () => {
     expect(lineUnitsOf([])).toEqual(['UNIT']);
   });
 

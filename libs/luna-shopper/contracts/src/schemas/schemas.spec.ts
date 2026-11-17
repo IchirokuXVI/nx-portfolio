@@ -398,7 +398,8 @@ describe('contract schemas', () => {
             listId: 'li',
             content: 'Milk',
             quantity: 1,
-            // A free text line counts pieces (plan 0246 W1).
+            // Created in pieces here; a free text line counts in any of the
+            // three units since the owner's ruling of 2026-11-17.
             unit: 'UNIT',
             // A free text line, which is what most lines are: an empty set and a
             // null hash, both stated rather than left out (plan 0048, 1.1).
@@ -3392,24 +3393,24 @@ describe('a line counts in a unit (plan 0246)', () => {
   });
 });
 
-describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
+describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => {
   it('a delta reaches the ceiling in both directions and stops there', () => {
     const delta = { userId: 'u', lineId: 'l', unit: 'GRAM' };
     const valid = (value: number) =>
       validateMessageRequest('line.addQuantity', { ...delta, delta: value })
         .valid;
-    expect(valid(999999)).toBe(true);
-    expect(valid(-999999)).toBe(true);
-    expect(valid(1000000)).toBe(false);
-    expect(valid(-1000000)).toBe(false);
+    expect(valid(99999)).toBe(true);
+    expect(valid(-99999)).toBe(true);
+    expect(valid(100000)).toBe(false);
+    expect(valid(-100000)).toBe(false);
   });
 
   it('an edit sets a line to the ceiling and not past it', () => {
     const edit = { userId: 'u', lineId: 'l', unit: 'GRAM' };
     const valid = (quantity: number) =>
       validateMessageRequest('line.update', { ...edit, quantity }).valid;
-    expect(valid(999999)).toBe(true);
-    expect(valid(1000000)).toBe(false);
+    expect(valid(99999)).toBe(true);
+    expect(valid(100000)).toBe(false);
   });
 
   it('a basket demand sets a line to the ceiling and not past it', () => {
@@ -3424,7 +3425,40 @@ describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
     const valid = (quantity: number) =>
       validateSchema(BASKET_SCHEMA_IDS.demandRequest, { ...demand, quantity })
         .valid;
-    expect(valid(999999)).toBe(true);
-    expect(valid(1000000)).toBe(false);
+    expect(valid(99999)).toBe(true);
+    expect(valid(100000)).toBe(false);
+  });
+
+  it('a line stored above the ceiling is named as it is, so it can be stepped down', () => {
+    // Only 100 000 can be stored in production, the ceiling before the
+    // ruling. What the client saw is no write, so it has no ceiling.
+    expect(
+      validateMessageRequest('line.update', {
+        userId: 'u',
+        lineId: 'l',
+        quantity: 99999,
+        from: 100000,
+      }).valid
+    ).toBe(true);
+    expect(
+      validateMessageRequest('line.addQuantity', {
+        userId: 'u',
+        lineId: 'l',
+        unit: 'UNIT',
+        delta: -1,
+        expect: 100000,
+      }).valid
+    ).toBe(true);
+    expect(
+      validateSchema(BASKET_SCHEMA_IDS.demandRequest, {
+        basketId: 'b',
+        participantId: 'p',
+        rowKey: 'r',
+        lineId: 'l',
+        unit: 'UNIT',
+        quantity: 99999,
+        from: 100000,
+      }).valid
+    ).toBe(true);
   });
 });

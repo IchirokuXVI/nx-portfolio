@@ -16,7 +16,8 @@
 >
 > Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no
 > larger step from 1000, and a count steps by 1 below 1000 and by 10 from 1000 (owner,
-> 2026-11-11); the most an amount can be is 999 999 (backend `0262`). Nothing else changed.
+> 2026-11-11); the most an amount can be is 999 999 (backend `0262`; 99 999 since the owner's
+> ruling of 2026-11-17). Nothing else changed.
 >
 > Written on 2026-11-09 from the owner's decision U4 of that day (section 0). Velista steps
 > every weight or volume line by one fixed rule: 25 g or 25 ml at every amount (amended

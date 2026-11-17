@@ -338,21 +338,37 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       ]);
     });
 
-    it('offers UNIT alone for a free text line, without asking catalog', async () => {
-      const refused = await send('POST', `lists/${LIST}/lines`, {
+    it.each(['UNIT', 'GRAM', 'MILLILITER'])(
+      'creates a free text line in %s, without asking catalog (the owner, 2026-11-17)',
+      async (unit) => {
+        const response = await send('POST', `lists/${LIST}/lines`, {
+          content: 'Ham',
+          unit,
+          quantity: 300,
+        });
+
+        expect(response.status).toBe(201);
+        expect(app.sent).toEqual([
+          {
+            subject: LINE_PATTERNS.add,
+            payload: {
+              userId: 'user-1',
+              listId: LIST,
+              content: 'Ham',
+              quantity: 300,
+              unit,
+            },
+          },
+        ]);
+      }
+    );
+
+    it('creates a free text line with no unit, which core reads as UNIT', async () => {
+      const response = await send('POST', `lists/${LIST}/lines`, {
         content: 'Ham 300 g',
-        unit: 'GRAM',
-      });
-      expect(refused.status).toBe(422);
-      expect(await refused.json()).toMatchObject({
-        details: { offered: ['UNIT'] },
       });
 
-      app.sent.length = 0;
-      const counted = await send('POST', `lists/${LIST}/lines`, {
-        content: 'Ham 300 g',
-      });
-      expect(counted.status).toBe(201);
+      expect(response.status).toBe(201);
       expect(app.sent.map((entry) => entry.subject)).toEqual([
         LINE_PATTERNS.add,
       ]);
@@ -437,6 +453,30 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
   });
 
   describe('POST /v1/lists/:id/lines/batch', () => {
+    it('passes free text items in any unit to core, without asking catalog (the owner, 2026-11-17)', async () => {
+      const response = await send('POST', `lists/${LIST}/lines/batch`, {
+        items: [
+          { content: 'Flour', unit: 'GRAM', quantity: 500 },
+          { content: 'Oil', unit: 'MILLILITER' },
+        ],
+      });
+
+      expect(response.status).toBe(201);
+      expect(app.sent).toEqual([
+        {
+          subject: LINE_PATTERNS.addMany,
+          payload: {
+            userId: 'user-1',
+            listId: LIST,
+            items: [
+              { content: 'Flour', unit: 'GRAM', quantity: 500 },
+              { content: 'Oil', unit: 'MILLILITER' },
+            ],
+          },
+        },
+      ]);
+    });
+
     it('refuses the batch when one item asks for a unit its products do not offer', async () => {
       const response = await send('POST', `lists/${LIST}/lines/batch`, {
         items: [
@@ -509,6 +549,50 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       ]);
     });
 
+    it('changes the unit of a free text line, without asking catalog (the owner, 2026-11-17)', async () => {
+      app.setBasis({ unit: 'UNIT', itemIds: [] });
+
+      const response = await send('PATCH', `lines/${LINE}`, {
+        unit: 'MILLILITER',
+        quantity: 25,
+      });
+
+      expect(response.status).toBe(200);
+      expect(app.sent.map((entry) => entry.subject)).toEqual([
+        LINE_PATTERNS.unitBasis,
+        LINE_PATTERNS.update,
+      ]);
+    });
+
+    it('clears the products of a weighed line, which leaves a free text line in grams', async () => {
+      app.setBasis({ unit: 'GRAM', itemIds: [LOOSE] });
+
+      const response = await send('PATCH', `lines/${LINE}`, { itemIds: [] });
+
+      expect(response.status).toBe(200);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.update,
+          payload: { userId: 'user-1', lineId: LINE, itemIds: [] },
+        },
+      ]);
+    });
+
+    it('still refuses a product that does not offer the unit of a free text line in grams', async () => {
+      app.setBasis({ unit: 'GRAM', itemIds: [] });
+
+      const response = await send('PATCH', `lines/${LINE}`, {
+        itemIds: [EGGS],
+      });
+
+      expect(response.status).toBe(422);
+      expect(await response.json()).toMatchObject({
+        code: ERROR_CODES.LINE_UNIT_NOT_OFFERED,
+        details: { offered: ['UNIT'] },
+      });
+      expect(coreWrites()).toEqual([]);
+    });
+
     it('asks nothing of core or catalog for an edit that names no unit and no product', async () => {
       const response = await send('PATCH', `lines/${LINE}`, { quantity: 3 });
 
@@ -519,10 +603,10 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
     });
   });
 
-  describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
-    it('passes a delta of 999 000 g to core', async () => {
+  describe('a line holds up to 99 999 of its unit (plan 0262, 2026-11-17)', () => {
+    it('passes a delta of 99 000 g to core', async () => {
       const response = await send('POST', `lines/${LINE}/quantity`, {
-        delta: 999000,
+        delta: 99000,
         unit: 'GRAM',
       });
 
@@ -533,16 +617,16 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
           payload: {
             userId: 'user-1',
             lineId: LINE,
-            delta: 999000,
+            delta: 99000,
             unit: 'GRAM',
           },
         },
       ]);
     });
 
-    it('answers 400 validation_failed on delta for a delta of 1 000 000', async () => {
+    it('answers 400 validation_failed on delta for a delta of 100 000', async () => {
       const response = await send('POST', `lines/${LINE}/quantity`, {
-        delta: 1000000,
+        delta: 100000,
         unit: 'GRAM',
       });
 
@@ -553,23 +637,23 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       expect(app.sent).toEqual([]);
     });
 
-    it('passes an edit to 999 999 to core', async () => {
+    it('passes an edit to 99 999 to core', async () => {
       const response = await send('PATCH', `lines/${LINE}`, {
-        quantity: 999999,
+        quantity: 99999,
       });
 
       expect(response.status).toBe(200);
       expect(coreWrites()).toEqual([
         {
           subject: LINE_PATTERNS.update,
-          payload: { userId: 'user-1', lineId: LINE, quantity: 999999 },
+          payload: { userId: 'user-1', lineId: LINE, quantity: 99999 },
         },
       ]);
     });
 
-    it('answers 400 validation_failed on quantity for an edit to 1 000 000', async () => {
+    it('answers 400 validation_failed on quantity for an edit to 100 000', async () => {
       const response = await send('PATCH', `lines/${LINE}`, {
-        quantity: 1000000,
+        quantity: 100000,
       });
 
       expect(response.status).toBe(400);
@@ -577,6 +661,26 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       expect(body).toMatchObject({ code: ERROR_CODES.VALIDATION_FAILED });
       expect(JSON.stringify(body)).toContain('quantity');
       expect(app.sent).toEqual([]);
+    });
+
+    it('passes the edit down of a line stored at 100 000, which names it as `from`', async () => {
+      const response = await send('PATCH', `lines/${LINE}`, {
+        quantity: 99999,
+        from: 100000,
+      });
+
+      expect(response.status).toBe(200);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.update,
+          payload: {
+            userId: 'user-1',
+            lineId: LINE,
+            quantity: 99999,
+            from: 100000,
+          },
+        },
+      ]);
     });
   });
 });
@@ -626,6 +730,20 @@ describe('the basket add checks the unit too (plan 0246, sections 3.2 and 4.2)',
       details: { offered: ['GRAM'] },
     });
     expect(w.sent).toEqual([]);
+  });
+
+  it('passes a free text add in grams to core, without asking catalog (the owner, 2026-11-17)', async () => {
+    const w = controller();
+
+    await w.basket.addLine(OWNER, BASKET, {
+      targetListId: LIST,
+      content: 'Ham',
+      unit: 'GRAM',
+      quantity: 300,
+    } as AddBasketLineDto);
+
+    expect(w.sent).toHaveLength(1);
+    expect(w.sent[0].payload).toMatchObject({ unit: 'GRAM', quantity: 300 });
   });
 
   it('hands the unit to core beside the quantity', async () => {
