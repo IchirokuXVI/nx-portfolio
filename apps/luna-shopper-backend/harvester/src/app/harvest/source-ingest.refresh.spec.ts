@@ -6,6 +6,7 @@ import type { Repository } from 'typeorm';
 import type { SourceCatalogEntry, SourceEntryPrice } from '../entities';
 import type { CatalogClient } from './catalog-client.service';
 import type { RunContext } from './run-context';
+import { withEntryWrites } from './source-entry-writes.fake';
 import {
   SourceIngest,
   type PartialSourceObservation,
@@ -66,11 +67,16 @@ function build(over: Partial<SourceCatalogEntry> = {}) {
       return undefined;
     }),
   } as unknown as Repository<SourceEntryPrice>;
-  const entries = {
-    find: jest.fn(async () => [{ ...row }]),
-    save: jest.fn(async (saved: SourceCatalogEntry) => saved),
-    create: jest.fn(),
-  } as unknown as Repository<SourceCatalogEntry>;
+  // The read at open. A read of the decided columns again is the wrapper's.
+  const find = jest.fn(async () => [{ ...row }]);
+  const entries = withEntryWrites(
+    {
+      find,
+      save: jest.fn(async (saved: SourceCatalogEntry) => saved),
+      create: jest.fn(),
+    },
+    () => [row]
+  ) as unknown as Repository<SourceCatalogEntry>;
   const catalog = {
     searchItems: jest.fn(async () => ({ items: [], nextCursor: null })),
     addPrices: jest.fn(async () => ({ inserted: 1, confirmed: 0 })),
@@ -82,7 +88,7 @@ function build(over: Partial<SourceCatalogEntry> = {}) {
     prices,
     catalog as unknown as CatalogClient
   );
-  return { ingest, row, priceRows, catalog, entries };
+  return { ingest, row, priceRows, catalog, entries, find };
 }
 
 const context = {
@@ -196,7 +202,7 @@ describe('SourceIngest.writeRefreshedPrices (plan 0216)', () => {
   it('writes no source row: the stored fields stay what the walk wrote', async () => {
     const refreshed = await refresh(observation([price('madrid')]));
     expect(refreshed.entries.save).not.toHaveBeenCalled();
-    expect(refreshed.entries.find).not.toHaveBeenCalled();
+    expect(refreshed.find).not.toHaveBeenCalled();
     expect(refreshed.catalog.searchItems).not.toHaveBeenCalled();
   });
 
