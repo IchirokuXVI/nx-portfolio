@@ -513,7 +513,7 @@ export class BasketPage {
    * likely reason to open one is to see what was bought, so every line, every
    * settlement, the people, the history, the share sheet and the link are all still
    * here. What goes is everything that would change it, absent rather than disabled
-   * per `0030`: the settle control on a row, the reel, the composer, the product
+   * per `0030`: the settle control on a row, the amount cell, the composer, the product
    * swap, the units sheet and the send sheet.
    */
   protected readonly finished = this._store.finished;

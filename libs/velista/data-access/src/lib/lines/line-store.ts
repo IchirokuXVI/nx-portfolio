@@ -995,7 +995,7 @@ export class LineStore {
    *
    * **Not optimistic, and that is the one deliberate difference from every other
    * write on this screen.** Everything else here is a gesture whose result the person
-   * already knows: they dragged a number, so the number moves. This one is two taps
+   * already knows: they stepped a number, so the number moves. This one is two taps
    * behind a deliberate open and its result is a *derivation* the server performs,
    * over history the client does not hold: how far the quantity falls depends on what
    * was outstanding, and whether the bought indicator appears depends on a count only
@@ -1863,7 +1863,7 @@ export class LineStore {
    * the row; the next step is a delta again.
    *
    * It never reads the old number in the new unit: three pieces are not three
-   * grams. Whatever the step or the turn of the reel asked for, the update names
+   * grams. Whatever the step asked for, the update names
    * the unit's default amount, one kilo or one litre, as an add does. A minus at
    * nothing sends nothing.
    *

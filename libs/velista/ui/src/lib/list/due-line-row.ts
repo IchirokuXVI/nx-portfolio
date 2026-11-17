@@ -24,8 +24,8 @@ import { QuantityStepper } from './quantity-stepper';
  * One line the list suggests, under To buy (velista `0089`, section 2).
  *
  * **Quieter than a line and visibly not one**: a dashed hairline in the attention role
- * over the attention tint, and no reel. It is a line at zero drawn early, so a tap on
- * its name opens the line detail sheet as a line row does.
+ * over the attention tint, and a button beside its stepper. It is a line at zero drawn
+ * early, so a tap on its name opens the line detail sheet as a line row does.
  *
  * ## The amount is chosen here, and the button takes it
  *

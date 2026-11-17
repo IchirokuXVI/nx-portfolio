@@ -500,8 +500,8 @@ export class BasketViewStore {
    * `0102`): the chosen shop and the scope of the price the row drew, or in "any of
    * your shops" mode the scope alone and never a shop.
    *
-   * The row, its reel and the settle sheet all ask here, so what one sends the others
-   * send too.
+   * The row and the settle sheet both ask here, so what one sends the other
+   * sends too.
    */
   settleShop(product: BasketProduct | null | undefined): {
     readonly priceScopeId?: string;

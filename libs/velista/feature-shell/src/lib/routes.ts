@@ -535,7 +535,7 @@ function memberActionRoutes(): Route[] {
  *
  * **Changing a line's quantity is deliberately not among them and never will be.** It
  * is the gesture the screen is built around, it happens under a thumb, and a sheet
- * would put a navigation and a dismissal around a number somebody is dragging. What
+ * would put a navigation and a dismissal around a number somebody is stepping. What
  * used to be said in this place about ticking off is the same rule about a different
  * gesture: the primary act on this page is never a route.
  *

@@ -262,7 +262,7 @@ export interface LineRowVm {
    */
   readonly detail?: string | null;
   /**
-   * How many are wanted, which is the row's state and the reel's value.
+   * How many are wanted, which is the row's state and the stepper's value.
    *
    * Drawn on **every** row now, zero included, where `0012` drew it only above
    * one. It stopped being an annotation on a line and became the thing the line
@@ -270,7 +270,10 @@ export interface LineRowVm {
    * learns to reach for.
    */
   readonly quantity: number;
-  /** What {@link quantity} counts, which the reel steps and draws by (velista `0182`). */
+  /**
+   * What {@link quantity} counts, which the stepper steps and draws by (velista
+   * `0182`).
+   */
   readonly unit: LineUnit;
   /**
    * The step its stepper presses by, `lineStepOf` of the line (velista `0186`), or

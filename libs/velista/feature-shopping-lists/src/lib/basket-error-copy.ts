@@ -48,7 +48,8 @@ export type BasketOperation =
   /** The summary: reading every list on a line, and changing what one asked for. */
   | 'basket.origins'
   /**
-   * Changing what one list **got**, from the summary's second reel (velista 0073).
+   * Changing what one list **got** (velista 0073). Its control was the summary's
+   * second reel, which went with velista 0190, and no screen sends it now.
    *
    * Apart from `basket.origins` because it is the opposite act on the same rows: that
    * one changes what a household asked for and buys nothing, and this one records a
@@ -120,7 +121,7 @@ export function basketErrorKey(
       // as it now stands rather than saying the save failed.
       //
       // Every operation, and deliberately not keyed on one: it means exactly the
-      // same thing to somebody dragging a row's number and to somebody typing a
+      // same thing to somebody stepping a list's amount and to somebody typing a
       // household's share.
       return 'basket.error.staleLine';
 

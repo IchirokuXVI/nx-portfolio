@@ -945,8 +945,8 @@ export function shownPriceScope(
 /**
  * Where a settle says it happened, as a body fragment to spread (velista `0102`).
  *
- * **The one place a settle body learns about a shop**, used by the row, its reel and
- * the settle sheet alike, so the three cannot disagree.
+ * **The one place a settle body learns about a shop**, used by the row and
+ * the settle sheet alike, so the two cannot disagree.
  *
  * - With a shop chosen, the shop and the scope of the price the row drew, which is
  *   the product's `atShop.priceScopeId`. The server copies the chain beside them.
@@ -1286,8 +1286,8 @@ export interface BasketSettleRequest {
  * What a write on a row addresses (backend `0201`, section 4): the row's key for
  * the path, and the lines the write acts on.
  *
- * `BasketStore` builds it from the row it holds, so the page, the sheet and the
- * reel cannot name different lines for one row. The key is one of the lines.
+ * `BasketStore` builds it from the row it holds, so the page and the sheet
+ * cannot name different lines for one row. The key is one of the lines.
  */
 export interface BasketRowTarget {
   readonly rowKey: string;

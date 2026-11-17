@@ -792,7 +792,7 @@ export type LineWriteCall =
    * A quantity adjustment, as the **delta** that was sent.
    *
    * The delta rather than the resulting number, because that is what the page is
-   * responsible for computing and therefore the thing worth asserting: a reel that
+   * responsible for computing and therefore the thing worth asserting: a stepper that
    * sent two increments where it should have sent one settled adjustment is a defect
    * a recorded end state would hide (velista plan 0043, section 4.1).
    */
