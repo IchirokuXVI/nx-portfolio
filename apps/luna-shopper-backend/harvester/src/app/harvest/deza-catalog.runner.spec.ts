@@ -1416,6 +1416,47 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     );
   });
 
+  it('writes a weight printed with aprox as an approximate weight and no size (plan 0266, D4)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Fuet extra ALTEZA 180 g aprox.',
+        section: 'W011',
+        shops: ['T1'],
+      },
+      {
+        description: 'Leche entera ALTEZA 1 L.',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    const byFormat = Object.fromEntries(
+      report.products.map((product) => [
+        product.sizeFormat,
+        [product.unitSize, product.sizeUnit, product.approxWeight],
+      ])
+    );
+    expect(byFormat).toEqual({
+      '180 g aprox.': [null, null, 180],
+      '1 L.': [1, 'LITER', null],
+    });
+    expect(report.products.map((product) => product.externalId)).toContain(
+      entryKey('Fuet extra ALTEZA', '180 g aprox.')
+    );
+    // Still no price, ever.
+    expect(
+      report.products.every((product) => product.prices.length === 0)
+    ).toBe(true);
+  });
+
   it('writes no price of any kind', async () => {
     listing = await startFakeListing(SECTIONS, [
       {
