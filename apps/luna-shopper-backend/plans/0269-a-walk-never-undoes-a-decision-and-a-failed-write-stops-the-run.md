@@ -443,3 +443,36 @@ says that the failed chunk may have written part of its rows and prices.
 **D10 (owner, answered 2026-11-17): a person's abort followed by a failed write ends `FAILED`,
 alerts and counts as a failure of the chain.** Kept as built, and it might change later. It is
 recorded here so that a reader does not take it for an accident.
+
+**D11 (decided 2026-11-17, extends D9): a run that fails before its drain still lets its queued
+writes finish, counts what ran, and says what kind of write failed.** The second review of
+PR #998 found three places where D9 did not hold yet.
+
+1. **A runner that throws with no abort.** The chunks it queued kept writing after the run row
+   said `FAILED` and the chain's lock was released, so their counters and heartbeat landed on
+   a finished row, a new run of the chain could start beside them, and the report stated
+   nothing of what they wrote. The executor now calls `RunReportSink.settle()` before it
+   finishes the run: it awaits the work already queued and nothing else. It queues no partial
+   chunk, closes no session, and writes no availability, pack count or weight, because the
+   run failed. The report then states what the settled chunks wrote, once, with the fields a
+   completed run uses, and the run ends `FAILED` with the runner's own error. `settle()` never
+   rejects. A queued chunk that fails while it settles does not change the sentence: the
+   runner's error came first and stays the sentence, the report counts the chunks before the
+   failed one, and the sink logs the failed write. No timeout bounds the wait: it is as long
+   as the queued writes take, as the drain of any run is, and a pod that stops is bounded by
+   its termination grace period as before.
+2. **`scopesDeclared` counts a declaration once it ran.** It was counted when the runner
+   declared it, so a declaration that a failed chunk before it skipped was counted as made. A
+   completed run states the same number as before, because every declaration runs before its
+   drain answers.
+3. **The stop sentence names the kind of work that failed.** The sink keeps the kind with the
+   first failure (a chunk of products, a chunk of places, or a price scope declaration), and
+   the sentence of each kind says what was kept and what may have been written in part. A
+   sink that cannot say gets words that are true of all three. No contract field changes.
+
+The other early exits of a run, as built: a stop of the refusal guard and a person's abort
+both abort the signal, so the runner's throw takes the abort path and the drain runs as for
+any run. An error before the sink exists leaves nothing queued. The reaper runs outside the
+executor and marks only a run whose heartbeat is older than the stale window. A chunk that
+settles counts its work through the run's context as it does during the walk, so a settling
+run is not more likely to be reaped than a walking one, and this plan changes nothing there.

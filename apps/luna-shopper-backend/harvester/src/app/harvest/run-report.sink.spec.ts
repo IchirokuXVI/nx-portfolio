@@ -1610,6 +1610,53 @@ describe('RunReportSink, a write that fails during a walk (plan 0269)', () => {
     expect(onWriteFailed).not.toHaveBeenCalled();
   });
 
+  it('settles what is queued without the partial chunk, closes nothing, and never rejects (D11)', async () => {
+    const failure = new Error('deadlock detected');
+    const { sink, pushed, closed, totals, catalog } = build({
+      counters: { pricesRecorded: 3, pricesWritten: 2 },
+      pushFails: { 1: failure },
+    });
+
+    for (const each of [...chunk('a'), ...chunk('b')]) {
+      sink.product(each);
+    }
+    // A partial chunk the runner never filled.
+    sink.product(observation({ externalId: 'c' }));
+
+    const written = await sink.settle();
+    expect(pushed.map((each) => each.length)).toEqual([400, 400]);
+    expect(written).toEqual(
+      expect.objectContaining({
+        products: 400,
+        pricesRecorded: 3,
+        pricesPublished: 2,
+      })
+    );
+    expect(sink.failure).toBe(failure);
+    expect(sink.failedWork).toBe('products');
+    expect(totals).toHaveBeenCalledTimes(1);
+    expect(closed).not.toHaveBeenCalled();
+    expect(catalog.setAvailability).not.toHaveBeenCalled();
+    expect(catalog.fillPackCounts).not.toHaveBeenCalled();
+  });
+
+  it('names the kind of work that failed, and counts a scope only once it was declared (D11)', async () => {
+    const failure = new Error('could not write the places');
+    const { sink, placesObserved, scopes } = build();
+    (scopes.declare as jest.Mock).mockImplementationOnce(async () => {
+      throw failure;
+    });
+
+    sink.scope({ key: 'A', kind: 'REGION', name: null } as never);
+    sink.place(place());
+    await settle();
+
+    expect(sink.failedWork).toBe('scope');
+    await expect(sink.drain()).rejects.toBe(failure);
+    expect(sink.writtenSoFar.scopesDeclared).toBe(0);
+    expect(placesObserved).toHaveLength(0);
+  });
+
   it('rejects the drain with a failure of the last chunk, which only the drain queues', async () => {
     const failure = new Error('deadlock detected');
     const { sink, onWriteFailed, closed } = build({

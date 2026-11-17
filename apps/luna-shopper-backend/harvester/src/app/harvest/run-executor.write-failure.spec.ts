@@ -140,6 +140,11 @@ function build(options: {
       get failure() {
         return failed ? failure : null;
       },
+      // The failed write was a chunk of products (plan 0269, D11).
+      get failedWork() {
+        return failed ? 'products' : null;
+      },
+      settle: jest.fn(async () => WRITTEN_BEFORE),
       delistingListings: () => ({ whole: [], notWhole: [] }),
     })
   );

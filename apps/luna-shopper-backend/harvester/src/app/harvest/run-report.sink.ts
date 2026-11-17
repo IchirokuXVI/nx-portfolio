@@ -78,6 +78,13 @@ export class ReportWriteFailedError extends Error {
   }
 }
 
+/**
+ * The kind of queued work that failed (plan 0269, D11): a chunk of products,
+ * a chunk of places, or the declaration of a price scope. The stop sentence
+ * of the run names it.
+ */
+export type FailedWriteKind = 'products' | 'places' | 'scope';
+
 /** How many products go into one ingest push. */
 const PRODUCT_CHUNK = 400;
 
@@ -350,8 +357,10 @@ export class RunReportSink implements RunReport {
   /** Everything queued, in order. It never rejects: see {@link queue}. */
   private chain: Promise<void> = Promise.resolve();
   /** The first failure on the chain, kept for `drain` (plan 0269). */
-  private firstFailure: { error: unknown } | null = null;
+  private firstFailure: { error: unknown; kind: FailedWriteKind } | null = null;
   private session: SourceIngestSession | null = null;
+  /** Whether the totals of a run that closes no session were taken. */
+  private totalsTaken = false;
 
   private products: ReportedObservation[] = [];
   private places: ObservedPlace[] = [];
@@ -457,6 +466,11 @@ export class RunReportSink implements RunReport {
     return this.firstFailure?.error ?? null;
   }
 
+  /** What kind of work the first failed write was, or null while none has. */
+  get failedWork(): FailedWriteKind | null {
+    return this.firstFailure?.kind ?? null;
+  }
+
   scope(declaration: ScopeDeclaration): void {
     if (this.firstFailure) {
       return;
@@ -471,9 +485,11 @@ export class RunReportSink implements RunReport {
       );
       return;
     }
-    this.result.scopesDeclared += 1;
-    this.queue(async () => {
+    // Counted once its work has run (plan 0269, D11): a declaration that a
+    // failed chunk before it skipped was never made.
+    this.queue('scope', async () => {
       await resolver.declare(declaration);
+      this.result.scopesDeclared += 1;
     });
   }
 
@@ -488,7 +504,7 @@ export class RunReportSink implements RunReport {
     if (this.products.length >= PRODUCT_CHUNK) {
       const chunk = this.products;
       this.products = [];
-      this.queue(() => this.pushProducts(chunk));
+      this.queue('products', () => this.pushProducts(chunk));
     }
   }
 
@@ -500,7 +516,7 @@ export class RunReportSink implements RunReport {
     if (this.places.length >= PLACE_CHUNK) {
       const chunk = this.places;
       this.places = [];
-      this.queue(() => this.writePlaces(chunk));
+      this.queue('places', () => this.writePlaces(chunk));
     }
   }
 
@@ -572,12 +588,12 @@ export class RunReportSink implements RunReport {
     if (this.products.length > 0) {
       const chunk = this.products;
       this.products = [];
-      this.queue(() => this.pushProducts(chunk));
+      this.queue('products', () => this.pushProducts(chunk));
     }
     if (this.places.length > 0) {
       const chunk = this.places;
       this.places = [];
-      this.queue(() => this.writePlaces(chunk));
+      this.queue('places', () => this.writePlaces(chunk));
     }
     await this.chain;
     // A failed chunk wrote nothing after it, and the drain writes nothing
@@ -585,10 +601,7 @@ export class RunReportSink implements RunReport {
     // the chunks before it wrote is already saved, so the result still states
     // it (D9), and the executor reads it through `writtenSoFar`.
     if (this.firstFailure) {
-      if (this.session) {
-        this.takeIngested(this.session.totals());
-      }
-      this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
+      this.takeTotals();
       throw this.firstFailure.error;
     }
 
@@ -634,6 +647,46 @@ export class RunReportSink implements RunReport {
    */
   get writtenSoFar(): RunReportResult {
     return this.result;
+  }
+
+  /**
+   * Let the work already queued finish, for a run that failed before its
+   * drain (plan 0269, D11), and answer what it wrote.
+   *
+   * It awaits the chain and nothing else: it queues no partial chunk, closes
+   * no session, and writes no availability, pack count or weight, because the
+   * run failed. A chunk that fails while it settles is kept as any failure is,
+   * and the result counts the chunks before it. **It never rejects**, so the
+   * executor can always finish the run after it.
+   */
+  async settle(): Promise<RunReportResult> {
+    try {
+      await this.chain;
+      this.takeTotals();
+    } catch (error) {
+      // The chain never rejects and the totals are a read of counters, so
+      // this is a guard, not a path.
+      this.logger.error(
+        `Run ${this.context.runId}: settling its writes failed: ` +
+          describeError(error).message
+      );
+    }
+    return this.result;
+  }
+
+  /**
+   * What the chunks written so far counted, into the result, once, for a run
+   * that closes no session (plan 0269, D9).
+   */
+  private takeTotals(): void {
+    if (this.totalsTaken) {
+      return;
+    }
+    this.totalsTaken = true;
+    if (this.session) {
+      this.takeIngested(this.session.totals());
+    }
+    this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
   }
 
   /** What the ingest counted, into the result. */
@@ -814,7 +867,7 @@ export class RunReportSink implements RunReport {
    * Work runs only while no failure is kept, and a failure is caught here, so
    * the chain never holds a rejection (plan 0269, section 1).
    */
-  private queue(work: () => Promise<void>): void {
+  private queue(kind: FailedWriteKind, work: () => Promise<void>): void {
     this.chain = this.chain.then(async () => {
       if (this.firstFailure) {
         return;
@@ -822,17 +875,17 @@ export class RunReportSink implements RunReport {
       try {
         await work();
       } catch (error) {
-        this.fail(error);
+        this.fail(error, kind);
       }
     });
   }
 
   /** Keep the first failure, log it, and tell the executor, all once. */
-  private fail(error: unknown): void {
+  private fail(error: unknown, kind: FailedWriteKind): void {
     if (this.firstFailure) {
       return;
     }
-    this.firstFailure = { error };
+    this.firstFailure = { error, kind };
     this.logger.error(
       `Run ${this.context.runId}: a write of what the run read failed, so ` +
         `the run stops here: ${describeError(error).message}`

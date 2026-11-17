@@ -501,6 +501,62 @@ describeIntegration(
       expect(told).toEqual([]);
     }, 120_000);
 
+    it('settles the chunks a runner queued before it threw, writes nothing of its partial chunk, and states what landed (D11)', async () => {
+      for (const n of [1, 2]) {
+        await seed({
+          externalId: `priced-${n}`,
+          name: `Producto con precio ${n}`,
+          status: SourceEntryStatus.ACTIVE,
+          itemId: `02690269-0000-4000-8000-44444444442${n}`,
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt: new Date('2026-11-01T00:00:00.000Z'),
+        });
+      }
+      const walk = sink();
+
+      // Two whole chunks, queued and still writing, and a partial chunk the
+      // runner never filled: then the runner throws, and the executor settles
+      // without awaiting anything else first.
+      for (const n of [1, 2]) {
+        report(walk, [
+          product(`priced-${n}`, { name: `Producto con precio ${n}` }),
+          ...fillers(`settle${n}`, CHUNK - 1),
+        ]);
+      }
+      report(walk, fillers('partial', 50));
+
+      const written = await walk.settle();
+
+      // Both queued chunks landed, and the result says exactly that.
+      expect(written).toMatchObject({
+        products: 2 * CHUNK,
+        pricesRecorded: 2 * CHUNK,
+        pricesPublished: 2,
+        availabilityWritten: 0,
+        packCountsFilled: 0,
+        approxWeightsWritten: 0,
+      });
+      expect(walk.failure).toBeNull();
+      const [{ count }] = await dataSource.query(
+        `SELECT count(*)::int AS count FROM "source_catalog_entries"
+          WHERE "supermarketId" = $1`,
+        [CHAIN]
+      );
+      expect(count).toBe(2 * CHUNK);
+      // The partial chunk was not written, and nothing of a drain was sent.
+      const [{ partial }] = await dataSource.query(
+        `SELECT count(*)::int AS partial FROM "source_catalog_entries"
+          WHERE "supermarketId" = $1 AND "externalId" LIKE 'partial-%'`,
+        [CHAIN]
+      );
+      expect(partial).toBe(0);
+      expect(sent).toHaveLength(2);
+      expect(told).toEqual([]);
+      expect(filled).toEqual([]);
+      expect(weighed).toEqual([]);
+    }, 120_000);
+
     it('does not bind by EAN a waiting row a person rejected after the open', async () => {
       await seed({
         externalId: 'barcode',
