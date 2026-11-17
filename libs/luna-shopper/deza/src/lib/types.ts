@@ -54,6 +54,12 @@ export interface DezaProductRow {
   unitSize: number | null;
   /** The catalog unit {@link unitSize} is in, and null exactly when it is null. */
   sizeUnit: SourceSizeUnit | null;
+  /**
+   * The approximate weight of one piece in grams, from a size printed with
+   * `aprox` (`600 g aprox` is 600), or null (plan 0266, D4). A weight that
+   * varies is no size, so {@link unitSize} is null beside it.
+   */
+  approxWeight: number | null;
   /** How many units the pack holds, read from the description (plan 0162), or null. */
   packCount: number | null;
   /** The longest run of capitals in {@link name}, or null (section 8). */

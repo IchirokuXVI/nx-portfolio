@@ -497,8 +497,7 @@
       "KILOGRAM": "/ kg",
       "LITER": "/ L",
       "UNIT": "/ unidad",
-      "DOZEN": "/ docena",
-      "WASH": "/ lavado"
+      "DOZEN": "/ docena"
     },
     "empty": {
       "title": "No hay nada que coincida con \"{{query}}\"",

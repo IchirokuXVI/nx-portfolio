@@ -600,7 +600,7 @@ describe('DiscoveredPlaceService import, the scope the run declared (plan 0152)'
 describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', () => {
   const LIDL = chain('chain-lidl', 'LIDL');
 
-  it('finds a shop by the same externalRef first', async () => {
+  it('finds a shop by the same externalRef first, then the other strict rungs', async () => {
     const harness = build({
       known: [LIDL],
       locations: [
@@ -609,8 +609,8 @@ describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', 
           externalRef: 'node/1',
           externalProvider: 'LIDL',
         }),
-        // Also within 50 metres, which a lower rung would find. The first rung
-        // that finds anything answers alone.
+        // Also within 50 metres, which rung 2 finds. Every strict candidate
+        // answers, the reference first (plan 0265, D2).
         shop({ id: 'loc-near', latitude: 37.8801, longitude: -4.77 }),
       ],
     });
@@ -634,6 +634,10 @@ describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', 
           // The fixture shop is 0.02 degrees of latitude north of the place.
           metres: 2224,
         },
+        expect.objectContaining({
+          supermarketLocationId: 'loc-near',
+          rung: PlaceMatchRung.NEARBY,
+        }),
       ],
     });
     expect(harness.catalog.createLocation).not.toHaveBeenCalled();
@@ -724,6 +728,65 @@ describe('DiscoveredPlaceService import, a shop the catalog holds (plan 0152)', 
         rung: PlaceMatchRung.ADDRESS,
       }),
     ]);
+  });
+
+  it('answers the 409 for a shop whose address is written short (plan 0265)', async () => {
+    const harness = build({
+      known: [LIDL],
+      locations: [
+        shop({
+          id: 'loc-seeded',
+          latitude: null,
+          longitude: null,
+          address: 'Avda. de Cádiz, 68',
+        }),
+      ],
+    });
+    harness.add(
+      place({ id: 'p1', street: 'Avenida de Cádiz 68', postalCode: '14013' })
+    );
+
+    const error = await refusal(
+      harness.service.import({ userId: ADMIN, placeId: 'p1' })
+    );
+
+    expect(error).toBeInstanceOf(PlaceMatchesLocationException);
+    expect(
+      (error as PlaceMatchesLocationException).details?.['candidates']
+    ).toEqual([
+      expect.objectContaining({
+        supermarketLocationId: 'loc-seeded',
+        rung: PlaceMatchRung.ADDRESS,
+      }),
+    ]);
+    expect(harness.catalog.createLocation).not.toHaveBeenCalled();
+  });
+
+  it('imports past a shop whose address is uncertain (plan 0265, D5)', async () => {
+    // The key cuts at the first number, so both read `avenida 28`. Two
+    // numbers make the pair uncertain: a hint, which stops no hand import.
+    const harness = build({
+      known: [LIDL],
+      locations: [
+        shop({
+          latitude: null,
+          longitude: null,
+          address: 'Avenida 28 de Febrero, 40',
+        }),
+      ],
+    });
+    harness.add(
+      place({
+        id: 'p1',
+        street: 'Avenida 28 de Febrero, 12',
+        postalCode: '14013',
+      })
+    );
+
+    const view = await harness.service.import({ userId: ADMIN, placeId: 'p1' });
+
+    expect(harness.catalog.createLocation).toHaveBeenCalled();
+    expect(view.status).toBe(DiscoveredPlaceStatus.IMPORTED);
   });
 
   it('does not match an address in another postal code', async () => {
