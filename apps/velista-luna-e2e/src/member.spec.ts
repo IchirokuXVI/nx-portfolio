@@ -206,7 +206,7 @@ test.describe('a registered participant', () => {
       await expect(
         entries.locator('.row-name', { hasText: 'Hardware' })
       ).toBeVisible();
-      const asks = amountField(entries, /^Amount of Hardware.*, asks for$/);
+      const asks = amountField(entries, /^Hardware.*, asks for$/);
       await stepAmount(asks, 1);
       await expect(asks).toHaveAttribute('aria-valuenow', '1');
 
