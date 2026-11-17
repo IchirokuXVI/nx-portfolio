@@ -27,10 +27,21 @@ const APPROX_MARK = '~';
 const BY_THE_KILO = 'by the kilo';
 
 /** The weight of one piece, in grams, as it reads: `1.56 kg`, `395 g`. */
-function formatGrams(grams: number, locale: string): string {
+export function formatGrams(grams: number, locale: string): string {
   return grams >= 1000
     ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(grams / 1000)} kg`
     : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(grams)} g`;
+}
+
+/**
+ * An amount in millilitres, as it reads: `1 L`, `250 ml`. The twin of
+ * {@link formatGrams}, for the step of a product sold by the litre (admin
+ * plan 0070).
+ */
+export function formatMillilitres(millilitres: number, locale: string): string {
+  return millilitres >= 1000
+    ? `${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(millilitres / 1000)} L`
+    : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(millilitres)} ml`;
 }
 
 /**

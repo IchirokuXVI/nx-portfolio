@@ -6,12 +6,14 @@ import {
   fieldMessage,
   localizedTextValue,
   type FieldNote,
+  type NumberUnit,
   type ResourceGateway,
   type Wire,
 } from '@portfolio/luna-shopper-admin/models';
 import { UNIT_OF_MEASURE_OPTIONS } from './catalog-enums';
 import { itemSource, priceSource } from './catalog-sources';
 import { ProductCounts } from './products/product-context';
+import { formatGrams, formatMillilitres } from './products/product-format';
 import {
   productListGateway,
   type ScopePriced,
@@ -132,6 +134,52 @@ function approxWeightNote(
     action: { label: 'catalog.items.approxWeightFrom.useChain', value: '' },
   };
 }
+
+/** A step as the wire carries it: one of the values the gateway takes. */
+type WireStep = NonNullable<Wire.CatalogItemView['quantityStep']>;
+
+/**
+ * The steps a curator may give a product sold by the kilo or the litre, in
+ * grams or millilitres (backend plan 0261 S2, admin plan 0070). Typed against
+ * the generated union, and `catalog-descriptors.spec.ts` asserts that every
+ * member of it is here, so a step the gateway adds fails a spec and not a
+ * curator's save.
+ */
+export const QUANTITY_STEP_CHOICES = [
+  1, 5, 10, 25, 50, 100, 200, 250, 500, 1000,
+] as const satisfies readonly WireStep[];
+
+/** Whether a value the form or the row holds is empty. */
+function blank(value: unknown): boolean {
+  return value === null || value === undefined || String(value).trim() === '';
+}
+
+/**
+ * What a step of this product is counted in: grams for a product sold by the
+ * kilo, millilitres for one sold by the litre, and `null` for a product that
+ * carries no step (backend plan 0261 S3, admin plan 0070 section 2.1).
+ *
+ * Only a product with no size and no weight is sold by the kilo or the litre:
+ * a weight makes it a piece, and a size a pack. The rule is the server's
+ * `carriesQuantityStep`, kept here as `0068` kept its own, and read over the
+ * row as the form holds it. `shown`, the unit, the options and the default
+ * line all read this one rule.
+ */
+export function measuredUnitOf(held: Partial<Item>): 'g' | 'ml' | null {
+  if (!blank(held.unitSize) || !blank(held.approxWeight)) {
+    return null;
+  }
+  if (held.defaultUnit === 'KILOGRAM') {
+    return 'g';
+  }
+  return held.defaultUnit === 'LITER' ? 'ml' : null;
+}
+
+/** A step in grams: "250 g", "1 kg". */
+const GRAM_STEP: NumberUnit = { word: 'g', format: formatGrams };
+
+/** A step in millilitres: "50 ml", "1 L". */
+const MILLILITRE_STEP: NumberUnit = { word: 'ml', format: formatMillilitres };
 
 /** The photo a shopper sees, or `null`: the first entry of `images`. */
 function shownImage(row: Item): Wire.CatalogItemImageView | null {
@@ -275,6 +323,50 @@ export const ITEMS = defineResource<Item>({
       note: approxWeightNote,
     },
     {
+      // How far one press moves a shopper's amount of a product sold by the
+      // kilo or the litre (backend plan 0261, admin plan 0070). Empty is the
+      // default step.
+      kind: 'number',
+      name: 'quantityStep',
+      label: 'catalog.items.quantityStep',
+      help: 'catalog.items.quantityStepHelp',
+      nullable: true,
+      integer: true,
+      // Only a product sold by the kilo or the litre carries one. Hidden, it
+      // holds its empty value, so the edit that makes the product a pack or a
+      // piece sends `quantityStep: null` beside it, which the server asks of
+      // that edit.
+      shown: (held) => measuredUnitOf(held) !== null,
+      // The ten steps of the server, as a select, in the unit the shopper
+      // reads. Its empty option is the default and saves `null`.
+      choices: () => QUANTITY_STEP_CHOICES,
+      unit: (held) => {
+        const unit = measuredUnitOf(held);
+        if (unit === null) {
+          return null;
+        }
+        return unit === 'g' ? GRAM_STEP : MILLILITRE_STEP;
+      },
+      emptyText: (held) => {
+        const unit = measuredUnitOf(held);
+        if (unit === null) {
+          return null;
+        }
+        return fieldMessage(
+          unit === 'g'
+            ? 'catalog.items.quantityStepDefault.gram'
+            : 'catalog.items.quantityStepDefault.milliliter'
+        );
+      },
+      // A set step is a person's, and a run does not weigh a product that
+      // has one (backend plan 0261 S6). No source to name: only a person
+      // sets a step (S7).
+      note: (held) =>
+        blank(held.quantityStep)
+          ? null
+          : { text: fieldMessage('catalog.items.quantityStepSet') },
+    },
+    {
       kind: 'reference',
       name: 'productGroupId',
       label: 'catalog.items.productGroupId',
@@ -412,6 +504,7 @@ export const ITEMS = defineResource<Item>({
           'defaultUnit',
           'unitSize',
           'approxWeight',
+          'quantityStep',
           'imageUrl',
           'shownPhoto',
         ],
@@ -440,13 +533,14 @@ export const ITEMS = defineResource<Item>({
   },
 
   // What the server refuses about a product's categories is said under them,
-  // and a refusal about its size or weight under the field it names.
+  // and a refusal about its size, weight or step under the field it names.
   errorFields: {
     category_not_a_leaf: 'categoryIds',
     item_needs_a_category: 'categoryIds',
     category_not_found: 'categoryIds',
     item_kilogram_has_size: 'unitSize',
     item_approx_weight_beside_size: 'approxWeight',
+    item_quantity_step_not_allowed: 'quantityStep',
   },
 
   gateway: () => {
