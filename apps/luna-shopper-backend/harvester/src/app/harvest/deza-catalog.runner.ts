@@ -189,6 +189,7 @@ export class DezaCatalogRunner implements CatalogRunner {
         // printed, so the format gate never ran for a DEZA row.
         unitSize: product.unitSize,
         sizeUnit: product.sizeUnit,
+        approxWeight: product.approxWeight,
         sizeFormat: product.sizeFormat,
         packCount: product.packCount,
         categoryPath: product.categoryPath,
@@ -431,6 +432,8 @@ interface CrawledProduct {
   /** The number the size states and the unit it is in (plan 0177). */
   unitSize: number | null;
   sizeUnit: SourceSizeUnit | null;
+  /** Grams of a size printed with `aprox`, null beside a size (plan 0266). */
+  approxWeight: number | null;
   /** Read from the description by the adapter (plan 0162). */
   packCount: number | null;
   brand: string | null;
@@ -830,6 +833,7 @@ class Crawl {
       sizeFormat: row.sizeFormat,
       unitSize: row.unitSize,
       sizeUnit: row.sizeUnit,
+      approxWeight: row.approxWeight,
       packCount: row.packCount,
       brand: row.brand,
       // The attribute icons sit beside the section path because they are the
