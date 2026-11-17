@@ -460,8 +460,9 @@ export class CatalogAddStore {
    *
    * The step is drawn at once and joins the line's run, which is written as one
    * change when the presses stop. A press down that brings a line the visit made
-   * to nothing, or a weight line the visit made down from its kilo, takes it back
-   * instead, which deletes it where the person may; the open run is sent first. A
+   * to nothing, or a weight line the visit made down from the amount it started
+   * at, takes it back instead, which deletes it where the person may; the open
+   * run is sent first. A
    * repeat that would do so is dropped, so a hold never takes a product back. A
    * line that was there before goes to zero and stays, which is what a list calls
    * stocked.
@@ -485,9 +486,8 @@ export class CatalogAddStore {
     }
     const entry = visitAddition(this._visit(), lineId);
     // The minus at the floor takes a product the visit added back: at nothing,
-    // as a count always did, or exactly at the kilo a weight line the visit made
-    // started at (velista `0182`). A weight line lowered under its kilo
-    // elsewhere steps down like any other.
+    // as a count always did, or exactly at the amount a weight line the visit
+    // made started at, one step of its product (velista `0186`, ruling 43).
     if (
       down &&
       entry !== null &&

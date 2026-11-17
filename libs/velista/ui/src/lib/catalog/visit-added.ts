@@ -23,8 +23,12 @@ export interface VisitAddedRow {
   readonly unit?: LineUnit;
   /** The step its stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
   readonly step?: number | null;
-  /** The lowest count the stepper shows. A minus pressed there takes it back. */
-  readonly floor: number;
+  /**
+   * The lowest amount the stepper's minus reaches. A minus that reaches it takes
+   * the product back: 0 for a line the visit made, so that minus draws the trash
+   * and is named for all it removes, or what a line that was there before held.
+   */
+  readonly min: number;
   /** The line waits for approval, which the row says under the name. */
   readonly pending: boolean;
 }
@@ -55,10 +59,11 @@ export interface VisitAddedStep {
  * One row for each line the visit added to, drawn as the compact product card
  * (velista `0163`): the photo, its name, the detail with the price, and a stepper
  * in the control slot. The card opens nothing here; the stepper is its control.
- * **The minus at the floor takes the product back**, so the stepper's lowest value
- * is one under the floor and the container reads a step down from the floor as
- * the undo. One quiet button takes back everything on a list, and a link opens
- * the list.
+ * **The minus at the floor takes the product back.** On a line the visit made it
+ * goes to 0 like every other stepper, with the trash; on a line that was there
+ * before it stops at what the line held. The container reads that step as the
+ * undo. One quiet button takes back everything on a list, and a link opens the
+ * list.
  *
  * Products added to two lists sit under two headings, one for each list. With one
  * list the sheet's title already names it and no heading is drawn.
@@ -99,7 +104,7 @@ export interface VisitAddedStep {
                   unit: row.unit,
                   step: row.step,
                   name: row.name,
-                  min: row.floor - 1,
+                  min: row.min,
                 }"
               />
             </li>

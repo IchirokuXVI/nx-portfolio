@@ -1,16 +1,21 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import { ActivatedRoute, UrlSegment } from '@angular/router';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CatalogAddStore } from '@portfolio/velista/data-access';
-import { QUANTITY_STEP_QUIET_MS } from '@portfolio/velista/models';
+import {
+  QUANTITY_STEP_QUIET_MS,
+  type LineUnit,
+} from '@portfolio/velista/models';
 import {
   provideVelistaTesting,
   SheetNavigation,
 } from '@portfolio/velista/platform';
+import { QuantityStepper } from '@portfolio/velista/ui';
 import {
   fakeAdds,
   madeLineId,
@@ -39,6 +44,8 @@ interface Seed {
   readonly imageUrl?: string;
   /** The line the add made waits for approval. */
   readonly pending?: boolean;
+  /** What a line of the product counts in. Absent is a count. */
+  readonly unit?: LineUnit;
 }
 
 const OIL: Seed = {
@@ -51,6 +58,13 @@ const RICE: Seed = {
   listId: 'list-weekly',
   itemId: 'item-rice',
   name: 'Short grain rice',
+};
+/** Loose bananas, sold by the kilo: an add starts the line at 25 g. */
+const BANANAS: Seed = {
+  listId: 'list-weekly',
+  itemId: 'item-bananas',
+  name: 'Bananas',
+  unit: 'GRAM',
 };
 const BLEACH: Seed = {
   listId: 'list-cleaning',
@@ -194,6 +208,7 @@ async function render(options: Options = {}): Promise<Harness> {
       name: seed.name,
       detail: seed.detail ?? null,
       imageUrl: seed.imageUrl ?? null,
+      ...(seed.unit === undefined ? {} : { unit: seed.unit }),
     });
   }
   // The stepper of a line under a row of the catalog, pressed once.
@@ -564,6 +579,36 @@ describe('AddedSheet', () => {
     // The other product stays, and so does the sheet.
     expect(row(fixture, 'item-rice')).not.toBeNull();
     expect(sheets.dismiss).not.toHaveBeenCalled();
+  });
+
+  it('draws the trash on the minus at the floor of a weight line the visit made, named for all it removes', async () => {
+    const { fixture } = await render({ added: [BANANAS] });
+
+    const { minus } = stepper(fixture, 'item-bananas');
+    expect(quantityOf(fixture, 'item-bananas')).toBe('25');
+    expect(minus?.querySelector('lib-trash-icon')).not.toBeNull();
+    // The name says the step the press removes: all 25 g, not 1 g.
+    const control = fixture.debugElement
+      .query(By.css('[data-item="item-bananas"] lib-quantity-stepper'))
+      .injector.get(QuantityStepper);
+    expect(control.lessStep()).toBe('25 g');
+  });
+
+  it('takes a weight line the visit made to 0 with the minus at the floor, and deletes it', async () => {
+    const { fixture, store, lines } = await render({ added: [BANANAS, RICE] });
+    const step = jest.spyOn(store, 'step');
+
+    stepper(fixture, 'item-bananas').minus?.click();
+    await quiet(fixture);
+
+    expect(step).toHaveBeenCalledWith(
+      expect.objectContaining({ itemId: 'item-bananas' }),
+      lineIdOf(BANANAS),
+      { from: 25, to: 0, repeat: false }
+    );
+    expect(lines.deleteLine).toHaveBeenCalledWith(lineIdOf(BANANAS));
+    expect(lines.addQuantity).not.toHaveBeenCalled();
+    expect(row(fixture, 'item-bananas')).toBeNull();
   });
 
   it('takes back no more than the visit added from a line that was there before', async () => {

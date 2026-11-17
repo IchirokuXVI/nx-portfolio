@@ -23,7 +23,7 @@ function row(overrides: Partial<VisitAddedRow> = {}): VisitAddedRow {
     detail: '1 L · €8.45 at Mercadona',
     imageUrl: null,
     quantity: 2,
-    floor: 1,
+    min: 0,
     pending: false,
     ...overrides,
   };
@@ -338,7 +338,7 @@ describe('VisitAdded', () => {
         {
           listId: 'l1',
           name: 'Weekly shop',
-          rows: [row({ quantity: 1000, unit: 'GRAM', floor: 1000, step: 100 })],
+          rows: [row({ quantity: 1000, unit: 'GRAM', min: 0, step: 100 })],
         },
       ]);
       const heard = steppedOf(fixture);
@@ -435,9 +435,9 @@ describe('VisitAdded', () => {
       ]);
     });
 
-    it('puts the lowest value one under the floor of a line that was there before the visit', async () => {
+    it('puts the lowest value at what a line that was there before the visit held', async () => {
       const fixture = await render([
-        { ...WEEKLY, rows: [row({ quantity: 5, floor: 5 })] },
+        { ...WEEKLY, rows: [row({ quantity: 5, min: 4 })] },
       ]);
       const heard = steppedOf(fixture);
 

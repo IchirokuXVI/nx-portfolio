@@ -13,11 +13,7 @@ import {
   RokuTranslatorPipe,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CatalogAddStore } from '@portfolio/velista/data-access';
-import {
-  APP_BASE_PATH,
-  visitFloor,
-  visitSections,
-} from '@portfolio/velista/models';
+import { APP_BASE_PATH, visitSections } from '@portfolio/velista/models';
 import { appPath, SheetNavigation } from '@portfolio/velista/platform';
 import {
   SheetShell,
@@ -109,12 +105,9 @@ export class AddedSheet {
         quantity: entry.quantity,
         unit: units.get(entry.lineId) ?? 'UNIT',
         step: steps.get(entry.lineId) ?? null,
-        // A line the visit made starts at one step of its product (ruling 43).
-        floor: visitFloor(
-          entry,
-          units.get(entry.lineId) ?? 'UNIT',
-          steps.get(entry.lineId) ?? null
-        ),
+        // A line the visit made goes to 0 and is taken back there, a weight as a
+        // count (velista 0188 S14); one that was there before stops at what it held.
+        min: entry.created ? 0 : entry.before,
         pending: entry.pending,
       })),
     }));
