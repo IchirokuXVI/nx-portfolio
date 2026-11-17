@@ -1,3 +1,5 @@
+> **PR:** [#1005](https://github.com/IchirokuXVI/nx-portfolio/pull/1005) (section 5.1, 2026-11-17)
+>
 > **PR:** [#984](https://github.com/IchirokuXVI/nx-portfolio/pull/984)
 
 # 0260: an add that meets a line already on the list adds nothing
