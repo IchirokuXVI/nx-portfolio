@@ -1145,15 +1145,11 @@ export interface RegisterBrandSuggestionResult {
  * a client can display "per litre" without parsing "el litro le sale a". The
  * label and the amount are never changed, and a label the table does not know
  * reads as null rather than as a guess.
+ *
+ * No value names a wash (plan 0264): a wash count is the brand's own claim and
+ * no basis to compare prices on, so a label such as `lv` reads as null.
  */
-export const UNIT_BASES = [
-  'KILOGRAM',
-  'LITER',
-  'UNIT',
-  'DOZEN',
-  /** A washing machine or dishwasher load, Mercadona's `lv`. */
-  'WASH',
-] as const;
+export const UNIT_BASES = ['KILOGRAM', 'LITER', 'UNIT', 'DOZEN'] as const;
 export type UnitBasis = (typeof UNIT_BASES)[number];
 
 /**
