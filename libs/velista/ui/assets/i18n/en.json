@@ -758,6 +758,12 @@
     "turned": {
       "grams": "Now in grams",
       "milliliters": "Now in milliliters"
+    },
+    "refused": {
+      "most": "At most {{- amount}}",
+      "wholeGrams": "Grams take no decimals",
+      "wholeMilliliters": "Milliliters take no decimals",
+      "decimals": "At most three decimals"
     }
   },
   "list": {

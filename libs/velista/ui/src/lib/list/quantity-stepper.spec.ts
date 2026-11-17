@@ -7,7 +7,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import { LINE_QUANTITY_MAX, type QuantityStep } from '@portfolio/velista/models';
-import { QuantityStepper } from './quantity-stepper';
+import { QuantityStepper, REFUSED_SHOWN_MS } from './quantity-stepper';
 
 /**
  * The D3 stepper (velista `0188`, section 7). It draws what it is given, so the
@@ -837,6 +837,246 @@ describe('QuantityStepper (velista 0188)', () => {
         key(h, 'Escape');
         expect(state(h)).toBe('1.5 kg');
         expect(turned(h)).toBe('');
+      });
+    });
+
+    describe('a key the field does not accept says why (the owner, 2026-11-17)', () => {
+      const append = (h: Harness, keys: string) => {
+        for (const one of keys) {
+          type(h, field(h).value + one);
+        }
+      };
+      /** The popover's sentence, drawn in the overlay, or null when none shows. */
+      const popover = () =>
+        document.querySelector('.refusal')?.textContent?.trim() ?? null;
+      /** What the field's polite live region says. */
+      const said = (h: Harness) =>
+        h.el.querySelector('.refusal-said')?.textContent?.trim() ?? null;
+      /** Drops the no-break space `Intl` writes before a unit. */
+      const plain = (text: string | null) => text?.replace(/\s/g, ' ');
+      const typedFocused = (h: Harness, text: string) => {
+        field(h).focus();
+        type(h, text);
+      };
+
+      describe('each reason', () => {
+        it('says a gram has no decimals for a separator under grams, and keeps the field', () => {
+          const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+          type(h, '1');
+          expect(popover()).toBeNull();
+          append(h, ',');
+          expect(field(h).value).toBe('1');
+          expect(popover()).toBe('amount.refused.wholeGrams:{}');
+          expect(said(h)).toBe('amount.refused.wholeGrams:{}');
+        });
+
+        it('says a millilitre has no decimals for a separator under millilitres', () => {
+          const h = render({
+            value: 500,
+            unit: 'MILLILITER',
+            variant: 'sheet-narrow',
+          });
+          type(h, '150.');
+          expect(field(h).value).toBe('500');
+          expect(popover()).toBe('amount.refused.wholeMilliliters:{}');
+        });
+
+        it('says the most in grams for a sixth digit under grams', () => {
+          const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+          type(h, '');
+          append(h, '999999');
+          expect(field(h).value).toBe('99999');
+          expect(plain(popover())).toBe(
+            'amount.refused.most:{"amount":"99,999 g"}'
+          );
+        });
+
+        it('says the most in kilos for 99.5 edited into 199.5 under kilos', () => {
+          const h = render({ value: 50_000, unit: 'GRAM', variant: 'sheet' });
+          type(h, '99.5');
+          type(h, '199.5');
+          expect(field(h).value).toBe('99.5');
+          expect(plain(popover())).toBe(
+            'amount.refused.most:{"amount":"99.999 kg"}'
+          );
+        });
+
+        it('says the most for a paste of six digits', () => {
+          const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+          type(h, '250000');
+          expect(field(h).value).toBe('500');
+          expect(plain(popover())).toBe(
+            'amount.refused.most:{"amount":"99,999 g"}'
+          );
+        });
+
+        it('says at most three decimals for a fourth decimal under litres', () => {
+          const h = render({
+            value: 1500,
+            unit: 'MILLILITER',
+            variant: 'sheet',
+          });
+          type(h, '1.234');
+          append(h, '5');
+          expect(field(h).value).toBe('1.234');
+          expect(popover()).toBe('amount.refused.decimals:{}');
+        });
+
+        it('says nothing for a key it accepts, nor for a turn', () => {
+          const h = render({ value: 50_000, unit: 'GRAM', variant: 'sheet' });
+          append(h, '0');
+          expect(popover()).toBeNull();
+          expect(said(h)).toBe('');
+        });
+
+        it('says the most when a typed count is held to it as the edit ends', () => {
+          const h = render({ value: 2, variant: 'sheet' });
+          type(h, '250000');
+          expect(popover()).toBeNull();
+          key(h, 'Enter');
+          expect(tos(h)).toEqual([99_999]);
+          expect(plain(popover())).toBe(
+            'amount.refused.most:{"amount":"99,999"}'
+          );
+          expect(said(h)).toBe(popover());
+        });
+
+        it('says the most for a held count on a blur too, and stays there for its beat', () => {
+          const h = render({ value: 2, variant: 'sheet' });
+          typedFocused(h, '123456');
+          fire(field(h), 'blur');
+          h.fixture.detectChanges();
+          expect(tos(h)).toEqual([99_999]);
+          expect(popover()).not.toBeNull();
+          jest.advanceTimersByTime(REFUSED_SHOWN_MS);
+          h.fixture.detectChanges();
+          expect(popover()).toBeNull();
+        });
+
+        it('says nothing for a typed count at or under the most', () => {
+          const h = render({ value: 2, variant: 'sheet' });
+          type(h, '99999');
+          key(h, 'Enter');
+          expect(tos(h)).toEqual([99_999]);
+          expect(popover()).toBeNull();
+        });
+      });
+
+      describe('the popover leaves', () => {
+        /** A field in grams that just refused a separator after "15". */
+        const refused = () => {
+          const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+          typedFocused(h, '15');
+          append(h, ',');
+          expect(popover()).not.toBeNull();
+          return h;
+        };
+
+        it('on the next accepted key', () => {
+          const h = refused();
+          append(h, '0');
+          expect(field(h).value).toBe('150');
+          expect(popover()).toBeNull();
+          expect(said(h)).toBe('');
+        });
+
+        it('stays while refused keys follow, and says its sentence once', () => {
+          const h = refused();
+          const live = h.el.querySelector('.refusal-said') as HTMLElement;
+          const changes: string[] = [];
+          const watcher = new MutationObserver(() =>
+            changes.push(live.textContent ?? '')
+          );
+          watcher.observe(live, {
+            childList: true,
+            characterData: true,
+            subtree: true,
+          });
+          append(h, ',');
+          append(h, '.');
+          watcher.disconnect();
+          expect(changes).toEqual([]);
+          expect(popover()).toBe('amount.refused.wholeGrams:{}');
+        });
+
+        it('on Enter, which commits the text', () => {
+          const h = refused();
+          key(h, 'Enter');
+          expect(tos(h)).toEqual([15]);
+          expect(popover()).toBeNull();
+        });
+
+        it('on a blur', () => {
+          const h = refused();
+          fire(field(h), 'blur');
+          h.fixture.detectChanges();
+          expect(popover()).toBeNull();
+        });
+
+        it('on a pointer press of a button', () => {
+          const h = refused();
+          fire(h.plus, 'pointerdown');
+          h.fixture.detectChanges();
+          expect(popover()).toBeNull();
+        });
+
+        it('on a key press of a button', () => {
+          const h = refused();
+          keyClick(h.minus);
+          h.fixture.detectChanges();
+          expect(popover()).toBeNull();
+        });
+
+        it('on an arrow key', () => {
+          const h = refused();
+          key(h, 'ArrowUp');
+          expect(popover()).toBeNull();
+        });
+
+        it('on Escape, which goes no further and keeps the typed text', () => {
+          const h = refused();
+          const escape = key(h, 'Escape');
+          expect(escape.defaultPrevented).toBe(true);
+          expect(popover()).toBeNull();
+          expect(field(h).value).toBe('15');
+          expect(h.fixture.componentInstance.draft()).toBe('15');
+          // A second Escape puts the shown amount back, as before.
+          key(h, 'Escape');
+          expect(field(h).value).toBe('500');
+        });
+
+        it('lets an Escape with nothing to close through, as before', () => {
+          const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+          const escape = key(h, 'Escape');
+          expect(escape.defaultPrevented).toBe(false);
+        });
+
+        it('by itself after a few seconds, and a new refusal starts the beat again', () => {
+          const h = refused();
+          jest.advanceTimersByTime(REFUSED_SHOWN_MS - 1000);
+          append(h, '.');
+          jest.advanceTimersByTime(REFUSED_SHOWN_MS - 1);
+          h.fixture.detectChanges();
+          expect(popover()).not.toBeNull();
+          jest.advanceTimersByTime(1);
+          h.fixture.detectChanges();
+          expect(popover()).toBeNull();
+          expect(said(h)).toBe('');
+        });
+
+        it('never takes the focus from the field', () => {
+          const h = refused();
+          expect(document.activeElement).toBe(field(h));
+        });
+      });
+
+      it('changes no size of the stepper: the popover is out of the capsule', () => {
+        const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+        type(h, '1,');
+        const capsule = h.el.querySelector('.stepper') as HTMLElement;
+        expect(capsule.contains(document.querySelector('.refusal'))).toBe(
+          false
+        );
       });
     });
 

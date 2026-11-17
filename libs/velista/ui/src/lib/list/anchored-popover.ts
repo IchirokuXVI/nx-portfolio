@@ -15,8 +15,8 @@ import {
 /** Why an {@link AnchoredPopover} asked to close. */
 export type AnchoredPopoverClose = 'escape' | 'outside' | 'detach';
 
-/** Which edge of the anchor the popover lines up with. */
-export type AnchoredPopoverAlign = 'start' | 'end';
+/** Which edge of the anchor the popover lines up with, or its middle. */
+export type AnchoredPopoverAlign = 'start' | 'end' | 'center';
 
 /** Which side of the anchor the popover tries first. */
 export type AnchoredPopoverSide = 'above' | 'below';
@@ -24,9 +24,10 @@ export type AnchoredPopoverSide = 'above' | 'below';
 /**
  * Its frame. `note` holds sentences and controls inside a padding. `choice` holds
  * rows that reach its edges, at the width the add choice was drawn to (velista
- * `0170`).
+ * `0170`). `hint` holds one short sentence at the width of its words (the stepper's
+ * refused key, velista `0188`).
  */
-export type AnchoredPopoverFrame = 'note' | 'choice';
+export type AnchoredPopoverFrame = 'note' | 'choice' | 'hint';
 
 /**
  * Above the anchor and aligned with its start edge, since the anchors this is drawn
@@ -75,6 +76,33 @@ const END: ConnectedPosition[] = [
 ];
 
 /**
+ * The same two places over the anchor's middle (velista `0188`): a hint about the
+ * field in the middle of the stepper reads as the field's own.
+ */
+const CENTER: ConnectedPosition[] = [
+  {
+    originX: 'center',
+    originY: 'top',
+    overlayX: 'center',
+    overlayY: 'bottom',
+    offsetY: -8,
+  },
+  {
+    originX: 'center',
+    originY: 'bottom',
+    overlayX: 'center',
+    overlayY: 'top',
+    offsetY: 8,
+  },
+];
+
+/**
+ * How far a pushed popover keeps from the screen's edges: the `--app-space-4` that
+ * its widest frame already leaves on each side.
+ */
+const VIEWPORT_MARGIN = 16;
+
+/**
  * A small popover held against an element on the page, with whatever the container
  * puts in it (velista `0110`).
  *
@@ -100,14 +128,17 @@ const END: ConnectedPosition[] = [
       [cdkConnectedOverlayOpen]="open()"
       [cdkConnectedOverlayOrigin]="origin()"
       [cdkConnectedOverlayPositions]="positions()"
+      [cdkConnectedOverlayPush]="push()"
       [cdkConnectedOverlayUsePopover]="'inline'"
+      [cdkConnectedOverlayViewportMargin]="push() ? viewportMargin : 0"
       cdkConnectedOverlay
     >
       <div
         [attr.aria-labelledby]="labelledBy()"
+        [attr.role]="role()"
         [class.choice]="frame() === 'choice'"
+        [class.hint]="frame() === 'hint'"
         class="pop"
-        role="dialog"
       >
         <ng-content />
       </div>
@@ -144,11 +175,27 @@ export class AnchoredPopover {
   /** The id of the element inside it that names it, for the dialog's label. */
   readonly labelledBy = input<string | null>(null);
 
+  /**
+   * Its role: a dialog by default. A hint that never takes focus and is said through
+   * its anchor's own live region passes null, and is no dialog (velista `0188`).
+   */
+  readonly role = input<'dialog' | null>('dialog');
+
+  /**
+   * Whether it is pushed back onto the screen when no place fits whole, so an anchor
+   * near an edge of a 320 px screen still shows all of it (velista `0188`).
+   */
+  readonly push = input(false);
+
   /** It wants to close, and why. */
   readonly closed = output<AnchoredPopoverClose>();
 
+  protected readonly viewportMargin = VIEWPORT_MARGIN;
+
   protected readonly positions = computed(() => {
-    const positions = this.align() === 'end' ? END : START;
+    const align = this.align();
+    const positions =
+      align === 'end' ? END : align === 'center' ? CENTER : START;
     return this.side() === 'below' ? [...positions].reverse() : positions;
   });
 

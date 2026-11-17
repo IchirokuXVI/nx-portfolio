@@ -486,9 +486,15 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     await expect(field).toHaveValue('100');
     await expect(symbol).toHaveText('g');
     await field.pressSequentially('000');
-    // The third zero would be a sixth digit, and is put back.
+    // The third zero would be a sixth digit, and is put back, and a popover says
+    // why (the owner, 2026-11-17). Escape takes the popover away first.
     await expect(field).toHaveValue('10000');
     await expect(symbol).toHaveText('g');
+    const refusal = page.locator('.refusal');
+    await expect(refusal).toHaveText('At most 99,999 g');
+    await field.press('Escape');
+    await expect(refusal).toHaveCount(0);
+    await expect(field).toHaveValue('10000');
     await field.press('Escape');
     await expect(field).toHaveValue('1');
     await expect(symbol).toHaveText('kg');

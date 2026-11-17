@@ -4,8 +4,10 @@ import {
   formatAmount,
   formatQuantity,
   formatQuantityChange,
+  isRefused,
   parseTypedAmount,
   shortAmount,
+  typedLimit,
   typedSymbol,
 } from './quantity';
 
@@ -240,7 +242,7 @@ describe('followTyped (the owner, 2026-11-17, velista 0188 decision K)', () => {
     let text = start;
     for (const key of keys) {
       const next = followTyped(text + key, symbol, unit, locale);
-      if (next === null) {
+      if ('refused' in next) {
         seen.push({ text, symbol, turned: 'refused' });
         continue;
       }
@@ -298,34 +300,44 @@ describe('followTyped (the owner, 2026-11-17, velista 0188 decision K)', () => {
     });
   });
 
-  it('does not accept a separator under grams', () => {
-    expect(followTyped('1,', 'g', 'GRAM', 'es')).toBeNull();
-    expect(followTyped(',5', 'g', 'GRAM', 'es')).toBeNull();
-    expect(followTyped('150.', 'ml', 'MILLILITER', 'en')).toBeNull();
+  const whole = { refused: 'whole' };
+  const decimals = { refused: 'decimals' };
+  const most = { refused: 'most' };
+
+  it('does not accept a separator under grams, and says a gram has no decimals', () => {
+    expect(followTyped('1,', 'g', 'GRAM', 'es')).toEqual(whole);
+    expect(followTyped(',5', 'g', 'GRAM', 'es')).toEqual(whole);
+    expect(followTyped('150.', 'ml', 'MILLILITER', 'en')).toEqual(whole);
+    expect(followTyped('1234567,', 'g', 'GRAM', 'es')).toEqual(whole);
     expect(shown(typeKeys('1,5', 'GRAM'))).toEqual(['1 g', '1 g', '15 g']);
   });
 
-  it('does not accept a key that would leave decimals under grams: 99,5 into 199,5', () => {
+  it('does not accept a key that would leave decimals under grams: 99,5 into 199,5 is over the most', () => {
     expect(followTyped('99,5', 'kg', 'GRAM', 'es')).toEqual({
       symbol: 'kg',
       turned: false,
     });
-    expect(followTyped('199,5', 'kg', 'GRAM', 'es')).toBeNull();
-    expect(followTyped('150,', 'kg', 'GRAM', 'es')).toBeNull();
+    expect(followTyped('199,5', 'kg', 'GRAM', 'es')).toEqual(most);
+    expect(followTyped('150,', 'kg', 'GRAM', 'es')).toEqual(most);
   });
 
-  it('does not accept a sixth digit, nor a fourth decimal under kilos', () => {
+  it('does not accept a sixth digit (the most), nor a fourth decimal under kilos (decimals)', () => {
     expect(followTyped('99999', 'g', 'GRAM', 'es')).toEqual({
       symbol: 'g',
       turned: false,
     });
-    expect(followTyped('999999', 'g', 'GRAM', 'es')).toBeNull();
-    expect(followTyped('250000', 'g', 'GRAM', 'es')).toBeNull();
+    expect(followTyped('999999', 'g', 'GRAM', 'es')).toEqual(most);
+    expect(followTyped('250000', 'g', 'GRAM', 'es')).toEqual(most);
+    expect(followTyped('250000', 'kg', 'GRAM', 'es')).toEqual(most);
+    expect(followTyped('1 kg 23456', 'kg', 'GRAM', 'es')).toEqual(most);
     expect(followTyped('99,999', 'kg', 'GRAM', 'es')).toEqual({
       symbol: 'kg',
       turned: false,
     });
-    expect(followTyped('1,0005', 'kg', 'GRAM', 'es')).toBeNull();
+    expect(followTyped('1,0005', 'kg', 'GRAM', 'es')).toEqual(decimals);
+    // Six digits and four decimals: the decimals are what to fix.
+    expect(followTyped('99,9999', 'kg', 'GRAM', 'es')).toEqual(decimals);
+    expect(followTyped('1.2345', 'l', 'MILLILITER', 'en')).toEqual(decimals);
     expect(followTyped('99999', 'kg', 'GRAM', 'es')).toEqual({
       symbol: 'g',
       turned: true,
@@ -359,7 +371,34 @@ describe('followTyped (the owner, 2026-11-17, velista 0188 decision K)', () => {
       symbol: '',
       turned: false,
     });
-    expect(followTyped('1,5', '', 'UNIT', 'es')?.symbol).toBe('K');
+    expect(followTyped('1,5', '', 'UNIT', 'es')).toEqual({
+      symbol: 'K',
+      turned: false,
+    });
+    // A count refuses no key: a typed count over the most is held when the edit ends.
+    expect(followTyped('1234567', '', 'UNIT', 'es')).toEqual({
+      symbol: '',
+      turned: false,
+    });
+  });
+});
+
+describe('isRefused (the owner, 2026-11-17)', () => {
+  it('tells a refused key from an accepted one', () => {
+    expect(isRefused(followTyped('1,', 'g', 'GRAM', 'es'))).toBe(true);
+    expect(isRefused(followTyped('15', 'g', 'GRAM', 'es'))).toBe(false);
+  });
+});
+
+describe('typedLimit (the owner, 2026-11-17)', () => {
+  it('says the most in the unit the field reads in, through Intl for the locale', () => {
+    expect(typedLimit(99_999, 'g', 'GRAM', 'en')).toBe('99,999 g');
+    expect(typedLimit(99_999, 'g', 'GRAM', 'es')).toBe('99.999 g');
+    expect(typedLimit(99_999, 'kg', 'GRAM', 'en')).toBe('99.999 kg');
+    expect(typedLimit(99_999, 'kg', 'GRAM', 'es')).toBe('99,999 kg');
+    expect(typedLimit(99_999, 'ml', 'MILLILITER', 'es')).toBe('99.999 ml');
+    expect(typedLimit(99_999, '', 'UNIT', 'en')).toBe('99,999');
+    expect(typedLimit(99_999, 'K', 'UNIT', 'es')).toBe('99.999');
   });
 });
 

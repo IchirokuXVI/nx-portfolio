@@ -130,4 +130,58 @@ test.describe('a typed amount and a free text line in grams (2026-11-17)', () =>
     await expect(rowStepper(page)).toHaveAttribute('data-value', '25000');
     expect(await drawn(rowStepper(page))).toBe('25 kg');
   });
+
+  test('a separator under g is put back and a popover says why, whole on a 320 px screen', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 640 });
+    await openList(page);
+    // By its name: at 320 px the middle of the row is its stepper.
+    await row(page).locator('.row').getByText(NAME, { exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    const stepper = dialog
+      .locator('lib-quantity-stepper.variant-sheet')
+      .first();
+    const field = stepper.getByRole('spinbutton', {
+      name: `Amount of ${NAME}`,
+    });
+    const capsule = stepper.locator('.stepper');
+    const popover = page.locator('.refusal');
+    await expect(field).toBeVisible();
+    const shown = await field.inputValue();
+
+    await field.click();
+    await field.press('Backspace');
+    await field.pressSequentially('15');
+    // Measured once the sheet has risen and the field is in view.
+    const before = await capsule.boundingBox();
+    await field.press(',');
+    await expect(field).toHaveValue('15');
+    await expect(popover).toHaveText('Grams take no decimals');
+    await expect(stepper.locator('.refusal-said')).toHaveText(
+      'Grams take no decimals'
+    );
+    // It takes no focus, moves nothing and fits the screen.
+    await expect(field).toBeFocused();
+    expect(await capsule.boundingBox()).toEqual(before);
+    const box = await popover.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
+    expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(320);
+
+    // The next accepted key takes it away.
+    await field.press('0');
+    await expect(field).toHaveValue('150');
+    await expect(popover).toHaveCount(0);
+
+    // Escape takes it away and leaves the sheet open; a second puts the amount back.
+    await field.press(',');
+    await expect(popover).toBeVisible();
+    await field.press('Escape');
+    await expect(popover).toHaveCount(0);
+    await expect(dialog).toBeVisible();
+    await expect(field).toHaveValue('150');
+    await field.press('Escape');
+    await expect(field).toHaveValue(shown);
+  });
 });

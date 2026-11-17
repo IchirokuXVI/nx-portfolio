@@ -14,6 +14,7 @@
       typed() ? null : ('amount.group' | rokuT: { name: name() })
     "
     [attr.role]="typed() ? null : 'group'"
+    #capsule
     class="stepper"
   >
     <button
@@ -105,6 +106,28 @@
       <span aria-live="polite" class="visually-hidden turned">{{
         turned ? (turned | rokuT) : ''
       }}</span>
+      @let refusal = refusalWords();
+      <span aria-live="polite" class="visually-hidden refusal-said">{{
+        refusal ? (refusal.key | rokuT: refusal.values) : ''
+      }}</span>
     }
   </span>
+  <!--
+    Why a key was not taken (the owner, 2026-11-17): over the capsule, in the top
+    layer, so no sheet or row clips it. It takes no focus and no role; the live
+    region above says the sentence.
+  -->
+  @if (refusalWords(); as shown) {
+    <lib-anchored-popover
+      (closed)="onRefusalClosed($event)"
+      [open]="true"
+      [origin]="capsule"
+      [push]="true"
+      [role]="null"
+      align="center"
+      frame="hint"
+    >
+      <span class="refusal">{{ shown.key | rokuT: shown.values }}</span>
+    </lib-anchored-popover>
+  }
 }

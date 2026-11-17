@@ -234,6 +234,12 @@
   color: var(--app-text-secondary);
 }
 
+// The refusal popover's host draws nothing of its own; out of the flow, so the
+// stepper keeps its size (the owner, 2026-11-17).
+lib-anchored-popover {
+  position: absolute;
+}
+
 .visually-hidden {
   position: absolute;
   inline-size: 1px;

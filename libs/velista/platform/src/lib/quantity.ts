@@ -180,7 +180,7 @@ export function parseTypedAmount(
   const followed = isMeasured(unit)
     ? followTyped(text, shown.symbol, unit, 'en')
     : { symbol: shown.symbol, turned: false };
-  if (followed === null) {
+  if (isRefused(followed)) {
     return null;
   }
   const typed = readTyped(text);
@@ -213,10 +213,34 @@ export interface TypedText {
 }
 
 /**
- * The unit typed text for a weight or a volume is read in, or null for a keystroke
- * the field does not accept (the owner, 2026-11-17, velista `0188` decision K).
- * `symbol` is the unit the field read in before this keystroke. The text itself is
- * never rewritten: what a person types stays as typed until the edit ends.
+ * Which rule a key the field does not accept broke (the owner, 2026-11-17: a
+ * popover says why). The reasons are grouped into as few sentences as stay true:
+ *
+ * - `most`: the field holds at most 99 999 base units. A sixth digit, and a decimal
+ *   number over 99 under kilos, which would land in grams with decimals ("99,5"
+ *   edited into "199,5" is more than 99,999 kg).
+ * - `whole`: a separator under grams or millilitres, which have no decimals.
+ * - `decimals`: a fourth decimal under kilos or litres, which names less than a gram.
+ */
+export type TypedRefusal = 'most' | 'whole' | 'decimals';
+
+/** A key the field does not accept, and the rule it broke. */
+export interface RefusedText {
+  readonly refused: TypedRefusal;
+}
+
+/** Whether {@link followTyped} did not accept the key. */
+export function isRefused(
+  followed: TypedText | RefusedText
+): followed is RefusedText {
+  return 'refused' in followed;
+}
+
+/**
+ * The unit typed text for a weight or a volume is read in, or the rule a keystroke
+ * the field does not accept broke (the owner, 2026-11-17, velista `0188` decision
+ * K). `symbol` is the unit the field read in before this keystroke. The text itself
+ * is never rewritten: what a person types stays as typed until the edit ends.
  *
  * - The unit the edit started under is held. Under grams "25000" stays 25000 g
  *   while it is typed, and the field rests as "25 kg" once the edit ends.
@@ -224,22 +248,24 @@ export interface TypedText {
  *   as they are ("500" kg is "500" g), because only the label changes. The field
  *   then stays in grams.
  * - An empty field reads in grams.
- * - Not accepted: a separator under grams, because a gram has no decimals; a whole
- *   part over 99 with a separator under kilos, which would land in grams with
- *   decimals ("99,5" edited into "199,5"); a fourth decimal under kilos, which
- *   names less than a gram; a sixth digit, because the field holds at most 99 999
- *   base units ("99999" g, "99,999" kg).
+ * - Not accepted: a separator under grams, because a gram has no decimals
+ *   (`whole`); a fourth decimal under kilos, which names less than a gram
+ *   (`decimals`); a sixth digit, because the field holds at most 99 999 base units
+ *   ("99999" g, "99,999" kg), and a whole part over 99 with a separator under
+ *   kilos, which would land in grams with decimals ("99,5" edited into "199,5"),
+ *   both `most`.
  * - Text that is not a number does not turn, and is put back when the edit ends.
  *
  * The same for millilitres and litres. A count does not turn: it reads in its top
- * name once a separator is typed and in `symbol` otherwise, as before.
+ * name once a separator is typed and in `symbol` otherwise, as before, and no key
+ * typed into it is refused.
  */
 export function followTyped(
   text: string,
   symbol: string,
   unit: LineUnit,
   locale: string
-): TypedText | null {
+): TypedText | RefusedText {
   if (!isMeasured(unit)) {
     return {
       symbol: /[.,]/.test(text) ? topSymbol(unit, locale) : symbol,
@@ -251,26 +277,27 @@ export function followTyped(
   if (compact === '') {
     return { symbol: baseSymbol(unit), turned: large };
   }
+  if (!large && /[.,]/.test(compact)) {
+    return { refused: 'whole' };
+  }
+  const typed = large ? readTyped(compact) : null;
+  if (
+    typed !== null &&
+    typed.fraction !== null &&
+    typed.fraction.length > TYPED_DECIMALS_MAX
+  ) {
+    // Before the digits: "99,9999" says a fourth decimal more than a sixth digit.
+    return { refused: 'decimals' };
+  }
   if ((compact.match(/\d/g) ?? []).length > TYPED_DIGITS_MAX) {
-    return null;
+    return { refused: 'most' };
   }
-  const separated = /[.,]/.test(compact);
-  if (!large) {
-    return separated ? null : { symbol, turned: false };
-  }
-  const typed = readTyped(compact);
-  if (typed === null) {
-    return { symbol, turned: false };
-  }
-  if (typed.fraction !== null && typed.fraction.length > TYPED_DECIMALS_MAX) {
-    return null;
-  }
-  if (Number(typed.whole || '0') <= TYPED_LARGE_WHOLE_MAX) {
+  if (typed === null || Number(typed.whole || '0') <= TYPED_LARGE_WHOLE_MAX) {
     return { symbol, turned: false };
   }
   return typed.fraction === null
     ? { symbol: baseSymbol(unit), turned: true }
-    : null;
+    : { refused: 'most' };
 }
 
 /**
@@ -284,7 +311,45 @@ export function typedSymbol(
   unit: LineUnit,
   locale: string
 ): string {
-  return followTyped(text, shown.symbol, unit, locale)?.symbol ?? shown.symbol;
+  const followed = followTyped(text, shown.symbol, unit, locale);
+  return isRefused(followed) ? shown.symbol : followed.symbol;
+}
+
+/**
+ * The most the field holds, in the unit it reads in now, as the refusal popover
+ * says it (the owner, 2026-11-17): "99,999 g" or "99.999 kg" in English, "99.999 g"
+ * or "99,999 kg" in Spanish, and the plain number for a count ("99,999"). Through
+ * `Intl` with the reader's grouping, never a number in a translation.
+ */
+export function typedLimit(
+  max: number,
+  symbol: string,
+  unit: LineUnit,
+  locale: string
+): string {
+  if (!isMeasured(unit)) {
+    return formatNumber(max, locale);
+  }
+  const large = isTopSymbol(symbol);
+  const name =
+    unit === 'GRAM'
+      ? large
+        ? 'kilogram'
+        : 'gram'
+      : large
+        ? 'liter'
+        : 'milliliter';
+  const value = large ? max / 1000 : max;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit: name,
+      maximumFractionDigits: 3,
+    }).format(value);
+  } catch {
+    const shown = large ? topSymbol(unit, 'en') : baseSymbol(unit);
+    return `${Number(value.toFixed(3))} ${shown}`;
+  }
 }
 
 /** The most whole kilos or litres the field holds before it turns into grams: 99. */
