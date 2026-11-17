@@ -1,7 +1,9 @@
+import { LINE_MEASURED_QUANTITY_MAX, LINE_QUANTITY_MAX } from './limits';
 import {
   addAmount,
   canStepUp,
   legacyLineUnit,
+  lineQuantityMax,
   lineUnitOfProduct,
   lineUnits,
   QUANTITY_STEP,
@@ -285,5 +287,15 @@ describe('stepping from an amount off the step (velista 0186, ruling 44)', () =>
   it('takes 10 g on a step of 50 down to 0 and up to 60', () => {
     expect(stepFrom(10, 'GRAM', -1, 50)).toBe(0);
     expect(stepFrom(10, 'GRAM', 1, 50)).toBe(60);
+  });
+});
+
+describe('lineQuantityMax (the owner, 2026-11-17)', () => {
+  it('holds a weight or a volume to 99 000 and leaves a count at the most', () => {
+    expect(lineQuantityMax('GRAM')).toBe(LINE_MEASURED_QUANTITY_MAX);
+    expect(lineQuantityMax('MILLILITER')).toBe(99_000);
+    expect(lineQuantityMax('UNIT')).toBe(LINE_QUANTITY_MAX);
+    expect(lineQuantityMax('GRAM', 500)).toBe(500);
+    expect(lineQuantityMax('UNIT', 500)).toBe(500);
   });
 });

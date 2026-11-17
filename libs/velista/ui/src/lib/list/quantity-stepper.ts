@@ -16,8 +16,10 @@ import {
 } from '@portfolio/localization/rokutranslator-angular';
 import {
   canStepUp,
+  isMeasured,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
+  lineQuantityMax,
   QUANTITY_HOLD_DELAY_MS,
   QUANTITY_HOLD_FACTOR,
   QUANTITY_HOLD_FASTEST_MS,
@@ -30,9 +32,9 @@ import {
 } from '@portfolio/velista/models';
 import {
   exactAmount,
+  followTyped,
   parseTypedAmount,
   shortAmount,
-  typedSymbol,
   type AmountWords,
 } from '@portfolio/velista/platform';
 import { TrashIcon } from '../icons/icons';
@@ -47,6 +49,14 @@ export type QuantityStepperVariant = 'row' | 'sheet' | 'sheet-narrow';
  * goes.
  */
 export const TOOK_DURATION_MS = 2500;
+
+/** What the field's live region says when a weight's typing turns its unit. */
+const TURNED_KEYS: Readonly<Record<string, string>> = {
+  g: 'amount.turned.grams',
+  kg: 'amount.turned.kilograms',
+  ml: 'amount.turned.milliliters',
+  l: 'amount.turned.liters',
+};
 
 /**
  * An amount, as a minus, the amount and a plus in one outlined capsule (velista
@@ -69,6 +79,12 @@ export const TOOK_DURATION_MS = 2500;
  *
  * **It never changes size**, whatever it holds: 155, 191 or 168 by 48 CSS px.
  * Typing is possible only in the two sheet variants (S9).
+ *
+ * **A typed weight or volume turns between grams and kilos as it is typed** (the
+ * owner, 2026-11-17, decision K): 1000 g or more turns into kilos showing the same
+ * amount, three whole digits under kilos turn back into grams, and an empty field
+ * reads in grams (`followTyped`). A weight or a volume goes no higher than 99 kg or
+ * 99 l, with the buttons as with typing ({@link ceiling}).
  */
 @Component({
   selector: 'lib-quantity-stepper',
@@ -131,6 +147,13 @@ export class QuantityStepper {
   readonly locale = computed(() => this._localeStore?.locale() ?? 'en');
   readonly typed = computed(() => this.variant() !== 'row');
 
+  /**
+   * The most a plus, End or a typed amount reaches: {@link max}, and no more than
+   * 99 000 for a weight or a volume (the owner, 2026-11-17). A line that already
+   * holds more draws as it is and steps down.
+   */
+  readonly ceiling = computed(() => lineQuantityMax(this.unit(), this.max()));
+
   /** The words of the amount, in the form this variant reads. */
   readonly words = computed<AmountWords>(() =>
     this.typed()
@@ -177,17 +200,30 @@ export class QuantityStepper {
   /** What a person has typed into a sheet's field and not committed yet. */
   readonly draft = signal<string | null>(null);
   private _draftFrom: AmountWords | null = null;
+  /** The symbol the draft is read in, which a weight's typing turns (decision K). */
+  private readonly _draftSymbol = signal<string | null>(null);
 
   /** The text of the sheet's field: the typed text, or the exact figure. */
   readonly fieldText = computed(() => this.draft() ?? this.words().figure);
 
   /** The symbol under the sheet's field, which follows the typing (decision K). */
-  readonly fieldSymbol = computed(() => {
-    const draft = this.draft();
-    const shown = this._draftFrom ?? this.words();
-    return draft === null
+  readonly fieldSymbol = computed(() =>
+    this.draft() === null
       ? this.words().symbol
-      : typedSymbol(draft, shown, this.unit(), this.locale());
+      : (this._draftSymbol() ?? this.words().symbol)
+  );
+
+  /**
+   * The unit a weight's field just turned into, for its polite live region: the
+   * digits changed under the caret, so a screen reader hears "Now in kilograms"
+   * once. Null when the last keystroke turned nothing.
+   */
+  readonly turnedTo = signal<string | null>(null);
+
+  /** The words of {@link turnedTo}, as a translation key. */
+  readonly turnedKey = computed(() => {
+    const symbol = this.turnedTo();
+    return symbol === null ? null : (TURNED_KEYS[symbol] ?? null);
   });
 
   /**
@@ -319,13 +355,13 @@ export class QuantityStepper {
       }
       case 'Home':
         event.preventDefault();
-        this.draft.set(null);
+        this._clearDraft();
         this._emit(this.min(), false);
         return;
       case 'End':
         event.preventDefault();
-        this.draft.set(null);
-        this._emit(this.max(), false);
+        this._clearDraft();
+        this._emit(this.ceiling(), false);
         return;
       case 'Enter':
         event.preventDefault();
@@ -336,8 +372,7 @@ export class QuantityStepper {
           // Typed text goes back to the shown amount and the sheet stays open.
           event.preventDefault();
           event.stopPropagation();
-          this.draft.set(null);
-          this._draftFrom = null;
+          this._clearDraft();
           (event.target as HTMLInputElement).value = this.words().figure;
         }
         return;
@@ -348,11 +383,31 @@ export class QuantityStepper {
     (event.target as HTMLInputElement).select();
   }
 
+  /**
+   * A keystroke or a paste. A weight or a volume reads the whole text in the unit
+   * the field shows now and may turn it (decision K): the field then holds the
+   * turned text with the caret at its end, and the live region names the new unit.
+   * A count reads in the symbol the typing started under, as before.
+   */
   onFieldInput(event: Event): void {
+    const input = event.target as HTMLInputElement;
     if (this.draft() === null) {
       this._draftFrom = this.words();
     }
-    this.draft.set((event.target as HTMLInputElement).value);
+    const from = this._draftFrom ?? this.words();
+    const unit = this.unit();
+    const symbol = isMeasured(unit)
+      ? (this._draftSymbol() ?? from.symbol)
+      : from.symbol;
+    const next = followTyped(input.value, symbol, unit, this.locale());
+    if (next.text !== input.value) {
+      input.value = next.text;
+      const end = next.text.length;
+      input.setSelectionRange?.(end, end);
+    }
+    this.turnedTo.set(next.turned ? next.symbol : null);
+    this._draftSymbol.set(next.symbol);
+    this.draft.set(next.text);
   }
 
   onFieldBlur(event: FocusEvent): void {
@@ -416,7 +471,7 @@ export class QuantityStepper {
   }
 
   private _plusAtEndOf(value: number): boolean {
-    return !canStepUp(value, this.unit(), this.max(), this.step());
+    return !canStepUp(value, this.unit(), this.ceiling(), this.step());
   }
 
   private _atEnd(direction: 1 | -1): boolean {
@@ -455,20 +510,28 @@ export class QuantityStepper {
     if (draft === null) {
       return false;
     }
-    const shown = this._draftFrom ?? this.words();
-    this.draft.set(null);
-    this._draftFrom = null;
+    const from = this._draftFrom ?? this.words();
+    // The draft is already turned, so it is read in the symbol it ended under.
+    const shown = { ...from, symbol: this._draftSymbol() ?? from.symbol };
+    this._clearDraft();
     const amount = parseTypedAmount(
       draft,
       shown,
       this.unit(),
       this.typedMin() ?? this.min(),
-      this.max()
+      this.ceiling()
     );
     if (amount !== null) {
       this._emit(amount, false);
     }
     return true;
+  }
+
+  private _clearDraft(): void {
+    this.draft.set(null);
+    this._draftFrom = null;
+    this._draftSymbol.set(null);
+    this.turnedTo.set(null);
   }
 
   /** Empties the live region, and fills it once the presses stop (decision E). */

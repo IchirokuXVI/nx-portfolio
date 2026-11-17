@@ -168,12 +168,56 @@ describe('QuantityStepper (velista 0188)', () => {
     });
 
     it('turns plus off one step before the most, and never clamps', () => {
-      const h = render({ value: 999_975, unit: 'GRAM', max: 999_999 });
+      const h = render({ value: 999_999, max: 999_999 });
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.plus.click();
       expect(h.steps).toEqual([]);
       h.set('value', 999_950);
       expect(h.plus.getAttribute('aria-disabled')).toBeNull();
+    });
+
+    describe('a weight or a volume goes no higher than 99 000 (the owner, 2026-11-17)', () => {
+      it.each(['GRAM', 'MILLILITER'])('stops %s plus at 99 000, and never clamps', (unit) => {
+        const h = render({ value: 98_950, unit });
+        h.plus.click();
+        h.plus.click();
+        expect(tos(h)).toEqual([98_975, 99_000]);
+        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+        h.plus.click();
+        expect(tos(h)).toEqual([98_975, 99_000]);
+        h.set('value', 98_990);
+        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      });
+
+      it('stops a plus hold at 99 kg', () => {
+        const h = render({ value: 98_900, unit: 'GRAM' });
+        fire(h.plus, 'pointerdown');
+        jest.advanceTimersByTime(5000);
+        expect(tos(h)).toEqual([98_925, 98_950, 98_975, 99_000]);
+      });
+
+      it('draws a line above it as it is and steps it down', () => {
+        const h = render({ value: 150_000, unit: 'GRAM' });
+        expect(h.el.getAttribute('data-value')).toBe('150000');
+        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+        h.minus.click();
+        expect(tos(h)).toEqual([149_975]);
+      });
+
+      it('leaves a count at the most of the server', () => {
+        const h = render({ value: 150_000 });
+        expect(h.plus.getAttribute('aria-disabled')).toBeNull();
+        const sheet = render({ value: 5, variant: 'sheet' });
+        expect(field(sheet).getAttribute('aria-valuemax')).toBe(
+          String(LINE_QUANTITY_MAX)
+        );
+      });
+
+      it('holds a lower max the caller passes', () => {
+        const h = render({ value: 475, unit: 'GRAM', max: 500 });
+        h.plus.click();
+        expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      });
     });
 
     it('turns a count plus off where the short reading would not move', () => {
@@ -460,9 +504,7 @@ describe('QuantityStepper (velista 0188)', () => {
       expect(input.getAttribute('inputmode')).toBe('decimal');
       expect(input.getAttribute('aria-valuenow')).toBe('1275');
       expect(input.getAttribute('aria-valuemin')).toBe('0');
-      expect(input.getAttribute('aria-valuemax')).toBe(
-        String(LINE_QUANTITY_MAX)
-      );
+      expect(input.getAttribute('aria-valuemax')).toBe('99000');
       expect(input.getAttribute('aria-valuetext')).toBe('1.275 kilograms');
       expect(input.getAttribute('aria-label')).toBe(
         'amount.group:{"name":"Plátano"}'
@@ -493,7 +535,8 @@ describe('QuantityStepper (velista 0188)', () => {
       key(h, 'ArrowDown');
       key(h, 'End');
       key(h, 'Home');
-      expect(tos(h)).toEqual([775, 750, 725, 999_999, 0]);
+      // End goes to the most a weight reaches, 99 kg (the owner, 2026-11-17).
+      expect(tos(h)).toEqual([775, 750, 725, 99_000, 0]);
       expect(h.steps.every((step) => !step.repeat)).toBe(true);
     });
 
@@ -563,6 +606,147 @@ describe('QuantityStepper (velista 0188)', () => {
       type(h, '900');
       h.plus.click();
       expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
+    });
+
+    describe('a typed weight turns between grams and kilos (the owner, 2026-11-17)', () => {
+      /** One more key at the end of what the field holds, as a person types. */
+      const append = (h: Harness, keys: string) => {
+        for (const one of keys) {
+          type(h, field(h).value + one);
+        }
+      };
+      const symbol = (h: Harness) => h.el.querySelector('.symbol')?.textContent;
+      const turned = (h: Harness) =>
+        h.el.querySelector('.turned')?.textContent?.trim() ?? null;
+      const state = (h: Harness) => `${field(h).value} ${symbol(h)}`;
+
+      it.each(['sheet', 'sheet-narrow'])(
+        "loops the owner's way in the %s variant: 1000, then 0, then 0, then 0",
+        (variant) => {
+          const h = render({ value: 500, unit: 'GRAM', variant });
+          // The first key replaces the selected number.
+          type(h, '1');
+          append(h, '00');
+          expect(state(h)).toBe('100 g');
+          append(h, '0');
+          expect(state(h)).toBe('1 kg');
+          expect(field(h).selectionStart).toBe(1);
+          expect(turned(h)).toBe('amount.turned.kilograms');
+          append(h, '0');
+          expect(state(h)).toBe('10 kg');
+          expect(turned(h)).toBe('');
+          append(h, '0');
+          expect(state(h)).toBe('100 g');
+          expect(turned(h)).toBe('amount.turned.grams');
+          append(h, '0');
+          expect(state(h)).toBe('1 kg');
+          expect(h.steps).toEqual([]);
+          key(h, 'Enter');
+          expect(h.steps).toEqual([{ from: 500, to: 1000, repeat: false }]);
+          expect(state(h)).toBe('1 kg');
+          expect(turned(h)).toBe('');
+        }
+      );
+
+      it('turns millilitres into litres the same way', () => {
+        const h = render({ value: 500, unit: 'MILLILITER', variant: 'sheet' });
+        type(h, '2');
+        append(h, '500');
+        expect(state(h)).toBe('2.5 l');
+        expect(turned(h)).toBe('amount.turned.liters');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([2500]);
+      });
+
+      it('goes back to grams when emptied, and keeps kilos while a digit is left', () => {
+        const h = render({ value: 50_000, unit: 'GRAM', variant: 'sheet' });
+        expect(state(h)).toBe('50 kg');
+        type(h, '5');
+        expect(state(h)).toBe('5 kg');
+        type(h, '');
+        expect(symbol(h)).toBe('g');
+        expect(turned(h)).toBe('amount.turned.grams');
+        append(h, '5');
+        expect(state(h)).toBe('5 g');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([5]);
+      });
+
+      it('reads the first key in kilos on a line resting in kilos', () => {
+        const h = render({ value: 1500, unit: 'GRAM', variant: 'sheet' });
+        expect(state(h)).toBe('1.5 kg');
+        type(h, '2');
+        expect(state(h)).toBe('2 kg');
+        append(h, '5');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([25_000]);
+      });
+
+      it('reads 750 typed over a line in kilos as 750 g', () => {
+        const h = render({ value: 2000, unit: 'GRAM', variant: 'sheet' });
+        type(h, '7');
+        append(h, '50');
+        expect(state(h)).toBe('750 g');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([750]);
+      });
+
+      it('shows a typed 1250 as 1.25 under kg, and reads decimals under kg', () => {
+        const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+        type(h, '1');
+        append(h, '250');
+        expect(state(h)).toBe('1.25 kg');
+        key(h, 'Enter');
+        type(h, '1');
+        append(h, ',5');
+        expect(state(h)).toBe('1,5 kg');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([1250, 1500]);
+      });
+
+      it('holds 99,5 kg to 99 kg on commit', () => {
+        const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+        type(h, '9');
+        append(h, '9,5');
+        expect(state(h)).toBe('99,5 kg');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([99_000]);
+      });
+
+      it('turns a paste over 99 kg into 99 kg', () => {
+        const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+        type(h, '250000');
+        expect(state(h)).toBe('99 kg');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([99_000]);
+      });
+
+      it('types a single gram', () => {
+        const h = render({ value: 500, unit: 'GRAM', variant: 'sheet' });
+        type(h, '1');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([1]);
+      });
+
+      it('leaves a count as it was: no turn, read in the name it started under', () => {
+        const h = render({ value: 2, variant: 'sheet' });
+        type(h, '1');
+        append(h, '000');
+        expect(field(h).value).toBe('1000');
+        expect(turned(h)).toBe('');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([1000]);
+      });
+
+      it('puts the shown amount back on Escape after a turn', () => {
+        const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
+        type(h, '1');
+        append(h, '000');
+        expect(symbol(h)).toBe('kg');
+        key(h, 'Escape');
+        expect(state(h)).toBe('750 g');
+        expect(turned(h)).toBe('');
+      });
     });
 
     describe('a pointer press while text is typed (the owner, 2026-11-12)', () => {
@@ -686,7 +870,7 @@ describe('QuantityStepper (velista 0188)', () => {
     });
 
     it('turns plus off where one step of the product would pass the most', () => {
-      const h = render({ value: 999_900, unit: 'GRAM', step: 100 });
+      const h = render({ value: 98_950, unit: 'GRAM', step: 100 });
       expect(h.plus.getAttribute('aria-disabled')).toBe('true');
       h.set('step', null);
       expect(h.plus.getAttribute('aria-disabled')).toBeNull();
@@ -811,13 +995,13 @@ describe('QuantityStepper (velista 0188)', () => {
 
       it('stops plus at the most within one task on a step of 100', () => {
         const h = render(
-          { value: 999_700, unit: 'GRAM', step: 100 },
+          { value: 98_800, unit: 'GRAM', step: 100 },
           { follow: false }
         );
         h.plus.click();
         h.plus.click();
         h.plus.click();
-        expect(tos(h)).toEqual([999_800, 999_900]);
+        expect(tos(h)).toEqual([98_900, 99_000]);
       });
     });
   });
@@ -890,6 +1074,17 @@ describe('QuantityStepper (velista 0188)', () => {
       fire(h.minus, 'pointerup');
       pointerClick(h.minus);
       expect(tos(h)).toEqual([2, 1, 0]);
+    });
+
+    it('takes a long press that starts on the trash to 0 on release, with no repeat (the owner, 2026-11-17)', () => {
+      const h = render({ value: 25, unit: 'GRAM' });
+      expect(trash(h)).not.toBeNull();
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(3000);
+      expect(h.steps).toEqual([]);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([{ from: 25, to: 0, repeat: false }]);
     });
 
     it('draws no button at all for a reader', () => {

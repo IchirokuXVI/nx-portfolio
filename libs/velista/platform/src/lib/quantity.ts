@@ -1,5 +1,7 @@
 import {
   isMeasured,
+  LINE_MEASURED_QUANTITY_MAX,
+  lineQuantityMax,
   QUANTITY_COARSE_FROM,
   shortHundredths,
   type LineUnit,
@@ -160,10 +162,15 @@ export function exactAmount(
 /**
  * What a person typed into a sheet's field, in base units, or null for text that is
  * not a number (velista `0188`, S10 and decision K). Spaces are dropped; "," and "."
- * are both the decimal separator, and one at most is read. A number with no
- * separator is read in the name of `shown`; with one it is read in the top name, so
- * "1,5" under "500 ml" is 1,5 l. Rounded half up to a whole base unit, in integers,
- * and held to `[min, max]`.
+ * are both the decimal separator, and one at most is read.
+ *
+ * A weight or a volume is read after the turns of {@link followTyped}, the owner's
+ * rule of 2026-11-17: the digits are read in the unit the field shows, so "750"
+ * under "kg" is 750 g, because three whole digits under kg turn the field back into
+ * grams. A count keeps its rule: a number with no separator is read in the name of
+ * `shown`, and with one in the top name. Rounded half up to a whole base unit, in
+ * integers, and held to `[min, max]`, a weight or a volume also to
+ * {@link LINE_MEASURED_QUANTITY_MAX}.
  */
 export function parseTypedAmount(
   text: string,
@@ -172,14 +179,17 @@ export function parseTypedAmount(
   min: number,
   max: number
 ): number | null {
-  const typed = readTyped(text);
+  const followed = isMeasured(unit)
+    ? followTyped(text, shown.symbol, unit, 'en')
+    : { text, symbol: shown.symbol };
+  const typed = readTyped(followed.text);
   if (typed === null) {
     return null;
   }
   let amount: number;
   if (typed.fraction === null) {
     const whole = Number(typed.whole);
-    amount = isTopSymbol(shown.symbol) ? whole * 1000 : whole;
+    amount = isTopSymbol(followed.symbol) ? whole * 1000 : whole;
   } else {
     const digits = typed.fraction.padEnd(4, '0');
     amount =
@@ -190,13 +200,85 @@ export function parseTypedAmount(
   if (!Number.isFinite(amount)) {
     return null;
   }
-  return Math.min(max, Math.max(min, amount));
+  return Math.min(lineQuantityMax(unit, max), Math.max(min, amount));
+}
+
+/** The text a sheet's field holds after a keystroke, and the unit it is read in. */
+export interface TypedText {
+  /** What the field holds: the typed text, or the same amount in the other unit. */
+  readonly text: string;
+  /** The symbol the text is read in: "g" or "kg", "ml" or "l", "" or "K". */
+  readonly symbol: string;
+  /** True when this keystroke turned the field from one unit into the other. */
+  readonly turned: boolean;
 }
 
 /**
- * The symbol a typed text will be read in, for the field's live symbol (velista
- * `0188`, decision K): the top name as soon as a separator is typed, otherwise the
- * symbol under the field when the typing started.
+ * Where typed text for a weight or a volume turns (the owner, 2026-11-17, velista
+ * `0188` decision K). `symbol` is the unit the field read in before this keystroke.
+ *
+ * - Under grams, a whole number of 1000 or more turns into kilos showing the same
+ *   amount ("1000" g is "1" kg, "1250" g is "1,25" kg), held to 99 kg.
+ * - Under grams, a separator turns into kilos with the digits as typed ("1," is
+ *   read in kilos and the decimals follow), because a gram has no decimals.
+ * - Under kilos, three whole digits turn back into grams with the whole digits as
+ *   typed ("100" kg is "100" g, "150,5" kg is "150" g). "99,5" kg stays in kilos and
+ *   is held to 99 kg when it is read.
+ * - An empty field reads in grams. Text that is not a number does not turn.
+ *
+ * The same for millilitres and litres. A count does not turn: it reads in its top
+ * name once a separator is typed and in `symbol` otherwise, as before.
+ */
+export function followTyped(
+  text: string,
+  symbol: string,
+  unit: LineUnit,
+  locale: string
+): TypedText {
+  if (!isMeasured(unit)) {
+    return {
+      text,
+      symbol: /[.,]/.test(text) ? topSymbol(unit, locale) : symbol,
+      turned: false,
+    };
+  }
+  const startsLarge = isTopSymbol(symbol);
+  if (text.replace(/\s+/g, '') === '') {
+    return { text, symbol: baseSymbol(unit), turned: startsLarge };
+  }
+  let large = startsLarge;
+  let current = text;
+  // Each pass turns at most once, and three settle every text: grams to kilos lands
+  // at 99 kg or under, and kilos to grams keeps the whole digits only.
+  for (let pass = 0; pass < 3; pass++) {
+    const typed = readTyped(current);
+    if (typed === null) {
+      break;
+    }
+    const whole = Number(typed.whole || '0');
+    if (!large && whole >= QUANTITY_COARSE_FROM) {
+      large = true;
+      const amount = Math.min(LINE_MEASURED_QUANTITY_MAX, whole);
+      current = plainFigure(amount / 1000, 3, locale);
+    } else if (!large && typed.fraction !== null) {
+      large = true;
+    } else if (large && whole > TYPED_LARGE_WHOLE_MAX) {
+      large = false;
+      current = typed.whole;
+    } else {
+      break;
+    }
+  }
+  return {
+    text: current,
+    symbol: large ? topSymbol(unit, locale) : baseSymbol(unit),
+    turned: large !== startsLarge,
+  };
+}
+
+/**
+ * The symbol a typed text will be read in when the typing started under `shown`
+ * (velista `0188`, decision K): {@link followTyped}'s symbol for that text.
  */
 export function typedSymbol(
   text: string,
@@ -204,8 +286,11 @@ export function typedSymbol(
   unit: LineUnit,
   locale: string
 ): string {
-  return /[.,]/.test(text) ? topSymbol(unit, locale) : shown.symbol;
+  return followTyped(text, shown.symbol, unit, locale).symbol;
 }
+
+/** The most whole kilos or litres the field holds before it turns back: 99. */
+const TYPED_LARGE_WHOLE_MAX = LINE_MEASURED_QUANTITY_MAX / 1000;
 
 /** Where the exact form of a count starts to read in thousands (S5). */
 const COUNT_EXACT_THOUSANDS_FROM = 100_000;

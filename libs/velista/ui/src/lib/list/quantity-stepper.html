@@ -49,7 +49,7 @@
             (keydown)="onFieldKey($event)"
             [attr.aria-disabled]="disabled() ? 'true' : null"
             [attr.aria-label]="'amount.group' | rokuT: { name: name() }"
-            [attr.aria-valuemax]="max()"
+            [attr.aria-valuemax]="ceiling()"
             [attr.aria-valuemin]="typedMin() ?? min()"
             [attr.aria-valuenow]="value()"
             [attr.aria-valuetext]="words().spoken"
@@ -98,5 +98,11 @@
         ? ('amount.settled' | rokuT: { name: name(), amount: words().spoken })
         : ''
     }}</span>
+    @if (typed()) {
+      @let turned = turnedKey();
+      <span aria-live="polite" class="visually-hidden turned">{{
+        turned ? (turned | rokuT) : ''
+      }}</span>
+    }
   </span>
 }
