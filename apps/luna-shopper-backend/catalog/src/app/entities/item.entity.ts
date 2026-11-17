@@ -96,8 +96,9 @@ export class Item extends BaseEntity {
    * How far one step moves a line of this product, in grams or millilitres,
    * or null for velista's default steps (plan 0261).
    *
-   * One of `QUANTITY_STEPS`, and only on a product sold by the kilo or the
-   * litre: `KILOGRAM` or `LITER`, no size, no weight. The checks
+   * One of `QUANTITY_STEPS`, and only on a product sold by the kilo:
+   * `KILOGRAM`, no size, no weight. No product by the litre carries one
+   * (`carriesQuantityStep` says why a legacy `LITER` row passes). The checks
    * `item_quantity_step_allowed` and `item_quantity_step_on_loose` restate
    * both rules. Only a person writes it, so it names no writer (S7).
    */

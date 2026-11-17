@@ -2,6 +2,20 @@
 
 # 0187: the product page steps a line and explains its order
 
+> Noted on 2026-11-17: a defect found in the review walk of the stepper batch, and its fix.
+> The lists table drew an existing weight line of a list the app had not loaded as a count:
+> 1.6 kg read "1.6 k" with "Add 10", the plus sent `{"delta":10,"unit":"UNIT"}`, the server
+> answered 409 `line_unit_mismatch`, and the amount snapped back. `GET /v1/items/:id/list-lines`
+> answered `ItemLineView` with no `unit`, so `toItemLists` fell back to pieces; a row was right
+> only when the list page had loaded that list before. The fix (PR stacked on #988): core's
+> `linesHoldingItem` reads `list_lines.unit`, `ItemLineView` and its schema require `unit`, and
+> velista's mapper takes it from the answer. Specs: core unit and integration, the velista
+> mapper against the contract schema, and a product page case for a list the app never
+> loaded. `catalog.spec.ts` gains a walk "a weight line on the product page" that draws 1.6 kg,
+> steps it to 1.7 kg by its own 100 g step with no refusal, and carries the step 9 of section 4
+> (the order sheet), on a product of its own group, because the demo world's Milk has no
+> similar products.
+
 > Amended on 2026-11-12 (the owner): a line that reaches 0 is never deleted by a write any
 > more, because backend `0263` is withdrawn; it is hidden on its list (section 1). The minus
 > draws a red trash where its next press reaches 0 (velista `0188`), always, also when the line

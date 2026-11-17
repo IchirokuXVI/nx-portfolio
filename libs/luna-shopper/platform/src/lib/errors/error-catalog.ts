@@ -247,8 +247,8 @@ export const ERROR_CATALOG: Record<
     es: 'Un producto tiene un tamaño fijo o un peso aproximado, nunca los dos, y el peso es mayor que cero. Quita uno de los dos.',
   },
   [ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED]: {
-    en: 'Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.',
-    es: 'Solo un producto que se vende por kilo o por litro tiene un paso, y el paso es uno de los permitidos. Elige un paso permitido o quita el paso.',
+    en: 'Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.',
+    es: 'Solo un producto que se vende por kilo tiene un paso, y el paso es uno de los permitidos. Elige un paso permitido o quita el paso.',
   },
   [ERROR_CODES.ITEM_MERGED]: {
     en: 'This product was merged into another one. Work on the product it was merged into.',

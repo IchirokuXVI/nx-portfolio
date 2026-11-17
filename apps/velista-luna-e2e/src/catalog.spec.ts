@@ -1,15 +1,27 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
+  demoWorld,
+  ITEM_MILK_ID,
   LINE_BREAD_ID,
   LINE_MILK_ID,
+  LIST_GROCERIES_ID,
+  PRICE_SCOPE_MERCADONA_VALENCIA_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
+  addProductLine,
+  adminLogin,
   ALICE_EMAIL,
+  categoryIdBySlug,
   deleteLine,
+  ensureItem,
   ensurePostalCode,
+  ensureProductGroup,
   login,
   resetAliceWorld,
+  setAdminPrice,
   setLineQuantity,
+  setProductGroup,
+  setQuantityStep,
   type Session,
 } from './support/api';
 import { signIn } from './support/app';
@@ -493,6 +505,139 @@ test.describe('a product on the list only at 0', () => {
     }
     // The stepper's raise went out as its own write, and the forced press as nothing.
     expect(adds).toEqual([]);
+  });
+});
+
+/**
+ * A weight line on the product page (velista 0187, criterion 1). A product by the
+ * kilo with a step of 100 g, and a line of it at 1.6 kg on Groceries that the API
+ * makes before the browser opens, so the app never loads that list: the page
+ * knows the line only from `GET /v1/items/:id/list-lines`. Its row draws the
+ * amount with its unit, and its plus steps the line by 100 g in grams. Before
+ * that answer named a line's unit the row drew pieces, its plus sent ten of them
+ * and the server refused the write with `line_unit_mismatch`.
+ *
+ * A second product of the same group gives the page its Similar products, whose
+ * info button opens the sheet about the order (velista 0187, section 4, step 9).
+ * The demo world's Milk is alone in its group, so the walk above cannot reach
+ * that button. Both products and their group are made through the back office
+ * and kept across runs; the line is made per run and deleted after.
+ */
+test.describe('a weight line on the product page (velista 0187)', () => {
+  const CHERRIES = { en: 'Loose cherries e2e', es: 'Cerezas a granel e2e' };
+  const PLUMS = { en: 'Loose plums e2e', es: 'Ciruelas a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let itemId = '';
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const categoryIds = [await categoryIdBySlug(alice, slug)];
+    const groupId = await ensureProductGroup(
+      admin,
+      'loose-stone-fruit-e2e',
+      { en: 'Loose stone fruit e2e', es: 'Fruta de hueso a granel e2e' },
+      'KILOGRAM'
+    );
+    itemId = await ensureItem(admin, CHERRIES, categoryIds, 'KILOGRAM');
+    const plums = await ensureItem(admin, PLUMS, categoryIds, 'KILOGRAM');
+    for (const [id, price] of [
+      [itemId, 6.99],
+      [plums, 2.49],
+    ] as const) {
+      await setProductGroup(admin, id, groupId);
+      await setAdminPrice(admin, id, PRICE_SCOPE_MERCADONA_VALENCIA_ID, price);
+    }
+    await setQuantityStep(admin, itemId, 100);
+
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: CHERRIES.en,
+      itemId,
+      quantity: 1600,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1600, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('draws the line in kilos, steps it by its own step, and explains the order of similar products', async ({
+    page,
+  }) => {
+    const row = page.locator(
+      `lib-lists-table li[data-list="${LIST_GROCERIES_ID}"] .row`
+    );
+    const count = row.locator('lib-quantity-stepper');
+
+    await test.step('1. the row draws the amount with its unit', async () => {
+      await signIn(page, ALICE_EMAIL);
+      await page.goto(`/en/catalog/products/${itemId}`);
+      await expect(
+        page.getByRole('heading', { level: 1, name: CHERRIES.en })
+      ).toBeVisible();
+      await expect(count).toHaveAttribute('data-value', '1600');
+      await expect(count.locator('.number')).toHaveText('1.6');
+      await expect(count.locator('.symbol')).toHaveText('kg');
+    });
+
+    await test.step('2. plus steps the line by 100 g, and the server takes it', async () => {
+      const written = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === `/v1/lines/${lineId}/quantity`
+      );
+      await row.getByRole('button', { name: /^Add 100 g to / }).click();
+      await expect(count).toHaveAttribute('data-value', '1700');
+
+      const response = await written;
+      expect(response.request().postDataJSON()).toEqual({
+        delta: 100,
+        unit: 'GRAM',
+      });
+      expect(response.ok()).toBe(true);
+      await expect(page.locator('.add-failed')).toHaveCount(0);
+      await expect(count).toHaveAttribute('data-value', '1700');
+    });
+
+    await test.step('3. a reload reads 1.7 kg back from the server', async () => {
+      await page.reload();
+      await expect(count).toHaveAttribute('data-value', '1700');
+    });
+
+    await test.step('4. the order of similar products says why it differs', async () => {
+      const heading = page.getByRole('heading', { name: /Similar products/ });
+      await expect(heading).toBeVisible();
+      await heading
+        .getByRole('button', { name: 'How these are sorted' })
+        .click();
+
+      await expect(page).toHaveURL(
+        new RegExp(`/en/catalog/products/${itemId}/sheet/about-order$`)
+      );
+      const sheet = page.getByRole('dialog');
+      await expect(
+        sheet.getByRole('heading', { name: 'How these are sorted' })
+      ).toBeVisible();
+      await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`/en/catalog/products/${itemId}$`)
+      );
+      await expect(
+        page.getByRole('heading', { level: 1, name: CHERRIES.en })
+      ).toBeVisible();
+    });
   });
 });
 

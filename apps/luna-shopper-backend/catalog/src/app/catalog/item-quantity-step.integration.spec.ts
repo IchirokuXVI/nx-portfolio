@@ -32,7 +32,7 @@ import { PlatformAdminService } from './platform-admin.service';
 import { ProductGroupService } from './product-group.service';
 
 /**
- * The step of a product sold by the kilo or the litre against real Postgres
+ * The step of a product sold by the kilo against real Postgres
  * (plan 0261).
  *
  * What only the database can say: the migration up and down, the two checks

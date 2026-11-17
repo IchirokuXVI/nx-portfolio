@@ -22,6 +22,7 @@ import {
   ItemNames,
   MEMORY_CATEGORIES,
   provideFakeCategoryStore,
+  toItemLists,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
 import {
@@ -29,6 +30,7 @@ import {
   type CatalogItem,
   type CatalogPriceState,
   type CatalogScopeOffer,
+  type ItemLists,
 } from '@portfolio/velista/models';
 import {
   PageNavigation,
@@ -149,6 +151,8 @@ interface Options extends FakeAddsOptions {
    * made, so a test can make the first read fail or never answer.
    */
   readonly history?: (read: jest.SpyInstance) => void;
+  /** Replaces the read of the lists that hold the product, before the page reads it. */
+  readonly itemLines?: (itemId: string) => Promise<ItemLists>;
 }
 
 interface Harness {
@@ -203,6 +207,9 @@ async function render(options: Options = {}): Promise<Harness> {
     convertToParamMap({ itemId: 'item-oil' })
   );
   const adds = fakeAdds(options);
+  if (options.itemLines !== undefined) {
+    adds.lines.linesHoldingItem.mockImplementation(options.itemLines);
+  }
 
   await TestBed.configureTestingModule({
     imports: [ProductPage, RokuTranslatorTestingModule.forTesting()],
@@ -1159,6 +1166,90 @@ describe('ProductPage', () => {
         250,
         'MILLILITER'
       );
+    });
+
+    it('draws a weight line of a list it never loaded in its own unit, and plus steps it by one step of that unit (velista 0187)', async () => {
+      // Rice by the kilo, stepped by 100 g, under the id the route opens. The
+      // party list holds 1.6 kg of it and the app never read that list: the
+      // page knows the line only from the server's answer for this product,
+      // mapped as the app maps it.
+      const loose: CatalogItem = {
+        ...RICE,
+        id: 'item-oil',
+        size: null,
+        quantityStep: 100,
+      };
+      const { fixture, lines } = await render({
+        items: [loose],
+        lists: [WEEKLY, PARTY],
+        // What the server holds, so a write has a line to land on.
+        lines: [
+          {
+            id: 'line-rice',
+            listId: 'list-party',
+            content: 'Short grain rice',
+            quantity: 1600,
+            unit: 'GRAM',
+            itemIds: ['item-oil'],
+          },
+        ],
+        itemLines: async (itemId) =>
+          toItemLists(
+            {
+              lists: [
+                {
+                  listId: 'list-weekly',
+                  name: WEEKLY.name,
+                  zoneId: WEEKLY.zoneId,
+                  zoneName: WEEKLY.zoneName,
+                  autoApproveLines: true,
+                  myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
+                  lines: [],
+                },
+                {
+                  listId: 'list-party',
+                  name: 'Party',
+                  zoneId: WEEKLY.zoneId,
+                  zoneName: WEEKLY.zoneName,
+                  autoApproveLines: true,
+                  myPermissions: ['READ', 'WRITE', 'DECIDE', 'MANAGE'],
+                  lines: [
+                    {
+                      id: 'line-rice',
+                      content: 'Short grain rice',
+                      quantity: 1600,
+                      unit: 'GRAM',
+                      approvalStatus: 'APPROVED',
+                    },
+                  ],
+                },
+              ],
+              hasMore: false,
+            },
+            itemId
+          ),
+      });
+      // The server refuses a delta in a unit that is not the line's.
+      const write = lines.addQuantity.getMockImplementation();
+      lines.addQuantity.mockImplementation(
+        async (lineId: string, delta: number, unit: string) => {
+          if (unit !== 'GRAM') {
+            throw new Error('line_unit_mismatch');
+          }
+          return write?.(lineId, delta, unit);
+        }
+      );
+
+      expect(lines.listLines).not.toHaveBeenCalledWith('list-party');
+      expect(listRow(fixture, 'list-party').main?.quantity).toBe('1600');
+
+      listRow(fixture, 'list-party').main?.plus?.click();
+      await quiet(fixture);
+
+      expect(lines.addQuantity).toHaveBeenCalledTimes(1);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-rice', 100, 'GRAM');
+      expect(listRow(fixture, 'list-party').main?.quantity).toBe('1700');
+      expect(addFailed(fixture)).toBe('');
     });
 
     it('sets a line that was there before to zero with the minus, and deletes nothing', async () => {

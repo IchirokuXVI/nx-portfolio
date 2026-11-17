@@ -18284,7 +18284,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18529,7 +18529,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18633,7 +18633,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18927,7 +18927,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28874,7 +28874,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -47626,6 +47626,9 @@
             "type": "integer",
             "minimum": 0
           },
+          "unit": {
+            "$ref": "#/components/schemas/enums.LineUnit"
+          },
           "approvalStatus": {
             "$ref": "#/components/schemas/enums.LineApprovalStatus"
           }
@@ -47634,6 +47637,7 @@
           "id",
           "content",
           "quantity",
+          "unit",
           "approvalStatus"
         ],
         "additionalProperties": false

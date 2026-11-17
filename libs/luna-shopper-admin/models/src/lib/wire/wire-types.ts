@@ -5537,6 +5537,7 @@ export type ListItemLineView = {
   id: string;
   content: string;
   quantity: number;
+  unit: EnumsLineUnit;
   approvalStatus: EnumsLineApprovalStatus;
 };
 

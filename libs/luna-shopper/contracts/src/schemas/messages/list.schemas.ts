@@ -830,9 +830,10 @@ const itemLineView = object(
     id: nonEmptyString(),
     content: string(),
     quantity: integer({ minimum: 0 }),
+    unit: ref(ENUM_IDS.lineUnit),
     approvalStatus: ref(ENUM_IDS.lineApprovalStatus),
   },
-  ['id', 'content', 'quantity', 'approvalStatus']
+  ['id', 'content', 'quantity', 'unit', 'approvalStatus']
 );
 const listWithItemLinesView = object(
   LIST_SCHEMA_IDS.listWithItemLinesView,

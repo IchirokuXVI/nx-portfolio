@@ -12,6 +12,6 @@
  */
 export * from './line-amount';
 export * from './line-unit';
-// The step of a product sold by the kilo or the litre (plan 0261), which
+// The step of a product sold by the kilo (plan 0261), which
 // reaches only `line-unit`.
 export * from './quantity-step';
