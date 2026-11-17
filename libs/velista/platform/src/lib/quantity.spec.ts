@@ -1,5 +1,6 @@
 import {
   exactAmount,
+  followTyped,
   formatAmount,
   formatQuantity,
   formatQuantityChange,
@@ -170,10 +171,27 @@ describe('parseTypedAmount (velista 0188, S10 and decision K)', () => {
     expect(parseTypedAmount('1,5', shownCount, 'UNIT', 0, MAX)).toBe(1500);
   });
 
-  it('reads a whole number in the name on screen', () => {
-    expect(parseTypedAmount('750', shownKg, 'GRAM', 0, MAX)).toBe(750_000);
+  it('reads digits in the unit on screen, after the turns (the owner, 2026-11-17)', () => {
+    // Three whole digits under kg turn the field back into grams.
+    expect(parseTypedAmount('750', shownKg, 'GRAM', 0, MAX)).toBe(750);
+    expect(parseTypedAmount('75', shownKg, 'GRAM', 0, MAX)).toBe(75_000);
     expect(parseTypedAmount('750', shownMl, 'MILLILITER', 0, MAX)).toBe(750);
+    expect(parseTypedAmount('1250', shownMl, 'MILLILITER', 0, MAX)).toBe(1250);
     expect(parseTypedAmount('0,5', shownKg, 'GRAM', 0, MAX)).toBe(500);
+    // A count keeps its rule: a whole number in the name on screen.
+    const shownK = exactAmount(150_000, 'UNIT', 'es');
+    expect(parseTypedAmount('200', shownK, 'UNIT', 0, MAX)).toBe(200_000);
+  });
+
+  it('holds a weight or a volume to 99 000 and a count to the most', () => {
+    expect(parseTypedAmount('250000', shownMl, 'MILLILITER', 0, MAX)).toBe(
+      99_000
+    );
+    expect(parseTypedAmount('99,5', shownKg, 'GRAM', 0, MAX)).toBe(99_000);
+    expect(parseTypedAmount('99', shownKg, 'GRAM', 0, MAX)).toBe(99_000);
+    expect(parseTypedAmount('500000', shownCount, 'UNIT', 0, MAX)).toBe(
+      500_000
+    );
   });
 
   it('reads both separators and drops spaces', () => {
@@ -196,6 +214,142 @@ describe('parseTypedAmount (velista 0188, S10 and decision K)', () => {
   it('holds the amount to the range', () => {
     expect(parseTypedAmount('1000000', shownCount, 'UNIT', 0, MAX)).toBe(MAX);
     expect(parseTypedAmount('0', shownCount, 'UNIT', 1, MAX)).toBe(1);
+  });
+});
+
+describe('followTyped (the owner, 2026-11-17, velista 0188 decision K)', () => {
+  /** Types `keys` one at a time into an empty field, as a person does. */
+  function typeKeys(
+    keys: string,
+    unit: 'GRAM' | 'MILLILITER',
+    locale = 'es',
+    symbol = unit === 'GRAM' ? 'g' : 'ml'
+  ): { text: string; symbol: string; turned: boolean }[] {
+    const seen: { text: string; symbol: string; turned: boolean }[] = [];
+    let text = '';
+    for (const key of keys) {
+      const next = followTyped(text + key, symbol, unit, locale);
+      seen.push({ ...next });
+      text = next.text;
+      symbol = next.symbol;
+    }
+    return seen;
+  }
+
+  it("loops the owner's way: 1000 g is 1 kg, then 10 kg, then 100 g, then 1 kg", () => {
+    const seen = typeKeys('1000000', 'GRAM');
+    expect(seen.map(({ text, symbol }) => `${text} ${symbol}`)).toEqual([
+      '1 g',
+      '10 g',
+      '100 g',
+      '1 kg',
+      '10 kg',
+      '100 g',
+      '1 kg',
+    ]);
+    expect(seen.map((one) => one.turned)).toEqual([
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+    ]);
+  });
+
+  it('turns millilitres into litres the same way', () => {
+    const seen = typeKeys('10000', 'MILLILITER', 'en');
+    expect(seen.map(({ text, symbol }) => `${text} ${symbol}`)).toEqual([
+      '1 ml',
+      '10 ml',
+      '100 ml',
+      '1 l',
+      '10 l',
+    ]);
+  });
+
+  it('shows the same amount after a turn, with its decimals', () => {
+    expect(followTyped('1250', 'g', 'GRAM', 'es')).toEqual({
+      text: '1,25',
+      symbol: 'kg',
+      turned: true,
+    });
+    expect(followTyped('1275', 'g', 'GRAM', 'en').text).toBe('1.275');
+  });
+
+  it('holds a paste over 99 kg to 99 kg', () => {
+    expect(followTyped('250000', 'g', 'GRAM', 'es')).toEqual({
+      text: '99',
+      symbol: 'kg',
+      turned: true,
+    });
+  });
+
+  it('reads a separator under grams in kilos, with the digits as typed', () => {
+    expect(followTyped('1,', 'g', 'GRAM', 'es')).toEqual({
+      text: '1,',
+      symbol: 'kg',
+      turned: true,
+    });
+    expect(followTyped('1,5', 'kg', 'GRAM', 'es')).toEqual({
+      text: '1,5',
+      symbol: 'kg',
+      turned: false,
+    });
+    expect(followTyped(',5', 'g', 'GRAM', 'es').symbol).toBe('kg');
+  });
+
+  it('keeps 99,5 under kilos, and turns three whole digits back with no decimals', () => {
+    expect(followTyped('99,5', 'kg', 'GRAM', 'es')).toEqual({
+      text: '99,5',
+      symbol: 'kg',
+      turned: false,
+    });
+    expect(followTyped('150,5', 'kg', 'GRAM', 'es')).toEqual({
+      text: '150',
+      symbol: 'g',
+      turned: true,
+    });
+    // A separator after three digits of grams has nowhere to go.
+    expect(followTyped('150,', 'g', 'GRAM', 'es')).toEqual({
+      text: '150',
+      symbol: 'g',
+      turned: false,
+    });
+  });
+
+  it('goes back to grams when emptied, and stays in kilos while a digit is left', () => {
+    expect(followTyped('', 'kg', 'GRAM', 'es')).toEqual({
+      text: '',
+      symbol: 'g',
+      turned: true,
+    });
+    expect(followTyped('5', 'kg', 'GRAM', 'es')).toEqual({
+      text: '5',
+      symbol: 'kg',
+      turned: false,
+    });
+    // After the field was emptied, kilos take four digits again.
+    const seen = typeKeys('5000', 'GRAM');
+    expect(seen.at(-1)).toEqual({ text: '5', symbol: 'kg', turned: true });
+  });
+
+  it('turns nothing that is not a number', () => {
+    expect(followTyped('1,2,3', 'g', 'GRAM', 'es')).toEqual({
+      text: '1,2,3',
+      symbol: 'g',
+      turned: false,
+    });
+  });
+
+  it('never turns a count', () => {
+    expect(followTyped('1000', '', 'UNIT', 'es')).toEqual({
+      text: '1000',
+      symbol: '',
+      turned: false,
+    });
+    expect(followTyped('1,5', '', 'UNIT', 'es').symbol).toBe('K');
   });
 });
 
