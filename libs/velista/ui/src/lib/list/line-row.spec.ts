@@ -624,6 +624,22 @@ describe('LineRow', () => {
 
       expect(steps).toEqual([{ from: 1000, to: 1100, repeat: false }]);
     });
+
+    it('draws and steps a free text line in grams in its own unit (the owner, 2026-11-17)', async () => {
+      const fixture = await render(
+        vm({ content: 'Queso de la feria', quantity: 500, unit: 'GRAM' })
+      );
+      const steps: QuantityStep[] = [];
+      fixture.componentInstance.quantityStepped.subscribe((event) =>
+        steps.push(event.step)
+      );
+
+      expect(text(fixture, 'lib-quantity-stepper .number')).toBe('500');
+      expect(text(fixture, 'lib-quantity-stepper .symbol')).toBe('g');
+      plus(fixture).click();
+
+      expect(steps).toEqual([{ from: 500, to: 525, repeat: false }]);
+    });
   });
 
   describe('what a tap does', () => {

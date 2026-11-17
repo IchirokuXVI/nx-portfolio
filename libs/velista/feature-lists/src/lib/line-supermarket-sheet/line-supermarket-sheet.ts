@@ -170,8 +170,11 @@ export class LineSupermarketSheet {
           ...sellsOf(row.sells, row.of),
           price:
             row.lowest !== null && row.lowest.price !== null
-              ? this._translator.t('list.supermarket.from', undefined, locale, {
+              ? // Not escaped: a kilo piece's price is words ("1,99 € / kg"),
+                // whose "/" i18next would write as "&#x2F;". Angular escapes it.
+                this._translator.t('list.supermarket.from', undefined, locale, {
                   price: this._fromPrice(row.lowest, row.lowest.price, locale),
+                  interpolation: { escapeValue: false },
                 })
               : null,
           selected: row.selected,

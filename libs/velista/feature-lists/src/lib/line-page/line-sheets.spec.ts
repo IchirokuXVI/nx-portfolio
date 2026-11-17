@@ -595,7 +595,7 @@ describe('LineSupermarketSheet', () => {
     });
 
     expect(fixture.componentInstance.choices()[1].price).toBe(
-      'list.supermarket.from:{"price":"€13.42 catalog.per.KILOGRAM"}'
+      'list.supermarket.from:{"price":"€13.42 catalog.per.KILOGRAM","interpolation":{"escapeValue":false}}'
     );
   });
 
@@ -605,7 +605,7 @@ describe('LineSupermarketSheet', () => {
     });
 
     expect(fixture.componentInstance.choices()[1].price).toBe(
-      'list.supermarket.from:{"price":"€2.15"}'
+      'list.supermarket.from:{"price":"€2.15","interpolation":{"escapeValue":false}}'
     );
   });
 

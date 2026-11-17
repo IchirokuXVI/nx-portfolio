@@ -713,6 +713,9 @@ export class SettleSheet {
           : 'basket.sheet.gotAtShop';
     // A weight says what was got in its words: "Got 250 g today" (velista `0182`).
     const measured = isMeasured(row.unit);
+    // Not escaped: a weight's price is words ("1,99 € / kg"), whose "/" i18next
+    // would write as "&#x2F;". Angular escapes the text it draws.
+    const interpolation = { escapeValue: false };
     return this._translator.t(
       measured ? `${key}Amount` : key,
       undefined,
@@ -722,8 +725,14 @@ export class SettleSheet {
             amount: formatAmount(row.bought, row.unit, locale),
             price: price ?? '',
             shop: where ?? '',
+            interpolation,
           }
-        : { count: row.bought, price: price ?? '', shop: where ?? '' }
+        : {
+            count: row.bought,
+            price: price ?? '',
+            shop: where ?? '',
+            interpolation,
+          }
     );
   });
 

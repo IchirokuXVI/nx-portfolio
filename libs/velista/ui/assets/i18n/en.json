@@ -757,9 +757,7 @@
     "inList": "{{name}} on {{list}}",
     "turned": {
       "grams": "Now in grams",
-      "kilograms": "Now in kilograms",
-      "milliliters": "Now in milliliters",
-      "liters": "Now in liters"
+      "milliliters": "Now in milliliters"
     }
   },
   "list": {

@@ -147,7 +147,13 @@ export function productRowView(
       ? null
       : chain === null
         ? price
-        : translate('catalog.row.priceAt', { price, chain });
+        : // Not escaped: the price is already words ("2,49 € / kg"), and i18next
+          // would write its "/" as "&#x2F;". Angular escapes the text it draws.
+          translate('catalog.row.priceAt', {
+            price,
+            chain,
+            interpolation: { escapeValue: false },
+          });
 
   return {
     id: product.id,

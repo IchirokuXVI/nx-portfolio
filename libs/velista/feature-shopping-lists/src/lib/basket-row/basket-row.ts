@@ -941,9 +941,12 @@ export class BasketRow {
 
     const locale = this._locale();
     if (mark.kind === 'cheaper') {
+      // Not escaped: a kilo's price is words ("1,99 € / kg"), and i18next would
+      // write its "/" as "&#x2F;". Angular escapes the text it draws.
       return this._translator.t('basket.price.cheaperAt', undefined, locale, {
         price: this._markPrice(mark.price, mark.currency),
         chain: mark.chain,
+        interpolation: { escapeValue: false },
       });
     }
 
@@ -962,6 +965,7 @@ export class BasketRow {
     const at = this._translator.t('basket.price.cheaperAt', undefined, locale, {
       price: this._markPrice(elsewhere.price, elsewhere.currency),
       chain: elsewhere.chain,
+      interpolation: { escapeValue: false },
     });
     return `${missing} · ${at}`;
   });

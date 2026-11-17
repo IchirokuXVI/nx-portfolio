@@ -155,9 +155,11 @@
   white-space: nowrap;
 }
 
-// The wide sheet pads its cell by 6 (section 3.2). The narrow one keeps the row's 4:
-// "999,999" in the field is 63 px, and 72 less 6 on each side leaves 60.
-:host(.variant-sheet) .cell {
+// Both sheets pad their cell by 6 (section 3.2). Since the ceiling of 99 999 (the
+// owner, 2026-11-17) the longest exact figure is "99,999", which fits the narrow
+// sheet's 72 less 6 on each side; "999,999" did not, and kept it at 4.
+:host(.variant-sheet) .cell,
+:host(.variant-sheet-narrow) .cell {
   padding-inline: var(--app-stepper-cell-pad-sheet);
 }
 

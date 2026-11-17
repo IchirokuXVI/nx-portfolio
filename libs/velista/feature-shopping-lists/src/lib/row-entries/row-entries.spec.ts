@@ -157,8 +157,15 @@ const askAmounts = (fixture: Fixture) => [
   ),
 ];
 
-/** The name each stepper of the lists that ask was given, in order. */
+/** The field name each stepper of the lists that ask was given, in order. */
 const stepperNames = (fixture: Fixture) =>
+  fixture.debugElement
+    .queryAll(By.directive(QuantityStepper))
+    .filter((held) => held.nativeElement.closest('.others') === null)
+    .map((held) => (held.componentInstance as QuantityStepper).fieldName());
+
+/** The name each stepper's buttons and settled amount read, in order. */
+const buttonNames = (fixture: Fixture) =>
   fixture.debugElement
     .queryAll(By.directive(QuantityStepper))
     .filter((held) => held.nativeElement.closest('.others') === null)
@@ -304,6 +311,21 @@ describe('RowEntries: who may change what a list asks for', () => {
     expect(askAmounts(fixture)).toHaveLength(1);
     expect(askAmounts(fixture)[0].classList).toContain('variant-sheet-narrow');
     expect(stepperNames(fixture)).toEqual(['basket.demand.askLabel']);
+  });
+
+  it('names the spinbutton with the ask label as given, and the buttons after the list (velista 0190, section 5)', async () => {
+    const fixture = await render(row([entry()]));
+    const stepper = askAmounts(fixture)[0];
+
+    // Not "Amount of Review walk, asks for": the label is the whole name.
+    expect(
+      stepper.querySelector('[role="spinbutton"]')?.getAttribute('aria-label')
+    ).toBe('basket.demand.askLabel');
+    const [listName] = buttonNames(fixture);
+    expect(listName).not.toContain('askLabel');
+    expect(
+      stepper.querySelector('button.plus')?.getAttribute('aria-label')
+    ).toBe('amount.more');
   });
 
   it('is not a live region, because the stepper says the amount itself', async () => {

@@ -11,6 +11,7 @@ import type {
   QuantityStep,
 } from '@portfolio/velista/models';
 import { readFileSync } from 'fs';
+import i18next from 'i18next';
 import { join } from 'path';
 import {
   ProductRow,
@@ -434,8 +435,45 @@ describe('productRowView', () => {
 
       expect(view.summary).toBe(
         'Hacendado · list.add.size.LITER {"size":"1"} · ' +
-          'catalog.row.priceAt {"price":"€8.45","chain":"Mercadona"}'
+          'catalog.row.priceAt {"price":"€8.45","chain":"Mercadona","interpolation":{"escapeValue":false}}'
       );
+    });
+
+    it('writes a price per kilo with its slash, not "&#x2F;", through i18next itself (2026-11-17)', async () => {
+      const i18n = i18next.createInstance();
+      await i18n.init({
+        lng: 'en',
+        resources: {
+          en: {
+            translation: {
+              catalog: {
+                row: { priceAt: '{{price}} at {{chain}}' },
+                per: { KILOGRAM: '/ kg' },
+              },
+            },
+          },
+        },
+      });
+      const loose: CatalogProduct = {
+        ...OIL,
+        size: null,
+        unit: 'KILOGRAM',
+        unitBasis: 'KILOGRAM',
+        offer: {
+          ...OFFER,
+          price: 2.49,
+          unitPrice: 2.49,
+          unitPriceLabel: 'EUR/kg',
+        },
+      };
+
+      const view = productRowView(
+        loose,
+        options({ translate: (key, args) => i18n.t(key, args) })
+      );
+
+      expect(view.summary).toContain('€2.49 / kg at Mercadona');
+      expect(view.summary).not.toContain('&#x2F;');
     });
 
     it('says the price alone while one chain is chosen', () => {

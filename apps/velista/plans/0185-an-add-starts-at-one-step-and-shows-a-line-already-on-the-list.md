@@ -36,7 +36,7 @@
 > one: velista `0188` (the stepper with buttons, which replaces the reel that carries today's mark),
 > velista `0189` (the search field at the top of a list, which moves the composer), velista `0187`
 > (the product page's lists table), velista `0186` (the per product step), backend `0262` (the
-> limit of 999 999). Velista `0192` and backend `0263` (a line with nothing to keep deleted at
+> limit of 999 999, which the owner brought down to 99 999 for every unit on 2026-11-17). Velista `0192` and backend `0263` (a line with nothing to keep deleted at
 > zero) were withdrawn on 2026-11-12. This plan names their surfaces only where they meet its
 > own.
 >

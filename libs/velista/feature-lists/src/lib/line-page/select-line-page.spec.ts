@@ -29,6 +29,15 @@ describe('offeredUnits (velista 0183; backend 0246 W1 and W2)', () => {
     ).toEqual(['UNIT']);
   });
 
+  it('keeps a free text line in its own unit, grams or millilitres too (the owner, 2026-11-17)', () => {
+    expect(offeredUnits({ itemIds: [], unit: 'GRAM' }, () => null)).toEqual([
+      'GRAM',
+    ]);
+    expect(
+      offeredUnits({ itemIds: [], unit: 'MILLILITER' }, () => null)
+    ).toEqual(['MILLILITER']);
+  });
+
   it('keeps the stored unit on offer when no product serves it, so the chip has a way out', () => {
     // A legacy line stored in pieces whose readable products are all loose.
     expect(
