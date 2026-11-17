@@ -2,7 +2,9 @@ import {
   measuresContent,
   packCountOf,
   sourceSizeOf,
+  UnitOfMeasure,
   type SourceSize,
+  type SourceSizeUnit,
 } from '@portfolio/luna-shopper/contracts';
 
 /**
@@ -34,7 +36,10 @@ import {
  * answer: a missing size is a weaker key, an invented one is a wrong key.
  *
  * Every entry here was seen in the listing on 2026-09-04 or is the obvious
- * spelling variant of one that was.
+ * spelling variant of one that was. `u` was added by plan 0266, from the
+ * names of the walk of 2026-11-06 that kept their size: `12 u` of eggs, `16 u`
+ * of capsules. It already names a count in the catalog's table of printed
+ * units, so the split states a size and not only a printed text.
  */
 export const DEZA_SIZE_UNITS: readonly string[] = [
   // Volume
@@ -57,6 +62,7 @@ export const DEZA_SIZE_UNITS: readonly string[] = [
   'kilos',
   'mg',
   // Count
+  'u',
   'ud',
   'uds',
   'unid',
@@ -95,9 +101,23 @@ const UNIT_SET = new Set(DEZA_SIZE_UNITS);
  */
 const QUANTITY = String.raw`\d+(?:[.,]\d+)?(?:\s*[x+]\s*\d+(?:[.,]\d+)?)*`;
 
-/** A quantity, optional space, then one word, anchored at the end. */
+/**
+ * What the chain may print after the unit word of a size (plan 0266): a full
+ * stop, `1 L.`, and the word `aprox`, `250 g aprox`, with its own stop or the
+ * slash the chain leaves on it, `170 g aprox/`. `aprox` is the chain saying
+ * the weight varies, so it belongs with the size it qualifies and not on the
+ * end of a product name. The Carrefour reader keeps `aprox` in its size too,
+ * but it leaves a stop after `aprox` outside the size and takes no slash.
+ */
+const SIZE_TAIL = String.raw`\.?(?:\s+[Aa][Pp][Rr][Oo][Xx][./]?)?`;
+
+/**
+ * A quantity, optional space, one word and its tail, anchored at the end.
+ *
+ * The tail is part of the printed size, so `sizeFormat` keeps it verbatim.
+ */
 const TRAILING_SIZE = new RegExp(
-  String.raw`(^|\s)(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10})\s*$`
+  String.raw`(^|\s)(${QUANTITY})\s*([A-Za-zÀ-ſ]{1,10})${SIZE_TAIL}\s*$`
 );
 
 export interface SplitDescription {
@@ -137,9 +157,14 @@ export function splitSize(description: string): SplitDescription {
   return { name, sizeFormat: trimmed.slice(start).trim() };
 }
 
-/** `75 cl`, `1.5 L`, `3x187 ml`: one optional count, one number, one word. */
-const STATED_SIZE =
-  /^(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*([A-Za-zÀ-ſ]{1,10})$/i;
+/**
+ * `75 cl`, `1.5 L`, `3x187 ml`, `400 g aprox.`: one optional count, one
+ * number, one word and its tail.
+ */
+const STATED_SIZE = new RegExp(
+  String.raw`^(?:(\d+)\s*x\s*)?(\d+(?:[.,]\d+)?)\s*([A-Za-zÀ-ſ]{1,10})${SIZE_TAIL}$`,
+  'i'
+);
 
 /**
  * The number a trailing size states and the catalog unit it is in (plan 0177).
@@ -154,8 +179,119 @@ const STATED_SIZE =
  * pattern does not match it. A length, `30 m`, has no catalog unit, and a
  * number with no unit beside it is what this plan exists to stop writing. The
  * printed text is untouched either way: `sizeFormat` is half of the row's key.
+ *
+ * A weight printed with `aprox`, `8 kg aprox.`, is not a fixed size either
+ * (plan 0266, D4): it answers no size, and {@link approxWeightOf} states it.
+ * That holds for a multipack too, `2x100 g aprox`: it is no fixed size of
+ * 200 g, whatever {@link approxWeightOf} answers for it.
  */
 export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
+  return approximateWeight(sizeFormat) === null
+    ? statedSize(sizeFormat)
+    : { unitSize: null, sizeUnit: null };
+}
+
+/** `aprox` at the end of a size, with the stop or the slash it may carry. */
+const APPROXIMATE = /\saprox[./]?$/i;
+
+/** What one of a weight unit is worth in grams. */
+const GRAMS_IN: Partial<Record<SourceSizeUnit, number>> = {
+  [UnitOfMeasure.GRAM]: 1,
+  [UnitOfMeasure.KILOGRAM]: 1000,
+};
+
+/**
+ * The approximate weight of one piece in grams (plan 0266, D4), or null.
+ *
+ * `600 g aprox` is a piece whose exact weight is known only once it is bought,
+ * as with any product sold by weight, so the chain does not promise the
+ * number. The row states the weight here and no size, the shape plan 0244
+ * gave the DIA and LIDL rows (sections 5.2 and 5.3). DEZA prints no price, so
+ * nothing here says whether the piece is sold by the kilo or priced as one.
+ *
+ * A format without `aprox` promises its number and answers null, the stop
+ * included (`1 L.`). An approximate format that is not a weight answers null
+ * too and keeps its size, as DIA's and LIDL's do, because the weight is in
+ * grams and nothing else.
+ *
+ * A multipack, `2x100 g aprox`, answers null as well, and {@link sizeOf}
+ * answers no size for it. The weight is of one piece, and the row has no field
+ * that says a weight is of one piece out of the `N` that {@link packCountIn}
+ * reads: `unitSize` beside a pack count is the whole pack. Stating 100 would
+ * be read as the weight of the pack, and stating 200 as the weight of one
+ * piece. So the row states the count and leaves the weight to the curator.
+ *
+ * This reads the format alone. A pack phrase before it, `pack de 2 100 g
+ * aprox.`, is in the name, so a row is measured by {@link measuresIn}.
+ */
+export function approxWeightOf(
+  sizeFormat: string | null | undefined
+): number | null {
+  return weightOfOnePiece(sizeFormat, null);
+}
+
+/**
+ * The one place that decides that a pack states no weight (plan 0266, D4).
+ *
+ * A weight printed with `aprox` is the weight of one piece only when nothing
+ * says the row holds more than one: neither the `N` of `2x100 g aprox` nor the
+ * count of a `pack de 2` phrase before the size. No size is stated either way,
+ * because {@link sizeOf} answers none for any weight printed with `aprox`.
+ */
+function weightOfOnePiece(
+  sizeFormat: string | null | undefined,
+  phraseCount: number | null
+): number | null {
+  const weight = approximateWeight(sizeFormat);
+  if (weight === null || weight.count !== 1) {
+    return null;
+  }
+  return phraseCount !== null && phraseCount > 1 ? null : weight.grams;
+}
+
+/** What a row states about its size, its weight and its pack. */
+export interface DezaMeasures extends SourceSize {
+  approxWeight: number | null;
+  packCount: number | null;
+}
+
+/**
+ * The size, the approximate weight and the pack count of one description.
+ *
+ * `Fuet ALTEZA pack de 2 100 g aprox.` states a pack of 2, no weight and no
+ * size, as `2x100 g aprox` does: see {@link weightOfOnePiece}.
+ */
+export function measuresIn(description: string): DezaMeasures {
+  const { name, sizeFormat } = splitSize(description);
+  return {
+    ...sizeOf(sizeFormat),
+    approxWeight: weightOfOnePiece(sizeFormat, phraseCountIn(name)),
+    packCount: packCountIn(description),
+  };
+}
+
+/**
+ * The grams and the count of a weight printed with `aprox`, or null for any
+ * other format. `grams` is the whole of what the format states, every piece.
+ */
+function approximateWeight(
+  sizeFormat: string | null | undefined
+): { grams: number; count: number } | null {
+  const trimmed = (sizeFormat ?? '').trim();
+  if (!APPROXIMATE.test(trimmed)) {
+    return null;
+  }
+  const { unitSize, sizeUnit } = statedSize(trimmed);
+  const grams = sizeUnit === null ? undefined : GRAMS_IN[sizeUnit];
+  if (unitSize === null || grams === undefined) {
+    return null;
+  }
+  const count = Number(STATED_SIZE.exec(trimmed)?.[1] ?? 1);
+  return { grams: Math.round(unitSize * grams * 10_000) / 10_000, count };
+}
+
+/** The size a format states, before an approximate weight is taken out. */
+function statedSize(sizeFormat: string | null | undefined): SourceSize {
   const match = STATED_SIZE.exec((sizeFormat ?? '').trim());
   if (!match) {
     return { unitSize: null, sizeUnit: null };
@@ -169,8 +305,10 @@ export function sizeOf(sizeFormat: string | null | undefined): SourceSize {
 }
 
 /** One count times one quantity and a unit, `3x187 ml`, and nothing else. */
-const COUNT_TIMES_QUANTITY =
-  /^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ſ]{1,10})$/i;
+const COUNT_TIMES_QUANTITY = new RegExp(
+  String.raw`^(\d+)\s*x\s*\d+(?:[.,]\d+)?\s*([A-Za-zÀ-ſ]{1,10})${SIZE_TAIL}$`,
+  'i'
+);
 
 /**
  * The `N` of a trailing `NxQ`, when `Q` measures what is inside (plan 0183).
@@ -214,4 +352,10 @@ export function packCountIn(description: string): number | null {
     return null;
   }
   return packCountOf(multiplied ?? phrase?.[1] ?? null);
+}
+
+/** The count of a pack phrase at the end of a name, whatever its size. */
+function phraseCountIn(name: string): number | null {
+  const phrase = TRAILING_PACK.exec(name);
+  return phrase ? Number(phrase[1]) : null;
 }

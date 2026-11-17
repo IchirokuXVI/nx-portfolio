@@ -19,7 +19,10 @@ import { RunReportSink } from '../run-report.sink';
 import type { SupermarketSourceService } from '../supermarket-source.service';
 import type { HarvestAlertDraft } from './harvest-alert.rules';
 
-jest.mock('../run-report.sink', () => ({ RunReportSink: jest.fn() }));
+jest.mock('../run-report.sink', () => ({
+  ...jest.requireActual('../run-report.sink'),
+  RunReportSink: jest.fn(),
+}));
 
 /**
  * The alert in the run's final write (plan 0218, sections 2 and 4.1).
