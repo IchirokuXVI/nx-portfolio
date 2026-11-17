@@ -75,7 +75,7 @@ const TURNED_KEYS: Readonly<Record<string, string>> = {
  * drawn, not hidden** (decision D): an end carries `aria-disabled` and ignores the
  * press, so focus stays on the button. **A hold repeats** after
  * `QUANTITY_HOLD_DELAY_MS`, from 300 ms down to 100 ms, and never takes an amount to
- * 0 (S8b): at 0 a line with nothing to keep is deleted, and that must take a press.
+ * 0 (S8b): at 0 a line leaves the list's view, and that must take a press.
  *
  * **It never changes size**, whatever it holds: 155, 191 or 168 by 48 CSS px.
  * Typing is possible only in the two sheet variants (S9).
@@ -492,7 +492,7 @@ export class QuantityStepper {
     return Math.max(this.min(), stepFrom(value, this.unit(), -1, this.step()));
   }
 
-  private _emit(to: number, repeat: boolean): boolean {
+  private _emit(to: number, repeat: boolean, typed = false): boolean {
     const from = this._current();
     if (to === from) {
       return false;
@@ -500,7 +500,9 @@ export class QuantityStepper {
     // Before the outputs: a caller that redraws inside them has already moved on.
     this._ahead = { over: this.value(), to };
     this.valueChange.emit(to);
-    this.stepped.emit({ from, to, repeat });
+    this.stepped.emit(
+      typed ? { from, to, repeat, typed: true } : { from, to, repeat }
+    );
     return true;
   }
 
@@ -522,7 +524,7 @@ export class QuantityStepper {
       this.ceiling()
     );
     if (amount !== null) {
-      this._emit(amount, false);
+      this._emit(amount, false, true);
     }
     return true;
   }

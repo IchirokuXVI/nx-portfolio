@@ -155,7 +155,9 @@
   white-space: nowrap;
 }
 
-:host(.variant-sheet) .cell {
+// Both sheets, the wide and the narrow, pad their cell by 6 (section 3.2).
+:host(.variant-sheet) .cell,
+:host(.variant-sheet-narrow) .cell {
   padding-inline: var(--app-stepper-cell-pad-sheet);
 }
 

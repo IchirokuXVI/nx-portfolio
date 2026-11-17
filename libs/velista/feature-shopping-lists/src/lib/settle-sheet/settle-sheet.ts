@@ -42,7 +42,6 @@ import {
   priceWordsText,
   shownOffer,
   soldAs,
-  stepFrom,
   toSettlementRow,
   type BasketParticipant,
   type BasketProduct,
@@ -239,7 +238,7 @@ export class SettleSheet {
    *
    * A row's key is its **anchor's** line id, and the anchor moves: somebody adds an
    * earlier line of the same name on another list, a rename merges two rows, the
-   * anchor is bought to zero and deleted. The sheet holds the key from its URL and
+   * anchor is deleted by hand. The sheet holds the key from its URL and
    * asks the store on every change, which is the third answer `rowFor` exists for.
    */
   private readonly _rowKeyParam = rowKeyOf(this._route);
@@ -991,7 +990,7 @@ export class SettleSheet {
     readonly step: QuantityStep;
   }): void {
     this.demandRuns.step(change.lineId, change.step);
-    if (this._typed(change.step, this.lineSteps().get(change.lineId) ?? null)) {
+    if (change.step.typed === true) {
       this.demandRuns.flush(change.lineId);
     }
   }
@@ -1002,25 +1001,9 @@ export class SettleSheet {
     readonly step: QuantityStep;
   }): void {
     this.raiseRuns.step(change.list.listId, change.step);
-    if (this._typed(change.step, this.step())) {
+    if (change.step.typed === true) {
       this.raiseRuns.flush(change.list.listId);
     }
-  }
-
-  /**
-   * Whether a step is a typed amount rather than a press: a press or an arrow
-   * moves exactly one step, so anything else is an amount somebody committed
-   * with Enter or a blur (or Home and End), and it is sent at once. Only presses
-   * wait. One step is measured by the step that stepper presses by.
-   */
-  private _typed(step: QuantityStep, size: number | null): boolean {
-    if (step.repeat) {
-      return false;
-    }
-    const unit = this.row()?.unit ?? 'UNIT';
-    return (
-      step.to !== stepFrom(step.from, unit, step.to > step.from ? 1 : -1, size)
-    );
   }
 
   /** A run that waited for a write of its line starts from the line's answer. */

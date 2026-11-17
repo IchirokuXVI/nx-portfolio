@@ -646,6 +646,14 @@ describe('BasketRowComponent: the amount cell', () => {
     );
   });
 
+  it('sits at the top of the row beside the name line (velista 0190, section 1)', () => {
+    const styles = readFileSync(resolve(__dirname, 'basket-row.scss'), 'utf8');
+    const rule = /\n\.amount \{([^}]*)\}/.exec(styles)?.[1] ?? '';
+    expect(rule).toContain('align-self: flex-start;');
+    const row = /\n\.row \{([^}]*)\}/.exec(styles)?.[1] ?? '';
+    expect(row).toContain('align-items: flex-start;');
+  });
+
   it('is one cell of 59 by 48 on every row, whatever its unit', async () => {
     // jsdom resolves no layout and no custom property, so the rule is read as
     // written, and the two tokens it names as the stylesheet defines them.

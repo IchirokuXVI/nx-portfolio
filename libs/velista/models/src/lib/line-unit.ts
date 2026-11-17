@@ -164,10 +164,11 @@ export const QUANTITY_STEP: Readonly<Record<LineUnit, number>> = {
 };
 
 /**
- * The steps a curator can give a product sold by the kilo or the litre, in base
- * units (backend `0261` S2): each divides 1000, so a kilo or a litre is a whole
- * number of steps. velista's own copy by rule D4; a served step off this list is
- * read as none.
+ * The steps a curator can give a loose product sold by the kilo, in grams
+ * (backend `0261` S2): each divides 1000, so a kilo is a whole number of steps.
+ * No product by the litre carries one (the owner, 2026-11-17): the catalog keeps
+ * a liquid in millilitres with a size, a pack counted in pieces. velista's own
+ * copy by rule D4; a served step off this list is read as none.
  */
 export const QUANTITY_STEPS: readonly number[] = [
   1, 5, 10, 25, 50, 100, 200, 250, 500, 1000,
@@ -276,6 +277,13 @@ export interface QuantityStep {
   readonly to: number;
   /** True for a step the hold made, false for a press, a key or a typed amount. */
   readonly repeat: boolean;
+  /**
+   * True for an amount typed into a sheet's field and committed with Enter, a
+   * blur or an arrow key; absent for a press, a repeat, an arrow step, Home or
+   * End. A sheet sends a typed amount at once and lets the others wait
+   * (velista `0190`, section 4).
+   */
+  readonly typed?: true;
 }
 
 /**
@@ -330,9 +338,11 @@ export function lineStepOf(
 
 /**
  * True when a product's step can count on a line of this unit: the product is
- * sold by the kilo for a gram line or by the litre for a millilitre line
- * (backend `0261` S3). A pack and a kilo piece also serve grams, through their
- * size or weight, but count pieces, so a step left on one says nothing.
+ * sold loose by the kilo for a gram line (backend `0261` S3). A legacy `LITER`
+ * row with no size still serves a millilitre line as built, though the catalog
+ * gives no new product by the litre a step. A pack and a kilo piece also serve
+ * grams, through their size or weight, but count pieces, so a step left on one
+ * says nothing.
  */
 function carriesStepFor(product: LineUnitProduct, unit: LineUnit): boolean {
   const kind = soldAs(product.unit, product.size, product.approxWeight);

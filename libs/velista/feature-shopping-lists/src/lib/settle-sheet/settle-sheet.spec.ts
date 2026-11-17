@@ -1235,6 +1235,35 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     fixture.detectChanges();
   }
 
+  /** An amount typed into the field and committed, as the stepper emits it. */
+  function commit(
+    fixture: ComponentFixture<SettleSheet>,
+    from: number,
+    to: number
+  ): void {
+    stepper(fixture).stepped.emit({ from, to, repeat: false, typed: true });
+    fixture.detectChanges();
+  }
+
+  /** The first asking list's field, with text typed into it. */
+  function typeInto(
+    fixture: ComponentFixture<SettleSheet>,
+    text: string
+  ): HTMLInputElement {
+    const field = fixture.debugElement
+      .query(By.css('lib-quantity-stepper.ask-amount'))
+      .nativeElement.querySelector('input.number') as HTMLInputElement;
+    field.value = text;
+    field.dispatchEvent(new Event('input'));
+    return field;
+  }
+
+  function key(field: HTMLInputElement, name: string): void {
+    field.dispatchEvent(
+      new KeyboardEvent('keydown', { key: name, cancelable: true })
+    );
+  }
+
   /** Let the promises of a write and what it awaits settle, under fake timers. */
   async function settleWrites(): Promise<void> {
     for (let i = 0; i < 10; i++) {
@@ -1310,8 +1339,8 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     store.setDemand.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    // 3 to 7 is no one press: it was typed and committed.
-    press(fixture, 3, 7);
+    key(typeInto(fixture, '7'), 'Enter');
+    fixture.detectChanges();
     await settleWrites();
 
     expect(store.setDemand).toHaveBeenCalledWith({
@@ -1319,6 +1348,40 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
       quantity: 7,
       from: 3,
     });
+  });
+
+  it('sends a typed amount one step away at once too, because it was typed', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    key(typeInto(fixture, '4'), 'Enter');
+    fixture.detectChanges();
+    await settleWrites();
+
+    expect(store.setDemand).toHaveBeenCalledWith({
+      lineId: 'zl1',
+      quantity: 4,
+      from: 3,
+    });
+  });
+
+  it('lets Home wait like a press, because nothing was typed', async () => {
+    const { fixture, store } = await render();
+    store.setDemand.mockResolvedValue(landed());
+    jest.useFakeTimers();
+
+    const field = fixture.debugElement
+      .query(By.css('lib-quantity-stepper.ask-amount'))
+      .nativeElement.querySelector('input.number') as HTMLInputElement;
+    key(field, 'Home');
+    fixture.detectChanges();
+    await settleWrites();
+    expect(store.setDemand).not.toHaveBeenCalled();
+
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await settleWrites();
+    expect(store.setDemand).toHaveBeenCalledTimes(1);
   });
 
   it('keeps one write per line, and sends a later run from the answer', async () => {
@@ -1333,7 +1396,7 @@ describe('SettleSheet: an amount is saved after the presses stop', () => {
     store.setDemand.mockResolvedValue(landed());
     jest.useFakeTimers();
 
-    press(fixture, 3, 7);
+    commit(fixture, 3, 7);
     await settleWrites();
     expect(store.setDemand).toHaveBeenCalledTimes(1);
 
