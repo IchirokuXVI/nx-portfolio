@@ -37,6 +37,7 @@ import type {
   ReportedObservation,
   SourceEntryOutcome,
   SourceIngest,
+  SourceIngestResult,
   SourceIngestSession,
 } from './source-ingest';
 import type { SourceLocationService } from './source-location.service';
@@ -98,6 +99,24 @@ const AVAILABILITY_BATCH = 200;
  * them is always the whole number, so a report that names fewer says so.
  */
 const PRICE_CONFLICTS_NAMED = 200;
+
+/**
+ * The outcomes of a run with each item as the decisions read again at the
+ * drain state it (plan 0269, D8), by the rule the availability follows (D5).
+ * An outcome that named an item names the item its row is `ACTIVE` on now,
+ * and none when the row is no longer `ACTIVE`. An outcome that named none
+ * stays as it was.
+ */
+function currentOutcomes(
+  outcomes: readonly SourceEntryOutcome[],
+  decided: ReadonlyMap<string, string>
+): SourceEntryOutcome[] {
+  return outcomes.map((outcome) =>
+    outcome.itemId
+      ? { ...outcome, itemId: decided.get(outcome.entry.id) ?? null }
+      : outcome
+  );
+}
 
 export interface RunReportSinkInput {
   /** The chain this run writes for, and null for a run that names none. */
@@ -562,55 +581,82 @@ export class RunReportSink implements RunReport {
     }
     await this.chain;
     // A failed chunk wrote nothing after it, and the drain writes nothing
-    // either: no close, no whole listing, no availability (plan 0269).
+    // either: no close, no whole listing, no availability (plan 0269). What
+    // the chunks before it wrote is already saved, so the result still states
+    // it (D9), and the executor reads it through `writtenSoFar`.
     if (this.firstFailure) {
+      if (this.session) {
+        this.takeIngested(this.session.totals());
+      }
+      this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
       throw this.firstFailure.error;
     }
 
+    const statesAvailability = this.input.writes !== HarvestRunWrites.PRICES;
     if (this.session) {
       // The ingest already counted every price this run wrote, and the close
       // used to be called for its side effect alone and the answer dropped on
       // the floor. That is why a walk's report named no price at all and the
       // screen fell back to `updated`, which is rows the ladder changed.
-      const { outcomes, counters, copies, priceConflicts, images, sizeDoubts } =
-        await this.session.close();
-      this.result.imagesLinked = images.linked;
-      this.result.imagesMoved = images.moved;
-      this.result.imagesUnchanged = images.unchanged;
-      this.result.imagesRejected = images.rejected;
-      this.result.imagesUnlinked = images.unlinked;
-      this.result.imageLinksFailed = images.failed;
-      this.result.pricesRecorded += counters.pricesRecorded;
-      this.result.pricesPublished += counters.pricesWritten;
-      this.result.pricesConfirmed += counters.pricesConfirmed;
-      this.result.pricesConflicted += counters.pricesConflicted;
-      this.result.wordOrderProposals += counters.wordOrderProposals;
-      this.result.wordOrderRejectedPointers +=
-        counters.wordOrderRejectedPointers;
-      this.result.sizesDisproved += counters.sizesDisproved;
-      this.result.probablePackCounts += counters.probablePackCounts;
-      this.result.sizesDisprovedExamples = sizeDoubts;
-      this.result.priceConflicts = priceConflicts.slice(
-        0,
-        PRICE_CONFLICTS_NAMED
+      const ingested = await this.session.close();
+      this.takeIngested(ingested);
+      // The decisions as they are now, read once for the pack counts, the
+      // weights and the availability alike (plan 0269, D5 and D8): a row a
+      // person decided after its chunk sends nothing to the product it left.
+      const decided = await this.readDecisions(
+        ingested.outcomes,
+        statesAvailability
       );
-      this.result.pricedScopes = [...copies.pricedScopes];
-      this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
-      await this.fillPackCounts(outcomes);
-      await this.writeApproxWeights(outcomes);
+      const current = currentOutcomes(ingested.outcomes, decided);
+      await this.fillPackCounts(current);
+      await this.writeApproxWeights(current);
+      if (statesAvailability) {
+        this.applyDecisions(decided);
+      }
     }
     this.result.scopesCreated = this.deps.scopes?.createdCount ?? 0;
     this.resolveWholeListings();
 
     // A run that writes prices only states no stock, per shop or per scope, and
     // its copies state none either (plan 0119, section 7).
-    if (this.input.writes !== HarvestRunWrites.PRICES) {
-      await this.refreshActiveItems();
+    if (statesAvailability) {
       await this.writeShopAvailability();
       await this.writeScopeAvailability();
       await this.writePricelessOffers();
     }
     return this.result;
+  }
+
+  /**
+   * What this run wrote so far, which is everything once {@link drain}
+   * answered (plan 0269, D9). A drain that failed leaves here what landed
+   * before the failure, and never more, for the report of the failed run.
+   */
+  get writtenSoFar(): RunReportResult {
+    return this.result;
+  }
+
+  /** What the ingest counted, into the result. */
+  private takeIngested(ingested: SourceIngestResult): void {
+    const { counters, copies, priceConflicts, images, sizeDoubts } = ingested;
+    this.result.imagesLinked = images.linked;
+    this.result.imagesMoved = images.moved;
+    this.result.imagesUnchanged = images.unchanged;
+    this.result.imagesRejected = images.rejected;
+    this.result.imagesUnlinked = images.unlinked;
+    this.result.imageLinksFailed = images.failed;
+    this.result.pricesRecorded += counters.pricesRecorded;
+    this.result.pricesPublished += counters.pricesWritten;
+    this.result.pricesConfirmed += counters.pricesConfirmed;
+    this.result.pricesConflicted += counters.pricesConflicted;
+    this.result.wordOrderProposals += counters.wordOrderProposals;
+    this.result.wordOrderRejectedPointers += counters.wordOrderRejectedPointers;
+    this.result.sizesDisproved += counters.sizesDisproved;
+    this.result.probablePackCounts += counters.probablePackCounts;
+    this.result.sizesDisprovedExamples = sizeDoubts;
+    this.result.priceConflicts = priceConflicts.slice(0, PRICE_CONFLICTS_NAMED);
+    this.result.pricedScopes = [...copies.pricedScopes];
+    this.result.pricesCopied = Object.fromEntries(copies.pricesCopied);
   }
 
   /**
@@ -866,22 +912,52 @@ export class RunReportSink implements RunReport {
   }
 
   /**
-   * The item of each `ACTIVE` row, read again before the drain states
-   * availability (plan 0269, section 5).
+   * The item of each row that is `ACTIVE` now, by row id, read again at the
+   * drain (plan 0269, section 5, D5 and D8). One read serves the pack counts,
+   * the weights and the availability.
    *
    * A chunk kept the item its row resolved to when it was written, and a
-   * person may have decided the row since. A row that is no longer `ACTIVE`
-   * states nothing for the product it left, and a row a person moved to
-   * another product states availability for that one.
+   * person may have decided the row since. Only the rows that were `ACTIVE`
+   * when their chunk was written are read, because only those are owed
+   * anything at the drain: the availability of a run that states it, and the
+   * pack count and the weight a row carries. A run with none reads nothing.
    */
-  private async refreshActiveItems(): Promise<void> {
-    if (!this.session || this.activeItemByExternalId.size === 0) {
-      return;
+  private async readDecisions(
+    outcomes: readonly SourceEntryOutcome[],
+    statesAvailability: boolean
+  ): Promise<Map<string, string>> {
+    const entryIds = new Set<string>();
+    for (const outcome of outcomes) {
+      if (
+        outcome.itemId &&
+        (statesAvailability ||
+          (outcome.entry.packCount ?? null) !== null ||
+          (outcome.entry.approxWeight ?? null) !== null)
+      ) {
+        entryIds.add(outcome.entry.id);
+      }
     }
-    const entryIds = [...this.activeItemByExternalId.keys()]
-      .map((externalId) => this.entryIdByExternalId.get(externalId))
-      .filter((id): id is string => id !== undefined);
-    const decided = await this.session.activeItemsOf(entryIds);
+    if (statesAvailability) {
+      for (const externalId of this.activeItemByExternalId.keys()) {
+        const entryId = this.entryIdByExternalId.get(externalId);
+        if (entryId !== undefined) {
+          entryIds.add(entryId);
+        }
+      }
+    }
+    if (!this.session || entryIds.size === 0) {
+      return new Map();
+    }
+    return this.session.activeItemsOf([...entryIds]);
+  }
+
+  /**
+   * The availability of the drain follows the decisions read again (plan
+   * 0269, section 5). A row that is no longer `ACTIVE` states nothing for the
+   * product it left, and a row a person moved to another product states
+   * availability for that one.
+   */
+  private applyDecisions(decided: ReadonlyMap<string, string>): void {
     for (const [externalId] of [...this.activeItemByExternalId]) {
       const entryId = this.entryIdByExternalId.get(externalId);
       const itemId = entryId === undefined ? null : decided.get(entryId);

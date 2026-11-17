@@ -2556,7 +2556,8 @@ export class SourceIngestSession {
 
   /**
    * The item of each of these rows that is `ACTIVE` now (plan 0269, section
-   * 5). Read by the drain, after {@link close}, so it is not refused there.
+   * 5, and D8). Read by the drain, after {@link close}, so it is not refused
+   * there. The availability, the pack counts and the weights all read it.
    */
   activeItemsOf(entryIds: readonly string[]): Promise<Map<string, string>> {
     return this.ingest.activeItemsOf(entryIds);
@@ -2571,6 +2572,18 @@ export class SourceIngestSession {
    */
   async close(): Promise<SourceIngestResult> {
     this.closed = true;
+    return this.totals();
+  }
+
+  /**
+   * What the chunks pushed so far wrote, without closing (plan 0269, D9).
+   *
+   * A chunk is added only once it is written, so a chunk that failed counts
+   * nothing here, although it may have written part of its rows before it
+   * failed. Read by the drain of a run whose chain failed, which closes
+   * nothing.
+   */
+  totals(): SourceIngestResult {
     return {
       outcomes: this.outcomes,
       counters: this.counters,

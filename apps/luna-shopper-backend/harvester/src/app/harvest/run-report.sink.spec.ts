@@ -144,7 +144,7 @@ function build(
   const opened: unknown[] = [];
   /** Every outcome a push answered, which is what `close` answers for the run. */
   const outcomes: unknown[] = [];
-  const closed = jest.fn(async () => ({
+  const totalsOf = () => ({
     outcomes,
     counters: {
       created: 0,
@@ -175,7 +175,10 @@ function build(
       failed: 0,
       ...options.images,
     },
-  }));
+  });
+  const closed = jest.fn(async () => totalsOf());
+  /** What the chunks so far wrote, without a close (plan 0269, D9). */
+  const totals = jest.fn(() => totalsOf());
   const ingest = {
     open: jest.fn(async (_context: RunContext, input: unknown) => {
       opened.push(input);
@@ -208,6 +211,7 @@ function build(
           return answered;
         }),
         close: closed,
+        totals,
         // What the rows are decided as at the drain (plan 0269, section 5):
         // what they resolved to, unless a person decided them since.
         activeItemsOf: jest.fn(async (entryIds: readonly string[]) => {
@@ -394,6 +398,7 @@ function build(
     entries,
     onWriteFailed,
     closed,
+    totals,
   };
 }
 
@@ -1553,6 +1558,46 @@ describe('RunReportSink, a write that fails during a walk (plan 0269)', () => {
     }
   });
 
+  it('states what the chunks before the failure wrote, and nothing of the chunk that failed (D9)', async () => {
+    const failure = new Error('connection terminated');
+    const { sink, closed, totals, catalog } = build({
+      resolves: { 'a-0': { itemId: 'item-a', active: true } },
+      // What the ingest counted for the chunk that was written.
+      counters: { pricesRecorded: 9, pricesWritten: 7, pricesConfirmed: 1 },
+      images: { linked: 2 },
+      pushFails: { 1: failure },
+    });
+
+    for (const each of chunk('a')) {
+      sink.product(each);
+    }
+    await settle();
+    for (const each of chunk('b')) {
+      sink.product(each);
+    }
+
+    await expect(sink.drain()).rejects.toBe(failure);
+    // Only the first chunk landed, and the result says that much and no more.
+    expect(sink.writtenSoFar).toEqual(
+      expect.objectContaining({
+        products: 400,
+        pricesRecorded: 9,
+        pricesPublished: 7,
+        pricesConfirmed: 1,
+        imagesLinked: 2,
+        availabilityWritten: 0,
+        packCountsFilled: 0,
+        approxWeightsWritten: 0,
+      })
+    );
+    // Read without a close, and nothing was written after the failure.
+    expect(totals).toHaveBeenCalledTimes(1);
+    expect(closed).not.toHaveBeenCalled();
+    expect(catalog.fillPackCounts).not.toHaveBeenCalled();
+    expect(catalog.setApproxWeights).not.toHaveBeenCalled();
+    expect(catalog.setAvailability).not.toHaveBeenCalled();
+  });
+
   it('answers no failure while every write succeeds', async () => {
     const { sink, onWriteFailed } = build();
 
@@ -1614,6 +1659,51 @@ describe('RunReportSink, decisions made after a chunk (plan 0269)', () => {
       { itemId: 'item-new', available: true },
       { itemId: 'item-kept', available: true },
     ]);
+  });
+
+  it('sends no pack count and no weight to the product a row left, and sends them to the new product of a row a person moved (D8)', async () => {
+    const { sink, catalog } = build({
+      resolves: {
+        rejected: { itemId: 'item-left', active: true },
+        moved: { itemId: 'item-old', active: true },
+      },
+      decidedSince: {
+        rejected: null,
+        moved: { itemId: 'item-new', active: true },
+      },
+    });
+
+    sink.product(
+      observation({ externalId: 'rejected', packCount: 6, approxWeight: 250 })
+    );
+    sink.product(
+      observation({ externalId: 'moved', packCount: 4, approxWeight: 300 })
+    );
+    await sink.drain();
+
+    expect(catalog.fillPackCounts).toHaveBeenCalledTimes(1);
+    expect(catalog.fillPackCounts).toHaveBeenCalledWith([
+      { itemId: 'item-new', packCount: 4 },
+    ]);
+    expect(catalog.setApproxWeights).toHaveBeenCalledTimes(1);
+    expect(catalog.setApproxWeights).toHaveBeenCalledWith([
+      { itemId: 'item-new', approxWeight: 300 },
+    ]);
+  });
+
+  it('reads the decisions again for a run that writes prices only, when a row carries a pack count (D8)', async () => {
+    const { sink, ingest, catalog } = build({
+      resolves: { a: { itemId: 'item-a', active: true } },
+      decidedSince: { a: null },
+      writes: HarvestRunWrites.PRICES,
+    });
+
+    sink.product(observation({ externalId: 'a', packCount: 6 }));
+    await sink.drain();
+
+    const session = await (ingest.open as jest.Mock).mock.results[0].value;
+    expect(session.activeItemsOf).toHaveBeenCalledTimes(1);
+    expect(catalog.fillPackCounts).not.toHaveBeenCalled();
   });
 
   it('reads nothing again for a run that writes prices only', async () => {

@@ -37,7 +37,31 @@ jest.mock('./run-report.sink', () => ({
 const CHAIN = '02690269-0000-4000-a000-000000000001';
 const PAGES = 5;
 
-function build(options: { failWrite: boolean }) {
+/**
+ * What the fake sink says its chunks wrote before a failure (plan 0269, D9):
+ * the first chunk landed, with its prices and photo links.
+ */
+const WRITTEN_BEFORE = {
+  products: 400,
+  pricesRecorded: 9,
+  pricesPublished: 7,
+  pricesConfirmed: 1,
+  pricesConflicted: 0,
+  imagesLinked: 2,
+  scopesCreated: 1,
+  availabilityWritten: 0,
+  packCountsFilled: 0,
+  approxWeightsWritten: 0,
+  pricedScopes: [],
+  pricesCopied: {},
+  availabilityCopied: {},
+};
+
+function build(options: {
+  failWrite: boolean;
+  /** A failure of the drain's own work after the chain, with no write failed. */
+  drainFails?: Error;
+}) {
   let row = {
     id: 'run-1',
     mode: HarvestRunMode.CATALOG_DISCOVERY,
@@ -86,6 +110,9 @@ function build(options: { failWrite: boolean }) {
     if (failed) {
       throw failure;
     }
+    if (options.drainFails) {
+      throw options.drainFails;
+    }
     return {
       products: 0,
       pricedScopes: [],
@@ -108,6 +135,8 @@ function build(options: { failWrite: boolean }) {
         }
       }),
       drain,
+      // What landed before the failure, which the real sink keeps (D9).
+      writtenSoFar: WRITTEN_BEFORE,
       get failure() {
         return failed ? failure : null;
       },
@@ -188,13 +217,59 @@ describe('RunExecutor and a write that fails during a walk (plan 0269)', () => {
       'Stopped: writing a chunk of the products the run read failed ' +
         '(connection terminated unexpectedly), so the walk stopped there and ' +
         'wrote nothing after it. The rows of the chunks written before it ' +
-        'are kept.'
+        'are kept, and the report counts what they wrote. The chunk that ' +
+        'failed may have written part of its rows and prices before it ' +
+        'failed, and the report does not count those.'
     );
     // A failed write counts as a failure of the chain, as a failed drain
     // always did (plan 0269, D4).
     expect(sources.recordRunFinished).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'src-1' }),
       false
+    );
+  });
+
+  it('states in the report what the chunks before the failed one wrote, with the fields of a completed run (D9)', async () => {
+    const { executor, store } = build({ failWrite: true });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.FAILED
+    );
+
+    const report = (await store.load('run-1')).report;
+    expect(report).toEqual(
+      expect.objectContaining({
+        productsWritten: 400,
+        pricesRecorded: 9,
+        pricesPublished: 7,
+        pricesConfirmed: 1,
+        imagesLinked: 2,
+        scopesCreated: 1,
+        availabilityWritten: 0,
+        packCountsFilled: 0,
+        approxWeightsWritten: 0,
+        // The resolved settings, as a completed walk states them.
+        writes: expect.any(String),
+        details: expect.any(String),
+      })
+    );
+  });
+
+  it('ends FAILED with the bare error when the drain fails after the chain, and still states what landed (D9)', async () => {
+    const { executor, store } = build({
+      failWrite: false,
+      drainFails: new Error('availability write timed out'),
+    });
+
+    await expect(executor.runToCompletion('run-1')).resolves.toBe(
+      HarvestRunStatus.FAILED
+    );
+
+    const [, status, error] = store.finish.mock.calls[0];
+    expect(status).toBe(HarvestRunStatus.FAILED);
+    expect(error).toBe('availability write timed out');
+    expect((await store.load('run-1')).report).toEqual(
+      expect.objectContaining({ productsWritten: 400, pricesPublished: 7 })
     );
   });
 

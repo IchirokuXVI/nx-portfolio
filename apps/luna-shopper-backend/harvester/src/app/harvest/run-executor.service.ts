@@ -389,6 +389,13 @@ export class RunExecutor implements OnApplicationShutdown {
 
     // Outside the try, so the catch below can read what failed in it.
     let sink: RunReportSink | null = null;
+    // Whether the drain began, and whether its writes reached the report. A
+    // drain that failed still wrote what its chunks wrote before it, and the
+    // catch below states that in the report (plan 0269, D9).
+    let drainReached = false;
+    let writesReported = false;
+    let reportWrites: ((written: RunReportResult) => Promise<void>) | null =
+      null;
     try {
       await this.store.markRunning(runId, 'START', 'Starting');
       if (source) {
@@ -411,6 +418,22 @@ export class RunExecutor implements OnApplicationShutdown {
               run.input['scopeCopies']
             )
           : new Map<string, string[]>();
+
+      // What the write half did, into the run's report: the same fields for a
+      // run that completed and for one whose drain failed (plan 0269, D9).
+      reportWrites = async (written) => {
+        await this.store.setReport(runId, {
+          ...(await this.store.load(runId)).report,
+          ...describeWrites(written),
+          ...describeCopies(copies, written),
+          // The resolved settings, beside what they produced (plan 0119,
+          // section 8).
+          ...(run.mode === HarvestRunMode.CATALOG_DISCOVERY
+            ? { writes, details }
+            : {}),
+        });
+        writesReported = true;
+      };
 
       // The write half of the run, and the only thing that has one (plan 0103,
       // section 2.3). Everything a runner has to say goes into this, and
@@ -569,6 +592,7 @@ export class RunExecutor implements OnApplicationShutdown {
       }
 
       if (sink) {
+        drainReached = true;
         const written = await sink.drain();
         // A run that writes no prices by choice leaves every copy source
         // unpriced, and that is not news worth a warning each.
@@ -587,16 +611,7 @@ export class RunExecutor implements OnApplicationShutdown {
             name: null,
           });
         }
-        await this.store.setReport(runId, {
-          ...(await this.store.load(runId)).report,
-          ...describeWrites(written),
-          ...describeCopies(copies, written),
-          // The resolved settings, beside what they produced (plan 0119,
-          // section 8).
-          ...(run.mode === HarvestRunMode.CATALOG_DISCOVERY
-            ? { writes, details }
-            : {}),
-        });
+        await reportWrites(written);
       } else if (imported) {
         await this.store.setReport(runId, {
           ...(await this.store.load(runId)).report,
@@ -666,6 +681,13 @@ export class RunExecutor implements OnApplicationShutdown {
       // Whatever the run managed before it died is still worth keeping.
       await context.flush().catch(() => undefined);
       await this.recordRefusals(runId, guard).catch(() => undefined);
+      // A drain that failed, on the chain or in its own work after it, still
+      // leaves what landed before the failure, and those rows are saved. The
+      // report states them with the fields a completed run uses (plan 0269,
+      // D9). Before the load below, so a stop sentence counts them too.
+      if (sink && drainReached && !writesReported && reportWrites) {
+        await reportWrites(sink.writtenSoFar).catch(() => undefined);
+      }
       // A failed write ends FAILED although it aborted the run (plan 0269,
       // section 1), as a stop of the guard does.
       const status =
@@ -1170,7 +1192,14 @@ function writeFailureOf(
   return failure === null ? null : { cause: failure };
 }
 
-/** The `error` of a run a failed write stopped, else null (plan 0269). */
+/**
+ * The `error` of a run a failed write stopped, else null (plan 0269).
+ *
+ * A chunk is not one transaction: its rows, photo links and prices are
+ * written one after another, and the ingest counts them only once the whole
+ * chunk is written. The report thus counts the chunks before the failed one
+ * exactly and the failed one not at all, and this sentence says so (D9).
+ */
 function writeFailedSentenceOf(
   signal: AbortSignal,
   sink: Pick<RunReportSink, 'failure'> | null
@@ -1183,7 +1212,9 @@ function writeFailedSentenceOf(
     'Stopped: writing a chunk of the products the run read failed ' +
     `(${describeError(failure.cause).message}), so the walk stopped there ` +
     'and wrote nothing after it. The rows of the chunks written before it ' +
-    'are kept.'
+    'are kept, and the report counts what they wrote. The chunk that failed ' +
+    'may have written part of its rows and prices before it failed, and the ' +
+    'report does not count those.'
   );
 }
 

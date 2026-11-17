@@ -417,3 +417,29 @@ the catalog price write is another service and another plan.
 **D7. The proof of the run status is a unit spec of the executor**, and the integration spec
 proves the sink and the ingest on real Postgres. Recommended, because the executor needs a
 store, a guard, a scheduler and a runner, and the guard spec already builds them with fakes.
+
+The owner decided three more on 2026-11-17, after the review of PR #998.
+
+**D8 (owner, answered 2026-11-17): the pack counts and the weights follow the decisions read
+again at the drain.** The review proved on real Postgres that a row `ACTIVE` on a product,
+written in a chunk with a pack count and a weight and rejected after it, still sent
+`catalog.fillPackCounts` and `catalog.setApproxWeights` for the product it left, because both
+fills read the item of each outcome as its chunk saw it. Both fills now read the same fresh
+decisions that the availability of section 5 reads, by the same rule (D5): an outcome that
+named an item names the item its row is `ACTIVE` on now, and none when the row is no longer
+`ACTIVE`. It is one read at the drain for all three, and a run that writes prices only reads
+it too when a row carries a pack count or a weight.
+
+**D9 (owner, answered 2026-11-17): everything a run wrote permanently is stated in its report,
+also when the run failed.** Those records are already saved, so a person must be able to know
+about them. A run whose chain failed, or whose drain failed in its own work after the chain,
+still merges into `harvest_runs.report` what landed before the failure, with the fields a
+completed run uses, and never more than landed. The run still ends `FAILED` with its sentence
+and writes no availability, no pack count and no weight after the failure. A chunk is not one
+transaction, and the ingest counts a chunk only once it is written, so the report counts the
+chunks before the failed one exactly and the failed one not at all. The sentence of the run
+says that the failed chunk may have written part of its rows and prices.
+
+**D10 (owner, answered 2026-11-17): a person's abort followed by a failed write ends `FAILED`,
+alerts and counts as a failure of the chain.** Kept as built, and it might change later. It is
+recorded here so that a reader does not take it for an accident.

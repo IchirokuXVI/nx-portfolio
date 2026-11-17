@@ -54,6 +54,8 @@ describeIntegration(
     const ITEM_BARCODE = '02690269-0000-4000-8000-444444444404';
     const ITEM_PRICED = '02690269-0000-4000-8000-444444444405';
     const ITEM_SHARED = '02690269-0000-4000-8000-444444444406';
+    const ITEM_PACK_LEFT = '02690269-0000-4000-8000-444444444407';
+    const ITEM_PACK_KEPT = '02690269-0000-4000-8000-444444444408';
 
     const EAN_REJECTED = '8410000000016';
     const EAN_BARCODE = '8410000000023';
@@ -72,6 +74,9 @@ describeIntegration(
     /** When set, `addPrices` rejects with it, once. */
     let pricesFail: Error | null;
     let pricesCalls: number;
+    /** The pack counts and the weights the drain sent (plan 0269, D8). */
+    let filled: { itemId: string; packCount: number }[];
+    let weighed: { itemId: string; approxWeight: number }[];
 
     const catalog = {
       searchItems: async () => ({
@@ -108,12 +113,22 @@ describeIntegration(
         told.push(...batch);
         return { updated: batch.length };
       },
-      fillPackCounts: async () => ({ written: 0 }),
-      setApproxWeights: async () => ({
-        written: 0,
-        skippedSetByAdmin: 0,
-        skippedHasSize: 0,
-      }),
+      fillPackCounts: async (
+        batch: { itemId: string; packCount: number }[]
+      ) => {
+        filled.push(...batch);
+        return { written: batch.length };
+      },
+      setApproxWeights: async (
+        batch: { itemId: string; approxWeight: number }[]
+      ) => {
+        weighed.push(...batch);
+        return {
+          written: batch.length,
+          skippedSetByAdmin: 0,
+          skippedHasSize: 0,
+        };
+      },
     } as unknown as CatalogClient;
 
     function item(id: string, name: string, ean: string) {
@@ -143,6 +158,8 @@ describeIntegration(
       told = [];
       pricesFail = null;
       pricesCalls = 0;
+      filled = [];
+      weighed = [];
       await clean();
     });
 
@@ -390,6 +407,98 @@ describeIntegration(
       // Neither product it left is stated in stock by the drain.
       expect(told.filter((each) => each.itemId === ITEM_REJECTED)).toEqual([]);
       expect(told.filter((each) => each.itemId === ITEM_LEFT)).toEqual([]);
+    }, 120_000);
+
+    it('sends no pack count and no weight to the product a row left after its chunk (D8)', async () => {
+      // Two rows a person bound before the walk. One is rejected after its
+      // chunk was written; the other is the control, which nobody touched.
+      for (const [externalId, itemId] of [
+        ['pack-left', ITEM_PACK_LEFT],
+        ['pack-kept', ITEM_PACK_KEPT],
+      ]) {
+        await seed({
+          externalId,
+          name: `Producto ${externalId}`,
+          status: SourceEntryStatus.ACTIVE,
+          itemId,
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt: new Date('2026-11-01T00:00:00.000Z'),
+        });
+      }
+      const walk = sink();
+
+      report(walk, [
+        product('pack-left', {
+          name: 'Producto pack-left',
+          packCount: 6,
+          approxWeight: 250,
+        }),
+        product('pack-kept', {
+          name: 'Producto pack-kept',
+          packCount: 4,
+          approxWeight: 300,
+        }),
+        ...fillers('one', CHUNK - 2),
+      ]);
+      await settled(walk);
+      await reject('pack-left');
+
+      report(walk, fillers('two', 1));
+      walk.assortmentComplete(null);
+      await walk.drain();
+
+      expect(filled).toEqual([{ itemId: ITEM_PACK_KEPT, packCount: 4 }]);
+      expect(weighed).toEqual([{ itemId: ITEM_PACK_KEPT, approxWeight: 300 }]);
+    }, 120_000);
+
+    it('states in the result of a walk whose third chunk failed what the first two chunks wrote, and never the third (D9)', async () => {
+      // One bound row a chunk, so each chunk writes one price to catalog.
+      for (const n of [1, 2, 3]) {
+        await seed({
+          externalId: `priced-${n}`,
+          name: `Producto con precio ${n}`,
+          status: SourceEntryStatus.ACTIVE,
+          // A product of its own, so no chunk weighs it against another.
+          itemId: `02690269-0000-4000-8000-44444444441${n}`,
+          matchedBy: ItemSourceMatch.MANUAL,
+          confidence: 1,
+          decidedAt: new Date('2026-11-01T00:00:00.000Z'),
+        });
+      }
+      const failure = new Error('catalog did not answer');
+      const walk = sink();
+
+      for (const n of [1, 2]) {
+        report(walk, [
+          product(`priced-${n}`, { name: `Producto con precio ${n}` }),
+          ...fillers(`chunk${n}`, CHUNK - 1),
+        ]);
+        await settled(walk);
+      }
+      expect(pricesCalls).toBe(2);
+      pricesFail = failure;
+      report(walk, [
+        product('priced-3', { name: 'Producto con precio 3' }),
+        ...fillers('chunk3', CHUNK - 1),
+      ]);
+
+      await expect(walk.drain()).rejects.toBe(failure);
+      // The first two chunks, exactly: their products, the price each read
+      // per product onto its source row, and the one price each sent to
+      // catalog. The third chunk wrote its rows and its source prices before
+      // catalog refused, and the result does not count them (the limit the
+      // run's sentence states).
+      expect(walk.writtenSoFar).toMatchObject({
+        products: 2 * CHUNK,
+        pricesRecorded: 2 * CHUNK,
+        pricesPublished: 2,
+        availabilityWritten: 0,
+        packCountsFilled: 0,
+        approxWeightsWritten: 0,
+      });
+      expect(sent).toHaveLength(2);
+      expect(told).toEqual([]);
     }, 120_000);
 
     it('does not bind by EAN a waiting row a person rejected after the open', async () => {
