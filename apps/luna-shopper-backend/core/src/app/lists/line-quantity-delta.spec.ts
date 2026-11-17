@@ -412,7 +412,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     // already checked. The delta is computed here, so here is the only place that
     // can check the result, and core's callers are NATS messages rather than one
     // gateway acting as a wall.
-    const w = build({ permissions: DECIDER, quantity: 999999 });
+    const w = build({ permissions: DECIDER, quantity: 99999 });
 
     await expect(
       w.service.addQuantity({
@@ -421,36 +421,113 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
         delta: 100,
         unit: 'UNIT',
       })
-    ).rejects.toThrow(/at most 999999/);
+    ).rejects.toThrow(/at most 99999/);
     expect(w.saved).toHaveLength(0);
   });
 
-  it('takes a line to exactly the ceiling of 999 999 (plan 0262)', async () => {
+  it('takes a line to exactly the ceiling of 99 999 (plan 0262, 2026-11-17)', async () => {
     const w = build({ permissions: DECIDER, quantity: 999 });
 
     const view = await w.service.addQuantity({
       userId: SHOPPER,
       lineId: 'li1',
-      delta: 999000,
+      delta: 99000,
       unit: 'UNIT',
     });
 
-    expect(view.quantity).toBe(999999);
-    expect(w.saved[0].quantity).toBe(999999);
+    expect(view.quantity).toBe(99999);
+    expect(w.saved[0].quantity).toBe(99999);
   });
 
-  it('refuses a delta that would pass the ceiling by one (plan 0262)', async () => {
+  it('refuses a delta that would pass the ceiling by one (plan 0262, 2026-11-17)', async () => {
     const w = build({ permissions: DECIDER, quantity: 1000 });
 
     await expect(
       w.service.addQuantity({
         userId: SHOPPER,
         lineId: 'li1',
-        delta: 999000,
+        delta: 99000,
         unit: 'UNIT',
       })
-    ).rejects.toThrow(/at most 999999/);
+    ).rejects.toThrow(/at most 99999/);
     expect(w.saved).toHaveLength(0);
+  });
+
+  /**
+   * The ceiling fell from 100 000 to 99 999 on 2026-11-17 with no migration,
+   * so a line can be stored one above it. It is read as it is, a minus moves
+   * it under the ceiling, and a plus is refused like any write past it.
+   */
+  describe('a line stored above the ceiling (plan 0262, 2026-11-17)', () => {
+    it('steps down by one piece, against the amount the client saw', async () => {
+      const w = build({ permissions: DECIDER, quantity: 100000 });
+
+      const view = await w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: -1,
+        unit: 'UNIT',
+        expect: 100000,
+      });
+
+      expect(view.quantity).toBe(99999);
+      expect(w.saved[0].quantity).toBe(99999);
+    });
+
+    it('steps down by 25 g', async () => {
+      const w = build({ permissions: DECIDER, quantity: 100000, unit: 'GRAM' });
+
+      const view = await w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: -25,
+        unit: 'GRAM',
+      });
+
+      expect(view.quantity).toBe(99975);
+    });
+
+    it('is edited down with its own amount as `from`', async () => {
+      const w = build({ permissions: DECIDER, quantity: 100000 });
+
+      const result = await w.service.update({
+        userId: SHOPPER,
+        lineId: 'li1',
+        quantity: 99999,
+        from: 100000,
+      });
+
+      expect(result.quantity).toBe(99999);
+    });
+
+    it('refuses a plus, which would end past the ceiling', async () => {
+      const w = build({ permissions: DECIDER, quantity: 100000 });
+
+      await expect(
+        w.service.addQuantity({
+          userId: SHOPPER,
+          lineId: 'li1',
+          delta: 1,
+          unit: 'UNIT',
+        })
+      ).rejects.toThrow(/at most 99999/);
+      expect(w.saved).toHaveLength(0);
+    });
+
+    it('is announced as it is by an edit that leaves the amount alone', async () => {
+      const w = build({
+        permissions: [...DECIDER, ListPermission.WRITE],
+        quantity: 100000,
+      });
+
+      const result = await w.service.update({
+        userId: SHOPPER,
+        lineId: 'li1',
+        content: 'Tomato passata',
+      });
+
+      expect(result.quantity).toBe(100000);
+    });
   });
 
   it('refuses a delta of zero, which is a request that means nothing', async () => {

@@ -993,7 +993,7 @@ describe('the list line descriptor', () => {
     expect(editable).toEqual(['content', 'quantity', 'unit']);
   });
 
-  it('takes a quantity of 999 999 and refuses 1 000 000 (backend plan 0262)', () => {
+  it('takes a quantity of 99 999 and refuses 100 000 (backend plan 0262, 2026-11-17)', () => {
     const original = draftFor(
       LIST_LINES,
       LIST_LINE_SEED[0] as ResourceRow,
@@ -1002,8 +1002,8 @@ describe('the list line descriptor', () => {
     const problems = (quantity: string) =>
       validateDraft(LIST_LINES, { ...original, quantity }, 'edit', original);
 
-    expect(problems('999999')).toEqual({});
-    expect(problems('1000000').quantity).toEqual([
+    expect(problems('99999')).toEqual({});
+    expect(problems('100000').quantity).toEqual([
       expect.objectContaining({ key: 'resource.error.tooLarge' }),
     ]);
   });

@@ -110,12 +110,15 @@ export const LINE_PATTERNS = {
  * 0263 proposed it and was withdrawn on 2026-11-12); velista hides a line at 0
  * outside a search instead.
  *
- * **The ceiling is 999 999 base units** (plan 0262): 999,999 kg, 999,999 l or
- * 999 999 pieces, one number for the three units. It was 100 000 from when a
- * line counted pieces only. Every column that holds an amount is `int`.
+ * **The ceiling is 99 999 base units** (plan 0262, the owner's ruling of
+ * 2026-11-17): 99,999 kg, 99,999 l or 99 999 pieces, one number for the three
+ * units. It was 100 000 from when a line counted pieces only, and 999 999 for a
+ * few days before the ruling. A line already stored above it is still read,
+ * and its next write must end at or below it. Every column that holds an
+ * amount is `int`.
  */
 export const LINE_QUANTITY_MIN = 0;
-export const LINE_QUANTITY_MAX = 999999;
+export const LINE_QUANTITY_MAX = 99999;
 
 /**
  * How many lines one `line.addMany` may carry (plan 0040, section 6.1).
@@ -294,9 +297,10 @@ export interface LineView {
    *
    * A line with one product counts in that product's unit and nobody chooses
    * it (W2): a product by the kilo is weighed, everything else is counted, a
-   * kilo piece included. A free text line counts pieces. Only a line that
-   * several products can serve lets the shopper choose, among the units
-   * `lineUnitsOf` answers for them (W1).
+   * kilo piece included. A free text line counts in the unit it was created
+   * or edited in, any of the three (the owner, 2026-11-17); velista creates it
+   * in `UNIT`. Only a line that several products can serve lets the shopper
+   * choose, among the units `lineUnitsOf` answers for them (W1).
    */
   unit: LineUnit;
   /**
@@ -708,7 +712,8 @@ export interface AddLineRequest {
    * another unit is refused with `line_unit_differs` and
    * {@link LineUnitDiffersDetails} (plan 0260 U2). A free text add is never
    * refused for a unit: it meets a line of any unit by name, and its unit only
-   * shapes a line it creates (R4).
+   * shapes a line it creates (R4), which counts in that unit, any of the
+   * three (the owner, 2026-11-17).
    */
   unit?: LineUnit;
   /** Set by a basket write alone (plan 0138). Never sent by a client. */
@@ -952,7 +957,8 @@ export interface UpdateLineRequest {
    * moved from grams is worse than a reset. The client sends
    * `defaultQuantityOf` the new unit. Absent leaves the unit alone. The
    * gateway refuses a unit the line's products do not offer with
-   * `line_unit_not_offered` (M3).
+   * `line_unit_not_offered` (M3). A free text line takes any of the three
+   * (the owner, 2026-11-17).
    */
   unit?: LineUnit;
   /**

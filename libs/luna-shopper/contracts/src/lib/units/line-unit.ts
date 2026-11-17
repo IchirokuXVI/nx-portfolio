@@ -103,8 +103,10 @@ export function unitsServedBy(product: ProductSizing): LineUnit[] {
  * The units a line can count in, in picker order (`UNIT`, `GRAM`,
  * `MILLILITER`), for the products it holds (plan 0246 W1, section 1).
  *
- * The union of what each product serves. A line with no product is a free
- * text line and counts pieces, so an empty set answers `UNIT` alone.
+ * The union of what each product serves. An empty set answers `UNIT` alone:
+ * the units of a line whose products the catalog names none of. A free text
+ * line is not asked here, because it counts in any of the three (the owner,
+ * 2026-11-17).
  *
  * **It takes the products, not their kinds.** The plan's sketch names
  * `kinds`, and its table needs the size: a pack of 500 g serves a weight line

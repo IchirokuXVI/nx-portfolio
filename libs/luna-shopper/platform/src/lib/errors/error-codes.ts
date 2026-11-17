@@ -187,8 +187,8 @@ export const ERROR_CODES = {
    * section 4.2 and M3).
    *
    * `details.offered` lists the units `lineUnitsOf` answers for the line, so
-   * the client can draw the choice it does allow. A free text line offers
-   * `UNIT` alone.
+   * the client can draw the choice it does allow. A free text line is never
+   * refused: it counts in any of the three units (the owner, 2026-11-17).
    */
   LINE_UNIT_NOT_OFFERED: 'line_unit_not_offered',
   /**
