@@ -103,6 +103,40 @@ describe('toAddChoice', () => {
     ]);
   });
 
+  it("holds a raise it works out itself to the ceiling of the line's unit, never under what the line holds (velista 0188, decision K)", () => {
+    const choice = toAddChoice(
+      refusal({
+        lines: [
+          // No resultingQuantity: the client works out one step more.
+          {
+            ...ENTRY,
+            lineId: 'line-g',
+            quantity: 98_990,
+            unit: 'GRAM',
+            outcome: 'RAISED',
+          },
+          {
+            ...ENTRY,
+            lineId: 'line-h',
+            quantity: 150_000,
+            unit: 'GRAM',
+            outcome: 'RAISED',
+          },
+          { ...ENTRY, lineId: 'line-c', quantity: 999_999, outcome: 'RAISED' },
+          { ...ENTRY, lineId: 'line-d', quantity: 98_990, outcome: 'RAISED' },
+        ],
+      })
+    );
+
+    expect(choice?.lines.map((line) => line.resultingQuantity)).toEqual([
+      99_000,
+      // A server that already holds more keeps its amount; nothing lowers it.
+      150_000, 999_999,
+      // A count keeps the backend's 999 999.
+      98_991,
+    ]);
+  });
+
   it('reads the unit of a line, a count when it is absent or unknown (velista 0182)', () => {
     const choice = toAddChoice(
       refusal({
