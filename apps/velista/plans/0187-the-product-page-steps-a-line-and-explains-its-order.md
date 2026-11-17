@@ -7,7 +7,7 @@
 > 1.6 kg read "1.6 k" with "Add 10", the plus sent `{"delta":10,"unit":"UNIT"}`, the server
 > answered 409 `line_unit_mismatch`, and the amount snapped back. `GET /v1/items/:id/list-lines`
 > answered `ItemLineView` with no `unit`, so `toItemLists` fell back to pieces; a row was right
-> only when the list page had loaded that list before. The fix (PR stacked on #988): core's
+> only when the list page had loaded that list before. The fix ([#1000](https://github.com/IchirokuXVI/nx-portfolio/pull/1000)): core's
 > `linesHoldingItem` reads `list_lines.unit`, `ItemLineView` and its schema require `unit`, and
 > velista's mapper takes it from the answer. Specs: core unit and integration, the velista
 > mapper against the contract schema, and a product page case for a list the app never
