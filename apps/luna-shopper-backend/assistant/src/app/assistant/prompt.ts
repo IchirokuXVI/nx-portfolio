@@ -18,9 +18,12 @@ const PLAIN_TEXT_RULE =
  * How a weight or a volume reaches a tool (plan 0246, section 5). One rule for
  * both prompts, beside the rules about lines: a line counts in grams or
  * millilitres, and a model that sent "0.3" kilos would write 0 or 1.
+ *
+ * Its second sentence is the owner's ruling of 2026-11-17 (plan 0260, section
+ * 5.1): a line keeps its unit, and an amount it cannot count is a question.
  */
 const WEIGHT_RULE =
-  '- A weight or a volume is sent in grams or millilitres with its unit, never as a count of kilos or litres: 300 g of cheese is 300 with GRAM, a litre and a half of milk is 1500 with MILLILITER.';
+  '- A weight or a volume is sent in grams or millilitres with its unit, never as a count of kilos or litres: 300 g of cheese is 300 with GRAM, a litre and a half of milk is 1500 with MILLILITER. A line already on a list counts in its own unit, which tool results state beside its amount ("750 g", "3 pieces"); when a tool says what they asked for does not fit the unit of the line, nothing was written, so ask how much they want in that unit and never convert a count into grams or grams into a count yourself.';
 
 /**
  * The operator prompt (plan 0039, section 7).

@@ -551,6 +551,44 @@ npx nx run luna-shopper-backend-gateway:openapi
 npx nx run luna-shopper-admin/models:wire-types
 ```
 
+### 5.1 The assistant writes a line in the unit it counts in (2026-11-17)
+
+The owner ruled on 2026-11-17: fix the assistant so it works with grams, and with the other
+units where they apply. Since the amendment of that day a free text line can count in `GRAM`
+or `MILLILITER`, and `upsert_lines` still treated every free text line as pieces: a weight
+said of a line in grams was folded into its name at quantity 1 with no unit, which core
+stored as 1 g, and a plain count was stored as that many grams. Built in `tools.ts`, the
+prompt and their specs; core, the gateway and the contracts did not change.
+
+- **An existing line is written in its own unit.** A `set` of a weight on a free text line in
+  grams (or of a volume on one in millilitres) sends the number in base units with the unit,
+  under the line's name, and folds nothing into the name. So does an item that names the line
+  with `lineId`. Only a free text line in pieces still takes a weight or a volume into its
+  name, as plan `0246` W1 wrote it.
+- **An amount the line cannot count is answered, never converted.** A plain count on a line in
+  grams or millilitres, and on a free text line any unit but its own (a weight on a free text
+  line in pieces excepted, which folds), writes nothing. The item answers the sentence a delta
+  of another unit already gets ("that line counts in grams; say the amount in grams or change
+  the line"), the line as `onList` and an `instead` that tells the model to ask the amount in
+  that unit. A delta (`mode: "add"`) of another unit is still sent and refused by core with
+  `line_unit_mismatch`, as before.
+- **Product lines.** A plain count on a product line in grams or millilitres was stored as
+  that many grams, the same defect, and is answered the same way now. A weight or a volume on
+  a product line of another unit is still sent with its unit, as plan `0246` section 5 built
+  it: it changes the unit of the line, and the gateway refuses with 422 a unit its products
+  are not sold in. A delta of another unit was already refused by core.
+- **The ceiling.** An amount above `LINE_QUANTITY_MAX` in the line's unit, or a delta that
+  would take the line above it as this call read it, writes nothing and is answered per item
+  with the ceiling in that unit, instead of a refusal of the whole batch. An amount folded into
+  a name is no quantity and is not asked.
+- **What the model reads.** Every line a tool hands the model states its unit with its number:
+  `query_lists` matches carry `unit` and `amount` ("750 g", "1500 ml", "3 pieces"), and so do
+  the results of a write, the lines of a question (`matches`) and `onList`. The prompt's weight
+  rule says that a line keeps its unit and that a mismatch is a question.
+- **Left as it is:** a new free text line is still created in pieces, with a weight or a volume
+  folded into its name, because velista itself creates free text lines in pieces for now.
+  Whether the assistant should create one in grams is a question for the owner.
+
 ## 6. Who sees what change
 
 - **A typed name already on the list**, wanted: nothing changes on the line; the client shows
