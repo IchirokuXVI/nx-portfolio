@@ -1676,6 +1676,19 @@ describe('ProductRow, a product already on the list', () => {
     expect(host.querySelector('.held-title')).toBeNull();
   });
 
+  it('keeps a space between the reason and the link, so the sentence does not run together (velista 0185, C1)', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+      onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+    });
+
+    const text = host.querySelector('.held-onlist-text')?.textContent ?? '';
+    expect(text.replace(/\s+/g, ' ').trim()).toBe(
+      'catalog.held.alreadyOn catalog.held.openLine'
+    );
+  });
+
   it('keeps focus on the plus when an add lands and switches it off, and a second press adds nothing', async () => {
     TestBed.resetTestingModule();
     await TestBed.configureTestingModule({
