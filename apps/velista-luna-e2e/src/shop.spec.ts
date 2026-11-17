@@ -911,6 +911,11 @@ test.describe('a product with a step of its own (velista 0186)', () => {
       .locator('.row');
     const stepper = listRow.locator('lib-quantity-stepper');
     await expect(stepper).toHaveAttribute('data-value', '1000');
+    // The line steps by the default until its product's record is read (velista
+    // 0186, decision B); the plus names the step once it is.
+    await expect(stepper.locator('button.plus')).toHaveAccessibleName(
+      /^Add 100 g to /
+    );
 
     // One press at a time, each drawn before the next. The run is written once,
     // after the quiet beat (velista 0188).
