@@ -11,6 +11,7 @@ import {
   type AssistantTurnRequest,
   type AssistantVoiceRequest,
   type LineSettlementResult,
+  type LineUnit,
   type LineView,
   type ListView,
   type MyZoneView,
@@ -123,7 +124,7 @@ class RecordingApi {
   async addLines(
     caller: ApiCaller,
     listId: string,
-    items: { content: string; quantity?: number }[]
+    items: { content: string; quantity?: number; unit?: LineUnit }[]
   ): Promise<AddLineResult[]> {
     this.record('addLines', caller, { listId, items });
     this.throwIfArmed();
@@ -135,12 +136,10 @@ class RecordingApi {
         merged: false,
         outcome: 'CREATED' as const,
       };
-      const view = line(
-        `line-new-${index}`,
-        listId,
-        item.content,
-        item.quantity ?? 1
-      );
+      const view: LineView = {
+        ...line(`line-new-${index}`, listId, item.content, item.quantity ?? 1),
+        ...(item.unit !== undefined ? { unit: item.unit } : {}),
+      };
       return {
         line: view,
         merged: answer.merged ?? answer.outcome !== 'CREATED',
@@ -170,12 +169,16 @@ class RecordingApi {
     const existing = [...this.linesByList.values()]
       .flat()
       .find((row) => row.id === lineId);
-    return line(
-      lineId,
-      existing?.listId ?? 'list-flat',
-      existing?.content ?? 'leche',
-      (existing?.quantity ?? 1) + delta
-    );
+    return {
+      ...line(
+        lineId,
+        existing?.listId ?? 'list-flat',
+        existing?.content ?? 'leche',
+        (existing?.quantity ?? 1) + delta
+      ),
+      // A delta moves the number and keeps the unit it counts in.
+      ...(existing?.unit !== undefined ? { unit: existing.unit } : {}),
+    };
   }
 
   async updateLine(
@@ -994,6 +997,167 @@ describe('AssistantService', () => {
       expect(items.some((item) => 'unit' in item)).toBe(false);
     });
 
+    describe('a new line counted by weight only when asked for in words (the owner, 2026-11-18)', () => {
+      /** The items of the one `upsert_lines` result the model read. */
+      function resultItems(
+        provider: FakeModelProvider
+      ): Record<string, unknown>[] {
+        const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+          ?.result as { items?: Record<string, unknown>[] };
+        return result.items ?? [];
+      }
+
+      async function upsert(
+        items: Record<string, unknown>[],
+        api = new RecordingApi()
+      ): Promise<{ api: RecordingApi; provider: FakeModelProvider }> {
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', { items }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        await build(provider, api).turn(turnRequest('añade harina'));
+        return { api, provider };
+      }
+
+      it('creates a line in GRAM with the weight in grams and the name left alone', async () => {
+        const { api, provider } = await upsert([
+          {
+            product: 'harina',
+            quantity: 1500,
+            unit: 'GRAM',
+            countByAmount: true,
+          },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina', quantity: 1500, unit: 'GRAM' },
+        ]);
+        expect(resultItems(provider)[0]).toMatchObject({
+          product: 'harina',
+          action: 'added',
+          quantity: 1500,
+          unit: 'GRAM',
+          amount: '1500 g',
+        });
+      });
+
+      it('creates a line in MILLILITER with the volume in millilitres', async () => {
+        const { api } = await upsert([
+          {
+            product: 'aceite',
+            quantity: 750,
+            unit: 'MILLILITER',
+            countByAmount: true,
+          },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'aceite', quantity: 750, unit: 'MILLILITER' },
+        ]);
+      });
+
+      it('still folds a weight said alone into the name of a line in pieces', async () => {
+        const { api } = await upsert([
+          { product: 'harina', quantity: 500, unit: 'GRAM' },
+          // Only a JSON true is the request.
+          {
+            product: 'arroz',
+            quantity: 1000,
+            unit: 'GRAM',
+            countByAmount: 'true',
+          },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina 500 g' },
+          { content: 'arroz 1000 g' },
+        ]);
+      });
+
+      it('starts a line at one step when they named the dimension and no amount, and says so', async () => {
+        const { api, provider } = await upsert([
+          { product: 'harina', unit: 'GRAM', countByAmount: true },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina', quantity: 25, unit: 'GRAM' },
+        ]);
+        expect(resultItems(provider)[0]['note']).toBe(
+          'They named no amount, so the line starts at 25 g. Say so, and that they can change it.'
+        );
+      });
+
+      it('reads the flag with no weight or volume unit as no flag', async () => {
+        const { api } = await upsert([
+          { product: 'harina', quantity: 2, countByAmount: true },
+          { product: 'sal', countByAmount: true },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina', quantity: 2 },
+          { content: 'sal' },
+        ]);
+      });
+
+      it('answers a weight above the ceiling and writes nothing', async () => {
+        const { api, provider } = await upsert([
+          {
+            product: 'harina',
+            quantity: 150000,
+            unit: 'GRAM',
+            countByAmount: true,
+          },
+        ]);
+
+        expect(api.of('addLines')).toHaveLength(0);
+        expect(JSON.stringify(provider.requests[1].turns.at(-1))).toContain(
+          'a line holds at most 99999 g'
+        );
+      });
+
+      it('changes nothing about how a line already on the list is written', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-pieces', 'list-flat', 'queso', 2),
+          {
+            ...line('line-grams', 'list-flat', 'harina', 500),
+            unit: 'GRAM',
+          },
+        ]);
+
+        await upsert(
+          [
+            {
+              product: 'queso',
+              quantity: 300,
+              unit: 'GRAM',
+              countByAmount: true,
+            },
+            {
+              product: 'harina',
+              quantity: 750,
+              unit: 'GRAM',
+              countByAmount: true,
+            },
+          ],
+          api
+        );
+
+        // The line in pieces takes the weight into its name, as without
+        // the flag, and the line in grams is written in grams.
+        expect(api.of('addLines')).toHaveLength(0);
+        expect(api.of('updateLine').map((call) => call.detail)).toEqual([
+          { lineId: 'line-pieces', content: 'queso 300 g', quantity: 1 },
+          {
+            lineId: 'line-grams',
+            content: 'harina',
+            quantity: 750,
+            unit: 'GRAM',
+          },
+        ]);
+      });
+    });
+
     it('writes a weight set on a free text line into its name and sends no unit (plan 0246, W1)', async () => {
       const api = new RecordingApi();
       api.linesByList.set('list-flat', [
@@ -1183,6 +1347,270 @@ describe('AssistantService', () => {
       expect(JSON.stringify(toolTurn?.toolResults)).toContain(
         'that line counts in grams; say the amount in grams or change the line'
       );
+    });
+
+    describe('a line is written in the unit it counts in (the owner, 2026-11-17)', () => {
+      /** The first item of the one `upsert_lines` result the model read. */
+      function resultItem(
+        provider: FakeModelProvider
+      ): Record<string, unknown> {
+        const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+          ?.result as { items?: Record<string, unknown>[] };
+        return (result.items ?? [])[0];
+      }
+
+      function gramLine(id: string, content: string, quantity: number) {
+        return {
+          ...line(id, 'list-flat', content, quantity),
+          unit: 'GRAM' as const,
+        };
+      }
+
+      function wroteNothing(api: RecordingApi): void {
+        expect(api.of('updateLine')).toHaveLength(0);
+        expect(api.of('addLineQuantity')).toHaveLength(0);
+        expect(api.of('addLines')).toHaveLength(0);
+      }
+
+      it('writes a weight said of a free text line in grams as its quantity, not into its name', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-cheese', 'queso', 500),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'queso', quantity: 750, unit: 'GRAM' }],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon 750 g de queso'));
+
+        expect(api.of('updateLine')).toHaveLength(1);
+        expect(api.of('updateLine')[0].detail).toEqual({
+          lineId: 'line-cheese',
+          content: 'queso',
+          quantity: 750,
+          unit: 'GRAM',
+        });
+      });
+
+      it('writes a volume said of a free text line in millilitres as its quantity', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          {
+            ...line('line-milk', 'list-flat', 'leche', 1000),
+            unit: 'MILLILITER',
+          },
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'leche', quantity: 1500, unit: 'MILLILITER' }],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('que sea litro y medio de leche'));
+
+        expect(api.of('updateLine')[0].detail).toEqual({
+          lineId: 'line-milk',
+          content: 'leche',
+          quantity: 1500,
+          unit: 'MILLILITER',
+        });
+      });
+
+      it('writes nothing for a count said of a free text line in grams, and hands back its unit', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-cheese', 'queso', 500),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'queso', quantity: 3 }],
+          }),
+          FakeModelProvider.says('¿Cuántos gramos?'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon tres de queso'));
+
+        // Three would have been stored as 3 g.
+        wroteNothing(api);
+        const item = resultItem(provider);
+        expect(item).toMatchObject({
+          product: 'queso',
+          refused: true,
+          reason:
+            'that line counts in grams; say the amount in grams or change the line',
+          onList: {
+            id: 'line-cheese',
+            product: 'queso',
+            quantity: 500,
+            unit: 'GRAM',
+            amount: '500 g',
+          },
+        });
+        expect(item['instead']).toContain('holds 500 g');
+      });
+
+      it('writes nothing for a volume said of a free text line in grams', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-cheese', 'queso', 500),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'queso', quantity: 500, unit: 'MILLILITER' }],
+          }),
+          FakeModelProvider.says('Esa línea cuenta en gramos.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon medio litro de queso'));
+
+        wroteNothing(api);
+        expect(resultItem(provider)).toMatchObject({
+          refused: true,
+          reason:
+            'that line counts in grams; say the amount in grams or change the line',
+        });
+      });
+
+      it('writes nothing for a count said of a product line in grams', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          { ...gramLine('line-ham', 'jamón', 200), itemIds: ['item-ham'] },
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'jamón', quantity: 2 }],
+          }),
+          FakeModelProvider.says('¿Cuántos gramos?'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon dos de jamón'));
+
+        wroteNothing(api);
+        expect(resultItem(provider)).toMatchObject({
+          refused: true,
+          onList: { unit: 'GRAM', amount: '200 g' },
+        });
+      });
+
+      it('writes a weight on the gram line a lineId names in grams', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-a', 'queso', 200),
+          gramLine('line-b', 'queso', 500),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              {
+                product: 'queso',
+                quantity: 750,
+                unit: 'GRAM',
+                lineId: 'line-b',
+              },
+            ],
+          }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('el de 500, que sean 750 g'));
+
+        expect(api.of('updateLine')).toHaveLength(1);
+        expect(api.of('updateLine')[0].detail).toEqual({
+          lineId: 'line-b',
+          content: 'queso',
+          quantity: 750,
+          unit: 'GRAM',
+        });
+      });
+
+      it('answers an amount above the ceiling and writes nothing', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-cheese', 'queso', 500),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [{ product: 'queso', quantity: 150000, unit: 'GRAM' }],
+          }),
+          FakeModelProvider.says('Es demasiado.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('pon 150 kilos de queso'));
+
+        wroteNothing(api);
+        expect(resultItem(provider)).toMatchObject({
+          refused: true,
+          reason:
+            'nothing was written, because the line would hold 150000 g and a line holds at most 99999 g',
+        });
+      });
+
+      it('states the unit with the number of every line the model reads', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-cheese', 'queso', 750),
+          line('line-eggs', 'list-flat', 'huevos', 6),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('query_lists', {}),
+          FakeModelProvider.says('Hay 750 g de queso y seis huevos.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('¿qué hay en la lista?'));
+
+        const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+          ?.result as { lists: { matches: Record<string, unknown>[] }[] };
+        expect(result.lists[0].matches).toEqual([
+          expect.objectContaining({
+            id: 'line-cheese',
+            quantity: 750,
+            unit: 'GRAM',
+            amount: '750 g',
+          }),
+          expect.objectContaining({
+            id: 'line-eggs',
+            quantity: 6,
+            unit: 'UNIT',
+            amount: '6 pieces',
+          }),
+        ]);
+      });
+
+      it('states the unit with the number of a line it wrote', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          gramLine('line-cheese', 'queso', 500),
+        ]);
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', {
+            items: [
+              { product: 'queso', quantity: 250, unit: 'GRAM', mode: 'add' },
+            ],
+          }),
+          FakeModelProvider.says('Ahora hay 750 g.'),
+        ]);
+        const service = build(provider, api);
+
+        await service.turn(turnRequest('añade 250 g de queso'));
+
+        expect(resultItem(provider)).toMatchObject({
+          action: 'increased',
+          unit: 'GRAM',
+          amount: '750 g',
+        });
+      });
     });
 
     it("mode 'add' calls the quantity route and never reads then writes", async () => {
@@ -1440,12 +1868,19 @@ describe('AssistantService', () => {
 
         wroteNothing(api);
         expect(firstItem(provider).matches).toEqual([
-          { id: 'line-a', product: 'queso 300 g', quantity: 1, unit: 'UNIT' },
+          {
+            id: 'line-a',
+            product: 'queso 300 g',
+            quantity: 1,
+            unit: 'UNIT',
+            amount: '1 piece',
+          },
           {
             id: 'line-b',
             product: 'queso 500 g',
             quantity: 0,
             unit: 'UNIT',
+            amount: '0 pieces',
           },
         ]);
       });
@@ -1922,6 +2357,7 @@ describe('AssistantService', () => {
           product: 'Desayuno',
           quantity: 500,
           unit: 'MILLILITER',
+          amount: '500 ml',
         },
         instead: insteadOfDesayuno,
       });
