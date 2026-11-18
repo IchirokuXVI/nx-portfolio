@@ -11,6 +11,7 @@ import {
   type AssistantTurnRequest,
   type AssistantVoiceRequest,
   type LineSettlementResult,
+  type LineUnit,
   type LineView,
   type ListView,
   type MyZoneView,
@@ -123,7 +124,7 @@ class RecordingApi {
   async addLines(
     caller: ApiCaller,
     listId: string,
-    items: { content: string; quantity?: number }[]
+    items: { content: string; quantity?: number; unit?: LineUnit }[]
   ): Promise<AddLineResult[]> {
     this.record('addLines', caller, { listId, items });
     this.throwIfArmed();
@@ -135,12 +136,10 @@ class RecordingApi {
         merged: false,
         outcome: 'CREATED' as const,
       };
-      const view = line(
-        `line-new-${index}`,
-        listId,
-        item.content,
-        item.quantity ?? 1
-      );
+      const view: LineView = {
+        ...line(`line-new-${index}`, listId, item.content, item.quantity ?? 1),
+        ...(item.unit !== undefined ? { unit: item.unit } : {}),
+      };
       return {
         line: view,
         merged: answer.merged ?? answer.outcome !== 'CREATED',
@@ -996,6 +995,167 @@ describe('AssistantService', () => {
         { content: 'leche' },
       ]);
       expect(items.some((item) => 'unit' in item)).toBe(false);
+    });
+
+    describe('a new line counted by weight only when asked for in words (the owner, 2026-11-18)', () => {
+      /** The items of the one `upsert_lines` result the model read. */
+      function resultItems(
+        provider: FakeModelProvider
+      ): Record<string, unknown>[] {
+        const result = provider.requests[1].turns.at(-1)?.toolResults?.[0]
+          ?.result as { items?: Record<string, unknown>[] };
+        return result.items ?? [];
+      }
+
+      async function upsert(
+        items: Record<string, unknown>[],
+        api = new RecordingApi()
+      ): Promise<{ api: RecordingApi; provider: FakeModelProvider }> {
+        const provider = new FakeModelProvider([
+          FakeModelProvider.calls('upsert_lines', { items }),
+          FakeModelProvider.says('Hecho.'),
+        ]);
+        await build(provider, api).turn(turnRequest('añade harina'));
+        return { api, provider };
+      }
+
+      it('creates a line in GRAM with the weight in grams and the name left alone', async () => {
+        const { api, provider } = await upsert([
+          {
+            product: 'harina',
+            quantity: 1500,
+            unit: 'GRAM',
+            countByAmount: true,
+          },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina', quantity: 1500, unit: 'GRAM' },
+        ]);
+        expect(resultItems(provider)[0]).toMatchObject({
+          product: 'harina',
+          action: 'added',
+          quantity: 1500,
+          unit: 'GRAM',
+          amount: '1500 g',
+        });
+      });
+
+      it('creates a line in MILLILITER with the volume in millilitres', async () => {
+        const { api } = await upsert([
+          {
+            product: 'aceite',
+            quantity: 750,
+            unit: 'MILLILITER',
+            countByAmount: true,
+          },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'aceite', quantity: 750, unit: 'MILLILITER' },
+        ]);
+      });
+
+      it('still folds a weight said alone into the name of a line in pieces', async () => {
+        const { api } = await upsert([
+          { product: 'harina', quantity: 500, unit: 'GRAM' },
+          // Only a JSON true is the request.
+          {
+            product: 'arroz',
+            quantity: 1000,
+            unit: 'GRAM',
+            countByAmount: 'true',
+          },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina 500 g' },
+          { content: 'arroz 1000 g' },
+        ]);
+      });
+
+      it('starts a line at one step when they named the dimension and no amount, and says so', async () => {
+        const { api, provider } = await upsert([
+          { product: 'harina', unit: 'GRAM', countByAmount: true },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina', quantity: 25, unit: 'GRAM' },
+        ]);
+        expect(resultItems(provider)[0]['note']).toBe(
+          'They named no amount, so the line starts at 25 g. Say so, and that they can change it.'
+        );
+      });
+
+      it('reads the flag with no weight or volume unit as no flag', async () => {
+        const { api } = await upsert([
+          { product: 'harina', quantity: 2, countByAmount: true },
+          { product: 'sal', countByAmount: true },
+        ]);
+
+        expect(api.of('addLines')[0].detail['items']).toEqual([
+          { content: 'harina', quantity: 2 },
+          { content: 'sal' },
+        ]);
+      });
+
+      it('answers a weight above the ceiling and writes nothing', async () => {
+        const { api, provider } = await upsert([
+          {
+            product: 'harina',
+            quantity: 150000,
+            unit: 'GRAM',
+            countByAmount: true,
+          },
+        ]);
+
+        expect(api.of('addLines')).toHaveLength(0);
+        expect(JSON.stringify(provider.requests[1].turns.at(-1))).toContain(
+          'a line holds at most 99999 g'
+        );
+      });
+
+      it('changes nothing about how a line already on the list is written', async () => {
+        const api = new RecordingApi();
+        api.linesByList.set('list-flat', [
+          line('line-pieces', 'list-flat', 'queso', 2),
+          {
+            ...line('line-grams', 'list-flat', 'harina', 500),
+            unit: 'GRAM',
+          },
+        ]);
+
+        await upsert(
+          [
+            {
+              product: 'queso',
+              quantity: 300,
+              unit: 'GRAM',
+              countByAmount: true,
+            },
+            {
+              product: 'harina',
+              quantity: 750,
+              unit: 'GRAM',
+              countByAmount: true,
+            },
+          ],
+          api
+        );
+
+        // The line in pieces takes the weight into its name, as without
+        // the flag, and the line in grams is written in grams.
+        expect(api.of('addLines')).toHaveLength(0);
+        expect(api.of('updateLine').map((call) => call.detail)).toEqual([
+          { lineId: 'line-pieces', content: 'queso 300 g', quantity: 1 },
+          {
+            lineId: 'line-grams',
+            content: 'harina',
+            quantity: 750,
+            unit: 'GRAM',
+          },
+        ]);
+      });
     });
 
     it('writes a weight set on a free text line into its name and sends no unit (plan 0246, W1)', async () => {

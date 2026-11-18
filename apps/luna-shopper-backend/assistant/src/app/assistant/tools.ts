@@ -1,4 +1,5 @@
 import {
+  defaultQuantityOf,
   isLineUnit,
   LINE_ADD_CHOICE_MAX,
   LINE_BATCH_MAX_ITEMS,
@@ -149,6 +150,18 @@ interface UpsertItem {
    * the item finds its line by name as before.
    */
   lineId: string | undefined;
+  /**
+   * The person asked in words for a new line counted by weight or volume
+   * rather than pieces (the owner, 2026-11-18, plan 0260 section 5.1). Read
+   * only by {@link freshLine}, and only with a weight or volume {@link unit}:
+   * see {@link amountUnitOf}.
+   */
+  countByAmount: boolean;
+  /**
+   * Whether the call carried a number. {@link quantity} cannot say it for an
+   * `add`, which reads a missing number as one more.
+   */
+  amountSaid: boolean;
 }
 
 /**
@@ -158,15 +171,16 @@ interface UpsertItem {
  * The last two sentences are W1 over section 5, as the owner ruled on
  * 2026-11-17 (plan 0260, section 5.1): a new line from this tool names no
  * product and counts pieces, so {@link freshLine} writes a weight into its
- * name; a line already on the list is written in its own unit, so a weight
- * goes to a line in grams as grams, and {@link unitMismatch} answers an
- * amount the line cannot count.
+ * name, unless the person asked in words for a line counted by weight
+ * (`countByAmount`, the owner, 2026-11-18); a line already on the list is
+ * written in its own unit, so a weight goes to a line in grams as grams, and
+ * {@link unitMismatch} answers an amount the line cannot count.
  */
 const UNIT_PARAMETER = {
   type: 'string',
   enum: [...LINE_UNITS],
   description:
-    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, 1.5 kg is 1500, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs. A new line that names no product counts pieces, so its weight or volume is written into its name ("queso 300 g") and you still send it here the same way. A line already on the list keeps the unit it counts in: send its amount in that unit, and when what they said does not fit it, the result tells you the line\'s unit and nothing is written.',
+    'What the number counts. GRAM for a weight, MILLILITER for a volume, both as the number of grams or millilitres: 300 g is 300, 1.5 kg is 1500, half a kilo is 500, a litre and a half is 1500. Omit for pieces or packs. A new line that names no product counts pieces unless its item sets countByAmount, so its weight or volume is written into its name ("queso 300 g") and you still send it here the same way. A line already on the list keeps the unit it counts in: send its amount in that unit, and when what they said does not fit it, the result tells you the line\'s unit and nothing is written.',
 };
 
 /**
@@ -199,6 +213,10 @@ const upsertItemsParameter = {
           'How many. Omit when they did not say. With mode "add" it is how many to add, and omitting it means one more.',
       },
       unit: UNIT_PARAMETER,
+      countByAmount: {
+        type: 'boolean',
+        description: `True only when the person asked in words for a new line counted in grams, kilos, millilitres or litres instead of pieces: "add flour and count it in grams", "a line for rice measured by weight, 500 g". Saying a weight is not that request: for "500 g of flour" leave this out, and the weight goes into the name of a line counted in pieces. With it, also send unit, GRAM for a weight or MILLILITER for a volume, even when they said no amount; with no amount the line starts at ${amountOf(defaultQuantityOf('GRAM'), 'GRAM')} or ${amountOf(defaultQuantityOf('MILLILITER'), 'MILLILITER')}. It changes nothing about a line already on the list.`,
+      },
       mode: {
         type: 'string',
         enum: ['set', 'add'],
@@ -439,13 +457,20 @@ const upsertLines: AssistantTool = {
         // the lines and told to ask.
         added.forEach((result, position) => {
           runtime.link.list(list);
-          results[fresh[position].index] =
+          const { item, index } = fresh[position];
+          const described =
             (result.outcome === 'ALREADY_ON_LIST'
-              ? severalMatches(
-                  fresh[position].item.product,
-                  result.alreadyOnList ?? []
-                )
+              ? severalMatches(item.product, result.alreadyOnList ?? [])
               : undefined) ?? describeLine(batchAction(result), result.line);
+          // A line by weight they named no amount for starts at one step,
+          // and the person is told so (the owner, 2026-11-18).
+          results[index] =
+            described.action === 'added' && startsAtStep(item)
+              ? {
+                  ...described,
+                  note: `They named no amount, so the line starts at ${described.amount}. Say so, and that they can change it.`,
+                }
+              : described;
         });
       } catch (error) {
         firstFailure = error;
@@ -1258,6 +1283,8 @@ interface ItemResult {
   matches?: MetLine[];
   /** What to do instead, said to the model in plain words (plan 0260). */
   instead?: string;
+  /** Something to tell the person about a write that happened. */
+  note?: string;
 }
 
 /**
@@ -1448,12 +1475,31 @@ const UNIT_SYMBOLS: Record<Exclude<LineUnit, 'UNIT'>, string> = {
  * Every line this tool creates is free text: it names no product. This tool
  * creates it in pieces, as plan 0246 section 9 states, so a weight or a volume
  * the person said is folded into the name and sent with no unit and no
- * quantity: "300 g of cheese" is a line called "queso 300 g" at one. The
- * gateway would take the unit on a free text line since the owner's ruling of
- * 2026-11-17, and the assistant was left as it was. A unit is sent only on a
- * line that already exists, in its own unit.
+ * quantity: "300 g of cheese" is a line called "queso 300 g" at one.
+ *
+ * The one exception is the owner's ruling of 2026-11-18 (plan 0260, section
+ * 5.1): when the person asked in words for a line counted by weight or volume
+ * ({@link amountUnitOf}), the line is created in GRAM or MILLILITER with the
+ * amount in base units and its name left alone, or at
+ * {@link defaultQuantityOf} that unit when they named no amount. The gateway
+ * takes either unit on a free text line since PR #1002.
  */
-function freshLine(item: UpsertItem): { content: string; quantity?: number } {
+function freshLine(item: UpsertItem): {
+  content: string;
+  quantity?: number;
+  unit?: LineUnit;
+} {
+  const byAmount = amountUnitOf(item);
+  if (byAmount !== undefined) {
+    return {
+      content: item.product,
+      quantity:
+        item.amountSaid && item.quantity !== undefined
+          ? item.quantity
+          : defaultQuantityOf(byAmount),
+      unit: byAmount,
+    };
+  }
   if (item.unit !== undefined && item.unit !== 'UNIT') {
     return {
       content:
@@ -1487,8 +1533,9 @@ function lineEdit(
   item: UpsertItem
 ): { content: string; quantity?: number; unit?: LineUnit } {
   if (foldsIntoName(line, item)) {
+    // `countByAmount` shapes a new line only (the owner, 2026-11-18).
     return item.quantity !== undefined
-      ? { ...freshLine(item), quantity: 1 }
+      ? { ...freshLine({ ...item, countByAmount: false }), quantity: 1 }
       : { content: item.product };
   }
   return {
@@ -1675,6 +1722,9 @@ function readItems(value: unknown): UpsertItem[] {
       quantity: mode === 'add' ? (quantity ?? 1) : quantity,
       unit: readUnit(bag['unit']),
       lineId: readString(bag['lineId']),
+      // Only a JSON true, as every flag of these tools.
+      countByAmount: bag['countByAmount'] === true,
+      amountSaid: quantity !== undefined,
     });
   }
   return items;
@@ -1720,11 +1770,19 @@ function foldDuplicates(items: UpsertItem[]): UpsertItem[] {
  * a `set` with no number leaves what is held.
  */
 function foldItem(held: UpsertItem, item: UpsertItem): UpsertItem {
+  // Asked once for a line by weight is asked for the line (2026-11-18).
+  const countByAmount = held.countByAmount || item.countByAmount;
   if (item.mode === 'set') {
-    return item.quantity !== undefined ? { ...item } : held;
+    return item.quantity !== undefined
+      ? { ...item, countByAmount }
+      : { ...held, countByAmount };
   }
   if (held.mode === 'set' && held.quantity !== undefined) {
-    return { ...held, quantity: held.quantity + (item.quantity ?? 1) };
+    return {
+      ...held,
+      quantity: held.quantity + (item.quantity ?? 1),
+      countByAmount,
+    };
   }
   return {
     product: held.product,
@@ -1733,6 +1791,8 @@ function foldItem(held: UpsertItem, item: UpsertItem): UpsertItem {
       (held.mode === 'add' ? (held.quantity ?? 1) : 0) + (item.quantity ?? 1),
     unit: held.unit,
     lineId: held.lineId,
+    countByAmount,
+    amountSaid: held.amountSaid || item.amountSaid,
   };
 }
 
@@ -2000,6 +2060,27 @@ function foldsAmount(item: UpsertItem): boolean {
     item.unit !== 'UNIT' &&
     item.quantity !== undefined
   );
+}
+
+/**
+ * The unit a new line is created in when the person asked in words for a line
+ * counted by weight or volume (the owner, 2026-11-18, plan 0260 section 5.1),
+ * or undefined for a line in pieces.
+ *
+ * The flag alone is not enough: it needs the dimension, a weight or volume
+ * `unit`, because "count it by amount" does not say grams or millilitres and
+ * this tool never guesses one. A flag with a number and no unit, or with no
+ * unit at all, is read as no flag.
+ */
+function amountUnitOf(item: UpsertItem): 'GRAM' | 'MILLILITER' | undefined {
+  return item.countByAmount && item.unit !== undefined && item.unit !== 'UNIT'
+    ? item.unit
+    : undefined;
+}
+
+/** A new line by weight or volume whose amount nobody named. */
+function startsAtStep(item: UpsertItem): boolean {
+  return amountUnitOf(item) !== undefined && !item.amountSaid;
 }
 
 /**

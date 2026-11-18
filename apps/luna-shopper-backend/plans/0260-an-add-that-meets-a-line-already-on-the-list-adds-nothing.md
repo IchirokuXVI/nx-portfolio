@@ -591,6 +591,24 @@ prompt and their specs; core, the gateway and the contracts did not change.
   folded into its name, because velista itself creates free text lines in pieces for now.
   Whether the assistant should create one in grams is a question for the owner.
 
+_Note of 2026-11-18 (the owner): a new free text line counts by weight only when asked for in
+words._ The owner answered the last bullet: the assistant creates a new free text line in
+`GRAM` or `MILLILITER` only when the person specifically asked for a line counted by weight or
+volume rather than pieces ("add flour and count it in grams"). Saying a weight ("500 g of
+flour") is not that request, and such an item is written exactly as above: the weight goes into
+the name of a line in pieces. Built in `tools.ts`, the prompt and their specs:
+
+- **The flag.** An `upsert_lines` item takes `countByAmount: true` for that request, described
+  in the tool schema and in the prompt's weight rule. Only a JSON `true` counts.
+- **With the flag and a weight or volume unit,** a new line is created in that unit with the
+  amount in base units and its name left alone. With the unit and no amount, it is created at
+  one step of that unit (`defaultQuantityOf`, 25 g or 25 ml), and the result's `note` tells the
+  model to say so. The flag needs the dimension: with no weight or volume `unit` it is read as
+  no flag, and the line counts pieces, because the tool never guesses grams over millilitres.
+- **It changes nothing else.** An item that meets a line already on the list is written by the
+  rules above and decision 50, whatever the flag says, and so is a product line. The ceiling of
+  `LINE_QUANTITY_MAX` applies to the new line in its unit as above.
+
 ## 6. Who sees what change
 
 - **A typed name already on the list**, wanted: nothing changes on the line; the client shows
