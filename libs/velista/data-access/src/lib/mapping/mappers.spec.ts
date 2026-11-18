@@ -1111,6 +1111,8 @@ describe('toCatalogItem: the size the catalog was always sending', () => {
       size: 0.5,
       unit: 'LITER',
       approxWeight: null,
+      // Absent on this fixture, so it has none (velista `0186`).
+      quantityStep: null,
       productGroupId: 'group-milk',
       // Absent on this fixture, so it has none (velista `0118`).
       categories: [],
@@ -1644,6 +1646,34 @@ describe('a piece whose weight varies (velista 0179, backend 0244)', () => {
   });
 });
 
+describe("toCatalogItem: the product's step (velista 0186, backend 0261)", () => {
+  const loose = {
+    id: 'item-chicken',
+    name: { es: 'Pollo entero', en: 'Whole chicken' },
+    unitSize: null,
+    defaultUnit: 'KILOGRAM',
+  };
+
+  it('reads one of the ten steps', () => {
+    expect(toCatalogItem({ ...loose, quantityStep: 100 })?.quantityStep).toBe(
+      100
+    );
+    expect(toCatalogItem({ ...loose, quantityStep: 5 })?.quantityStep).toBe(5);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['null', null],
+    ['a step off the list', 30],
+    ['a string', '100'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, value) => {
+    expect(
+      toCatalogItem({ ...loose, quantityStep: value })?.quantityStep
+    ).toBeNull();
+  });
+});
+
 describe('toProductOffer: the comparable pair (backend 0245)', () => {
   const wire = {
     price: 0.99,
@@ -1842,6 +1872,57 @@ describe('toItemLists', () => {
       ],
       hasMore: false,
     });
+  });
+
+  it('takes the unit of a weight line from the answer, which the server names (velista 0187)', () => {
+    // The answer the product page reads for a list the app never loaded. The
+    // contract names each line's unit, so the mapper never has to guess pieces
+    // for a line that counts grams.
+    const wire = {
+      lists: [
+        {
+          ...SUNDAY,
+          lines: [
+            {
+              id: 'ln-ham',
+              content: 'Jamón cocido',
+              quantity: 1600,
+              unit: 'GRAM',
+              approvalStatus: 'APPROVED',
+            },
+          ],
+        },
+      ],
+      hasMore: false,
+    };
+    expect(
+      validateSchema(LIST_SCHEMA_IDS.listsWithItemLinesResult, wire).valid
+    ).toBe(true);
+    // A line with no unit is not the answer the server gives.
+    const unnamed = {
+      ...wire,
+      lists: [
+        {
+          ...SUNDAY,
+          lines: [{ ...wire.lists[0].lines[0], unit: undefined }],
+        },
+      ],
+    };
+    expect(
+      validateSchema(LIST_SCHEMA_IDS.listsWithItemLinesResult, unnamed).valid
+    ).toBe(false);
+
+    expect(toItemLists(wire, 'item-ham').lines).toEqual([
+      {
+        lineId: 'ln-ham',
+        listId: 'list-sunday',
+        name: 'Jamón cocido',
+        quantity: 1600,
+        unit: 'GRAM',
+        pending: false,
+        itemIds: ['item-ham'],
+      },
+    ]);
   });
 
   it('drops a permission it does not know, alone', () => {

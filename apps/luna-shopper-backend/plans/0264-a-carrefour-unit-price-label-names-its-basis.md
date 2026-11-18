@@ -1,3 +1,5 @@
+> **PR:** [#974](https://github.com/IchirokuXVI/nx-portfolio/pull/974)
+
 # 0264: a Carrefour unit price label names its basis, and a wash names none
 
 > Found during the all chain scheduled harvest of 2026-11-06 on Luna slot 4, and checked
@@ -31,9 +33,9 @@
 
 Make `unitBasisOf` name a basis for the three labels Carrefour builds, `€/kg`, `€/l` and
 `€/ud`, so that a Carrefour offer carries a `unitBasis`. Remove the keys `lv` and `lavado`
-from `UNIT_BASIS_BY_LABEL`, so that no label names the basis `WASH`. Then remove the value
-`WASH` from the contract and from every reader that section 2 lists, and regenerate the two
-generated files. Change no stored value.
+from `UNIT_BASIS_BY_LABEL`, so that no label names the basis `WASH`, and remove the value
+`WASH` itself from the contract and from every reader of it that section 2 lists (D4). Then
+regenerate the two generated files. Change no stored value.
 
 ### Context
 
@@ -43,12 +45,13 @@ generated files. Change no stored value.
   does not map the plural `lavados`, which thus answers null today. The comment of the table
   (near lines 17 to 20) says that `lv` on liquid detergent sits on a price per litre.
 - `'WASH'` is the last value of `UNIT_BASES` (`catalog.messages.ts`, near lines 1149 to 1157),
-  and the type `UnitBasis` is read from that array. Section 2 lists every place that holds it.
+  and the type `UnitBasis` is read from that array. This plan removes the value (D4). Section 2
+  lists every place that holds it.
 - **A basis is never stored.** Every reader derives it on read from the verbatim label:
   `catalog.mappers.ts` (near lines 409, 453 and 478), `item.service.ts` (near line 4434) and
-  `price-history.service.ts` (near line 131) in catalog, and `harvest.mappers.ts` (near line
-  346) in the harvester. No entity, migration, Postgres enum type or check constraint names a
-  unit basis or `WASH`. The stored labels `lv`, `lavado`, `lavados` and `€/lavado` stay
+  `price-history.service.ts` (near line 131) in catalog, and `harvest.mappers.ts` (near
+  line 346) in the harvester. No entity, migration, Postgres enum type or check constraint
+  names a unit basis or `WASH`. The stored labels `lv`, `lavado`, `lavados` and `€/lavado` stay
   verbatim, as plan `0157` requires.
 - `unitPriceLabel` (`carrefour/src/lib/price.ts`, near line 54) answers `€/${unit}` for a
   card that states a `measure_unit`. `readCard` (`listing.ts`, near line 455) calls it.
@@ -81,7 +84,7 @@ generated files. Change no stored value.
   figures are the price of one wash, for example a pack of tablets (rule 1 of the same
   comment). Those rows lose their basis.
 - **Old clients.** velista reads the basis with `oneOfOrNull(bestOffer['unitBasis'],
-  PRICE_UNIT_BASES)` (`libs/velista/data-access/src/lib/mapping/catalog-browse-mappers.ts`,
+PRICE_UNIT_BASES)` (`libs/velista/data-access/src/lib/mapping/catalog-browse-mappers.ts`,
   near line 74, and `mappers.ts`, near line 744). A value it does not know, and no value, read
   as null. The back office reads the basis as `unknown` and falls back to the label. No
   request body carries a basis. Section 3 states what this means for an installed client.
@@ -93,41 +96,62 @@ generated files. Change no stored value.
 2. `unitBasisOf('lv')`, `unitBasisOf('lavado')` and `unitBasisOf('€/lavado')` are null. No
    label answers a wash.
 3. Every other label answers what it answers today.
-4. `UNIT_BASES` is `['KILOGRAM', 'LITER', 'UNIT', 'DOZEN']`. No file of the workspace that
-   section 2 lists names the value `WASH`.
-5. `openapi.json` and `wire-types.ts` are regenerated, and their six enums no longer list
+4. The PR lists every reader of the wash basis (section 2).
+5. `UNIT_BASES` is `['KILOGRAM', 'LITER', 'UNIT', 'DOZEN']`. No contract, document or client
+   names the value `WASH` (D4). A client that receives it from an older backend reads it as no
+   basis and does not fail.
+6. `openapi.json` and `wire-types.ts` are regenerated, and their six enums no longer list
    `WASH`.
-6. No stored row changes. No migration and no release task is added.
+7. No stored row changes. No migration and no release task is added.
 
 ### Scope
 
-Every file of section 2 marked "change", the specs beside them, the fixture proof spec in
-`libs/luna-shopper/carrefour`, and the two generated files, written only by their generators.
-Nothing in the Carrefour adapter (D1). Not in scope: the Mercadona normalizer, the size words
-of section 2.3 (D5), the leaflet tool's own `wash` token, and any stored label.
+`libs/luna-shopper/contracts/src/lib/units/unit-basis.ts` and
+`apps/luna-shopper-backend/catalog/src/app/catalog/unit-basis.spec.ts`, and the fixture proof
+spec in `libs/luna-shopper/carrefour`. For D4: every file of section 2 marked "change" and the
+specs beside them. That is the value `'WASH'` of `UNIT_BASES` and the type `UnitBasis`
+(`catalog.messages.ts`, and the schemas that read the array), `openapi.json` and
+`wire-types.ts` (regenerated, never edited), velista (`PriceUnitBasis`, `PRICE_UNIT_BASES`, the
+mappers and the `WASH` keys of `en.json` and `es.json`), the back office (`WASH: 'wash'` in
+`money.ts`), and each other reader that section 2 finds. Nothing in the Carrefour adapter (D1)
+and nothing in the Mercadona normalizer. Not in scope either: the size words of section 2.3
+(D5), the leaflet tool's own `wash` token, and any stored label.
 
 ### Constraints
 
 - The table names a basis only for a label whose figure is per that unit. Before you change
-  the table, prove it with every `kg`, `l` and `ud` card of the Carrefour fixtures: price
-  divided by the size the name prints must equal `price_per_unit` within one cent. If one
-  fixture disagrees, stop and report it.
+  the table, prove it with the Carrefour fixtures. **The proof tests the basis, not the
+  cent** (owner, 2026-11-11). For each priced card whose `measure_unit` is `kg`, `l` or `ud`,
+  price divided by `price_per_unit` must be within 10% of the size the name prints, read
+  with the adapter's own `splitCardName`. A wrong basis is off by a factor of 10, 100 or the
+  pack count, so it still fails. A card whose name gives no size in the family of its
+  `measure_unit` is left out by that rule, and never by product id or name: no card is named
+  as an exception. The spec asserts how many cards it measured, so the rule cannot silently
+  skip all of them. The PR states how many cards agree to the cent. If a card fails the 10%
+  rule, stop and report it.
 - `bulk_price`, `unitPrice` and `unitPriceLabel` stay verbatim. The fix is on read only.
 - The reader removes a leading `€/` (with optional spaces around the slash) and nothing more.
   A label it does not know after that still answers null, never a guess.
 - A wash is not a unit of measure (D2). No label maps to a basis for a wash, and no new wash key
   is added in any spelling.
 - `unitBasisOf` stays browser reachable. It names no `process`.
-- Never edit `openapi.json` or `wire-types.ts` by hand. Write them with
+- `UNIT_BASES` and the type `UnitBasis` lose the value `'WASH'` and nothing else (D4). Never
+  edit `openapi.json` or `wire-types.ts` by hand. Write them with
   `npx nx run luna-shopper-backend-gateway:openapi` and then
   `npx nx run luna-shopper-admin/models:wire-types`, and commit both. The only change the
   regeneration may make is the removal of `WASH` from the six enums of section 2.1. If it
   writes any other diff, stop and report it.
+- The basis is derived on read from the stored label. No stored column, migration, seed,
+  database enum type or fixture row may hold the value `WASH`. If one does, stop and report it
+  before you touch it: no migration rewrites rows (section 3).
+- A velista client that is already installed must not break. Its mapper reads an unknown
+  basis from `unknown` as no basis, never as a throw.
 - Build in the order of section 4, so that no commit leaves the workspace red.
 - Never edit an old migration. The comment in migration `1756100000000` stays as it is.
 
 ### Action boundaries
 
+- Before you remove the value, write the list of section 2 for the PR.
 - Stop and ask before you change a stored label, add a migration or add a release task.
   Section 3 says why none is needed.
 - Stop and ask before you change the Carrefour adapter or the Mercadona normalizer.
@@ -195,8 +219,8 @@ the reason is given.
 
 ### 2.2 The clients
 
-- Change: velista, `libs/velista/models/src/lib/catalog-browse.ts`. `PriceUnitBasis` (near line
-  96) and `PRICE_UNIT_BASES` (near lines 98 to 104) lose `'WASH'`. The comment of
+- Change: velista, `libs/velista/models/src/lib/catalog-browse.ts`. `PriceUnitBasis` (near
+  line 96) and `PRICE_UNIT_BASES` (near lines 98 to 104) lose `'WASH'`. The comment of
   `ComparableBasis` (near line 108) names "`DOZEN` or `WASH`" and names `DOZEN` only after
   this plan.
 - Change: velista, the key `catalog.per.WASH` in `libs/velista/ui/assets/i18n/en.json` ("/
@@ -217,9 +241,9 @@ the reason is given.
 - `washedLabel` of plan `0189` (`mercadona/src/lib/normalize.ts`, near lines 347 to 449). It
   does not read the basis: it writes the label `L` or `kg` in place of `lv` on the way in. The
   fixture `product-detergent-per-wash.json` holds the label `lv` verbatim.
-- The leaflet tool. `build-document.mjs` (`libs/luna-shopper/tools/leaflet/cli/src`, near line
-  68) reads a printed `LAVADO` into its own token `wash`, and `to-harvest-document.mjs` (near
-  line 111) writes that token as the label when the tile printed no other text. It is a label,
+- The leaflet tool. `build-document.mjs` (`libs/luna-shopper/tools/leaflet/cli/src`, near
+  line 68) reads a printed `LAVADO` into its own token `wash`, and `to-harvest-document.mjs`
+  (near line 111) writes that token as the label when the tile printed no other text. It is a label,
   not the value `WASH`, and `unitBasisOf('wash')` already answers null. The prompts of DIA,
   DEZA and LIDL name `€/lavado` or `por lavado` as printed text.
 - The harvest document schemas (`harvest-document.ts` near line 39,
@@ -231,7 +255,7 @@ the reason is given.
   (`libs/luna-shopper/contracts/src/lib/units/source-size.ts`, near lines 84 and 85), and to a
   unit in the size readers of Carrefour (`listing.ts`, near lines 77 and 78), DIA (`size.ts`,
   near line 76), El Jamón (`size.ts`, near line 70) and DEZA (`size.ts`, near lines 74 and 75).
-  This is a size and not a unit basis, so this plan does not change it. D5 asks the owner.
+  This is a size and not a unit basis, so this plan does not change it. Plan `0270` does (D5).
 - The curation tool. `rules.mjs` has its own `UNIT_BASES` (near line 284), a table of size units
   with no wash. No fixture and no seed of the workspace names the value `WASH`.
 
@@ -277,7 +301,7 @@ One PR, in commits in this order. Each commit is green on its own.
 4. The regenerations: `npx nx run luna-shopper-backend-gateway:openapi`, then
    `npx nx run luna-shopper-admin/models:wire-types`. Commit both outputs.
 5. `npx nx affected -t lint test`, and `npx nx build velista` and `npx nx build
-   luna-shopper-admin`, because the PR checks build neither app.
+luna-shopper-admin`, because the PR checks build neither app.
 
 ## Tests
 
@@ -286,7 +310,7 @@ One PR, in commits in this order. Each commit is green on its own.
 - `unit-basis.spec.ts`: the row `['lv', 72, 'WASH']` of the first table (near line 20) becomes
   `['lv', 72, null]`, and the row `['lavado', 'WASH']` of the second table (near line 36) moves
   to a test of labels that answer null. `lv` leaves the list of `only ever answers a basis the
-  contract names` (near line 56). A new test: `lv`, `lavado`, `lavados`, `€/lavado` and `LV`
+contract names` (near line 56). A new test: `lv`, `lavado`, `lavados`, `€/lavado` and `LV`
   all answer null.
 - A label `€/` alone answers null.
 - The Carrefour fixture proof as a spec in `libs/luna-shopper/carrefour`, so that a later
@@ -302,12 +326,14 @@ One PR, in commits in this order. Each commit is green on its own.
 - [ ] The three Carrefour labels name a basis, and `€/m` names none.
 - [ ] No label answers a wash, and `UNIT_BASES` holds four values.
 - [ ] Every other label of the existing table answers what it answered before.
-- [ ] No file that section 2 marks "change" names `WASH`, and the PR lists section 2 with the
-      lines on the branch.
-- [ ] `openapi.json` and `wire-types.ts` are regenerated, and their only change is `WASH` out
-      of six enums each.
+- [ ] The PR lists every reader of the wash basis, as section 2 with the lines on the branch.
 - [ ] No stored row changes, and no migration or release task is added.
-- [ ] The fixture proof passes for every `kg`, `l` and `ud` card.
+- [ ] `WASH` is gone from `UNIT_BASES`, `openapi.json`, `wire-types.ts`, velista and the back
+      office, and from every file that section 2 marks "change". The two generated files
+      differ only by that value, out of six enums each.
+- [ ] velista and the back office read a `WASH` from an older backend as no basis.
+- [ ] Every priced `kg`, `l` and `ud` card whose name gives a size in its family is within
+      10% of that size, and the spec asserts how many cards it measured.
 - [ ] `npx nx build velista` and `npx nx build luna-shopper-admin` build.
 
 ## Verification
@@ -318,12 +344,15 @@ npx nx test luna-shopper-backend-catalog -t "unitBasisOf"
 npx nx test luna-shopper/carrefour
 npx nx run luna-shopper-backend-gateway:openapi
 npx nx run luna-shopper-admin/models:wire-types
-npx nx test luna-shopper-backend-gateway -t "openapi"
+git diff apps/luna-shopper-backend/gateway/docs/openapi.json libs/luna-shopper-admin/models/src/lib/wire/wire-types.ts
+npx nx test luna-shopper-backend-gateway
 npx nx test luna-shopper-admin/models
 npx nx build velista
 npx nx build luna-shopper-admin
 npx nx affected -t lint test
 ```
+
+The diff of the two generated files removes `WASH` and nothing else.
 
 Then one Carrefour product on a Luna slot, as Progress evidence says.
 
@@ -341,14 +370,19 @@ it is a bad basis to compare prices on. This plan thus also removes the existing
 `size-check.ts` is a plan of its own. The two tables answer different questions (a basis, and
 an amount the figure is per), so only the key rule is shared.
 
-**D4 (owner, answered 2026-11-11):** the value `WASH` is removed in this plan, not in a later
-one, for the reasons of D2. Section 2 lists every place it lives, and section 4 orders the
-work.
+**D4 (owner, answered 2026-11-11): removed in this plan**, not in a later one, for the reasons
+of D2. The value `WASH` leaves `UNIT_BASES`, the OpenAPI document, `wire-types.ts`, velista and
+the back office, together with every other reader that section 2 finds. The PR writes the list
+of section 2 first, and section 4 orders the work. The change removes a value from the wire,
+and a client that still receives it from an older backend reads it as no basis.
 
-**D5. A wash count as a size. Open.** Section 2.3 shows that `lavado` and `lavados` are read as
-a count of units when a chain prints them as a size, in the contracts and in the size readers
-of Carrefour, DIA, El Jamón and DEZA. A detergent of "40 lavados" thus has 40 units, and its
-`comparablePrice` (plan `0245`) is a price per wash under the word "per unit". That is the
+**D5 (owner, answered 2026-11-16): a later plan, and a wash is no size.** Plan `0270`, which
+PR #1007 builds, takes `lavado` and `lavados` out of the size words of section 2.3. This plan
+leaves them as they are. The question as it was asked follows.
+
+Section 2.3 shows that `lavado` and `lavados` are read as a count of units when a chain prints
+them as a size, in the contracts and in the size readers of Carrefour, DIA, El Jamón and
+DEZA. A detergent of "40 lavados" thus has 40 units, and its `comparablePrice` (plan `0245`) is a price per wash under the word "per unit". That is the
 comparison D2 calls a bad basis. A change there writes new sizes on the next harvest of each
 chain, and it touches the size check of plan `0249` and the four framework free libraries.
 

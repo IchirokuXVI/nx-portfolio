@@ -21,6 +21,13 @@ export interface HeldLine {
   readonly pending: boolean;
   /** The products the catalog knows this line holds. */
   readonly itemIds: readonly string[];
+  /**
+   * The step its steppers press by, `lineStepOf` over the products this session
+   * read (velista `0186`): a number, or null once every product of the line has
+   * answered and none carries a step, which is the unit's default. Absent while
+   * that is not known yet, so a screen may step by a product it holds meanwhile.
+   */
+  readonly step?: number | null;
 }
 
 /** One list the person can read, with what they may do on it. */
@@ -95,6 +102,12 @@ export interface HoldingRow {
   /** Whether the person may move its quantity. */
   readonly editable: boolean;
   readonly pending: boolean;
+  /**
+   * The step its stepper presses by, `lineStepOf` of the line (velista `0186`):
+   * as {@link HeldLine.step}, null for the unit's default and absent while not
+   * known.
+   */
+  readonly step?: number | null;
 }
 
 /**
@@ -120,6 +133,7 @@ export function holdingRows(
       editable:
         !isUnsavedLine(line.lineId) && canStepLine(permissions, line.pending),
       pending: line.pending,
+      ...(line.step === undefined ? {} : { step: line.step }),
     }));
 }
 

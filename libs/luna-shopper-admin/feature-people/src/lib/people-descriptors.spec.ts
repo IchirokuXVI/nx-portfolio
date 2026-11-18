@@ -16,6 +16,7 @@ import {
   recordTabs,
   toInput,
   toRowView,
+  validateDraft,
   type AnyResourceDescriptor,
   type ResourceGateway,
   type ResourceRow,
@@ -990,6 +991,21 @@ describe('the list line descriptor', () => {
       .map((field) => field.name);
 
     expect(editable).toEqual(['content', 'quantity', 'unit']);
+  });
+
+  it('takes a quantity of 99 999 and refuses 100 000 (backend plan 0262, 2026-11-17)', () => {
+    const original = draftFor(
+      LIST_LINES,
+      LIST_LINE_SEED[0] as ResourceRow,
+      'edit'
+    );
+    const problems = (quantity: string) =>
+      validateDraft(LIST_LINES, { ...original, quantity }, 'edit', original);
+
+    expect(problems('99999')).toEqual({});
+    expect(problems('100000').quantity).toEqual([
+      expect.objectContaining({ key: 'resource.error.tooLarge' }),
+    ]);
   });
 
   it('addresses a row by the pair of list and line', () => {

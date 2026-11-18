@@ -1,5 +1,6 @@
 import { CdkOverlayOrigin } from '@angular/cdk/overlay';
 import {
+  afterNextRender,
   afterRenderEffect,
   ChangeDetectionStrategy,
   Component,
@@ -8,6 +9,7 @@ import {
   effect,
   type ElementRef,
   inject,
+  Injector,
   signal,
   untracked,
   viewChild,
@@ -23,6 +25,7 @@ import {
   BasketListStore,
   BasketStore,
   BasketViewStore,
+  GatewayError,
   GroupMembers,
   ItemNames,
   keepsShopMap,
@@ -30,12 +33,14 @@ import {
   ShopDetailStore,
   ShopSectionsStore,
   toAddChoice,
+  toAddUnitRefusal,
 } from '@portfolio/velista/data-access';
 import {
   type AddChoice,
   addChoiceName,
   addChoiceRows,
   type AddLineOptions,
+  addUnitRefusalKey,
   APP_BASE_PATH,
   type BasketParticipant,
   type BasketProduct,
@@ -43,7 +48,6 @@ import {
   type BasketRow as BasketRowModel,
   basketRowPick,
   basketRowProduct,
-  type BasketViewRow,
   type BasketViewSection,
   type BasketViewState,
   catalogName,
@@ -66,9 +70,11 @@ import {
   ColumnScroll,
   formatAmount,
   ListSearchNavigation,
-  NavChrome,
   PageReturn,
   productPagePath,
+  type QuantityRun,
+  quantityRuns,
+  rowInView,
   searchOpenOf,
   sheetSegments,
   shopMapPath,
@@ -78,12 +84,13 @@ import {
 import {
   AnchoredPopover,
   type AnchoredPopoverClose,
+  type AnchoredPopoverSide,
   BasketIcon,
-  BasketTotalBar,
   BasketTotalNumber,
   ChangesBanner,
   ChipRow,
   type ChipRowItem,
+  DragReleasesField,
   EllipsisIcon,
   InfoIcon,
   LineComposer,
@@ -110,10 +117,10 @@ import { basketErrorKey, type BasketOperation } from '../basket-error-copy';
 import {
   basketRowName,
   listPickerRows,
-  outstandingCaption,
   participantInitials,
   visitTime,
 } from '../basket-labels';
+import { basketLineStep, unreadLineProducts } from '../basket-line-step';
 import { basketDoors, basketMenuEntries, hasFinishSheet } from '../basket-menu';
 import { basketPath, SHOP_ASK_SEGMENTS } from '../basket-paths';
 import { BasketRow, ownBoughtUnits } from '../basket-row/basket-row';
@@ -135,6 +142,13 @@ import { SeenTarget } from './seen-target';
  * with weeks left on it.
  */
 const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * How long the polite region stays empty before a sentence it already holds is said
+ * again, as on the list page. Long enough for a screen reader to see the region
+ * change, short enough to read as the answer to the press.
+ */
+const REPEAT_SAY_GAP_MS = 150;
 
 /**
  * What the basket showed when somebody left it for another page, handed back when
@@ -212,11 +226,11 @@ function basketReturnKey(live: boolean, id: string): string {
     AnchoredPopover,
     BasketIcon,
     BasketRow,
-    BasketTotalBar,
     BasketTotalNumber,
     CdkOverlayOrigin,
     ChangesBanner,
     ChipRow,
+    DragReleasesField,
     EllipsisIcon,
     SeenTarget,
     InfoIcon,
@@ -499,7 +513,7 @@ export class BasketPage {
    * likely reason to open one is to see what was bought, so every line, every
    * settlement, the people, the history, the share sheet and the link are all still
    * here. What goes is everything that would change it, absent rather than disabled
-   * per `0030`: the settle control on a row, the reel, the composer, the product
+   * per `0030`: the settle control on a row, the amount cell, the composer, the product
    * swap, the units sheet and the send sheet.
    */
   protected readonly finished = this._store.finished;
@@ -1092,8 +1106,6 @@ export class BasketPage {
 
     inject(DestroyRef).onDestroy(() => {
       followed.unsubscribe();
-      // The bar comes back with whatever screen is next (velista `0117`).
-      this._chrome.setComposing(false);
       // What a return to this basket comes back to, taken before the stores let go.
       this._returns.keep<BasketPageReturn>(
         basketReturnKey(this._live, this._id),
@@ -1108,6 +1120,7 @@ export class BasketPage {
       if (this._tookTimer !== null) {
         clearTimeout(this._tookTimer);
       }
+      this._cancelSay();
     });
   }
 
@@ -1157,7 +1170,7 @@ export class BasketPage {
     this._reopenFailed.set(false);
     this._statusBusy.set(false);
     this._notice.set(null);
-    this.outstandingSaid.set('');
+    this._say('');
     this.uncoveredInfoOpen.set(false);
 
     // The words in the field were a search of the old basket's rows and a question
@@ -1220,6 +1233,28 @@ export class BasketPage {
     const scope = this._groupScope();
     if (groupIds.length > 0 && this._store.me()?.kind !== 'GUEST') {
       untracked(() => void this._groupMembers.ensure(groupIds, scope));
+    }
+  });
+
+  /**
+   * The products of the basket's lines that the read did not name, read once each
+   * into `ItemNames`, so a line of several products steps here by its own step
+   * (velista `0186`, decision A; the owner, 2026-11-12). Its settle sheet sits
+   * over this page and reads the same records. Not for a guest, for the reason
+   * above.
+   */
+  private readonly _lineProductIds = computed(
+    () => unreadLineProducts(this._store.rows(), this._store.products()),
+    {
+      equal: (a, b) =>
+        a.length === b.length && a.every((itemId, i) => itemId === b[i]),
+    }
+  );
+
+  private readonly _loadLineProducts = effect(() => {
+    const itemIds = this._lineProductIds();
+    if (itemIds.length > 0 && this._store.me()?.kind !== 'GUEST') {
+      untracked(() => void this._itemNames.ensure(itemIds));
     }
   });
 
@@ -1414,72 +1449,6 @@ export class BasketPage {
   }
 
   /**
-   * The row's reel was let go: one call, whichever direction it went (plan 0054).
-   *
-   * **The client never decides whether the drag was a purchase or a take back.**
-   * `BasketStore.setLeft` turns the pair of numbers into a settle or a revert, and it
-   * is the one place that decision lives, so the row, the entries pane and this
-   * cannot disagree. What this page owns is the sentence a refusal leaves behind.
-   *
-   * Under a list heading the row is drawn for one entry, and moving its reel is
-   * still a write on the **row**: the units it settles are allocated to that
-   * household through `allocations`, which is velista `0092`'s to draw from the
-   * entries pane. Until then the reel under a heading commits against the row and
-   * the server divides oldest entry first, which is what it did before a heading
-   * existed.
-   */
-  protected setRowLeft(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): void {
-    // Only the settling direction is a buy. Taking units back names no shop, so
-    // it never asks (velista `0141`).
-    if (change.to < change.from) {
-      this._buy(() => this._writeRowLeft(row, change));
-      return;
-    }
-    void this._writeRowLeft(row, change);
-  }
-
-  private async _writeRowLeft(
-    row: BasketViewRow,
-    change: { from: number; to: number }
-  ): Promise<void> {
-    // Whatever the last move of any row came to, gone before this one starts: one
-    // sentence at a time across the whole basket, and a stale refusal sitting under
-    // a row somebody has since moved again would be a lie about the present.
-    this._notice.set(null);
-
-    const result = await this._store.setLeft(
-      row.row.rowKey,
-      change.to,
-      change.from,
-      this._settleAt(row.row)
-    );
-
-    if (result === null) {
-      this._reportLeft(row.row);
-      return;
-    }
-
-    // The same sentence the caption showed under the thumb, so a reader who could
-    // not see it still learns which of the two happened (section 7).
-    this._say(
-      outstandingCaption(
-        change.from,
-        change.to,
-        this._translator,
-        this._locale(),
-        row.row.unit
-      ) ?? ''
-    );
-
-    if (result.skippedCount > 0) {
-      this.openRow(row.row);
-    }
-  }
-
-  /**
    * A section's count as the heading draws it, or empty where it has none.
    *
    * "1 of 3 got", in the same words and from the same function as the sentence in
@@ -1547,33 +1516,11 @@ export class BasketPage {
   }
 
   /**
-   * Say what went wrong, once, on the row it went wrong on.
-   *
-   * The count is read back off the store rather than off the row this was called
-   * with, and that is the whole of the stale answer: `BasketStore.setLeft`
-   * refetches before it returns null, so by now the row's number is the true one and
-   * "it says 3 now" is a sentence worth saying. Every other failure gets its own
-   * sentence the same way, because a failure with no sentence is the defect
-   * `basket-error-copy.ts` exists to close (plan 0052, section 7).
-   */
-  private _reportLeft(row: BasketRowModel): void {
-    const key = basketErrorKey(this._store.error(), 'basket.outstanding');
-    // Found again rather than trusted: a `stale_quantity` refetch can land a
-    // re-keyed row, and the number to report is that row's as it now stands.
-    const found = this._store.rowFor(row.rowKey);
-    const count = (found ?? row).left;
-
-    // On the row as it now stands, so a re-keyed row draws it (velista `0141`).
-    this._notice.set({ rowKey: (found ?? row).rowKey, key, count });
-    this._say(this._translator.t(key, undefined, this._locale(), { count }));
-  }
-
-  /**
    * Say that a held buy was refused, on its row (velista `0141`).
    *
    * The settle sheet drew this sentence before the hold. A held buy outlives the
    * sheet, which the question replaced, so the row says it instead, as it does for
-   * a refused reel. The row is found again by the key of the press, because a
+   * a refused circle. The row is found again by the key of the press, because a
    * patch can have re-keyed it while the question was open.
    */
   private _reportSettle(
@@ -1590,8 +1537,34 @@ export class BasketPage {
     this._say(this._translator.t(key, undefined, this._locale(), { count }));
   }
 
+  /** A repeated sentence waiting for its gap, which any newer message drops. */
+  private _sayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The one writer of the basket's polite region. The same sentence a second time is
+   * no change a screen reader hears, so the region is emptied now and filled again
+   * after a short gap, as on the list page (velista `0192`). A newer message, the page
+   * going away or another basket opening drops a sentence still waiting.
+   */
   private _say(sentence: string): void {
-    this.outstandingSaid.set(sentence);
+    this._cancelSay();
+    const repeat = sentence !== '' && this.outstandingSaid() === sentence;
+    if (!repeat) {
+      this.outstandingSaid.set(sentence);
+      return;
+    }
+    this.outstandingSaid.set('');
+    this._sayTimer = setTimeout(() => {
+      this._sayTimer = null;
+      this.outstandingSaid.set(sentence);
+    }, REPEAT_SAY_GAP_MS);
+  }
+
+  private _cancelSay(): void {
+    if (this._sayTimer !== null) {
+      clearTimeout(this._sayTimer);
+      this._sayTimer = null;
+    }
   }
 
   /**
@@ -1752,7 +1725,6 @@ export class BasketPage {
   // --- One field finds and adds (velista 0117) -------------------------------
 
   private readonly _search = inject(ListSearchNavigation);
-  private readonly _chrome = inject(NavChrome);
 
   /**
    * Whether `?search=1` is on the URL (velista `0109`).
@@ -1804,22 +1776,14 @@ export class BasketPage {
   /** The id of the results region, which the field names in `aria-controls`. */
   protected readonly resultsId = 'basket-results';
 
-  /** Whether the composer's field has focus. */
-  private readonly _fieldFocused = signal(false);
-
-  /** The composer's field gained or lost focus. */
-  protected onFieldFocused(focused: boolean): void {
-    this._fieldFocused.set(focused);
-  }
-
   /**
-   * The bar gives the page its room while the field has focus or holds words (rule
-   * F3), so the results reach from the basket's bar to the composer.
+   * The first touch or pen drag of the column takes the focus off the field, so a
+   * phone puts its keyboard away (velista `0189`, section 4). The words, the results
+   * and `?search=1` stay, and a field without focus is left alone.
    */
-  private readonly _hideChrome = effect(() => {
-    const composing = this._fieldFocused() || this.typing();
-    untracked(() => this._chrome.setComposing(composing));
-  });
+  protected releaseField(): void {
+    this._composer()?.releaseFocus();
+  }
 
   private readonly _column = viewChild<ElementRef<HTMLElement>>('column');
 
@@ -1827,12 +1791,10 @@ export class BasketPage {
   private _resultsDrawn = false;
 
   /**
-   * When the results first appear, the column goes back to its top, so they sit
-   * under the basket's bar however far down the basket somebody was.
-   *
-   * Not further, unlike the zone list: the basket's bar is inside this column
-   * rather than above it, so scrolling the heading to the top would take the bar
-   * off the screen, and the bar stays while typing.
+   * When the results first appear, the column goes back to its top, so they start
+   * under the field however far down the basket somebody was. The tools row and the
+   * field are pinned above this column (velista `0189`), so the top of the column is
+   * the top of what moves, as on the zone list.
    *
    * Not on a return to the basket: the results were already on screen when
    * somebody left, and the place they were reading in is what {@link _scroll} puts
@@ -2194,6 +2156,15 @@ export class BasketPage {
    */
   protected readonly pickerAnchor = signal<HTMLElement | null>(null);
 
+  /**
+   * Which side of its anchor the picker opens on (velista `0189`). Below the
+   * composer's plus, which sits at the top of the page, where above it would cover the
+   * tools row; above a card's add button in the results, as before.
+   */
+  protected readonly pickerSide = computed<AnchoredPopoverSide>(() =>
+    this.pickerAnchor()?.closest('.composer-dock') ? 'below' : 'above'
+  );
+
   /** The line the open picker is asking about, as the composer sent it. */
   private _waiting: LineComposerSubmit | null = null;
 
@@ -2208,6 +2179,12 @@ export class BasketPage {
     readonly listId: string;
     readonly listName: string | null;
     readonly entry: LineComposerSubmit;
+    /**
+     * The words in the field when the list was picked. For a card they are the
+     * search that found it, not the card's name, which is `entry.content`: the
+     * field goes back to them, and the typeahead stays open on them.
+     */
+    readonly words: string;
     readonly choice: AddChoice;
   } | null>(null);
 
@@ -2225,37 +2202,60 @@ export class BasketPage {
     return {
       name: addChoiceName(asked.choice, asked.entry.content),
       listName: asked.listName,
-      added: asked.entry.quantity,
-      rows: addChoiceRows(
-        asked.choice,
-        asked.entry.quantity,
-        {
-          itemOf: (itemId) => this._itemNames.nameOf(itemId),
-          // The basket holds no favourite, so a row shows the line's first product.
-          favoriteOf: () => null,
-          locale,
-          brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
-        },
-        asked.entry.unit
-      ),
+      // For typed words alone (the owner's ruling of 2026-11-16).
+      offerNewLine: (asked.entry.itemIds ?? []).length === 0,
+      rows: addChoiceRows(asked.choice, {
+        itemOf: (itemId) => this._itemNames.nameOf(itemId),
+        // The basket holds no favourite, so a row shows the line's first product.
+        favoriteOf: () => null,
+        locale,
+        brandSizeOf: (item) => productBrandSizeText(item, locale, translate),
+      }),
     };
   });
 
   /**
-   * The line a basket add just raised, whose row's quantity carries the amber edge
-   * for {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   * The lines a basket add just raised or met, whose rows' quantity carries the
+   * amber edge for {@link TOOK_DURATION_MS} (velista `0170`, target 4; velista
+   * `0185`, decision E).
    */
-  protected readonly tookLine = signal<string | null>(null);
+  protected readonly tookLines = signal<ReadonlySet<string>>(new Set());
 
   private _tookTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Whether a row holds the line an add just raised. */
+  /** Whether a row holds a line an add just raised or met. */
   protected tookIn(row: BasketRowModel): boolean {
-    const lineId = this.tookLine();
-    return (
-      lineId !== null && row.entries.some((held) => held.lineId === lineId)
-    );
+    const took = this.tookLines();
+    return took.size > 0 && row.entries.some((held) => took.has(held.lineId));
   }
+
+  /**
+   * The lines a drawn row stands for, space separated, so a page that names a line
+   * finds its row (velista `0185`, section 3.2): the entry of a row under a list
+   * heading, every entry of a row everywhere else.
+   */
+  protected lineIdsOf(drawn: {
+    readonly row: BasketRowModel;
+    readonly entry: { readonly lineId: string } | null;
+  }): string {
+    return drawn.entry === null
+      ? drawn.row.entries.map((held) => held.lineId).join(' ')
+      : drawn.entry.lineId;
+  }
+
+  /**
+   * One sentence under the composer's row, or null (velista `0185`): a line an add
+   * met that no drawn row shows, or why a product could not go on in its unit. It
+   * goes on the next words, the next send and its cross.
+   */
+  protected readonly composerNotice = signal<string | null>(null);
+
+  /** The cross of the composer's sentence. */
+  protected dismissNotice(): void {
+    this.composerNotice.set(null);
+  }
+
+  private readonly _injector = inject(Injector);
 
   /**
    * The plus or a card's add button was pressed, and the answer is a question:
@@ -2267,6 +2267,8 @@ export class BasketPage {
    * away leaves them in the field.
    */
   protected askWhere(entry: LineComposerSubmit): void {
+    // A new send: the sentence about the last one goes (velista `0185`).
+    this.composerNotice.set(null);
     if (entry.anchor === undefined) {
       // The composer here always names the button, because `holdOnSend` is on.
       // This is the belt: a picker with nothing to stand on cannot be drawn.
@@ -2282,20 +2284,11 @@ export class BasketPage {
     if (entry === null || this.adding()) {
       return;
     }
-    if ((entry.itemIds ?? []).length > 0) {
-      // A card's products decide where it lands, so nothing can come back as a
-      // question. Cleared now, as an unheld send is: the add is not optimistic, but
-      // the words go back into the field if it fails (see `_addTo`), and a field
-      // that kept them while the request was out would invite pressing the plus
-      // again.
-      this._closePicker();
-      this._composer()?.sent();
-      await this._addTo(listId, entry);
-      return;
-    }
-    // Typed words can come back as a question about them (velista `0170`), asked in
-    // this same popover, so it stays open and the words stay in the field until the
-    // answer. The plus waits meanwhile, because the add is in flight.
+    // An add can come back as a question about it (velista `0170`), a card's too
+    // since the owner's ruling of 2026-11-16, asked in this same popover. So it stays
+    // open until the answer, and the words stay in the field: clearing them would
+    // close it, because new words are a new line. The plus waits meanwhile, because
+    // the add is in flight.
     await this._addTo(listId, entry, { askIfAmbiguous: true });
   }
 
@@ -2305,27 +2298,46 @@ export class BasketPage {
     if (asked === null || this.adding()) {
       return;
     }
-    await this._addTo(asked.listId, asked.entry, { intoLineId: lineId });
+    await this._addTo(
+      asked.listId,
+      asked.entry,
+      { intoLineId: lineId },
+      asked.words
+    );
   }
 
   /** "A new line" was chosen. */
   protected async chooseNewLine(): Promise<void> {
     const asked = this._choice();
-    if (asked === null || this.adding()) {
+    if (
+      asked === null ||
+      this.adding() ||
+      (asked.entry.itemIds ?? []).length > 0
+    ) {
+      // Offered for typed words alone; the gateway refuses `newLine` beside
+      // products.
       return;
     }
-    await this._addTo(asked.listId, asked.entry, { newLine: true });
+    await this._addTo(
+      asked.listId,
+      asked.entry,
+      { newLine: true },
+      asked.words
+    );
   }
 
   /**
    * Back from the second question to the lists, unchanged. Focus goes back into the
-   * field, where it was while the lists were asked.
+   * field, where it was while the lists were asked, with the words that were typed
+   * there: for a card, the search that found it and never the card's name, which a
+   * plus would then add as typed words with no product. The query is left on those
+   * words, so the typeahead stays open on them as it was before the pick.
    */
   protected backToLists(): void {
     const asked = this._choice();
     this._choice.set(null);
     if (asked !== null) {
-      this._composer()?.restore(asked.entry.content);
+      this._composer()?.restore(asked.words);
     }
   }
 
@@ -2341,6 +2353,15 @@ export class BasketPage {
     this._waiting = null;
     this._choice.set(null);
     this.pickerAnchor.set(null);
+  }
+
+  /** The name of a covered list, as the picker draws it, or nothing. */
+  private _listNameOf(listId: string): string {
+    return (
+      this._store.lists().get(listId)?.name ??
+      this.pickerRows().find((row) => row.listId === listId)?.name ??
+      ''
+    );
   }
 
   /** Whether the composer's field is empty, as a cleared or a sent field is. */
@@ -2389,16 +2410,48 @@ export class BasketPage {
     };
   }
 
-  /** Mark the row of a line an add raised (velista `0170`, target 4). */
-  private _markTook(lineId: string): void {
+  /**
+   * Mark the rows of the lines an add raised or met (velista `0170`, target 4), and
+   * bring the first marked row to the centre when it is out of view, as the zone
+   * list does (velista `0185`). `found` runs after the next render, with whether a
+   * drawn row holds any of them.
+   */
+  private _markTook(
+    lineIds: readonly string[],
+    found?: (drawn: boolean) => void
+  ): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
-    this.tookLine.set(lineId);
+    this.tookLines.set(new Set(lineIds));
     this._tookTimer = setTimeout(() => {
       this._tookTimer = null;
-      this.tookLine.set(null);
+      this.tookLines.set(new Set());
     }, TOOK_DURATION_MS);
+
+    afterNextRender(
+      () => {
+        const column = this._column()?.nativeElement;
+        const rows = Array.from(
+          column?.querySelectorAll<HTMLElement>('[data-line-ids]') ?? []
+        );
+        const row = rows.find((candidate) =>
+          (candidate.dataset['lineIds'] ?? '')
+            .split(' ')
+            .some((lineId) => lineIds.includes(lineId))
+        );
+        if (column === undefined || row === undefined) {
+          found?.(false);
+          return;
+        }
+        if (!rowInView(row, column)) {
+          // Centred and instant: the edge is the news, not the trip.
+          row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
+        }
+        found?.(true);
+      },
+      { injector: this._injector }
+    );
   }
 
   /**
@@ -2438,7 +2491,9 @@ export class BasketPage {
   protected readonly holdingsOf = computed(() => {
     const rows = this._store.rows();
     const lists = this._store.lists();
+    const products = this._store.products();
     const busy = this.busyRows();
+    const names = this._itemNames;
     return (suggestion: CatalogSuggestion): readonly SuggestionHolding[] => {
       if (suggestion.kind !== 'item') {
         return [];
@@ -2454,8 +2509,23 @@ export class BasketPage {
               entry.listId === null
                 ? null
                 : (lists.get(entry.listId)?.name ?? null),
-            quantity: entry.left,
+            // The open run's amount while presses gather, then the amount of
+            // its write until that answers (velista `0188`).
+            quantity: this._holdingRuns.shown(
+              entry.lineId,
+              this._sending().get(entry.lineId)?.to ?? entry.left
+            ),
             unit: entry.unit,
+            // The line's step over every product it holds, as its list steps
+            // it (velista `0186`, decision A; the owner, 2026-11-12). The
+            // card's own product stands in for a record not read yet.
+            step: basketLineStep(
+              entry,
+              products,
+              (itemId) =>
+                names.nameOf(itemId) ??
+                (itemId === suggestion.item.id ? suggestion.item : null)
+            ),
             editable: entry.demandEditable,
             busy: busy.has(row.rowKey),
           }))
@@ -2478,20 +2548,66 @@ export class BasketPage {
       productPagePath(locale, this._basePath, itemId);
   });
 
+  /** The amount of each run whose demand write has not answered, by line. */
+  private readonly _sending = signal<
+    ReadonlyMap<string, { readonly to: number }>
+  >(new Map());
+
+  /** The holding each open run belongs to, for the sentence after its write. */
+  private readonly _runHoldings = new Map<string, SuggestionHolding>();
+
   /**
-   * A card's stepper moved one list's demand (velista `0101`, section 2): the write
-   * the settle sheet makes, `POST rows/{lineId}/demand`, and the same sentences
-   * after it. It is sent under the line itself (backend `0201`), because a row's key
-   * can change under the panel while somebody else adds or settles.
+   * A card's steps on one line, gathered into one demand write per run (velista
+   * `0188`, section 5.6): a hold repeats ten times a second, which would otherwise be
+   * ten writes a second. The card draws the run's amount while it is open.
    */
-  protected async changeHolding(
-    change: SuggestionHoldingChange
-  ): Promise<void> {
-    const result = await this._store.setDemand({
-      lineId: change.holding.lineId,
-      quantity: change.to,
+  private readonly _holdingRuns = quantityRuns<string>((lineId, run) => {
+    const holding = this._runHoldings.get(lineId);
+    this._runHoldings.delete(lineId);
+    if (holding !== undefined) {
+      void this._sendHolding(holding, run);
+    }
+  });
+
+  /** A card's stepper stepped one list's demand. */
+  protected changeHolding(change: SuggestionHoldingChange): void {
+    this._runHoldings.set(change.holding.lineId, change.holding);
+    this._holdingRuns.step(change.holding.lineId, {
       from: change.from,
+      to: change.to,
+      repeat: change.repeat,
     });
+  }
+
+  /**
+   * One run of a card's stepper, as one list's demand (velista `0101`, section 2):
+   * the write the settle sheet makes, `POST rows/{lineId}/demand`, with the run's
+   * `from` and its last `to`, and the same sentences after it. It is sent under the
+   * line itself (backend `0201`), because a row's key can change under the panel
+   * while somebody else adds or settles.
+   */
+  private async _sendHolding(
+    holding: SuggestionHolding,
+    run: QuantityRun
+  ): Promise<void> {
+    const change = { holding, from: run.from, to: run.to };
+    // The demand write is not optimistic, so the run's amount stays drawn until
+    // it answers: the card does not jump back to the old amount and then forward.
+    const sending = { to: run.to };
+    const lineId = holding.lineId;
+    this._sending.update((all) => new Map(all).set(lineId, sending));
+    const result = await this._store
+      .setDemand({ lineId, quantity: run.to, from: run.from })
+      .finally(() =>
+        this._sending.update((all) => {
+          if (all.get(lineId) !== sending) {
+            return all;
+          }
+          const next = new Map(all);
+          next.delete(lineId);
+          return next;
+        })
+      );
 
     if (result === null) {
       this._say(
@@ -2535,6 +2651,8 @@ export class BasketPage {
 
   protected onComposerQuery(query: string): void {
     this._query.set(query);
+    // The sentence about the last add goes with the next words (velista `0185`).
+    this.composerNotice.set(null);
     // The rows are searched from the first character, the catalog from the third
     // (velista `0117`).
     this._view.search(query);
@@ -2619,9 +2737,18 @@ export class BasketPage {
   private async _addTo(
     listId: string,
     entry: LineComposerSubmit,
-    options?: AddLineOptions
+    options?: AddLineOptions,
+    askedWords?: string
   ): Promise<void> {
     const itemIds = entry.itemIds ?? [];
+    // The words in the field as the add goes, or as the question was asked: a
+    // card's name is not what the field holds, so a landed card clears the field
+    // only while it still holds these, and a failed one puts these back.
+    const words = askedWords ?? this._composer()?.content().trim() ?? '';
+    // The basket the add was sent from. A sentence about it is not said on another
+    // one the page has followed to since (velista `0185`).
+    const basketId = this._store.basket()?.id ?? null;
+    const stillHere = () => (this._store.basket()?.id ?? null) === basketId;
     // The lines this basket already shows, so an answer naming one of them is a
     // raise: the basket route answers the lines and not whether they were new.
     const held = new Set(
@@ -2630,21 +2757,29 @@ export class BasketPage {
     const result = await this._store.addLine({
       targetListId: listId,
       content: entry.content,
-      quantity: entry.quantity,
-      // The composer's unit: grams for one product sold by the kilo (velista `0182`).
-      unit: entry.unit,
+      // A card's one step and its unit, grams for a product sold by the kilo
+      // (velista `0182`); a typed name states neither (velista `0185`).
+      ...(entry.quantity === undefined ? {} : { quantity: entry.quantity }),
+      ...(entry.unit === undefined ? {} : { unit: entry.unit }),
       ...(itemIds.length > 0 ? { itemIds } : {}),
       // A chosen card is not named (velista `0144`, section 3).
       ...(itemIds.length > 0 && entry.named === false ? { named: false } : {}),
-      // What typed words say about a name the list holds (backend `0228`).
-      ...(itemIds.length > 0 ? {} : (options ?? {})),
+      // What the add says about lines the list holds (backend `0228`), for a
+      // product too since the owner's ruling of 2026-11-16, and never `newLine`
+      // beside products (backend `0260`, rule 7).
+      ...(options?.askIfAmbiguous === true ? { askIfAmbiguous: true } : {}),
+      ...(options?.intoLineId === undefined
+        ? {}
+        : { intoLineId: options.intoLineId }),
+      ...(options?.newLine === true && itemIds.length === 0
+        ? { newLine: true }
+        : {}),
     });
 
-    // Typed words were held in the field while the add was out; a card's were
-    // cleared when its list was picked. Whether the popover that sent typed words is
-    // still open for them is read off the add itself, never off the anchor alone: a
-    // press outside closes it while the add is in flight, and the answer still
-    // belongs to these words.
+    // The words were held in the field while the add was out, a card's too. Whether
+    // the popover that sent them is still open for them is read off the add itself,
+    // never off the anchor alone: a press outside closes it while the add is in
+    // flight, and the answer still belongs to these words.
     const typed = itemIds.length === 0;
     const asking = this._waiting === entry && this.pickerAnchor() !== null;
 
@@ -2656,14 +2791,12 @@ export class BasketPage {
         void this._itemNames.ensure(
           choice.lines.flatMap((line) => line.itemIds)
         );
-        const listName =
-          this._store.lists().get(listId)?.name ??
-          this.pickerRows().find((row) => row.listId === listId)?.name ??
-          '';
+        const listName = this._listNameOf(listId);
         this._choice.set({
           listId,
           listName: listName === '' ? null : listName,
           entry,
+          words: typed ? entry.content : words,
           choice,
         });
         return;
@@ -2677,16 +2810,59 @@ export class BasketPage {
       if (asking) {
         this._closePicker();
       }
+      const failure = this._store.error();
+      const lineGone =
+        options?.intoLineId !== undefined &&
+        failure instanceof GatewayError &&
+        failure.code === 'not_found';
       if (asking || this._fieldIsEmpty()) {
         // The words go back, and focus with them, into a field nobody has typed
         // in since: newer words are a newer add and stay, with their suggestions.
-        this._query.set('');
-        this.suggestions.set([]);
-        this._composer()?.restore(entry.content);
+        // A card's are the search that found it, never the card's name, and the
+        // typeahead stays on them as before the pick.
+        if (typed) {
+          this._query.set('');
+          this.suggestions.set([]);
+          this._composer()?.restore(entry.content);
+        } else {
+          this._query.set(words);
+          this._composer()?.restore(words);
+        }
+      }
+      const refusal = typed
+        ? null
+        : toAddUnitRefusal(this._store.error(), entry.content);
+      if (refusal !== null) {
+        if (!stillHere()) {
+          return;
+        }
+        // The list counts this product in another unit (velista `0185`, section 4):
+        // nothing was made, and the sentence under the field says which list and why.
+        this.composerNotice.set(
+          this._translator.t(
+            addUnitRefusalKey(refusal, 'basket'),
+            undefined,
+            this._locale(),
+            { name: refusal.name, list: this._listNameOf(listId) }
+          )
+        );
+        // The line the sentence names is marked and brought into view, as an add
+        // already on the list does (velista `0185`, owner ruling 45 of 2026-11-16).
+        // No drawn row holds it (a filter, a line at 0): the sentence alone.
+        if (refusal.lineId !== null) {
+          this._markTook([refusal.lineId]);
+        }
+        return;
       }
       this._say(
         this._translator.t(
-          basketErrorKey(this._store.error(), 'basket.addLine'),
+          // A chosen line that went while the question was open, or is no longer
+          // one the add meets (backend `0260`, rule 6): the add's own failure, not
+          // the basket being gone. The plus asks again with the lines as they are.
+          basketErrorKey(
+            lineGone ? null : this._store.error(),
+            'basket.addLine'
+          ),
           undefined,
           this._locale()
         )
@@ -2699,7 +2875,7 @@ export class BasketPage {
     if (asking) {
       this._closePicker();
     }
-    if (typed && this._fieldHolds(entry.content)) {
+    if (this._fieldHolds(typed ? entry.content : words)) {
       this._composer()?.sent();
     }
     // The dropdown goes with the words that produced it. Clearing it here rather
@@ -2711,13 +2887,51 @@ export class BasketPage {
     }
 
     const line = result.entries[0];
+    if (result.addOutcome === 'alreadyOnList' && line !== undefined) {
+      // The list already asks for it, so nothing was added (velista `0185`, A1):
+      // every row of a line it met is marked, the first brought into view, and the
+      // sentence names the row as it is drawn. A met line no drawn row shows (a
+      // filter, a hidden list) is said under the field instead. Either way it is
+      // said once: the page's live region speaks for a drawn row, the notice's own
+      // region for one that is not.
+      const shown = this._shownRow(line.lineId);
+      const sentence = this._translator.t(
+        'basket.add.alreadyOn',
+        undefined,
+        this._locale(),
+        {
+          name:
+            shown?.name ?? (line.content === '' ? entry.content : line.content),
+          list: this._listNameOf(listId),
+        }
+      );
+      this._markTook(
+        result.entries.map((met) => met.lineId),
+        (drawn) => {
+          if (!stillHere()) {
+            return;
+          }
+          if (drawn) {
+            this._say(sentence);
+          } else {
+            this.composerNotice.set(sentence);
+          }
+        }
+      );
+      return;
+    }
     if (
       line !== undefined &&
-      (options?.intoLineId !== undefined || held.has(line.lineId))
+      result.addOutcome !== 'created' &&
+      (result.addOutcome === 'raised' ||
+        options?.intoLineId !== undefined ||
+        held.has(line.lineId))
     ) {
       // A line the basket already showed, raised: its row is marked (target 4),
-      // and said as that row draws it, its name and its number.
-      this._markTook(line.lineId);
+      // and said as that row draws it, its name and its number. With no
+      // `addOutcome` (a gateway of before backend `0260`) a raise is told by a line
+      // this basket already showed.
+      this._markTook([line.lineId]);
       const shown = this._shownRow(line.lineId);
       this._say(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {

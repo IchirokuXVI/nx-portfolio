@@ -1,5 +1,27 @@
+> **PR:** [#982](https://github.com/IchirokuXVI/nx-portfolio/pull/982)
+
 # 0187: the product page steps a line and explains its order
 
+> Noted on 2026-11-17: a defect found in the review walk of the stepper batch, and its fix.
+> The lists table drew an existing weight line of a list the app had not loaded as a count:
+> 1.6 kg read "1.6 k" with "Add 10", the plus sent `{"delta":10,"unit":"UNIT"}`, the server
+> answered 409 `line_unit_mismatch`, and the amount snapped back. `GET /v1/items/:id/list-lines`
+> answered `ItemLineView` with no `unit`, so `toItemLists` fell back to pieces; a row was right
+> only when the list page had loaded that list before. The fix ([#1000](https://github.com/IchirokuXVI/nx-portfolio/pull/1000)): core's
+> `linesHoldingItem` reads `list_lines.unit`, `ItemLineView` and its schema require `unit`, and
+> velista's mapper takes it from the answer. Specs: core unit and integration, the velista
+> mapper against the contract schema, and a product page case for a list the app never
+> loaded. `catalog.spec.ts` gains a walk "a weight line on the product page" that draws 1.6 kg,
+> steps it to 1.7 kg by its own 100 g step with no refusal, and carries the step 9 of section 4
+> (the order sheet), on a product of its own group, because the demo world's Milk has no
+> similar products.
+
+> Amended on 2026-11-12 (the owner): a line that reaches 0 is never deleted by a write any
+> more, because backend `0263` is withdrawn; it is hidden on its list (section 1). The minus
+> draws a red trash where its next press reaches 0 (velista `0188`), always, also when the line
+> has buys, and that settles how the lists table lowers an existing line to 0 (section 0). The
+> Spanish copy says "similares", not "parecidos" (section 2).
+>
 > Amended on 2026-11-11: the lists table draws the stepper of velista `0188` (D3, the amount
 > with its unit) and builds on its event shape, so this plan now needs `0188`; a plus on a
 > list that holds the product steps that line by one step of `0188` section 1; a first add puts
@@ -89,6 +111,13 @@ opens a short sheet saying why that order and a line's cheapest mark can differ.
   first, then the comparable figure within one basis, then the pack price
   (`product-group.ts:17` to `:61`). A line orders its products by `lineMemberCost`, the cost
   of the line's amount (`line-products.ts:28` to `:42`).
+
+  > Note of 2026-11-17, from the review of the stepper batch: as built, each Similar products
+  > row is the catalog's `ProductRow`, so a product the chosen list already holds shows its
+  > plus switched off with the sentence under the card, "Already on <list>." and its link,
+  > or `catalog.held.atZero` when every line of it is at 0 (velista `0185`, decision 51 of
+  > 2026-11-16). The review found the reason and the link run together with no space; that
+  > is fixed (velista `0185` C1).
 - Velista has one info button already: beside "Any of these will do" on the line page, a
   `lib-info-icon` in a plain button that opens `LineProductsInfoSheet`, a child route
   `about-products` under the `sheet` marker (velista `0137` section 3).
@@ -166,6 +195,19 @@ returns to the page.
   mark CHEAPEST by the cost of the line's amount (`0246` W3). A small info icon on the product
   page explains that in a sentence or two.
 
+### The owner's, 2026-11-12
+
+- **Lowering an existing line to 0 on the product page.** The owner did not choose between
+  keeping the list's own stepper and decision B. He decided instead that the minus draws a red
+  trash where its next press reaches 0, "that way the user knows the line will disappear",
+  always, also when the line has buys. That is velista `0188`'s stepper (the class `is-clear`
+  on the minus), so the lists table has it with no code of its own. `lists-table.spec.ts`
+  asserts that a list's own stepper at one step draws the trash, and that after the press the
+  line at 0 is drawn as its own row (decision B, as built).
+- **A line at 0 is kept.** Backend `0263` is withdrawn: no write deletes a line that reaches 0;
+  it is hidden on its list. Section 1 says so.
+- **"similares" stays** in the Spanish copy, over "parecidos". Section 2 says so.
+
 ### The writer's, open to the owner
 
 - **A. The rule is one for every unit, not for weights only.** A plus on a `main` line that is
@@ -232,8 +274,10 @@ U5 asks once the plus reaches it, writes one change per run, and keeps the take 
   started at (`visitFloor`, `catalog-visit.ts:152`). Once velista `0185` makes an add one step,
   one minus from 25 ml removes the Milk the visit added. A repeat never takes back.
 - A line that was there before the visit is not taken back: a minus lowers it, and taking it
-  back lowers it to what it held before. A minus that takes such a line to 0 can remove it,
-  by backend `0263`, when it has nothing to keep; velista `0192` says what the page does then.
+  back lowers it to what it held before. A minus that takes such a line to 0 keeps the line:
+  no write deletes it, and its list hides it (the owner, 2026-11-12, backend `0263`
+  withdrawn). The minus draws the red trash of velista `0188` before that press. The take
+  back of a line this visit made, above, is unchanged.
 
 After velista `0186` is built, `_step` reads the product's own step through `lineStepOf` and
 this table steps by it with no change here.
@@ -265,14 +309,15 @@ are unchanged.
 | --- | --- | --- |
 | `catalog.similar.aboutLabel` | How these are sorted | Cómo se ordenan |
 | `catalog.similar.about.title` | How these are sorted | Cómo se ordenan |
-| `catalog.similar.about.order` | Similar products are sorted by price per kilo or litre, so a big pack and a small one are compared fairly. | Los productos parecidos se ordenan por precio por kilo o litro, para comparar bien un paquete grande con uno pequeño. |
+| `catalog.similar.about.order` | Similar products are sorted by price per kilo or litre, so a big pack and a small one are compared fairly. | Los productos similares se ordenan por precio por kilo o litro, para comparar bien un paquete grande con uno pequeño. |
 | `catalog.similar.about.line` | On a list, the product marked cheapest is the one that costs least for the amount you asked for. For 300 g, a small pack can cost less than a big pack that is cheaper per kilo. | En una lista, el producto marcado como el más barato es el que menos cuesta para la cantidad que pides. Para 300 g, un paquete pequeño puede costar menos que uno grande que sale más barato por kilo. |
 | `catalog.similar.about.close` | Close | Cerrar |
 
   "300 g" is part of the sentence and not an argument: it is an example, not a value, and a
   number formatted by `Intl` would change nothing in either locale. The word "cheapest" is in
   lower case because the card's mark is drawn in capitals by its own key, and the sentence
-  names the mark, it does not draw it.
+  names the mark, it does not draw it. The Spanish says "similares", as the section's own
+  title "Productos similares" does; the owner chose it over "parecidos" on 2026-11-12.
 
 ## 3. Specs
 

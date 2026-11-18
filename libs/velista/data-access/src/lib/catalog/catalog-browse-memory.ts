@@ -557,6 +557,7 @@ function toProduct(
 
   return {
     id: row.id,
+    quantityStep: null,
     name: { es: row.es, en: row.en },
     brand: row.brand,
     imageUrl: null,

@@ -64,7 +64,12 @@ export class GatewayApiError extends Error {
     readonly status: number,
     /** The problem body's `message`, when the response carried one. */
     readonly apiMessage: string | undefined,
-    readonly code: string | undefined
+    readonly code: string | undefined,
+    /**
+     * The problem body's `details`, unread: a reader that needs it maps it
+     * from `unknown` itself (plan 0260, `line_unit_differs` on an add).
+     */
+    readonly details?: unknown
   ) {
     super(`gateway answered ${status}`);
     this.name = 'GatewayApiError';
@@ -319,16 +324,19 @@ export class GatewayApiClient {
 async function readProblem(response: Response): Promise<GatewayApiError> {
   let message: string | undefined;
   let code: string | undefined;
+  let details: unknown;
   try {
     const problem = (await response.json()) as {
       message?: unknown;
       code?: unknown;
+      details?: unknown;
     };
     message = typeof problem.message === 'string' ? problem.message : undefined;
     code = typeof problem.code === 'string' ? problem.code : undefined;
+    details = problem.details;
   } catch {
     // A non JSON body from something in front of the gateway. The status is
     // still the answer, and it is enough for the bot to say what happened.
   }
-  return new GatewayApiError(response.status, message, code);
+  return new GatewayApiError(response.status, message, code, details);
 }

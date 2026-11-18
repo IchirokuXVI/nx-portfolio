@@ -421,7 +421,7 @@ describe('BasketApi, the writes on a row', () => {
     expect((await done).entries[0].content).toBe('Batteries');
   });
 
-  it('sends what a typed add says about a name the list holds, and never with products (backend 0228)', async () => {
+  it('sends what an add says about the lines the list holds, with products too, and never newLine beside products (the ruling of 2026-11-16)', async () => {
     const asked = api.addLine(BASKET, {
       targetListId: 'list-weekly',
       content: 'Milk',
@@ -467,9 +467,30 @@ describe('BasketApi, the writes on a row', () => {
       content: 'Milk',
       quantity: 1,
       itemIds: ['item-a'],
+      askIfAmbiguous: true,
     });
     product.flush(ANSWER);
     await card;
+
+    const fresh = api.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+      newLine: true,
+    });
+    const refusedNew = httpMock.expectOne(
+      `${GATEWAY}/v1/baskets/${BASKET}/lines`
+    );
+    // The gateway answers 400 to newLine beside products (backend 0260, rule 7).
+    expect(refusedNew.request.body).toEqual({
+      targetListId: 'list-weekly',
+      content: 'Milk',
+      quantity: 1,
+      itemIds: ['item-a'],
+    });
+    refusedNew.flush(ANSWER);
+    await fresh;
   });
 
   it('sends a suggestion\u2019s product set as itemIds', async () => {

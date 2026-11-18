@@ -1,5 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import {
+  addAmount,
   addedToLine,
   defaultQuantity,
   firstAddTarget,
@@ -7,9 +8,9 @@ import {
   isMeasured,
   isUnsavedLine,
   legacyLineUnit,
+  lineStepOf,
   sameLineName,
   shownLineUnit,
-  stepFrom,
   unsavedLineId,
   visitAddition,
   visitAfterAdd,
@@ -18,20 +19,28 @@ import {
   visitTakeBack,
   visitWithout,
   type AddTargetList,
+  type AddUnitRefusal,
   type CatalogVisit,
   type HeldLine,
   type ItemList,
   type Line,
   type LineUnit,
   type MyZone,
+  type QuantityStep,
   type ShoppingListSummary,
   type VisitList,
   type VisitProduct,
 } from '@portfolio/velista/models';
-import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  quantityRuns,
+  StorageKeys,
+  type QuantityRun,
+} from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
+import { toAddUnitRefusal, toRefusedLine } from '../mapping/add-choice-mappers';
 import { ZONE_SERVICE, type ZoneServiceI } from '../zones/zone-service';
 import { ItemNames } from './item-names';
 
@@ -47,9 +56,29 @@ export interface CatalogAddProduct {
   /**
    * What a line of this product counts in (velista `0182`):
    * `lineUnitOf(soldAsOf(offer, product))`. Absent is a count. An add starts at
-   * `defaultQuantity` of it, one piece or one kilo.
+   * `addAmount` of it, one piece, 25 g or 25 ml (velista `0185`).
    */
   readonly unit?: LineUnit;
+  /**
+   * The step a line of this product alone presses by, `lineStepOf` over the
+   * page's record (velista `0186`). An add starts at one step of it (the owner's
+   * ruling 43): a whole chicken stepped at 1000 is added at 1 kg. Absent or null
+   * is the unit's default.
+   */
+  readonly step?: number | null;
+}
+
+/**
+ * Why a plus did nothing (velista `0185`, owner ruling 46): the card was drawn
+ * before another device changed the list, and the server answered that the
+ * product is already on it. `onList`: a line of it asks for some. `atZero`:
+ * every line of it stands at zero, and the line is to be raised with its own
+ * stepper (decision 51 of 2026-11-16). `list` is the list's name, for the
+ * sentence.
+ */
+export interface CatalogAddMet {
+  readonly kind: 'onList' | 'atZero';
+  readonly list: string;
 }
 
 /** Where a read is: not asked for, on its way, answered, or not answered. */
@@ -120,6 +149,8 @@ export class CatalogAddStore {
   private readonly _targetId = signal<string | null>(null);
   private readonly _visit = signal<CatalogVisit>([]);
   private readonly _failures = signal(0);
+  private readonly _refusal = signal<AddUnitRefusal | null>(null);
+  private readonly _met = signal<CatalogAddMet | null>(null);
   private readonly _held = signal<readonly HeldLine[]>([]);
   private readonly _lineReads = signal<ReadonlyMap<string, CatalogAddStatus>>(
     new Map()
@@ -142,6 +173,29 @@ export class CatalogAddStore {
    * show two, then one, then two.
    */
   private readonly _adding = new Map<string, number>();
+
+  /**
+   * How much each of those adds asks for, by the same key: one step of the
+   * product's own when it has one (velista `0186`, ruling 43), else one step of
+   * its unit. Absent before the first add, which is the unit's default.
+   */
+  private readonly _addEach = new Map<string, number>();
+
+  /**
+   * The open run of each line a stepper moves (velista `0188`, decision G): the
+   * presses gather here, drawn at once, and after `QUANTITY_STEP_QUIET_MS` with no
+   * step the run is written as one change. Every open run is written when the app
+   * is destroyed or hidden, because a number the person watched move is saved.
+   */
+  private readonly _runs = quantityRuns<string>((lineId, run) =>
+    this._sendRun(lineId, run)
+  );
+
+  /** The product of each open run, and the drawn amount it started from. */
+  private readonly _runOf = new Map<
+    string,
+    { readonly product: VisitProduct; readonly from: number }
+  >();
 
   /** Bumped by every erase, so an answer from the visit before is dropped. */
   private _generation = 0;
@@ -182,17 +236,67 @@ export class CatalogAddStore {
     if (items === null) {
       return held;
     }
+    const before = this._shownHeld;
     let changed = false;
-    const shown = held.map((line) => {
-      const unit = shownLineUnit(line, (itemId) => items.nameOf(itemId));
-      if (unit === line.unit) {
+    const shown = held.map((line, at) => {
+      const productOf = (itemId: string) => items.nameOf(itemId);
+      const unit = shownLineUnit(line, productOf);
+      // The product's step (velista `0186`, decision A). A record not read yet
+      // says nothing (decision B), so null is only known to be the default once
+      // every product of the line has answered; until then the step is absent,
+      // or the step a first add of its one product was sent at, and a screen
+      // that knows a product's step may step by it meanwhile.
+      const found = lineStepOf({ ...line, unit }, productOf);
+      const step =
+        found !== null ||
+        line.itemIds.every((itemId) => items.sizingOf(itemId) !== undefined)
+          ? found
+          : line.itemIds.length === 1
+            ? this._addStep.get(line.itemIds[0])
+            : undefined;
+      if (unit === line.unit && step === line.step) {
         return line;
       }
       changed = true;
-      return { ...line, unit };
+      // The same line read the same way keeps the object the last read drew, so
+      // a recompute that changed nothing redraws no row (a raw line has no
+      // `step`, and a known default is null).
+      const last = before?.lines[at] === line ? before.shown[at] : undefined;
+      return last !== undefined && last.unit === unit && last.step === step
+        ? last
+        : { ...line, unit, step };
     });
-    return changed ? shown : held;
+    if (!changed) {
+      this._shownHeld = null;
+      return held;
+    }
+    if (
+      before !== null &&
+      before.shown.length === shown.length &&
+      before.shown.every((line, at) => line === shown[at])
+    ) {
+      return before.shown;
+    }
+    this._shownHeld = { lines: held, shown };
+    return shown;
   });
+
+  /**
+   * What {@link held} answered last, over the raw lines it read, so a recompute
+   * that changed nothing answers the same array and the same rows.
+   */
+  private _shownHeld: {
+    readonly lines: readonly HeldLine[];
+    readonly shown: readonly HeldLine[];
+  } | null = null;
+
+  /**
+   * The step each product was last added at, by product (velista `0186`, ruling
+   * 43): what {@link held} names for a line of that one product while its record
+   * is still on its way, so the sheet of the visit and the take back read the
+   * step the line was made at.
+   */
+  private readonly _addStep = new Map<string, number | null>();
 
   /** What this visit added, in the order it was added. */
   readonly visit = this._visit.asReadonly();
@@ -201,10 +305,25 @@ export class CatalogAddStore {
   readonly count = computed(() => this._visit().length);
 
   /**
-   * How many writes have failed in this visit. A page says so once for each, in
-   * its live region, by watching this number move.
+   * How many writes have failed in this visit, or did nothing because the card
+   * was stale ({@link met}). A page says so once for each, in its live region, by
+   * watching this number move.
    */
   readonly failures = this._failures.asReadonly();
+
+  /**
+   * Why the last failed write failed, when it was an add of a product the list
+   * counts in another unit (velista `0185`, section 4): the page says that sentence
+   * in place of the generic one. Null after any other failure.
+   */
+  readonly refusal = this._refusal.asReadonly();
+
+  /**
+   * Why the last plus that counted in {@link failures} did nothing, when the
+   * server answered that the product is already on the list: the page says that
+   * sentence in place of the failure. Null after any other failure.
+   */
+  readonly met = this._met.asReadonly();
 
   /**
    * Read the lists the person can write to, once for the visit (section 4.3):
@@ -295,6 +414,7 @@ export class CatalogAddStore {
           ...answer.lines.filter((fresh) => !known.has(fresh.lineId)),
         ];
       });
+      this._readProductsOf(answer.lines);
       return answer.lists;
     } catch {
       return null;
@@ -315,6 +435,18 @@ export class CatalogAddStore {
       return Promise.resolve();
     }
     const key = keyOf(to, product.itemId);
+    // A stepper's open run on a line of this product is sent first, as a take
+    // back does, so the add lands on top of it and the run does not later write
+    // an amount that left the add out.
+    for (const line of this._held()) {
+      if (line.listId === to && line.itemIds.includes(product.itemId)) {
+        this._flush(line.lineId);
+      }
+    }
+    this._addEach.set(key, addAmount(product.unit ?? 'UNIT', product.step));
+    if (product.step !== undefined) {
+      this._addStep.set(product.itemId, product.step);
+    }
     const drawnOn = this._drawAdd(to, product);
     this._adding.set(key, (this._adding.get(key) ?? 0) + 1);
     return this._queued(key, (generation) =>
@@ -323,20 +455,75 @@ export class CatalogAddStore {
   }
 
   /**
-   * A press on the stepper of one line: one more or one fewer.
+   * One step of the stepper of one line, as the stepper drew it (velista `0188`,
+   * section 5.5).
    *
-   * A minus that brings a line the visit made to nothing takes it back, which
-   * deletes it where the person may. A line that was there before goes to zero
-   * and stays, which is what a list calls stocked.
+   * The step is drawn at once and joins the line's run, which is written as one
+   * change when the presses stop. A press down that brings a line the visit made
+   * to nothing, or a weight line the visit made down from the amount it started
+   * at, takes it back instead, which deletes it where the person may; the open
+   * run is sent first. A
+   * repeat that would do so is dropped, so a hold never takes a product back. A
+   * line that was there before goes to zero and stays, which is what a list calls
+   * stocked.
    */
-  step(product: VisitProduct, lineId: string, by: 1 | -1): Promise<void> {
-    return this._queued(keyOf(product.listId, product.itemId), (generation) =>
-      this._step(product, lineId, by, generation)
-    );
+  step(product: VisitProduct, lineId: string, step: QuantityStep): void {
+    const line = this._held().find((held) => held.lineId === lineId);
+    if (line === undefined || isUnsavedLine(lineId) || step.to === step.from) {
+      return;
+    }
+    const key = keyOf(product.listId, product.itemId);
+    const open = this._runs.pending().has(lineId);
+    const down = step.to < step.from;
+    if (!open && this._legacyUnit(line) !== null) {
+      // A legacy line is corrected before any run starts on it (backend `0246`
+      // section 3.2). The correction reads the line in its turn, so a second
+      // press that comes while it waits corrects nothing twice.
+      void this._queued(key, (generation) =>
+        this._correctLegacy(product, lineId, down ? -1 : 1, generation)
+      );
+      return;
+    }
+    const entry = visitAddition(this._visit(), lineId);
+    // The minus at the floor takes a product the visit added back: at nothing,
+    // as a count always did, or exactly at the amount a weight line the visit
+    // made started at, one step of its product (velista `0186`, ruling 43).
+    if (
+      down &&
+      entry !== null &&
+      entry.created &&
+      (step.to === 0 ||
+        (isMeasured(line.unit) &&
+          step.from ===
+            visitFloor(
+              entry,
+              line.unit,
+              this.held().find((held) => held.lineId === lineId)?.step
+            )))
+    ) {
+      if (step.repeat) {
+        return;
+      }
+      this._flush(lineId);
+      void this._queued(key, () => this._takeBack(lineId));
+      return;
+    }
+    if (!open) {
+      this._runOf.set(lineId, { product, from: line.quantity });
+    }
+    this._move(lineId, step.to - line.quantity);
+    // The run starts from what was drawn, so the change it writes is exactly how
+    // far the drawn amount moved.
+    this._runs.step(lineId, {
+      ...step,
+      from: this._runOf.get(lineId)?.from ?? line.quantity,
+    });
   }
 
   /** Take one line back: undo what the visit did to it, and no more. */
   takeBack(lineId: string): Promise<void> {
+    // What the steppers moved is written first, so the undo reads it.
+    this._flush(lineId);
     const entry = visitAddition(this._visit(), lineId);
     if (entry === null) {
       return Promise.resolve();
@@ -371,6 +558,11 @@ export class CatalogAddStore {
     ) {
       return;
     }
+    // The steps the person made are written; the record that follows them is
+    // the visit's, which ends here.
+    for (const lineId of [...this._runs.pending().keys()]) {
+      this._flush(lineId);
+    }
     this._generation++;
     this._loading = null;
     this._status.set('idle');
@@ -381,6 +573,8 @@ export class CatalogAddStore {
     this._lineReads.set(new Map());
     this._rights.clear();
     this._adding.clear();
+    this._addEach.clear();
+    this._addStep.clear();
   }
 
   /**
@@ -398,7 +592,9 @@ export class CatalogAddStore {
     );
     const unit = product.unit ?? 'UNIT';
     if (own !== null) {
-      this._move(own.lineId, defaultQuantity(own.unit));
+      // The server raises the line by the amount the add sends, so that is what
+      // is drawn: the step of the product in the unit the add states.
+      this._move(own.lineId, addAmount(unit, product.step));
       return own.lineId;
     }
     const lineId = unsavedLineId(listId, product.itemId);
@@ -408,7 +604,7 @@ export class CatalogAddStore {
         lineId,
         listId,
         name: product.name,
-        quantity: defaultQuantity(unit),
+        quantity: addAmount(unit, product.step),
         unit,
         pending: false,
         itemIds: [product.itemId],
@@ -430,9 +626,10 @@ export class CatalogAddStore {
     generation: number
   ): Promise<void> {
     const key = keyOf(listId, product.itemId);
-    // One piece or one kilo, in the product's unit (velista `0182`).
+    // One step of the product's unit, 25 g, 25 ml or one piece (velista `0185`),
+    // or one step of its own when it has one (velista `0186`, ruling 43).
     const unit = product.unit ?? 'UNIT';
-    const amount = defaultQuantity(unit);
+    const amount = addAmount(unit, product.step);
     try {
       // Not named: the words are the product's (velista `0144`, section 3), and
       // they are still sent, because the server needs them and `sameLineName`
@@ -458,12 +655,41 @@ export class CatalogAddStore {
       if (elsewhere) {
         this._move(drawnOn, -amount);
       }
+      const answered = heldOf(result.line, elsewhere ? 0 : ahead, amount);
+      // A stepper's run still open on the line stays drawn on top of the answer.
+      // Every other line the add met is read as the server holds it.
+      const met = result.alreadyOnList.filter(
+        (line) => line.id !== result.line.id
+      );
       this._held.update((held) =>
-        upsert(
-          held.filter((line) => line.lineId !== unsaved),
-          heldOf(result.line, elsewhere ? 0 : ahead)
+        met.reduce(
+          (all, line) => upsert(all, heldOf(line, 0)),
+          upsert(
+            held.filter((line) => line.lineId !== unsaved),
+            {
+              ...answered,
+              quantity: answered.quantity + this._openOffset(answered.lineId),
+            }
+          )
         )
       );
+      if (result.outcome === 'alreadyOnList') {
+        // The list already asked for it, so nothing was added (backend `0260`,
+        // A1): what was drawn came off with the server's quantity above, and the
+        // visit records nothing to take back. The card offered the plus, so it was
+        // drawn before another device changed the list: every line the answer met
+        // is held now, which redraws the card, and the reason is said once, or the
+        // press would visibly do nothing.
+        this._refusal.set(null);
+        this._met.set({
+          kind: result.alreadyOnList.some((line) => line.quantity > 0)
+            ? 'onList'
+            : 'atZero',
+          list: this._lists().find((one) => one.listId === listId)?.name ?? '',
+        });
+        this._failures.update((count) => count + 1);
+        return;
+      }
       this._visit.update((visit) =>
         visitAfterAdd(
           visit,
@@ -478,7 +704,7 @@ export class CatalogAddStore {
           amount
         )
       );
-    } catch {
+    } catch (error) {
       if (generation !== this._generation) {
         return;
       }
@@ -500,70 +726,119 @@ export class CatalogAddStore {
           this._move(drawn.lineId, -amount);
         }
       }
+      // The refusal names the line of another unit the add met, which another
+      // device saved after the card was drawn. It is held now, so the card switches
+      // its plus off (decision 51) and the next press is not refused again.
+      const refused = toRefusedLine(error);
+      if (refused !== null) {
+        const known = this._held().find(
+          (line) => line.lineId === refused.lineId
+        );
+        this._held.update((held) =>
+          upsert(held, {
+            lineId: refused.lineId,
+            listId,
+            name: refused.content,
+            quantity: refused.quantity,
+            unit: refused.unit,
+            pending: known?.pending ?? false,
+            itemIds: [product.itemId],
+          })
+        );
+      }
+      this._refusal.set(toAddUnitRefusal(error, product.name));
+      this._met.set(null);
       this._failures.update((count) => count + 1);
     }
   }
 
-  private async _step(
+  /** A run closed: write it after the writes already on their way for its product. */
+  private _sendRun(lineId: string, run: QuantityRun): void {
+    const meta = this._runOf.get(lineId);
+    this._runOf.delete(lineId);
+    if (meta === undefined) {
+      return;
+    }
+    const { product } = meta;
+    void this._queued(keyOf(product.listId, product.itemId), (generation) =>
+      this._writeRun(product, lineId, run, generation)
+    );
+  }
+
+  /**
+   * One run as one signed change (velista `0188`, section 5.5). The record of the
+   * visit says the line held what the run started from. A refused run moves the
+   * drawn amount back by what the run moved it.
+   */
+  private async _writeRun(
+    product: VisitProduct,
+    lineId: string,
+    run: QuantityRun,
+    generation: number
+  ): Promise<void> {
+    const delta = run.to - run.from;
+    const line = this._held().find((held) => held.lineId === lineId);
+    try {
+      const answer = await this._lines.addQuantity(
+        lineId,
+        delta,
+        line?.unit ?? 'UNIT'
+      );
+      if (generation !== this._generation) {
+        return;
+      }
+      const key = keyOf(product.listId, product.itemId);
+      const held = heldOf(
+        answer,
+        this._adding.get(key) ?? 0,
+        this._addEach.get(key)
+      );
+      // A run opened on the line since this one closed is drawn on top.
+      this._held.update((all) =>
+        upsert(all, {
+          ...held,
+          quantity: held.quantity + this._openOffset(lineId),
+        })
+      );
+      this._visit.update((visit) =>
+        visitAfterStep(visit, product, stateOf(answer), run.from)
+      );
+    } catch {
+      if (generation === this._generation) {
+        this._move(lineId, -delta);
+        this._refusal.set(null);
+        this._met.set(null);
+        this._failures.update((count) => count + 1);
+      }
+    }
+  }
+
+  /** Send a line's open run now. A run back to its start sends nothing, and leaves nothing. */
+  private _flush(lineId: string): void {
+    this._runs.flush(lineId);
+    this._runOf.delete(lineId);
+  }
+
+  /** How far an open run on a line has moved its drawn amount, or nothing. */
+  private _openOffset(lineId: string): number {
+    const to = this._runs.pending().get(lineId);
+    const from = this._runOf.get(lineId)?.from;
+    return to === undefined || from === undefined ? 0 : to - from;
+  }
+
+  /** A legacy line, read in its turn of the queue, corrected once. */
+  private async _correctLegacy(
     product: VisitProduct,
     lineId: string,
     by: 1 | -1,
     generation: number
   ): Promise<void> {
     const line = this._held().find((held) => held.lineId === lineId);
-    if (line === undefined || isUnsavedLine(lineId)) {
+    const legacy = line === undefined ? null : this._legacyUnit(line);
+    if (line === undefined || legacy === null) {
       return;
     }
-    const legacy = this._legacyUnit(line);
-    if (legacy !== null) {
-      await this._correctUnit(product, line, legacy, by, generation);
-      return;
-    }
-    // One step of the line's unit, so a weight moves by 25 g or 250 g and a count
-    // by one (velista `0182`, section 3).
-    const next = stepFrom(line.quantity, line.unit, by);
-    const delta = next - line.quantity;
-    if (next < 0 || delta === 0) {
-      return;
-    }
-    const entry = visitAddition(this._visit(), lineId);
-    // The minus at the floor takes a product the visit added back: at nothing,
-    // as a count always did, or exactly at the kilo a weight line the visit made
-    // started at (velista `0182`). A weight line lowered under its kilo
-    // elsewhere steps down like any other.
-    if (
-      by === -1 &&
-      entry !== null &&
-      entry.created &&
-      (next === 0 ||
-        (isMeasured(line.unit) &&
-          line.quantity === visitFloor(entry, line.unit)))
-    ) {
-      await this._takeBack(lineId);
-      return;
-    }
-
-    this._move(lineId, delta);
-    try {
-      const answer = await this._lines.addQuantity(
-        lineId,
-        delta,
-        line.unit ?? 'UNIT'
-      );
-      if (generation !== this._generation) {
-        return;
-      }
-      const ahead = this._adding.get(keyOf(product.listId, product.itemId));
-      this._held.update((held) => upsert(held, heldOf(answer, ahead ?? 0)));
-      this._visit.update((visit) =>
-        visitAfterStep(visit, product, stateOf(answer), answer.quantity - delta)
-      );
-    } catch {
-      if (generation === this._generation) {
-        this._move(lineId, -delta);
-        this._failures.update((count) => count + 1);
-      }
-    }
+    await this._correctUnit(product, line, legacy, by, generation);
   }
 
   /**
@@ -597,9 +872,16 @@ export class CatalogAddStore {
       if (generation !== this._generation) {
         return;
       }
-      const ahead = this._adding.get(keyOf(product.listId, product.itemId));
+      const key = keyOf(product.listId, product.itemId);
       this._held.update((held) =>
-        upsert(held, heldOf(answer.line, ahead ?? 0))
+        upsert(
+          held,
+          heldOf(
+            answer.line,
+            this._adding.get(key) ?? 0,
+            this._addEach.get(key)
+          )
+        )
       );
       // From nothing the visit added the kilo, which taking back lowers again.
       // Over pieces there is no amount in the new unit to go back to, so the
@@ -615,8 +897,29 @@ export class CatalogAddStore {
     } catch {
       if (generation === this._generation) {
         replace(line);
+        this._refusal.set(null);
+        this._met.set(null);
         this._failures.update((count) => count + 1);
       }
+    }
+  }
+
+  /**
+   * Read the products of the weight and volume lines just read, so {@link held}
+   * can name each line's step (velista `0186`, decision A): a line of a whole
+   * chicken and thighs steps by the thighs' 100 on the chicken's page too, as the
+   * list page steps it. Until they answer, the step is not known.
+   */
+  private _readProductsOf(lines: readonly HeldLine[]): void {
+    const items = this._items;
+    if (items === null) {
+      return;
+    }
+    const itemIds = lines
+      .filter((line) => isMeasured(line.unit))
+      .flatMap((line) => line.itemIds);
+    if (itemIds.length > 0) {
+      void items.ensure(itemIds);
     }
   }
 
@@ -670,6 +973,8 @@ export class CatalogAddStore {
           ...visit.slice(at),
         ]);
         this._held.set(before);
+        this._refusal.set(null);
+        this._met.set(null);
         this._failures.update((count) => count + 1);
       }
     }
@@ -762,6 +1067,7 @@ export class CatalogAddStore {
         ),
         ...lines.filter((line) => !this._written(line.lineId)),
       ]);
+      this._readProductsOf(lines);
       this._markLines(listId, 'ready');
     } catch {
       if (generation === this._generation) {
@@ -777,7 +1083,10 @@ export class CatalogAddStore {
    * what the visit added.
    */
   private _written(lineId: string): boolean {
-    return visitAddition(this._visit(), lineId) !== null;
+    return (
+      visitAddition(this._visit(), lineId) !== null ||
+      this._runs.pending().has(lineId)
+    );
   }
 
   private _markLines(listId: string, status: CatalogAddStatus): void {
@@ -874,13 +1183,18 @@ function stateOf(line: Line) {
 }
 
 /** A line as the store holds it, with the adds still on their way drawn in. */
-function heldOf(line: Line, ahead: number): HeldLine {
+function heldOf(
+  line: Line,
+  ahead: number,
+  each: number = addAmount(line.unit)
+): HeldLine {
   return {
     lineId: line.id,
     listId: line.listId,
     name: line.content,
-    // Each add on its way is one piece or one kilo of the line's unit.
-    quantity: line.quantity + ahead * defaultQuantity(line.unit),
+    // Each add on its way is what it asked for: one step of the line's unit
+    // (velista `0185`), or of the product's own (velista `0186`, ruling 43).
+    quantity: line.quantity + ahead * each,
     unit: line.unit,
     pending: line.approvalStatus === 'PENDING',
     itemIds: line.itemIds,

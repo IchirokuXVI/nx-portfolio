@@ -178,9 +178,6 @@ export function probeNoticeMessage(
       ),
       status: translator.t(`harvest.probeNotice.status.${verdict.status}`),
       sentence: verdict.error ?? '',
-      // The template escapes what it draws. Escaping here as well would put
-      // `&#x2F;` in place of every slash of a URL the probe names.
-      interpolation: { escapeValue: false },
     },
   };
 }

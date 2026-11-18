@@ -1,6 +1,7 @@
 import {
   isMeasured,
   QUANTITY_COARSE_FROM,
+  shortHundredths,
   type LineUnit,
 } from '@portfolio/velista/models';
 
@@ -15,7 +16,7 @@ import {
  * translation key with a number in it, for the reason {@link formatMoney} gives.
  *
  * **Up to three decimals, where the plan says one** (builder decision of velista
- * `0182`), so the words always say the exact amount: 1250 g is a value the reel
+ * `0182`), so the words always say the exact amount: 1250 g is a value the stepper
  * lands on and reads "1,25 kg", and 975 g added twice sums to 1975 on the server
  * and reads "1,975 kg", not "1,98 kg". A value that needs one decimal or none
  * draws as the plan's examples do.
@@ -82,6 +83,366 @@ export function formatQuantityChange(
 ): string {
   const sign = delta < 0 ? '-' : '+';
   return `${sign}${formatAmount(Math.abs(delta), unit, locale)}`;
+}
+
+/** An amount as a figure draws it: the number, and the symbol under it (velista `0188`). */
+export interface AmountWords {
+  /** "750", "1,25", "999,99", "2". */
+  readonly figure: string;
+  /** "g", "kg", "ml", "l", "K" or "k", or "" for a count under a thousand. */
+  readonly symbol: string;
+  /** True when a short figure has six characters, which draw one step smaller (S4). */
+  readonly long: boolean;
+  /** The exact amount for a screen reader: "750 gramos", "1,275 kilogramos", "12". */
+  readonly spoken: string;
+}
+
+/**
+ * The short form of an amount (velista `0188`, S4): rows, cards, tables and the
+ * shopping list's cell. At most three whole digits and two decimals. Below 1000 it
+ * reads in the base unit; from 1000 it reads hundredths of the top name, rounded
+ * half up for the display only, and never 1000 of the top name: 999 995 to 999 999
+ * read "999,99". The spoken words are always the exact amount.
+ */
+export function shortAmount(
+  quantity: number,
+  unit: LineUnit,
+  locale: string
+): AmountWords {
+  const amount = Math.max(0, Math.round(quantity));
+  const spoken = spokenAmount(amount, unit, locale);
+  if (amount < QUANTITY_COARSE_FROM) {
+    const figure = plainFigure(amount, 0, locale);
+    return { figure, symbol: baseSymbol(unit), long: false, spoken };
+  }
+  const figure = plainFigure(shortHundredths(amount) / 100, 2, locale);
+  return {
+    figure,
+    symbol: topSymbol(unit, locale),
+    long: figure.length >= 6,
+    spoken,
+  };
+}
+
+/**
+ * The exact form of an amount (velista `0188`, S5): the two line sheets only. A
+ * weight or a volume reads in the base unit below 1000 and in the top name with up
+ * to three decimals from it ("1,275 kg"). A count is plain under 100 000 and reads in
+ * thousands with three decimals from there ("123,456"). `long` is always false: the
+ * sheets' cells are measured for the longest exact figure at full size.
+ */
+export function exactAmount(
+  quantity: number,
+  unit: LineUnit,
+  locale: string
+): AmountWords {
+  const amount = Math.max(0, Math.round(quantity));
+  const spoken = spokenAmount(amount, unit, locale);
+  const coarseFrom = isMeasured(unit)
+    ? QUANTITY_COARSE_FROM
+    : COUNT_EXACT_THOUSANDS_FROM;
+  if (amount < coarseFrom) {
+    return {
+      figure: plainFigure(amount, 0, locale),
+      symbol: baseSymbol(unit),
+      long: false,
+      spoken,
+    };
+  }
+  return {
+    figure: plainFigure(amount / 1000, 3, locale),
+    symbol: topSymbol(unit, locale),
+    long: false,
+    spoken,
+  };
+}
+
+/**
+ * What a person typed into a sheet's field, in base units, or null for text that is
+ * not a number (velista `0188`, S10 and decision K). Spaces are dropped; "," and "."
+ * are both the decimal separator, and one at most is read.
+ *
+ * A weight or a volume is read in the unit {@link followTyped} leaves it under, the
+ * owner's rule of 2026-11-17: the digits are read in the unit the field showed when
+ * the edit started, so "25000" under "g" is 25 000 g, and a whole number over 99
+ * under "kg" is read in grams ("500" is 500 g). Text the field does not accept (a
+ * separator under "g", a sixth digit) is null. A count keeps its rule: a number
+ * with no separator is read in the name of `shown`, and with one in the top name.
+ * Rounded half up to a whole base unit, in integers, and held to `[min, max]`.
+ */
+export function parseTypedAmount(
+  text: string,
+  shown: AmountWords,
+  unit: LineUnit,
+  min: number,
+  max: number
+): number | null {
+  const followed = isMeasured(unit)
+    ? followTyped(text, shown.symbol, unit, 'en')
+    : { symbol: shown.symbol, turned: false };
+  if (isRefused(followed)) {
+    return null;
+  }
+  const typed = readTyped(text);
+  if (typed === null) {
+    return null;
+  }
+  let amount: number;
+  if (typed.fraction === null) {
+    const whole = Number(typed.whole);
+    amount = isTopSymbol(followed.symbol) ? whole * 1000 : whole;
+  } else {
+    const digits = typed.fraction.padEnd(4, '0');
+    amount =
+      Number(typed.whole || '0') * 1000 +
+      Number(digits.slice(0, 3)) +
+      (Number(digits[3]) >= 5 ? 1 : 0);
+  }
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+  return Math.min(max, Math.max(min, amount));
+}
+
+/** The unit a sheet's field reads its text in after a keystroke. */
+export interface TypedText {
+  /** The symbol the text is read in: "g" or "kg", "ml" or "l", "" or "K". */
+  readonly symbol: string;
+  /** True when this keystroke turned the field from one unit into the other. */
+  readonly turned: boolean;
+}
+
+/**
+ * Which rule a key the field does not accept broke (the owner, 2026-11-17: a
+ * popover says why). The reasons are grouped into as few sentences as stay true:
+ *
+ * - `most`: the field holds at most 99 999 base units. A sixth digit, and a decimal
+ *   number over 99 under kilos, which would land in grams with decimals ("99,5"
+ *   edited into "199,5" is more than 99,999 kg).
+ * - `whole`: a separator under grams or millilitres, which have no decimals.
+ * - `decimals`: a fourth decimal under kilos or litres, which names less than a gram.
+ */
+export type TypedRefusal = 'most' | 'whole' | 'decimals';
+
+/** A key the field does not accept, and the rule it broke. */
+export interface RefusedText {
+  readonly refused: TypedRefusal;
+}
+
+/** Whether {@link followTyped} did not accept the key. */
+export function isRefused(
+  followed: TypedText | RefusedText
+): followed is RefusedText {
+  return 'refused' in followed;
+}
+
+/**
+ * The unit typed text for a weight or a volume is read in, or the rule a keystroke
+ * the field does not accept broke (the owner, 2026-11-17, velista `0188` decision
+ * K). `symbol` is the unit the field read in before this keystroke. The text itself
+ * is never rewritten: what a person types stays as typed until the edit ends.
+ *
+ * - The unit the edit started under is held. Under grams "25000" stays 25000 g
+ *   while it is typed, and the field rests as "25 kg" once the edit ends.
+ * - Under kilos, a whole number over 99 turns into grams at once, with the digits
+ *   as they are ("500" kg is "500" g), because only the label changes. The field
+ *   then stays in grams.
+ * - An empty field reads in grams.
+ * - Not accepted: a separator under grams, because a gram has no decimals
+ *   (`whole`); a fourth decimal under kilos, which names less than a gram
+ *   (`decimals`); a sixth digit, because the field holds at most 99 999 base units
+ *   ("99999" g, "99,999" kg), and a whole part over 99 with a separator under
+ *   kilos, which would land in grams with decimals ("99,5" edited into "199,5"),
+ *   both `most`.
+ * - Text that is not a number does not turn, and is put back when the edit ends.
+ *
+ * The same for millilitres and litres. A count does not turn: it reads in its top
+ * name once a separator is typed and in `symbol` otherwise, as before, and no key
+ * typed into it is refused.
+ */
+export function followTyped(
+  text: string,
+  symbol: string,
+  unit: LineUnit,
+  locale: string
+): TypedText | RefusedText {
+  if (!isMeasured(unit)) {
+    return {
+      symbol: /[.,]/.test(text) ? topSymbol(unit, locale) : symbol,
+      turned: false,
+    };
+  }
+  const large = isTopSymbol(symbol);
+  const compact = text.replace(/\s+/g, '');
+  if (compact === '') {
+    return { symbol: baseSymbol(unit), turned: large };
+  }
+  if (!large && /[.,]/.test(compact)) {
+    return { refused: 'whole' };
+  }
+  const typed = large ? readTyped(compact) : null;
+  if (
+    typed !== null &&
+    typed.fraction !== null &&
+    typed.fraction.length > TYPED_DECIMALS_MAX
+  ) {
+    // Before the digits: "99,9999" says a fourth decimal more than a sixth digit.
+    return { refused: 'decimals' };
+  }
+  if ((compact.match(/\d/g) ?? []).length > TYPED_DIGITS_MAX) {
+    return { refused: 'most' };
+  }
+  if (typed === null || Number(typed.whole || '0') <= TYPED_LARGE_WHOLE_MAX) {
+    return { symbol, turned: false };
+  }
+  return typed.fraction === null
+    ? { symbol: baseSymbol(unit), turned: true }
+    : { refused: 'most' };
+}
+
+/**
+ * The symbol a typed text will be read in when the typing started under `shown`
+ * (velista `0188`, decision K): {@link followTyped}'s symbol for that text, or the
+ * shown symbol for text the field does not accept.
+ */
+export function typedSymbol(
+  text: string,
+  shown: AmountWords,
+  unit: LineUnit,
+  locale: string
+): string {
+  const followed = followTyped(text, shown.symbol, unit, locale);
+  return isRefused(followed) ? shown.symbol : followed.symbol;
+}
+
+/**
+ * The most the field holds, in the unit it reads in now, as the refusal popover
+ * says it (the owner, 2026-11-17): "99,999 g" or "99.999 kg" in English, "99.999 g"
+ * or "99,999 kg" in Spanish, and the plain number for a count ("99,999"). Through
+ * `Intl` with the reader's grouping, never a number in a translation.
+ */
+export function typedLimit(
+  max: number,
+  symbol: string,
+  unit: LineUnit,
+  locale: string
+): string {
+  if (!isMeasured(unit)) {
+    return formatNumber(max, locale);
+  }
+  const large = isTopSymbol(symbol);
+  const name =
+    unit === 'GRAM'
+      ? large
+        ? 'kilogram'
+        : 'gram'
+      : large
+        ? 'liter'
+        : 'milliliter';
+  const value = large ? max / 1000 : max;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit: name,
+      maximumFractionDigits: 3,
+    }).format(value);
+  } catch {
+    const shown = large ? topSymbol(unit, 'en') : baseSymbol(unit);
+    return `${Number(value.toFixed(3))} ${shown}`;
+  }
+}
+
+/** The most whole kilos or litres the field holds before it turns into grams: 99. */
+const TYPED_LARGE_WHOLE_MAX = 99;
+
+/** The most decimals under kilos or litres: three, a whole gram or millilitre. */
+const TYPED_DECIMALS_MAX = 3;
+
+/** The most digits the field of a weight or a volume holds: 99 999 base units. */
+const TYPED_DIGITS_MAX = 5;
+
+/** Where the exact form of a count starts to read in thousands (S5). */
+const COUNT_EXACT_THOUSANDS_FROM = 100_000;
+
+/** The symbols of the top names, in both languages ("k" and "K" for a count). */
+const TOP_SYMBOLS: ReadonlySet<string> = new Set(['kg', 'l', 'k', 'K']);
+
+function isTopSymbol(symbol: string): boolean {
+  return TOP_SYMBOLS.has(symbol);
+}
+
+function baseSymbol(unit: LineUnit): string {
+  return unit === 'GRAM' ? 'g' : unit === 'MILLILITER' ? 'ml' : '';
+}
+
+/**
+ * A fixed table and not `Intl`'s unit names: `Intl` writes "L" for a litre in
+ * English, and the owner asked for "l". The thousand of a count is "K" in Spanish
+ * and "k" otherwise.
+ */
+function topSymbol(unit: LineUnit, locale: string): string {
+  if (unit === 'GRAM') {
+    return 'kg';
+  }
+  if (unit === 'MILLILITER') {
+    return 'l';
+  }
+  return locale.toLowerCase().split(/[-_]/)[0] === 'es' ? 'K' : 'k';
+}
+
+function readTyped(
+  text: string
+): { readonly whole: string; readonly fraction: string | null } | null {
+  const compact = text.replace(/\s+/g, '');
+  const match = /^(\d*)(?:[.,](\d*))?$/.exec(compact);
+  if (match === null) {
+    return null;
+  }
+  const whole = match[1];
+  const fraction = match[2] ?? null;
+  if (whole === '' && (fraction === null || fraction === '')) {
+    return null;
+  }
+  return { whole, fraction };
+}
+
+/** A number with no grouping and up to `decimals` decimals, in the reader's language. */
+function plainFigure(value: number, decimals: number, locale: string): string {
+  try {
+    return new Intl.NumberFormat(locale, {
+      maximumFractionDigits: decimals,
+      useGrouping: false,
+    }).format(value);
+  } catch {
+    return String(Number(value.toFixed(decimals)));
+  }
+}
+
+/** The exact amount, as a screen reader says it ("750 gramos", "12"). */
+function spokenAmount(amount: number, unit: LineUnit, locale: string): string {
+  if (!isMeasured(unit)) {
+    return formatNumber(amount, locale);
+  }
+  const coarse = amount >= QUANTITY_COARSE_FROM;
+  const name =
+    unit === 'GRAM'
+      ? coarse
+        ? 'kilogram'
+        : 'gram'
+      : coarse
+        ? 'liter'
+        : 'milliliter';
+  const value = coarse ? amount / 1000 : amount;
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'unit',
+      unit: name,
+      unitDisplay: 'long',
+      maximumFractionDigits: 3,
+    }).format(value);
+  } catch {
+    return formatAmount(amount, unit, 'en');
+  }
 }
 
 function formatNumber(value: number, locale: string): string {

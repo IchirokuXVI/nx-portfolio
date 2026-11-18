@@ -1,3 +1,9 @@
+> **PR:** [#978](https://github.com/IchirokuXVI/nx-portfolio/pull/978)
+>
+> **PR:** [#1003](https://github.com/IchirokuXVI/nx-portfolio/pull/1003), the owner's rulings of 2026-11-17 on typing and the ceiling
+>
+> **PR:** [#1006](https://github.com/IchirokuXVI/nx-portfolio/pull/1006), the owner's ruling of 2026-11-17 on a refused key
+
 # 0188: an amount is stepped with two buttons
 
 > Decided on 2026-11-10 and 2026-11-11. The owner finds the quantity reel "confusing for most
@@ -214,7 +220,16 @@ the amount once after a run.
   999 995 to 999 999 read "999,99".
 - **S5. The exact form** in the two line sheets only: up to three decimals ("1,275 kg"); a
   count is plain under 100 000 and reads in K from there.
-- **S6. The most is 999 999 base units.** Raising `LINE_QUANTITY_MAX` is backend `0262`.
+- **S6. The most is 99 999 base units, for every unit** (the owner, 2026-11-17, second
+  ruling): 99,999 kg, 99,999 l or 99 999 pieces, the same number as the server, whose
+  `LINE_QUANTITY_MAX` comes down to 99 999 on the same day. `LINE_QUANTITY_MAX` in
+  `libs/velista/models` is 99999, and the separate 99 000 for a weight or a volume
+  (`LINE_MEASURED_QUANTITY_MAX`, `lineQuantityMax`) is gone. Plus and a hold stop where the
+  next step would pass it (plus `aria-disabled`); End and typing reach it. A line stored
+  above it (only 100 000 is possible) draws as it is, its plus is off and its minus works.
+
+  > Note of 2026-11-17: this replaces the first reading of the day, 999 999 for a count and
+  > 99 000 for a weight or a volume.
 - **S7. One step per unit:** 25 g, 25 ml, 1. No larger step above 1000 for a weight or a
   volume. "Different steps on one line confuse; the hold accelerates; the exact amount can be
   typed in the sheet."
@@ -234,7 +249,10 @@ the amount once after a run.
 - **S8b. A hold never takes an amount to 0 (the owner, 2026-11-11 03:00: "Perfect").** A repeat
   stops at the last amount above 0, and a separate press goes to 0, because at 0 a line with
   nothing to keep is deleted (backend `0263`), and a deletion must not come from a finger held
-  a moment too long.
+  a moment too long. **Ruled by the owner on 2026-11-17, as built:** a long press that starts
+  where the next press reaches 0 (minus draws the red trash, S14) takes the line to 0 on
+  release, because no repeat ran and the release is an ordinary press; a hold never repeats
+  into 0.
 - **S9. Typing only in the two line sheets.** In a row, a card, the product page table and the
   line page the amount cannot be focused or typed into. "The buttons are needed in the line
   page, it's fine."
@@ -242,14 +260,27 @@ the amount once after a run.
   48 (the shopping list's line sheet, cell 72 px), measured for "999,999" at 17 px 700 with
   tabular figures. A text input with `inputmode="decimal"`, 16 px or more when focused,
   `role="spinbutton"` with its four ARIA values; Arrow Up and Down step, Home and End go to the
-  ends; a focus selects the whole number. A number typed with a decimal into the base unit is
-  read one name up ("1,5" into "500 ml" is 1,5 l). A typed amount is rounded to a whole base
-  unit and held to 0 to 999 999.
+  ends; a focus selects the whole number. A weight or a volume is typed by decision K as the
+  owner ruled it on 2026-11-17 (the second ruling): a decimal only under kg or l. A typed
+  amount is rounded to a whole base unit and held to 0 to 99 999 (S6).
 - **S11. Holding repeats,** "from slower to faster as you hold it", up to ten steps a second. A
   single press steps once, on release.
 - **S12. Saving is not the component's job.** "It will be done from outside the component, by
   the logic layer in a feature library."
 - **S13. Accessibility is a must**, with the contract that section 3.6 states.
+- **S14 (2026-11-12). Minus becomes a red trash where its next press reaches 0.** "When
+  lowering from 1 to 0, the icon will be a trash, in red. That way the user knows the line will
+  disappear. The trash will always appear going from 1 to 0, even if the line has buys and isn't
+  actually deleted." Read as: on every `lib-quantity-stepper`, in all three variants, while the
+  value is above 0 and `max(min, stepFrom(value, unit, -1)) === 0` (1 for a count, 25 g or
+  anything under one step for a weight; never with `min` above 0, as on a due row or the how
+  many step), minus draws `lib-trash-icon` at the glyph size in `--app-status-danger-fg` in
+  place of its bar. At 0 minus is at its end with the plain bar. The accessible name stays the
+  true step ("Remove 1 from Milk"), because nothing is deleted; the hold is unchanged, so a
+  hold ends on the trash and a separate press goes to 0. The glyph swaps with no animation.
+- **S15 (2026-11-12). Presses faster than the caller redraws each take their own step.** "Fix
+  it." A press builds on the amount the last press emitted until the caller redraws; the
+  caller's `value` wins as soon as it moves or any render runs (section 3.3).
 
 ### The numbers of the hold, proposed with the mock and open to the owner
 
@@ -301,17 +332,147 @@ the amount once after a run.
 - **J. The amber edge stays.** `took` draws a 2 px inset ring in `--app-action-bg` around the
   amount cell and the number in `--app-action-quiet-fg`, as the mock draws `.mk-took`.
   `TOOK_DURATION_MS` moves to `quantity-stepper.ts`.
-- **K. Typing reads in the name on screen.** A typed number with no decimal is read in the name
-  shown under the field when the typing started ("750" under "kg" is 750 kg). With a decimal
-  typed under the base name it is read one name up (S10). The symbol under the field changes
-  as the separator is typed, so the person sees the unit before they leave the field. Both
-  "," and "." are read as the decimal separator, because the field draws no grouping.
+- **K. A typed weight or volume turns between grams and kilos as it is typed (the owner,
+  2026-11-17).** This replaces the writer's first reading ("750" under "kg" is 750 kg). The
+  owner's words: "While setting amounts manually, typing over 1000 will turn into kg (this one
+  is easy because the input still holds the same amount, just displayed differently) but going
+  over 99 kg will turn back into grams. This means that an user could loop the input
+  infinitely, he types 1000 which transforms into 1, adds one more zero which would be 10, adds
+  another one which would be "100" and it turns into grams again, you add another zero and it
+  goes back to "kg" again. It might be confusing, but let's change it and see if it works
+  fine." And: "If the user removes the input value (it says 50kg and you remove both digits),
+  it will go back to grams. If there are two digits and you remove only one, it's still
+  kilograms. If the user wants to set kgs after removing both digits, he will need to type 4
+  or more digits so it goes automatically into kg. This will also limit the amount of
+  whichever unit to 99 thousand (which is 99kg or 99 liters) instead of 999 999."
+
+  As rules, the same for millilitres and litres, in `followTyped` (`libs/velista/platform`):
+
+  1. The field reads in the small unit (g, ml) or the large one (kg, l), and typed digits are
+     read in the unit it shows at that moment.
+  2. Under the small unit, a whole number of 1000 or more turns the field into the large unit
+     showing the same amount ("1000" g shows "1" under kg), live while typing, caret at the end.
+  3. Under the large unit, three whole digits (over 99) turn it back into the small unit, and
+     the digits are read there (a zero typed after "10" kg gives "100" g).
+  4. Emptying the field turns it back into the small unit; removing one of two digits keeps
+     the large one.
+  5. A count does not turn, and keeps the rule it had: a number with no separator in the name
+     the typing started under, with a separator in thousands. "," and "." are both the
+     decimal separator, because the field draws no grouping.
+
+  The gaps the words leave, decided by the builder of 2026-11-17:
+
+  - **Decimals.** A separator typed under the small unit turns the field into the large unit
+    with the digits as typed, because a gram has no decimals ("1,5" under "g" is 1,5 kg, as
+    S10 had it). A typed "1250" under "g" shows "1,25" under "kg", the exact form with up to
+    three decimals ("1275" shows "1,275").
+  - **Over 99 with decimals.** "Over 99" is read on the whole part: three whole digits. "99,5"
+    stays under "kg" and is held to 99 kg when it is read. "150,5" under "kg" turns into "150"
+    under "g": the decimals have nowhere to go in grams, and the same is true of a separator
+    typed after three digits of grams, which is refused.
+  - **A paste** is one keystroke: the whole text goes through the same turns. "250000" pasted
+    under "g" is held to the ceiling and shows "99" under "kg". Text that is not a number
+    ("1,5 kg") does not turn and is put back on commit, as before.
+  - **Focus on a resting amount.** The field shows the exact form and selects it all; the
+    first keystroke replaces it and is read in the unit the line rests in. At 500 g, a "1"
+    is 1 g; at 1,5 kg, a "2" is 2 kg, and "750" typed key by key over 1,5 kg ends at 750 g
+    by rule 3.
+  - **The unit label** under the field follows every turn at once. The field's accessible
+    name stays "Amount of {{name}}" and `aria-valuenow` and `aria-valuetext` keep the amount
+    the line holds until the typing is committed.
+  - **What a screen reader hears.** The digits change under the caret, so a polite live region
+    inside the sheet's control says the new unit once per turn: "Now in kilograms", "Now in
+    grams", "Now in liters", "Now in milliliters" (`amount.turned.*`; "Ahora en kilogramos",
+    "Ahora en gramos", "Ahora en litros", "Ahora en mililitros"). A keystroke that turns
+    nothing empties it.
+
+  > **Replaced on 2026-11-17 by the owner's second ruling of the day, below.** The rules
+  > above turned the field while it was typed into, and that lost digits: typed key by key,
+  > "25000" from an empty field stored 2500 g, because the field turned into "2,5 kg" at the
+  > fourth digit and the fifth became a decimal. The first reading's ceiling of 99 000 for a
+  > weight or a volume went with it (S6).
+
+  **The typed amount waits for the end of the edit (the owner, 2026-11-17, second ruling).**
+  For weight and volume lines, in `followTyped` (`libs/velista/platform`), the same for
+  millilitres and litres:
+
+  1. The unit shown when an edit starts is held until the edit ends. Nothing is converted
+     while the person types, with the one exception of rule 4. The text is never rewritten
+     while it is typed. The conversion to the resting form happens when the edit ends:
+     Enter, a blur, a press of a button.
+  2. Emptying the field returns to the base unit (g, ml), as before.
+  3. From an empty field, 2, 5, 0, 0, 0 shows "25000" under g while typing and rests as
+     "25 kg" after the edit ends. A paste of "25000" gives the same, also over a field that
+     shows kilos (rule 4). A field that starts as "2,5 kg" and gets a 0 appended reads
+     "2,50 kg", still 2,5 kg.
+  4. **The exception:** under kg (or l), a whole number over 99 turns into grams at once,
+     while typing, because only the unit label changes and the digits stay: "50 kg" plus a
+     0 becomes "500 g". After that the field is in grams and follows rules 1 to 3 ("5000"
+     stays under g until the edit ends, then rests as "5 kg"). The polite live region says
+     "Now in grams" (`amount.turned.grams`, `amount.turned.milliliters`) for this turn and
+     for an emptied field that showed kilos; `amount.turned.kilograms` and
+     `amount.turned.liters` are gone, because typing never turns into kilos now.
+  5. The field holds at most 99 999, which always means 99 999 base units and rests as
+     "99,999 kg". A sixth digit is not accepted.
+  6. A decimal can only be typed under kg or l. A separator typed under g or ml is not
+     accepted.
+
+  A key that is not accepted is put back: the field keeps the text it had and the caret its
+  place, and nothing is drawn or said. A paste is one keystroke, so a paste of six digits is
+  not accepted whole. `followTyped` answers null for such a key, and `parseTypedAmount` null
+  for such a text. Text that is not a number ("1,5 kg") is still accepted while typed and put
+  back when the edit ends, as before.
+
+  Decided by the builder of 2026-11-17 where the ruling leaves an edge:
+
+  - **A decimal that would end up under grams.** "99,5" edited into "199,5" under kg would
+    turn into grams by rule 4 and keep a decimal there. The key that causes it is not
+    accepted: the field stays "99,5 kg". The same for "150," under kg.
+  - **"A sixth digit"** is read as any sixth digit in the field, so under kg two whole digits
+    and three decimals ("99,999") is the most; a fourth decimal under kg is not accepted
+    either, because it names less than a gram and the field holds whole base units.
+  - **A count** keeps the rule it had (decision K, rule 5 of the first reading: with a
+    separator it reads in thousands) and only gets the ceiling: a typed count over 99 999 is
+    held to 99 999 when the edit ends, and its digits are not limited while typing.
+
+  > **Note of 2026-11-17, the owner's ruling on a refused key.** "Nothing is drawn or said"
+  > above is replaced: when a key is not accepted, a small popover says why. As built:
+  >
+  > - `followTyped` answers which rule refused the key in place of null:
+  >   `{ refused: 'most' | 'whole' | 'decimals' }`. `isRefused` tells the two answers apart, and
+  >   `parseTypedAmount` still answers null for such a text. The reasons are grouped into
+  >   three sentences that stay true. `most`: a sixth digit, a paste of six, and a decimal
+  >   number over 99 under kg ("99,5" into "199,5" is more than 99,999 kg), "At most 99,999 g"
+  >   / "Como máximo, 99.999 g", the amount through `typedLimit` (`Intl`, the locale's
+  >   grouping) in the unit the field reads in, so "At most 99.999 kg" under kg. `whole`: a
+  >   separator under g or ml, "Grams take no decimals" / "Los gramos no llevan decimales"
+  >   and the same for milliliters. `decimals`: a fourth decimal under kg or l, "At most
+  >   three decimals" / "Como máximo, tres decimales". The keys are `amount.refused.*`.
+  > - It is `lib-anchored-popover` (velista `0110`), the surface of every popover in the app,
+  >   with a new `hint` frame at the width of its words, centred over the capsule, pushed
+  >   back onto a 320 px screen, in the top layer so no sheet clips it. It has no role and
+  >   takes no focus; the field's own polite live region (`.refusal-said`) says the sentence,
+  >   once while the same refusal repeats. Only the two sheet variants have a field, so only
+  >   the line sheet and the basket sheet ever show it.
+  > - It goes on the next accepted key, on Enter, an arrow, Home or End, a blur, a press of
+  >   either button, on Escape (which then goes no further and keeps the typed text; a
+  >   second Escape puts the shown amount back), and by itself after 4 s
+  >   (`REFUSED_SHOWN_MS`); a new refusal starts the 4 s again. A press outside it does not
+  >   close it, because the press that blurs the field lands after a popover the blur opened.
+  > - **A count over the most** (builder decision): its digits are still not limited while
+  >   typing, and when the edit ends and the amount is held to the ceiling, the same popover
+  >   says "At most 99,999" for its 4 s. A weight cannot pass the ceiling of 99 999 by typing.
 - **L. A tests' attribute.** The host carries `data-value` with the amount in base units, so the
   e2e suites read a row's amount without a spinbutton, which a row no longer has.
 - **M. The step follows the short form, also in a sheet.** S7b is stated for the row's reading.
   The sheet's exact form shows more digits, but one rule in one function is simpler than two,
   and the sheet's arrows and buttons then move exactly as the row's do. The step is read from
   the short form's name at the amount, never from the variant.
+
+> Note of 2026-11-17: the server keeps a free text line in GRAM or MILLILITER since that
+> day. velista still creates a free text line in pieces, and every surface draws and steps a
+> free text line in its own unit ("500 g", a step of 25 g, decision K's typing), as it does a
+> line of a product: the stepper reads `unit` from the line, never from its products.
 
 ## 1. The step and the limits (`libs/velista/models`)
 
@@ -444,9 +605,18 @@ The rules, in integers so no floating point rounding can move a digit:
   the exact amount for a weight or a volume ("750 gramos", "1,275 kilogramos"), and the plain
   integer for a count.
 - **Parsing.** Spaces are dropped. One separator at most, "," or "."; anything else is null.
-  With no separator the number is read in the name of `shown`. With a separator under the
-  base name it is read in the top name (S10, decision K). The result is rounded half up to a
-  whole base unit and held to `[min, max]`.
+  A weight or a volume is read in the unit `followTyped` leaves it under (decision K as the
+  owner ruled it the second time on 2026-11-17): "25000" under "g" is 25 000 g, and "750"
+  typed over a field in kilos is 750 g by rule 4. Text the field does not accept is null. A
+  count: with no separator the number is read in the name of `shown`, with one in the top
+  name. The result is rounded half up to a whole base unit and held to `[min, max]`.
+- **`followTyped(text, symbol, unit, locale)`** answers the symbol the field reads its text
+  in after a keystroke and whether it turned, or null for a keystroke the field does not
+  accept. It never rewrites the text. The stepper keeps the symbol of its draft and passes it
+  back on the next keystroke, and puts a refused key back. `typedSymbol` is its symbol for a
+  text typed under `shown`, or `shown`'s for a refused text. Since the note of 2026-11-17 on
+  a refused key (decision K) it answers `{ refused }` with the rule in place of null, and
+  `typedLimit(max, symbol, unit, locale)` writes the most for the popover that says why.
 
 `formatAmount` and `formatQuantity` keep their callers (captions, sentences, the dropped
 write note) and are not changed.
@@ -523,6 +693,19 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   a six character short form. Symbol 12 px, 400, `--app-text-secondary`. An amount of 0 draws
   its number in `--app-text-secondary` and its minus at an end, so 0 is never told by colour
   alone.
+
+  > Note of 2026-11-17, from the review of the stepper batch: the narrow sheet variant keeps
+  > the row's 4 px, as built, and this sentence's "6 in the sheets" holds for the wide one
+  > only. Measured by the fit test (`stepper-fit.spec.ts`): "999,999" in the field is 63 px,
+  > and the 72 px cell less 6 on each side leaves 60, so the field would scroll; with 4 it
+  > leaves 64.
+
+  > Note of 2026-11-17, after the ceiling of 99 999 (S6): the longest exact figure is now
+  > "99,999", so the narrow sheet takes the 6 px this sentence first asked for, as the wide
+  > one does. The fit test (`stepper-fit.spec.ts`) measures "99,999" and "125,25" with a four
+  > letter symbol in the 72 px cell less 6 on each side, and the field does not scroll. The
+  > row is measured for "99,99" at the full size too, because the six character figures that
+  > drew one step smaller are no longer reachable.
 - The sheets' field: the number is an `<input>` laid over a hidden copy of its text, so the
   field takes the width of what it holds, 17 px when focused (never under 16), its focus ring
   around the whole cell.
@@ -543,6 +726,11 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
 - **The ends.** Minus is at an end when `value <= min`; plus when `!canStepUp(value, unit,
   max)`. At an end the button carries `aria-disabled="true"` and ignores the press
   (decision D).
+- **The base of a press** (S15). `value` is drawn and is the base, except that a press,
+  repeat, key or typed commit that comes before the caller has redrawn builds on the amount the
+  last one emitted. That amount is never drawn; it is dropped when `value` moves away from the
+  amount it was built over, or after any render, so a refused, clamped or realtime amount wins
+  at once.
 - **The hold.** A primary pointer down on a button that is not at an end starts a timer of
   `QUANTITY_HOLD_DELAY_MS`. When it fires the button steps with `repeat: true` and schedules
   the next step after `QUANTITY_HOLD_FIRST_MS`, each later interval multiplied by
@@ -557,6 +745,15 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   Minus stops at the last amount above 0, or at `min` when `min` is above 0 (decision C). A
   separate press is the only way to 0.
 - `prefers-reduced-motion` changes nothing about the repeat; it only turns off the press scale.
+- **A pointer press while the field holds typed text** commits the text and takes no step (the
+  owner, 2026-11-12). A real press moves focus on mousedown, so the field's blur commits the
+  text before the click arrives. The `pointerdown` that comes while a draft is open therefore
+  marks its gesture: it starts no hold, and its pointer click is consumed until the next
+  `pointerdown`. A key click (`detail` 0) after Tab left the field is a new gesture and steps;
+  the blur by Tab already committed.
+- **Only a primary pointer on the main button touches the hold.** Any other `pointerdown` (a
+  second finger, a right button) returns before it resets anything, so it cannot undo the
+  swallow of the first finger's release.
 
 ### 3.4 The row variant
 
@@ -585,7 +782,8 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   `min`, End to the most a plus can reach (`max` rounded down to a whole step from the current
   amount is not needed: End goes to `max`). The live region is not filled for these (decision
   E).
-- While typing, the symbol under the field follows `typedSymbol` (decision K).
+- While typing, the symbol under the field follows `typedSymbol` (decision K): it holds the
+  unit the edit started under, and changes only for an emptied field and for rule 4.
 - Enter and a blur commit: `parseTypedAmount` answers the amount, which is emitted when it
   differs from `value()`; null puts the shown text back and emits nothing. Escape with typed
   text puts the shown text back and stops the event, so the sheet stays open; Escape with
@@ -738,6 +936,15 @@ branch (`:136` to `:144`) is unchanged.
   product is velista `0187`'s (U5), which builds on this event shape.
 - `VisitAdded` (`visit-added.ts:80`) passes the step through `VisitAddedStep.step`, and keeps
   `min: row.floor - 1` so the minus at the floor stays pressable.
+
+  > Note of 2026-11-17, from the review of the stepper batch: `row.floor - 1` held a weight
+  > line the visit made at 24 g under its 25 g floor, so its minus was named "Remove 1 g",
+  > drew the plain bar and still took the line back. A row now carries `min`: 0 for a line the
+  > visit made, and what a line that was there before held. The minus of a line the visit made
+  > therefore reaches 0 like every other stepper, draws the trash (S14) and is named for what
+  > it removes ("Remove 25 g from Bananas"). The take back is unchanged: on a line the visit
+  > made it still deletes the line (velista `0185`, note of 2026-11-12), which `step.to === 0`
+  > already meets.
 - `CatalogAddStore.step(product, lineId, step: QuantityStep)` replaces `by: 1 | -1`:
   - A press (`repeat: false`) going down on a line the visit created that meets today's take
     back rule (`catalog-add-store.ts:531` to `:541`: `step.to === 0`, or a measured line
@@ -815,7 +1022,9 @@ eighth rows are this plan's, and the builder stops to say so (Action boundaries)
   999 999 g, 99 999 pieces, 123 456 pieces; `spoken` in both locales; `parseTypedAmount` for
   "1,5" under "ml" (1500), "1,5" under a count of 2 (1500), "750" under "kg" (750 000), "0,5"
   under "kg" (500), "1.5" (both separators), "1,2,3" and "abc" (null), "1000000" (held to
-  999 999), a value under `min` (held to `min`).
+  999 999), a value under `min` (held to `min`). Since 2026-11-17 the cases follow decision
+  K's second ruling and the ceiling of 99 999: "25000" under "g" typed key by key and pasted,
+  "50" kg plus a 0, "99,5" into "199,5" refused, a sixth digit refused.
 - `quantity-runs.spec.ts`: one send per run with the first `from` and the last `to`; separate
   runs per key; a run back to its start sends nothing; flush; destroy flushes; a hidden page
   flushes; `pending` and `shown`.
@@ -856,7 +1065,8 @@ eighth rows are this plan's, and the builder stops to say so (Action boundaries)
 ## 8. Acceptance criteria
 
 - [ ] `QuantityStepper` draws D3 at 155, 191 and 168 by 48 for every amount from 0 to 999 999,
-      and the fit test proves a four letter symbol and the longest figures fit.
+      and the fit test proves a four letter symbol and the longest figures fit. (Since
+      2026-11-17 the most is 99 999, and a stored 100 000 still draws.)
 - [ ] Every surface of section 5 draws it, with no orange tint, and no zone list, line page,
       line sheet or catalog surface draws the reel.
 - [ ] The step follows S7b (a count by 10 from 1000), plus then minus always returns, and the
@@ -882,6 +1092,7 @@ eighth rows are this plan's, and the builder stops to say so (Action boundaries)
 - **What an add puts on a line, and the catalog's switched off plus.** Velista `0185` and
   backend `0260`.
 - **The most of 999 999 on the server.** Backend `0262`; velista's `LINE_QUANTITY_MAX` follows it.
+  Since the owner's ruling of 2026-11-17 the server holds 99 999 and so does velista (S6).
 - **Deleting a line at 0.** Backend `0263` and velista `0192`. This plan only makes sure a hold
   never reaches 0.
 - **A product's own step.** Velista `0186`, which adds a `step` input.
@@ -890,15 +1101,34 @@ eighth rows are this plan's, and the builder stops to say so (Action boundaries)
 
 ## Questions for the owner
 
+Answered on 2026-11-12:
+
+- A press while the field holds typed text commits the text and takes no step. Kept.
+- A run is written 800 ms after the last step, even while the finger is still down. Kept.
+- No `MIN_CLIENT_VERSION` raise for builds that still have the reel.
+
+Answered on 2026-11-17:
+
 1. The hold's numbers (400 ms, then 300 ms down to 100 ms by a factor of 0.85): do they feel
-   right on the phone?
+   right on the phone? Reviewed by the owner, stands as built (2026-11-17).
 2. In a sheet the step follows the short form too, so a count of 1000 steps by 10 there even
    though the field shows "1000" (decision M). Is that right, or should the sheet step by 1?
+   Reviewed by the owner, stands as built (2026-11-17).
 3. The writes wait 800 ms after the last press (decision F). Shorter feels faster on a slow
-   list; longer sends fewer requests. Is 800 ms right?
+   list; longer sends fewer requests. Is 800 ms right? Reviewed by the owner, stands as built
+   (2026-11-17).
 4. A typed "750" under "kg" means 750 kg (decision K). Should a whole number typed into a field
-   that shows kilos be read in grams instead?
+   that shows kilos be read in grams instead? Answered by the owner's ruling of 2026-11-17:
+   the field turns into kilos from 1000 g and back into grams over 99 kg, and a weight or a
+   volume stops at 99 000 (decision K as amended). Ruled again later that day: the unit
+   shown when an edit starts is held until the edit ends, a whole number over 99 under kg
+   turns into grams at once, and every unit stops at 99 999 (decision K, S6).
 5. A person who may only read a list sees the amount with no buttons and no outline
    (decision I). Do you want the outline kept, with no buttons, so rows look the same?
+   Reviewed by the owner, stands as built (2026-11-17).
 6. The catalog waits in its store and not in the pages (decision G). Is that an acceptable
-   reading of "the logic layer in a feature library"?
+   reading of "the logic layer in a feature library"? Reviewed by the owner, stands as built
+   (2026-11-17).
+
+Also ruled on 2026-11-17: a long press that starts where the next press reaches 0 (the red
+trash) takes the line to 0 on release, as built; a hold never repeats into 0 (S8b).

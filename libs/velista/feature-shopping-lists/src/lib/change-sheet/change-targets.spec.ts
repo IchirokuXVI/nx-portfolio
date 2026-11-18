@@ -180,6 +180,7 @@ describe('basketProductOf', () => {
     packCount: null,
     unitBasis: null,
     approxWeight: null,
+    quantityStep: null,
   } as CatalogItem;
   const offer = {
     price: 1.1,
@@ -215,6 +216,17 @@ describe('basketProductOf', () => {
         false
       ).approxWeight
     ).toBe(1560);
+  });
+
+  it("carries the product's step, so the settle sheet steps a switched row by it (velista 0186)", () => {
+    expect(
+      basketProductOf(
+        { ...item, unit: 'KILOGRAM', size: null, quantityStep: 250 },
+        offer,
+        false
+      ).quantityStep
+    ).toBe(250);
+    expect(basketProductOf(item, offer, false).quantityStep).toBeNull();
   });
 
   it('draws it as the price of the shop when the basket is read at one', () => {

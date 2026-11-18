@@ -1,10 +1,11 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import {
   demoWorld,
   ITEM_MILK_ID,
   LINE_MILK_ID,
   LIST_GROCERIES_ID,
   PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+  ZONE_WEEKLY_ID,
 } from '@portfolio/luna-shopper/test-fixtures';
 import {
   addProductLine,
@@ -13,16 +14,22 @@ import {
   categoryIdBySlug,
   deleteLine,
   ensureItem,
+  finishOpenBaskets,
   lineSettlements,
+  listLines,
   login,
   readLine,
   resetAliceWorld,
   setAdminPrice,
+  setLineQuantity,
+  setQuantityStep,
+  type LineView,
   type Session,
 } from './support/api';
 import {
   addInTheAisle,
-  askReel,
+  amountCell,
+  askAmount,
   chip,
   clearBasketSearch,
   closeSettleSheet,
@@ -30,11 +37,9 @@ import {
   expectBasketUrl,
   filterTool,
   generateBasket,
-  nudge,
   openFilterSheet,
   openSettleSheet,
   pressBasketMenuRow,
-  reel,
   row,
   rows,
   searchBasket,
@@ -49,10 +54,9 @@ import {
  * would meet them on a single shop: generate (0045), search (0074), filter and
  * group (0075, 0077), prices from one shop (0078), the row's status control
  * (0052), the settle sheet (0044, as velista 0139 drew it around the lists
- * that ask), the reel that settles and then reverts (0073 test 13), a row
+ * that ask), the amount cell that opens it (0190), a settle and its undo, a row
  * bought whole as its product (0139), the composer in the aisle (0053, 0110),
- * finishing
- * (0057), and what the next basket remembers (0076).
+ * finishing (0057), and what the next basket remembers (0076).
  *
  * The world is set up through the API as absolute values, so the trip starts
  * from the same place on a fresh database and on the run after it. Everything
@@ -230,19 +234,19 @@ test.describe('one trip, by the owner', () => {
       );
     });
 
-    await test.step('6. the settle sheet names the product, its price and the list that asks, and the reel buys one', async () => {
+    await test.step('6. the settle sheet names the product, its price and the list that asks, and the amount cell opens it', async () => {
       const dialog = await openSettleSheet(page, 'Milk');
       // Under the product: the price of one at the shop, and what is left
       // (velista `0139`, section 3).
       await expect(dialog.locator('.subtitle')).toHaveText(
         /€1\.15 each\s*·\s*2 to get/
       );
-      // One list asks, with its quantity as a reel the owner may move.
+      // One list asks, with its amount in a stepper the owner may change.
       const entries = dialog.locator('lib-row-entries');
       await expect(
         entries.getByRole('heading', { name: 'Asked for on 1 list' })
       ).toBeVisible();
-      await expect(askReel(dialog, 'Groceries')).toHaveAttribute(
+      await expect(askAmount(dialog, 'Groceries')).toHaveAttribute(
         'aria-valuenow',
         '2'
       );
@@ -251,23 +255,20 @@ test.describe('one trip, by the owner', () => {
       ).toBeVisible();
       await closeSettleSheet(page, dialog, basketId);
 
-      // Part of a row is bought with the row's own reel.
-      await nudge(reel(row(page, 'Milk'), 'Milk, still to get'), -1);
-      await expect(
-        reel(row(page, 'Milk'), 'Milk, still to get')
-      ).toHaveAttribute('aria-valuenow', '1');
-      await expect(
-        row(page, 'Milk').getByRole('button', {
-          name: 'Mark the rest of Milk as got',
-        })
-      ).toBeVisible();
+      // The row shows only its amount, and a press on it opens the same sheet
+      // (velista 0190). The amount is changed in the sheet, not on the row.
+      const cell = amountCell(row(page, 'Milk'));
+      await expect(cell).toHaveAccessibleName('Amount of Milk: 2');
+      await expect(cell.locator('.number')).toHaveText('2');
+      await cell.click();
+      await expect(page).toHaveURL(/\/sheet\/rows\/[0-9a-f-]{36}\/settle$/);
+      await closeSettleSheet(page, sheet(page, 'Milk'), basketId);
     });
 
-    await test.step('7. settle Milk to zero with the reel, raise it to two, and the zone line asks for the rest again', async () => {
-      const milk = reel(row(page, 'Milk'), 'Milk, still to get');
-
-      await nudge(milk, -1);
-      await expect(milk).toHaveAttribute('aria-valuenow', '0');
+    await test.step('7. settle Milk with its status control, undo it, and the zone line asks for two again', async () => {
+      await row(page, 'Milk')
+        .getByRole('button', { name: 'Mark Milk as got' })
+        .click();
       await expect(
         row(page, 'Milk').getByRole('button', { name: 'Milk is got. Undo it' })
       ).toBeVisible();
@@ -278,11 +279,16 @@ test.describe('one trip, by the owner', () => {
         )
         .toBe(0);
 
-      await nudge(milk, 2);
-      await expect(milk).toHaveAttribute('aria-valuenow', '2');
+      await row(page, 'Milk')
+        .getByRole('button', { name: 'Milk is got. Undo it' })
+        .click();
+      await expect(amountCell(row(page, 'Milk'))).toHaveAccessibleName(
+        'Amount of Milk: 2'
+      );
 
-      // Plan 0073 test 13: raising the reel walks the settlements back, so the
-      // household's own line asks for both again rather than for extra.
+      // The undo takes the buy back, so the household's own line asks for both
+      // again. Plan 0073 test 13 (raising the reel walks the settlements back)
+      // has no gesture left since velista 0190 took the reel off the row.
       await expect
         .poll(
           async () =>
@@ -396,9 +402,14 @@ test.describe('one trip, by the owner', () => {
  * A loose product is asked for by weight (velista plan 0182, section 4).
  *
  * One product sold by the kilo, with a price, on the Groceries list: added at
- * 1000 g, the row's reel nudged from 1000 to 750, which buys 250 g, and what was
- * bought reads 250 g. `aria-valuenow` stays the integer in grams, as every reel
- * of this suite asserts, and `aria-valuetext` carries the words.
+ * 1000 g, its row's amount cell reads 1 over kg, and the sheet's field is typed
+ * "750", which three whole digits under kilos turn into 750 g (velista 0188
+ * decision K as the owner ruled it on 2026-11-17), after it is typed key by key
+ * the owner's way:
+ * "1000" turns into 1 kg, two more zeros turn back into 100 g, and Escape drops
+ * it. The line then
+ * asks for 750 g and nothing was bought (velista 0190). `aria-valuenow` stays
+ * the integer in grams. "Got all" then records one buy of 750 in grams.
  *
  * The product is made through the back office and kept across runs, as
  * `aisles.spec.ts` makes its own; the line is made per run and deleted after,
@@ -442,36 +453,604 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     await admin?.dispose();
   });
 
-  test('is added at a kilo, nudged to 750 g, and 250 g is what was bought', async ({
+  test('is added at a kilo, typed down to 750 g in the sheet, and bought at 750 g', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
-    await generateBasket(page, ['Groceries'], `Weighed ${Date.now()}`);
-
-    const bananas = reel(row(page, NAME.en), `${NAME.en}, still to get`);
-    await expect(bananas).toHaveAttribute('aria-valuenow', '1000');
-    await expect(bananas).toHaveAttribute('aria-valuetext', '1 kg');
-
-    // Ten steps of 25 g down from a kilo: 975, 950, ... 750. Down is bought.
-    await nudge(bananas, -10);
-    await expect(bananas).toHaveAttribute('aria-valuenow', '750');
-    await expect(bananas).toHaveAttribute('aria-valuetext', '750 g');
-    await expect(row(page, NAME.en).locator('.progress')).toHaveText(
-      '250 g of 1 kg'
+    const basketId = await generateBasket(
+      page,
+      ['Groceries'],
+      `Weighed ${Date.now()}`
     );
 
-    // Bought, as the backend records it: 250 in grams, not 250 of something.
-    await expect
-      .poll(async () =>
-        (await lineSettlements(alice, lineId))
-          .filter((s) => s.outcome === 'BOUGHT' && !s.revertedAt)
-          .map((s) => ({ quantity: s.quantity, unit: s.unit }))
-      )
-      .toEqual([{ quantity: 250, unit: 'GRAM' }]);
+    const cell = amountCell(row(page, NAME.en));
+    await expect(cell.locator('.number')).toHaveText('1');
+    await expect(cell.locator('.symbol')).toHaveText('kg');
+
+    const dialog = await openSettleSheet(page, NAME.en);
+    const field = askAmount(dialog, 'Groceries');
+    await expect(field).toHaveAttribute('aria-valuenow', '1000');
+
+    // The owner's second ruling of 2026-11-17: under kg a whole number over 99
+    // turns into grams at once, and the field then waits in grams until the edit
+    // ends. A sixth digit is not accepted. Escape saves nothing.
+    const symbol = field
+      .locator('xpath=ancestor::lib-quantity-stepper')
+      .locator('.field-cell .symbol');
+    await field.click();
+    await field.press('ControlOrMeta+a');
+    await field.pressSequentially('10');
+    await expect(field).toHaveValue('10');
+    await expect(symbol).toHaveText('kg');
+    await field.pressSequentially('0');
+    await expect(field).toHaveValue('100');
+    await expect(symbol).toHaveText('g');
+    await field.pressSequentially('000');
+    // The third zero would be a sixth digit, and is put back, and a popover says
+    // why (the owner, 2026-11-17). Escape takes the popover away first.
+    await expect(field).toHaveValue('10000');
+    await expect(symbol).toHaveText('g');
+    const refusal = page.locator('.refusal');
+    await expect(refusal).toHaveText('At most 99,999 g');
+    await field.press('Escape');
+    await expect(refusal).toHaveCount(0);
+    await expect(field).toHaveValue('10000');
+    await field.press('Escape');
+    await expect(field).toHaveValue('1');
+    await expect(symbol).toHaveText('kg');
+
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname)
+    );
+    // "750" under kg turns into 750 g as it is typed (decision K), so the
+    // plan's "750" is what a person types (velista 0190, section 8).
+    await field.fill('750');
+    await field.press('Enter');
+    await saved;
+    await expect(field).toHaveAttribute('aria-valuenow', '750');
+    await closeSettleSheet(page, dialog, basketId);
+
+    await expect(cell.locator('.number')).toHaveText('750');
+    await expect(cell.locator('.symbol')).toHaveText('g');
+
+    // Asked for, as the backend records it: 750 in grams, and nothing bought.
     expect(await readLine(alice, LIST_GROCERIES_ID, lineId)).toMatchObject({
       quantity: 750,
       unit: 'GRAM',
     });
+    expect(
+      (await lineSettlements(alice, lineId)).filter((s) => !s.revertedAt)
+    ).toEqual([]);
+
+    // Bought from the sheet: one settlement of 750, recorded in grams.
+    const again = await openSettleSheet(page, NAME.en);
+    await again.getByRole('button', { name: /^Got all\b/ }).click();
+    await expectBasketUrl(page, basketId);
+    await expect
+      .poll(async () =>
+        (await lineSettlements(alice, lineId))
+          .filter((s) => !s.revertedAt)
+          .map((s) => [s.outcome, s.quantity, s.unit])
+      )
+      .toEqual([['BOUGHT', 750, 'GRAM']]);
+  });
+});
+
+/**
+ * A typed name already on the list adds nothing (velista plan 0185, A1).
+ *
+ * The loose product of the describe above, on a line of its own at a kilo. The
+ * composer types its name and presses add: the line still asks for 1000 g, no row
+ * of that name is drawn beside it, and the list holds one line of it, in grams, at
+ * 1000. The line is made per run and deleted after.
+ */
+test.describe('a typed name already on the list (velista 0185)', () => {
+  const NAME = { en: 'Loose bananas e2e', es: 'Plátanos a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('leaves the line at 1000 g, draws no second row, and says it is on the list', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+    const amount = page.locator(
+      `lib-line-list [data-line-id="${lineId}"] lib-quantity-stepper`
+    );
+    await expect(amount).toHaveAttribute('data-value', '1000');
+
+    await composerField(page).fill(NAME.en);
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+
+    await expect(composerField(page)).toHaveValue('');
+    // Said in the page's live region, not drawn under the field: the row is drawn.
+    await expect(
+      page.getByText(`${NAME.en} is already on the list.`).first()
+    ).toBeAttached();
+    await expect(page.locator('lib-line-composer .notice')).toHaveCount(0);
+    await expect(amount).toHaveAttribute('data-value', '1000');
+    await expect(amount).toHaveClass(/is-took/);
+    await expect(
+      page.locator('lib-line-list lib-line-row').filter({ hasText: NAME.en })
+    ).toHaveCount(1);
+
+    const held = (await listLines(alice, LIST_GROCERIES_ID)).filter(
+      (one) => one.content === NAME.en
+    );
+    expect(held).toHaveLength(1);
+    expect(held[0]).toMatchObject({ id: lineId, quantity: 1000, unit: 'GRAM' });
+  });
+});
+
+/**
+ * A typed name two lines meet asks which (velista 0185, the owner's ruling of
+ * 2026-11-16; backend 0260, rule 4).
+ *
+ * The loose product on a line of its own, kept at 0, and a free text line of the
+ * same name asking for one. The composer types the name and presses add: nothing
+ * is written, and the question names both lines, the one above 0 as already on the
+ * list, and offers a new line because the add is typed. Choosing the line at 0
+ * raises it by one step of its unit, 25 g. The two lines are made per run and
+ * deleted after.
+ */
+test.describe('a typed name two lines meet (velista 0185, 2026-11-16)', () => {
+  const NAME = { en: 'Loose bananas e2e', es: 'Plátanos a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let productLine = '';
+  let textLine = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    const kept = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    productLine = kept.id;
+    await setLineQuantity(alice, productLine, 0);
+    const typed = await alice.post<{ line: LineView }>(
+      `/v1/lists/${LIST_GROCERIES_ID}/lines`,
+      { content: NAME.en, newLine: true }
+    );
+    textLine = typed.line.id;
+    expect(textLine).not.toBe(productLine);
+  });
+
+  test.afterAll(async () => {
+    for (const id of [productLine, textLine]) {
+      if (id !== '') await deleteLine(alice, id);
+    }
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('asks which line, shows the one already on the list, and raises the one at 0', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+
+    await composerField(page).fill(NAME.en);
+    await page
+      .locator('lib-line-composer')
+      .getByRole('button', { name: 'Add', exact: true })
+      .click();
+
+    const question = page.locator('lib-add-choice');
+    await expect(question).toBeVisible();
+    const choices = question.locator('button.row');
+    // Both lines and a new line, for typed words.
+    await expect(choices).toHaveCount(3);
+    await expect(question.locator('button.row.new')).toHaveCount(1);
+    await expect(
+      question.getByRole('button', {
+        name: new RegExp(`already on the list with 1\\. Choose it to see it`),
+      })
+    ).toHaveCount(1);
+    await expect(question.locator('.state')).toHaveText([
+      'Already on the list. Choose it to see it.',
+    ]);
+    // The words wait in the field, and nothing was written.
+    await expect(composerField(page)).toHaveValue(NAME.en);
+    expect(
+      (await listLines(alice, LIST_GROCERIES_ID)).filter(
+        (one) => one.content === NAME.en
+      )
+    ).toHaveLength(2);
+
+    // The line at 0: raised by one step of its unit.
+    await question.getByRole('button', { name: /0 g to 25 g/ }).click();
+    await expect(question).toHaveCount(0);
+    await expect
+      .poll(
+        async () =>
+          (await readLine(alice, LIST_GROCERIES_ID, productLine)).quantity
+      )
+      .toBe(25);
+    expect(await readLine(alice, LIST_GROCERIES_ID, textLine)).toMatchObject({
+      quantity: 1,
+    });
+  });
+});
+
+/**
+ * The search field at the top of a list (velista 0189, section 8).
+ *
+ * On both pages the field sits above the first row, the bottom bar stays while
+ * somebody types, and the first touch drag of the results takes the focus off the
+ * field while the words, the results and `?search=1` stay. Desktop Chrome has no
+ * on screen keyboard, so this proves the blur, not the keyboard.
+ *
+ * The drag goes through the DevTools protocol with touch emulation on, because a
+ * synthetic DOM event is not what the browser scrolls with: this is the touch a
+ * finger makes, with the pointer cancelled once the browser takes it for a scroll.
+ * The two lines are made per run and deleted after.
+ */
+test.describe('the search field at the top of a list (velista 0189)', () => {
+  const RUN = `${Date.now()}`;
+  const WORD = 'Topsearch';
+  let alice: Session;
+  const made: LineView[] = [];
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    await resetAliceWorld(alice);
+    for (const what of ['soap', 'sponge']) {
+      const answer = await alice.post<{ line: LineView }>(
+        `/v1/lists/${LIST_GROCERIES_ID}/lines`,
+        { content: `${WORD} ${RUN} ${what}`, quantity: 1 }
+      );
+      made.push(answer.line);
+    }
+  });
+
+  test.afterAll(async () => {
+    // The basket step leaves a live basket holding the two lines.
+    await finishOpenBaskets(alice);
+    for (const line of made) await deleteLine(alice, line.id);
+    await alice?.dispose();
+  });
+
+  /** A finger on `target` that moves 120 px up in three steps and lifts. */
+  async function touchDrag(page: Page, target: Locator): Promise<void> {
+    const box = await target.boundingBox();
+    if (box === null) throw new Error('nothing to drag');
+    const x = box.x + box.width / 2;
+    const y = box.y + Math.min(box.height - 10, 200);
+
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send('Emulation.setTouchEmulationEnabled', {
+      enabled: true,
+      maxTouchPoints: 1,
+    });
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ x, y }],
+    });
+    for (const step of [1, 2, 3]) {
+      await cdp.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{ x, y: y - step * 40 }],
+      });
+    }
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchEnd',
+      touchPoints: [],
+    });
+    await cdp.detach();
+  }
+
+  test('sits above the rows, keeps the bar, and lets a drag take the keyboard down', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+
+    await test.step('1. the zone list', async () => {
+      await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+      const field = composerField(page);
+      const firstRow = page.locator('lib-line-list .line').first();
+      await expect(firstRow).toBeVisible();
+
+      const fieldBox = await field.boundingBox();
+      const rowBox = await firstRow.boundingBox();
+      expect(fieldBox).not.toBeNull();
+      expect(rowBox).not.toBeNull();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        rowBox?.y ?? 0
+      );
+
+      await field.fill(WORD);
+      const results = page.locator('#list-results');
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+      await expect(
+        page.getByRole('navigation', { name: 'Main sections' })
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+
+      await touchDrag(page, results);
+
+      await expect(field).not.toBeFocused();
+      await expect(field).toHaveValue(WORD);
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+    });
+
+    await test.step('2. the shopping list', async () => {
+      const basketId = await generateBasket(
+        page,
+        ['Groceries'],
+        `Top search ${RUN}`
+      );
+      await expectBasketUrl(page, basketId);
+      const field = composerField(page);
+      await expect(rows(page).first()).toBeVisible();
+      const fieldBox = await field.boundingBox();
+      const rowBox = await rows(page).first().boundingBox();
+      expect((fieldBox?.y ?? 0) + (fieldBox?.height ?? 0)).toBeLessThanOrEqual(
+        rowBox?.y ?? 0
+      );
+
+      await field.fill(WORD);
+      const results = page.locator('#basket-results');
+      await expect(results).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+      await expect(page.locator('.tools-bar')).toBeVisible();
+      await expect(
+        page.getByRole('navigation', { name: 'Main sections' })
+      ).toBeVisible();
+      await expect(field).toBeFocused();
+
+      await touchDrag(page, results);
+
+      await expect(field).not.toBeFocused();
+      await expect(field).toHaveValue(WORD);
+      await expect(results).toBeVisible();
+      await expect(page.locator('.tools-bar')).toBeVisible();
+      await expect(page).toHaveURL(/[?&]search=1/);
+    });
+  });
+});
+
+/**
+ * A product with a step of its own (velista 0186, backend 0261).
+ *
+ * A second loose product, made the way the bananas are, that a curator gave a
+ * step of 100 g through the admin update. A separate product, so the bananas'
+ * numbers above never depend on a step an earlier run left. Its line is made at
+ * a stated kilo through the API, so the test holds whatever a first add asks for.
+ * The zone list row's stepper presses by 100 g (velista 0186, section 4): three
+ * down to 700, one up to 800, and "Got all" then records a buy of the 800 g
+ * asked for, since no part of a row is bought from the shopping list.
+ */
+test.describe('a product with a step of its own (velista 0186)', () => {
+  const NAME = { en: 'Whole chicken e2e', es: 'Pollo entero e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    await setQuantityStep(admin, itemId, 100);
+    await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 5.49);
+
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('steps by 100 g on the list row, and buys what it asks for', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+    const listRow = page
+      .locator('lib-line-row', { hasText: NAME.en })
+      .locator('.row');
+    const stepper = listRow.locator('lib-quantity-stepper');
+    await expect(stepper).toHaveAttribute('data-value', '1000');
+    // The line steps by the default until its product's record is read (velista
+    // 0186, decision B); the plus names the step once it is.
+    await expect(stepper.locator('button.plus')).toHaveAccessibleName(
+      /^Add 100 g to /
+    );
+
+    // One press at a time, each drawn before the next. The run is written once,
+    // after the quiet beat (velista 0188).
+    for (const amount of ['900', '800', '700']) {
+      await stepper.locator('button.minus').click();
+      await expect(stepper).toHaveAttribute('data-value', amount);
+    }
+    await expect
+      .poll(
+        async () => (await readLine(alice, LIST_GROCERIES_ID, lineId)).quantity
+      )
+      .toBe(700);
+    await expect(stepper.locator('button.plus')).toHaveAccessibleName(
+      /^Add 100 g to /
+    );
+
+    await stepper.locator('button.plus').click();
+    await expect(stepper).toHaveAttribute('data-value', '800');
+    await expect
+      .poll(
+        async () => (await readLine(alice, LIST_GROCERIES_ID, lineId)).quantity
+      )
+      .toBe(800);
+
+    // No part of a row is bought from the shopping list since velista 0190
+    // (the owner, 2026-11-11), so "Got all" buys the 800 g the line asks for.
+    const basketId = await generateBasket(
+      page,
+      ['Groceries'],
+      `Stepped ${Date.now()}`
+    );
+    const dialog = await openSettleSheet(page, NAME.en);
+    await expect(askAmount(dialog, 'Groceries')).toHaveAttribute(
+      'aria-valuenow',
+      '800'
+    );
+    await dialog.getByRole('button', { name: /^Got all / }).click();
+    await expectBasketUrl(page, basketId);
+    await expect
+      .poll(async () =>
+        (await lineSettlements(alice, lineId))
+          .filter((s) => !s.revertedAt)
+          .map((s) => s.quantity)
+      )
+      .toEqual([800]);
+  });
+});
+
+/**
+ * A first add at the product's own step (velista 0186, the owner's ruling 43 of
+ * 2026-11-16).
+ *
+ * A third loose product, given a step of 1000 g, on no line of the Groceries list.
+ * The zone list's composer finds it and its card's plus adds it: the line asks for
+ * 1 kg, not 25 g, and one plus on its row then asks for 2 kg. The line is deleted
+ * after, so the next run adds it again.
+ */
+test.describe("a first add at the product's step (velista 0186, ruling 43)", () => {
+  const NAME = { en: 'Whole turkey e2e', es: 'Pavo entero e2e' };
+  let alice: Session;
+  let admin: Session;
+
+  const linesOfIt = async () =>
+    (await listLines(alice, LIST_GROCERIES_ID)).filter(
+      (one) => one.content === NAME.en
+    );
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    await setQuantityStep(admin, itemId, 1000);
+    await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 3.95);
+    for (const held of await linesOfIt()) await deleteLine(alice, held.id);
+  });
+
+  test.afterAll(async () => {
+    for (const held of await linesOfIt()) await deleteLine(alice, held.id);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('is added at 1 kg from the zone list, and plus then asks for 2 kg', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+
+    await composerField(page).fill(NAME.en);
+    const card = page
+      .locator('#list-results lib-product-row')
+      .filter({ hasText: NAME.en })
+      .first();
+    await expect(card).toBeVisible();
+    await card.locator('button.add').click();
+
+    await expect.poll(async () => (await linesOfIt()).length).toBe(1);
+    const [made] = await linesOfIt();
+    expect(made).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+
+    await composerField(page).fill('');
+    const amount = page.locator(
+      `lib-line-list [data-line-id="${made.id}"] lib-quantity-stepper`
+    );
+    await expect(amount).toHaveAttribute('data-value', '1000');
+    await amount.locator('button.plus').click();
+    await expect(amount).toHaveAttribute('data-value', '2000');
+    await expect
+      .poll(
+        async () =>
+          (await readLine(alice, LIST_GROCERIES_ID, made.id)).quantity,
+        { timeout: 10_000 }
+      )
+      .toBe(2000);
   });
 });
 

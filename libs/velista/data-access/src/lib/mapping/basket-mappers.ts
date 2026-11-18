@@ -40,6 +40,7 @@ import {
   type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
+import { toAddOutcome } from './add-choice-mappers';
 import { toProductCategories } from './category-mappers';
 import { toLocalizedName, toProductOffer } from './mappers';
 import {
@@ -52,6 +53,7 @@ import {
   oneOf,
   oneOfOrNull,
   positiveNum,
+  quantityStepOf,
   str,
   strOr,
 } from './primitives';
@@ -224,7 +226,7 @@ function toBasketRowEntry(
     boughtElsewhere: atLeastZero(raw['boughtElsewhere']),
     // Not on the wire: the entry view carries `left` and `bought` and backend
     // `0130` section 4 defines the sum. It is stated once here rather than at the
-    // reel that needs a ceiling, which is the one arithmetic this file does and
+    // stepper that needs a ceiling, which is the one arithmetic this file does and
     // the only one the plan leaves it.
     asked: bought + left,
     state: oneOf(raw['state'], BASKET_ROW_STATES, BASKET_ROW_STATE_FALLBACK),
@@ -469,9 +471,12 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
     return null;
   }
 
+  // Only the line add names it (backend `0260`); every other write leaves it out.
+  const addOutcome = toAddOutcome(raw['addOutcome']);
   return {
     entries: mapArray(raw['entries'], (entry) => toBasketRowEntry(entry)),
     skippedCount: atLeastZero(raw['skippedCount']),
+    ...(addOutcome === null ? {} : { addOutcome }),
   };
 }
 
@@ -614,6 +619,7 @@ function toBasketProduct(raw: unknown): BasketProduct | null {
         size: typeof raw['unitSize'] === 'number' ? raw['unitSize'] : null,
         unit: nullableStr(raw['defaultUnit']),
         approxWeight: positiveNum(raw['approxWeight']),
+        quantityStep: quantityStepOf(raw['quantityStep']),
         offer: toProductOffer(raw['bestOffer']),
         // Every scope's offer (velista `0078`, section 2). Absent for every caller
         // but the basket read, which is the only one that asks backend `0109` for

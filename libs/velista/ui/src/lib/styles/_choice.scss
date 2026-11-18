@@ -85,3 +85,68 @@
     block-size: var(--app-choice-card-tick-height);
   }
 }
+
+// A switch drawn over a native checkbox, which stays the control: the switch role,
+// the keyboard and the label's tap all come with it. The knob travels, so the state
+// never rests on colour alone. Moved here from the walks styles (velista `0191`) so
+// a ui component can use it; the two copies in features are left as they are.
+@mixin switch {
+  position: relative;
+  flex: none;
+  inline-size: calc(var(--app-space-10) - var(--app-space-2));
+  block-size: calc(var(--app-space-7) + var(--app-space-2));
+  margin: 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: var(--app-radius-full);
+  background: var(--app-surface-sunken);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  transition: background-color var(--app-motion-fast) var(--app-motion-ease);
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block-start: var(--app-space-hair);
+    inset-inline-start: var(--app-space-hair);
+    inline-size: var(--app-space-6);
+    block-size: var(--app-space-6);
+    border-radius: var(--app-radius-full);
+    background: var(--app-text-muted);
+    transition:
+      transform var(--app-motion-fast) var(--app-motion-ease),
+      background-color var(--app-motion-fast) var(--app-motion-ease);
+  }
+
+  &:checked {
+    border-color: var(--app-action-bg);
+    background: var(--app-action-bg);
+
+    &::before {
+      background: var(--app-text-on-action);
+      transform: translateX(var(--app-space-5));
+    }
+  }
+
+  &:dir(rtl):checked::before {
+    transform: translateX(calc(-1 * var(--app-space-5)));
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &::before {
+      transition: none;
+    }
+  }
+}

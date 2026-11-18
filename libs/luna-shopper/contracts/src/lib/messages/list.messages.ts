@@ -106,10 +106,19 @@ export const LINE_PATTERNS = {
  *
  * **Zero is not deleted** (section 2.2). Deleting is a separate, confirmed
  * gesture and it is the only thing that discards the history, which is the whole
- * reason the model works.
+ * reason the model works. No write deletes a line because it reached 0 (plan
+ * 0263 proposed it and was withdrawn on 2026-11-12); velista hides a line at 0
+ * outside a search instead.
+ *
+ * **The ceiling is 99 999 base units** (plan 0262, the owner's ruling of
+ * 2026-11-17): 99,999 kg, 99,999 l or 99 999 pieces, one number for the three
+ * units. It was 100 000 from when a line counted pieces only, and 999 999 for a
+ * few days before the ruling. A line already stored above it is still read,
+ * and its next write must end at or below it. Every column that holds an
+ * amount is `int`.
  */
 export const LINE_QUANTITY_MIN = 0;
-export const LINE_QUANTITY_MAX = 100000;
+export const LINE_QUANTITY_MAX = 99999;
 
 /**
  * How many lines one `line.addMany` may carry (plan 0040, section 6.1).
@@ -288,9 +297,10 @@ export interface LineView {
    *
    * A line with one product counts in that product's unit and nobody chooses
    * it (W2): a product by the kilo is weighed, everything else is counted, a
-   * kilo piece included. A free text line counts pieces. Only a line that
-   * several products can serve lets the shopper choose, among the units
-   * `lineUnitsOf` answers for them (W1).
+   * kilo piece included. A free text line counts in the unit it was created
+   * or edited in, any of the three (the owner, 2026-11-17); velista creates it
+   * in `UNIT`. Only a line that several products can serve lets the shopper
+   * choose, among the units `lineUnitsOf` answers for them (W1).
    */
   unit: LineUnit;
   /**
@@ -689,12 +699,21 @@ export interface AddLineRequest {
   userId: string;
   listId: string;
   content: string;
+  /**
+   * The amount of a line the add creates, or of the raise of a line kept at
+   * zero (plan 0260). Never added to a wanted line: an add that meets one
+   * writes nothing. Absent is one step of {@link unit} (`defaultQuantityOf`).
+   */
   quantity?: number;
   /**
    * What {@link quantity} counts (plan 0246, section 3.2). Absent is `UNIT`.
    * The gateway refuses a unit that none of the line's products offers with
-   * `line_unit_not_offered` (M3). An add that lands on a line of another unit
-   * sums nothing and answers that line as the duplicate of plan 0228 (M5).
+   * `line_unit_not_offered` (M3). A product add that meets only lines of
+   * another unit is refused with `line_unit_differs` and
+   * {@link LineUnitDiffersDetails} (plan 0260 U2). A free text add is never
+   * refused for a unit: it meets a line of any unit by name, and its unit only
+   * shapes a line it creates (R4), which counts in that unit, any of the
+   * three (the owner, 2026-11-17).
    */
   unit?: LineUnit;
   /** Set by a basket write alone (plan 0138). Never sent by a client. */
@@ -726,38 +745,43 @@ export interface AddLineRequest {
   /** The same flag {@link AddLinesItem} carries. */
   named?: boolean;
   /**
-   * The caller can ask the person which line a typed name means (plan 0228,
-   * section 1). When the name is the name of two or more lines that hold a
-   * product, the add is refused with `line_add_needs_choice` and
-   * {@link LineAddNeedsChoiceDetails}. Absent or false, such an add creates a
-   * line, as before. One such line is raised either way.
-   *
-   * Read on a free text add only, as are {@link intoLineId} and
-   * {@link newLine}: an add that carries products or a group is unchanged.
-   * The one exception is a line of another unit (plan 0246 M5): any add that
-   * meets one is refused with `line_add_needs_choice` naming that line, and
-   * `newLine: true` then creates a line on a product add too.
+   * The caller can ask the person which line an add means (plan 0228; the
+   * owner, 2026-11-16). An add that meets two or more lines, wanted and kept
+   * alike, is then refused with `line_add_needs_choice` and
+   * {@link LineAddNeedsChoiceDetails} naming all of them, and nothing is
+   * written. Absent or false, the add writes nothing and answers
+   * `ALREADY_ON_LIST` with all of them in `alreadyOnList`, never a guess at
+   * which to raise. It is never asked about a unit, and it is read on a
+   * product add too.
    */
   askIfAmbiguous?: boolean;
   /**
-   * The line the person chose, which the add raises (plan 0228). A line of the
-   * same list that is not `REJECTED`; any other id is the line not found
-   * refusal, and the add never falls back to a new line. Refused beside
-   * `newLine: true`.
+   * The line the person chose, the answer to `line_add_needs_choice` (plan
+   * 0228; the owner, 2026-11-16), on a free text add or a product add. It must
+   * be one of the lines the add meets; any other id, a line of another list
+   * and a `REJECTED` line are the line not found refusal, and the add never
+   * falls back to a new line. Wanted, the add writes nothing and answers
+   * `ALREADY_ON_LIST`; at zero or below, it is raised by the add's amount, or
+   * by one step of its own unit when that is not the unit of the add (plan
+   * 0260 R2, R4). Refused beside `newLine: true`.
    */
   intoLineId?: string;
   /**
    * The person chose a new line over the lines that hold a product under this
-   * name (plan 0228). A free text line of the same name still takes the add,
-   * because a list holds one free text line per name (plan 0091).
+   * typed name (plan 0228). A free text line of the same name still meets the
+   * add, because a list holds one free text line per name (plan 0091). Refused
+   * as a validation error under `newLine` on an add that carries products or a
+   * group (the owner, 2026-11-16): a second line of one product in one unit is
+   * what plan 0260 prevents.
    */
   newLine?: boolean;
 }
 
 /**
  * One line a `line_add_needs_choice` refusal offers (plan 0228, section 3),
- * as it stood when the add was refused. The client draws the product from its
- * own catalog read of {@link itemIds}.
+ * as it stood when the add was refused, and what choosing it does (the owner,
+ * 2026-11-16). The client draws the product from its own catalog read of
+ * {@link itemIds}.
  */
 export interface LineAddChoice {
   lineId: string;
@@ -765,41 +789,107 @@ export interface LineAddChoice {
   named: boolean;
   quantity: number;
   /**
-   * What {@link quantity} counts (plan 0246, section 3.1), so a client can
-   * say why a line of another unit was offered rather than raised (M5).
+   * What {@link quantity} counts (plan 0246, section 3.1), the line's own, so
+   * a client can say what each line becomes in its own unit.
    */
   unit: LineUnit;
   itemIds: string[];
   productGroupId: string | null;
   approvalStatus: LineApprovalStatus;
+  /**
+   * What the add answers when this line is chosen (the owner, 2026-11-16).
+   * `ALREADY_ON_LIST` for a line above zero: nothing changes, and the client
+   * only scrolls to the line and marks it. `RAISED` for a line at zero or
+   * below: it is raised to {@link resultingQuantity}.
+   */
+  outcome: LineAddChoiceOutcome;
+  /**
+   * The line's quantity once it is chosen, in {@link unit}: {@link quantity}
+   * itself for `ALREADY_ON_LIST`, and the raised amount for `RAISED`.
+   */
+  resultingQuantity: number;
 }
+
+/** What choosing one line of a `line_add_needs_choice` refusal does. */
+export type LineAddChoiceOutcome = 'RAISED' | 'ALREADY_ON_LIST';
 
 /**
  * The `details` a `line_add_needs_choice` refusal carries (plan 0228,
- * section 3): the candidate lines in list position order, at most
- * {@link LINE_ADD_CHOICE_MAX} of them.
+ * section 3): every line the add meets, wanted and kept alike (the owner,
+ * 2026-11-16), in list position order, at most {@link LINE_ADD_CHOICE_MAX} of
+ * them.
  */
 export interface LineAddNeedsChoiceDetails {
   lines: LineAddChoice[];
 }
 
 /**
- * What an add did (plan 0091, section 4).
+ * The three things an add can do (plan 0260, R1), in the order of
+ * {@link AddLineOutcome}.
+ */
+export const ADD_LINE_OUTCOMES = [
+  'CREATED',
+  'RAISED',
+  'ALREADY_ON_LIST',
+] as const;
+
+/**
+ * What an add did (plan 0260, R1). `CREATED` made a line at the add's amount.
+ * `RAISED` met only a line kept at zero and raised it (R2). `ALREADY_ON_LIST`
+ * met a wanted line, or two or more lines it could not choose between, and
+ * wrote nothing (A1; the owner, 2026-11-16).
+ */
+export type AddLineOutcome = (typeof ADD_LINE_OUTCOMES)[number];
+
+/**
+ * What an add did (plan 0091, section 4; plan 0260, section 2).
  *
- * A zone list holds one line per normalized name, so an add either created a
- * line or raised one that was already there, and the two are not the same news.
- * A caller that has to say something about it, the assistant reading its answer
- * back to a person, cannot tell from the line alone: a merged line comes back
- * looking exactly like a line that already existed, because it is one.
+ * A zone list holds one line per normalized name, so an add created a line,
+ * raised one kept at zero, or met one already wanted and left it as it was. A
+ * caller that has to say something about it, the assistant reading its answer
+ * back to a person, cannot tell from the line alone.
  *
- * `merged` is the whole of the difference. The line is the line as it now
- * stands either way, so a client that only draws it upserts by id and needs to
- * read no flag.
+ * The line is the line as it now stands in every case, so a client that only
+ * draws it upserts by id and needs to read no flag. An `ALREADY_ON_LIST` answer
+ * carries the line's own `version`, unchanged.
  */
 export interface AddLineResult {
+  /** The line created or raised, or the first line met, in list position order. */
   line: LineView;
-  /** True when the add raised an existing line instead of creating one. */
+  /**
+   * True when the add landed on a line that was already there: `RAISED` or
+   * `ALREADY_ON_LIST`. Kept so a client that reads no {@link outcome} marks
+   * the row it already draws (plan 0260 R1).
+   */
   merged: boolean;
+  outcome: AddLineOutcome;
+  /**
+   * Every line the add met and left as it was, in list position order, at
+   * most {@link LINE_ADD_CHOICE_MAX}. Empty unless {@link outcome} is
+   * `ALREADY_ON_LIST`; then {@link line} is its first. One entry is a wanted
+   * line. Two or more are every line the add met, lines at zero included,
+   * when the add could not ask which one (no `askIfAmbiguous`, or a batch
+   * item): nothing was written for it (the owner, 2026-11-16).
+   */
+  alreadyOnList: LineView[];
+}
+
+/**
+ * The `details` a `line_unit_differs` refusal of an add carries (plan 0260,
+ * section 3). A merge throws the same code with no details.
+ */
+export interface LineUnitDiffersDetails {
+  /** The line the add met, which counts in another unit. */
+  line: {
+    lineId: string;
+    content: string;
+    unit: LineUnit;
+    quantity: number;
+  };
+  /** What the add counted in. */
+  unit: LineUnit;
+  /** The batch item's position, or null on a single add. */
+  index: number | null;
 }
 
 /** One line of a {@link AddLinesRequest} batch (plan 0040, section 6.5). */
@@ -808,7 +898,8 @@ export interface AddLinesItem {
   quantity?: number;
   /**
    * What {@link quantity} counts (plan 0246, section 3.2). Absent is `UNIT`.
-   * Two items of one name fold only when their units agree (M5).
+   * Two items of one product in two units are refused as a validation error
+   * before anything is read (plan 0260 R7).
    */
   unit?: LineUnit;
   /** The same product set {@link AddLineRequest} carries. */
@@ -837,12 +928,13 @@ export interface AddLinesItem {
  * a partial failure the design cannot produce, and `merged` is a report about a
  * write that succeeded rather than one that did not.
  *
- * **It merges, per item** (plan 0091, section 2). Two items naming one thing fold
- * into one line at the summed quantity, and both slots of the answer name that
- * line. Plan 0040 section 6.3 decided the other way, on the argument that a
- * person pasting a list may have meant two entries; plan 0091 reverses it,
- * because a list that holds one line per name cannot hold two of them however
- * they arrived.
+ * **It follows the single add per item, and never sums** (plan 0260 R6). An
+ * item that meets a wanted line, or a line an earlier item of this batch
+ * created or raised, writes nothing and answers `ALREADY_ON_LIST`. So two items
+ * naming one thing make one line at the first item's amount, and both slots of
+ * the answer name that line. A product item that meets only a line of another
+ * unit refuses the whole batch with `line_unit_differs`, `details.index` naming
+ * the item (R7).
  */
 export interface AddLinesRequest {
   userId: string;
@@ -865,7 +957,8 @@ export interface UpdateLineRequest {
    * moved from grams is worse than a reset. The client sends
    * `defaultQuantityOf` the new unit. Absent leaves the unit alone. The
    * gateway refuses a unit the line's products do not offer with
-   * `line_unit_not_offered` (M3).
+   * `line_unit_not_offered` (M3). A free text line takes any of the three
+   * (the owner, 2026-11-17).
    */
   unit?: LineUnit;
   /**
@@ -1448,6 +1541,12 @@ export interface ItemLineView {
   content: string;
   /** Zero is a real answer: the line holds the product and wants none of it. */
   quantity: number;
+  /**
+   * What {@link quantity} counts, the line's own (plan 0246, section 3.1). A
+   * stepper steps the line in this unit, and a delta in any other is refused
+   * with `line_unit_mismatch` (M8).
+   */
+  unit: LineUnit;
   /** `APPROVED` or `PENDING`. A rejected line is never in the answer. */
   approvalStatus: LineApprovalStatus;
 }

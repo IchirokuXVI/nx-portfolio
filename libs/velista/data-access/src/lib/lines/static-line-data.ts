@@ -34,9 +34,8 @@ import { SEED_USER_ID } from '../zones/static-zone-data';
  * ## Positions have gaps
  *
  * Because they do on the server: `position` is assigned on insert and a delete leaves a
- * hole rather than renumbering the rest. A fixture with contiguous positions would make
- * a partial reorder look like it worked, which is the exact failure rule L4 exists to
- * prevent (`0012`, section 4.5).
+ * hole rather than renumbering the rest. A fixture with contiguous positions would hide
+ * code that reads a position as an index (`0012`, section 4.5).
  *
  * ## What each list is for
  *
@@ -52,9 +51,9 @@ import { SEED_USER_ID } from '../zones/static-zone-data';
  * - `list-pantry`, the same group, where the caller holds `WRITE` and not `DECIDE`. It
  *   carries an approved line the caller may not touch at all, an unapproved one of their
  *   own they may edit and delete, and a rejected one, which is the whole of what `WRITE`
- *   reaches. Its rows open and its reels do not move.
+ *   reaches. Its rows open and its steppers do not move.
  * - `list-market`, the same group, where the caller holds `DECIDE` and not `WRITE`. It
- *   carries an approved line with a quantity worth dragging down, plus one line waiting
+ *   carries an approved line with a quantity worth stepping down, plus one line waiting
  *   and one turned down, for the decision buttons and the restore.
  * - `list-freezer`, the same group, where the caller holds all four without being group
  *   staff. Short on purpose: it exists for the share sheet, not for its lines.
@@ -125,12 +124,12 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
     }),
   ],
   // `WRITE` and no `DECIDE` (see `SEED_LIST_ACCESS`). Rosa decides on this one, so
-  // every row here opens and no reel on it moves.
+  // every row here opens and no stepper on it moves.
   'list-pantry': [
     settled('ln-p-01', 'list-pantry', 'Rice', 1, {
       createdByUserId: 'user-mum',
     }),
-    // Approved and therefore untouchable by `WRITE`: no edit, no delete, no reel.
+    // Approved and therefore untouchable by `WRITE`: no edit, no delete, no stepper.
     wanted('ln-p-02', 'list-pantry', 'Olive oil', 1, 2, {
       createdByUserId: 'user-mum',
     }),
@@ -147,9 +146,9 @@ export const SEED_LINES: Readonly<Record<string, readonly Line[]>> = {
     }),
   ],
   // `DECIDE` and no `WRITE`. No composer, no edit entry on an unapproved row, and the
-  // reel is live on every approved one.
+  // stepper is live on every approved one.
   'list-market': [
-    // Three, where the shop has one. Dragging this to 1 is the ordinary gesture now,
+    // Three, where the shop has one. Stepping this to 1 is the ordinary gesture now,
     // and it writes one delta of -2 rather than the remainder split `0037` used to do.
     wanted('ln-m-01', 'list-market', 'Tinned tomatoes', 3, 1, {
       createdByUserId: 'user-dad',
@@ -220,7 +219,8 @@ function line(
     // Typed by a person, like every line of the fixture.
     named: true,
     quantity,
-    // Counted, as every free text line is (velista `0182`).
+    // Counted, as velista makes every free text line (velista `0182`). The server
+    // also keeps one in grams or millilitres since 2026-11-17, drawn in its unit.
     unit: 'UNIT',
     position,
     // Free text, which is what most lines are and stays first class (section 6).

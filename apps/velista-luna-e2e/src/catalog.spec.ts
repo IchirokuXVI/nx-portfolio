@@ -1,6 +1,45 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ALICE_EMAIL } from './support/api';
+import {
+  demoWorld,
+  ITEM_MILK_ID,
+  LINE_BREAD_ID,
+  LINE_MILK_ID,
+  LIST_GROCERIES_ID,
+  PRICE_SCOPE_MERCADONA_VALENCIA_ID,
+} from '@portfolio/luna-shopper/test-fixtures';
+import {
+  addProductLine,
+  adminLogin,
+  ALICE_EMAIL,
+  categoryIdBySlug,
+  deleteLine,
+  ensureItem,
+  ensurePostalCode,
+  ensureProductGroup,
+  login,
+  resetAliceWorld,
+  setAdminPrice,
+  setLineQuantity,
+  setProductGroup,
+  setQuantityStep,
+  type Session,
+} from './support/api';
 import { signIn } from './support/app';
+
+/**
+ * What every walk below reads, set here so the file passes alone as well as after
+ * the others: a postal code on Alice's profile, which is what gives the catalog a
+ * shop and so its prices. `resetAliceWorld` sets it too, and the files that call
+ * it run first in a full run; this file must not rely on that.
+ */
+test.beforeAll(async () => {
+  const alice = await login(ALICE_EMAIL);
+  try {
+    await ensurePostalCode(alice, '46004');
+  } finally {
+    await alice.dispose();
+  }
+});
 
 /**
  * The category picker (velista plan 0119), walked once as a shopper would: the
@@ -175,6 +214,19 @@ test.describe('the Supermarket selector', () => {
  * opens a page with its prices, their history and the person's lists.
  */
 test.describe('adding from the catalog', () => {
+  /** The line the last step makes and follows the link to, deleted after. */
+  let followed = '';
+
+  test.afterAll(async () => {
+    if (followed === '') return;
+    const alice = await login(ALICE_EMAIL);
+    try {
+      await deleteLine(alice, followed);
+    } finally {
+      await alice.dispose();
+    }
+  });
+
   test('adds a product to the named list, takes it back, orders by price, and opens a product page', async ({
     page,
   }) => {
@@ -198,19 +250,35 @@ test.describe('adding from the catalog', () => {
 
       await expect(held).toHaveCount(1);
       await expect(held).toContainText('Bread');
-      await expect(held.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      // The row stepper of velista 0188 has no spinbutton: the amount is on the
+      // host's data-value, in base units.
+      await expect(held.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '1'
       );
       await expect(adding.locator('[data-adding="count"]')).toHaveText(
         '1 product added'
       );
+
+      // The list asks for it now, so its plus is off and the card says why, with
+      // the way to the line (velista 0185, C1).
+      // Inert by aria-disabled and still focusable (decision G).
+      const bread = products(page, 'Bread');
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      await expect(bread.locator('button.add')).not.toHaveAttribute('disabled');
+      await expect(bread.locator('.held-onlist')).toContainText('Already on');
+      await expect(
+        bread.getByRole('link', { name: 'See it on the list' })
+      ).toBeVisible();
     });
 
     await test.step('3. the stepper of that line raises it', async () => {
-      await held.getByRole('button', { name: 'One more' }).click();
-      await expect(held.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      await held.getByRole('button', { name: /^Add 1 to Bread/ }).click();
+      await expect(held.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '2'
       );
     });
@@ -234,17 +302,22 @@ test.describe('adding from the catalog', () => {
 
       const added = page.getByRole('dialog');
       await expect(added.getByText('Bread', { exact: true })).toBeVisible();
-      await added.getByRole('button', { name: 'One fewer' }).click();
-      await expect(added.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      const fewer = added.getByRole('button', { name: /^Remove 1 from Bread/ });
+      await fewer.click();
+      await expect(added.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '1'
       );
-      await added.getByRole('button', { name: 'One fewer' }).click();
+      await fewer.click();
 
       // The last line taken back closes the sheet, and the row holds no line.
       await expect(page).toHaveURL(/\/en\/catalog$/);
       await expect(adding.locator('[data-adding="count"]')).toHaveCount(0);
       await expect(held).toHaveCount(0);
+      // On no line any more, so the plus adds again (velista 0185).
+      await expect(
+        products(page, 'Bread').locator('button.add')
+      ).not.toHaveAttribute('aria-disabled', 'true');
     });
 
     await test.step('6. the order menu puts the list in a price order, kept in the URL', async () => {
@@ -278,28 +351,27 @@ test.describe('adding from the catalog', () => {
       await expectCatalogLit(page);
     });
 
-    await test.step('8. the stepper of a list adds the product there, by the litre', async () => {
+    await test.step('8. the stepper of a list adds the product once, then steps it', async () => {
       // The demo world's Milk is a litre with no size, so a line of it counts
-      // millilitres (velista `0182`). The list's plus is an add, so each press
-      // puts one more litre on the line: 1000, then 2000. Its minus steps the
-      // line: from a litre on, one step is 250 ml, so the presses down read 1750,
-      // 1500, 1250 and 1000. One more press down takes the product back, because
-      // the visit made the line and a minus at the litre it started at removes
-      // it, as a minus at one does for a count. The list's stepper reads 0 again.
+      // millilitres (velista `0182`). From zero the list's plus is an add, which
+      // makes the line at one step, 25 ml (velista 0185). After that the plus
+      // steps the line that exists by the one step of velista 0188, 25 ml, as the
+      // list page does (velista 0187, U5). The minus steps it down, and a press at
+      // the amount the visit started it at takes the product back.
       const list = page.locator('lib-lists-table .list').first();
       const row = list.locator('.row');
-      const count = row.getByRole('spinbutton');
-      const more = row.getByRole('button', { name: 'One more' });
-      const fewer = row.getByRole('button', { name: 'One fewer' });
-      await expect(count).toHaveAttribute('aria-valuenow', '0');
+      const count = row.locator('lib-quantity-stepper');
+      const more = row.getByRole('button', { name: /^Add / });
+      const fewer = row.getByRole('button', { name: /^Remove / });
+      await expect(count).toHaveAttribute('data-value', '0');
 
-      for (const reads of ['1000', '2000']) {
+      for (const reads of ['25', '50', '75']) {
         await more.click();
-        await expect(count).toHaveAttribute('aria-valuenow', reads);
+        await expect(count).toHaveAttribute('data-value', reads);
       }
-      for (const reads of ['1750', '1500', '1250', '1000', '0']) {
+      for (const reads of ['50', '25', '0']) {
         await fewer.click();
-        await expect(count).toHaveAttribute('aria-valuenow', reads);
+        await expect(count).toHaveAttribute('data-value', reads);
       }
     });
 
@@ -307,6 +379,265 @@ test.describe('adding from the catalog', () => {
       await page.getByRole('button', { name: 'Back', exact: true }).click();
       await expect(page).toHaveURL(/\/en\/catalog\?order=price$/);
       await expect(products(page, 'Bread')).toBeVisible();
+    });
+
+    await test.step('10. a product on the list links to its line, which the list centres and marks', async () => {
+      const bread = products(page, 'Bread');
+      await bread.locator('button.add').click();
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      // The press switched it off under the focus, which stays on it.
+      await expect(bread.locator('button.add')).toBeFocused();
+
+      await bread.getByRole('link', { name: 'See it on the list' }).click();
+
+      await expect(page).toHaveURL(
+        /\/en\/zones\/[0-9a-f-]{36}\/lists\/[0-9a-f-]{36}\?line=[0-9a-f-]{36}$/
+      );
+      followed = new URL(page.url()).searchParams.get('line') ?? '';
+      const line = page.locator(`lib-line-list [data-line-id="${followed}"]`);
+      await expect(line).toBeVisible();
+      await expect(line).toContainText('Bread');
+      await expect(line).toHaveClass(/marked/);
+    });
+  });
+});
+
+/**
+ * A product whose every line on the list stands at 0 has the catalog's plus off
+ * (velista 0185, the owner's decision 51 of 2026-11-16), one line or several: the
+ * card says to raise the line under it with its own buttons, and links nowhere,
+ * because the list hides its lines at 0. The plus never raises a line at 0.
+ *
+ * Groceries holds Bread on two lines in the demo world, the Bread line and the Milk
+ * line that carries Bread as a second product, and Milk on the Milk line alone. Both
+ * go to 0 for the walk and back after it. The list the catalog adds to is held by
+ * this browser alone, so the other walks keep theirs.
+ */
+test.describe('a product on the list only at 0', () => {
+  let alice: Session;
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    await resetAliceWorld(alice);
+    await setLineQuantity(alice, LINE_BREAD_ID, 0);
+    await setLineQuantity(alice, LINE_MILK_ID, 0);
+  });
+
+  test.afterAll(async () => {
+    await resetAliceWorld(alice);
+    await alice?.dispose();
+  });
+
+  test('switch the plus off for one line or two, say to raise it below, and let the line step', async ({
+    page,
+  }) => {
+    const sentence =
+      'This is on Groceries at 0. Raise it below with its own buttons.';
+    const adding = page.locator('lib-adding-bar');
+    await signIn(page, ALICE_EMAIL);
+    await page.goto('/en/catalog');
+
+    // The catalog adds to Groceries for this walk.
+    await adding.locator('[data-adding="list"]').click();
+    const lists = page.getByRole('dialog');
+    await lists.getByRole('radio', { name: /Groceries/ }).click();
+    await expect(page).toHaveURL(/\/en\/catalog(\?.*)?$/);
+
+    // Bread, on two lines at 0.
+    const bread = products(page, 'Bread');
+    const breadPlus = bread.locator('button.add');
+    await expect(bread.locator('.held-line')).toHaveCount(2);
+    await expect(breadPlus).toHaveAttribute('aria-disabled', 'true');
+    await expect(bread.locator('.held-onlist')).toContainText(sentence);
+    // The reason, and only the reason, describes the plus.
+    const reasonId = await breadPlus.getAttribute('aria-describedby');
+    expect(reasonId).not.toBeNull();
+    await expect(page.locator(`[id="${reasonId}"]`)).toHaveText(sentence);
+
+    // Milk, on one line at 0: the same, and a press of the plus raises nothing.
+    // By the card's own name: the Bread card draws the Milk line under it too.
+    const milk = page.locator('lib-product-row').filter({
+      has: page.locator('span.name', { hasText: /^\s*Milk\s*$/ }),
+    });
+    const milkPlus = milk.locator('button.add');
+    const milkLine = milk.locator('.held-line');
+    await expect(milkLine).toHaveCount(1);
+    await expect(milkPlus).toHaveAttribute('aria-disabled', 'true');
+    await expect(milk.locator('.held-onlist')).toContainText(sentence);
+    // No link to the list: its lines at 0 are hidden there.
+    for (const card of [bread, milk]) {
+      await expect(
+        card.getByRole('link', { name: 'See it on the list' })
+      ).toHaveCount(0);
+    }
+    // Every add the page sends from here on: the switched off plus must send none.
+    // A value of 0 alone would pass before a wrong draw showed.
+    const adds: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        /\/v1\/lists\/[^/]+\/lines$/.test(new URL(request.url()).pathname)
+      ) {
+        adds.push(request.url());
+      }
+    });
+    await milkPlus.click({ force: true });
+    await expect(milkLine.locator('lib-quantity-stepper')).toHaveAttribute(
+      'data-value',
+      '0'
+    );
+
+    // The line's own stepper raises it.
+    await milkLine.getByRole('button', { name: /^Add / }).click();
+    await expect(milkLine.locator('lib-quantity-stepper')).not.toHaveAttribute(
+      'data-value',
+      '0'
+    );
+    // A line above 0 now: both products read as on the list, with the link.
+    for (const card of [milk, bread]) {
+      await expect(card.locator('.held-onlist')).toContainText('Already on');
+      await expect(
+        card.getByRole('link', { name: 'See it on the list' })
+      ).toBeVisible();
+    }
+    // The stepper's raise went out as its own write, and the forced press as nothing.
+    expect(adds).toEqual([]);
+  });
+});
+
+/**
+ * A weight line on the product page (velista 0187, criterion 1). A product by the
+ * kilo with a step of 100 g, and a line of it at 1.6 kg on Groceries that the API
+ * makes before the browser opens, so the app never loads that list: the page
+ * knows the line only from `GET /v1/items/:id/list-lines`. Its row draws the
+ * amount with its unit, and its plus steps the line by 100 g in grams. Before
+ * that answer named a line's unit the row drew pieces, its plus sent ten of them
+ * and the server refused the write with `line_unit_mismatch`.
+ *
+ * A second product of the same group gives the page its Similar products, whose
+ * info button opens the sheet about the order (velista 0187, section 4, step 9).
+ * The demo world's Milk is alone in its group, so the walk above cannot reach
+ * that button. Both products and their group are made through the back office
+ * and kept across runs; the line is made per run and deleted after.
+ */
+test.describe('a weight line on the product page (velista 0187)', () => {
+  const CHERRIES = { en: 'Loose cherries e2e', es: 'Cerezas a granel e2e' };
+  const PLUMS = { en: 'Loose plums e2e', es: 'Ciruelas a granel e2e' };
+  let alice: Session;
+  let admin: Session;
+  let itemId = '';
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const categoryIds = [await categoryIdBySlug(alice, slug)];
+    const groupId = await ensureProductGroup(
+      admin,
+      'loose-stone-fruit-e2e',
+      { en: 'Loose stone fruit e2e', es: 'Fruta de hueso a granel e2e' },
+      'KILOGRAM'
+    );
+    itemId = await ensureItem(admin, CHERRIES, categoryIds, 'KILOGRAM');
+    const plums = await ensureItem(admin, PLUMS, categoryIds, 'KILOGRAM');
+    for (const [id, price] of [
+      [itemId, 6.99],
+      [plums, 2.49],
+    ] as const) {
+      await setProductGroup(admin, id, groupId);
+      await setAdminPrice(admin, id, PRICE_SCOPE_MERCADONA_VALENCIA_ID, price);
+    }
+    await setQuantityStep(admin, itemId, 100);
+
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: CHERRIES.en,
+      itemId,
+      quantity: 1600,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1600, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('draws the line in kilos, steps it by its own step, and explains the order of similar products', async ({
+    page,
+  }) => {
+    const row = page.locator(
+      `lib-lists-table li[data-list="${LIST_GROCERIES_ID}"] .row`
+    );
+    const count = row.locator('lib-quantity-stepper');
+
+    await test.step('1. the row draws the amount with its unit', async () => {
+      await signIn(page, ALICE_EMAIL);
+      await page.goto(`/en/catalog/products/${itemId}`);
+      await expect(
+        page.getByRole('heading', { level: 1, name: CHERRIES.en })
+      ).toBeVisible();
+      await expect(count).toHaveAttribute('data-value', '1600');
+      await expect(count.locator('.number')).toHaveText('1.6');
+      await expect(count.locator('.symbol')).toHaveText('kg');
+    });
+
+    await test.step('2. plus steps the line by 100 g, and the server takes it', async () => {
+      const written = page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          new URL(response.url()).pathname === `/v1/lines/${lineId}/quantity`
+      );
+      await row.getByRole('button', { name: /^Add 100 g to / }).click();
+      await expect(count).toHaveAttribute('data-value', '1700');
+
+      const response = await written;
+      expect(response.request().postDataJSON()).toEqual({
+        delta: 100,
+        unit: 'GRAM',
+      });
+      expect(response.ok()).toBe(true);
+      // The live region is always there; a refused write fills it.
+      await expect(page.locator('.add-failed')).toHaveText('');
+      await expect(count).toHaveAttribute('data-value', '1700');
+    });
+
+    await test.step('3. a reload reads 1.7 kg back from the server', async () => {
+      await page.reload();
+      await expect(count).toHaveAttribute('data-value', '1700');
+    });
+
+    await test.step('4. the order of similar products says why it differs', async () => {
+      const heading = page.getByRole('heading', { name: /Similar products/ });
+      await expect(heading).toBeVisible();
+      await heading
+        .getByRole('button', { name: 'How these are sorted' })
+        .click();
+
+      await expect(page).toHaveURL(
+        new RegExp(`/en/catalog/products/${itemId}/sheet/about-order$`)
+      );
+      const sheet = page.getByRole('dialog');
+      await expect(
+        sheet.getByRole('heading', { name: 'How these are sorted' })
+      ).toBeVisible();
+      await sheet.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(page).toHaveURL(
+        new RegExp(`/en/catalog/products/${itemId}$`)
+      );
+      await expect(
+        page.getByRole('heading', { level: 1, name: CHERRIES.en })
+      ).toBeVisible();
     });
   });
 });

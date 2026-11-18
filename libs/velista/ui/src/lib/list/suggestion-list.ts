@@ -17,7 +17,6 @@ import {
   RokuTranslatorService,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  stepFrom,
   type CatalogSuggestion,
   type LineUnit,
 } from '@portfolio/velista/models';
@@ -60,6 +59,8 @@ export interface SuggestionHolding {
    * steps by: 25 g or 250 g for a weight, one for a count. Absent is a count.
    */
   readonly unit?: LineUnit;
+  /** The step the stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
   /** Whether the stepper may move. A caller who may not change it sees it disabled. */
   readonly editable: boolean;
   /**
@@ -70,11 +71,17 @@ export interface SuggestionHolding {
   readonly busy?: boolean;
 }
 
-/** A holding's stepper moved, once per press. */
+/**
+ * A holding's stepper moved, once per press and once per repeat of a hold (velista
+ * `0188`): the amount the stepper drew, and the one it asks for. The page gathers the
+ * steps into one write.
+ */
 export interface SuggestionHoldingChange {
   readonly holding: SuggestionHolding;
   readonly from: number;
   readonly to: number;
+  /** True for a step the hold made. */
+  readonly repeat: boolean;
 }
 
 /** A suggestion chosen, and the button it was chosen with. */
@@ -359,7 +366,7 @@ export class SuggestionList {
       : link(card.productId);
   }
 
-  /** A held line's stepper was pressed: one more or one fewer, from and to. */
+  /** A held line's stepper stepped: the stepper's own from and to (velista `0188`). */
   protected stepHolding(
     card: SuggestionCardView,
     step: ProductRowLineStep
@@ -370,14 +377,11 @@ export class SuggestionList {
     if (holding === undefined || holding.busy === true) {
       return;
     }
-    // One step of the line's unit, not one gram (velista `0182`).
     this.holdingChanged.emit({
       holding,
-      from: holding.quantity,
-      to: Math.max(
-        0,
-        stepFrom(holding.quantity, holding.unit ?? 'UNIT', step.by)
-      ),
+      from: step.step.from,
+      to: step.step.to,
+      repeat: step.step.repeat,
     });
   }
 }
@@ -408,10 +412,11 @@ function addOf(
       name: holding.text,
       quantity: holding.quantity,
       unit: holding.unit,
+      step: holding.step,
       editable: holding.editable && holding.busy !== true,
       pending: false,
       list: list === null ? holding.listName : null,
-      stepperLabel: t('list.add.card.alreadyQuantity', { line: holding.text }),
+      stepperName: holding.text,
     })),
   };
 }

@@ -1,14 +1,27 @@
 import {
   ADD_CHOICE_MAX,
+  addAmount,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
+  LINE_QUANTITY_MAX,
   LINE_UNIT_FALLBACK,
   LINE_UNITS,
   type AddChoice,
   type AddChoiceLine,
+  type AddChoiceOutcome,
+  type AddOutcome,
+  type AddUnitRefusal,
+  type LineUnit,
 } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { isRecord, mapArray, nullableStr, oneOf, str } from './primitives';
+import {
+  isRecord,
+  mapArray,
+  nullableStr,
+  oneOf,
+  oneOfOrNull,
+  str,
+} from './primitives';
 
 /**
  * The question a `line_add_needs_choice` refusal asks, or null for any other failure
@@ -34,6 +47,19 @@ export function toAddChoice(error: unknown): AddChoice | null {
   return lines.length === 0 ? null : { lines };
 }
 
+/**
+ * One step of its unit more, when the server did not say what a raise comes to:
+ * held to the ceiling of every line (`LINE_QUANTITY_MAX`, 99 999), and never
+ * under what the line already holds, so an amount the server keeps above the
+ * ceiling is drawn as it is.
+ */
+function raisedBy(quantity: number, unit: LineUnit): number {
+  return Math.min(
+    Math.max(LINE_QUANTITY_MAX, quantity),
+    quantity + addAmount(unit)
+  );
+}
+
 /** One entry of `details.lines`, or null when it cannot be drawn. */
 export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
   if (!isRecord(raw)) {
@@ -53,6 +79,22 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
     return null;
   }
 
+  // Backend `0246`: a line of another unit is named alone. Absent is a count.
+  const unit = oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK);
+  // What choosing it does (backend `0260`, rule 4). A server of before the ruling of
+  // 2026-11-16 names no outcome, and then a line that holds an amount is one the
+  // list already asks for, and a line at zero is raised.
+  const outcome =
+    toAddChoiceOutcome(raw['outcome']) ??
+    (quantity > 0 ? 'alreadyOnList' : 'raised');
+  const resulting = raw['resultingQuantity'];
+  const resultingQuantity =
+    outcome === 'alreadyOnList'
+      ? quantity
+      : typeof resulting === 'number' && Number.isFinite(resulting)
+        ? resulting
+        : raisedBy(quantity, unit);
+
   return {
     lineId,
     content,
@@ -60,8 +102,9 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
     // reading that never shows a product's name over somebody's typing.
     named: raw['named'] !== false,
     quantity,
-    // Backend `0246`: a line of another unit is named alone. Absent is a count.
-    unit: oneOf(raw['unit'], LINE_UNITS, LINE_UNIT_FALLBACK),
+    unit,
+    outcome,
+    resultingQuantity,
     itemIds: mapArray(raw['itemIds'], str),
     productGroupId: nullableStr(raw['productGroupId']),
     approvalStatus: oneOf(
@@ -70,4 +113,107 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
       LINE_APPROVAL_STATUS_FALLBACK
     ),
   };
+}
+
+/** The `outcome` of one line of the question, or null for one this build does not know. */
+function toAddChoiceOutcome(raw: unknown): AddChoiceOutcome | null {
+  switch (raw) {
+    case 'RAISED':
+      return 'raised';
+    case 'ALREADY_ON_LIST':
+      return 'alreadyOnList';
+    default:
+      return null;
+  }
+}
+
+/**
+ * The refusal of a product add that met a line of another unit, or null for any
+ * other failure (velista `0185`, section 4; backend `0260`, section 3).
+ *
+ * Mapped from `details.line` (rule D4). A refusal whose bag is missing or unreadable
+ * is still that refusal: it names no line, `name` falls back to `addedName`, the
+ * product the person added, and the unit is unknown, which draws the sentence that
+ * names no unit. Only a product add reaches this; a merge's `line_unit_differs`
+ * carries no bag and keeps the rename sentence, because its caller never asks here.
+ */
+export function toAddUnitRefusal(
+  error: unknown,
+  addedName: string
+): AddUnitRefusal | null {
+  if (!(error instanceof GatewayError) || error.code !== 'line_unit_differs') {
+    return null;
+  }
+
+  const line = error.details?.['line'];
+  if (!isRecord(line)) {
+    return { lineId: null, name: addedName, unit: null };
+  }
+
+  const lineId = str(line['lineId']);
+  const content = str(line['content'])?.trim() ?? '';
+  return {
+    lineId: lineId === null || lineId === '' ? null : lineId,
+    name: content === '' ? addedName : content,
+    unit: oneOfOrNull(line['unit'], LINE_UNITS),
+  };
+}
+
+/** The line a `line_unit_differs` refusal of an add names, as `details.line` carries it. */
+export interface RefusedLine {
+  readonly lineId: string;
+  readonly content: string;
+  readonly unit: LineUnit;
+  readonly quantity: number;
+}
+
+/**
+ * The line a product add's `line_unit_differs` refusal met (backend `0260`,
+ * section 3), or null for any other failure and for a bag that does not name all
+ * four fields in a shape this build reads (rule D4). Only a line known in full is
+ * returned, because its caller holds it as a saved line of the list.
+ */
+export function toRefusedLine(error: unknown): RefusedLine | null {
+  if (!(error instanceof GatewayError) || error.code !== 'line_unit_differs') {
+    return null;
+  }
+  const line = error.details?.['line'];
+  if (!isRecord(line)) {
+    return null;
+  }
+  const lineId = str(line['lineId']);
+  const content = str(line['content']);
+  const unit = oneOfOrNull(line['unit'], LINE_UNITS);
+  const quantity = line['quantity'];
+  if (
+    lineId === null ||
+    lineId === '' ||
+    content === null ||
+    unit === null ||
+    typeof quantity !== 'number' ||
+    !Number.isFinite(quantity) ||
+    quantity < 0
+  ) {
+    return null;
+  }
+  return { lineId, content, unit, quantity };
+}
+
+/**
+ * The `outcome` of an add's answer, or the `addOutcome` of the basket's (backend
+ * `0260`, R1), in velista's own words. Null for an answer that names none or one
+ * this build does not know: a gateway of before backend `0260`, whose caller then
+ * reads `merged` as it always did.
+ */
+export function toAddOutcome(raw: unknown): AddOutcome | null {
+  switch (raw) {
+    case 'CREATED':
+      return 'created';
+    case 'RAISED':
+      return 'raised';
+    case 'ALREADY_ON_LIST':
+      return 'alreadyOnList';
+    default:
+      return null;
+  }
 }

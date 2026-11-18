@@ -251,12 +251,58 @@ export type ImageCaption =
       readonly id: string;
     };
 
+/**
+ * What a number is counted in, for a number field whose unit follows the row
+ * (admin plan 0070, section 3): the step of a product is grams for one sold
+ * by the kilo and millilitres for one sold by the litre.
+ */
+export interface NumberUnit {
+  /** The short word a box draws after the number: "g", "ml". */
+  readonly word: string;
+  /**
+   * The value with its unit, as a person reads it: "250 g", "1 kg". The
+   * same value the field holds, so it writes nothing of its own.
+   */
+  format(value: number, locale: string): string;
+}
+
 /** A count or a measure. Not money, which is its own kind for a reason. */
 export interface NumberField<T extends ResourceRow> extends FieldBase<T> {
   readonly kind: 'number';
   readonly min?: number;
   readonly max?: number;
   readonly integer?: boolean;
+  /**
+   * The unit of the value, read from the row as {@link FieldBase.shown}
+   * reads it, or `null` for a bare number (admin plan 0070). A value reads
+   * through its `format`, and a box draws its `word` after it.
+   *
+   * A method for the reason {@link FieldBase.read} is one.
+   */
+  unit?(held: Partial<T>): NumberUnit | null;
+  /**
+   * The values the field may hold, drawn as a select of them in place of a
+   * box, or `null` for the box (admin plan 0070). Each one is labelled
+   * through {@link unit} when there is one. A nullable field starts the list
+   * with an empty option, which submits `null`.
+   *
+   * A value the row holds that is not in the list is drawn as one more
+   * option, so a stale row shows what it holds and is not silently replaced.
+   * The draft holds the chosen value as it holds a typed one, so the checks
+   * and the submit are those of the box.
+   *
+   * A method for the reason {@link FieldBase.read} is one.
+   */
+  choices?(held: Partial<T>): readonly number[] | null;
+  /**
+   * What an empty value is called, in place of "None", or `null` for "None"
+   * (admin plan 0070). Drawn greyed while the page reads, as the label of the
+   * empty option of a select, and as the placeholder of an empty box. A step
+   * left empty is the default step, and says which one.
+   *
+   * A method for the reason {@link FieldBase.read} is one.
+   */
+  emptyText?(held: Partial<T>): FieldMessage | null;
 }
 
 /** A `numeric` column, carried as a string for as long as this app can manage. */

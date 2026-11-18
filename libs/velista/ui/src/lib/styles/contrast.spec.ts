@@ -169,6 +169,18 @@ describe('contrast', () => {
       });
     });
 
+    // Velista `0191`: the 12px size and price per measure of a compact row are the
+    // smallest text on the list page, in the secondary colour on the row's two
+    // surfaces. Named, so a later change to that colour names this row when it fails.
+    it.each(['--app-surface-ground', '--app-surface-sunken'])(
+      `the compact row's 12 px facts reach ${TEXT}:1 on %s`,
+      (surface) => {
+        expect(
+          ratio('--app-text-secondary', surface, theme)
+        ).toBeGreaterThanOrEqual(TEXT);
+      }
+    );
+
     // A quiet action is text and nothing else, so it carries a text floor rather
     // than a control one. This is the pair that forces amber-800 on Day: the
     // amber-500 that fills the primary button is 1.9:1 as text on white.
@@ -215,6 +227,18 @@ describe('contrast', () => {
         }
       );
     });
+
+    // Velista `0188` S14: the stepper's minus draws a trash in the danger foreground
+    // where its next press reaches 0. The capsule is raised, and the button sinks
+    // while it is pressed.
+    it.each(['--app-surface-raised', '--app-surface-sunken'])(
+      `the stepper's trash reaches ${NON_TEXT}:1 on %s`,
+      (surface) => {
+        expect(
+          ratio('--app-status-danger-fg', surface, theme)
+        ).toBeGreaterThanOrEqual(NON_TEXT);
+      }
+    );
 
     // Velista `0133`: the strip of a support session. Its text, the border of End and
     // the ring End takes are all the one foreground, so one ratio covers the three.

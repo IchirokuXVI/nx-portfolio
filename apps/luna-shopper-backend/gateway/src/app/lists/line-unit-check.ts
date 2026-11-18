@@ -21,10 +21,15 @@ import type { NatsClient } from '../messaging/nats-client';
  * products can be counted in, with `line_unit_not_offered` and the units the
  * line does offer in `details.offered`.
  *
- * - **A free text line offers `UNIT` alone**, and needs no catalog read.
+ * - **A free text line is never refused** (the owner, 2026-11-17). With no
+ *   product it counts in `UNIT`, `GRAM` or `MILLILITER`, whichever it is
+ *   given, and needs no catalog read. That holds for an add, a batch item, a
+ *   basket add, and an edit that changes the unit of a free text line or
+ *   clears its products.
  * - **A product the catalog no longer names offers nothing** and does not
- *   widen the set. A line whose products the catalog names none of is read as
- *   the free text line it now is.
+ *   widen the set. A line whose products the catalog names none of offers
+ *   `UNIT` alone, as {@link lineUnitsOf} answers for an empty set: it still
+ *   holds products, so the rule for a line with products applies to it.
  * - **A catalog that does not answer refuses nothing.** Unknown and slow must
  *   not look the same, as on a settle: the write goes on, and core stores the
  *   unit as it does for every caller.
@@ -37,14 +42,13 @@ export class LineUnitCheck {
 
   /**
    * Refuse each `unit` that its products do not offer. One catalog read for
-   * every item, so a batch add costs one round trip.
+   * every item, so a batch add costs one round trip. A write with no product
+   * is a free text line, which counts in any unit, so it is not asked.
    */
   async assertOffered(
     writes: readonly { unit: LineUnit; itemIds: readonly string[] }[]
   ): Promise<void> {
-    const needed = writes.filter(
-      (write) => write.unit !== 'UNIT' || write.itemIds.length > 0
-    );
+    const needed = writes.filter((write) => write.itemIds.length > 0);
     if (needed.length === 0) {
       return;
     }

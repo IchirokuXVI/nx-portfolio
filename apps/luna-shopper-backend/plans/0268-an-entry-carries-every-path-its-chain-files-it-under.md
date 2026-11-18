@@ -21,6 +21,25 @@
 > The owner answered D1 to D5 on 2026-11-11. The answer to D2 widens the plan from DIA to every
 > chain, so the plan took a new title and file name.
 >
+> **Note of 2026-11-18, checked against `origin/dev`.** The neighbours of this plan moved after
+> it was written. The design does not change. Where the text below disagrees, this note holds:
+>
+> - Plan `0254` (PR #964) is merged. The eight leaves that Context names still have a name in
+>   `DIA_CATEGORY_NAMES` and no slug in `DIA_CATEGORY_SLUGS`.
+> - Plan `0267` is not in the same PR as this plan any more. Its part 1, Carrefour and El Jamón,
+>   is PR #973, open. DIA, LIDL and DEZA come in a later wave.
+> - Admin plan `0071` is built (PR #972), and it draws no `unslottedOnly` block, because the
+>   field is not on `origin/dev`. The follow up case of section 5 applies.
+> - Plan `0269` is built (PR #998). The sink keeps the first failed write, runs no later work
+>   and aborts the run, and `drain()` then rejects and writes nothing more. A run whose write
+>   failed thus writes no path, as a run that dies before `drain()` (Constraints). A walk writes
+>   only its own columns, with `update` and never with a `save` of a cached entity, so the
+>   write of section 2 is an `update` of the one column (plan `0269`, section 3).
+> - The anchors in the sink and the ingest moved with plan `0269`: `product()` is near line 532
+>   of `run-report.sink.ts`, `availability()` near line 559 and `drain()` near line 623,
+>   `fieldsOf` is near line 2380 of `source-ingest.ts`, and `sizesDisprovedExamples` is near
+>   line 1073 of `run-executor.service.ts`.
+>
 > Prerequisite reading: plan `0173` (our tree is a copy of DIA's), plan `0174` (a DIA row is
 > filed by its leaf ids), plan `0254` (PR #964, not merged on 2026-11-11: the leaves left with no
 > slug on purpose), plan `0267` (the same runners hand products to the sink as they read them,

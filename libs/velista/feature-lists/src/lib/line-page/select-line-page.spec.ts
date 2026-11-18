@@ -29,6 +29,15 @@ describe('offeredUnits (velista 0183; backend 0246 W1 and W2)', () => {
     ).toEqual(['UNIT']);
   });
 
+  it('keeps a free text line in its own unit, grams or millilitres too (the owner, 2026-11-17)', () => {
+    expect(offeredUnits({ itemIds: [], unit: 'GRAM' }, () => null)).toEqual([
+      'GRAM',
+    ]);
+    expect(
+      offeredUnits({ itemIds: [], unit: 'MILLILITER' }, () => null)
+    ).toEqual(['MILLILITER']);
+  });
+
   it('keeps the stored unit on offer when no product serves it, so the chip has a way out', () => {
     // A legacy line stored in pieces whose readable products are all loose.
     expect(
@@ -201,6 +210,22 @@ describe('selectLinePage', () => {
       boughtCount: 12,
       canStep: true,
     });
+  });
+
+  it("gives the stepper the product's step, and none for a count (velista 0186)", () => {
+    const chicken = {
+      ...item('chicken', 'Whole chicken', null),
+      size: null,
+      unit: 'KILOGRAM',
+      quantityStep: 250,
+    } as CatalogItem;
+    const weighed = input({
+      line: { ...line(), unit: 'GRAM', quantity: 1000, itemIds: ['chicken'] },
+      itemNameOf: (itemId) => (itemId === 'chicken' ? chicken : null),
+    });
+
+    expect(selectLinePage(weighed)?.step).toBe(250);
+    expect(selectLinePage(input())?.step).toBeNull();
   });
 
   describe('who added it', () => {

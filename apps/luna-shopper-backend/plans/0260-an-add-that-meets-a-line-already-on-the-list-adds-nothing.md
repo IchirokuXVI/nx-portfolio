@@ -1,3 +1,7 @@
+> **PR:** [#1005](https://github.com/IchirokuXVI/nx-portfolio/pull/1005) (section 5.1, 2026-11-17)
+>
+> **PR:** [#984](https://github.com/IchirokuXVI/nx-portfolio/pull/984)
+
 # 0260: an add that meets a line already on the list adds nothing
 
 > **Amended on 2026-11-11** from the owner's decisions of 2026-11-10 and 2026-11-11 (section 0).
@@ -9,6 +13,14 @@
 > that line by one default", and M4 of `0246` ("a new weight line starts at 1000"). The usual
 > amount at a repeat add (the median of the amounts bought) is backlog `0025`, not built here.
 > The title changed with it; the file name is the old one.
+>
+> **Amended on 2026-11-17 (the owner): a free text line counts in any unit.** U1 ("a free
+> text line counts pieces") is replaced: the owner ruled on 2026-11-17 that a free text line (no product) may be created and edited in `UNIT`, `GRAM` or `MILLILITER`, and stores and returns the unit it was given. The gateway no longer refuses it
+> (`0246` M3). R4's "always `UNIT`" is replaced by "in the unit the add states, `UNIT` when
+> it states none". The matching rules are unchanged: an add meets a line by name whatever the
+> unit, no add raises a wanted line, and a raise of a line at 0 takes the amount from that
+> line's own unit (`amountOnto`). Core needed no change for it; the gateway's check was the
+> one refusal. Velista still creates a free text line in `UNIT`.
 >
 > It amends `0246` M4, M5 and section 3.3 in their add half, and `0228` target 1 (the raise of
 > one candidate, the question). The merge half of `0246` (a rename onto a line of another unit,
@@ -176,6 +188,9 @@ From 2026-11-09:
 
 - **U1. A free text line counts pieces.** To count in another unit a line needs a product.
   This closes the first bullet of `0246` section 9. W1 of `0246` stands.
+  _Replaced on 2026-11-17 by the owner: a free text line may be created and edited in
+  `UNIT`, `GRAM` or `MILLILITER`, and keeps the unit it was given. A line with products keeps
+  the rule of `0246` M3._
 - **U2. A conversion between units is wanted at an add and at a merge, and not now.** Until a
   conversion plan is built, an add or a merge that meets a line of another unit is an error,
   never a choice and never a silent new line. The conversion is backlog `0024`.
@@ -194,6 +209,92 @@ From 2026-11-10 and 2026-11-11:
   piece. This replaces "one default unit (one kilo, one litre)" of U3 and M4 of `0246`. The step
   is one size per unit (25 for a weight "or any other measurement unit", 1 for a count). The per
   product step of backend `0261` is later work and, once built, is the step an add uses.
+
+From 2026-11-12 (the owner's rulings on the build, PR #984):
+
+- **R5 stands, and replaces decision 2 of `0214` for adds.** A product add meets a line that
+  holds the product whatever the line's `named` flag, and raises it when it is kept at 0. The
+  owner: the old rule as he remembers it was that when only one line holds a product, adding
+  that product lands on that line regardless of its name. Decision 2 of `0214` ("an unnamed add
+  never lands on a named line") still governs the identity key; for an add it is replaced by
+  R5.
+- **U2 means "only".** A product add lands on a line of its own unit when one holds the
+  product, and is refused with `line_unit_differs` only when no line of its unit holds it, even
+  when its earliest identity line counts in another unit. Example: "Leche" counts 2 pieces at
+  position 1, "Desayuno" (several products, millilitres) holds milk at position 3; an add of milk
+  in millilitres answers `ALREADY_ON_LIST` with "Desayuno", or raises it when it is kept at 0.
+  The same in `addMany`. Section 1 steps 2 and 3 are amended below.
+- **`intoLineId` on a kept line** raises it by the request's amount when the units agree, and by
+  one step of the line's unit otherwise. Step 1 is amended below.
+- **A refused add has its own sentence.** `line_unit_differs` on an add names the line with
+  `messageArgs.content` and `messageArgs.variant: 'add'`, which picks "\"{content}\" is already
+  on this list in another unit. Change the amount on that line." (Spanish: "\"{content}\" ya está
+  en esta lista en otra unidad. Cambia la cantidad en esa línea."). The code and the `details`
+  of section 3 are unchanged; the merge keeps its own sentence.
+- **The assistant helps to fix it.** In the owner's words: "Make sure the assistant also answers
+  with some help to fix it. For example, returning the line that is already on the list and
+  telling you to use that one instead." A refused add or batch hands the model the met line
+  from `details.line` (`onList`: id, name, quantity, unit) and an `instead` sentence that says
+  to change the amount on that line. An `ALREADY_ON_LIST` slot already names its line
+  (`product`, `quantity`, `unit` of the line it met), so it is left as it was.
+- **Backend `0263` was withdrawn.** No write deletes a line because it reached 0; velista hides
+  a line at 0 outside a search. Every line at 0 is a kept line (R2).
+
+From 2026-11-16 (the owner). In his words: "The backend won't accept ambiguous lines. If more
+than one line matches (it will also match if the line's amount is at 0), the user needs to pick
+one line. The server will return the possible lines to pick from and on client side a choice
+will be shown to the user. If the line is filled and has an amount, it won't step when selecting
+it, only scroll to it and highlight the line." This **replaces R3** and the order "a kept
+identity line is raised before held lines" of section 1 (steps 2 and 3, their amendment of
+2026-11-12 and the note of review round 3). As rules:
+
+- **M1. The matches of an add** are every line it could land on, wanted and kept alike, never a
+  rejected one. A product add: the identity targets and the held lines (`findLinesHolding`) of
+  the add's unit, once each. A free text add: the identity target and the named candidates
+  (`findNamedProductLines`), of any unit (R4). `newLine: true` leaves out the named candidates
+  and never the free text line of the name (`0228` target 1.2). Order: `isEarlierLine`.
+- **M2. No match** creates. A product add with no match in its unit and a line of the product
+  in another unit is refused with `line_unit_differs`, as before.
+- **M3. One match**: wanted answers `ALREADY_ON_LIST` and writes nothing; kept is raised
+  (`RAISED`).
+- **M4. Two or more, with `askIfAmbiguous`**: `line_add_needs_choice` listing all of them (up to
+  `LINE_ADD_CHOICE_MAX`), on a product add too. Each entry gains `outcome` (`ALREADY_ON_LIST`
+  for a wanted line, which choosing leaves as it is; `RAISED` for a kept one) and
+  `resultingQuantity` (the line's own quantity, or what the raise makes it). Nothing is written.
+- **M5. Two or more, without `askIfAmbiguous`** (a batch item, a replayed add): nothing is
+  written and the answer is `ALREADY_ON_LIST` with every match in `alreadyOnList`, kept ones
+  included. This replaces "raise the earliest".
+- **M6. `intoLineId`** works on a product add too. The chosen line must be one of the add's
+  matches; any other is the line not found refusal (`0228` B3). Wanted: `ALREADY_ON_LIST`;
+  kept: raised by `amountOnto`.
+- **M7. `newLine: true`** is an answer for a typed name alone. On an add of a product or a
+  group it is a 400 validation error with `messageArgs.field` `newLine`, at the gateway (list
+  add and basket add) and in core. The batch carries no `newLine`.
+- **M8. `addMany`** follows M1 to M5 per item, counting the lines this batch creates or raises
+  as matches. The basket add is `LineService.add` and passes `askIfAmbiguous` through, so it
+  can ask.
+- **M9. The assistant**: a batch slot answering `ALREADY_ON_LIST` with two or more lines is
+  reported as not added, with the lines (`matches`: id, name, quantity, unit) and an `instead`
+  sentence telling the model to ask which one.
+
+From 2026-11-16, decision 50 (the owner approved it on 2026-11-16):
+
+- **The assistant asks too.** M1 to M9 held for the screens and for a batch slot, but the
+  assistant matched names itself before it wrote: `upsert_lines` took the first line of the
+  name it found and changed it, and it had no way to name one line among several. Now an item
+  of `upsert_lines` whose name fits two or more lines of the list (lines at 0 included,
+  rejected lines never, as M1) writes nothing and answers the lines as `matches` (id, name,
+  amount, unit) with an `instead` sentence telling the model to ask which one. The item gains
+  an optional `lineId`; with it the item changes exactly that line, under the line's own name
+  (only a weight or a volume with a number rewrites the amount folded into a free text name).
+  A `lineId` is accepted only for a line the product fits by either name tier, as core's
+  `intoLineId` refuses a line that is no match: an id that is no line of the list, a rejected
+  line, or a line of another product is a refused item the model reads, never a throw. Two
+  items that land on one line, one by name and one by its id, fold into one write by the rule
+  of plan 0040 section 7.3. One match and no match behave as before. Why: a guess between two lines is the wrong write
+  the screens already refuse to make, and the assistant must not be the one way around the
+  rule. `remove_lines` and `settle_lines` already name lines by id, so they did not change;
+  core and the gateway did not change.
 
 ### The writer's, open to the owner
 
@@ -214,7 +315,11 @@ From 2026-11-10 and 2026-11-11:
   one step. Once backend `0263` is built, a line with nothing to keep is deleted at 0, so the
   kept lines an add meets are the ones that hold a buy, a name or a choice. Either plan can be
   built first.
-- **R3. The duplicate question of `0228` survives only where an add would write.** When a typed
+  _Note of 2026-11-12: backend `0263` was withdrawn by the owner. No write deletes a line at 0,
+  so every line at 0 is a kept line, and an add that meets only kept lines raises one. The code
+  needed no change for it._
+- **R3 (replaced on 2026-11-16 by the owner's M1 to M9, section 0). The duplicate question of
+  `0228` survives only where an add would write.** When a typed
   name meets two or more candidates and at least one is wanted, nothing is written, so there is
   nothing to choose: the add answers `ALREADY_ON_LIST` with every wanted candidate, and the client
   marks them all. A question here would cost a tap to choose which line to look at, which the
@@ -230,6 +335,11 @@ From 2026-11-10 and 2026-11-11:
   stated `unit` and `quantity` of a free text add only shape a line it creates (always `UNIT`,
   U1). This also keeps every installed velista working: it sends `unit: 'UNIT'` and a
   `quantity` on every typed name (velista `0182`).
+  _Note of 2026-11-17 (the owner): the line a free text add creates counts in the add's
+  `unit`, any of the three, and no longer always `UNIT` (U1 replaced). Core already stored the
+  unit it was given; the gateway refused it with `line_unit_not_offered` and no longer does.
+  The rest of R4 stands: the unit filters no match, and a raise of a kept line of another
+  unit is one step of that line's own unit._
 - **R5. A product add meets a line whose product set holds every product of the add.** A line of
   several products (velista `0183`) that holds the product is the product "already on the list"
   in the owner's words, and the catalog tab of velista `0185` switches its plus off for exactly
@@ -246,6 +356,7 @@ From 2026-11-10 and 2026-11-11:
   transaction; the assistant reads a refused batch as a refusal and reports it (`tools.ts:1560`).
   Two items of one product in two units in one batch are a 400 before the transaction, with
   `messageArgs.field` `items` (R4 of 2026-11-09, unchanged).
+  _Note of 2026-11-16: only when both would create a line, decided in the plan loop (section 4)._
 - **R8. `defaultQuantityOf` changes in place rather than a second function.** Core uses it only
   for an add that states no amount (`line.service.ts:978`, `:1225`, `:1420`). The update route
   never computes it; its doc comment (`list.messages.ts:866`) says what the client sends on a unit
@@ -262,9 +373,16 @@ a raise of a line that counts in another unit than the request (a free text add,
 `add` (`line.service.ts:960`) resolves in this order, inside the existing transaction and lock.
 "Met lines" go to section 2's answer.
 
+_Note of 2026-11-16 (the owner): the order below, steps 1 to 4 with their amendments, is
+replaced by M1 to M9 of section 0. An add collects its matches, then creates (none), meets or
+raises (one), or asks or answers all of them (two or more)._
+
 1. **`intoLineId`** (free text only, `0228` B3). The chosen line, locked. Wanted: answer
    `ALREADY_ON_LIST` with it. Kept: raise it by `defaultQuantityOf(chosen.unit)` (R2, R4),
    whatever its unit; the old `line_unit_differs` at `:1035` to `:1040` goes.
+   _Amended on 2026-11-12 (the owner, no change to the code): a kept chosen line is raised by
+   the request's amount when its unit is the request's, and by one step of the line's own unit
+   otherwise (`amountOnto`)._
 2. **The identity targets** (`:1052`). The earliest line in the add's unit, as today
    (`sameUnit`). For a free text add the unit does not filter (R4): the earliest identity target
    of any unit. Wanted: `ALREADY_ON_LIST`. Kept: raise it.
@@ -276,6 +394,18 @@ a raise of a line that counts in another unit than the request (a free text add,
    any wanted, `ALREADY_ON_LIST` with every wanted one (up to `LINE_ADD_CHOICE_MAX`); none
    wanted, raise the earliest. None in its unit and one or more of another unit:
    `line_unit_differs` naming the first by position.
+
+_Amended on 2026-11-12 (the owner: U2 said "only"): for a product add, steps 2 and 3 run as one
+step. The identity target of the add's unit, then the held lines of the add's unit, take the add
+as above. Only when neither exists is the add refused with `line_unit_differs`, naming the
+earliest by position of the identity target of another unit and the held lines of another unit,
+whatever `newLine` says. An identity target of another unit no longer refuses before
+`findLinesHolding` runs. `addMany` follows the same order per item (section 4)._
+
+_Note of 2026-11-16 (review round 3): a wanted identity target of the add's unit answers
+`ALREADY_ON_LIST` with every wanted held line of that unit beside it, in position order, as
+step 3 says; `line` is the first of them. A kept identity target is still raised before any
+held line is looked at._
 4. **A free text add's candidates** (`0228` target 1.4, `findNamedProductLines`), skipped when
    `newLine` is true, as today. Every candidate, whatever its unit (R4).
    - One or more wanted: `ALREADY_ON_LIST` with every wanted candidate (R3).
@@ -394,6 +524,14 @@ Unchanged from 2026-11-09 in shape; only a product add reaches it now (R4).
 - An `ALREADY_ON_LIST` item emits nothing. The basket nudge at `:1373` names only lines that were
   created or raised.
 
+_Note of 2026-11-16 (review round 3): the check before the transaction is gone. Two items of
+one product in two units are the 400 on `items` only when both would create a line: a later
+product item that finds no line of its unit, and that a creation of this batch in another unit
+holds (by product, whatever the names or the `named` flag), is refused, because a single add of
+it would be. An item that meets a line of its own unit already on the list stands, so a list
+that holds the product in both units takes both items. A line of another unit already on the
+list still refuses with `line_unit_differs` and `details.index`, before the 400 is asked._
+
 ## 5. The gateway, the assistant and the documents
 
 - The list add, the basket add and the batch add document 409 `line_unit_differs` (the batch
@@ -414,6 +552,62 @@ Unchanged from 2026-11-09 in shape; only a product add reaches it now (R4).
 npx nx run luna-shopper-backend-gateway:openapi
 npx nx run luna-shopper-admin/models:wire-types
 ```
+
+### 5.1 The assistant writes a line in the unit it counts in (2026-11-17)
+
+The owner ruled on 2026-11-17: fix the assistant so it works with grams, and with the other
+units where they apply. Since the amendment of that day a free text line can count in `GRAM`
+or `MILLILITER`, and `upsert_lines` still treated every free text line as pieces: a weight
+said of a line in grams was folded into its name at quantity 1 with no unit, which core
+stored as 1 g, and a plain count was stored as that many grams. Built in `tools.ts`, the
+prompt and their specs; core, the gateway and the contracts did not change.
+
+- **An existing line is written in its own unit.** A `set` of a weight on a free text line in
+  grams (or of a volume on one in millilitres) sends the number in base units with the unit,
+  under the line's name, and folds nothing into the name. So does an item that names the line
+  with `lineId`. Only a free text line in pieces still takes a weight or a volume into its
+  name, as plan `0246` W1 wrote it.
+- **An amount the line cannot count is answered, never converted.** A plain count on a line in
+  grams or millilitres, and on a free text line any unit but its own (a weight on a free text
+  line in pieces excepted, which folds), writes nothing. The item answers the sentence a delta
+  of another unit already gets ("that line counts in grams; say the amount in grams or change
+  the line"), the line as `onList` and an `instead` that tells the model to ask the amount in
+  that unit. A delta (`mode: "add"`) of another unit is still sent and refused by core with
+  `line_unit_mismatch`, as before.
+- **Product lines.** A plain count on a product line in grams or millilitres was stored as
+  that many grams, the same defect, and is answered the same way now. A weight or a volume on
+  a product line of another unit is still sent with its unit, as plan `0246` section 5 built
+  it: it changes the unit of the line, and the gateway refuses with 422 a unit its products
+  are not sold in. A delta of another unit was already refused by core.
+- **The ceiling.** An amount above `LINE_QUANTITY_MAX` in the line's unit, or a delta that
+  would take the line above it as this call read it, writes nothing and is answered per item
+  with the ceiling in that unit, instead of a refusal of the whole batch. An amount folded into
+  a name is no quantity and is not asked.
+- **What the model reads.** Every line a tool hands the model states its unit with its number:
+  `query_lists` matches carry `unit` and `amount` ("750 g", "1500 ml", "3 pieces"), and so do
+  the results of a write, the lines of a question (`matches`) and `onList`. The prompt's weight
+  rule says that a line keeps its unit and that a mismatch is a question.
+- **Left as it is:** a new free text line is still created in pieces, with a weight or a volume
+  folded into its name, because velista itself creates free text lines in pieces for now.
+  Whether the assistant should create one in grams is a question for the owner.
+
+_Note of 2026-11-18 (the owner): a new free text line counts by weight only when asked for in
+words._ The owner answered the last bullet: the assistant creates a new free text line in
+`GRAM` or `MILLILITER` only when the person specifically asked for a line counted by weight or
+volume rather than pieces ("add flour and count it in grams"). Saying a weight ("500 g of
+flour") is not that request, and such an item is written exactly as above: the weight goes into
+the name of a line in pieces. Built in `tools.ts`, the prompt and their specs:
+
+- **The flag.** An `upsert_lines` item takes `countByAmount: true` for that request, described
+  in the tool schema and in the prompt's weight rule. Only a JSON `true` counts.
+- **With the flag and a weight or volume unit,** a new line is created in that unit with the
+  amount in base units and its name left alone. With the unit and no amount, it is created at
+  one step of that unit (`defaultQuantityOf`, 25 g or 25 ml), and the result's `note` tells the
+  model to say so. The flag needs the dimension: with no weight or volume `unit` it is read as
+  no flag, and the line counts pieces, because the tool never guesses grams over millilitres.
+- **It changes nothing else.** An item that meets a line already on the list is written by the
+  rules above and decision 50, whatever the flag says, and so is a product line. The ceiling of
+  `LINE_QUANTITY_MAX` applies to the new line in its unit as above.
 
 ## 6. Who sees what change
 
@@ -521,8 +715,9 @@ a merge across units waits for a conversion.
 - The usual amount at a repeat add, the median of the amounts bought (backlog `0025`).
 - A conversion between units at an add or a merge (backlog `0024`).
 - The per product step (backend `0261`, velista `0186`).
-- The limit of 999 999 (backend `0262`).
-- The deletion of a line with nothing to keep at 0 (backend `0263`, velista `0192`).
+- The limit of 999 999 (backend `0262`; 99 999 since the owner's ruling of 2026-11-17).
+- The deletion of a line with nothing to keep at 0 (backend `0263`, velista `0192`). _Note of
+  2026-11-12: `0263` was withdrawn by the owner; no write deletes a line at 0._
 - The merge and the rename planner (`0246` section 3.3 stands).
 - Everything a client draws (velista `0185`).
 
@@ -531,12 +726,24 @@ a merge across units waits for a conversion.
 1. **R2.** A typed name or a product whose only line is at 0 (bought, kept) is raised to one
    step rather than left at 0 and shown. Is that what you want, or should a kept line also be
    "already on the list" and stay at 0?
+
+   _Answered on 2026-11-17 by the choice rule of 2026-11-16 (section 0, the owner's, rules M1
+   to M9): one kept match is raised (M3), and two or more matches are a choice (M4)._
 2. **R3.** When a typed name meets several lines and at least one is wanted, nothing is asked:
    every wanted line is marked. The question with "A new line" is asked only when every line is
    at 0. Is losing the "A new line" choice in the first case acceptable?
+
+   _Answered on 2026-11-17 by the choice rule of 2026-11-16 (section 0, the owner's, rules M1
+   to M9), which replaces R3: two or more matches are a choice with every match listed (M4)._
 3. **R5.** A product on a line of several products counts as already on the list, so the add
    writes nothing there. Should it instead create a line of that product alone?
+   _Answered on 2026-11-12: R5 stands (section 0)._
 4. **R6.** A pasted list that names one thing twice now makes one line at the first amount, not
    the sum. Is that right?
+
+   _Answered on 2026-11-17: R6 stands as built. A batch never sums; a second item of one thing
+   adds nothing (M8)._
 5. **R7.** Is a whole batch refusal still acceptable for the assistant, or should a later plan
    teach the batch to skip and report?
+
+   _Answered on 2026-11-17: reviewed by the owner, stands as built._
