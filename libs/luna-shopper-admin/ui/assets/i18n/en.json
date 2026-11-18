@@ -1510,6 +1510,11 @@
     "entries": {
       "heading": "Source products",
       "empty": "Every product a source named here has been decided.",
+      "entry": {
+        "one": "Showing one entry.",
+        "all": "Show the whole queue",
+        "empty": "No entry has this address."
+      },
       "accept": "Yes, it is this product",
       "openSibling": "Open the row it points at",
       "reject": "Not a product we track",
@@ -1539,7 +1544,9 @@
       },
       "proposal": {
         "heading": "Proposed product",
+        "boundHeading": "Bound product",
         "item": "The match is {{confidence}}% sure. Nothing is written until you accept.",
+        "bound": "This entry is bound to this product. A change here moves or withdraws its prices at this chain.",
         "sibling": "This looks like {{name}}, another row of this chain. That row is the one with the barcode, so it is the one to create the product from.",
         "siblingElsewhere": "The row it points at ({{id}}) is not in this queue, which usually means somebody has already decided it. Accept or create here instead.",
         "none": "Nothing in the catalog looked like it, so find the product or create it."
@@ -1598,6 +1605,7 @@
       },
       "proposalBadge": {
         "item": "Has a proposal",
+        "bound": "Bound",
         "sibling": "Points at another row",
         "none": "No proposal"
       },

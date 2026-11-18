@@ -28650,6 +28650,16 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "entryId",
+            "required": false,
+            "in": "query",
+            "description": "The one row with this id, whatever its status, which is how the back office addresses one entry (admin plan 0073). Every other filter given still applies, and with no `status` the default CANDIDATE and UNRESOLVED clause is not added.",
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
           }
         ],
         "responses": {

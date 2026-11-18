@@ -1,3 +1,5 @@
+> **PR:** [#1008](https://github.com/IchirokuXVI/nx-portfolio/pull/1008)
+
 # 0073: a source entry has an address
 
 > Follow up of admin plan `0071` (PR #972, open on 2026-11-11), and checked against `origin/dev`
@@ -130,9 +132,11 @@ Three designs reach one entry:
 
 - (a) **A filter `entryId` on the queue route.** One optional field in the DTO, the contract
   and the harvester clause. The queue page already reads its filters from the URL and already
-  draws and decides any row the route answers, decided rows included (with a `status` it
-  "reaches a decision to look up or undo", the DTO says). The answer has the shape the queue
-  reads today, with the brands of each row.
+  decides any row the route answers, decided rows included (with a `status` it "reaches a
+  decision to look up or undo", the DTO says). It drew a decided row as a waiting one,
+  though: an `ACTIVE` row read "Has a proposal", "Proposed product" and "Nothing is written
+  until you accept". Decision D7 makes it say the row's status. The answer has the shape the
+  queue reads today, with the brands of each row.
 - (b) **A new route `GET /v1/admin/harvest/entries/{id}`**, a new NATS pattern, a handler, and
   a page or a mode of the queue that draws one row from it. It is a second read of the same
   row in a second shape, and the queue would still need a mode to show it.
@@ -154,7 +158,9 @@ When the query string holds `entry`:
   the run page. The queue then reads again from the top.
 - A changed filter (chain, status, kind, brand) also removes `entry`, because the operator has
   asked another question.
-- A page that answers no row draws the existing empty state, with the notice above it.
+- A page that answers no row draws an empty state of its own, "No entry has this address.",
+  with the notice above it (D8).
+- The State select is disabled while `entry` is set, and each row says its own status (D7).
 - After a decision, the row stays in the answer (the route answers it whatever its status), so
   the operator sees what the decision made of it.
 
@@ -164,6 +170,10 @@ Copy:
 | --- | --- |
 | `harvest.entries.entry.one` | Showing one entry. |
 | `harvest.entries.entry.all` | Show the whole queue |
+| `harvest.entries.entry.empty` | No entry has this address. |
+| `harvest.entries.proposal.boundHeading` | Bound product |
+| `harvest.entries.proposal.bound` | This entry is bound to this product. A change here moves or withdraws its prices at this chain. |
+| `harvest.entries.proposalBadge.bound` | Bound |
 
 ## 3. The address
 
@@ -227,6 +237,28 @@ npx nx affected -t lint test
 
 **D1 (owner, answered 2026-11-11):** the size example links to its entry, in a plan of its own
 after admin plan `0071`.
+
+**D7 (owner, decision 47b, answered 2026-11-18): say the status, change no action.**
+
+- The head of the card shows a chip with the entry's own status, with the
+  `harvest.entryStatus.<status>` labels. It shows for every status, in the whole queue and in
+  the one entry view. It is read from the row's `status`, never from the filter.
+- An `ACTIVE` entry's panel heading is "Bound product" (`harvest.entries.proposal.boundHeading`),
+  and its hint is "This entry is bound to this product. A change here moves or withdraws its
+  prices at this chain." (`harvest.entries.proposal.bound`). Its line in the column says "Bound"
+  (`harvest.entries.proposalBadge.bound`). The bound product's lines and its link stay as the
+  proposal panel draws them.
+- A `REJECTED` entry gets the chip and nothing more.
+- Every button and what it calls stays as it is. A rule for the buttons of a decided row is a
+  later plan.
+- While one entry is shown, the State select is disabled, because the status is not sent then.
+  The other filters stay as they are.
+
+**D8 (owner, decision 45a, answered 2026-11-18): the empty one entry view has its own
+sentence.** When `entry` is set and the answer is empty (a malformed id, an entry that does not
+exist, a chain that does not match), the queue draws "No entry has this address."
+(`harvest.entries.entry.empty`) in place of "Every product a source named here has been
+decided." The ordinary empty queue keeps that sentence.
 
 The choices below are the planner's and wait for the owner. The PR body lists them.
 

@@ -4,6 +4,8 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  CARREFOUR_ACEITE_ENTRY,
+  CARREFOUR_YOGUR_ENTRY,
   CATEGORY_SEED,
   ContentLocaleStore,
   DASHBOARD_SERVICE,
@@ -35,6 +37,7 @@ import { ReviewChain } from './review-chain';
  */
 
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 const DEZA = '33333333-3333-4333-8333-333333333333';
 
 /** What the directory answers for the two chains the seed holds rows for. */
@@ -99,6 +102,19 @@ const BREAD = {
   },
 };
 
+/** The product the seeded accepted row is bound to (admin plan 0073). */
+const OLIVE_OIL = {
+  id: 'it_olive_oil_1l',
+  title: 'Aceite de oliva virgen extra',
+  row: {
+    id: 'it_olive_oil_1l',
+    brand: 'Carrefour',
+    ean: '8480000000017',
+    unitSize: 1,
+    defaultUnit: 'LITER',
+  },
+};
+
 async function render(
   queryParams: Record<string, string> = {},
   /** A wide screen, where the rows are a column beside the open row. */
@@ -130,6 +146,9 @@ async function render(
             // The product a proposal names, for the panel beside the row.
             if (resource === 'items' && id === BREAD.id) {
               return BREAD;
+            }
+            if (resource === 'items' && id === OLIVE_OIL.id) {
+              return OLIVE_OIL;
             }
             // The category picker's rows, which carry the slug the create
             // sends (admin plan 0036).
@@ -255,6 +274,7 @@ describe('the one queue, with no chain chosen', () => {
       'entry-aceite',
       'entry-galletas',
       'entry-leche-leaflet',
+      CARREFOUR_YOGUR_ENTRY,
     ]);
   });
 
@@ -308,7 +328,7 @@ describe('the one queue, with no chain chosen', () => {
     page.open('');
     await drain();
     fixture.detectChanges();
-    expect(page.queue?.items().length).toBe(5);
+    expect(page.queue?.items().length).toBe(6);
   });
 
   /**
@@ -857,6 +877,361 @@ describe('the one queue, reading', () => {
     expect(page.queue?.items().map((entry) => entry.id)).toEqual([
       'entry-leche-leaflet',
     ]);
+  });
+});
+
+/**
+ * One entry by its address (admin plan 0073): what a size example of a run
+ * links to. The entry and the chain are the question, so the other filters
+ * are not sent, and any of them changed ends the view.
+ */
+describe('the one queue, narrowed to one entry', () => {
+  const notice = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    fixture.nativeElement.querySelector(
+      '[data-entry-notice]'
+    ) as HTMLElement | null;
+
+  it('asks with the entry and the chain only, opens the row and says so', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+      brandKey: 'hacendado',
+    });
+    const page = fixture.componentInstance;
+
+    expect(named(calls, 'listEntries')).toEqual([
+      [
+        {
+          entryId: CARREFOUR_YOGUR_ENTRY,
+          supermarketId: CARREFOUR,
+          cursor: undefined,
+        },
+      ],
+    ]);
+    expect(page.row()?.id).toBe(CARREFOUR_YOGUR_ENTRY);
+    expect(notice(fixture)?.textContent).toContain('harvest.entries.entry.one');
+    expect(notice(fixture)?.textContent).toContain('harvest.entries.entry.all');
+  });
+
+  it('reaches a decided row, which the default queue does not list', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_ACEITE_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    expect(fixture.componentInstance.queue?.current()).toMatchObject({
+      id: CARREFOUR_ACEITE_ENTRY,
+      status: 'ACTIVE',
+    });
+    expect(text(fixture)).toContain('Aceite de oliva virgen extra 1 l');
+  });
+
+  it('shows the whole queue again from the button, and keeps the chain', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+
+    (
+      fixture.nativeElement.querySelector('[data-entry-all]') as HTMLElement
+    ).click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.entryFilter()).toBeNull();
+    expect(notice(fixture)).toBeNull();
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${CARREFOUR}`);
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toEqual({
+      supermarketId: CARREFOUR,
+      cursor: undefined,
+    });
+  });
+
+  it('ends the view when a filter changes', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="status"]'
+    );
+    select.value = 'ACTIVE';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.entryFilter()).toBeNull();
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${CARREFOUR}`);
+    const last = named(calls, 'listEntries').at(-1)?.[0];
+    expect(last).toMatchObject({ status: 'ACTIVE', supermarketId: CARREFOUR });
+    expect(last).not.toHaveProperty('entryId');
+  });
+
+  it('ends the view when the chain changes', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    TestBed.inject(ReviewChain).choose(DEZA);
+    await drain();
+    fixture.detectChanges();
+    await drain();
+
+    expect(fixture.componentInstance.entryFilter()).toBeNull();
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${DEZA}`);
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toEqual({
+      supermarketId: DEZA,
+      cursor: undefined,
+    });
+  });
+
+  it('asks nothing for a value that is not an id, and draws the empty state under the notice', async () => {
+    const { fixture, calls } = await render({
+      entry: 'not-an-id',
+      chain: CARREFOUR,
+    });
+
+    expect(named(calls, 'listEntries')).toEqual([]);
+    expect(fixture.componentInstance.queue?.empty()).toBe(true);
+    expect(notice(fixture)).not.toBeNull();
+    // An address that names nothing is not a queue with nothing left in it
+    // (decision 45a).
+    expect(text(fixture)).toContain('harvest.entries.entry.empty');
+    expect(text(fixture)).not.toContain('harvest.entries.empty');
+  });
+
+  it('says no entry has the address when the answer is empty', async () => {
+    // An id of the right shape that names nothing, and a known entry under
+    // a chain that is not its own.
+    for (const params of [
+      { entry: 'ffffffff-ffff-4fff-8fff-ffffffffffff', chain: CARREFOUR },
+      { entry: CARREFOUR_YOGUR_ENTRY, chain: DEZA },
+    ]) {
+      const { fixture } = await render(params);
+
+      expect(fixture.componentInstance.queue?.empty()).toBe(true);
+      expect(text(fixture)).toContain('harvest.entries.entry.empty');
+      expect(text(fixture)).not.toContain('harvest.entries.empty');
+    }
+  });
+
+  it('keeps the old sentence for an ordinary empty queue', async () => {
+    const { fixture, page } = await opened(DEZA);
+
+    page.brandText.set('nothing-carries-this');
+    page.reload();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue?.empty()).toBe(true);
+    expect(text(fixture)).toContain('harvest.entries.empty');
+    expect(text(fixture)).not.toContain('harvest.entries.entry.empty');
+  });
+
+  /** Not sent while one entry is shown, so it claims no filter then. */
+  it('disables the State select while one entry is shown, and only then', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    await drain();
+    fixture.detectChanges();
+    const select = (): HTMLSelectElement =>
+      fixture.nativeElement.querySelector('select[name="status"]');
+    const kind = (): HTMLSelectElement =>
+      fixture.nativeElement.querySelector('select[name="sourceKind"]');
+
+    expect(select().disabled).toBe(true);
+    expect(kind().disabled).toBe(false);
+    expect(
+      (fixture.nativeElement.querySelector('[data-brand]') as HTMLInputElement)
+        .disabled
+    ).toBe(false);
+
+    fixture.componentInstance.showWholeQueue();
+    await drain();
+    fixture.detectChanges();
+    await drain();
+    fixture.detectChanges();
+
+    expect(select().disabled).toBe(false);
+  });
+
+  it('leaves the State select enabled on the whole queue', async () => {
+    const { fixture } = await opened(DEZA);
+    await drain();
+    fixture.detectChanges();
+
+    expect(
+      (
+        fixture.nativeElement.querySelector(
+          'select[name="status"]'
+        ) as HTMLSelectElement
+      ).disabled
+    ).toBe(false);
+  });
+
+  it('keeps the row in the answer after a decision, as the decision left it', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+
+    page.reject();
+    await drain();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue?.current()).toMatchObject({
+      id: CARREFOUR_YOGUR_ENTRY,
+      status: 'REJECTED',
+    });
+    expect(notice(fixture)).not.toBeNull();
+  });
+});
+
+/**
+ * Decision 47b (admin plan 0073): a decided row says its status, and a bound
+ * row's product is named as bound rather than proposed. No action changes.
+ */
+describe('the one queue, the status of a row', () => {
+  const status = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    (
+      fixture.nativeElement.querySelector(
+        '.identity [data-status]'
+      ) as HTMLElement | null
+    )?.textContent?.trim();
+  const heading = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    (
+      fixture.nativeElement.querySelector(
+        '[data-proposal-heading]'
+      ) as HTMLElement
+    ).textContent?.trim();
+  const hint = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    (
+      fixture.nativeElement.querySelector(
+        '[data-proposal-hint]'
+      ) as HTMLElement | null
+    )?.textContent?.trim();
+  const badges = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    [
+      ...fixture.nativeElement.querySelectorAll('.column [data-line-badge]'),
+    ].map((badge: Element) => badge.textContent?.trim());
+
+  async function settle(fixture: ComponentFixture<EntriesQueuePage>) {
+    for (let round = 0; round < 3; round++) {
+      await drain();
+      fixture.detectChanges();
+    }
+  }
+
+  it('draws a bound row as bound in the one entry view', async () => {
+    const { fixture } = await render(
+      { entry: CARREFOUR_ACEITE_ENTRY, chain: CARREFOUR },
+      true
+    );
+    await settle(fixture);
+
+    expect(status(fixture)).toBe('harvest.entryStatus.ACTIVE');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.boundHeading');
+    expect(hint(fixture)).toBe('harvest.entries.proposal.bound');
+    expect(text(fixture)).not.toContain('harvest.entries.proposal.item');
+    expect(badges(fixture)).toEqual(['harvest.entries.proposalBadge.bound']);
+    // The bound product, drawn as the proposal panel draws one. Its link
+    // needs the products mounted, which this spec does not do.
+    const proposed: HTMLElement =
+      fixture.nativeElement.querySelector('.proposed');
+    expect(proposed.textContent).toContain('Aceite de oliva virgen extra');
+  });
+
+  it('draws a bound row as bound under the State filter', async () => {
+    const { fixture } = await render({}, true);
+    const page = fixture.componentInstance;
+
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="status"]'
+    );
+    select.value = 'ACTIVE';
+    select.dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    const rows = page.listRows();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.status === 'ACTIVE')).toBe(true);
+    expect(status(fixture)).toBe('harvest.entryStatus.ACTIVE');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.boundHeading');
+    expect(hint(fixture)).toBe('harvest.entries.proposal.bound');
+    expect(badges(fixture)).toEqual(
+      rows.map(() => 'harvest.entries.proposalBadge.bound')
+    );
+  });
+
+  it('keeps every button of a bound row', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_ACEITE_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+    await settle(fixture);
+    const host: HTMLElement = fixture.nativeElement;
+
+    for (const action of ['confirm', 'skip', 'reject']) {
+      const button = host.querySelector(
+        `.actions [data-action="${action}"]`
+      ) as HTMLButtonElement | null;
+      expect(button).not.toBeNull();
+      expect(button?.disabled).toBe(false);
+    }
+    expect(page.confirmKey()).toBe('harvest.entries.accept');
+    expect(
+      [...host.querySelectorAll('.actions .other button')].map((button) =>
+        button.textContent?.trim()
+      )
+    ).toEqual(['harvest.entries.pick', 'harvest.entries.create.open']);
+    expect(host.querySelector('.links [data-panel="pick"]')).not.toBeNull();
+    expect(host.querySelector('.links [data-panel="create"]')).not.toBeNull();
+  });
+
+  it('leaves a waiting row as it was, with its status said', async () => {
+    const { fixture, page } = await opened(MERCADONA, true);
+    page.skip();
+    await settle(fixture);
+
+    expect(page.row()?.id).toBe('entry-bread');
+    expect(status(fixture)).toBe('harvest.entryStatus.CANDIDATE');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.heading');
+    expect(hint(fixture)).toBe('harvest.entries.proposal.item');
+    expect(badges(fixture)).not.toContain(
+      'harvest.entries.proposalBadge.bound'
+    );
+    expect(badges(fixture)).toContain('harvest.entries.proposalBadge.item');
+  });
+
+  it('says the status of a waiting row in the one entry view', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    expect(status(fixture)).toBe('harvest.entryStatus.UNRESOLVED');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.heading');
+  });
+
+  it('says a rejected row is rejected', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    fixture.componentInstance.reject();
+    await settle(fixture);
+
+    expect(status(fixture)).toBe('harvest.entryStatus.REJECTED');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.heading');
   });
 });
 

@@ -630,18 +630,25 @@ export class HarvestMemory implements HarvestServiceI {
    * No status asked for means the queue: `CANDIDATE` and `UNRESOLVED` together,
    * which is what is waiting for a person. That default is the route's, not the
    * screen's, so it lives here rather than in the page.
+   *
+   * An `entryId` answers that one row, and with no status asked for it drops
+   * the default, as the route does (admin plan 0073).
    */
   async listEntries(
     query: EntryQuery
   ): Promise<Wire.HarvestQueuedSourceEntryPage> {
     const term = (query.query ?? '').trim().toLowerCase();
     const chain = query.supermarketId ?? '';
+    const entryId = query.entryId ?? '';
     const matching = this._entries.filter(
       (entry) =>
         // Absent lists every chain's rows, as the route does.
         (chain === '' || entry.supermarketId === chain) &&
+        (entryId === '' || entry.id === entryId) &&
         (query.status === undefined
-          ? entry.status === 'CANDIDATE' || entry.status === 'UNRESOLVED'
+          ? entryId !== '' ||
+            entry.status === 'CANDIDATE' ||
+            entry.status === 'UNRESOLVED'
           : entry.status === query.status) &&
         (query.sourceKind === undefined ||
           entry.sourceKind === query.sourceKind) &&

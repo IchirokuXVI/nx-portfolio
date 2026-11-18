@@ -1036,6 +1036,56 @@ describe('RunPage, what a walk did not read', () => {
     fixture.componentInstance.watch.stop();
   });
 
+  it('links a size example that names its entry to that entry on the run chain, and draws the name alone otherwise (admin plan 0073)', async () => {
+    const entryId = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01';
+    const fixture = await render(
+      run({
+        status: 'COMPLETED',
+        finishedAt: '2026-09-03T09:30:00.000Z',
+        supermarketId: 'sm_carrefour',
+        report: {
+          sizesDisproved: 2,
+          probablePackCounts: 0,
+          sizesDisprovedExamples: [
+            {
+              entryId,
+              name: 'Yogur natural',
+              stated: 125,
+              implied: 500,
+              unit: 'GRAM',
+              label: '2,36 €/kg',
+            },
+            {
+              name: 'Aceite de oliva',
+              stated: 1000,
+              implied: 750,
+              unit: 'MILLILITER',
+              label: '9,99 €/l',
+            },
+          ],
+        },
+      })
+    );
+
+    const rows = [
+      ...fixture.nativeElement.querySelectorAll('[data-sizes] tbody tr'),
+    ] as HTMLElement[];
+    const link = rows[0].querySelector(
+      'a[data-size-entry]'
+    ) as HTMLAnchorElement | null;
+    expect(link?.textContent?.trim()).toBe('Yogur natural');
+    const href = new URL(link?.getAttribute('href') ?? '', 'http://admin');
+    expect(href.pathname).toBe('/harvest/review/products');
+    expect(href.searchParams.get('entry')).toBe(entryId);
+    expect(href.searchParams.get('chain')).toBe('sm_carrefour');
+
+    expect(rows[1].querySelector('a')).toBeNull();
+    expect(rows[1].querySelector('th')?.textContent?.trim()).toBe(
+      'Aceite de oliva'
+    );
+    fixture.componentInstance.watch.stop();
+  });
+
   it('draws the size doubts of an import, and none of the chain parts', async () => {
     // The harvester writes the two counts for an imported run, with no
     // examples (run-executor.service.ts, plan 0249). The owner chose on

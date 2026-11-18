@@ -9,7 +9,7 @@ import {
   type OnDestroy,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   ContentLocaleStore,
@@ -33,6 +33,8 @@ import {
 import {
   harvestRunPath,
   OFFICIAL_SOURCE_KINDS,
+  recordIdIn,
+  REVIEW_ENTRY_PARAM,
   SOURCE_ENTRY_STATUSES,
   type OfficialSourceKind,
   type ScopeMarkView,
@@ -107,6 +109,21 @@ const SCOPE_PAGE = 100;
 const BRAND_SEARCH_DELAY_MS = 250;
 
 /**
+ * The entry an address names, read from `unknown` (admin plan 0073).
+ *
+ * `null` for no parameter at all, which is the whole queue. `''` for one that
+ * is there and not the shape of an id, which narrows the queue to nothing
+ * rather than sending the gateway a value it refuses. A parameter given twice
+ * arrives as an array, and is not an id either.
+ */
+function entryIn(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return typeof value === 'string' ? (recordIdIn(value) ?? '') : '';
+}
+
+/**
  * Everything a source named and nobody has decided (admin plan 0014, section 1).
  *
  * **One queue where there were three.** `harvest/entries` listed what a walk
@@ -172,8 +189,11 @@ const BRAND_SEARCH_DELAY_MS = 250;
     <section class="filters">
       <label>
         <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
+        <!-- Not sent while one entry is shown, so it does not claim to be a
+             filter then (admin plan 0073, decision 47b). -->
         <select
           (ngModelChange)="chooseStatus($event)"
+          [disabled]="entryFilter() !== null"
           [ngModel]="status()"
           name="status"
         >
@@ -234,6 +254,18 @@ const BRAND_SEARCH_DELAY_MS = 250;
           }
         </select>
       </label>
+
+      <!-- The queue narrowed to one entry by its address (admin plan 0073).
+           The other filters are not sent while it is, so it says so, and the
+           button is the way back to the whole queue. -->
+      @if (entryFilter() !== null) {
+        <p class="entry-notice" role="status" data-entry-notice>
+          <span>{{ 'harvest.entries.entry.one' | rokuT }}</span>
+          <button (click)="showWholeQueue()" type="button" data-entry-all>
+            {{ 'harvest.entries.entry.all' | rokuT }}
+          </button>
+        </p>
+      }
     </section>
 
     @if (queue !== null) {
@@ -248,12 +280,12 @@ const BRAND_SEARCH_DELAY_MS = 250;
         [confirmKey]="confirmKey()"
         [currentId]="row()?.id ?? null"
         [empty]="queue!.empty()"
+        [emptyKey]="emptyKey()"
         [errorKey]="errorKey()"
         [failed]="queue!.failed()"
         [loading]="queue!.loading()"
         [loadingMore]="queue!.loadingMore()"
         [rows]="listRows()"
-        emptyKey="harvest.entries.empty"
         rejectKey="harvest.entries.reject"
         rejectShortKey="harvest.entries.rejectShort"
         titleKey="harvest.entries.heading"
@@ -281,6 +313,14 @@ const BRAND_SEARCH_DELAY_MS = 250;
           <div class="head">
             <h2>{{ entry.name }}</h2>
             <p class="identity">
+              <!-- The row's own status, whatever the filter asked for (admin
+                   plan 0073, decision 47b). -->
+              <span
+                [class.good]="entry.status === 'ACTIVE'"
+                class="chip"
+                data-status
+                >{{ 'harvest.entryStatus.' + entry.status | rokuT }}</span
+              >
               @if (chainName(entry.supermarketId); as chain) {
                 <span class="chip chain">{{ chain }}</span>
               }
@@ -328,7 +368,14 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
             <section [class.has]="proposal() !== 'none'" class="proposed">
               <div class="proposed-head">
-                <h3>{{ 'harvest.entries.proposal.heading' | rokuT }}</h3>
+                <h3 data-proposal-heading>
+                  {{
+                    (bound()
+                      ? 'harvest.entries.proposal.boundHeading'
+                      : 'harvest.entries.proposal.heading'
+                    ) | rokuT
+                  }}
+                </h3>
                 <!-- Why this product was proposed, as a state. -->
                 @if (proposal() === 'none') {
                   <span class="chip">{{
@@ -363,11 +410,15 @@ const BRAND_SEARCH_DELAY_MS = 250;
                       }}</a>
                     }
                   }
-                  <p class="hint">
-                    {{
-                      'harvest.entries.proposal.item'
-                        | rokuT: { confidence: entry.confidence }
-                    }}
+                  <p class="hint" data-proposal-hint>
+                    @if (bound()) {
+                      {{ 'harvest.entries.proposal.bound' | rokuT }}
+                    } @else {
+                      {{
+                        'harvest.entries.proposal.item'
+                          | rokuT: { confidence: entry.confidence }
+                      }}
+                    }
                   </p>
                 }
                 @case ('sibling') {
@@ -619,9 +670,14 @@ const BRAND_SEARCH_DELAY_MS = 250;
           @if (chainName(row.supermarketId); as chain) {
             <span class="line-chain">{{ chain }}</span>
           }
-          <span [class.good]="proposalKind(row) !== 'none'" class="chip">{{
-            'harvest.entries.proposalBadge.' + proposalKind(row) | rokuT
-          }}</span>
+          <span
+            [class.good]="proposalKind(row) !== 'none'"
+            class="chip"
+            data-line-badge
+            >{{
+              'harvest.entries.proposalBadge.' + lineBadge(row) | rokuT
+            }}</span
+          >
         </ng-template>
       </lib-queue-frame>
 
@@ -691,6 +747,16 @@ const BRAND_SEARCH_DELAY_MS = 250;
 
     .filters {
       align-items: flex-start;
+    }
+
+    /* A line of its own under the filters, because it says what they do not
+       do while it stands. */
+    .entry-notice {
+      display: flex;
+      flex-basis: 100%;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2) var(--admin-space-3);
+      align-items: center;
     }
 
     .head {
@@ -994,6 +1060,7 @@ export class EntriesQueuePage implements OnDestroy {
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _content = inject(ContentLocaleStore);
   private readonly _route = inject(ActivatedRoute);
+  private readonly _router = inject(Router);
   /**
    * The chosen chain's scopes, read for their names.
    *
@@ -1033,6 +1100,16 @@ export class EntriesQueuePage implements OnDestroy {
 
   /** The brand, as it was typed. The key it makes is what goes out. */
   readonly brandText = signal('');
+
+  /**
+   * The one entry the queue is narrowed to, by its address (admin plan 0073).
+   *
+   * `null` while the address names none, which is the queue. A string while it
+   * names one: the entry's id, or `''` when the parameter is not the shape of
+   * an id. The gateway refuses such a value with a 400, so the queue asks
+   * nothing for it and draws its empty state under the notice.
+   */
+  readonly entryFilter = signal<string | null>(null);
 
   /**
    * The key that text makes, or `null` when it makes none.
@@ -1176,13 +1253,27 @@ export class EntriesQueuePage implements OnDestroy {
     this.brandText.set(
       this._route.snapshot.queryParamMap.get('brandKey') ?? ''
     );
+    this.entryFilter.set(
+      entryIn(this._route.snapshot.queryParams[REVIEW_ENTRY_PARAM])
+    );
 
     // The chain the four queues share (admin plan 0044). A run's own link
     // names it, and so does the filter above the queue. Each change builds
     // the queue again, and the first read is this effect's first run.
+    //
+    // A chain chosen after that is another question, so it ends the one entry
+    // view (admin plan 0073). `ReviewChain.choose` drops the parameter from
+    // the URL in the same navigation; this drops the state.
+    let first = true;
     effect(() => {
       const chain = this._review.chain();
-      untracked(() => this.open(chain));
+      untracked(() => {
+        if (!first) {
+          this.entryFilter.set(null);
+        }
+        first = false;
+        this.open(chain);
+      });
     });
 
     // The product a proposal names, for the panel beside the row.
@@ -1239,6 +1330,29 @@ export class EntriesQueuePage implements OnDestroy {
     const row = this.row();
     return row === null ? 'none' : proposalOf(row);
   });
+
+  /**
+   * Whether the row in front is bound to its product (admin plan 0073,
+   * decision 47b).
+   *
+   * Read off the row's own status and never off the filter, because the one
+   * entry view sends no status and still answers a decided row. A bound row's
+   * product is no proposal, so the panel names it as what it is. The buttons
+   * stay as they are: what they may do on a decided row is a later plan.
+   */
+  readonly bound = computed(() => this.row()?.status === 'ACTIVE');
+
+  /**
+   * The empty state, which in the one entry view is about the address and
+   * not about the queue (admin plan 0073, decision 45a): a malformed id, an
+   * entry that does not exist and a chain that does not match all answer
+   * nothing, and none of them means everything was decided.
+   */
+  readonly emptyKey = computed(() =>
+    this.entryFilter() === null
+      ? 'harvest.entries.empty'
+      : 'harvest.entries.entry.empty'
+  );
 
   /**
    * The sibling row the ladder proposed, when the queue is holding it.
@@ -1380,12 +1494,42 @@ export class EntriesQueuePage implements OnDestroy {
    */
   chooseStatus(status: SourceEntryStatus | ''): void {
     this.status.set(status);
+    this._leaveEntry();
     this.reload();
   }
 
   chooseKind(sourceKind: OfficialSourceKind | ''): void {
     this.sourceKind.set(sourceKind);
+    this._leaveEntry();
     this.reload();
+  }
+
+  /**
+   * Widen the queue from the one entry its address named back to the whole
+   * queue, read again from the top (admin plan 0073).
+   */
+  showWholeQueue(): void {
+    this._leaveEntry();
+    this.reload();
+  }
+
+  /**
+   * End the one entry view: the state at once, and the parameter in the URL.
+   *
+   * The URL is replaced, as `ReviewChain.choose` writes a filter, so the back
+   * button still returns to the page that linked here.
+   */
+  private _leaveEntry(): void {
+    if (this.entryFilter() === null) {
+      return;
+    }
+    this.entryFilter.set(null);
+
+    const tree = this._router.parseUrl(this._router.url);
+    const kept = { ...tree.queryParams };
+    delete kept[REVIEW_ENTRY_PARAM];
+    tree.queryParams = kept;
+    void this._router.navigateByUrl(tree, { replaceUrl: true });
   }
 
   /**
@@ -1402,6 +1546,7 @@ export class EntriesQueuePage implements OnDestroy {
     }
     this._brandTimer = setTimeout(() => {
       this._brandTimer = null;
+      this._leaveEntry();
       this.reload();
     }, BRAND_SEARCH_DELAY_MS);
   }
@@ -1435,14 +1580,34 @@ export class EntriesQueuePage implements OnDestroy {
    * rather than a filter applied to what is in hand: the queue holds one page,
    * and filtering that page would answer from a twentieth of the rows.
    */
-  reload(): void {
+  reload(options: { keepWritten?: boolean } = {}): void {
     const supermarketId = this.chosen();
     const brandKeyFilter = this._brandFilterValue();
+    const entryId = this.entryFilter();
 
-    this.written.set(null);
+    if (options.keepWritten !== true) {
+      this.written.set(null);
+    }
     const queue = new QueueStore<Entry>(
       async (cursor) => {
         try {
+          // One entry by its address (admin plan 0073): the id and the chain
+          // and nothing else, because the entry is the question. An id that
+          // is not the shape of one asks nothing, since the gateway would
+          // refuse it.
+          if (entryId !== null) {
+            if (entryId === '') {
+              return { items: [], nextCursor: null };
+            }
+            const page = await this._service.listEntries({
+              entryId,
+              ...(supermarketId === '' ? {} : { supermarketId }),
+              cursor,
+            });
+            this.shell.observeReachable();
+            return page;
+          }
+
           const status = this.status();
           const sourceKind = this.sourceKind();
           const page = await this._service.listEntries({
@@ -1467,7 +1632,13 @@ export class EntriesQueuePage implements OnDestroy {
     );
 
     this._queue.set(queue);
-    void queue.load().then(() => this._syncSubject());
+    void queue.load().then(() => {
+      // The row the address names is opened, when the page answers it.
+      if (entryId !== null && entryId !== '') {
+        queue.focus(entryId);
+      }
+      this._syncSubject();
+    });
   }
 
   /**
@@ -1624,6 +1795,15 @@ export class EntriesQueuePage implements OnDestroy {
     return proposalOf(row);
   }
 
+  /**
+   * The word on a line of the column: "Bound" for a bound row's product,
+   * where a waiting row says it has a proposal (admin plan 0073, decision 47b).
+   */
+  lineBadge(row: SourceEntryRow): string {
+    const kind = proposalOf(row);
+    return kind === 'item' && row.status === 'ACTIVE' ? 'bound' : kind;
+  }
+
   /** Where a run is read. Absolute, because this screen has no route to pop. */
   runLink(runId: string): readonly string[] {
     return harvestRunPath(runId);
@@ -1643,7 +1823,14 @@ export class EntriesQueuePage implements OnDestroy {
    * switch above say what the queue holds (admin plan 0044, target 2).
    */
   private _decided(): void {
-    this._syncSubject();
+    // A decided row leaves the queue in hand, but the route answers the one
+    // entry whatever its status, so in that view it is read again and the
+    // operator sees what the decision made of it (admin plan 0073).
+    if (this.entryFilter() !== null) {
+      this.reload({ keepWritten: true });
+    } else {
+      this._syncSubject();
+    }
     this._status.refresh();
   }
 
