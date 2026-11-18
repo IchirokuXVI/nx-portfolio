@@ -466,7 +466,6 @@
                 <li [attr.data-line-ids]="lineIdsOf(row)">
                   <lib-basket-row
                     (changeProduct)="openChange(row.row)"
-                    (left)="setRowLeft(row, $event)"
                     (open)="openRow(row.row)"
                     (revert)="revertRow(row.row)"
                     (settle)="settleRow(row.row)"
@@ -722,7 +721,6 @@
                     >
                       <lib-basket-row
                         (changeProduct)="openChange(row.row)"
-                        (left)="setRowLeft(row, $event)"
                         (open)="openRow(row.row)"
                         (revert)="revertRow(row.row)"
                         (settle)="settleRow(row.row)"

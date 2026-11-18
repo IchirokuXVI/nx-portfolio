@@ -52,7 +52,7 @@
     "argon2": "^0.45.1",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
-    "d3-array": "3.2.4",
+    "d3-array": "3.2.5",
     "d3-scale": "4.0.2",
     "d3-shape": "3.2.0",
     "deep-equal": "^2.2.3",

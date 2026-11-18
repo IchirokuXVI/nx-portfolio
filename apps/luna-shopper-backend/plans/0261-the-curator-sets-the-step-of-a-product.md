@@ -1,3 +1,5 @@
+> **PR:** [#976](https://github.com/IchirokuXVI/nx-portfolio/pull/976)
+
 # 0261: the curator sets the step of a product
 
 > Amended on 2026-11-11: the default steps are now 25 g and 25 ml at every amount, with no

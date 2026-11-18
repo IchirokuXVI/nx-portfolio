@@ -1,5 +1,7 @@
+import { QUANTITY_STEPS } from '@portfolio/luna-shopper/contracts';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { ITEM_QUANTITY_STEPS_SQL } from './1759500000000-ItemQuantityStep';
 import { CATALOG_MIGRATIONS } from './index';
 
 /**
@@ -39,6 +41,13 @@ describe('CATALOG_MIGRATIONS', () => {
     });
 
     expect(timestamps).toEqual([...timestamps].sort((a, b) => a - b));
+  });
+
+  it('restates the steps of plan 0261 in the check of ItemQuantityStep', () => {
+    // The check `item_quantity_step_allowed` holds its own copy of the list,
+    // so a step added to the contract and not to a migration fails here and
+    // not as a 500 from the database.
+    expect([...ITEM_QUANTITY_STEPS_SQL]).toEqual([...QUANTITY_STEPS]);
   });
 
   it('is not empty', () => {

@@ -33,6 +33,7 @@ import { ContactStore } from './contacts/contact-store';
 import { LineMemory } from './lines/line-memory';
 import { LineStore } from './lines/line-store';
 import { ListMemory } from './lists/list-memory';
+import { ListRowsStore } from './lists/list-rows-store';
 import { ListStore } from './lists/list-store';
 import { MemberNames } from './memberships/member-names';
 import { MembershipMemory } from './memberships/membership-memory';
@@ -262,6 +263,8 @@ export const VELISTA_DATA_ACCESS_PROVIDERS: Provider[] = [
   ShopWalksStore,
   ShopWalkMemory,
   MappingSettingsStore,
+  // Velista `0191`: how this device draws the rows of a zone list.
+  ListRowsStore,
   GroupMembers,
   CatalogAddStore,
   ProductPickStore,

@@ -498,8 +498,7 @@
       "KILOGRAM": "/ kg",
       "LITER": "/ L",
       "UNIT": "/ unidad",
-      "DOZEN": "/ docena",
-      "WASH": "/ lavado"
+      "DOZEN": "/ docena"
     },
     "empty": {
       "title": "No hay nada que coincida con \"{{query}}\"",
@@ -1211,7 +1210,8 @@
       "more_other": "y {{count}} más que también valen",
       "pickFor": "Para {{name}}",
       "failed": "Los productos de esta lista no se cargaron.",
-      "retry": "Reintentar"
+      "retry": "Reintentar",
+      "about": "unos {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1318,6 +1318,10 @@
     },
     "tour": {
       "again": "Enséñamela otra vez"
+    },
+    "listRows": {
+      "label": "Filas compactas",
+      "hint": "Las listas muestran el tamaño, el precio y el total en cada fila. Solo en este teléfono."
     }
   },
   "install": {
@@ -1643,20 +1647,10 @@
       "open": "Registrar {{name}}",
       "wanted": "×{{count}}",
       "busy": "Guardando",
-      "takenBack_one": "1 devuelto",
-      "takenBack_other": "{{count}} devueltos",
       "removed": "Ya no está en la lista",
       "boughtFromAnotherList": "Comprado desde otra lista de la compra",
       "boughtFromTheList": "Comprado desde la lista",
-      "alreadyBought": "Ya está comprado",
-      "takenBackAmount": "Devuelto: {{amount}}"
-    },
-    "outstanding": {
-      "label": "{{name}}, aún por conseguir",
-      "bought_one": "{{count}} comprado",
-      "bought_other": "{{count}} comprados",
-      "listLabel": "{{list}}, {{name}}, por conseguir",
-      "boughtAmount": "Comprado: {{amount}}"
+      "alreadyBought": "Ya está comprado"
     },
     "touched": {
       "got": "{{name}} lo consiguió",
@@ -1972,7 +1966,7 @@
     },
     "entries": {
       "otherList": "Otra lista",
-      "asks": "pide {{count}}"
+      "asks": "pide {{amount}}"
     },
     "row": {
       "boughtOf": "{{bought}} de {{asked}}",
@@ -2086,9 +2080,12 @@
       "unavailable": "No disponible en esta tienda",
       "instead": "En lugar de {{name}}, que no está disponible en esta tienda"
     },
+    "amount": {
+      "label": "Cantidad de {{name}}: {{amount}}",
+      "listLabel": "{{list}}, cantidad de {{name}}: {{amount}}"
+    },
     "change": {
-      "one": "Cambiar",
-      "oneLabel": "Cambiar el producto de {{name}}",
+      "oneLabel": "Cambiar el producto en {{name}}",
       "all": "Cambiar en todas las listas",
       "openLabel": "Hay otro más barato que {{name}}. Cambiar el producto",
       "cheaper": "otro más barato",

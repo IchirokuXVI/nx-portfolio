@@ -240,6 +240,23 @@ $app-landing-short: 700px;
   // How few letters of a product's name survive on a row before its brand and size
   // start to give way (section 3).
   --app-line-product-name-min: 4ch;
+  // The compact row of a list (velista 0191, section 3): the label and the brand on
+  // one 22px line, then three fact lines (the size and the unit price on 16px lines,
+  // the total on a 20px one) beside the stepper. The picture is as tall as
+  // the text, 74px, and the brand never takes more than 96px of the first line.
+  --app-line-compact-label-leading: 22px;
+  --app-line-compact-fact-leading: 16px;
+  --app-line-compact-price-leading: 20px;
+  --app-line-compact-facts-height: calc(
+    2 * var(--app-line-compact-fact-leading) +
+      var(--app-line-compact-price-leading)
+  );
+  --app-line-compact-picture-size: calc(
+    var(--app-line-compact-label-leading) + var(--app-line-compact-facts-height)
+  );
+  --app-line-compact-brand-max: 96px;
+  // "Choose a product" in the facts column of a free text line, when it wraps.
+  --app-line-compact-choose-leading: 18px;
   // The same picture on the basket line sheet's product card, larger because the
   // card is the one product on the sheet and not one row of many.
   --app-product-card-image-size: 72px;
@@ -354,23 +371,6 @@ $app-landing-short: 700px;
   --app-choice-card-check-radius: 7px;
   --app-choice-card-tick-width: 11px;
   --app-choice-card-tick-height: 6px;
-
-  // **The one number that decides how the reel feels.** It is positional, one to one
-  // with the finger, so this is the distance a thumb travels per unit. 40px leaves
-  // roughly seven units in the ~280px of comfortable travel on a 390px phone, which
-  // is what makes two to five a single gesture rather than three.
-  //
-  // It is duplicated in `@portfolio/velista/models` as `QUANTITY_REEL_PX_PER_UNIT`,
-  // which is the copy the gesture arithmetic reads; this one only draws the tape.
-  // They have to agree, and the component asserts nothing about it: a drift shows up
-  // as a reel whose highlighted number is not the one under the thumb.
-  --app-reel-unit: 40px;
-  --app-reel-height: 56px;
-  --app-reel-radius: 14px;
-  // Each number in the overlay keeps this width whether or not it has anything in it,
-  // so the current number does not slide sideways as the reel reaches zero and the
-  // neighbour to its left disappears.
-  --app-reel-digit-width: 28px;
 
   // The stepper (velista 0188, the owner's D3 Outline): minus, the amount cell and
   // plus in one outlined capsule, each button 48 by 48. The cells were measured in the

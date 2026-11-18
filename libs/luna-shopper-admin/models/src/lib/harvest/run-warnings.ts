@@ -21,7 +21,11 @@ export interface RunWarningRow {
   readonly offerId: string;
   /** The page, or `''` where the warning names none. */
   readonly page: string;
-  /** What the leaflet printed, where the warning carries it. */
+  /**
+   * What the leaflet printed, where the warning carries it. `''` for a blank
+   * name and for `LISTING_UNREAD` and `LISTING_SHORT`, whose sentence always
+   * names the part.
+   */
   readonly name: string;
   /** The harvester's own sentence, shown as it came. */
   readonly message: string;
@@ -44,6 +48,15 @@ export function isFileImportRun(run: HarvestRun | null): boolean {
  * A `null` page or offer becomes `''` rather than the word "null", because the
  * cell is drawn when it has something in it and left out when it does not, the
  * same rule the run's own facts follow.
+ *
+ * The name is decided by code, never by reading the sentence (admin plan
+ * 0071, D7). The two walk warnings in `CODES_WHOSE_SENTENCE_NAMES_THE_PART`
+ * always state their subject in the sentence ("Section 07 Mascotas failed"),
+ * and a runner may or may not also set `name`, so their name is `''` either
+ * way and the row reads the same on every run. Every other warning keeps its
+ * name, also when its sentence quotes it: an import's list then has the bold
+ * product name on every row that has one, and can be scanned by product. A
+ * blank name is `''`, so no empty `<strong>` is drawn.
  */
 export function runWarningRows(
   run: HarvestRun | null
@@ -57,10 +70,22 @@ export function runWarningRows(
     code: warning.code,
     offerId: warning.offerId ?? '',
     page: warning.page === null ? '' : String(warning.page),
-    name: warning.name ?? '',
+    name: CODES_WHOSE_SENTENCE_NAMES_THE_PART.has(warning.code)
+      ? ''
+      : (warning.name ?? '').trim(),
     message: warning.message,
   }));
 }
+
+/**
+ * The walk warnings whose sentence always names the part it is about.
+ *
+ * Typed against the wire union, so a code the gateway renames fails the build
+ * here. The admin libraries read the codes from the wire types and have no
+ * runtime enum to import.
+ */
+const CODES_WHOSE_SENTENCE_NAMES_THE_PART: ReadonlySet<Wire.EnumsHarvestWarningCode> =
+  new Set<Wire.EnumsHarvestWarningCode>(['LISTING_UNREAD', 'LISTING_SHORT']);
 
 /**
  * How many products this run put in front of a person.

@@ -9,11 +9,9 @@ import {
   expectBasketUrl,
   generateBasket,
   newVisitor,
-  nudge,
   openSettleSheet,
   pressBasketMenuRow,
   readShareLinkFromSheet,
-  reel,
   row,
   sheet,
   signIn,
@@ -89,19 +87,22 @@ test.describe('the owner and a guest', () => {
       await expectBasketUrl(guest, basketId);
     });
 
-    await test.step('3. the guest buys some of Milk from the row, and Alice sees the remainder without a reload', async () => {
-      // The row's reel is how part of a row is bought: the settle sheet has no
-      // "Got some" any more (velista `0092`), only the ways of not buying it.
-      await nudge(reel(row(guest, 'Milk'), 'Milk, still to get'), -1);
+    await test.step('3. the guest buys Milk from the row, and Alice sees it bought without a reload', async () => {
+      // The status control buys the whole row. A row has no way to buy part of
+      // it since velista 0190 took the reel off (the owner's answer to its
+      // question 1).
+      await row(guest, 'Milk')
+        .getByRole('button', { name: 'Mark Milk as got' })
+        .click();
       await expect(
-        reel(row(guest, 'Milk'), 'Milk, still to get')
-      ).toHaveAttribute('aria-valuenow', '1');
+        row(guest, 'Milk').getByRole('button', { name: 'Milk is got. Undo it' })
+      ).toBeVisible();
 
-      await expect(
-        reel(row(page, 'Milk'), 'Milk, still to get')
-      ).toHaveAttribute('aria-valuenow', '1');
       await expect(row(page, 'Milk').locator('.touched')).toContainText(
-        'Guest 1 got 1'
+        'Guest 1'
+      );
+      await expect(row(page, 'Milk').locator('.status')).toHaveAccessibleName(
+        /^Milk is got/
       );
     });
 

@@ -24,6 +24,9 @@ export * from './lib/units/comparable-price';
 // (plan 0246). Browser reachable too: velista mirrors both functions.
 export * from './lib/units/line-amount';
 export * from './lib/units/line-unit';
+// The step a curator gives a product sold by the kilo or the litre (plan
+// 0261). Browser reachable too: velista steps a line by it.
+export * from './lib/units/quantity-step';
 
 // The one barcode reader, shared by catalog, the harvester and the gateway
 // (plan 0184). Browser reachable, as the brand key is.

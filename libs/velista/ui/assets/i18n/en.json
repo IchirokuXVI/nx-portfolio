@@ -498,8 +498,7 @@
       "KILOGRAM": "/ kg",
       "LITER": "/ L",
       "UNIT": "/ unit",
-      "DOZEN": "/ dozen",
-      "WASH": "/ wash"
+      "DOZEN": "/ dozen"
     },
     "empty": {
       "title": "Nothing matches \"{{query}}\"",
@@ -1211,7 +1210,8 @@
       "more_other": "and {{count}} more that will do",
       "pickFor": "For {{name}}",
       "failed": "The products on this list did not load.",
-      "retry": "Try again"
+      "retry": "Try again",
+      "about": "about {{price}}"
     },
     "dropped": {
       "quantity": {
@@ -1318,6 +1318,10 @@
     },
     "tour": {
       "again": "Show me around again"
+    },
+    "listRows": {
+      "label": "Compact rows",
+      "hint": "Lists show the size, the price and the total on every row. Only on this phone."
     }
   },
   "install": {
@@ -1643,20 +1647,10 @@
       "open": "Settle {{name}}",
       "wanted": "×{{count}}",
       "busy": "Saving",
-      "takenBack_one": "1 taken back",
-      "takenBack_other": "{{count}} taken back",
       "removed": "No longer on the list",
       "boughtFromAnotherList": "Bought from another shopping list",
       "boughtFromTheList": "Bought from the list",
-      "alreadyBought": "Already bought",
-      "takenBackAmount": "{{amount}} taken back"
-    },
-    "outstanding": {
-      "label": "{{name}}, still to get",
-      "bought_one": "{{count}} bought",
-      "bought_other": "{{count}} bought",
-      "listLabel": "{{list}}, {{name}}, still to get",
-      "boughtAmount": "{{amount}} bought"
+      "alreadyBought": "Already bought"
     },
     "touched": {
       "got": "{{name}} got it",
@@ -1972,7 +1966,7 @@
     },
     "entries": {
       "otherList": "Another list",
-      "asks": "asks for {{count}}"
+      "asks": "asks for {{amount}}"
     },
     "row": {
       "boughtOf": "{{bought}} of {{asked}}",
@@ -2086,9 +2080,12 @@
       "unavailable": "Not available at this shop",
       "instead": "Instead of {{name}}, not available at this shop"
     },
+    "amount": {
+      "label": "Amount of {{name}}: {{amount}}",
+      "listLabel": "{{list}}, amount of {{name}}: {{amount}}"
+    },
     "change": {
-      "one": "Change",
-      "oneLabel": "Change the product for {{name}}",
+      "oneLabel": "Change the product on {{name}}",
       "all": "Change for all lists",
       "openLabel": "There is a cheaper option than {{name}}. Change the product",
       "cheaper": "cheaper option",

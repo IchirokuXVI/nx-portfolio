@@ -140,14 +140,16 @@
         <lib-row-entries
           (changed)="changeLine($event)"
           (changedAll)="changeAll()"
-          (demanded)="demand($event)"
-          (raised)="raise($event)"
+          (demanded)="stepDemand($event)"
+          (raised)="stepRaise($event)"
           (retry)="retryOthers()"
           [busy]="busy()"
           [changeable]="changeable()"
           [finished]="basketFinished()"
           [lists]="lists()"
           [others]="others()"
+          [pending]="shownAsks()"
+          [pendingRaises]="shownRaises()"
           [row]="held"
         />
       }
@@ -178,7 +180,11 @@
         anything was bought. "Not today" keeps its place after it.
       -->
       @if (canSettle()) {
-        <div class="actions">
+        <!--
+          Busy while a stepped amount waits for its save: a press here sends it
+          first and settles after it (velista 0190, decision J).
+        -->
+        <div [attr.aria-busy]="amountSaving() ? 'true' : null" class="actions">
           <button
             (click)="settleAll()"
             [disabled]="busy()"
