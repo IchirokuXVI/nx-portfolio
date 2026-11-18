@@ -127,11 +127,11 @@
                 />
                 <lib-quantity-stepper
                   (stepped)="step($event)"
-                  [controlled]="true"
                   [disabled]="unitPending()"
-                  [label]="'list.page.quantityLabel' | rokuT"
+                  [name]="line.content"
                   [unit]="line.unit"
-                  [value]="line.quantity"
+                  [value]="quantityRuns.shown(lineId(), line.quantity)"
+                  variant="row"
                 />
               </div>
             } @else {

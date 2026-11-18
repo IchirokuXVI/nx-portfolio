@@ -71,6 +71,7 @@ import {
   NO_CATEGORY,
   type PresenceUser,
   productSuggestions,
+  type QuantityStep,
   type RecordedAudio,
   reorderWithinSlots,
   SUGGEST_DEBOUNCE_MS,
@@ -97,6 +98,7 @@ import {
   productPagePath,
   productPickPath,
   productsPickPath,
+  quantityRuns,
   RECORDING_LIMITS,
   type RecordingLimits,
   searchOpenOf,
@@ -1735,21 +1737,42 @@ export class ListPage {
       return;
     }
 
+    // The line's open run is written first, so the sheet reads the amount the row
+    // drew and a Save inside the quiet beat cannot send the old one (velista 0188).
+    this.quantityRuns.flush(lineId);
     void this._openSheet(['lines', lineId, 'detail']);
   }
 
   /**
-   * One settled adjustment of a line's quantity, as a signed delta.
-   *
-   * **The primary gesture of the page** (velista plan 0043, section 4). The reel has
-   * already snapped, already waited out its idle beat, and already collapsed however
-   * many drags happened inside that window into one number, so this is called once per
-   * adjustment rather than once per step.
+   * The steps of each line, gathered into one run and written after the quiet beat
+   * (velista `0188`, section 4). The rows and the catalog's held lines draw the run's
+   * amount while it is open (decision H); the store, the sections and the sort keep
+   * the stored amount until the run is written. A page that goes away writes its open
+   * runs.
+   */
+  readonly quantityRuns = quantityRuns<string>((lineId, run) => {
+    void this.changeQuantity({ lineId, delta: run.to - run.from });
+  });
+
+  /** Every step of a row's stepper, a press or a repeat of a hold (velista `0188`). */
+  stepQuantity(event: { lineId: string; step: QuantityStep }): void {
+    const page = this.loaded();
+    if (page !== null && !page.abilities.canDecide) {
+      return;
+    }
+    this.quantityRuns.step(event.lineId, event.step);
+  }
+
+  /**
+   * One settled adjustment of a line's quantity, as a signed delta: one run of a
+   * stepper, or a dropped write sent again.
    *
    * The guard is silent and is belt on top of braces: `LineRowVm.adjustable` follows
-   * `canDecide`, so a caller who may not change the number has a reel that does not
-   * move, and the sentence explaining that is on screen from the moment the page draws
-   * rather than appearing after a refusal (section 3.2).
+   * `canDecide`, so a caller who may not change the number has a stepper with no
+   * buttons, and the sentence explaining that is on screen from the moment the page
+   * draws rather than appearing after a refusal (section 3.2). Nothing is announced
+   * here: the stepper says the amount once its presses stop (velista `0188`, decision
+   * E), and a second sentence would say it twice.
    */
   async changeQuantity(event: {
     lineId: string;
@@ -1766,30 +1789,6 @@ export class ListPage {
       reportDropped: true,
     });
     this._afterWrite(outcome, event.lineId, 'lines.write');
-
-    if (outcome === 'succeeded') {
-      // Announced **once**, as the settled result, and not per step of the drag
-      // (section 7). The reel's own `aria-valuenow` is what a keyboard user hears as
-      // they go; this is for the pointer path, where nothing else says out loud that
-      // the number moved.
-      const line = this._lines
-        .linesIn(this.listId())
-        .find((candidate) => candidate.id === event.lineId);
-      if (line !== undefined) {
-        this.announcement.set(
-          this._translator.t(
-            'list.line.quantityChanged',
-            undefined,
-            undefined,
-            {
-              name: this._lineName(line),
-              // "3", or "750 g" for a weight (velista `0182`).
-              quantity: formatAmount(line.quantity, line.unit, this._locale()),
-            }
-          )
-        );
-      }
-    }
   }
 
   /**
@@ -2253,7 +2252,8 @@ export class ListPage {
           lineId: line.id,
           text: line.content,
           listName: null,
-          quantity: line.quantity,
+          // The open run's amount, so a card and the row agree (velista `0188`).
+          quantity: this.quantityRuns.shown(line.id, line.quantity),
           unit: line.unit,
           editable,
         }));
@@ -2270,14 +2270,14 @@ export class ListPage {
   });
 
   /**
-   * A card's stepper moved a line that already holds the product. The same write as
-   * the row's own reel, so the same guard, the same failure copy and the same
-   * sentence afterwards.
+   * A card's stepper moved a line that already holds the product. The same run as
+   * the row's own stepper, so one write per run, the same guard and the same failure
+   * copy (velista `0188`, section 5.1).
    */
-  async changeHolding(change: SuggestionHoldingChange): Promise<void> {
-    await this.changeQuantity({
+  changeHolding(change: SuggestionHoldingChange): void {
+    this.stepQuantity({
       lineId: change.holding.lineId,
-      delta: change.to - change.from,
+      step: { from: change.from, to: change.to, repeat: change.repeat },
     });
   }
 

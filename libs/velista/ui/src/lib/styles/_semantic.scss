@@ -372,6 +372,27 @@ $app-landing-short: 700px;
   // neighbour to its left disappears.
   --app-reel-digit-width: 28px;
 
+  // The stepper (velista 0188, the owner's D3 Outline): minus, the amount cell and
+  // plus in one outlined capsule, each button 48 by 48. The cells were measured in the
+  // mock, never guessed: the row's 59px holds "99,975" at 16px 700 with 4px of air a
+  // side and "MMMM" at 12px; the list sheet's 95px and the shopping list sheet's 72px
+  // hold "999,999" at 17px 700 with tabular figures. 48 + 59 + 48 is 155, 48 + 95 +
+  // 48 is 191, 48 + 72 + 48 is 168, and a control never changes size.
+  --app-stepper-button: var(--app-space-10);
+  --app-stepper-cell-row: 59px;
+  --app-stepper-cell-sheet: 95px;
+  --app-stepper-cell-sheet-narrow: 72px;
+  --app-stepper-figure: 17px;
+  --app-stepper-figure-count: var(--app-text-lg);
+  --app-stepper-figure-long: var(--app-text-sm);
+  --app-stepper-symbol: var(--app-text-xs);
+  --app-stepper-glyph: 14px;
+  --app-stepper-glyph-bar: 2px;
+  --app-stepper-figure-gap: 2px;
+  --app-stepper-cell-pad-sheet: 6px;
+  // The amber ring around the cell of an amount an add just raised (velista 0170).
+  --app-stepper-took-ring: 2px;
+
   // How tall the line page's one line suggestion rows may grow before they scroll
   // (plan 0043, section 6). Four rows and a bit: enough to show that there is more
   // without the list becoming the page.

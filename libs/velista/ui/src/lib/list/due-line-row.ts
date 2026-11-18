@@ -55,10 +55,11 @@ import { QuantityStepper } from './quantity-stepper';
       <div class="acts">
         <lib-quantity-stepper
           (valueChange)="step($event)"
-          [label]="'list.due.quantityLabel' | rokuT: { name: vm.name }"
           [min]="1"
+          [name]="vm.name"
           [unit]="vm.unit"
           [value]="amount()"
+          variant="row"
         />
         <button
           (click)="add()"

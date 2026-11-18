@@ -618,9 +618,11 @@ label.open .pick:focus-visible {
   font-size: var(--app-text-xs);
 }
 
+// The held lines sit 12 px apart, as the stepper mock draws them (velista 0188).
 .held-lines {
   display: flex;
   flex-direction: column;
+  gap: var(--app-space-4);
   margin: 0;
   padding: 0;
   list-style: none;

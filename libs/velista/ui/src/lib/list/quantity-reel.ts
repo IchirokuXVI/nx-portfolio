@@ -27,12 +27,6 @@ import { formatAmount, handleBackWhile } from '@portfolio/velista/platform';
 import { classifyReelGesture } from './quantity-reel-gesture';
 
 /**
- * How long a raised number keeps its {@link QuantityReel.took} edge (velista `0170`,
- * D4). One value for the list page and the basket, which both decide when it goes.
- */
-export const TOOK_DURATION_MS = 2500;
-
-/**
  * How many of something, as a number you drag.
  *
  * The primary gesture of the list page (velista plan 0043, section 4). A thumb lands

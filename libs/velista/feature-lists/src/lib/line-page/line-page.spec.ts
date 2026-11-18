@@ -44,6 +44,7 @@ import {
   type Line,
   type ListPermission,
   type MyZone,
+  QUANTITY_STEP_QUIET_MS,
   type ShoppingListSummary,
 } from '@portfolio/velista/models';
 import {
@@ -413,20 +414,87 @@ describe('LinePage', () => {
   });
 
   describe('the number', () => {
-    it('sends one more and one fewer as a delta', async () => {
+    it('writes one run of presses once, after the quiet beat (velista 0188)', async () => {
+      const { fixture, lines } = await render();
+      const more = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[1];
+      jest.useFakeTimers();
+
+      more.click();
+      fixture.detectChanges();
+      more.click();
+      fixture.detectChanges();
+      more.click();
+      fixture.detectChanges();
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual(
+        []
+      );
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('6');
+
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
+      await drain(fixture);
+
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
+        { kind: 'quantity', lineId: LINE_ID, delta: 3 },
+      ]);
+    });
+
+    it('writes a run 800 ms after its last step while the finger is still down (velista 0188)', async () => {
+      // The owner, 2026-11-12: kept. A minus hold from 3 repeats to 2 and 1 and stops
+      // there (S8b); the finger never lifts, and the run is written all the same.
+      const { fixture, lines } = await render();
+      const fewer = fixture.debugElement
+        .queryAll(By.css('lib-quantity-stepper button'))
+        .map((element) => element.nativeElement as HTMLButtonElement)[0];
+      const quantityCalls = () =>
+        lines.calls.filter((call) => call.kind === 'quantity');
+      jest.useFakeTimers();
+
+      fewer.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      // The repeats land at 400 and 700 ms; the next one would reach 0 and stops.
+      jest.advanceTimersByTime(700);
+      fixture.detectChanges();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS - 1);
+      fixture.detectChanges();
+      expect(
+        fixture.nativeElement
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value')
+      ).toBe('1');
+      expect(quantityCalls()).toEqual([]);
+
+      jest.advanceTimersByTime(1);
+      jest.useRealTimers();
+      await drain(fixture);
+
+      expect(quantityCalls()).toEqual([
+        { kind: 'quantity', lineId: LINE_ID, delta: -2 },
+      ]);
+    });
+
+    it('sends a run back to where it started as nothing', async () => {
       const { fixture, lines } = await render();
       const [fewer, more] = fixture.debugElement
         .queryAll(By.css('lib-quantity-stepper button'))
         .map((element) => element.nativeElement as HTMLButtonElement);
+      jest.useFakeTimers();
 
       more.click();
+      fixture.detectChanges();
       fewer.click();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
       await drain(fixture);
 
-      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual([
-        { kind: 'quantity', lineId: LINE_ID, delta: 1 },
-        { kind: 'quantity', lineId: LINE_ID, delta: -1 },
-      ]);
+      expect(lines.calls.filter((call) => call.kind === 'quantity')).toEqual(
+        []
+      );
     });
 
     it('asks for no record of a write the network drops (velista 0159)', async () => {
@@ -438,7 +506,10 @@ describe('LinePage', () => {
         .queryAll(By.css('lib-quantity-stepper button'))
         .map((element) => element.nativeElement as HTMLButtonElement);
 
+      jest.useFakeTimers();
       more.click();
+      jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+      jest.useRealTimers();
       await drain(fixture);
 
       expect(addQuantity).toHaveBeenCalledTimes(1);
@@ -578,11 +649,56 @@ describe('LinePage', () => {
       await drain(fixture);
       expect(fixture.nativeElement.querySelector('.unit-error')).not.toBeNull();
 
-      fixture.componentInstance.step(1);
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      fixture.componentInstance.quantityRuns.flush(LINE_ID);
       await drain(fixture);
 
       expect(lines.calls.at(-1)).toMatchObject({ kind: 'quantity', delta: 1 });
       expect(fixture.nativeElement.querySelector('.unit-error')).toBeNull();
+    });
+
+    it('writes an open run before it changes the unit (velista 0188)', async () => {
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      segments(fixture)[1].click();
+      await drain(fixture);
+
+      const kinds = lines.calls.map((call) => call.kind);
+      expect(kinds.indexOf('quantity')).toBeGreaterThanOrEqual(0);
+      expect(kinds.indexOf('quantity')).toBeLessThan(
+        kinds.lastIndexOf('update')
+      );
+    });
+
+    it('sends the unit only after the open run has answered', async () => {
+      // A delta in the old unit that reached the server after the change would be
+      // refused, and the refusal would draw the line in the old unit again.
+      const { fixture, lines } = await render({
+        items: [LOOSE, PIECE],
+        lines: [line({ unit: 'UNIT', quantity: 2 })],
+      });
+      let answer: (outcome: 'succeeded') => void = () => undefined;
+      jest.spyOn(lines, 'addQuantity').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          })
+      );
+
+      fixture.componentInstance.step({ from: 2, to: 3, repeat: false });
+      segments(fixture)[1].click();
+      await drain(fixture);
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([]);
+
+      answer('succeeded');
+      await drain(fixture);
+      expect(lines.calls.filter((call) => call.kind === 'update')).toEqual([
+        { kind: 'update', lineId: LINE_ID, unit: 'GRAM', quantity: 1000 },
+      ]);
     });
   });
 

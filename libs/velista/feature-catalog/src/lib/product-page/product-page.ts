@@ -448,7 +448,7 @@ export class ProductPage {
       return;
     }
     this.addFailed.set(false);
-    void this._adds.step(
+    this._adds.step(
       {
         listId: target.listId,
         itemId: row.id,
@@ -456,7 +456,7 @@ export class ProductPage {
         imageUrl: row.imageUrl,
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 
@@ -479,7 +479,7 @@ export class ProductPage {
   /** A press on the stepper of a line in the table. */
   protected stepListLine(step: ListsTableStep): void {
     this.addFailed.set(false);
-    void this._adds.step(
+    this._adds.step(
       {
         listId: step.listId,
         itemId: this.itemId(),
@@ -487,7 +487,7 @@ export class ProductPage {
         imageUrl: this.imageUrl(),
       },
       step.lineId,
-      step.by
+      step.step
     );
   }
 

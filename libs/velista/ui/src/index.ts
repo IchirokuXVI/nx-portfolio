@@ -85,6 +85,7 @@ export * from './lib/list/list-tools';
 export * from './lib/list/product-picture';
 export * from './lib/list/quantity-reel';
 export * from './lib/list/quantity-stepper';
+export * from './lib/list/amount-figure';
 export * from './lib/list/share-row';
 export * from './lib/list/suggestion-list';
 export * from './lib/list/to-buy-heading';

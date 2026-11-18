@@ -198,8 +198,10 @@ test.describe('adding from the catalog', () => {
 
       await expect(held).toHaveCount(1);
       await expect(held).toContainText('Bread');
-      await expect(held.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      // The row stepper of velista 0188 has no spinbutton: the amount is on the
+      // host's data-value, in base units.
+      await expect(held.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '1'
       );
       await expect(adding.locator('[data-adding="count"]')).toHaveText(
@@ -208,9 +210,9 @@ test.describe('adding from the catalog', () => {
     });
 
     await test.step('3. the stepper of that line raises it', async () => {
-      await held.getByRole('button', { name: 'One more' }).click();
-      await expect(held.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      await held.getByRole('button', { name: /^Add 1 to Bread/ }).click();
+      await expect(held.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '2'
       );
     });
@@ -234,12 +236,13 @@ test.describe('adding from the catalog', () => {
 
       const added = page.getByRole('dialog');
       await expect(added.getByText('Bread', { exact: true })).toBeVisible();
-      await added.getByRole('button', { name: 'One fewer' }).click();
-      await expect(added.getByRole('spinbutton')).toHaveAttribute(
-        'aria-valuenow',
+      const fewer = added.getByRole('button', { name: /^Remove 1 from Bread/ });
+      await fewer.click();
+      await expect(added.locator('lib-quantity-stepper')).toHaveAttribute(
+        'data-value',
         '1'
       );
-      await added.getByRole('button', { name: 'One fewer' }).click();
+      await fewer.click();
 
       // The last line taken back closes the sheet, and the row holds no line.
       await expect(page).toHaveURL(/\/en\/catalog$/);
@@ -282,25 +285,21 @@ test.describe('adding from the catalog', () => {
       // The demo world's Milk is a litre with no size, so a line of it counts
       // millilitres (velista `0182`). The list's plus is an add, so each press
       // puts one more litre on the line: 1000, then 2000. Its minus steps the
-      // line: from a litre on, one step is 250 ml, so the presses down read 1750,
-      // 1500, 1250 and 1000. One more press down takes the product back, because
-      // the visit made the line and a minus at the litre it started at removes
-      // it, as a minus at one does for a count. The list's stepper reads 0 again.
+      // line by the one step of velista 0188, 25 ml, so a press down reads 1975.
+      // Velista 0187 rewrites this step with its own rule for the plus.
       const list = page.locator('lib-lists-table .list').first();
       const row = list.locator('.row');
-      const count = row.getByRole('spinbutton');
-      const more = row.getByRole('button', { name: 'One more' });
-      const fewer = row.getByRole('button', { name: 'One fewer' });
-      await expect(count).toHaveAttribute('aria-valuenow', '0');
+      const count = row.locator('lib-quantity-stepper');
+      const more = row.getByRole('button', { name: /^Add / });
+      const fewer = row.getByRole('button', { name: /^Remove / });
+      await expect(count).toHaveAttribute('data-value', '0');
 
       for (const reads of ['1000', '2000']) {
         await more.click();
-        await expect(count).toHaveAttribute('aria-valuenow', reads);
+        await expect(count).toHaveAttribute('data-value', reads);
       }
-      for (const reads of ['1750', '1500', '1250', '1000', '0']) {
-        await fewer.click();
-        await expect(count).toHaveAttribute('aria-valuenow', reads);
-      }
+      await fewer.click();
+      await expect(count).toHaveAttribute('data-value', '1975');
     });
 
     await test.step('9. back returns to the list, in the order it was left in', async () => {

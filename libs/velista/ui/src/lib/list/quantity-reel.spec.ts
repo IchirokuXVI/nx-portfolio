@@ -975,15 +975,17 @@ describe('QuantityReel', () => {
    * thousand in both directions, the words change with it, and a count is what it
    * always was.
    */
-  describe('the step of a weight (velista 0182)', () => {
+  // The reel reads the one step of velista 0188 until velista 0190 removes it: 25 g
+  // and 25 ml at every amount, with no grid.
+  describe('the step of a weight (velista 0182, 0188)', () => {
     const grams = (value: number, more: Parameters<typeof render>[1] = {}) =>
       render(value, { ...more, unit: 'GRAM' });
 
-    it('1. draws its neighbours one step away, and the step changes at a thousand', async () => {
+    it('1. draws its neighbours one step away, the same step across a thousand', async () => {
       const { fixture } = await grams(1000);
 
       expect(fixture.componentInstance.previous()).toBe(975);
-      expect(fixture.componentInstance.next()).toBe(1250);
+      expect(fixture.componentInstance.next()).toBe(1025);
 
       const below = await grams(975);
       expect(below.fixture.componentInstance.previous()).toBe(950);
@@ -995,11 +997,11 @@ describe('QuantityReel', () => {
 
       drag(host, 4);
       fixture.detectChanges();
-      // 950, 975, 1000, then 1250 and 1500: the step grew at the thousand.
-      expect(fixture.componentInstance.shown()).toBe(1500);
+      // 950, 975, 1000, 1025, 1050.
+      expect(fixture.componentInstance.shown()).toBe(1050);
 
       jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
-      expect(deltas).toEqual([550]);
+      expect(deltas).toEqual([100]);
     });
 
     it('3. moves by one step on an arrow and five on a page key, both ways', async () => {
@@ -1009,9 +1011,9 @@ describe('QuantityReel', () => {
       expect(fixture.componentInstance.shown()).toBe(975);
       key(host, 'ArrowUp');
       key(host, 'ArrowUp');
-      expect(fixture.componentInstance.shown()).toBe(1250);
+      expect(fixture.componentInstance.shown()).toBe(1025);
       key(host, 'PageDown');
-      // 1250, 1000, 975, 950, 925, 900.
+      // 1025, 1000, 975, 950, 925, 900.
       expect(fixture.componentInstance.shown()).toBe(900);
 
       jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
@@ -1044,7 +1046,7 @@ describe('QuantityReel', () => {
       fixture.detectChanges();
       expect(host.querySelector('.current')?.textContent?.trim()).toBe('1 kg');
       expect(number(host, 975).textContent?.trim()).toBe('975 g');
-      expect(number(host, 1250).textContent?.trim()).toBe('1.25 kg');
+      expect(number(host, 1025).textContent?.trim()).toBe('1.025 kg');
     });
 
     it('6. keeps aria-valuenow the raw integer and says the words in aria-valuetext', async () => {
@@ -1060,13 +1062,13 @@ describe('QuantityReel', () => {
       expect(host.getAttribute('aria-valuetext')).toBe('875 g');
     });
 
-    it('steps millilitres by 50 below a litre and 250 from it', async () => {
-      const { fixture, host } = await render(950, { unit: 'MILLILITER' });
+    it('steps millilitres by 25 below a litre and from it', async () => {
+      const { fixture, host } = await render(975, { unit: 'MILLILITER' });
 
       key(host, 'ArrowUp');
       expect(fixture.componentInstance.shown()).toBe(1000);
       key(host, 'ArrowUp');
-      expect(fixture.componentInstance.shown()).toBe(1250);
+      expect(fixture.componentInstance.shown()).toBe(1025);
     });
 
     it('leaves a count exactly as it was: one per step, the bare number, no value text', async () => {

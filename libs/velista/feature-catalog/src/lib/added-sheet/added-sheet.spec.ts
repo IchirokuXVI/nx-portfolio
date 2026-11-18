@@ -6,6 +6,7 @@ import {
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import { CatalogAddStore } from '@portfolio/velista/data-access';
+import { QUANTITY_STEP_QUIET_MS } from '@portfolio/velista/models';
 import {
   provideVelistaTesting,
   SheetNavigation,
@@ -117,6 +118,16 @@ async function settle(fixture: ComponentFixture<AddedSheet>): Promise<void> {
   fixture.detectChanges();
 }
 
+/**
+ * The quiet beat after a press, then every write it started (velista `0188`): the
+ * store gathers the presses on a line and writes them once they stop.
+ */
+async function quiet(fixture: ComponentFixture<AddedSheet>): Promise<void> {
+  fixture.detectChanges();
+  jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+  await settle(fixture);
+}
+
 /** The line an add of this product is on: the one that add made or raised. */
 function lineIdOf(seed: Pick<Seed, 'listId' | 'itemId'>): string {
   return madeLineId(seed.listId, seed.itemId);
@@ -190,7 +201,9 @@ async function render(options: Options = {}): Promise<Harness> {
   for (const line of options.raised ?? []) {
     store.choose(line.listId);
     await pause();
-    await store.step(
+    const from =
+      store.held().find((held) => held.lineId === line.lineId)?.quantity ?? 0;
+    store.step(
       {
         listId: line.listId,
         itemId: line.itemId,
@@ -198,8 +211,10 @@ async function render(options: Options = {}): Promise<Harness> {
         imageUrl: null,
       },
       line.lineId,
-      1
+      { from, to: from + 1, repeat: false }
     );
+    jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+    await pause();
   }
   for (const mock of Object.values(adds.lines)) {
     mock.mockClear();
@@ -271,11 +286,11 @@ function stepsOf(scope: HTMLElement | null): {
   return { minus: steps[0] ?? null, plus: steps[1] ?? null };
 }
 
+/** What a row's stepper draws, in base units (velista 0188, decision L). */
 function quantityIn(scope: HTMLElement | null): string | null {
   return (
-    scope
-      ?.querySelector('lib-quantity-stepper [role="spinbutton"]')
-      ?.getAttribute('aria-valuenow') ?? null
+    scope?.querySelector('lib-quantity-stepper')?.getAttribute('data-value') ??
+    null
   );
 }
 
@@ -291,14 +306,18 @@ function quantityOf(
   fixture: ComponentFixture<AddedSheet>,
   itemId: string
 ): string | null {
-  return (
-    row(fixture, itemId)
-      ?.querySelector('lib-quantity-stepper [role="spinbutton"]')
-      ?.getAttribute('aria-valuenow') ?? null
-  );
+  return quantityIn(row(fixture, itemId));
 }
 
 describe('AddedSheet', () => {
+  beforeEach(() => {
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('draws one section for one list, named by the title and with no heading', async () => {
     const { fixture } = await render({ added: [OIL, RICE] });
 
@@ -383,7 +402,7 @@ describe('AddedSheet', () => {
     const step = jest.spyOn(store, 'step');
 
     stepper(fixture, 'item-rice').plus?.click();
-    await settle(fixture);
+    await quiet(fixture);
 
     expect(step).toHaveBeenCalledTimes(1);
     expect(step).toHaveBeenCalledWith(
@@ -394,7 +413,7 @@ describe('AddedSheet', () => {
         imageUrl: null,
       },
       lineIdOf(RICE),
-      1
+      { from: 1, to: 2, repeat: false }
     );
     expect(lines.addQuantity).toHaveBeenCalledWith(lineIdOf(RICE), 1, 'UNIT');
     expect(quantityOf(fixture, 'item-rice')).toBe('2');
@@ -402,7 +421,7 @@ describe('AddedSheet', () => {
 
     // Above the floor, a minus is one fewer and not a take back.
     stepper(fixture, 'item-rice').minus?.click();
-    await settle(fixture);
+    await quiet(fixture);
 
     expect(step).toHaveBeenLastCalledWith(
       {
@@ -412,7 +431,7 @@ describe('AddedSheet', () => {
         imageUrl: null,
       },
       lineIdOf(RICE),
-      -1
+      { from: 2, to: 1, repeat: false }
     );
     expect(lines.addQuantity).toHaveBeenLastCalledWith(
       lineIdOf(RICE),
@@ -430,7 +449,7 @@ describe('AddedSheet', () => {
     const step = jest.spyOn(store, 'step');
 
     stepper(fixture, 'item-oil').plus?.click();
-    await settle(fixture);
+    await quiet(fixture);
 
     expect(step).toHaveBeenCalledWith(
       {
@@ -440,7 +459,7 @@ describe('AddedSheet', () => {
         imageUrl: 'https://img.test/oil.png',
       },
       lineIdOf(OIL),
-      1
+      { from: 1, to: 2, repeat: false }
     );
     expect(
       row(fixture, 'item-oil')?.querySelector('.detail')?.textContent
@@ -479,7 +498,7 @@ describe('AddedSheet', () => {
       const step = jest.spyOn(store, 'step');
 
       stepsOf(lineRow(fixture, 'line-frying')).plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(step).toHaveBeenCalledTimes(1);
       expect(step).toHaveBeenCalledWith(
@@ -490,7 +509,7 @@ describe('AddedSheet', () => {
           imageUrl: null,
         },
         'line-frying',
-        1
+        { from: 2, to: 3, repeat: false }
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
@@ -503,7 +522,7 @@ describe('AddedSheet', () => {
 
       // "Oil for frying" held one before the visit, so it goes back to one.
       stepsOf(lineRow(fixture, 'line-frying')).minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1, 'UNIT');
@@ -513,7 +532,7 @@ describe('AddedSheet', () => {
       expect(sheets.dismiss).not.toHaveBeenCalled();
 
       stepsOf(lineRow(fixture, lineIdOf(OIL))).minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(lines.deleteLine).toHaveBeenCalledTimes(1);
       expect(lines.deleteLine).toHaveBeenCalledWith(lineIdOf(OIL));
@@ -529,12 +548,12 @@ describe('AddedSheet', () => {
     const step = jest.spyOn(store, 'step');
 
     stepper(fixture, 'item-oil').minus?.click();
-    await settle(fixture);
+    await quiet(fixture);
 
     expect(step).toHaveBeenCalledWith(
       expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
       lineIdOf(OIL),
-      -1
+      { from: 1, to: 0, repeat: false }
     );
     expect(lines.deleteLine).toHaveBeenCalledWith(lineIdOf(OIL));
     expect(lines.addQuantity).not.toHaveBeenCalled();
@@ -552,7 +571,7 @@ describe('AddedSheet', () => {
     expect(quantityOf(fixture, 'item-oil')).toBe('3');
 
     stepper(fixture, 'item-oil').minus?.click();
-    await settle(fixture);
+    await quiet(fixture);
 
     expect(lines.deleteLine).not.toHaveBeenCalled();
     expect(lines.addQuantity).toHaveBeenCalledTimes(1);
@@ -625,7 +644,7 @@ describe('AddedSheet', () => {
     const { fixture, sheets, store } = await render({ added: [OIL] });
 
     stepper(fixture, 'item-oil').minus?.click();
-    await settle(fixture);
+    await quiet(fixture);
 
     expect(store.count()).toBe(0);
     expect(sheets.dismiss).toHaveBeenCalledTimes(1);

@@ -32,6 +32,7 @@ import {
   defaultQuantity,
   LINE_PRICED_PRODUCTS_MAX,
   type LineUnit,
+  type QuantityStep,
 } from '@portfolio/velista/models';
 import {
   AppHistory,
@@ -41,6 +42,7 @@ import {
   PageNavigation,
   productPagePath,
   productsPickPath,
+  quantityRuns,
   sheetSegments,
   zoneIdOf,
 } from '@portfolio/velista/platform';
@@ -393,14 +395,37 @@ export class LinePage {
     return answer;
   }
 
-  /** One press of the stepper: one more, or one fewer, as a delta (section 2). */
-  /** One press of the stepper, as the signed amount it moved (velista `0182`). */
-  step(by: number): void {
-    void this._lines.addQuantity(this.lineId(), by).then((outcome) => {
-      if (outcome === 'succeeded') {
-        this._unitError.set(null);
-      }
-    });
+  /**
+   * The stepper's steps, gathered into one write per run (velista `0188`, section
+   * 5.2): a hold that repeats ten times a second would otherwise be ten requests a
+   * second. The stepper draws the open run, and a page that goes away writes it.
+   */
+  readonly quantityRuns = quantityRuns<string>((lineId, run) => {
+    const write = this._lines
+      .addQuantity(lineId, run.to - run.from)
+      .then((outcome) => {
+        if (outcome === 'succeeded') {
+          this._unitError.set(null);
+        }
+      })
+      .finally(() => {
+        if (this._runWrites.get(lineId) === write) {
+          this._runWrites.delete(lineId);
+        }
+      });
+    this._runWrites.set(lineId, write);
+  });
+
+  /**
+   * The run write of each line still on its way. A unit change waits for it: a
+   * delta in the old unit that reached the server after the change would be
+   * refused, and the refusal puts the line back in the old unit on screen.
+   */
+  private readonly _runWrites = new Map<string, Promise<void>>();
+
+  /** One step of the stepper, a press or a repeat of a hold. */
+  step(step: QuantityStep): void {
+    this.quantityRuns.step(this.lineId(), step);
   }
 
   /**
@@ -414,8 +439,12 @@ export class LinePage {
     if (line === undefined || this.unitPending() || unit === line.unit) {
       return;
     }
+    // The open run is written first, and its answer is waited for, so the unit
+    // change reaches the server after the delta in the old unit.
+    this.quantityRuns.flush(line.id);
     this.unitPending.set(true);
     this._unitError.set(null);
+    await this._runWrites.get(line.id);
     const outcome = await this._lines.updateLine(line.id, {
       unit,
       quantity: defaultQuantity(unit),

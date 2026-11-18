@@ -9,7 +9,6 @@ import {
   legacyLineUnit,
   sameLineName,
   shownLineUnit,
-  stepFrom,
   unsavedLineId,
   visitAddition,
   visitAfterAdd,
@@ -24,11 +23,17 @@ import {
   type Line,
   type LineUnit,
   type MyZone,
+  type QuantityStep,
   type ShoppingListSummary,
   type VisitList,
   type VisitProduct,
 } from '@portfolio/velista/models';
-import { BrowserFacade, StorageKeys } from '@portfolio/velista/platform';
+import {
+  BrowserFacade,
+  quantityRuns,
+  StorageKeys,
+  type QuantityRun,
+} from '@portfolio/velista/platform';
 import { SessionStore } from '../auth/session-store';
 import { LINE_SERVICE, type LineServiceI } from '../lines/line-service';
 import { LIST_SERVICE, type ListServiceI } from '../lists/list-service';
@@ -142,6 +147,22 @@ export class CatalogAddStore {
    * show two, then one, then two.
    */
   private readonly _adding = new Map<string, number>();
+
+  /**
+   * The open run of each line a stepper moves (velista `0188`, decision G): the
+   * presses gather here, drawn at once, and after `QUANTITY_STEP_QUIET_MS` with no
+   * step the run is written as one change. Every open run is written when the app
+   * is destroyed or hidden, because a number the person watched move is saved.
+   */
+  private readonly _runs = quantityRuns<string>((lineId, run) =>
+    this._sendRun(lineId, run)
+  );
+
+  /** The product of each open run, and the drawn amount it started from. */
+  private readonly _runOf = new Map<
+    string,
+    { readonly product: VisitProduct; readonly from: number }
+  >();
 
   /** Bumped by every erase, so an answer from the visit before is dropped. */
   private _generation = 0;
@@ -315,6 +336,14 @@ export class CatalogAddStore {
       return Promise.resolve();
     }
     const key = keyOf(to, product.itemId);
+    // A stepper's open run on a line of this product is sent first, as a take
+    // back does, so the add lands on top of it and the run does not later write
+    // an amount that left the add out.
+    for (const line of this._held()) {
+      if (line.listId === to && line.itemIds.includes(product.itemId)) {
+        this._flush(line.lineId);
+      }
+    }
     const drawnOn = this._drawAdd(to, product);
     this._adding.set(key, (this._adding.get(key) ?? 0) + 1);
     return this._queued(key, (generation) =>
@@ -323,20 +352,69 @@ export class CatalogAddStore {
   }
 
   /**
-   * A press on the stepper of one line: one more or one fewer.
+   * One step of the stepper of one line, as the stepper drew it (velista `0188`,
+   * section 5.5).
    *
-   * A minus that brings a line the visit made to nothing takes it back, which
-   * deletes it where the person may. A line that was there before goes to zero
-   * and stays, which is what a list calls stocked.
+   * The step is drawn at once and joins the line's run, which is written as one
+   * change when the presses stop. A press down that brings a line the visit made
+   * to nothing, or a weight line the visit made down from its kilo, takes it back
+   * instead, which deletes it where the person may; the open run is sent first. A
+   * repeat that would do so is dropped, so a hold never takes a product back. A
+   * line that was there before goes to zero and stays, which is what a list calls
+   * stocked.
    */
-  step(product: VisitProduct, lineId: string, by: 1 | -1): Promise<void> {
-    return this._queued(keyOf(product.listId, product.itemId), (generation) =>
-      this._step(product, lineId, by, generation)
-    );
+  step(product: VisitProduct, lineId: string, step: QuantityStep): void {
+    const line = this._held().find((held) => held.lineId === lineId);
+    if (line === undefined || isUnsavedLine(lineId) || step.to === step.from) {
+      return;
+    }
+    const key = keyOf(product.listId, product.itemId);
+    const open = this._runs.pending().has(lineId);
+    const down = step.to < step.from;
+    if (!open && this._legacyUnit(line) !== null) {
+      // A legacy line is corrected before any run starts on it (backend `0246`
+      // section 3.2). The correction reads the line in its turn, so a second
+      // press that comes while it waits corrects nothing twice.
+      void this._queued(key, (generation) =>
+        this._correctLegacy(product, lineId, down ? -1 : 1, generation)
+      );
+      return;
+    }
+    const entry = visitAddition(this._visit(), lineId);
+    // The minus at the floor takes a product the visit added back: at nothing,
+    // as a count always did, or exactly at the kilo a weight line the visit made
+    // started at (velista `0182`). A weight line lowered under its kilo
+    // elsewhere steps down like any other.
+    if (
+      down &&
+      entry !== null &&
+      entry.created &&
+      (step.to === 0 ||
+        (isMeasured(line.unit) && step.from === visitFloor(entry, line.unit)))
+    ) {
+      if (step.repeat) {
+        return;
+      }
+      this._flush(lineId);
+      void this._queued(key, () => this._takeBack(lineId));
+      return;
+    }
+    if (!open) {
+      this._runOf.set(lineId, { product, from: line.quantity });
+    }
+    this._move(lineId, step.to - line.quantity);
+    // The run starts from what was drawn, so the change it writes is exactly how
+    // far the drawn amount moved.
+    this._runs.step(lineId, {
+      ...step,
+      from: this._runOf.get(lineId)?.from ?? line.quantity,
+    });
   }
 
   /** Take one line back: undo what the visit did to it, and no more. */
   takeBack(lineId: string): Promise<void> {
+    // What the steppers moved is written first, so the undo reads it.
+    this._flush(lineId);
     const entry = visitAddition(this._visit(), lineId);
     if (entry === null) {
       return Promise.resolve();
@@ -370,6 +448,11 @@ export class CatalogAddStore {
       this._held().length === 0
     ) {
       return;
+    }
+    // The steps the person made are written; the record that follows them is
+    // the visit's, which ends here.
+    for (const lineId of [...this._runs.pending().keys()]) {
+      this._flush(lineId);
     }
     this._generation++;
     this._loading = null;
@@ -458,10 +541,15 @@ export class CatalogAddStore {
       if (elsewhere) {
         this._move(drawnOn, -amount);
       }
+      const answered = heldOf(result.line, elsewhere ? 0 : ahead);
+      // A stepper's run still open on the line stays drawn on top of the answer.
       this._held.update((held) =>
         upsert(
           held.filter((line) => line.lineId !== unsaved),
-          heldOf(result.line, elsewhere ? 0 : ahead)
+          {
+            ...answered,
+            quantity: answered.quantity + this._openOffset(answered.lineId),
+          }
         )
       );
       this._visit.update((visit) =>
@@ -504,59 +592,52 @@ export class CatalogAddStore {
     }
   }
 
-  private async _step(
+  /** A run closed: write it after the writes already on their way for its product. */
+  private _sendRun(lineId: string, run: QuantityRun): void {
+    const meta = this._runOf.get(lineId);
+    this._runOf.delete(lineId);
+    if (meta === undefined) {
+      return;
+    }
+    const { product } = meta;
+    void this._queued(keyOf(product.listId, product.itemId), (generation) =>
+      this._writeRun(product, lineId, run, generation)
+    );
+  }
+
+  /**
+   * One run as one signed change (velista `0188`, section 5.5). The record of the
+   * visit says the line held what the run started from. A refused run moves the
+   * drawn amount back by what the run moved it.
+   */
+  private async _writeRun(
     product: VisitProduct,
     lineId: string,
-    by: 1 | -1,
+    run: QuantityRun,
     generation: number
   ): Promise<void> {
+    const delta = run.to - run.from;
     const line = this._held().find((held) => held.lineId === lineId);
-    if (line === undefined || isUnsavedLine(lineId)) {
-      return;
-    }
-    const legacy = this._legacyUnit(line);
-    if (legacy !== null) {
-      await this._correctUnit(product, line, legacy, by, generation);
-      return;
-    }
-    // One step of the line's unit, so a weight moves by 25 g or 250 g and a count
-    // by one (velista `0182`, section 3).
-    const next = stepFrom(line.quantity, line.unit, by);
-    const delta = next - line.quantity;
-    if (next < 0 || delta === 0) {
-      return;
-    }
-    const entry = visitAddition(this._visit(), lineId);
-    // The minus at the floor takes a product the visit added back: at nothing,
-    // as a count always did, or exactly at the kilo a weight line the visit made
-    // started at (velista `0182`). A weight line lowered under its kilo
-    // elsewhere steps down like any other.
-    if (
-      by === -1 &&
-      entry !== null &&
-      entry.created &&
-      (next === 0 ||
-        (isMeasured(line.unit) &&
-          line.quantity === visitFloor(entry, line.unit)))
-    ) {
-      await this._takeBack(lineId);
-      return;
-    }
-
-    this._move(lineId, delta);
     try {
       const answer = await this._lines.addQuantity(
         lineId,
         delta,
-        line.unit ?? 'UNIT'
+        line?.unit ?? 'UNIT'
       );
       if (generation !== this._generation) {
         return;
       }
       const ahead = this._adding.get(keyOf(product.listId, product.itemId));
-      this._held.update((held) => upsert(held, heldOf(answer, ahead ?? 0)));
+      const held = heldOf(answer, ahead ?? 0);
+      // A run opened on the line since this one closed is drawn on top.
+      this._held.update((all) =>
+        upsert(all, {
+          ...held,
+          quantity: held.quantity + this._openOffset(lineId),
+        })
+      );
       this._visit.update((visit) =>
-        visitAfterStep(visit, product, stateOf(answer), answer.quantity - delta)
+        visitAfterStep(visit, product, stateOf(answer), run.from)
       );
     } catch {
       if (generation === this._generation) {
@@ -564,6 +645,34 @@ export class CatalogAddStore {
         this._failures.update((count) => count + 1);
       }
     }
+  }
+
+  /** Send a line's open run now. A run back to its start sends nothing, and leaves nothing. */
+  private _flush(lineId: string): void {
+    this._runs.flush(lineId);
+    this._runOf.delete(lineId);
+  }
+
+  /** How far an open run on a line has moved its drawn amount, or nothing. */
+  private _openOffset(lineId: string): number {
+    const to = this._runs.pending().get(lineId);
+    const from = this._runOf.get(lineId)?.from;
+    return to === undefined || from === undefined ? 0 : to - from;
+  }
+
+  /** A legacy line, read in its turn of the queue, corrected once. */
+  private async _correctLegacy(
+    product: VisitProduct,
+    lineId: string,
+    by: 1 | -1,
+    generation: number
+  ): Promise<void> {
+    const line = this._held().find((held) => held.lineId === lineId);
+    const legacy = line === undefined ? null : this._legacyUnit(line);
+    if (line === undefined || legacy === null) {
+      return;
+    }
+    await this._correctUnit(product, line, legacy, by, generation);
   }
 
   /**
@@ -777,7 +886,10 @@ export class CatalogAddStore {
    * what the visit added.
    */
   private _written(lineId: string): boolean {
-    return visitAddition(this._visit(), lineId) !== null;
+    return (
+      visitAddition(this._visit(), lineId) !== null ||
+      this._runs.pending().has(lineId)
+    );
   }
 
   private _markLines(listId: string, status: CatalogAddStatus): void {

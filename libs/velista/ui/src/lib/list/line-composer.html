@@ -125,7 +125,12 @@
       }
     </div>
 
-    <lib-quantity-stepper [(value)]="quantity" [disabled]="busy()" />
+    <lib-quantity-stepper
+      [(value)]="quantity"
+      [disabled]="busy()"
+      [name]="'amount.newLine' | rokuT"
+      variant="row"
+    />
 
     <!--
     One slot, two jobs, and the empty field decides (plan 0038, section 2). A

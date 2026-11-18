@@ -25,9 +25,10 @@ import {
   provideFakeCategoryStore,
   type FakeCategoryStore,
 } from '@portfolio/velista/data-access';
-import type {
-  CatalogBrowseQuery,
-  CatalogPriceState,
+import {
+  QUANTITY_STEP_QUIET_MS,
+  type CatalogBrowseQuery,
+  type CatalogPriceState,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
 import { AddingBar } from '@portfolio/velista/ui';
@@ -96,6 +97,17 @@ async function settle(fixture: ComponentFixture<CatalogPage>): Promise<void> {
     await Promise.resolve();
   }
   fixture.detectChanges();
+}
+
+/**
+ * The quiet beat after a press on a stepper, then every write it started (velista
+ * `0188`): the store gathers the presses on a line and writes them once they stop.
+ * Under the fake timers of the specs that press one.
+ */
+async function quiet(fixture: ComponentFixture<CatalogPage>): Promise<void> {
+  fixture.detectChanges();
+  jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+  await settle(fixture);
 }
 
 async function render(
@@ -316,10 +328,11 @@ function heldLines(
     return {
       lineId: line.dataset['line'] ?? '',
       name: line.querySelector('.held-name')?.textContent?.trim() ?? '',
+      // What the stepper draws, in base units (velista 0188, decision L).
       quantity:
         line
-          .querySelector('lib-quantity-stepper [role="spinbutton"]')
-          ?.getAttribute('aria-valuenow') ?? null,
+          .querySelector('lib-quantity-stepper')
+          ?.getAttribute('data-value') ?? null,
       minus: steps[0] ?? null,
       plus: steps[1] ?? null,
     };
@@ -886,6 +899,10 @@ describe('CatalogPage', () => {
   });
 
   describe('adding from a row (velista 0134, section 4)', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
     const OIL = 'Extra virgin olive oil';
     const RICE = 'Short grain rice';
 
@@ -1026,9 +1043,9 @@ describe('CatalogPage', () => {
       );
       expect(
         held
-          ?.querySelector('lib-quantity-stepper [role="spinbutton"]')
+          ?.querySelector('lib-quantity-stepper [role="group"]')
           ?.getAttribute('aria-label')
-      ).toBe('catalog.held.stepper');
+      ).toBe('amount.group');
       // The lines sit beside the product's button and the plus, inside neither.
       expect(held?.closest('button')).toBeNull();
       expect(plusOf(fixture, OIL)).not.toBeNull();
@@ -1051,7 +1068,7 @@ describe('CatalogPage', () => {
       const step = jest.spyOn(store, 'step');
 
       heldLines(fixture, OIL)[1]?.plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(step).toHaveBeenCalledTimes(1);
       expect(step).toHaveBeenCalledWith(
@@ -1062,7 +1079,7 @@ describe('CatalogPage', () => {
           imageUrl: null,
         },
         'line-frying',
-        1
+        { from: 1, to: 2, repeat: false }
       );
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', 1, 'UNIT');
@@ -1074,12 +1091,12 @@ describe('CatalogPage', () => {
       expect(store.count()).toBe(1);
 
       heldLines(fixture, OIL)[0]?.minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(step).toHaveBeenLastCalledWith(
         expect.objectContaining({ listId: 'list-weekly', itemId: 'item-oil' }),
         'line-oil',
-        -1
+        { from: 2, to: 1, repeat: false }
       );
       expect(lines.addQuantity).toHaveBeenLastCalledWith(
         'line-oil',
@@ -1109,7 +1126,7 @@ describe('CatalogPage', () => {
       expect(heldLines(fixture, RICE)).toHaveLength(1);
 
       heldLines(fixture, RICE)[0]?.plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(lines.addQuantity).toHaveBeenCalledTimes(1);
       expect(lines.addQuantity).toHaveBeenCalledWith(
@@ -1131,7 +1148,7 @@ describe('CatalogPage', () => {
 
       // The visit made the rice's line, so nothing of it is left behind.
       heldLines(fixture, RICE)[0]?.minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
       expect(lines.deleteLine).toHaveBeenCalledWith(
         'line-list-weekly-item-rice'
       );
@@ -1140,14 +1157,16 @@ describe('CatalogPage', () => {
 
       // The oil for frying was there before: it goes to zero and stays.
       heldLines(fixture, OIL)[0]?.minus?.click();
-      await settle(fixture);
+      await quiet(fixture);
       expect(lines.addQuantity).toHaveBeenCalledWith('line-frying', -1, 'UNIT');
       expect(lines.deleteLine).toHaveBeenCalledTimes(1);
       expect(heldLines(fixture, OIL)).toMatchObject([
         { lineId: 'line-frying', quantity: '0' },
       ]);
       // At zero there is nothing fewer to ask for.
-      expect(heldLines(fixture, OIL)[0]?.minus?.disabled).toBe(true);
+      expect(
+        heldLines(fixture, OIL)[0]?.minus?.getAttribute('aria-disabled')
+      ).toBe('true');
     });
 
     it('draws a line the person may not change with its stepper out of action, and still offers the plus', async () => {
@@ -1159,8 +1178,8 @@ describe('CatalogPage', () => {
 
       const line = heldLines(fixture, OIL)[0];
       expect(line?.quantity).toBe('2');
-      expect(line?.minus?.disabled).toBe(true);
-      expect(line?.plus?.disabled).toBe(true);
+      expect(line?.minus?.getAttribute('aria-disabled')).toBe('true');
+      expect(line?.plus?.getAttribute('aria-disabled')).toBe('true');
       line?.plus?.click();
       await settle(fixture);
       expect(lines.addQuantity).not.toHaveBeenCalled();
@@ -1236,7 +1255,7 @@ describe('CatalogPage', () => {
 
       lines.addQuantity.mockRejectedValueOnce(new Error('offline'));
       heldLines(fixture, OIL)[0]?.plus?.click();
-      await settle(fixture);
+      await quiet(fixture);
 
       expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1, 'UNIT');
       expect(addFailed(fixture)).toBe('catalog.add.failed');
