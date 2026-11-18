@@ -43,7 +43,6 @@ describe('the probe notice', () => {
         age: '3 days ago',
         status: 'harvest.probeNotice.status.UNREACHABLE',
         sentence: 'home: GET https://deza.example/ timed out',
-        interpolation: { escapeValue: false },
       },
     });
   });
