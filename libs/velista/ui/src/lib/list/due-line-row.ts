@@ -57,6 +57,7 @@ import { QuantityStepper } from './quantity-stepper';
           (valueChange)="step($event)"
           [min]="1"
           [name]="vm.name"
+          [step]="vm.step ?? null"
           [unit]="vm.unit"
           [value]="amount()"
           variant="row"

@@ -21,6 +21,8 @@ export interface VisitAddedRow {
   readonly quantity: number;
   /** What {@link quantity} counts (velista `0182`). Absent is a count. */
   readonly unit?: LineUnit;
+  /** The step its stepper presses by, `lineStepOf` (velista `0186`). Absent is the default. */
+  readonly step?: number | null;
   /** The lowest count the stepper shows. A minus pressed there takes it back. */
   readonly floor: number;
   /** The line waits for approval, which the row says under the name. */
@@ -95,6 +97,7 @@ export interface VisitAddedStep {
                 [stepper]="{
                   value: row.quantity,
                   unit: row.unit,
+                  step: row.step,
                   name: row.name,
                   min: row.floor - 1,
                 }"

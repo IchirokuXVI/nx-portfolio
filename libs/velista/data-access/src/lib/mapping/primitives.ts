@@ -1,3 +1,5 @@
+import { isQuantityStep } from '@portfolio/velista/models';
+
 /**
  * The narrowing primitives every mapper is built from.
  *
@@ -62,6 +64,15 @@ export function positiveNum(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? value
     : null;
+}
+
+/**
+ * A product's step (backend `0261`, velista `0186`): one of `QUANTITY_STEPS`, else
+ * null. A step on a product the client reads as not sold by the kilo or the litre
+ * is kept as served; `lineStepOf` ignores it.
+ */
+export function quantityStepOf(value: unknown): number | null {
+  return isQuantityStep(value) ? value : null;
 }
 
 /**

@@ -43,6 +43,7 @@ const OFFER: ProductOffer = {
 
 const OIL: CatalogProduct = {
   id: 'item-oil',
+  quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
   imageUrl: null,
@@ -1001,6 +1002,20 @@ describe('ProductRow', () => {
       // A step on a line is not an add, and it does not open the product.
       expect(heard.added).toEqual([]);
       expect(heard.opened).toEqual([]);
+    });
+
+    it("steps a held line by the product's step it carries (velista 0186)", async () => {
+      const fixture = await render(
+        productRowView(OIL, options()),
+        adding([held({ quantity: 1000, unit: 'GRAM', step: 100 })])
+      );
+      const heard = record(fixture);
+
+      steps(fixture, 'line-oil')[0]?.click();
+
+      expect(heard.lineStepped).toEqual([
+        { lineId: 'line-oil', step: { from: 1000, to: 900, repeat: false } },
+      ]);
     });
 
     it('says one fewer for the line whose minus was pressed', async () => {

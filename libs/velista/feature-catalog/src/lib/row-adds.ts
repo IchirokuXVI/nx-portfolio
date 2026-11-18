@@ -4,10 +4,12 @@ import {
   addUnitRefusalKey,
   canStepLine,
   isUnsavedLine,
+  lineStepOf,
   type AddTargetList,
   type AddUnitRefusal,
   type HeldLine,
   type HoldingRow,
+  type LineUnitProduct,
 } from '@portfolio/velista/models';
 import type { ProductRowAdd } from '@portfolio/velista/ui';
 
@@ -46,11 +48,17 @@ export interface RowAdds {
  * them, and `pathOf` the list's URL, which the card's link opens with `?line=`.
  * Lines all at zero set `atZero`: the person raises the line under the card with
  * its own stepper, and there is no link, because the list hides its lines at zero.
+ *
+ * `productOf` is the page's records of the products it shows (velista `0186`,
+ * decision E): each held row steps by `lineStepOf` over them, so a row of a
+ * product stepped at 100 g steps its lines by 100 g. Absent, every row steps by
+ * its unit's default.
  */
 export function rowAdds(
   target: AddTargetList | null,
   held: readonly HeldLine[],
-  pathOf: (target: AddTargetList) => string
+  pathOf: (target: AddTargetList) => string,
+  productOf?: (itemId: string) => LineUnitProduct | null | undefined
 ): RowAdds {
   if (target === null) {
     return { plain: null, of: () => null };
@@ -70,6 +78,7 @@ export function rowAdds(
         !isUnsavedLine(line.lineId) &&
         canStepLine(target.permissions, line.pending),
       pending: line.pending,
+      ...stepOf(line, productOf),
     };
     for (const itemId of line.itemIds) {
       const rows = lines.get(itemId);
@@ -141,6 +150,26 @@ export function addFailedCopy(
     };
   }
   return { key: 'catalog.add.failed', args: {} };
+}
+
+/**
+ * A held row's step, as a field to spread: the store's (`HeldLine.step`, over
+ * the products this session read), else `lineStepOf` over the page's records,
+ * else nothing, which steps by the unit's default.
+ */
+function stepOf(
+  line: HeldLine,
+  productOf:
+    | ((itemId: string) => LineUnitProduct | null | undefined)
+    | undefined
+): { readonly step?: number } {
+  const step =
+    line.step !== undefined
+      ? line.step
+      : productOf === undefined
+        ? null
+        : lineStepOf(line, productOf);
+  return step === null ? {} : { step };
 }
 
 /**

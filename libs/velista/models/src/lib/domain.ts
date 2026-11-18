@@ -561,6 +561,13 @@ export interface CatalogItem {
    * the kilo with no stated weight.
    */
   readonly approxWeight: number | null;
+  /**
+   * The step a curator set for a product sold by the kilo or the litre, in base
+   * units (backend `0261`), or null for the default. One of `QUANTITY_STEPS`; the
+   * mapper reads anything else as null. Required, so a conversion from one
+   * product shape to another cannot drop it unseen.
+   */
+  readonly quantityStep: number | null;
   readonly productGroupId: string | null;
   /**
    * The aisles the catalog files it under, in the catalog's order (velista `0082`,

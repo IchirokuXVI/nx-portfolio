@@ -91,6 +91,25 @@ describe('QuantityStepper (velista 0188)', () => {
 
   const tos = (h: Harness) => h.steps.map((step) => step.to);
 
+  /** The sheet's field, and typing and keys on it. */
+  const field = (h: Harness) => h.el.querySelector('input') as HTMLInputElement;
+  const type = (h: Harness, text: string) => {
+    const input = field(h);
+    input.value = text;
+    fire(input, 'input');
+    h.fixture.detectChanges();
+  };
+  const key = (h: Harness, name: string) => {
+    const event = new KeyboardEvent('keydown', {
+      key: name,
+      bubbles: true,
+      cancelable: true,
+    });
+    field(h).dispatchEvent(event);
+    h.fixture.detectChanges();
+    return event;
+  };
+
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => {
     jest.useRealTimers();
@@ -434,25 +453,6 @@ describe('QuantityStepper (velista 0188)', () => {
   });
 
   describe('the sheets (section 3.5)', () => {
-    const field = (h: Harness) =>
-      h.el.querySelector('input') as HTMLInputElement;
-    const type = (h: Harness, text: string) => {
-      const input = field(h);
-      input.value = text;
-      fire(input, 'input');
-      h.fixture.detectChanges();
-    };
-    const key = (h: Harness, name: string) => {
-      const event = new KeyboardEvent('keydown', {
-        key: name,
-        bubbles: true,
-        cancelable: true,
-      });
-      field(h).dispatchEvent(event);
-      h.fixture.detectChanges();
-      return event;
-    };
-
     it('is a spinbutton with its four values and the exact form', () => {
       const h = render({ value: 1275, unit: 'GRAM', variant: 'sheet' });
       const input = field(h);
@@ -627,6 +627,197 @@ describe('QuantityStepper (velista 0188)', () => {
         expect(tos(h)).toEqual([900]);
         keyClick(h.plus);
         expect(tos(h)).toEqual([900, 925]);
+      });
+    });
+  });
+
+  describe("the product's step (velista 0186, section 3)", () => {
+    const arrow = (h: Harness, name: string) => {
+      const input = h.el.querySelector('input') as HTMLInputElement;
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: name,
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      h.fixture.detectChanges();
+    };
+
+    it('moves a press, a repeat and an arrow key by a step of 100', () => {
+      const h = render({ value: 1000, unit: 'GRAM', step: 100 });
+      h.minus.click();
+      fire(h.minus, 'pointerdown');
+      jest.advanceTimersByTime(400);
+      fire(h.minus, 'pointerup');
+      pointerClick(h.minus);
+      expect(h.steps).toEqual([
+        { from: 1000, to: 900, repeat: false },
+        { from: 900, to: 800, repeat: true },
+      ]);
+
+      const sheet = render({
+        value: 1000,
+        unit: 'GRAM',
+        step: 100,
+        variant: 'sheet',
+      });
+      arrow(sheet, 'ArrowDown');
+      arrow(sheet, 'ArrowUp');
+      expect(tos(sheet)).toEqual([900, 1000]);
+    });
+
+    it('moves a press at 1000 by 10 on a step of 5 (S7b, decision F)', () => {
+      const h = render({ value: 995, unit: 'GRAM', step: 5 });
+      h.plus.click();
+      h.plus.click();
+      h.minus.click();
+      h.minus.click();
+      expect(tos(h)).toEqual([1000, 1010, 1000, 995]);
+    });
+
+    it('names the step each button moves', () => {
+      const h = render({ value: 1000, unit: 'GRAM', step: 100 });
+      expect(h.minus.getAttribute('aria-label')).toContain('"step":"100 g"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"100 g"');
+      h.set('step', 5);
+      expect(h.minus.getAttribute('aria-label')).toContain('"step":"5 g"');
+      expect(h.plus.getAttribute('aria-label')).toContain('"step":"10 g"');
+    });
+
+    it('turns plus off where one step of the product would pass the most', () => {
+      const h = render({ value: 999_900, unit: 'GRAM', step: 100 });
+      expect(h.plus.getAttribute('aria-disabled')).toBe('true');
+      h.set('step', null);
+      expect(h.plus.getAttribute('aria-disabled')).toBeNull();
+    });
+
+    it('ignores a step on a count', () => {
+      const h = render({ value: 3, step: 100 });
+      h.plus.click();
+      expect(tos(h)).toEqual([4]);
+    });
+
+    describe('typing accepts any amount (the owner, ruling 44 of 2026-11-16)', () => {
+      it('takes 10 g on a step of 50 down to 0 with the trash, or up to 60', () => {
+        const down = render({ value: 10, unit: 'GRAM', step: 50 });
+        expect(down.minus.classList).toContain('is-clear');
+        expect(down.minus.querySelector('lib-trash-icon')).not.toBeNull();
+        down.minus.click();
+        expect(tos(down)).toEqual([0]);
+
+        const up = render({ value: 10, unit: 'GRAM', step: 50 });
+        up.plus.click();
+        expect(tos(up)).toEqual([60]);
+      });
+
+      it('keeps a typed amount under one step on a step of 50', () => {
+        const h = render({ value: 50, unit: 'GRAM', step: 50, variant: 'sheet' });
+        type(h, '10');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([10]);
+      });
+
+      it('keeps a typed amount under the floor of the buttons with a typed floor', () => {
+        const h = render({
+          value: 100,
+          unit: 'GRAM',
+          step: 100,
+          min: 100,
+          typedMin: 1,
+          variant: 'sheet',
+        });
+        type(h, '10');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([10]);
+        type(h, '0');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([10, 1]);
+        // The buttons still stop at their floor: minus at 1 is at its end.
+        expect(h.minus.getAttribute('aria-disabled')).toBe('true');
+        h.minus.click();
+        expect(tos(h)).toEqual([10, 1]);
+        expect(field(h).getAttribute('aria-valuemin')).toBe('1');
+      });
+
+      it('holds a typed amount to the floor of the buttons without one, as before', () => {
+        const h = render({
+          value: 100,
+          unit: 'GRAM',
+          step: 100,
+          min: 100,
+          variant: 'sheet',
+        });
+        type(h, '10');
+        key(h, 'Enter');
+        expect(tos(h)).toEqual([]);
+        expect(field(h).getAttribute('aria-valuemin')).toBe('100');
+      });
+    });
+
+    describe('where minus reaches 0 and quick presses (velista 0188 S14)', () => {
+      const trash = (h: Harness) => h.minus.querySelector('lib-trash-icon');
+
+      it.each([
+        [100, 100],
+        [300, 500],
+        [5, 5],
+      ])('draws the trash at %s g on a step of %s', (value, step) => {
+        const h = render({ value, unit: 'GRAM', step });
+        expect(trash(h)).not.toBeNull();
+        expect(h.minus.classList).toContain('is-clear');
+      });
+
+      it.each([
+        [1005, 5],
+        [200, 100],
+        [600, 500],
+      ])('draws the bar at %s g on a step of %s', (value, step) => {
+        const h = render({ value, unit: 'GRAM', step });
+        expect(trash(h)).toBeNull();
+        expect(h.minus.classList).not.toContain('is-clear');
+      });
+
+      it('goes from 300 g to 0 in one minus on a step of 500', () => {
+        const h = render({ value: 300, unit: 'GRAM', step: 500 });
+        h.minus.click();
+        expect(tos(h)).toEqual([0]);
+      });
+
+      it('builds quick presses in one task on the step of the product', () => {
+        const h = render(
+          { value: 1000, unit: 'GRAM', step: 100 },
+          { follow: false }
+        );
+        h.minus.click();
+        h.minus.click();
+        h.plus.click();
+        expect(h.steps).toEqual([
+          { from: 1000, to: 900, repeat: false },
+          { from: 900, to: 800, repeat: false },
+          { from: 800, to: 900, repeat: false },
+        ]);
+      });
+
+      it('builds quick presses past 1000 by 10 on a step of 5', () => {
+        const h = render(
+          { value: 1005, unit: 'GRAM', step: 5 },
+          { follow: false }
+        );
+        h.minus.click();
+        h.minus.click();
+        expect(tos(h)).toEqual([995, 990]);
+      });
+
+      it('stops plus at the most within one task on a step of 100', () => {
+        const h = render(
+          { value: 999_700, unit: 'GRAM', step: 100 },
+          { follow: false }
+        );
+        h.plus.click();
+        h.plus.click();
+        h.plus.click();
+        expect(tos(h)).toEqual([999_800, 999_900]);
       });
     });
   });

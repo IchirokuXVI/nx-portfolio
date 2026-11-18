@@ -63,6 +63,7 @@ const READ_ONLY: readonly ListPermission[] = ['READ'];
 
 const MILK: CatalogItem = {
   id: 'item-milk-a',
+  quantityStep: null,
   name: { es: 'Leche entera', en: 'Whole milk' },
   brand: 'Hacendado',
   size: 1,
@@ -1223,6 +1224,87 @@ describe('LineDetailSheet: the unit chip (velista 0183)', () => {
         'lib-line-unit-chip [role="radio"]'
       ),
     ] as HTMLButtonElement[];
+
+  it("steps both steppers and the how many floor by the product's step (velista 0186)", async () => {
+    const stepped: CatalogItem = { ...LOOSE, quantityStep: 100 };
+    const { fixture } = await render({
+      lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 1000 })],
+      itemNames: fakeItemNames({ items: [stepped] }),
+    });
+
+    expect(fixture.componentInstance.productStep()).toBe(100);
+    expect(fixture.componentInstance.howManyFloor()).toBe(100);
+    const steppers = fixture.debugElement
+      .queryAll(By.directive(QuantityStepper))
+      .map((one) => one.componentInstance as QuantityStepper);
+    expect(steppers.length).toBeGreaterThan(0);
+    expect(steppers.every((one) => one.step() === 100)).toBe(true);
+  });
+
+  describe('how many takes any typed amount (the owner, ruling 44 of 2026-11-16)', () => {
+    const stepped: CatalogItem = { ...LOOSE, quantityStep: 100 };
+    const howMany = (fixture: ComponentFixture<LineDetailSheet>) =>
+      (fixture.nativeElement as HTMLElement).querySelector(
+        '.step-row lib-quantity-stepper input'
+      ) as HTMLInputElement;
+    const typeInto = (
+      fixture: ComponentFixture<LineDetailSheet>,
+      text: string
+    ) => {
+      const input = howMany(fixture);
+      input.value = text;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(
+        new KeyboardEvent('keydown', {
+          key: 'Enter',
+          bubbles: true,
+          cancelable: true,
+        })
+      );
+      fixture.detectChanges();
+    };
+
+    it('opens at one step when nothing is wanted, and records 10 g typed under it', async () => {
+      const { fixture, lines } = await render({
+        lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 0 })],
+        itemNames: fakeItemNames({ items: [stepped] }),
+      });
+      fixture.componentInstance.startBought();
+      await settle(fixture);
+      expect(fixture.componentInstance.howMany()).toBe(100);
+
+      typeInto(fixture, '10');
+      expect(fixture.componentInstance.howMany()).toBe(10);
+      typeInto(fixture, '0');
+      // Recording nothing is never offered: the least typed is one gram.
+      expect(fixture.componentInstance.howMany()).toBe(1);
+
+      typeInto(fixture, '10');
+      await fixture.componentInstance.recordBought();
+      await settle(fixture);
+      expect(lines.calls.at(-1)).toMatchObject({
+        kind: 'settle',
+        outcome: 'BOUGHT',
+        quantity: 10,
+      });
+    });
+
+    it('opens at what is wanted under one step, and its minus stops at one step', async () => {
+      const { fixture } = await render({
+        lines: [line({ itemIds: [LOOSE.id], unit: 'GRAM', quantity: 10 })],
+        itemNames: fakeItemNames({ items: [stepped] }),
+      });
+      fixture.componentInstance.startBought();
+      await settle(fixture);
+      expect(fixture.componentInstance.howMany()).toBe(10);
+      const stepper = fixture.debugElement
+        .queryAll(By.directive(QuantityStepper))
+        .map((one) => one.componentInstance as QuantityStepper)
+        .find((one) => one.typedMin() === 1);
+      expect(stepper?.min()).toBe(100);
+      expect(stepper?.minusAtEnd()).toBe(true);
+    });
+  });
 
   it('draws no chip on a line of one product of one unit', async () => {
     const { fixture } = await render({

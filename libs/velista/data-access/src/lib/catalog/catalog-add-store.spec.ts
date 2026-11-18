@@ -104,9 +104,12 @@ interface World {
         readonly unit: string | null;
         readonly size: number | null;
         readonly approxWeight: number | null;
+        readonly quantityStep?: number | null;
       }
     >
   >;
+  /** Ids whose record has not answered yet; every other id has answered. */
+  readonly unreadItems?: readonly string[];
 }
 
 /** The clock's own timeout, kept before the fake timers of each spec replace it. */
@@ -169,6 +172,8 @@ function setup(world: World) {
   const addedNamed: (false | undefined)[] = [];
   /** The unit every add and every step named (velista `0182`). */
   const units: (string | undefined)[] = [];
+  /** Every set of products the store asked `ItemNames` to read (velista `0186`). */
+  const ensured: string[][] = [];
   const storage = new Map<string, string>();
   if (world.lastList !== undefined) {
     storage.set(StorageKeys.lastList, world.lastList);
@@ -398,6 +403,12 @@ function setup(world: World) {
               provide: ItemNames,
               useValue: {
                 nameOf: (itemId: string) => world.items?.[itemId] ?? null,
+                sizingOf: (itemId: string) =>
+                  world.items?.[itemId] ??
+                  (world.unreadItems?.includes(itemId) ? undefined : null),
+                ensure: async (itemIds: readonly string[]) => {
+                  ensured.push([...itemIds]);
+                },
               },
             },
           ]),
@@ -424,6 +435,7 @@ function setup(world: World) {
     calls,
     addedNamed,
     units,
+    ensured,
     storage,
     /** The lines as the server holds them. */
     server,
@@ -974,6 +986,198 @@ describe('CatalogAddStore', () => {
 
         expect(calls.some((call) => call.startsWith('update:'))).toBe(false);
         expect(calls.some((call) => call.startsWith('quantity:'))).toBe(false);
+      });
+    });
+
+    describe('a product with a step of its own (velista 0186)', () => {
+      const STEPPED = {
+        unit: 'KILOGRAM',
+        size: null,
+        approxWeight: null,
+        quantityStep: 100,
+      };
+
+      it("carries the product's step on its held lines, and writes a stepper's to", async () => {
+        const { store, calls } = setup({
+          ...HOME,
+          items: { bananas: STEPPED },
+          lines: [
+            line('kilo', 'weekly', {
+              content: 'Plátanos',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas'],
+            }),
+          ],
+        });
+        await store.ensure();
+        expect(store.held()[0]?.step).toBe(100);
+
+        store.step(on('weekly', BANANAS), 'kilo', {
+          from: 1000,
+          to: stepFrom(1000, 'GRAM', -1, 100),
+          repeat: false,
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        await settled();
+
+        expect(calls).toContain('quantity:kilo:-100');
+        expect(store.held()[0]?.quantity).toBe(900);
+      });
+
+      it('tells a line known to step by the default from one whose products have not answered (decision A)', async () => {
+        const PLAIN = { ...STEPPED, quantityStep: null };
+        const { store, ensured } = setup({
+          ...HOME,
+          items: { bananas: PLAIN },
+          unreadItems: ['thighs'],
+          lines: [
+            line('known', 'weekly', {
+              content: 'Plátanos',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas'],
+            }),
+            line('waiting', 'weekly', {
+              content: 'Pollo',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas', 'thighs'],
+            }),
+          ],
+        });
+        await store.ensure();
+
+        const steps = new Map(
+          store.held().map((held) => [held.lineId, held.step])
+        );
+        expect(steps.get('known')).toBeNull();
+        expect(steps.get('waiting')).toBeUndefined();
+        // And the store asks for the products of its weight lines, so the
+        // step of "Pollo" becomes known.
+        expect(ensured.flat()).toEqual(
+          expect.arrayContaining(['bananas', 'thighs'])
+        );
+      });
+
+      it('still takes a line the visit made back with one minus at its floor', async () => {
+        const { store, calls } = setup({
+          ...HOME,
+          items: { bananas: STEPPED },
+        });
+        await store.ensure();
+        await store.add(BANANAS);
+        const added = store.held()[0]?.quantity ?? 0;
+        expect(store.held()[0]?.step).toBe(100);
+
+        store.step(on('weekly', BANANAS), 'line-1', {
+          from: added,
+          to: stepFrom(added, 'GRAM', -1, 100),
+          repeat: false,
+        });
+        jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+        await settled();
+
+        // Taken back whole, whatever the first add asked for, never one step.
+        expect(calls).toContain(`quantity:line-1:-${added}`);
+        expect(store.visit()).toEqual([]);
+      });
+
+      describe("a first add at the product's step (the owner, ruling 43 of 2026-11-16)", () => {
+        it('adds a whole chicken stepped at 1000 at 1 kg, and plus then gives 2 kg', async () => {
+          const CHICKEN = { ...BANANAS, step: 1000 };
+          const { store, calls, drawn } = setup({
+            ...HOME,
+            items: { bananas: { ...STEPPED, quantityStep: 1000 } },
+          });
+          await store.ensure();
+
+          await store.add(CHICKEN);
+
+          expect(calls).toContain('add:weekly:Plátanos:1000:bananas');
+          expect(drawn('weekly', 'bananas')).toEqual([1000]);
+          expect(store.visit()[0]?.quantity).toBe(1000);
+
+          store.step(on('weekly', BANANAS), 'line-1', {
+            from: 1000,
+            to: stepFrom(1000, 'GRAM', 1, 1000),
+            repeat: false,
+          });
+          jest.advanceTimersByTime(QUANTITY_STEP_QUIET_MS);
+          await settled();
+          expect(store.held()[0]?.quantity).toBe(2000);
+        });
+
+        it('takes the line back at its floor of one step from the sheet of the visit', async () => {
+          const { store, calls } = setup({
+            ...HOME,
+            items: { bananas: STEPPED },
+          });
+          await store.ensure();
+          await store.add({ ...BANANAS, step: 100 });
+          expect(store.held()[0]?.quantity).toBe(100);
+
+          // The sheet's stepper stops one under its floor (`VisitAdded`).
+          store.step(on('weekly', BANANAS), 'line-1', {
+            from: 100,
+            to: 99,
+            repeat: false,
+          });
+          await settled();
+
+          expect(calls).toContain('quantity:line-1:-100');
+          expect(store.visit()).toEqual([]);
+        });
+
+        it('adds a product with no step at 25 g, as before', async () => {
+          const { store, calls } = setup(HOME);
+          await store.ensure();
+
+          await store.add({ ...BANANAS, step: null });
+
+          expect(calls).toContain('add:weekly:Plátanos:25:bananas');
+        });
+      });
+
+      it('keeps the same array and rows when a recompute changed nothing (review)', async () => {
+        const PLAIN = { ...STEPPED, quantityStep: null };
+        const { store } = setup({
+          ...HOME,
+          items: { bananas: PLAIN },
+          lines: [
+            line('known', 'weekly', {
+              content: 'Plátanos',
+              quantity: 1000,
+              unit: 'GRAM',
+              itemIds: ['bananas'],
+            }),
+            line('other', 'weekly', {
+              content: 'Peras',
+              quantity: 500,
+              unit: 'GRAM',
+              itemIds: ['bananas'],
+            }),
+          ],
+        });
+        await store.ensure();
+        const first = store.held();
+        expect(first[0]?.step).toBeNull();
+
+        // The same lines in a new array: nothing a row draws changed.
+        const raw = store['_held'];
+        raw.update((held) => [...held]);
+        expect(store.held()).toBe(first);
+
+        // One line moves: the other keeps its object.
+        raw.update((held) =>
+          held.map((one) =>
+            one.lineId === 'other' ? { ...one, quantity: 525 } : one
+          )
+        );
+        const next = store.held();
+        expect(next).not.toBe(first);
+        expect(next[0]).toBe(first[0]);
+        expect(next[1]?.quantity).toBe(525);
       });
     });
 

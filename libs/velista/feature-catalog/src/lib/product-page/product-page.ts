@@ -34,6 +34,7 @@ import {
   catalogName,
   categoryName,
   chainPriceHistories,
+  lineStepOf,
   lineUnitOfProduct,
   PRICE_HISTORY_DEFAULT_RANGE,
   PRICE_HISTORY_READ_DAYS,
@@ -228,6 +229,17 @@ export class ProductPage {
     lineUnitOfProduct(this._item()?.offer ?? null, this._item())
   );
 
+  /**
+   * The product's step (velista `0186`, decision E): `lineStepOf` of a line of this
+   * one product in {@link lineUnit}, or null for the default.
+   */
+  protected readonly step = computed(() => {
+    const item = this._item();
+    return item === null
+      ? null
+      : lineStepOf({ unit: this.lineUnit(), itemIds: [item.id] }, () => item);
+  });
+
   /** `brand · size`, with the row's own rule for when a size is worth saying. */
   protected readonly detail = computed(() => {
     const item = this._item();
@@ -394,18 +406,35 @@ export class ProductPage {
     };
   });
 
-  private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held(), (target) =>
-      appPath(
-        this._locale(),
-        this._basePath,
-        'zones',
-        target.zoneId,
-        'lists',
-        target.listId
+  private readonly _rowAdds = computed(() => {
+    // The records of the page and its similar rows, so a held line steps by its
+    // product's step (velista `0186`, decision E).
+    const item = this._item();
+    const groupId = item?.productGroupId ?? null;
+    const entry = groupId === null ? null : this._groupMembers.entry(groupId);
+    const members = new Map(
+      (entry?.status === 'ready' ? entry.members : []).map(
+        (member) => [member.id, member] as const
       )
-    )
-  );
+    );
+    return rowAdds(
+      this.addTarget(),
+      this._adds.held(),
+      (target) =>
+        appPath(
+          this._locale(),
+          this._basePath,
+          'zones',
+          target.zoneId,
+          'lists',
+          target.listId
+        ),
+      (itemId) =>
+        item !== null && itemId === item.id
+          ? item
+          : (members.get(itemId) ?? null)
+    );
+  });
 
   /** The sentence of a failed add, as the catalog says it (velista `0185`). */
   protected readonly addFailedText = computed(() =>
@@ -453,6 +482,12 @@ export class ProductPage {
 
   protected addProduct(row: ProductRowView): void {
     this.addFailed.set(false);
+    const groupId = this._item()?.productGroupId ?? null;
+    const entry = groupId === null ? null : this._groupMembers.entry(groupId);
+    const record =
+      entry?.status === 'ready'
+        ? (entry.members.find((member) => member.id === row.id) ?? null)
+        : null;
     void this._adds.add({
       itemId: row.id,
       name: row.name,
@@ -460,6 +495,11 @@ export class ProductPage {
       imageUrl: row.imageUrl,
       // A product sold by the kilo is asked for by weight (velista `0182`).
       unit: row.lineUnit,
+      // At one step of its own (velista `0186`, ruling 43).
+      step: lineStepOf(
+        { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
+        () => record
+      ),
     });
   }
 
@@ -496,6 +536,8 @@ export class ProductPage {
         imageUrl: this.imageUrl(),
         // A product sold by the kilo is asked for by weight (velista `0182`).
         unit: this.lineUnit(),
+        // At one step of its own (velista `0186`, ruling 43).
+        step: this.step(),
       },
       listId
     );

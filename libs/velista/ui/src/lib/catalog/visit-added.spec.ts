@@ -333,6 +333,23 @@ describe('VisitAdded', () => {
   });
 
   describe('the stepper', () => {
+    it("steps by the product's step the row carries (velista 0186)", async () => {
+      const fixture = await render([
+        {
+          listId: 'l1',
+          name: 'Weekly shop',
+          rows: [row({ quantity: 1000, unit: 'GRAM', floor: 1000, step: 100 })],
+        },
+      ]);
+      const heard = steppedOf(fixture);
+
+      steps(fixture, 'l1', 'item-oil')[1]?.click();
+
+      expect(heard.map((each) => each.step)).toEqual([
+        { from: 1000, to: 1100, repeat: false },
+      ]);
+    });
+
     it('says one more, with the list, the product, the line and its detail', async () => {
       const fixture = await render([WEEKLY, BARBECUE]);
       const heard = steppedOf(fixture);

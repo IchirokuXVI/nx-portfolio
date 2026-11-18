@@ -1643,6 +1643,7 @@ describe('searching the basket', () => {
   ): BasketProduct {
     return {
       id,
+      quantityStep: null,
       name: { en, es },
       brand,
       size: null,
@@ -3542,6 +3543,7 @@ describe('the composer and the list it adds to', () => {
           items: [
             {
               id: 'item-a',
+              quantityStep: null,
               name: { es: 'Leche entera', en: 'Whole milk' },
               brand: 'Hacendado',
               size: 1,
@@ -3816,6 +3818,7 @@ describe('the composer and the list it adds to', () => {
       it('says the raised row as it draws it, its name and its number', async () => {
         const WHOLE_MILK: BasketProduct = {
           id: 'i-milk',
+          quantityStep: null,
           name: { en: 'Whole milk', es: 'Whole milk' },
           brand: null,
           imageUrl: null,
@@ -4316,6 +4319,7 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     kind: 'item',
     item: {
       id: 'item-milk',
+      quantityStep: null,
       name: { es: 'Leche entera', en: 'Whole milk' },
       brand: 'Hacendado',
       size: 1,
@@ -4542,6 +4546,120 @@ describe('BasketPage: the lines a suggestion card names (velista 0101)', () => {
     ).toEqual(['Leche para el café']);
   });
 
+  describe("a line's step (velista 0186, decision A)", () => {
+    // Rice by the kilo stepped by 250 g, which the basket read names, and a
+    // second rice the same line holds, stepped by 100 g, which it does not.
+    const riceItem = (id: string, quantityStep: number): CatalogItem => ({
+      ...MILK.item,
+      id,
+      quantityStep,
+      size: null,
+      unit: 'KILOGRAM',
+      categories: [],
+    });
+    const RICE_ITEM = riceItem('item-rice', 250);
+    const OTHER_RICE = riceItem('item-rice-2', 100);
+    const RICE: CatalogSuggestion = { kind: 'item', item: RICE_ITEM };
+    const RICE_PRODUCT: BasketProduct = {
+      id: RICE_ITEM.id,
+      quantityStep: 250,
+      name: RICE_ITEM.name,
+      brand: null,
+      size: null,
+      unit: 'KILOGRAM',
+      imageUrl: null,
+      offer: null,
+      offers: [],
+      atShop: null,
+      productGroupId: null,
+      categories: [],
+      sectionIds: null,
+      approxWeight: null,
+    };
+    const riceRow = (itemIds: readonly string[]) =>
+      line('Rice', {
+        productId: RICE_ITEM.id,
+        unit: 'GRAM',
+        entries: [
+          entry('l-groceries', 'zl-1', 1000, {
+            unit: 'GRAM',
+            itemIds: [...itemIds],
+          }),
+        ],
+      });
+    const stepOf = (fixture: ComponentFixture<BasketPage>) =>
+      (
+        fixture.componentInstance as unknown as {
+          holdingsOf(): (
+            suggestion: CatalogSuggestion
+          ) => readonly { step?: number | null }[];
+        }
+      )
+        .holdingsOf()(RICE)
+        .map((held) => held.step ?? null);
+
+    it('steps a line of two products by the smaller step, and reads the one the basket did not name', async () => {
+      const itemNames = fakeItemNames({ items: [OTHER_RICE] });
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id, OTHER_RICE.id])],
+        products: new Map([[RICE_ITEM.id, RICE_PRODUCT]]),
+        served: SERVED,
+        itemNames,
+      });
+
+      expect(stepOf(fixture)).toEqual([100]);
+      expect(itemNames.asked).toContainEqual([OTHER_RICE.id]);
+    });
+
+    it("steps a line of one product by that product's step, and reads nothing", async () => {
+      const itemNames = fakeItemNames();
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id])],
+        products: new Map([[RICE_ITEM.id, RICE_PRODUCT]]),
+        served: SERVED,
+        itemNames,
+      });
+
+      expect(stepOf(fixture)).toEqual([250]);
+      expect(itemNames.asked.flat()).not.toContain(RICE_ITEM.id);
+    });
+
+    it('steps by the default while the records load, then by the line', async () => {
+      const records = signal<ReadonlyMap<string, CatalogItem>>(new Map());
+      const itemNames = {
+        ...fakeItemNames(),
+        nameOf: (itemId: string) => records().get(itemId) ?? null,
+      };
+      // The basket read names neither rice (catalog unreachable), and the card
+      // is a product with no step of its own.
+      const { fixture } = await render({
+        lines: [riceRow([RICE_ITEM.id, OTHER_RICE.id])],
+        served: SERVED,
+        itemNames,
+      });
+      const plain: CatalogSuggestion = {
+        kind: 'item',
+        item: { ...RICE_ITEM, quantityStep: null },
+      };
+      const stepNow = () =>
+        (
+          fixture.componentInstance as unknown as {
+            holdingsOf(): (
+              suggestion: CatalogSuggestion
+            ) => readonly { step?: number | null }[];
+          }
+        )
+          .holdingsOf()(plain)
+          .map((held) => held.step ?? null);
+
+      expect(stepNow()).toEqual([null]);
+
+      records.set(new Map([[OTHER_RICE.id, OTHER_RICE]]));
+
+      expect(stepNow()).toEqual([100]);
+    });
+  });
+
   it('holds nothing for a product no row is, even when a line lists it', async () => {
     const { fixture } = await render({
       lines: [
@@ -4680,6 +4798,7 @@ describe('similar products on the basket', () => {
 
   const GROUPED: BasketProduct = {
     id: 'i-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     imageUrl: null,
@@ -4702,6 +4821,7 @@ describe('similar products on the basket', () => {
 
   const member = (id: string, unitPrice: number): CatalogItem => ({
     id,
+    quantityStep: null,
     name: { en: id, es: id },
     brand: null,
     size: 1,
@@ -4973,6 +5093,7 @@ describe('BasketPage: the aisles of the shop you are in', () => {
   ): BasketProduct {
     return {
       id,
+      quantityStep: null,
       name: { en: name, es: name },
       brand: null,
       imageUrl: null,
@@ -5166,6 +5287,7 @@ describe('BasketPage: the map of the shop you are in', () => {
 
   const MILK: BasketProduct = {
     id: 'i-milk',
+    quantityStep: null,
     name: { en: 'Milk', es: 'Leche' },
     brand: null,
     imageUrl: null,
@@ -5430,6 +5552,7 @@ describe('BasketPage: what the lines cost (velista 0132)', () => {
   function yogurt(atShop: number | null = null): BasketProduct {
     return {
       id: 'item-yogurt',
+      quantityStep: null,
       name: { en: 'Yogurt', es: 'Yogur' },
       brand: null,
       imageUrl: null,

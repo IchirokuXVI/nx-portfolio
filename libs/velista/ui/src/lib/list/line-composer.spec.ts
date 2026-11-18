@@ -202,6 +202,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       kind: 'item',
       item: {
         id: 'item-oat',
+        quantityStep: null,
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',
         size: null,
@@ -285,6 +286,54 @@ describe('LineComposer, one slot and the empty field decides', () => {
       ]);
     });
 
+    it('sends a stepped product at one step of its own (velista 0186, ruling 43)', async () => {
+      const { fixture } = await render();
+      const added: unknown[] = [];
+      fixture.componentInstance.submitted.subscribe((one) => added.push(one));
+      const item = (OAT as Extract<CatalogSuggestion, { kind: 'item' }>).item;
+      const stepped = (
+        id: string,
+        unit: string,
+        quantityStep: number
+      ): CatalogSuggestion => ({
+        kind: 'item',
+        item: { ...item, id, unit, size: null, quantityStep },
+      });
+
+      fixture.componentInstance.choose(
+        stepped('item-chicken', 'KILOGRAM', 1000),
+        document.createElement('button')
+      );
+      fixture.componentInstance.choose(
+        stepped('item-oil', 'LITER', 250),
+        document.createElement('button')
+      );
+      // A step on a product counted in pieces says nothing.
+      fixture.componentInstance.choose(
+        { kind: 'item', item: { ...item, quantityStep: 100 } },
+        document.createElement('button')
+      );
+      fixture.detectChanges();
+
+      expect(added).toEqual([
+        expect.objectContaining({
+          itemIds: ['item-chicken'],
+          quantity: 1000,
+          unit: 'GRAM',
+        }),
+        expect.objectContaining({
+          itemIds: ['item-oil'],
+          quantity: 250,
+          unit: 'MILLILITER',
+        }),
+        expect.objectContaining({
+          itemIds: ['item-oat'],
+          quantity: 1,
+          unit: 'UNIT',
+        }),
+      ]);
+    });
+
     it('draws no stepper: the field and the one button are the whole row (velista 0185)', async () => {
       const { fixture } = await render();
       type(fixture, 'oat');
@@ -349,6 +398,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       kind: 'item',
       item: {
         id: 'item-oat',
+        quantityStep: null,
         name: { es: 'Bebida de avena', en: 'Oat drink' },
         brand: 'Oatly',
         size: null,

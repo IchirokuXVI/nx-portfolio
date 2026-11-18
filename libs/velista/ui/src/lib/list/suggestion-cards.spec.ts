@@ -685,6 +685,24 @@ describe('SuggestionList, the cards', () => {
       ]);
     });
 
+    it("steps a weight line by the product's step the holding carries (velista 0186)", async () => {
+      const stepped = [
+        { ...holdings[0], quantity: 1000, unit: 'GRAM' as const, step: 100 },
+      ];
+      const { fixture, changed } = await render([item('held')], {
+        holdings: stepped,
+      });
+      const steps = root(fixture)
+        .querySelectorAll('.held-line')[0]
+        ?.querySelectorAll('.step');
+
+      await press(fixture, steps?.[0] ?? null);
+
+      expect(changed).toEqual([
+        { holding: stepped[0], from: 1000, to: 900, repeat: false },
+      ]);
+    });
+
     it('steps and draws a weight line by its unit: 1 kg up to 1,025 kg, down to 975 g (velista 0188)', async () => {
       const weighed = [
         { ...holdings[0], quantity: 1000, unit: 'GRAM' as const },

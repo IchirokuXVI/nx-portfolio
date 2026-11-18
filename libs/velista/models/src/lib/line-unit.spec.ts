@@ -264,4 +264,26 @@ describe('addAmount (velista 0185)', () => {
     expect(addAmount('GRAM')).toBe(25);
     expect(addAmount('MILLILITER')).toBe(25);
   });
+
+  it('starts a stepped product at one step of its own (velista 0186, ruling 43)', () => {
+    // A whole chicken stepped at 1000 is added at 1 kg, and plus then gives 2 kg.
+    expect(addAmount('GRAM', 1000)).toBe(1000);
+    expect(stepFrom(addAmount('GRAM', 1000), 'GRAM', 1, 1000)).toBe(2000);
+    expect(addAmount('GRAM', 100)).toBe(100);
+    expect(addAmount('MILLILITER', 250)).toBe(250);
+    expect(addAmount('GRAM', 5)).toBe(5);
+  });
+
+  it('keeps the default for no step, and a count ignores a step', () => {
+    expect(addAmount('GRAM', null)).toBe(25);
+    expect(addAmount('GRAM', undefined)).toBe(25);
+    expect(addAmount('UNIT', 1000)).toBe(1);
+  });
+});
+
+describe('stepping from an amount off the step (velista 0186, ruling 44)', () => {
+  it('takes 10 g on a step of 50 down to 0 and up to 60', () => {
+    expect(stepFrom(10, 'GRAM', -1, 50)).toBe(0);
+    expect(stepFrom(10, 'GRAM', 1, 50)).toBe(60);
+  });
 });

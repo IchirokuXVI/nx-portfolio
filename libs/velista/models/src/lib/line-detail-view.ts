@@ -210,6 +210,12 @@ export interface LineDetailVm {
    */
   readonly units: readonly LineUnit[];
   /**
+   * The step both of the sheet's steppers press by, `lineStepOf` of the line
+   * (velista `0186`), or null for the unit's default. Optional, so a view built
+   * without a catalog steps by the default.
+   */
+  readonly step?: number | null;
+  /**
    * What the line stands for, in one phrase: the product, or how many of them.
    *
    * A key and its arguments rather than an assembled string, because "3 products"
@@ -412,6 +418,11 @@ export interface LinePageVm {
    * the chip that chooses among them.
    */
   readonly units: readonly LineUnit[];
+  /**
+   * The step the stepper presses by, `lineStepOf` of the line (velista `0186`),
+   * or null for the unit's default.
+   */
+  readonly step: number | null;
   /** {@link quantity} in words for a reader who may not move it: "3", "750 g". */
   readonly quantityWords: string;
   /** "On Weekly shop, in Home", as parts, so the copy can order them. */

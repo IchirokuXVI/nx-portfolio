@@ -40,6 +40,7 @@ import {
   catalogToolsView,
   categoryName,
   chainOfScope,
+  lineStepOf,
   productSetChange,
   productSetChanged,
   scopesOfChain,
@@ -682,18 +683,28 @@ export class CatalogPage {
    * The plus of each row and the lines under it, for the chosen list (section 4.1),
    * and the list's URL for a product already on it (velista `0185`, decision D).
    */
-  private readonly _rowAdds = computed(() =>
-    rowAdds(this.addTarget(), this._adds.held(), (target) =>
-      appPath(
-        this._locale(),
-        this._basePath,
-        'zones',
-        target.zoneId,
-        'lists',
-        target.listId
-      )
-    )
-  );
+  private readonly _rowAdds = computed(() => {
+    // The records of the rows on the page, so a held line steps by its product's
+    // step (velista `0186`, decision E). A product off the page says nothing.
+    const byId = new Map(
+      this._products().map((product) => [product.id, product] as const)
+    );
+    const names = this._itemNames;
+    return rowAdds(
+      this.addTarget(),
+      this._adds.held(),
+      (target) =>
+        appPath(
+          this._locale(),
+          this._basePath,
+          'zones',
+          target.zoneId,
+          'lists',
+          target.listId
+        ),
+      (itemId) => byId.get(itemId) ?? names?.nameOf(itemId) ?? null
+    );
+  });
 
   /**
    * The sentence of a failed add (section 4.1): why, for a product the list counts
@@ -1081,6 +1092,10 @@ export class CatalogPage {
   /** The plus on a row: one of this product on the chosen list. */
   protected addProduct(row: ProductRowView): void {
     this.addFailed.set(false);
+    const record =
+      this._products().find((product) => product.id === row.id) ??
+      this._itemNames?.nameOf(row.id) ??
+      null;
     void this._adds.add({
       itemId: row.id,
       name: row.name,
@@ -1088,6 +1103,11 @@ export class CatalogPage {
       imageUrl: row.imageUrl,
       // A product sold by the kilo is asked for by weight (velista `0182`).
       unit: row.lineUnit,
+      // At one step of its own (velista `0186`, ruling 43).
+      step: lineStepOf(
+        { unit: row.lineUnit ?? 'UNIT', itemIds: [row.id] },
+        () => record
+      ),
     });
   }
 

@@ -45,6 +45,8 @@ interface DrawnEntry {
   readonly shown: number;
   /** Whether the quantity is a control, by the server's `demandEditable`. */
   readonly editable: boolean;
+  /** The step its stepper presses by: its line's, or null for the unit's default. */
+  readonly step: number | null;
   readonly label: string;
   /** Change is drawn on this entry (velista `0140`, section 1). */
   readonly changeable: boolean;
@@ -127,6 +129,20 @@ export class RowEntries {
 
   /** What the row counts, which every stepper here steps and draws by (velista `0182`). */
   protected readonly unit = computed(() => this.row().unit);
+
+  /**
+   * The step of each list's line, by line id (velista `0186`, decision A, which
+   * the owner ruled on 2026-11-12 wins over decision C), so a line steps here as
+   * it steps on its list. A line not in here presses by the unit's default.
+   */
+  readonly steps = input<ReadonlyMap<string, number | null>>(new Map());
+
+  /**
+   * The row's product's step, which the steppers of the lists that do not ask
+   * yet press by, since the line such a list gains holds that product. Null for
+   * the unit's default.
+   */
+  readonly step = input<number | null>(null);
 
   /**
    * The amount of each line with an open run in the sheet, by line id, so a
@@ -297,6 +313,7 @@ export class RowEntries {
       asksSpoken: exactAmount(entry.left, this.unit(), locale).spoken,
       shown: this.pending().get(entry.lineId) ?? entry.left,
       editable: this._mayDemand(entry),
+      step: this.steps().get(entry.lineId) ?? null,
       // The list's own name, so two steppers on one sheet are told apart by somebody
       // who hears them. A single unserved entry takes the plain label: there is one
       // list in the row and nothing to tell apart.

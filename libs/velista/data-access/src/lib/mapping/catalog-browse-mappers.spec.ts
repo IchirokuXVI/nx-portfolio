@@ -35,6 +35,32 @@ describe('toCatalogProduct: the weight of a piece (velista 0179)', () => {
   });
 });
 
+describe("toCatalogProduct: the product's step (velista 0186, backend 0261)", () => {
+  const loose = {
+    id: 'item-chicken',
+    name: { es: 'Pollo', en: 'Chicken' },
+    defaultUnit: 'KILOGRAM',
+    unitSize: null,
+  };
+
+  it('reads one of the ten steps', () => {
+    expect(
+      toCatalogProduct({ ...loose, quantityStep: 250 })?.quantityStep
+    ).toBe(250);
+  });
+
+  it.each([
+    ['an absent field', undefined],
+    ['a step off the list', 30],
+    ['a string', '250'],
+    ['zero', 0],
+  ])('reads %s as no step', (_, value) => {
+    expect(
+      toCatalogProduct({ ...loose, quantityStep: value })?.quantityStep
+    ).toBeNull();
+  });
+});
+
 /** The basis a unit price is per (backend `0157`, and `0264` for a wash). */
 describe('toCatalogProduct: the unit basis', () => {
   const tablets = {

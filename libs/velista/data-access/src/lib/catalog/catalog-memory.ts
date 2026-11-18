@@ -192,6 +192,7 @@ function item(
   // the state both clusters are permanently in anyway (velista `0063`, section 3).
   return {
     id,
+    quantityStep: null,
     name: { es, en },
     brand,
     size,

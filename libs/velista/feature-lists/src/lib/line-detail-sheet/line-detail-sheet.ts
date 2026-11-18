@@ -39,7 +39,7 @@ import {
   lineNameChange,
   lineNameRefused,
   priceWordsText,
-  QUANTITY_STEP,
+  stepAt,
   type BasketShop,
   type Line,
   type LineUnit,
@@ -256,8 +256,24 @@ export class LineDetailSheet {
   /** What the line counts in (velista `0182`), a count while it is not read yet. */
   readonly unit = computed<LineUnit>(() => this.detail()?.unit ?? 'UNIT');
 
-  /** The least the how many step records: one step of the line's unit. */
-  readonly howManyFloor = computed(() => QUANTITY_STEP[this.unit()] ?? 1);
+  /** The product's step (velista `0186`), or null for the unit's default. */
+  readonly productStep = computed(() => this.detail()?.step ?? null);
+
+  /**
+   * The least the how many step's minus reaches, and the amount it opens at when
+   * nothing is wanted: one step of the line's product. Only the buttons stop here
+   * (the owner's ruling 44 of 2026-11-16): a typed amount is kept down to
+   * {@link howManyTypedFloor}.
+   */
+  readonly howManyFloor = computed(() =>
+    stepAt(0, this.unit(), this.productStep())
+  );
+
+  /**
+   * The least a typed amount records: one base unit, 1 g, 1 ml or one piece
+   * (ruling 44). Recording nothing is never offered, so it is not 0.
+   */
+  readonly howManyTypedFloor = 1;
 
   /** A quantity of this line in words: "3" for a count, "750 g" for a weight. */
   wordsOf(quantity: number): string {
@@ -555,8 +571,12 @@ export class LineDetailSheet {
       return;
     }
 
-    // Floored at one step of the line's unit (velista `0182`): one piece, or 25 g.
-    this.howMany.set(Math.max(this.howManyFloor(), detail.quantity));
+    // The whole wanted amount, even under one step (ruling 44: 10 g wanted opens
+    // at 10 g). A line that wants nothing opens at one step of its product
+    // (velista `0182`, `0186`): one piece, 25 g, or 100 g on a step of 100.
+    this.howMany.set(
+      detail.quantity > 0 ? detail.quantity : this.howManyFloor()
+    );
     this.chosenItemId.set(detail.preselectedItemId);
     // The shop this device named last, while it is still the same trip.
     this.chosenShop.set(this._boughtShop.read());

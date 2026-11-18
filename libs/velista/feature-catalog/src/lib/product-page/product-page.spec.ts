@@ -51,6 +51,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const OIL: CatalogItem = {
   id: 'item-oil',
+  quantityStep: null,
   name: { es: 'Aceite de oliva virgen extra', en: 'Extra virgin olive oil' },
   brand: 'Hacendado',
   size: 1,
@@ -1017,6 +1018,7 @@ describe('ProductPage', () => {
           detail: expect.stringContaining('Hacendado'),
           imageUrl: null,
           unit: 'UNIT',
+          step: null,
         },
         'list-party'
       );
@@ -1127,6 +1129,36 @@ describe('ProductPage', () => {
       expect(lines.deleteLine).toHaveBeenCalledWith('line-list-party-item-oil');
       expect(lines.addQuantity).not.toHaveBeenCalled();
       expect(store.count()).toBe(0);
+    });
+
+    it('adds a stepped loose product at one step of its own, and plus moves it by that step (velista 0186, ruling 43)', async () => {
+      const stepped: CatalogItem = { ...OIL, size: null, quantityStep: 250 };
+      const { fixture, lines } = await render({
+        items: [stepped, RICE],
+        lists: [WEEKLY, PARTY],
+      });
+
+      listRow(fixture, 'list-party').main?.plus?.click();
+      await settle(fixture);
+
+      expect(lines.addLineResult).toHaveBeenCalledWith(
+        'list-party',
+        'Extra virgin olive oil',
+        250,
+        ['item-oil'],
+        false,
+        undefined,
+        'MILLILITER'
+      );
+      expect(listRow(fixture, 'list-party').main?.quantity).toBe('250');
+
+      listRow(fixture, 'list-party').main?.plus?.click();
+      await quiet(fixture);
+      expect(lines.addQuantity).toHaveBeenCalledWith(
+        'line-list-party-item-oil',
+        250,
+        'MILLILITER'
+      );
     });
 
     it('sets a line that was there before to zero with the minus, and deletes nothing', async () => {

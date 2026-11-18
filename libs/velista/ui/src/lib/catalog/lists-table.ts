@@ -7,6 +7,7 @@ import {
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
   isUnsavedLine,
+  type HoldingRow,
   type LineUnit,
   type ProductListGroup,
   type ProductListRow,
@@ -92,6 +93,7 @@ export interface ListsTableStep {
                       | rokuT: { name: product(), list: list.name }
                   "
                   [readonly]="readOnly(list)"
+                  [step]="stepOf(list.main)"
                   [unit]="list.main?.unit ?? unit()"
                   [value]="quantityOf(list)"
                   variant="row"
@@ -122,6 +124,7 @@ export interface ListsTableStep {
                     'amount.inList'
                       | rokuT: { name: line.name, list: list.name }
                   "
+                  [step]="stepOf(line)"
                   [unit]="line.unit"
                   [value]="line.quantity"
                   variant="row"
@@ -151,6 +154,13 @@ export class ListsTable {
    * sold by the litre reads "0 ml" and names a step of 25 ml.
    */
   readonly unit = input<LineUnit>('UNIT');
+
+  /**
+   * The product's step (velista `0186`, decision E), or null for the default.
+   * Every stepper of the table steps a line that holds this one product, so each
+   * reads it; a stepper that counts pieces ignores it.
+   */
+  readonly step = input<number | null>(null);
 
   /** The plus of a list with no line under the product's name: make that line. */
   readonly added = output<string>();
@@ -185,6 +195,16 @@ export class ListsTable {
   /** The amount and no buttons: the person may not change the line (decision C). */
   protected readOnly(list: ProductListRow): boolean {
     return list.main !== null && !list.main.editable && !this.unsaved(list);
+  }
+
+  /**
+   * The step of one line's stepper: the line's own (`HoldingRow.step`, the step
+   * the list page presses the same line by, decision A), and the product's only
+   * while the line's is not known yet. A line known to step by the default
+   * (null) keeps the default here too. A list with no line steps by the product.
+   */
+  protected stepOf(line: HoldingRow | null): number | null {
+    return line?.step !== undefined ? line.step : this.step();
   }
 
   protected quantityOf(list: ProductListRow): number {

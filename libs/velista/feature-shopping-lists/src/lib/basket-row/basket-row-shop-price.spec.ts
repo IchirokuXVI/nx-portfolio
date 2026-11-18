@@ -95,6 +95,7 @@ const offer = (priceScopeId: string, price: number): ProductOffer => ({
  */
 const MILK: BasketProduct = {
   id: 'i-milk',
+  quantityStep: null,
   name: { en: 'Milk', es: 'Leche' },
   brand: null,
   size: null,

@@ -49,6 +49,9 @@ export function selectDueLines(input: DueLinesInput): DueLinesVm {
       name: row.content,
       quantity: due.quantity,
       unit: row.unit,
+      ...(row.step === undefined || row.step === null
+        ? {}
+        : { step: row.step }),
       ...reasonOf(due, relative),
     });
   }

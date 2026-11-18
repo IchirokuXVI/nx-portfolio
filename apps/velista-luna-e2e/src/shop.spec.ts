@@ -22,6 +22,7 @@ import {
   resetAliceWorld,
   setAdminPrice,
   setLineQuantity,
+  setQuantityStep,
   type LineView,
   type Session,
 } from './support/api';
@@ -44,6 +45,7 @@ import {
   searchBasket,
   sheet,
   signIn,
+  stepAmount,
 } from './support/app';
 
 /**
@@ -823,6 +825,192 @@ test.describe('the search field at the top of a list (velista 0189)', () => {
       await expect(page.locator('.tools-bar')).toBeVisible();
       await expect(page).toHaveURL(/[?&]search=1/);
     });
+  });
+});
+
+/**
+ * A product with a step of its own (velista 0186, backend 0261).
+ *
+ * A second loose product, made the way the bananas are, that a curator gave a
+ * step of 100 g through the admin update. A separate product, so the bananas'
+ * numbers above never depend on a step an earlier run left. Its line is made at
+ * a stated kilo through the API, so the test holds whatever a first add asks for.
+ * The settle sheet's stepper presses by 100 g: three down to 700, one up to 800,
+ * and "Got all" then records a buy of the 800 g asked for.
+ */
+test.describe('a product with a step of its own (velista 0186)', () => {
+  const NAME = { en: 'Whole chicken e2e', es: 'Pollo entero e2e' };
+  let alice: Session;
+  let admin: Session;
+  let lineId = '';
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    await setQuantityStep(admin, itemId, 100);
+    await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 5.49);
+
+    const line = await addProductLine(alice, LIST_GROCERIES_ID, {
+      content: NAME.en,
+      itemId,
+      quantity: 1000,
+      unit: 'GRAM',
+    });
+    expect(line).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+    lineId = line.id;
+  });
+
+  test.afterAll(async () => {
+    if (lineId !== '') await deleteLine(alice, lineId);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('steps by 100 g in the settle sheet, and buys what it asks for', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    const basketId = await generateBasket(
+      page,
+      ['Groceries'],
+      `Stepped ${Date.now()}`
+    );
+
+    const dialog = await openSettleSheet(page, NAME.en);
+    const field = askAmount(dialog, 'Groceries');
+    await expect(field).toHaveAttribute('aria-valuenow', '1000');
+    const stepper = dialog
+      .locator('lib-row-entries lib-quantity-stepper')
+      .first();
+
+    // One key at a time, each drawn before the next: a stepper steps from the
+    // amount it draws, so a key pressed before the sheet draws the last one
+    // repeats it. The run is sent once, after the quiet beat.
+    const saved = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' &&
+        /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname),
+      { timeout: 10_000 }
+    );
+    await field.focus();
+    for (const amount of ['900', '800', '700']) {
+      await field.press('ArrowDown');
+      await expect(field).toHaveAttribute('aria-valuenow', amount);
+    }
+    await field.blur();
+    await saved;
+    await expect(stepper).toHaveAttribute('data-value', '700');
+    await expect(
+      dialog.getByRole('button', { name: /^Add 100 g to / })
+    ).toBeVisible();
+
+    await stepAmount(field, 1);
+    await expect(field).toHaveAttribute('aria-valuenow', '800');
+    await expect
+      .poll(
+        async () => (await readLine(alice, LIST_GROCERIES_ID, lineId)).quantity
+      )
+      .toBe(800);
+
+    await dialog.getByRole('button', { name: /^Got all / }).click();
+    await expectBasketUrl(page, basketId);
+    await expect
+      .poll(async () =>
+        (await lineSettlements(alice, lineId))
+          .filter((s) => !s.revertedAt)
+          .map((s) => s.quantity)
+      )
+      .toEqual([800]);
+  });
+});
+
+/**
+ * A first add at the product's own step (velista 0186, the owner's ruling 43 of
+ * 2026-11-16).
+ *
+ * A third loose product, given a step of 1000 g, on no line of the Groceries list.
+ * The zone list's composer finds it and its card's plus adds it: the line asks for
+ * 1 kg, not 25 g, and one plus on its row then asks for 2 kg. The line is deleted
+ * after, so the next run adds it again.
+ */
+test.describe("a first add at the product's step (velista 0186, ruling 43)", () => {
+  const NAME = { en: 'Whole turkey e2e', es: 'Pavo entero e2e' };
+  let alice: Session;
+  let admin: Session;
+
+  const linesOfIt = async () =>
+    (await listLines(alice, LIST_GROCERIES_ID)).filter(
+      (one) => one.content === NAME.en
+    );
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    admin = await adminLogin();
+    await resetAliceWorld(alice);
+
+    const milk = demoWorld.catalog.items.find((one) => one.id === ITEM_MILK_ID);
+    const slug = milk?.categories[0];
+    if (slug === undefined) throw new Error('the demo world files no milk');
+    const itemId = await ensureItem(
+      admin,
+      NAME,
+      [await categoryIdBySlug(alice, slug)],
+      'KILOGRAM'
+    );
+    await setQuantityStep(admin, itemId, 1000);
+    await setAdminPrice(admin, itemId, PRICE_SCOPE_MERCADONA_VALENCIA_ID, 3.95);
+    for (const held of await linesOfIt()) await deleteLine(alice, held.id);
+  });
+
+  test.afterAll(async () => {
+    for (const held of await linesOfIt()) await deleteLine(alice, held.id);
+    await alice?.dispose();
+    await admin?.dispose();
+  });
+
+  test('is added at 1 kg from the zone list, and plus then asks for 2 kg', async ({
+    page,
+  }) => {
+    await signIn(page, ALICE_EMAIL);
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+
+    await composerField(page).fill(NAME.en);
+    const card = page
+      .locator('#list-results lib-product-row')
+      .filter({ hasText: NAME.en })
+      .first();
+    await expect(card).toBeVisible();
+    await card.locator('button.add').click();
+
+    await expect.poll(async () => (await linesOfIt()).length).toBe(1);
+    const [made] = await linesOfIt();
+    expect(made).toMatchObject({ quantity: 1000, unit: 'GRAM' });
+
+    await composerField(page).fill('');
+    const amount = page.locator(
+      `lib-line-list [data-line-id="${made.id}"] lib-quantity-stepper`
+    );
+    await expect(amount).toHaveAttribute('data-value', '1000');
+    await amount.locator('button.plus').click();
+    await expect(amount).toHaveAttribute('data-value', '2000');
+    await expect
+      .poll(
+        async () =>
+          (await readLine(alice, LIST_GROCERIES_ID, made.id)).quantity,
+        { timeout: 10_000 }
+      )
+      .toBe(2000);
   });
 });
 
