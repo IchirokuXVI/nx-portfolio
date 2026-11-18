@@ -367,6 +367,12 @@ export interface RunReportResult {
   approxWeightsSkippedSetByAdmin: number;
   /** Products skipped because they are still a sized pack. */
   approxWeightsSkippedHasSize: number;
+  /**
+   * Products skipped because a person gave them a step (plan 0261, S6): a
+   * weight would make them a kilo piece, which carries no step. The curator
+   * decides whether the product is a kilo piece after all.
+   */
+  approxWeightsSkippedHasStep: number;
 }
 
 export class RunReportSink implements RunReport {
@@ -459,6 +465,7 @@ export class RunReportSink implements RunReport {
     approxWeightsWritten: 0,
     approxWeightsSkippedSetByAdmin: 0,
     approxWeightsSkippedHasSize: 0,
+    approxWeightsSkippedHasStep: 0,
   };
 
   constructor(
@@ -854,6 +861,8 @@ export class RunReportSink implements RunReport {
       this.result.approxWeightsWritten += answer.written;
       this.result.approxWeightsSkippedSetByAdmin += answer.skippedSetByAdmin;
       this.result.approxWeightsSkippedHasSize += answer.skippedHasSize;
+      // Absent from a catalog older than plan 0261, which skips nothing.
+      this.result.approxWeightsSkippedHasStep += answer.skippedHasStep ?? 0;
     }
   }
 

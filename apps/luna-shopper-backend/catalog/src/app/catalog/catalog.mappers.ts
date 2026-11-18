@@ -287,6 +287,8 @@ export function toItemView(
     unitSize: toNumber(row.unitSize),
     approxWeight: toNumber(row.approxWeight ?? null),
     approxWeightSetBy: row.approxWeightSetBy ?? null,
+    // Plan 0261: a smallint, which Postgres answers as a number.
+    quantityStep: toNumber(row.quantityStep ?? null),
     packCount: row.packCount ?? null,
     categories,
     defaultUnit: row.defaultUnit,

@@ -246,6 +246,10 @@ export const ERROR_CATALOG: Record<
     en: 'A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.',
     es: 'Un producto tiene un tamaño fijo o un peso aproximado, nunca los dos, y el peso es mayor que cero. Quita uno de los dos.',
   },
+  [ERROR_CODES.ITEM_QUANTITY_STEP_NOT_ALLOWED]: {
+    en: 'Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.',
+    es: 'Solo un producto que se vende por kilo o por litro tiene un paso, y el paso es uno de los permitidos. Elige un paso permitido o quita el paso.',
+  },
   [ERROR_CODES.ITEM_MERGED]: {
     en: 'This product was merged into another one. Work on the product it was merged into.',
     es: 'Este producto se fusionó con otro. Trabaja con el producto con el que se fusionó.',
