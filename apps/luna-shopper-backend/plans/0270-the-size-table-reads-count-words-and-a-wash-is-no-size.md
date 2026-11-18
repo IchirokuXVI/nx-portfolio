@@ -1,3 +1,5 @@
+> **PR:** [#1007](https://github.com/IchirokuXVI/nx-portfolio/pull/1007)
+
 # 0270: the size table reads the count words a chain prints, and a wash is no size
 
 > Three owner decisions of 2026-11-16, one plan, built in wave 2 of the harvester round of
