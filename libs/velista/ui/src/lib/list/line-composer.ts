@@ -71,7 +71,7 @@ export interface LineComposerSubmit {
 }
 
 /**
- * The field at the bottom of the list, and the reason this screen has no floating
+ * The field at the top of the list, and the reason this screen has no floating
  * action button.
  *
  * ## Adding happens in runs
@@ -85,7 +85,7 @@ export interface LineComposerSubmit {
  *
  * That decision belongs to the container, which knows whether the caller may write.
  * This component is simply not rendered in that case, because a disabled text field at
- * the bottom of a screen is an invitation that does not work and costs a tap to find
+ * the top of a screen is an invitation that does not work and costs a tap to find
  * out (section 3.2).
  *
  * The basket used to lock it until a list was chosen (velista `0110`). It asks which
@@ -257,12 +257,6 @@ export class LineComposer {
    * picker and leaves the words for another try (velista `0116`).
    */
   readonly escapeClears = input(true);
-
-  /**
-   * The field gained or lost focus. The page hides the bottom bar while it has focus
-   * (velista `0117`, rule F3), so the results get the room.
-   */
-  readonly fieldFocused = output<boolean>();
 
   /**
    * What has been typed, raw and on every keystroke.
@@ -598,6 +592,21 @@ export class LineComposer {
   restore(content: string): void {
     this.content.set(content);
     this._field()?.nativeElement.focus();
+  }
+
+  /**
+   * Take the focus off the field, so a phone puts its keyboard away (velista `0189`,
+   * section 3). The page calls it on the first drag of its column.
+   *
+   * Nothing else changes: the words, the results they found and the history entry
+   * that holds them all stay. A field without focus is left alone, so the call never
+   * moves focus that is somewhere else.
+   */
+  releaseFocus(): void {
+    const field = this._field()?.nativeElement;
+    if (field !== undefined && field.ownerDocument.activeElement === field) {
+      field.blur();
+    }
   }
 
   /**

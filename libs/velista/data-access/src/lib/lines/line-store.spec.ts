@@ -219,14 +219,6 @@ function service(seed: readonly Line[]) {
     linesHoldingItem: async () => ({ lists: [], lines: [], hasMore: false }),
     setApproval: async (lineId, approvalStatus) =>
       answer(line(lineId, { approvalStatus, version: 2 })),
-    reorder: async () => {
-      calls.push('reorder');
-      if (failWith !== null) {
-        const error = failWith;
-        failWith = null;
-        throw error;
-      }
-    },
     deleteLine: async (lineId) => {
       calls.push('delete');
       if (failWith !== null) {
@@ -1675,37 +1667,6 @@ describe('LineStore', () => {
       await store.refresh(LIST);
 
       expect(store.commentCountOf('a')).toBe(3);
-    });
-  });
-
-  describe('reordering', () => {
-    it('renumbers optimistically and keeps the order on success', async () => {
-      const { store } = await build([
-        line('a', { position: 1 }),
-        line('b', { position: 2 }),
-      ]);
-      await store.load(LIST);
-
-      const outcome = await store.reorder(LIST, ['b', 'a']);
-
-      expect(outcome).toBe('succeeded');
-      expect(store.linesIn(LIST).map((l) => l.id)).toEqual(['b', 'a']);
-    });
-
-    it('puts the old order back and rereads when the server refuses', async () => {
-      // A `validation_failed` means somebody deleted a line mid drag. The person who
-      // dragged has done nothing wrong, so the list rereads and says nothing.
-      const { store, lines } = await build([
-        line('a', { position: 1 }),
-        line('b', { position: 2 }),
-      ]);
-      await store.load(LIST);
-      lines.failNext(new Error('gone'));
-
-      const outcome = await store.reorder(LIST, ['b', 'a']);
-
-      expect(outcome).toBe('failed');
-      expect(lines.calls.filter((call) => call === 'list').length).toBe(2);
     });
   });
 

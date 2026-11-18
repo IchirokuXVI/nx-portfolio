@@ -56,7 +56,6 @@ export interface ListStateInput {
   readonly zoneName: string | null;
   readonly lines: readonly Line[];
   readonly linesState: 'idle' | 'loading' | 'loaded' | 'failed';
-  readonly linesComplete: boolean;
   readonly writes: ReadonlyMap<
     string,
     {
@@ -77,7 +76,6 @@ export interface ListStateInput {
   readonly caller: CallerFacts;
   /** Resolves a user id to a name in this zone, or null. */
   readonly nameOf: (userId: string) => string | null;
-  readonly reordering: boolean;
   /**
    * Who else has this list open, already resolved and already without the reader.
    *
@@ -187,10 +185,6 @@ export function selectListState(input: ListStateInput): ListPageState {
     lines,
     abilities,
     empty: lines.length === 0,
-    // Rule L4: dragging is available only once every page has arrived, and never in
-    // the middle of somebody reading a long list. Still `canWrite`, because reordering
-    // rewrites what the list asks for rather than what the shop had (section 4).
-    canReorder: abilities.canWrite && input.linesComplete && lines.length > 1,
     // A list fact rather than an ability, so it is read from the summary and not from
     // the permission set. False while the list itself is still a cold cache miss, which
     // is the safe direction: an optimistic row drawn PENDING and corrected to APPROVED
@@ -334,21 +328,18 @@ function toRow(
     // **Everybody who can see the row can open it**, which is the change (velista plan
     // 0043, section 5.1). The tap used to be the tick, so it followed `DECIDE` and a
     // reader's rows sat there not answering; it opens what the app knows about the
-    // thing now, and knowing is not a permission. False only in reorder mode, where
-    // every row is a thing being dragged rather than a thing being read.
-    interactive: !input.reordering,
+    // thing now, and knowing is not a permission.
+    interactive: true,
     // The reel is the half that still follows `DECIDE`, because moving the number is
     // saying what the household now has. The two came apart here for the first time,
     // and a `WRITE` only caller is why: they get a full composer, a row that opens, and
     // a number that does not move, with one caption at the top of the page saying who
     // does the buying rather than each row refusing in turn (section 7).
-    adjustable: abilities.canDecide && !input.reordering,
-    decidable: abilities.canDecide && awaiting && !input.reordering,
-    restorable: abilities.canDecide && rejected && !input.reordering,
-    // Nobody is shown as editing while the list is being reordered: the sheet cannot be
-    // opened from a row in that mode, so an indicator there would be about a screen the
-    // reader cannot see. Advisory either way, and it locks nothing (section 3).
-    editor: input.reordering ? null : input.editorOf(line.id),
+    adjustable: abilities.canDecide,
+    decidable: abilities.canDecide && awaiting,
+    restorable: abilities.canDecide && rejected,
+    // Advisory, and it locks nothing (section 3).
+    editor: input.editorOf(line.id),
   };
 }
 

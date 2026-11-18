@@ -12,7 +12,6 @@ import type {
   LineSettlement,
   LineUnit,
   Page,
-  ReorderLinesRequest,
   SetLineApprovalRequest,
   SettleLineOptions,
   SettleLineRequest,
@@ -64,9 +63,9 @@ export function addLineOptionsRequest(
  * Provided by the app layer and never at root (rule D5): it depends on the `HttpClient`
  * the app configures.
  *
- * The routes sit on two controllers and this class does not hide that: reading and
- * reordering go through the list, and everything addressed at one line goes through
- * `/v1/lines/:id`. Collapsing the two into one private helper would save a line and
+ * The routes sit on two controllers and this class does not hide that: reading goes
+ * through the list, and everything addressed at one line goes through `/v1/lines/:id`.
+ * Collapsing the two into one private helper would save a line and
  * lose the fact that the second group needs no list id at all, which is exactly why
  * a comment sheet opened as a route can still write.
  */
@@ -404,19 +403,6 @@ export class LineApi implements LineServiceI {
     );
 
     return required(toLine(body), 'lines.setApproval');
-  }
-
-  async reorder(
-    listId: string,
-    orderedLineIds: readonly string[]
-  ): Promise<void> {
-    const request: ReorderLinesRequest = { orderedLineIds };
-
-    await firstValueFrom(
-      this._http.post<unknown>(`${this._list(listId)}/lines/reorder`, request, {
-        context: operation('lines.reorder'),
-      })
-    );
   }
 
   async deleteLine(lineId: string): Promise<string> {

@@ -734,17 +734,32 @@ describe('LineComposer, the field and its results', () => {
       expect(escape.defaultPrevented).toBe(false);
     });
 
-    it('says when the field gains and loses focus', async () => {
+    // Velista `0189`, section 3: the page calls it on the first drag of its column.
+    it('releases the focus and keeps the words', async () => {
       const { fixture } = await onPage();
-      const focused: boolean[] = [];
-      fixture.componentInstance.fieldFocused.subscribe((one) =>
-        focused.push(one)
-      );
+      type(fixture, 'oat');
+      field(fixture).focus();
 
-      field(fixture).dispatchEvent(new Event('focus'));
-      field(fixture).dispatchEvent(new Event('blur'));
+      fixture.componentInstance.releaseFocus();
+      fixture.detectChanges();
 
-      expect(focused).toEqual([true, false]);
+      expect(document.activeElement).not.toBe(field(fixture));
+      expect(field(fixture).value).toBe('oat');
+      expect(fixture.componentInstance.content()).toBe('oat');
+    });
+
+    it('leaves focus alone when the field does not have it', async () => {
+      const { fixture } = await onPage();
+      type(fixture, 'oat');
+      const elsewhere = document.createElement('button');
+      document.body.appendChild(elsewhere);
+      elsewhere.focus();
+
+      fixture.componentInstance.releaseFocus();
+
+      expect(document.activeElement).toBe(elsewhere);
+      expect(field(fixture).value).toBe('oat');
+      elsewhere.remove();
     });
 
     it('empties the field on clear() without taking focus', async () => {
@@ -813,10 +828,6 @@ describe('LineComposer, the field and its results', () => {
         const { fixture } = await onPage();
         type(fixture, 'oat');
         field(fixture).focus();
-        const blurs: boolean[] = [];
-        fixture.componentInstance.fieldFocused.subscribe((one) =>
-          blurs.push(one)
-        );
         const press = new MouseEvent('mousedown', { cancelable: true });
 
         cross(fixture)?.dispatchEvent(press);
@@ -825,7 +836,6 @@ describe('LineComposer, the field and its results', () => {
 
         expect(press.defaultPrevented).toBe(true);
         expect(document.activeElement).toBe(field(fixture));
-        expect(blurs).toEqual([]);
       });
     });
   });

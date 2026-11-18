@@ -34,9 +34,8 @@ import { SEED_USER_ID } from '../zones/static-zone-data';
  * ## Positions have gaps
  *
  * Because they do on the server: `position` is assigned on insert and a delete leaves a
- * hole rather than renumbering the rest. A fixture with contiguous positions would make
- * a partial reorder look like it worked, which is the exact failure rule L4 exists to
- * prevent (`0012`, section 4.5).
+ * hole rather than renumbering the rest. A fixture with contiguous positions would hide
+ * code that reads a position as an index (`0012`, section 4.5).
  *
  * ## What each list is for
  *

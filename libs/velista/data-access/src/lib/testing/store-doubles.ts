@@ -839,7 +839,6 @@ export type LineWriteCall =
       readonly confirmMerge?: boolean;
     }
   | { readonly kind: 'delete'; readonly lineId: string }
-  | { readonly kind: 'reorder'; readonly orderedLineIds: readonly string[] }
   /**
    * A further page of a history, asked for by a "show more" (plan 0047, section 4).
    *
@@ -1350,13 +1349,6 @@ export function fakeLineStore(options: FakeLineStateOptions = {}) {
     setApproval: async (lineId: string, status: LineApprovalStatus) => {
       calls.push({ kind: 'approval', lineId, status });
       return outcome;
-    },
-
-    reorder: async (_listId: string, orderedLineIds: readonly string[]) => {
-      calls.push({ kind: 'reorder', orderedLineIds });
-      return outcome === 'failed'
-        ? ('failed' as const)
-        : ('succeeded' as const);
     },
 
     deleteLine: async (lineId: string) => {

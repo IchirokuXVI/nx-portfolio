@@ -1,3 +1,5 @@
+> **PR:** [#979](https://github.com/IchirokuXVI/nx-portfolio/pull/979)
+
 # 0189: the search field sits at the top of a list
 
 > Decided on 2026-11-10 and 2026-11-11. On the zone list page and on the shopping list page the
@@ -409,9 +411,11 @@ and rewrite the comment at `:1` to `:7`; `list-tools.ts:39` likewise.
 - Remove the `fieldFocused` output, its two bindings in `line-composer.html:81` to `:82`, and
   its comment (decision I).
 - `line-composer.scss:1` to `:15`: the row no longer sits at the foot. Remove the
-  `--app-safe-bottom` term from `padding-block-end` of `.composer` and `.listening`, move the
-  hairline from `border-block-start` to `border-block-end`, and drop the raised fill so the
-  row sits on the ground as in the mock. The builder checks the listening row against the
+  `--app-safe-bottom` term from `padding-block-end` of `.composer` and `.listening`, remove
+  the hairline (`border-block-start`) and draw no rule under the row, and drop the raised fill
+  so the row sits on the ground as in the mock. (Amended 2026-11-12: this said to move the
+  hairline to `border-block-end`. The owner decided on 2026-11-12 that the row draws no rule,
+  as the approved mock draws it.) The builder checks the listening row against the
   mock's surfaces with `design-taste-frontend`. Rewrite the comment.
 - The voice stop of the tour (`tour-stops.ts:124`) changes `placement` to `'below'`.
 
