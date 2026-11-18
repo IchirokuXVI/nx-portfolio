@@ -447,7 +447,7 @@ const QUANTITY_STEP_DESCRIPTION =
   'How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo carries one: `KILOGRAM`, no `unitSize` and no `approxWeight` (S3). A write that names `LITER` is refused with `item_unit_not_base`, so a step is set on a kilo product; a legacy product by the litre takes one only on an edit that names no unit and no size. A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it.';
 
 /**
- * The step of a product sold by the kilo or the litre (plan 0261, section 3),
+ * The step of a product sold by the kilo (plan 0261, section 3),
  * stated once for the create, the edit and the expectation. The enum lists
  * the steps in the document, so the admin wire types carry them.
  */

@@ -1535,6 +1535,12 @@ export interface ItemLineView {
   content: string;
   /** Zero is a real answer: the line holds the product and wants none of it. */
   quantity: number;
+  /**
+   * What {@link quantity} counts, the line's own (plan 0246, section 3.1). A
+   * stepper steps the line in this unit, and a delta in any other is refused
+   * with `line_unit_mismatch` (M8).
+   */
+  unit: LineUnit;
   /** `APPROVED` or `PENDING`. A rejected line is never in the answer. */
   approvalStatus: LineApprovalStatus;
 }
