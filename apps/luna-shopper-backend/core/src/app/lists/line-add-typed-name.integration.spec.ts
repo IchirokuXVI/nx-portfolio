@@ -6,7 +6,9 @@ import {
 } from '@portfolio/luna-shopper/contracts';
 import {
   LineAddNeedsChoiceException,
+  LineUnitDiffersException,
   NotFoundException,
+  ValidationException,
 } from '@portfolio/luna-shopper/platform';
 import {
   describeIntegration,
@@ -38,11 +40,21 @@ import { ListAccessService } from './list-access.service';
  * A typed name meets the line that holds that product, on real Postgres (plan
  * 0228, progress evidence).
  *
- * **Two adds of one typed name, racing on a list with one candidate, both
- * raise that line.** Both answer `merged: true` with that line, the list
- * still holds one row of the name, and its quantity is 4: the 1 it was
- * created with plus the 1 and the 2 of the two adds. A mock has no row and no
- * lock, so two adds that overlap can only be run here.
+ * **Two adds of one typed name, racing on a list with one candidate at zero,
+ * write one raise.** The first raises the line and the second meets it wanted
+ * and writes nothing (plan 0260 R2, A1). Both answer `merged: true` with that
+ * line, the list still holds one row of the name, and its quantity is the one
+ * step of the raise. A mock has no row and no lock, so two adds that overlap
+ * can only be run here.
+ *
+ * **An add that meets a wanted line leaves the row byte for byte** (plan
+ * 0260, section 7.1): quantity, version and `updatedAt` as they were, and no
+ * `list_line_changes` row. A mock can only say `save` was not called.
+ *
+ * **A product add finds the held line of its unit** beside an identity line of
+ * another unit (the owner, 2026-11-12), through the product rows of the list,
+ * and a batch that would create one product in two units is refused as the
+ * second of two single adds is.
  *
  * The rest are the reads a mock cannot prove: the products in the refusal's
  * `details` come from an `In` query, and a chosen line of another list or a
@@ -165,6 +177,22 @@ describeIntegration(
       return line.id;
     }
 
+    /** Lowers a line to zero by hand, as a buy or an edit to 0 leaves it. */
+    async function keep(lineId: string): Promise<void> {
+      await dataSource
+        .getRepository(ListLine)
+        .update({ id: lineId }, { quantity: 0 });
+    }
+
+    /** How many change records name the line (plan 0138). */
+    async function changesOf(lineId: string): Promise<number> {
+      const [row] = await dataSource.query(
+        'SELECT count(*)::int AS "count" FROM list_line_changes WHERE "lineId" = $1',
+        [lineId]
+      );
+      return (row as { count: number }).count;
+    }
+
     /** Every line of the list, deleted ones included, by position. */
     async function stored(listId = ids.list): Promise<ListLine[]> {
       return dataSource.getRepository(ListLine).find({
@@ -195,8 +223,9 @@ describeIntegration(
       return running;
     }
 
-    it('raises the one product line from two racing adds of its name, and creates nothing', async () => {
+    it('raises the one kept product line once from two racing adds of its name, and creates nothing', async () => {
       const milk = await productLine('Leche entera', WHOLE);
+      await keep(milk);
 
       const results = await whileTheListIsHeld(() =>
         Promise.all([
@@ -204,30 +233,88 @@ describeIntegration(
             userId: ids.owner,
             listId: ids.list,
             content: 'leche entera',
-            quantity: 1,
+            quantity: 3,
             askIfAmbiguous: true,
           }),
           lines.add({
             userId: ids.owner,
             listId: ids.list,
             content: 'LECHE ENTERA',
-            quantity: 2,
+            quantity: 3,
           }),
         ])
       );
 
       expect(results.map((result) => result.merged)).toEqual([true, true]);
       expect(results.map((result) => result.line.id)).toEqual([milk, milk]);
+      // Whichever took the lock first raised the line; the other met it
+      // wanted and added nothing (plan 0260 R2, A1).
+      expect(results.map((result) => result.outcome).sort()).toEqual([
+        'ALREADY_ON_LIST',
+        'RAISED',
+      ]);
       const rows = await stored();
       expect(rows).toHaveLength(1);
-      // One from the product add, then one and two from the typed adds.
-      expect(rows[0].quantity).toBe(4);
+      expect(rows[0].quantity).toBe(3);
       expect(rows[0].content).toBe('Leche entera');
     });
 
-    it('asks which line, naming each with its products, when two hold a product', async () => {
+    it('leaves a wanted weighed product line byte for byte beside an open typed add, and raises it from zero to 25 (plan 0260)', async () => {
+      const { line: bananas } = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Platanos',
+        itemIds: [WHOLE],
+        unit: 'GRAM',
+        quantity: 750,
+      });
+      const before = (await stored())[0];
+      const changesBefore = await changesOf(bananas.id);
+
+      const met = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'platanos',
+        quantity: 2,
+        unit: 'UNIT',
+      });
+
+      expect(met).toMatchObject({
+        merged: true,
+        outcome: 'ALREADY_ON_LIST',
+        line: { id: bananas.id, quantity: 750, unit: 'GRAM' },
+      });
+      expect(met.alreadyOnList.map((line) => line.id)).toEqual([bananas.id]);
+      const after = (await stored())[0];
+      expect(after.quantity).toBe(before.quantity);
+      expect(after.version).toBe(before.version);
+      expect(after.updatedAt.toISOString()).toBe(
+        before.updatedAt.toISOString()
+      );
+      expect(await changesOf(bananas.id)).toBe(changesBefore);
+      expect(await stored()).toHaveLength(1);
+
+      await keep(bananas.id);
+      const raised = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'platanos',
+      });
+
+      expect(raised).toMatchObject({
+        outcome: 'RAISED',
+        line: { id: bananas.id, quantity: 25, unit: 'GRAM' },
+      });
+      expect((await stored())[0].quantity).toBe(25);
+      expect(await changesOf(bananas.id)).toBe(changesBefore + 1);
+    });
+
+    it('asks which line, naming each with its products, when two kept lines hold a product', async () => {
       const whole = await productLine('Leche entera', WHOLE);
       const oat = await productLine('Leche entera', OAT);
+      // Both at zero, so the add would write a raise (plan 0260 R3).
+      await keep(whole);
+      await keep(oat);
 
       const refused = await lines
         .add({
@@ -246,7 +333,7 @@ describeIntegration(
         [oat, [OAT]],
       ]);
       // The refusal wrote nothing.
-      expect((await stored()).map((row) => row.quantity)).toEqual([1, 1]);
+      expect((await stored()).map((row) => row.quantity)).toEqual([0, 0]);
 
       // The person's answer raises the line they chose.
       const answered = await lines.add({
@@ -255,8 +342,12 @@ describeIntegration(
         content: 'leche entera',
         intoLineId: oat,
       });
-      expect(answered).toMatchObject({ merged: true, line: { id: oat } });
-      expect((await stored()).map((row) => row.quantity)).toEqual([1, 2]);
+      expect(answered).toMatchObject({
+        merged: true,
+        outcome: 'RAISED',
+        line: { id: oat },
+      });
+      expect((await stored()).map((row) => row.quantity)).toEqual([0, 1]);
     });
 
     it('refuses a chosen line of another list, or a deleted one, and creates nothing', async () => {
@@ -277,6 +368,251 @@ describeIntegration(
 
       expect((await stored()).map((row) => row.id)).toEqual([gone]);
       expect((await stored(ids.other)).map((row) => row.quantity)).toEqual([1]);
+    });
+
+    // The owner's ruling of 2026-11-12 ("only"): the identity line counts in
+    // another unit, and the line of the add's unit that holds the product is
+    // found by the read of `findLinesHolding`, which has to run before the
+    // refusal does.
+    it('lands a product add on the held line of its unit beside an identity line of another unit', async () => {
+      const leche = await productLine('Leche', WHOLE);
+      const { line: desayuno } = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Desayuno',
+        itemIds: [WHOLE, OAT],
+        unit: 'MILLILITER',
+        quantity: 300,
+      });
+      const before = (await stored()).find((row) => row.id === desayuno.id);
+      const milk = {
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'Leche',
+        itemIds: [WHOLE],
+        unit: 'MILLILITER' as const,
+      };
+
+      const met = await lines.add(milk);
+      const [batched] = await lines.addMany({
+        userId: ids.owner,
+        listId: ids.list,
+        items: [milk],
+      });
+
+      for (const answer of [met, batched]) {
+        expect(answer).toMatchObject({
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: desayuno.id, quantity: 300, unit: 'MILLILITER' },
+        });
+        expect(answer.alreadyOnList.map((line) => line.id)).toEqual([
+          desayuno.id,
+        ]);
+      }
+      const after = (await stored()).find((row) => row.id === desayuno.id);
+      expect(after?.version).toBe(before?.version);
+      expect((await stored()).map((row) => row.id)).toEqual([
+        leche,
+        desayuno.id,
+      ]);
+
+      await keep(desayuno.id);
+      const raised = await lines.add(milk);
+
+      expect(raised).toMatchObject({
+        outcome: 'RAISED',
+        line: { id: desayuno.id, quantity: 25, unit: 'MILLILITER' },
+      });
+      expect((await stored()).map((row) => row.quantity)).toEqual([1, 25]);
+    });
+
+    // The owner's ruling of 2026-11-16: two or more matches are never guessed
+    // between, wanted and kept alike.
+    describe('two or more matches (the owner, 2026-11-16)', () => {
+      it('asks about a kept line and a wanted one, each with what choosing it does, and writes nothing (rule 4)', async () => {
+        const whole = await productLine('Leche entera', WHOLE);
+        const oat = await productLine('Leche entera', OAT);
+        await keep(whole);
+        const before = await stored();
+
+        const refused = await lines
+          .add({
+            userId: ids.owner,
+            listId: ids.list,
+            content: 'leche entera',
+            quantity: 2,
+            askIfAmbiguous: true,
+          })
+          .catch((error: unknown) => error);
+
+        expect(refused).toBeInstanceOf(LineAddNeedsChoiceException);
+        const details = (refused as LineAddNeedsChoiceException)
+          .details as unknown as LineAddNeedsChoiceDetails;
+        expect(
+          details.lines.map((line) => ({
+            lineId: line.lineId,
+            itemIds: line.itemIds,
+            quantity: line.quantity,
+            unit: line.unit,
+            outcome: line.outcome,
+            resultingQuantity: line.resultingQuantity,
+          }))
+        ).toEqual([
+          {
+            lineId: whole,
+            itemIds: [WHOLE],
+            quantity: 0,
+            unit: 'UNIT',
+            outcome: 'RAISED',
+            resultingQuantity: 2,
+          },
+          {
+            lineId: oat,
+            itemIds: [OAT],
+            quantity: 1,
+            unit: 'UNIT',
+            outcome: 'ALREADY_ON_LIST',
+            resultingQuantity: 1,
+          },
+        ]);
+        const after = await stored();
+        expect(after.map((row) => [row.quantity, row.version])).toEqual(
+          before.map((row) => [row.quantity, row.version])
+        );
+        expect(await changesOf(whole)).toBe(1);
+        expect(await changesOf(oat)).toBe(1);
+      });
+
+      it('answers every kept match of a batch item and raises none (rule 5)', async () => {
+        const whole = await productLine('Leche entera', WHOLE);
+        const oat = await productLine('Leche entera', OAT);
+        await keep(whole);
+        await keep(oat);
+        const before = await stored();
+
+        const [result] = await lines.addMany({
+          userId: ids.owner,
+          listId: ids.list,
+          items: [{ content: 'LECHE ENTERA', quantity: 3 }],
+        });
+
+        expect(result).toMatchObject({
+          merged: true,
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: whole, quantity: 0 },
+        });
+        expect(
+          result.alreadyOnList.map((line) => [line.id, line.quantity])
+        ).toEqual([
+          [whole, 0],
+          [oat, 0],
+        ]);
+        const after = await stored();
+        expect(after).toHaveLength(2);
+        expect(after.map((row) => [row.quantity, row.version])).toEqual(
+          before.map((row) => [row.quantity, row.version])
+        );
+        expect(await changesOf(whole)).toBe(1);
+        expect(await changesOf(oat)).toBe(1);
+      });
+
+      it('takes intoLineId on a product add: raises the kept match chosen, meets the wanted one (rule 6)', async () => {
+        const { line: leche } = await lines.add({
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER',
+          quantity: 500,
+        });
+        const { line: desayuno } = await lines.add({
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Desayuno',
+          itemIds: [WHOLE, OAT],
+          unit: 'MILLILITER',
+          quantity: 300,
+        });
+        await keep(leche.id);
+        const milk = {
+          userId: ids.owner,
+          listId: ids.list,
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER' as const,
+          quantity: 200,
+        };
+
+        const asked = await lines
+          .add({ ...milk, askIfAmbiguous: true })
+          .catch((error: unknown) => error);
+        expect(asked).toBeInstanceOf(LineAddNeedsChoiceException);
+        expect(
+          (
+            (asked as LineAddNeedsChoiceException)
+              .details as unknown as LineAddNeedsChoiceDetails
+          ).lines.map((line) => [line.lineId, line.outcome])
+        ).toEqual([
+          [leche.id, 'RAISED'],
+          [desayuno.id, 'ALREADY_ON_LIST'],
+        ]);
+
+        const met = await lines.add({ ...milk, intoLineId: desayuno.id });
+        const raised = await lines.add({ ...milk, intoLineId: leche.id });
+
+        expect(met).toMatchObject({
+          outcome: 'ALREADY_ON_LIST',
+          line: { id: desayuno.id, quantity: 300, version: desayuno.version },
+        });
+        expect(raised).toMatchObject({
+          outcome: 'RAISED',
+          line: { id: leche.id, quantity: 200, unit: 'MILLILITER' },
+        });
+        expect((await stored()).map((row) => row.quantity)).toEqual([200, 300]);
+      });
+
+      it('refuses newLine on a product add under newLine, and writes nothing (rule 7)', async () => {
+        await productLine('Leche entera', WHOLE);
+
+        const refused = await lines
+          .add({
+            userId: ids.owner,
+            listId: ids.list,
+            content: 'Leche entera',
+            itemIds: [WHOLE],
+            newLine: true,
+          })
+          .catch((error: unknown) => error);
+
+        expect(refused).toBeInstanceOf(ValidationException);
+        expect(refused).toMatchObject({ messageArgs: { field: 'newLine' } });
+        expect((await stored()).map((row) => row.quantity)).toEqual([1]);
+      });
+    });
+
+    it('refuses a batch that would create one product in two units under two names, as two single adds refuse the second', async () => {
+      const items = [
+        {
+          content: 'Leche',
+          itemIds: [WHOLE],
+          unit: 'MILLILITER' as const,
+        },
+        { content: 'Milk', itemIds: [WHOLE], unit: 'UNIT' as const },
+      ];
+
+      const refused = await lines
+        .addMany({ userId: ids.owner, listId: ids.list, items })
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(ValidationException);
+      expect(refused).toMatchObject({ messageArgs: { field: 'items' } });
+      expect(await stored()).toEqual([]);
+
+      await lines.add({ userId: ids.owner, listId: ids.list, ...items[0] });
+      await expect(
+        lines.add({ userId: ids.owner, listId: ids.list, ...items[1] })
+      ).rejects.toBeInstanceOf(LineUnitDiffersException);
+      expect(await stored()).toHaveLength(1);
     });
   }
 );

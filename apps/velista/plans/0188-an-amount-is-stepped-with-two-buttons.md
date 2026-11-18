@@ -577,6 +577,15 @@ From the mock's `.mk-D3`, `.mk-D`, `.mk-btn`, `.mk-val` and `.mk-u` rules:
   Minus stops at the last amount above 0, or at `min` when `min` is above 0 (decision C). A
   separate press is the only way to 0.
 - `prefers-reduced-motion` changes nothing about the repeat; it only turns off the press scale.
+- **A pointer press while the field holds typed text** commits the text and takes no step (the
+  owner, 2026-11-12). A real press moves focus on mousedown, so the field's blur commits the
+  text before the click arrives. The `pointerdown` that comes while a draft is open therefore
+  marks its gesture: it starts no hold, and its pointer click is consumed until the next
+  `pointerdown`. A key click (`detail` 0) after Tab left the field is a new gesture and steps;
+  the blur by Tab already committed.
+- **Only a primary pointer on the main button touches the hold.** Any other `pointerdown` (a
+  second finger, a right button) returns before it resets anything, so it cannot undo the
+  swallow of the first finger's release.
 
 ### 3.4 The row variant
 

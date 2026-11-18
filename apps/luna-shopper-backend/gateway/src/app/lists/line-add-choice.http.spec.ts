@@ -195,15 +195,57 @@ describe('POST /v1/lists/:id/lines asks which line (plan 0228)', () => {
     expect(app.sent).toEqual([]);
   });
 
-  it('takes the three fields beside a product, which core then ignores', async () => {
-    const response = await post({
+  it('takes askIfAmbiguous and intoLineId beside a product, which core reads too (the owner, 2026-11-16)', async () => {
+    const asks = await post({
       content: 'Leche entera',
       itemIds: [ITEM],
       askIfAmbiguous: true,
     });
+    const chose = await post({
+      content: 'Leche entera',
+      itemIds: [ITEM],
+      intoLineId: LINE,
+    });
+
+    expect([asks.status, chose.status]).toEqual([201, 201]);
+    expect(app.sent[0].payload).toMatchObject({ askIfAmbiguous: true });
+    expect(app.sent[1].payload).toMatchObject({ intoLineId: LINE });
+  });
+
+  it('refuses newLine true beside a product or a group under newLine, and sends nothing (the owner, 2026-11-16)', async () => {
+    for (const extra of [{ itemIds: [ITEM] }, { productGroupId: ITEM }]) {
+      const response = await post({
+        content: 'Leche entera',
+        ...extra,
+        newLine: true,
+      });
+
+      expect(response.status).toBe(400);
+      // This app installs no problem filter, so the pipe's own message names
+      // the field.
+      expect(JSON.stringify(await response.json())).toContain(
+        'newLine true is an answer for a typed name alone'
+      );
+    }
+    // False beside a product is no answer, and is taken.
+    const plain = await post({
+      content: 'Leche entera',
+      itemIds: [ITEM],
+      newLine: false,
+    });
+    expect(plain.status).toBe(201);
+    expect(app.sent).toHaveLength(1);
+  });
+
+  it('takes newLine true beside a null group, which core reads as free text', async () => {
+    const response = await post({
+      content: 'leche',
+      newLine: true,
+      productGroupId: null,
+    });
 
     expect(response.status).toBe(201);
-    expect(app.sent[0].payload).toMatchObject({ askIfAmbiguous: true });
+    expect(app.sent[0].payload).toMatchObject({ newLine: true });
   });
 });
 
@@ -229,6 +271,21 @@ describe('POST /v1/baskets/:id/lines takes the same fields (plan 0228)', () => {
     expect(await errors({ ...base, intoLineId: LINE, newLine: true })).toEqual([
       'intoLineId',
     ]);
+  });
+
+  it('refuses newLine true beside a product (the owner, 2026-11-16)', async () => {
+    expect(
+      await errors({ ...base, itemIds: [ITEM], unit: 'UNIT', newLine: true })
+    ).toEqual(['newLine']);
+    expect(
+      await errors({ ...base, itemIds: [ITEM], unit: 'UNIT', newLine: false })
+    ).toEqual([]);
+  });
+
+  it('takes newLine true beside a null group, as the list add does', async () => {
+    expect(
+      await errors({ ...base, productGroupId: null, newLine: true })
+    ).toEqual([]);
   });
 
   it('refuses a flag that is not a boolean, and an id that is not a uuid', async () => {

@@ -386,6 +386,7 @@ describeIntegration(
       favoriteItemId?: string | null;
       preferredSupermarketId?: string | null;
       approvalStatus?: LineApprovalStatus;
+      quantity?: number;
     }): Promise<ListLine> {
       const repo = dataSource.getRepository(ListLine);
       const itemIds = seed.itemIds ?? [];
@@ -393,7 +394,7 @@ describeIntegration(
         repo.create({
           listId: ids.list,
           content: seed.content,
-          quantity: 1,
+          quantity: seed.quantity ?? 1,
           position: seed.position,
           itemSetHash: itemSetHash(itemIds),
           productGroupId: seed.productGroupId ?? null,
@@ -643,6 +644,9 @@ describeIntegration(
       });
     });
 
+    // Changed on purpose by plan 0260 (R2): an add raises only a line kept at
+    // zero now, so the raise this case protects starts from zero. A wanted
+    // line is met and left whole, which the next case holds.
     it('leaves the fields of a line alone when an add raises it', async () => {
       const milk = await seedLine({
         content: 'Milk',
@@ -650,9 +654,14 @@ describeIntegration(
         itemIds: [SEMI],
         favoriteItemId: SEMI,
         preferredSupermarketId: MERCADONA,
+        quantity: 0,
       });
 
-      const { line: view, merged } = await lines.add({
+      const {
+        line: view,
+        merged,
+        outcome,
+      } = await lines.add({
         userId: ids.owner,
         listId: ids.list,
         content: 'milk',
@@ -661,12 +670,45 @@ describeIntegration(
       });
 
       expect(merged).toBe(true);
+      expect(outcome).toBe('RAISED');
       expect(view).toMatchObject({
         id: milk.id,
-        quantity: 3,
+        quantity: 2,
         favoriteItemId: SEMI,
         preferredSupermarketId: MERCADONA,
       });
+      expect(await row(milk.id)).toMatchObject({
+        favoriteItemId: SEMI,
+        preferredSupermarketId: MERCADONA,
+      });
+    });
+
+    it('leaves a wanted line whole when an add meets it (plan 0260 A1)', async () => {
+      const milk = await seedLine({
+        content: 'Milk',
+        position: 1,
+        itemIds: [SEMI],
+        favoriteItemId: SEMI,
+        preferredSupermarketId: MERCADONA,
+      });
+      const before = await row(milk.id);
+
+      const { line: view, outcome } = await lines.add({
+        userId: ids.owner,
+        listId: ids.list,
+        content: 'milk',
+        itemIds: [SEMI],
+        quantity: 2,
+      });
+
+      expect(outcome).toBe('ALREADY_ON_LIST');
+      expect(view).toMatchObject({
+        id: milk.id,
+        quantity: 1,
+        favoriteItemId: SEMI,
+        preferredSupermarketId: MERCADONA,
+      });
+      expect(await row(milk.id)).toEqual(before);
     });
 
     it('takes the favourite off a deleted line with its products', async () => {

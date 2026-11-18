@@ -217,6 +217,7 @@
       "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
       "itemKilogramHasSize": "A product sold by the kilo has no size. Give it an approximate weight instead, or choose grams.",
       "itemApproxWeightBesideSize": "A product has a size or an approximate weight, not both. Clear one of them.",
+      "itemQuantityStepNotAllowed": "Only a product sold by the kilo or by the litre has a step. Choose the default, or sell it by the kilo or the litre.",
       "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
       "sectionOfAnotherShop": "That section belongs to another shop. A shop can only order its own sections. Read the screen again and try once more.",
       "sectionSlugTaken": "This shop already has a section with that slug. Choose another one.",
@@ -471,6 +472,13 @@
         "admin": "Typed by a person. Runs do not change it",
         "useChain": "Use the chain’s weight"
       },
+      "quantityStep": "Step",
+      "quantityStepHelp": "How far one press moves a shopper’s amount of this product, at every amount",
+      "quantityStepDefault": {
+        "gram": "Default: 25 g",
+        "milliliter": "Default: 25 ml"
+      },
+      "quantityStepSet": "Set for this product. A run does not give it a weight while it has a step.",
       "pricesPerKilo": "The prices of this product are per kilo",
       "productGroupId": "Product group",
       "productGroupIdHelp": "What makes this product comparable with another. Empty is the ordinary state of a newly harvested product, and nothing is wrong with it.",
@@ -1010,7 +1018,17 @@
       "EXTRACTOR": "From the extractor",
       "COPY_TARGET_GONE": "A copy target was deleted",
       "COPY_SOURCE_NOT_WRITTEN": "Nothing to copy",
-      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown"
+      "DETAIL_SKIPPED_UNKNOWN": "A skipped product was unknown",
+      "UNKNOWN_PRICE_SCOPE": "A price named an unknown scope",
+      "NO_PRICE_SCOPE": "A price had no scope",
+      "SCOPE_KIND_MISMATCH": "A scope of another kind",
+      "PRICE_SOLD_ANOTHER_WAY": "Sold another way",
+      "SOURCE_PAUSED": "The chain refused, the run paused",
+      "SOURCE_RESUMED": "The chain answered again",
+      "APPROX_WEIGHT_ROWS_DISAGREE": "Two weights for one piece",
+      "LISTING_UNREAD": "A part was not read",
+      "LISTING_SHORT": "A part was read short",
+      "DETAIL_UNREAD": "Product pages stopped answering"
     },
     "status": {
       "PENDING": "Pending",
@@ -1233,6 +1251,45 @@
           "prices": "Prices copied",
           "availability": "Availability copied",
           "more": "{{count}} more"
+        },
+        "unreadable": "Not read",
+        "askedAgain": "Asked again at the end",
+        "askedAgainRead": "read the second time",
+        "askedAgainLost": "still not read",
+        "blockedAfter": "Stopped because the chain refused",
+        "sections": {
+          "caption": "Sections",
+          "name": "Section",
+          "products": "Products",
+          "queries": "Queries",
+          "queriesNotStated": "Not stated by the run",
+          "stoppedBy": "Why it stopped",
+          "openQueries": "Still at the ceiling"
+        },
+        "stoppedBy": {
+          "BUDGET": "Out of queries",
+          "BARREN": "Nothing new to find",
+          "GROWTH": "Stopped growing",
+          "NO_TERM": "No term left to narrow by",
+          "COMPLETE": "Finished",
+          "FAILED": "Failed"
+        },
+        "categories": {
+          "caption": "Categories, read against printed",
+          "name": "Category",
+          "printed": "Printed",
+          "read": "Read",
+          "repeated": "Repeated"
+        },
+        "detail": "Product pages: {{pages}} asked, {{failed}} failed, {{timeouts}} timed out",
+        "sizesDisproved": "Sizes their own price disproves: {{count}}",
+        "probablePackCounts": "Of them, probably a pack: {{count}} (a guess)",
+        "sizes": {
+          "name": "Product",
+          "stated": "Stated",
+          "implied": "Implied",
+          "unit": "Unit",
+          "label": "Label"
         }
       },
       "queue": {

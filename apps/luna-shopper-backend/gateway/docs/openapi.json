@@ -8320,6 +8320,16 @@
               }
             }
           },
+          "409": {
+            "description": "`line_unit_differs` — These two lines count in different units, so they cannot be merged.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "422": {
             "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
             "content": {
@@ -18274,7 +18284,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18519,7 +18529,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18623,7 +18633,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -18917,7 +18927,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -28864,7 +28874,7 @@
             }
           },
           "400": {
-            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.",
+            "description": "`validation_failed` — Some of the submitted values are invalid.\n\n`item_unit_not_base` — A product is stored in a base unit: a volume in millilitres and a count in units. Send the unit and the size it becomes.\n\n`item_kilogram_has_size` — A product sold by the kilo has no size. Clear the size, or store the weight in grams.\n\n`item_approx_weight_beside_size` — A product has a fixed size or an approximate weight, never both, and a weight is above zero. Clear one of the two.\n\n`item_quantity_step_not_allowed` — Only a product sold by the kilo or the litre has a step, and the step is one of the allowed steps. Choose an allowed step, or clear the step.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -31421,7 +31431,8 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 999999
+            "maximum": 999999,
+            "description": "The amount of a line the add creates, or of the raise of a line at 0 (plan 0260). Never added to a wanted line: an add that meets one writes nothing and answers outcome ALREADY_ON_LIST. Absent is one step of the unit: 1 piece, 25 g or 25 ml."
           },
           "unit": {
             "type": "string",
@@ -31453,16 +31464,16 @@
           },
           "askIfAmbiguous": {
             "type": "boolean",
-            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before."
+            "description": "The client can ask which line an add means (plan 0228). An add that meets one line above 0 writes nothing and answers 201 with outcome ALREADY_ON_LIST and that line in alreadyOnList; one line at 0 is raised and answers RAISED (plan 0260). An add that meets two or more lines, above 0 or at 0, a product add included: true refuses it with 409 line_add_needs_choice and every one of them in details.lines, at most 10, in list position order, each with its own unit, its quantity, the outcome choosing it answers (ALREADY_ON_LIST for a line above 0, which nothing changes; RAISED for a line at 0) and the resultingQuantity; absent or false writes nothing and answers 201 ALREADY_ON_LIST with every one of them in alreadyOnList, lines at 0 included (the owner, 2026-11-16). Never asked about a unit."
           },
           "intoLineId": {
             "type": "string",
             "format": "uuid",
-            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+            "description": "The line the person chose, the answer to line_add_needs_choice (plan 0228), on a free text add or a product add. It must be one of the lines the add meets; any other id, a line of another list and a REJECTED line answer 404 not_found, and the add never falls back to a new line. Above 0, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised by the add amount, or by one step of its own unit when that is not the unit of the add, and answers RAISED (plan 0260). Refused beside newLine true."
           },
           "newLine": {
             "type": "boolean",
-            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
+            "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
           }
         },
         "required": [
@@ -31479,7 +31490,8 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 999999
+            "maximum": 999999,
+            "description": "The amount of a line the add creates, or of the raise of a line at 0 (plan 0260). Never added to a wanted line: an add that meets one writes nothing and answers outcome ALREADY_ON_LIST. Absent is one step of the unit: 1 piece, 25 g or 25 ml."
           },
           "unit": {
             "type": "string",
@@ -32080,16 +32092,16 @@
           },
           "askIfAmbiguous": {
             "type": "boolean",
-            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before."
+            "description": "The client can ask which line an add means (plan 0228). An add that meets one line above 0 writes nothing and answers 201 with outcome ALREADY_ON_LIST and that line in alreadyOnList; one line at 0 is raised and answers RAISED (plan 0260). An add that meets two or more lines, above 0 or at 0, a product add included: true refuses it with 409 line_add_needs_choice and every one of them in details.lines, at most 10, in list position order, each with its own unit, its quantity, the outcome choosing it answers (ALREADY_ON_LIST for a line above 0, which nothing changes; RAISED for a line at 0) and the resultingQuantity; absent or false writes nothing and answers 201 ALREADY_ON_LIST with every one of them in alreadyOnList, lines at 0 included (the owner, 2026-11-16). Never asked about a unit."
           },
           "intoLineId": {
             "type": "string",
             "format": "uuid",
-            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+            "description": "The line the person chose, the answer to line_add_needs_choice (plan 0228), on a free text add or a product add. It must be one of the lines the add meets; any other id, a line of another list and a REJECTED line answer 404 not_found, and the add never falls back to a new line. Above 0, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised by the add amount, or by one step of its own unit when that is not the unit of the add, and answers RAISED (plan 0260). Refused beside newLine true."
           },
           "newLine": {
             "type": "boolean",
-            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
+            "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
           }
         },
         "required": [
@@ -32609,6 +32621,23 @@
             "nullable": true,
             "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
           },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo carries one: `KILOGRAM`, no `unitSize` and no `approxWeight` (S3). A write that names `LITER` is refused with `item_unit_not_base`, so a step is set on a kilo product; a legacy product by the litre takes one only on an edit that names no unit and no size. A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it."
+          },
           "packCount": {
             "type": "integer",
             "nullable": true,
@@ -32706,6 +32735,23 @@
             "nullable": true,
             "description": "Compared as a number of grams, as `unitSize` is (plan 0244)."
           },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "The step the product holds, or null for none (plan 0261, section 2.4)."
+          },
           "defaultUnit": {
             "type": "string",
             "enum": [
@@ -32766,6 +32812,23 @@
             "type": "number",
             "nullable": true,
             "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo carries one: `KILOGRAM`, no `unitSize` and no `approxWeight` (S3). A write that names `LITER` is refused with `item_unit_not_base`, so a step is set on a kilo product; a legacy product by the litre takes one only on an edit that names no unit and no size. A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it."
           },
           "packCount": {
             "type": "integer",
@@ -32900,6 +32963,23 @@
             "type": "number",
             "nullable": true,
             "description": "The approximate weight of one piece, in grams, when the chain says it varies (plan 0244): a cheese piece of about 1560 g, a salad tub of about 580 g. A product has a size or a weight, never both: a weight beside a `unitSize`, or at zero or below, is refused with `item_approx_weight_beside_size`. On a `KILOGRAM` product the offers answer `piecePrice` from it, and on a `UNIT` product the price is already the piece. Written as `ADMIN`, which no harvest run overwrites; on an edit, null hands the weight back to the runs, and an edit that sets a size on a piece sends null here with it."
+          },
+          "quantityStep": {
+            "type": "integer",
+            "enum": [
+              1,
+              5,
+              10,
+              25,
+              50,
+              100,
+              200,
+              250,
+              500,
+              1000
+            ],
+            "nullable": true,
+            "description": "How far one step moves a line of this product, in grams or millilitres (plan 0261). One of the ten steps, each a divisor of 1000 (S2); a value off the list is refused with `validation_failed`. Only a product sold by the kilo carries one: `KILOGRAM`, no `unitSize` and no `approxWeight` (S3). A write that names `LITER` is refused with `item_unit_not_base`, so a step is set on a kilo product; a legacy product by the litre takes one only on an edit that names no unit and no size. A step on any other product is refused with `item_quantity_step_not_allowed`, whose `details.allowed` lists the steps. Null, or absent on a create, keeps the default steps. An edit that gives a stepped product a size, a weight or another unit sends null here with it. No harvest run writes it."
           },
           "packCount": {
             "type": "integer",
@@ -37892,6 +37972,28 @@
               }
             ]
           },
+          "quantityStep": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  5,
+                  10,
+                  25,
+                  50,
+                  100,
+                  200,
+                  250,
+                  500,
+                  1000
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "packCount": {
             "type": [
               "integer",
@@ -38233,6 +38335,9 @@
           "skippedCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "addOutcome": {
+            "$ref": "#/components/schemas/enums.AddLineOutcome"
           }
         },
         "required": [
@@ -38868,8 +38973,7 @@
                   "KILOGRAM",
                   "LITER",
                   "UNIT",
-                  "DOZEN",
-                  "WASH"
+                  "DOZEN"
                 ]
               },
               {
@@ -39619,8 +39723,7 @@
                   "KILOGRAM",
                   "LITER",
                   "UNIT",
-                  "DOZEN",
-                  "WASH"
+                  "DOZEN"
                 ]
               },
               {
@@ -39901,8 +40004,7 @@
                   "KILOGRAM",
                   "LITER",
                   "UNIT",
-                  "DOZEN",
-                  "WASH"
+                  "DOZEN"
                 ]
               },
               {
@@ -39996,8 +40098,7 @@
                   "KILOGRAM",
                   "LITER",
                   "UNIT",
-                  "DOZEN",
-                  "WASH"
+                  "DOZEN"
                 ]
               },
               {
@@ -40381,6 +40482,28 @@
                 "enum": [
                   "SOURCE",
                   "ADMIN"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quantityStep": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "enum": [
+                  1,
+                  5,
+                  10,
+                  25,
+                  50,
+                  100,
+                  200,
+                  250,
+                  500,
+                  1000
                 ]
               },
               {
@@ -42361,8 +42484,7 @@
                   "KILOGRAM",
                   "LITER",
                   "UNIT",
-                  "DOZEN",
-                  "WASH"
+                  "DOZEN"
                 ]
               },
               {
@@ -42974,6 +43096,14 @@
           "dia-api",
           "osm-places",
           "manual"
+        ]
+      },
+      "enums.AddLineOutcome": {
+        "type": "string",
+        "enum": [
+          "CREATED",
+          "RAISED",
+          "ALREADY_ON_LIST"
         ]
       },
       "enums.AiTextProvider": {
@@ -46735,8 +46865,7 @@
                   "KILOGRAM",
                   "LITER",
                   "UNIT",
-                  "DOZEN",
-                  "WASH"
+                  "DOZEN"
                 ]
               },
               {
@@ -47349,11 +47478,23 @@
           },
           "merged": {
             "type": "boolean"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.AddLineOutcome"
+          },
+          "alreadyOnList": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.LineView"
+            },
+            "maxItems": 10
           }
         },
         "required": [
           "line",
-          "merged"
+          "merged",
+          "outcome",
+          "alreadyOnList"
         ],
         "additionalProperties": false
       },
@@ -48933,6 +49074,7 @@
               "item_unit_not_base",
               "item_kilogram_has_size",
               "item_approx_weight_beside_size",
+              "item_quantity_step_not_allowed",
               "item_merged",
               "item_merge_two_articles_one_chain",
               "item_merge_format_differs",
@@ -48998,7 +49140,7 @@
           "details": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Machine readable facts about this occurrence. Present when `code` is `line_merge_required` or `line_add_needs_choice`, the two codes whose bag is described here. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null. For `line_add_needs_choice` it carries `lines`, the lines of the list that hold a product under the typed name, in list position order and at most 10 of them (`lineId`, `content`, `named`, `quantity`, `itemIds`, `productGroupId`, `approvalStatus`): send the add again with `intoLineId` set to one of them, or with `newLine` true."
+            "description": "Machine readable facts about this occurrence. Present when `code` is `line_merge_required`, `line_add_needs_choice` or `line_unit_differs` on an add, the three codes whose bag is described here. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null. For `line_add_needs_choice` it carries `lines`, every line the add meets, above zero and at zero alike, in list position order and at most 10 of them (`lineId`, `content`, `named`, `quantity`, `unit`, `itemIds`, `productGroupId`, `approvalStatus`, and `outcome` with `resultingQuantity`: `ALREADY_ON_LIST` and the quantity itself for a line above zero, which choosing it leaves as it is, `RAISED` and the raised quantity for a line at zero): send the add again with `intoLineId` set to one of them, or, on a typed name only, with `newLine` true. For `line_unit_differs` from a product add it carries `line`, the line the add met (`lineId`, `content`, `unit`, `quantity`), `unit`, what the add counted in, and `index`, the batch item or null on a single add; the same code from a rename carries none."
           }
         }
       },

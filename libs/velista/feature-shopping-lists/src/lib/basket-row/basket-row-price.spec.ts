@@ -399,7 +399,7 @@ describe('BasketRowComponent: a row bought elsewhere (velista 0142)', () => {
       host(fixture).querySelector('.is-removed .content.is-product')
     ).not.toBeNull();
     expect(host(fixture).querySelector('.status')).toBeNull();
-    expect(host(fixture).querySelector('lib-quantity-reel')).toBeNull();
+    expect(host(fixture).querySelector('.amount')).toBeNull();
     expect(host(fixture).textContent).not.toContain('0.95');
   });
 });

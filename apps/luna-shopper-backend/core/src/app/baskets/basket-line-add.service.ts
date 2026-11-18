@@ -119,8 +119,20 @@ export class BasketLineAddService {
 
     // No announcement of its own (plan 0139, section 3). The add went through
     // `LineService.add`, which announces to every basket covering the list, and
-    // this basket is one of them: it had to cover the list to add to it.
-    return opened.result([added.line.id]);
+    // this basket is one of them: it had to cover the list to add to it. An add
+    // that met a wanted line wrote nothing and announced nothing (plan 0260).
+    //
+    // The entries name every line the add met when it met wanted ones, so the
+    // shopping list can find the rows to mark, and `addOutcome` says which of
+    // the three things happened (plan 0260, section 2). An add that meets two
+    // or more lines asks with `askIfAmbiguous` as the list's add does, and
+    // without it names them all, lines at zero included (the owner,
+    // 2026-11-16); one with no buy that keeps it a row has no entry.
+    const lineIds =
+      added.outcome === 'ALREADY_ON_LIST' && added.alreadyOnList.length > 0
+        ? added.alreadyOnList.map((line) => line.id)
+        : [added.line.id];
+    return { ...(await opened.result(lineIds)), addOutcome: added.outcome };
   }
 
   /**

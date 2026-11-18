@@ -1405,7 +1405,18 @@ export const AppShellRoutes: Route[] = [
               import('@portfolio/velista/feature-catalog').then(
                 (m) => m.ProductPage
               ),
-            children: [...addListSheetRoutes()],
+            children: [
+              ...addListSheetRoutes(),
+              sheet({
+                // Why Similar products and a list's cheapest mark can differ
+                // (velista `0187`, U6).
+                path: CATALOG_PATHS.orderInfoSheet,
+                loadComponent: () =>
+                  import('@portfolio/velista/feature-catalog').then(
+                    (m) => m.OrderInfoSheet
+                  ),
+              }),
+            ],
           },
           {
             /**

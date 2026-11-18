@@ -187,6 +187,12 @@ export class QuantityStepper {
   private _holdTimer: ReturnType<typeof setTimeout> | null = null;
   private _holdCount = 0;
   private _swallowClick = false;
+  /**
+   * A pointer went down on a button while the field held typed text. Its click is
+   * consumed until the next pointerdown, like the release of a hold; a key click
+   * (`detail` 0) is a new gesture and steps.
+   */
+  private _draftPress = false;
   private _announceTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly _onScroll = () => this._stopRepeat();
 
@@ -209,8 +215,16 @@ export class QuantityStepper {
    * click whose `detail` is 0, and those are never swallowed after a hold.
    */
   press(direction: 1 | -1, event?: MouseEvent): void {
-    if (this._swallowClick && (event?.detail ?? 1) !== 0) {
+    const pointer = (event?.detail ?? 1) !== 0;
+    if (this._swallowClick && pointer) {
       // The release of a hold that already repeated adds no extra step.
+      return;
+    }
+    if (this._draftPress && pointer) {
+      // The press that took focus out of a typed field: the blur committed the
+      // text, or it is committed here when the button took no focus. No step.
+      this._draftPress = false;
+      this._commitDraft();
       return;
     }
     if (this.disabled() || this._atEnd(direction)) {
@@ -225,15 +239,25 @@ export class QuantityStepper {
     }
   }
 
-  /** A primary pointer down on a button that is not at an end starts the hold. */
+  /**
+   * A primary pointer down on a button that is not at an end starts the hold. Any
+   * other pointer leaves the hold of the first one as it is, so a second finger
+   * cannot undo the swallow of the first finger's release.
+   */
   startHold(direction: 1 | -1, event: PointerEvent): void {
-    this._swallowClick = false;
-    this._stopRepeat();
-    this._holdCount = 0;
     const primary =
       (event as { isPrimary?: boolean }).isPrimary !== false &&
       (event.button === undefined || event.button === 0);
-    if (!primary || this.disabled() || this._atEnd(direction)) {
+    if (!primary) {
+      return;
+    }
+    this._swallowClick = false;
+    this._stopRepeat();
+    this._holdCount = 0;
+    // Down comes before the focus moves, so typed text is still a draft here. The
+    // owner's rule: this gesture commits the text only, with no step and no repeat.
+    this._draftPress = this.draft() !== null;
+    if (this._draftPress || this.disabled() || this._atEnd(direction)) {
       return;
     }
     this._document.defaultView?.addEventListener('scroll', this._onScroll, {
