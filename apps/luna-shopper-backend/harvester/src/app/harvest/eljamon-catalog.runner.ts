@@ -245,9 +245,8 @@ export class ElJamonCatalogRunner implements CatalogRunner {
         // reported (see {@link listingOnly}).
         report.product(listingOnly(listed.row, observedAt));
       } else {
-        report.product(
-          observationOf(listed, walk.details.get(listed.row.code), observedAt)
-        );
+        // A page that was read was reported then, so no page is at hand here.
+        report.product(observationOf(listed, undefined, observedAt));
       }
     }
 
@@ -309,7 +308,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
           if (!product) {
             throw new Error('The page carried no product JSON-LD.');
           }
-          walk.details.set(listed.row.code, product);
+          walk.details.add(listed.row.code);
           if (product.price !== null && product.price !== listed.row.price) {
             walk.priceDisagreements.push({
               code: listed.row.code,
@@ -349,11 +348,7 @@ export class ElJamonCatalogRunner implements CatalogRunner {
           if (!walk.reported.has(listed.row.code)) {
             walk.report(
               report,
-              observationOf(
-                listed,
-                walk.details.get(listed.row.code),
-                new Date()
-              ),
+              observationOf(listed, undefined, new Date()),
               listed.row.code
             );
           }
@@ -812,7 +807,11 @@ interface DetailStage {
 class Walk {
   /** Article code -> the first category that listed it, and its row. */
   readonly rows = new Map<string, ListedRow>();
-  readonly details = new Map<string, ElJamonProduct>();
+  /**
+   * The article codes whose page was read. Only the code is kept: the product
+   * was reported when its page answered (plan 0267).
+   */
+  readonly details = new Set<string>();
   readonly categories: Array<{
     code: string;
     name: string;
