@@ -194,6 +194,16 @@
   puts its keyboard away and the results get the room (velista 0189, section 4).
 -->
 <main (dragged)="releaseField()" #column class="page" libDragReleasesField>
+  <!--
+    The page's one polite region (velista 0192). Outside every state, so it is in the
+    DOM from the first render and stays there when the lines it speaks about are
+    replaced by "No lines match.": a region inserted together with its text is often
+    not read, and a region removed in the render that fills it is never read.
+  -->
+  <p aria-atomic="true" aria-live="polite" class="live">
+    {{ announcement() }}
+  </p>
+
   @if (current.kind === 'gone') {
     <!--
       One sentence for a list this reader cannot read and for an id that names nothing,
@@ -331,7 +341,6 @@
             (opened)="openLine($event)"
             (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
-            [announcement]="announcement()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="drawnLines()"
@@ -410,7 +419,7 @@
           <!--
             The lines the list suggests (velista 0089, section 2), after the wanted
             lines and before the lines at zero. So those are drawn in two lists around
-            them, and the page's one polite region stays on the first.
+            them.
           -->
           <lib-line-list
             (act)="act($event)"
@@ -419,7 +428,6 @@
             (opened)="openLine($event)"
             (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
-            [announcement]="announcement()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="wantedLines()"
@@ -479,7 +487,6 @@
             (opened)="openLine($event)"
             (quantityStepped)="stepQuantity($event)"
             (retry)="retry($event)"
-            [announcement]="announcement()"
             [highlight]="highlight()"
             [layout]="listRows.layout()"
             [lines]="drawnLines()"

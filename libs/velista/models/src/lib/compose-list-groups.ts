@@ -41,6 +41,13 @@ export interface ListGroupsInput<T extends ListViewLine> {
    * while the first read is out and after it failed.
    */
   readonly tripsReady: boolean;
+  /**
+   * Whether the first heads read for this list has not answered yet (velista `0192`,
+   * owner ruling of 2026-11-16). While it is out, no line at 0 or less is drawn in To
+   * buy, so a bought line at 0 does not flash there and leave once the trips arrive.
+   * Absent reads as false.
+   */
+  readonly tripsLoading?: boolean;
   /** The keys of the trips somebody has open. */
   readonly openKeys: ReadonlySet<string>;
   /**
@@ -90,16 +97,21 @@ export type ListGroupsView<T extends ListViewLine> =
  *
  * ## What goes in To buy (section 3)
  *
- * Every wanted line no live trip draws, in list order, then the lines at zero that were
- * never bought, then the lines at zero with purchases that no trip can be trusted to
- * hold, then the rejected lines of either kind. **No line is ever on neither side.**
+ * Every wanted line no live trip draws, in list order, then the lines at zero with
+ * purchases that no trip can be trusted to hold, then the rejected lines of either
+ * kind.
  *
  * - A claimed line leaves To buy only once a live trip's rows that name it have
  *   arrived.
+ * - **A line at 0 or less that was never bought is not drawn at rest** (velista
+ *   `0192`). Nothing deletes it: the search, which is flat, finds it at 0, and a step
+ *   above 0 puts it back in To buy. The amount read is the stored one, so a run of
+ *   stepper presses that is still open keeps its row (velista `0188`, decision H).
  * - A line at zero with purchases leaves To buy only once a heads read succeeded and
- *   named at least one trip (velista `0095`, section 5). Before the heads arrive, after
- *   they failed, and when the list has no trip at all, it stays in To buy, where it
- *   can be raised.
+ *   named at least one trip (velista `0095`, section 5). After the heads failed, and
+ *   when the list has no trip at all, it stays in To buy, where it can be raised.
+ *   While the first heads read is out it is not drawn there at all (velista `0192`,
+ *   owner ruling of 2026-11-16): it would only flash and leave once the trips arrive.
  *
  * ## The due lines (velista `0089`, section 2)
  *
@@ -135,7 +147,6 @@ export function composeListGroups<T extends ListViewLine>(
     input.tripsReady && input.live.length + input.past.length > 0;
 
   const wanted: T[] = [];
-  const neverBought: T[] = [];
   const boughtAtZero: T[] = [];
   const rejected: T[] = [];
   for (const line of input.lines) {
@@ -148,10 +159,12 @@ export function composeListGroups<T extends ListViewLine>(
 
     const isWanted =
       facts.quantity > 0 && !(facts.claimed && heldByLive.has(line.id));
-    const isNeverBought = facts.quantity === 0 && facts.boughtCount === 0;
     const isUnheld =
-      !tripsHold && facts.quantity === 0 && facts.boughtCount > 0;
-    if (!isWanted && !isNeverBought && !isUnheld) {
+      !tripsHold &&
+      input.tripsLoading !== true &&
+      facts.quantity <= 0 &&
+      facts.boughtCount > 0;
+    if (!isWanted && !isUnheld) {
       continue;
     }
 
@@ -159,8 +172,6 @@ export function composeListGroups<T extends ListViewLine>(
       rejected.push(line);
     } else if (isWanted) {
       wanted.push(line);
-    } else if (isNeverBought) {
-      neverBought.push(line);
     } else {
       boughtAtZero.push(line);
     }
@@ -173,7 +184,6 @@ export function composeListGroups<T extends ListViewLine>(
   const narrowedWanted = narrow(wanted);
   const toBuy = [
     ...narrowedWanted,
-    ...narrow(neverBought),
     ...narrow(boughtAtZero.filter((line) => !dueIds.has(line.id))),
     ...narrow(rejected),
   ];

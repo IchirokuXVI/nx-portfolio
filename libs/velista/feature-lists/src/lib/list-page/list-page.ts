@@ -136,6 +136,7 @@ import {
   TOOK_DURATION_MS,
   TripGroup,
 } from '@portfolio/velista/ui';
+import { LineSheetEvents } from '../line-detail-sheet/line-sheet-events';
 import {
   correlationIdOf,
   listErrorEffect,
@@ -146,6 +147,33 @@ import { selectDueLines } from '../select-due-lines';
 import { type ListStateCatalog, selectListState } from '../select-list-state';
 import { selectTripGroups } from '../select-trip-groups';
 import { voiceFailureCopy } from '../voice-error-copy';
+import {
+  focusAfterLeaving,
+  focusDropped,
+  focusDueRow,
+  focusLeavingTarget,
+  type LeavingRowFocus,
+} from './leaving-row-focus';
+
+/**
+ * A flag set as the context it is called in starts going away. Hooks run in the
+ * order they were registered, so a caller registers it before any hook that must
+ * read it.
+ */
+function destroyingFlag(): { readonly destroying: boolean } {
+  const flag = { destroying: false };
+  inject(DestroyRef).onDestroy(() => {
+    flag.destroying = true;
+  });
+  return flag;
+}
+
+/**
+ * How long the polite region stays empty before a sentence it already holds is said
+ * again. Long enough for a screen reader to see the region change, short enough to
+ * read as the answer to the press.
+ */
+const REPEAT_SAY_GAP_MS = 150;
 
 /** What the list page hands the catalog that chooses a product, to know its answer. */
 const LIST_ROW_PICK = 'list-row';
@@ -438,8 +466,12 @@ export class ListPage {
    */
   private readonly _listsChecked = signal(false);
 
-  /** What the live region is currently saying. Cleared after it has been read. */
-  readonly announcement = signal('');
+  /**
+   * What the page's polite region is currently saying. Written only through
+   * `_announce` and the repeat gap of `_say`.
+   */
+  private readonly _announcement = signal('');
+  readonly announcement = this._announcement.asReadonly();
 
   /**
    * Whether a typed add or a recording is out, which holds the composer (velista
@@ -862,6 +894,12 @@ export class ListPage {
       tripsReady:
         this._trips.listId() === this.listId() &&
         this._trips.state() === 'loaded',
+      // Until the first heads read about this list has answered, no line at zero is
+      // drawn in To buy: it would flash there and leave once the trips arrive
+      // (velista `0192`, owner ruling of 2026-11-16). A failed read keeps the fallback.
+      tripsLoading:
+        this._trips.listId() !== this.listId() ||
+        (this._trips.state() !== 'loaded' && this._trips.state() !== 'failed'),
       // Only an answer about this list: the store may still hold the list somebody
       // came from for the frame before it opens this one.
       dueLineIds:
@@ -1604,7 +1642,14 @@ export class ListPage {
       });
     });
 
+    // What the line's sheet over this page did (velista 0192, owner ruling).
+    const stopHearingSheet = inject(LineSheetEvents).listen({
+      lowered: (lineId) => this._sheetLowered(lineId),
+      closed: (lineId) => this._sheetClosed(lineId),
+    });
+
     inject(DestroyRef).onDestroy(() => {
+      stopHearingSheet();
       // What a return to this list comes back to, taken before the stores let go.
       this._returns.keep<ListPageReturn>(listReturnKey(this.listId()), {
         view: this._view.snapshot(),
@@ -1617,7 +1662,8 @@ export class ListPage {
       // given back here, as the basket page gives back `BasketViewStore`.
       this._view.leave();
       this._trips.leave();
-      this.announcement.set('');
+      // Also drops a repeated sentence still waiting for its gap.
+      this._announce('');
       if (this._markTimer !== null) {
         clearTimeout(this._markTimer);
       }
@@ -1654,8 +1700,114 @@ export class ListPage {
     // The line's open run is written first, so the sheet reads the amount the row
     // drew and a Save inside the quiet beat cannot send the old one (velista 0188).
     this.quantityRuns.flush(lineId);
+    // Read while the row is still drawn: a save to 0 from the sheet hides it, and
+    // focus then goes where it goes for any row that left (velista 0192).
+    const column = this._column()?.nativeElement;
+    this._sheetLine = {
+      lineId,
+      inToBuy: this._inToBuy(lineId),
+      focus: column === undefined ? null : focusAfterLeaving(column, lineId),
+      left: false,
+      due: false,
+    };
     void this._openSheet(['lines', lineId, 'detail']);
   }
+
+  /**
+   * The line whose sheet this page opened, until that sheet has closed and focus has
+   * been decided: whether its row was in To buy, where focus goes if the row leaves,
+   * and whether a save from the sheet took the row away (velista `0192`, owner ruling
+   * of 2026-11-16).
+   */
+  private _sheetLine: {
+    readonly lineId: string;
+    readonly inToBuy: boolean;
+    readonly focus: LeavingRowFocus | null;
+    left: boolean;
+    due: boolean;
+  } | null = null;
+
+  /**
+   * A save from the line's sheet was accepted and lowered the line to 0. When that took
+   * its row out of To buy it is said once, as for a row's own stepper; a line now drawn
+   * as a due row is still on screen and says nothing.
+   */
+  private _sheetLowered(lineId: string): void {
+    const opened = this._sheetLine;
+    if (
+      this._teardown.destroying ||
+      opened === null ||
+      opened.lineId !== lineId ||
+      !opened.inToBuy ||
+      opened.left ||
+      this._inToBuy(lineId)
+    ) {
+      return;
+    }
+    const line = this._lineById().get(lineId);
+    if (line === undefined) {
+      return;
+    }
+    opened.left = true;
+    opened.due = this._dueRowDrawn(lineId);
+    const say = this._prepareHidden(line, opened.due);
+    if (say === null) {
+      return;
+    }
+    afterNextRender(
+      () => {
+        if (!this._teardown.destroying) {
+          say();
+        }
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * The line's sheet went away. Focus handed back to a row that is gone falls to the
+   * page, so it is moved as for a row that left. Another sheet still open over the
+   * list (the comments, pushed over this one) keeps the decision for later.
+   */
+  private _sheetClosed(lineId: string): void {
+    const opened = this._sheetLine;
+    if (opened === null || opened.lineId !== lineId) {
+      return;
+    }
+    afterNextRender(
+      () => {
+        if (this._teardown.destroying || this._route.firstChild) {
+          return;
+        }
+        if (this._sheetLine === opened) {
+          this._sheetLine = null;
+        }
+        const column = this._column()?.nativeElement;
+        if (
+          !opened.left ||
+          opened.focus === null ||
+          column === undefined ||
+          !focusDropped(column)
+        ) {
+          return;
+        }
+        if (opened.due && focusDueRow(column, lineId, opened.focus)) {
+          return;
+        }
+        focusLeavingTarget(column, opened.focus);
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * Set as the page starts going away. Registered here, before `quantityRuns`,
+   * because hooks run in the order they were registered and that one writes the open
+   * runs: the write still goes out, and nothing after it may say, focus or schedule
+   * anything on a view Angular has marked destroyed (`NG0911`), which would also
+   * skip the rest of the page's own teardown.
+   */
+  private readonly _teardown = destroyingFlag();
 
   /**
    * The steps of each line, gathered into one run and written after the quiet beat
@@ -1664,9 +1816,158 @@ export class ListPage {
    * the stored amount until the run is written. A page that goes away writes its open
    * runs.
    */
-  readonly quantityRuns = quantityRuns<string>((lineId, run) => {
-    void this.changeQuantity({ lineId, delta: run.to - run.from });
-  });
+  readonly quantityRuns = quantityRuns<string>((lineId, run) =>
+    this._writeRun(lineId, run.to - run.from)
+  );
+
+  /**
+   * One run of a row's stepper, written. A run that takes a line To buy draws to 0
+   * hides its row (velista `0192`): the store patches the amount before the request
+   * goes out, so the row is still drawn when this reads where focus is and is gone
+   * when it reads again. A row the search draws stays at 0 and leaves nothing.
+   */
+  private _writeRun(lineId: string, delta: number): void {
+    if (this._teardown.destroying) {
+      // A number the person watched move is written, and that is all.
+      void this.changeQuantity({ lineId, delta });
+      return;
+    }
+
+    const column = this._column()?.nativeElement;
+    const drawn = this._inToBuy(lineId);
+    const focus =
+      drawn && column !== undefined ? focusAfterLeaving(column, lineId) : null;
+    const line = this._lineById().get(lineId);
+
+    const writing = this.changeQuantity({ lineId, delta });
+
+    if (!drawn || line === undefined) {
+      return;
+    }
+    if (!this._inToBuy(lineId)) {
+      this._afterLeaving(line, focus, column);
+      return;
+    }
+    // A step during the line's unit correction waits for it before the store
+    // patches the amount, so the row is still drawn here. Decided again once the
+    // write has settled.
+    if (line.quantity + delta <= 0) {
+      void writing.then(() => {
+        if (!this._teardown.destroying && !this._inToBuy(lineId)) {
+          this._afterLeaving(line, focus, column);
+        }
+      });
+    }
+  }
+
+  /** Whether the list at rest draws the line in To buy, outside its due rows. */
+  private _inToBuy(lineId: string): boolean {
+    const shown = this.groups();
+    return (
+      shown !== null &&
+      shown.kind === 'groups' &&
+      shown.toBuy.some((row) => row.id === lineId)
+    );
+  }
+
+  /**
+   * The row this reader lowered left To buy. Hidden at 0, it is said in the page's
+   * polite region, and focus that was in it moves to the next row. Drawn now as a due
+   * row, the line is still on screen, so nothing is said and focus moves to the due
+   * row's same control. A due row past the few the section draws is not on screen, so
+   * it is said and focus moves to the next row as for a hidden line. The stepper's own
+   * settled amount is never drawn, because its row is gone in the same render.
+   */
+  private _afterLeaving(
+    line: Line,
+    focus: LeavingRowFocus | null,
+    column: HTMLElement | undefined
+  ): void {
+    const due = this._dueRowDrawn(line.id);
+    const say = this._prepareHidden(line, due);
+    afterNextRender(
+      () => {
+        if (this._teardown.destroying) {
+          return;
+        }
+        say?.();
+        if (focus === null || column === undefined || !focusDropped(column)) {
+          return;
+        }
+        if (due && focusDueRow(column, line.id, focus)) {
+          return;
+        }
+        focusLeavingTarget(column, focus);
+      },
+      { injector: this._injector }
+    );
+  }
+
+  /**
+   * The hidden at zero sentence for a line, readied in the render that takes its row
+   * away, and the call that says it after that render. Null for a line now drawn as a
+   * due row, which says nothing. The same sentence a second time is no change to the
+   * polite region, so it is emptied first and filled again a moment later, in its own
+   * task.
+   */
+  private _prepareHidden(line: Line, due: boolean): (() => void) | null {
+    if (due) {
+      return null;
+    }
+    const sentence = this._translator.t(
+      'list.line.hiddenAtZero',
+      undefined,
+      undefined,
+      { name: this._lineName(line) }
+    );
+    const repeat = this.announcement() === sentence;
+    if (repeat) {
+      this._announce('');
+    }
+    return () => this._say(sentence, repeat);
+  }
+
+  /** A repeated sentence waiting for its gap, which any newer message drops. */
+  private _sayTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The one writer of the page's polite region. A repeated sentence still waiting for
+   * its gap is dropped first, so it can never replace a newer message.
+   */
+  private _announce(text: string): void {
+    this._cancelSay();
+    this._announcement.set(text);
+  }
+
+  private _cancelSay(): void {
+    if (this._sayTimer !== null) {
+      clearTimeout(this._sayTimer);
+      this._sayTimer = null;
+    }
+  }
+
+  /** Say a sentence in the page's polite region, after a gap when it repeats. */
+  private _say(sentence: string, repeat: boolean): void {
+    if (!repeat) {
+      this._announce(sentence);
+      return;
+    }
+    this._cancelSay();
+    this._sayTimer = setTimeout(() => {
+      this._sayTimer = null;
+      this._announcement.set(sentence);
+    }, REPEAT_SAY_GAP_MS);
+  }
+
+  /**
+   * Whether the list at rest draws the line as a due row: one of the few the section
+   * shows, and not one behind "Show more suggestions".
+   */
+  private _dueRowDrawn(lineId: string): boolean {
+    return (
+      this.dueSection()?.rows.some((row) => row.lineId === lineId) ?? false
+    );
+  }
 
   /** Every step of a row's stepper, a press or a repeat of a hold (velista `0188`). */
   stepQuantity(event: { lineId: string; step: QuantityStep }): void {
@@ -1852,7 +2153,7 @@ export class ListPage {
       // The units went to a line already on the list, which stays where it is: the
       // page shows it and marks its quantity (target 4).
       this._markTook(outcome.line.id);
-      this.announcement.set(
+      this._announce(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
           // In the line's unit: "1,25 kg", not "1250" (velista `0182`).
@@ -1871,7 +2172,7 @@ export class ListPage {
     // that moves only the column (velista `0189`, decision H).
     this._addedLine.set(outcome.line.id);
     // The name the new row draws, which for a card is the product's.
-    this.announcement.set(this._lineName(outcome.line));
+    this._announce(this._lineName(outcome.line));
   }
 
   /**
@@ -2353,7 +2654,7 @@ export class ListPage {
       return;
     }
 
-    this.announcement.set(
+    this._announce(
       this._translator.t('list.due.added', undefined, undefined, {
         name: this._lineName(line),
       })
@@ -2383,7 +2684,7 @@ export class ListPage {
    */
   async loadOlderTrips(): Promise<void> {
     const outcome = await this._trips.loadMore();
-    this.announcement.set(
+    this._announce(
       outcome.state === 'failed'
         ? this._translator.t('list.trips.olderFailed')
         : this._translator.t('list.trips.arrived', undefined, undefined, {
@@ -2496,7 +2797,7 @@ export class ListPage {
       return;
     }
 
-    this.announcement.set(this._translator.t(key));
+    this._announce(this._translator.t(key));
   }
 
   /** Applies the structural half of a failure. True when it handled the failure. */
