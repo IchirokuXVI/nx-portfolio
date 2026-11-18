@@ -16,8 +16,8 @@
 > and the section "A release task runs in a window, on data it expects" in `CLAUDE.md`.
 >
 > **Builds on `dev` after PR #1007 is merged**, so the specs of section 7 run against the split
-> that the release carries. **Ships in the first velista release that carries plan `0266`**,
-> which is the next one (section 5.3). Never in a release after the one that carries #1007.
+> that the release carries. **Ships in the next velista release**, which carries plan `0266`
+> and PR #1007 together (decision 52a, section 5.3).
 
 ## Brief for the agent
 
@@ -161,7 +161,7 @@ sizeFormat)` (`isNameKeyed`). A row that fails this is never touched. Its descri
    The row moves when `newKey !== externalId`.
 
 The selection reads the old key from the row and never runs old code. So one command covers
-plan `0266` and plan `0270` alike, and any later change of the split (section 8, decision 53).
+plan `0266` and plan `0270` alike, and any later change of the split (section 8, D6).
 
 ## 2. How the new key is computed
 
@@ -252,12 +252,13 @@ rows that give one new key. Example: a stored `Yogur 2X125 g` with no size, keye
 first one's new key is the second one's key. The unique index `uq_source_catalog_entry` on
 (`supermarketId`, `externalId`) refuses the update.
 
-Production has 0 of either shape. The task must still state what it does: by the
-recommendation of decision 50, it **skips** every row of a collision, writes nothing to it,
-counts it under `collisions`, and lists it in the record of section 4.1. Such a row then
-behaves as decision 28a described: the walk writes its observations on the row that holds the
-key, and the skipped row ages out. The owner links it by hand. `check.sh` and `post.sh` refuse
-when `collisions` is above `MAX_COLLISIONS_<ENVIRONMENT>`.
+Production has 0 of either shape. The task must still state what it does: by decision 50b
+(D3), it **skips** every row of a collision, writes nothing to it, counts it under
+`collisions`, and lists it in the record of section 4.1. Such a row then behaves as decision
+28a described: the walk writes its observations on the row that holds the key, and the skipped
+row ages out. The owner links it by hand. `check.sh` and `post.sh` refuse when `collisions` is
+above `MAX_COLLISIONS_<ENVIRONMENT>`, which is 0. To let a collision through, the owner raises
+that ceiling in a commit.
 
 ### 4.1 The record
 
@@ -267,7 +268,7 @@ The write run writes one line per re-keyed or skipped row, tab separated: `entry
 No name. `post.sh` copies it into the ConfigMap `release-task-<NNNN>-record` of the namespace,
 with `kubectl create configmap ... --from-file=record.tsv --dry-run=client -o yaml | kubectl
 apply -f -`, and prints only its line count. A run that re-keyed nothing leaves an earlier
-record in place. This is decision 54.
+record in place. This is decision 54a (D7): the ConfigMap stays until the owner deletes it.
 
 ## 5. No walk before the task
 
@@ -282,7 +283,7 @@ yet. Three things can start a DEZA walk in that gap:
   (`retryInterrupted`, `harvest-schedule.worker.ts`, near line 298), which fires on the first
   tick of the new pod, within 60 seconds.
 
-The phase order alone does not hold the gap shut. So, by the recommendation of decision 51:
+The phase order alone does not hold the gap shut. So, by decision 51a (D4):
 
 - **The spawn refuses.** `validateRequest` (`harvest-run.service.ts`, near line 865) refuses a
   `CATALOG_DISCOVERY` run of a `deza-web` source while the selection of section 1 finds a move
@@ -316,16 +317,13 @@ neither.
 ### 5.3 Which release
 
 `velista-v0.19.0`, the release in production, and `origin/main`, the code in staging, do not
-hold plan `0266`. The next velista release from `dev` carries it, so **this task ships in that
-release**, whether or not PR #1007 is in it. Decision 52 asks the owner how the two land:
+hold plan `0266`. By decision 52a (D5), the next rollup from `dev` to `main` waits until PR
+#1007 and the build of this plan are both in `dev`. The next velista release then carries plan
+`0266`, PR #1007 and this task together, and **this task ships in that release**: one run per
+cluster re-keys the 137 rows.
 
-- With #1007 in the same release, one run re-keys the 137 rows.
-- With #1007 in a later release, this task re-keys the 66 rows of plan `0266`, and a second task
-  directory with new windows runs the same command in the release of #1007. The guard makes a
-  forgotten second task loud: the first DEZA walk on that release is refused.
-
-Never later than #1007: a release that carries #1007 without this task in it or before it moves
-the keys of 71 rows a person linked.
+If a release ever carried a split change without its task, the guard of section 5.1 would
+refuse the first DEZA walk on it, so no key moves under a row a person linked.
 
 ## 6. The task
 
@@ -350,9 +348,8 @@ MAX_COLLISIONS_PRODUCTION="0"
 The builder writes the windows and `PRODUCTION_RELEASE` in the pull request that ships the
 task. The release is the velista release of section 5.3. `MAX_MOVES` is the count of each
 environment rounded up to the next ten: 140 for production from the count of 2026-11-18 under
-#1007 (70 if #1007 is not in the release), and the staging count read the same way, stated in
-the PR for the owner to confirm. `MAX_UNKEYED` and `MAX_COLLISIONS` are 0, because both were 0
-in production. `DATABASES` is `harvester`, the one database the task writes.
+#1007, and the staging count read the same way, stated in the PR for the owner to confirm.
+`MAX_UNKEYED` and `MAX_COLLISIONS` are 0, because both were 0 in production. `DATABASES` is `harvester`, the one database the task writes.
 
 ### 6.2 The dump
 
@@ -427,7 +424,8 @@ the built `splitSize` and `entryKey`. The PR quotes the counts of section 3. It 
 Under decision 39a, every later change of the split moves keys again. The command and the guard
 are written for any split, not for the words of plan `0270`. A later plan that changes the split
 adds a new task directory that runs the same command in its release. The guard refuses a DEZA
-walk on that release until it has run. Decision 53 asks whether the guard stays.
+walk on that release until it has run. By decision 53a (D6), the guard and the command stay
+after this task.
 
 ## Tests
 
@@ -488,6 +486,39 @@ stays as the record of what moved.
 **D2 (owner, 2026-11-17, decision 39a, plan `0270` D5):** the key stays `entryKey(name,
 sizeFormat)` of the split. This plan does not change the key's shape.
 
+**D3 (owner, answered 2026-11-18, decision 50b, was open question 50):** a collision is
+skipped, counted under `collisions` and listed in the record of section 4.1 (section 4). The
+task refuses only above the ceiling, which is 0. To let one through, the owner raises the
+ceiling in a commit and links that row by hand.
+
+- Not taken, 50a: refuse every collision, until a person resolves the pair by hand.
+- Not taken, 50c: fold the moved row into the holder, a machine link and a deleted row.
+
+**D4 (owner, answered 2026-11-18, decision 51a, was open question 51):** the guard of section
+5.1. The spawn refuses a DEZA catalog walk while a row the task would re-key exists, and the
+runner checks again at its start.
+
+- Not taken, 51b: the owner turns the DEZA row off before each such deploy and on after it.
+- Not taken, 51c: the phase order alone, which loses the race of a retried scheduled run.
+
+**D5 (owner, answered 2026-11-18, decision 52a, was open question 52):** the next rollup from
+`dev` to `main` is held until PR #1007 (plan `0270`) and the build of this plan are both in
+`dev`. One task re-keys all 137 rows (section 5.3).
+
+- Not taken, 52b: ship this task with plan `0266` alone and a second task with PR #1007.
+
+**D6 (owner, answered 2026-11-18, decision 53a, was open question 53):** the guard and the
+command stay after this task. Every later change of the split ships a new task directory that
+runs the same command (section 8).
+
+- Not taken, 53b: remove the guard and the command once the task is `done` in both clusters.
+
+**D7 (owner, answered 2026-11-18, decision 54a, was open question 54):** the task keeps the
+record ConfigMap of section 4.1 (entry id, old key, new key, outcome; no name) until the owner
+deletes it.
+
+- Not taken, 54b: keep nothing beyond the dump and the counts in the deploy log.
+
 **C1 (planner choice, for the owner):** the new key is computed by a command in the harvester
 image (section 2, option A), so the key the task writes is the key the next walk builds.
 
@@ -501,67 +532,4 @@ repeat.
 
 ## Open questions
 
-**50 (owner, open): what the task does with a collision.** Example: a stored `Yogur 2X125 g`
-with no size and a stored `Yogur` with `2x125 g`. Under PR #1007 both build the key
-`yogur|2x125 g`, and the unique index refuses the second. Production has 0 today; a walk or a
-leaflet before the release can make one.
-
-- **50a:** refuse. `post.sh` fails, nothing is re-keyed, and the guard keeps refusing DEZA walks
-  until a person resolves the pair by hand.
-- **50b:** skip the colliding rows, count them, list them in the record, refuse only above the
-  ceiling (0 today). A skipped row behaves as under 28a: the walk lands on the holder, and the
-  owner links by hand.
-- **50c:** fold the moved row into the holder: move its prices, shops and presence rows, keep
-  the decision of whichever row has one, and delete the moved row. This links two rows by
-  machine and deletes a row a harvest wrote.
-
-Recommendation: **50b**, with the ceilings at 0. With 0 the task still refuses a collision it
-was not written for, and the owner raises the ceiling in a commit to let it skip one. 50c is a
-merge rule, and the owner has declined machine links before.
-
-**51 (owner, open): how no DEZA walk runs before the task.** Example: production stops a
-scheduled DEZA walk for the deploy. The new pod's first scheduler tick retries it within 60
-seconds, before `post.sh` has run, and the walk writes 137 new rows.
-
-- **51a:** the guard of section 5: the spawn refuses a DEZA walk while a move exists, and the
-  runner checks again. A refused slot sends the `REFUSED` alert.
-- **51b:** no code guard. Before each deploy that carries the task, the owner turns the DEZA row
-  of `supermarket_sources` off, and turns it on after the task is `done`. Slots in between are
-  `REFUSED` with `SOURCE_DISABLED`.
-- **51c:** rely on the phase order alone.
-
-Recommendation: **51a**. 51b is a manual step on every such deploy in two clusters, and 51c
-loses the race above.
-
-**52 (owner, open): how plan `0266` and PR #1007 reach a release.** Example: dev is rolled into
-main with plan `0266` and without #1007. The task re-keys 66 rows. When #1007 ships later, its
-71 rows need a second task.
-
-- **52a:** hold the next rollup from `dev` to `main` until #1007 and the build of this plan are
-  both in `dev`. One task, one run, 137 rows.
-- **52b:** ship this task with plan `0266` alone, and add a second task directory for the
-  release of #1007.
-
-Recommendation: **52a**. One window per cluster and one record. 52b works too, because the
-guard refuses the first walk of a release that forgot its task.
-
-**53 (owner, open): whether the guard stays after this task.** Example: a later plan adds
-`sobres` to the split. Its DEZA rows move.
-
-- **53a:** the guard and the command stay. Every later change of the split ships a new task
-  directory that runs `deza-keys.js`, and a release that forgets it cannot walk DEZA.
-- **53b:** remove the guard and the command once the task is `done` in both clusters. A later
-  change of the split moves keys as plan `0270` D4 described, unless its plan adds its own task.
-
-Recommendation: **53a**. Under 39a the split will change again, and the guard costs a few tens
-of milliseconds per spawn.
-
-**54 (owner, open): whether the task keeps a record of what it re-keyed.** Example: after three
-weeks a row turns out to have been re-keyed wrongly, and the dump is gone.
-
-- **54a:** keep the record ConfigMap of section 4.1 (entry id, old key, new key, outcome; no
-  name) until the owner deletes it.
-- **54b:** keep nothing beyond the dump and the counts in the deploy log.
-
-Recommendation: **54a**. It is small, it names no product, and it is the only way back for one
-row after 14 days.
+None.
