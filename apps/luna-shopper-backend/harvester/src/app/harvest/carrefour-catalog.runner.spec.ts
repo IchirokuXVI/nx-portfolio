@@ -11,9 +11,11 @@ import {
 import type { HarvestRun, SupermarketSource } from '../entities';
 import { TokenBucket } from '../runner/token-bucket';
 import { CarrefourCatalogRunner } from './carrefour-catalog.runner';
+import { FailingRunReport } from './failing-run-report.fake';
 import type { HarvestRunStore } from './harvest-run.store';
 import { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { ReportWriteFailedError } from './run-report.sink';
 
 /**
  * The crawl, end to end, over a fake page loader and no browser (plan 0090,
@@ -1178,6 +1180,66 @@ describe('CarrefourCatalogRunner', () => {
       ]);
       // p3 came from the end pass, which runs under ENUMERATE too.
       expect(at['p3'].stages).toEqual(['FRONTIER', 'ENUMERATE', 'ENUMERATE']);
+    });
+
+    it('stops before the next page when its first chunk fails to write (plan 0269)', async () => {
+      // Two pages in the first category and one in the second, so a walk that
+      // missed the stop would ask for two more pages.
+      const pages = {
+        ...states(),
+        [one.url]: page({ totalResults: 30 }),
+        '/supermercado/x/cat1/c?offset=0': page({
+          totalResults: 30,
+          cards: [shared, card('p2', 'Cola CARREFOUR 33 cl.', '0,35 €')],
+        }),
+        '/supermercado/x/cat1/c?offset=24': page({
+          totalResults: 30,
+          cards: [card('p4', 'Zumo CARREFOUR 1 l.', '0,99 €')],
+        }),
+      };
+      /** The runtime's wiring: the client reads the run's signal. */
+      class SignalledRunner extends TestRunner {
+        protected override createClient(ctx: RunContext): CarrefourClient {
+          return new CarrefourClient({
+            userAgent: 'LunaShopperBot/1.0',
+            sleepImpl: async () => undefined,
+            signal: ctx.signal,
+            openSession: async () => ({
+              goto: async (url: string) => {
+                const path = url.replace('https://www.carrefour.es', '');
+                this.asked.push(path);
+                const state = this.states[path];
+                return state
+                  ? { status: 200, state }
+                  : { status: 404, state: null };
+              },
+              close: async () => undefined,
+            }),
+          });
+        }
+      }
+      const controller = new AbortController();
+      const failing = new FailingRunReport(controller);
+      const runner = new SignalledRunner(pages);
+      const runContext = context(controller.signal);
+
+      await runner.run(
+        runContext,
+        failing,
+        { supermarketId: CHAIN, priceScopeId: SCOPE },
+        source({ delistCountsCrawl: true })
+      );
+
+      // The executor's abort reached the walk through the signal it reads.
+      expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+      // No page was asked after the one whose product failed to write.
+      expect(runner.asked).toContain('/supermercado/x/cat1/c?offset=0');
+      expect(runner.asked).not.toContain('/supermercado/x/cat1/c?offset=24');
+      expect(runner.asked).not.toContain('/supermercado/x/cat2/c?offset=0');
+      // Nothing that needs the whole walk is stated for a stopped one.
+      expect(failing.wholeListings).toEqual([]);
+      expect(failing.notWhole).toEqual([]);
+      expect(runContext.warn).not.toHaveBeenCalled();
     });
   });
 });

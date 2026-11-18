@@ -20,8 +20,10 @@ import {
   ElJamonCatalogRunner,
   type SilentAttempts,
 } from './eljamon-catalog.runner';
+import { FailingRunReport } from './failing-run-report.fake';
 import type { RunContext } from './run-context';
 import { RecordingRunReport } from './run-report';
+import { ReportWriteFailedError } from './run-report.sink';
 
 /**
  * Catalog discovery against El Jamón's online shop (plan 0169, section 5).
@@ -1344,6 +1346,71 @@ describe('ElJamonCatalogRunner', () => {
       expect(report.products).toHaveLength(21);
       // An aborted walk declares nothing whole.
       expect(report.wholeListings).toEqual([]);
+    });
+
+    describe('a first chunk that fails to write stops the walk (plan 0269)', () => {
+      /** The paths of every request the walk sent, in order. */
+      const paths = (runner: TestRunner): string[] =>
+        runner.sent.map((sent) => new URL(sent.url).pathname);
+
+      it('in the listing: no next category and no product page is asked', async () => {
+        const controller = new AbortController();
+        const ctx = context(controller.signal);
+        const failing = new FailingRunReport(controller);
+        const runner = new TestRunner(site());
+
+        await runner.run(
+          ctx,
+          failing,
+          // 101 is known, so it goes to the sink as FRESCOS is listed.
+          { ...input, externalIdsWithoutEan: new Set(['101']) },
+          { ...source, workers: 1 } as SupermarketSource
+        );
+
+        expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+        expect(failing.partialProducts.map((p) => p.externalId)).toEqual([
+          '101',
+        ]);
+        // FRESCOS was read, and nothing after the failure was asked.
+        expect(paths(runner)).toContain('/categorias/frescos/04');
+        expect(paths(runner)).not.toContain('/categorias/bebidas/06');
+        expect(paths(runner).some((path) => path.includes('/detalle/'))).toBe(
+          false
+        );
+        // What the end still hands over is dropped by the sink, and nothing
+        // that needs the whole walk is stated.
+        expect(failing.products).toEqual([]);
+        expect(failing.wholeListings).toEqual([]);
+        expect(failing.notWhole).toEqual([]);
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
+
+      it('in the detail stage: no product page is asked after the failure', async () => {
+        const controller = new AbortController();
+        const ctx = context(controller.signal);
+        const failing = new FailingRunReport(controller);
+        const runner = new TestRunner(site());
+
+        // Nothing is known, so the first product goes to the sink when its
+        // page answers. One worker asks the pages in the listing's order.
+        await runner.run(ctx, failing, input, {
+          ...source,
+          workers: 1,
+        } as SupermarketSource);
+
+        expect(controller.signal.reason).toBeInstanceOf(ReportWriteFailedError);
+        const pages = paths(runner).filter((path) =>
+          path.includes('/detalle/')
+        );
+        expect(pages).toEqual(['/detalle/-/Producto/p/101']);
+        expect(failing.products.map((p) => p.externalId)).toEqual(['101']);
+        // The 21 rows whose pages were never read are still handed over at
+        // the end, and the sink writes none of them.
+        expect(failing.dropped).toBe(21);
+        expect(failing.wholeListings).toEqual([]);
+        expect(failing.notWhole).toEqual([]);
+        expect(ctx.warn).not.toHaveBeenCalled();
+      });
     });
   });
 });
