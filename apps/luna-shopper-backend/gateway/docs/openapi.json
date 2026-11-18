@@ -31217,7 +31217,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000
+            "maximum": 999999
           },
           "unit": {
             "type": "string",
@@ -31421,7 +31421,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000
+            "maximum": 999999
           },
           "unit": {
             "type": "string",
@@ -31479,7 +31479,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000
+            "maximum": 999999
           },
           "unit": {
             "type": "string",
@@ -31550,7 +31550,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000
+            "maximum": 999999
           },
           "unit": {
             "type": "string",
@@ -31564,7 +31564,7 @@
           "from": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000,
+            "maximum": 999999,
             "description": "The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given."
           },
           "itemIds": {
@@ -31612,8 +31612,8 @@
         "properties": {
           "delta": {
             "type": "number",
-            "minimum": -100000,
-            "maximum": 100000,
+            "minimum": -999999,
+            "maximum": 999999,
             "description": "How many to add, or a negative number to take off. Never zero. The resulting quantity has to stay within the line quantity bounds."
           },
           "unit": {
@@ -31660,7 +31660,7 @@
           "quantity": {
             "type": "number",
             "minimum": 1,
-            "maximum": 100000,
+            "maximum": 999999,
             "description": "How many were bought. Defaults to one, and may exceed what the line asks for: the extra unit is real and belongs in the consumption history. Not allowed when the shop did not have it."
           },
           "unit": {
@@ -31804,7 +31804,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000
+            "maximum": 999999
           }
         },
         "required": [
@@ -31836,7 +31836,7 @@
           "quantity": {
             "type": "number",
             "minimum": 1,
-            "maximum": 100000,
+            "maximum": 999999,
             "description": "Units bought. Absent means everything the row still asks for. Ignored for NOT_AVAILABLE, which is an outcome rather than a quantity. It is not capped at what the row asks for: buying three of a row that says two records three."
           },
           "unit": {
@@ -31851,7 +31851,7 @@
           "from": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000,
+            "maximum": 999999,
             "description": "The sum of `left` over the lines in `lineIds`, as you drew them. Refused with `stale_quantity` when somebody else moved it first, which is also what catches a double tap."
           },
           "itemId": {
@@ -31940,12 +31940,12 @@
           "units": {
             "type": "number",
             "minimum": 1,
-            "maximum": 100000
+            "maximum": 999999
           },
           "from": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000,
+            "maximum": 999999,
             "description": "The sum of `bought` over the lines in `lineIds`, as you drew them. Required for UNITS."
           }
         },
@@ -31965,7 +31965,7 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000,
+            "maximum": 999999,
             "description": "What that list asks for from now on. Zero is allowed."
           },
           "unit": {
@@ -31980,7 +31980,7 @@
           "from": {
             "type": "number",
             "minimum": 0,
-            "maximum": 100000
+            "maximum": 999999
           }
         },
         "required": [
@@ -32054,7 +32054,7 @@
           "quantity": {
             "type": "number",
             "minimum": 1,
-            "maximum": 100000
+            "maximum": 999999
           },
           "unit": {
             "type": "string",

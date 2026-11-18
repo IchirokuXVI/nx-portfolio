@@ -1,8 +1,9 @@
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
-import type {
-  CatalogSuggestion,
-  RecordedAudio,
+import {
+  LINE_QUANTITY_MAX,
+  type CatalogSuggestion,
+  type RecordedAudio,
 } from '@portfolio/velista/models';
 import {
   AUDIO_CAPTURE,
@@ -274,7 +275,7 @@ describe('LineComposer, one slot and the empty field decides', () => {
       ]);
     });
 
-    it('caps a loose product at the 100 kilos the server takes', async () => {
+    it('caps a loose product at the ceiling the server takes', async () => {
       const { fixture } = await render();
       const added: { quantity: number }[] = [];
       fixture.componentInstance.submitted.subscribe((one) => added.push(one));
@@ -287,14 +288,15 @@ describe('LineComposer, one slot and the empty field decides', () => {
         },
       };
 
-      fixture.componentInstance.quantity.set(150);
+      fixture.componentInstance.quantity.set(1500);
       fixture.componentInstance.choose(
         bananas,
         document.createElement('button')
       );
       fixture.detectChanges();
 
-      expect(added[0]?.quantity).toBe(100000);
+      // 1500 kg is past 999,999 kg (backend plan 0262).
+      expect(added[0]?.quantity).toBe(LINE_QUANTITY_MAX);
     });
 
     it('sends again once the submit is over', async () => {

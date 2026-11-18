@@ -389,6 +389,67 @@ describe('the unit of a line over HTTP (plan 0246)', () => {
       ]);
     });
   });
+
+  describe('a line holds up to 999 999 of its unit (plan 0262)', () => {
+    it('passes a delta of 999 000 g to core', async () => {
+      const response = await send('POST', `lines/${LINE}/quantity`, {
+        delta: 999000,
+        unit: 'GRAM',
+      });
+
+      expect(response.status).toBe(201);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.addQuantity,
+          payload: {
+            userId: 'user-1',
+            lineId: LINE,
+            delta: 999000,
+            unit: 'GRAM',
+          },
+        },
+      ]);
+    });
+
+    it('answers 400 validation_failed on delta for a delta of 1 000 000', async () => {
+      const response = await send('POST', `lines/${LINE}/quantity`, {
+        delta: 1000000,
+        unit: 'GRAM',
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: ERROR_CODES.VALIDATION_FAILED });
+      expect(JSON.stringify(body)).toContain('delta');
+      expect(app.sent).toEqual([]);
+    });
+
+    it('passes an edit to 999 999 to core', async () => {
+      const response = await send('PATCH', `lines/${LINE}`, {
+        quantity: 999999,
+      });
+
+      expect(response.status).toBe(200);
+      expect(coreWrites()).toEqual([
+        {
+          subject: LINE_PATTERNS.update,
+          payload: { userId: 'user-1', lineId: LINE, quantity: 999999 },
+        },
+      ]);
+    });
+
+    it('answers 400 validation_failed on quantity for an edit to 1 000 000', async () => {
+      const response = await send('PATCH', `lines/${LINE}`, {
+        quantity: 1000000,
+      });
+
+      expect(response.status).toBe(400);
+      const body = await response.json();
+      expect(body).toMatchObject({ code: ERROR_CODES.VALIDATION_FAILED });
+      expect(JSON.stringify(body)).toContain('quantity');
+      expect(app.sent).toEqual([]);
+    });
+  });
 });
 
 describe('the basket add checks the unit too (plan 0246, sections 3.2 and 4.2)', () => {

@@ -57,7 +57,7 @@ describe('list contracts', () => {
     // Zero since plan 0047: a line at zero is stocked rather than deleted, and
     // it is where the reel on the list page puts one.
     expect(LINE_QUANTITY_MIN).toBe(0);
-    expect(LINE_QUANTITY_MAX).toBe(100000);
+    expect(LINE_QUANTITY_MAX).toBe(999999);
     expect(LINE_BATCH_MAX_ITEMS).toBe(50);
   });
 

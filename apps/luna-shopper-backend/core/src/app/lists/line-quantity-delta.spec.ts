@@ -1,4 +1,5 @@
 import {
+  LINE_QUANTITY_MAX,
   LineApprovalStatus,
   ListPermission,
   MembershipStatus,
@@ -411,7 +412,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
     // already checked. The delta is computed here, so here is the only place that
     // can check the result, and core's callers are NATS messages rather than one
     // gateway acting as a wall.
-    const w = build({ permissions: DECIDER, quantity: 99999 });
+    const w = build({ permissions: DECIDER, quantity: 999999 });
 
     await expect(
       w.service.addQuantity({
@@ -420,7 +421,35 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
         delta: 100,
         unit: 'UNIT',
       })
-    ).rejects.toThrow(/at most 100000/);
+    ).rejects.toThrow(/at most 999999/);
+    expect(w.saved).toHaveLength(0);
+  });
+
+  it('takes a line to exactly the ceiling of 999 999 (plan 0262)', async () => {
+    const w = build({ permissions: DECIDER, quantity: 999 });
+
+    const view = await w.service.addQuantity({
+      userId: SHOPPER,
+      lineId: 'li1',
+      delta: 999000,
+      unit: 'UNIT',
+    });
+
+    expect(view.quantity).toBe(999999);
+    expect(w.saved[0].quantity).toBe(999999);
+  });
+
+  it('refuses a delta that would pass the ceiling by one (plan 0262)', async () => {
+    const w = build({ permissions: DECIDER, quantity: 1000 });
+
+    await expect(
+      w.service.addQuantity({
+        userId: SHOPPER,
+        lineId: 'li1',
+        delta: 999000,
+        unit: 'UNIT',
+      })
+    ).rejects.toThrow(/at most 999999/);
     expect(w.saved).toHaveLength(0);
   });
 
@@ -445,7 +474,7 @@ describe('line.addQuantity (plan 0040, section 3)', () => {
       w.service.addQuantity({
         userId: SHOPPER,
         lineId: 'li1',
-        delta: 100001,
+        delta: LINE_QUANTITY_MAX + 1,
         unit: 'UNIT',
       })
     ).rejects.toThrow(/delta must be between/);
