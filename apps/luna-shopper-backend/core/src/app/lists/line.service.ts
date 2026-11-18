@@ -30,6 +30,7 @@ import {
   type LineUnit,
   type LineUnitBasis,
   type LineUnitBasisRequest,
+  type LineUnitDiffersDetails,
   type LineView,
   type ListLinesRequest,
   type ReorderLinesRequest,
@@ -43,6 +44,7 @@ import {
   encodeCursor,
   ForbiddenException,
   isUuid,
+  LINE_UNIT_DIFFERS_ADD_VARIANT,
   LineAddNeedsChoiceException,
   LineMergeNeedsApprovalException,
   LineMergeRequiredException,
@@ -282,6 +284,141 @@ interface LineWriter {
  */
 function inUnit(identity: string, unit: LineUnit): string {
   return `${identity}\0${unit}`;
+}
+
+/**
+ * What the transaction of {@link LineService.add} did (plan 0260, section 2),
+ * before anything is announced.
+ */
+type AddOutcome =
+  | { kind: 'CREATED'; line: ListLine }
+  | { kind: 'RAISED'; written: WrittenLine }
+  | { kind: 'ALREADY_ON_LIST'; views: LineView[] };
+
+/**
+ * A line one item of {@link LineService.addMany} met and left as it was: the
+ * view of a line that was already wanted, or a line this batch raises or
+ * creates, whose view exists only once it is written (R6).
+ */
+type BatchMet = { view: LineView } | { raised: string } | { created: number };
+
+/**
+ * What one item of {@link LineService.addMany} did: met lines and added
+ * nothing (`ALREADY_ON_LIST`), or created or raised the line it names.
+ */
+type BatchSlot = { met: BatchMet[] } | { created: number } | { raised: string };
+
+/** The lines of a list that hold a product or a group, with their products. */
+interface ProductLines {
+  rows: ListLine[];
+  sets: Map<string, Set<string>>;
+}
+
+/**
+ * Whether a line asks for something (plan 0260, section 1). A line at zero is
+ * kept: on the list only as a line somebody bought or chose, so an add raises
+ * it rather than leaving it at zero (R2).
+ */
+function isWanted(line: Pick<ListLine, 'quantity'>): boolean {
+  return line.quantity > 0;
+}
+
+/** What a line counts, `UNIT` for a row of before plan 0246. */
+function unitOf(line: Pick<ListLine, 'unit'>): LineUnit {
+  return line.unit ?? 'UNIT';
+}
+
+/**
+ * What an add raises a kept line by (plan 0260, section 1): its own amount on
+ * a line of its unit, and one step of the line's unit on a line of another,
+ * which only a free text add reaches (R4).
+ */
+function amountOnto(
+  line: Pick<ListLine, 'unit'>,
+  unit: LineUnit,
+  quantity: number
+): number {
+  return unitOf(line) === unit ? quantity : defaultQuantityOf(unitOf(line));
+}
+
+/**
+ * The refusal of a product add that met only lines of another unit (plan
+ * 0260, section 3), naming the line it met, what the add counted in and the
+ * batch item, or null on a single add.
+ */
+function lineUnitDiffers(
+  line: Pick<ListLine, 'id' | 'content' | 'unit' | 'quantity'>,
+  unit: LineUnit,
+  index: number | null
+): LineUnitDiffersException {
+  const details: LineUnitDiffersDetails = {
+    line: {
+      lineId: line.id,
+      content: line.content,
+      unit: unitOf(line),
+      quantity: line.quantity,
+    },
+    unit,
+    index,
+  };
+  // `variant: 'add'` picks the add's own sentence (the owner, 2026-11-12):
+  // the code's sentence is the merge's.
+  return new LineUnitDiffersException(
+    `"${line.content}" counts in another unit`,
+    {
+      details: { ...details },
+      messageArgs: {
+        content: line.content,
+        variant: LINE_UNIT_DIFFERS_ADD_VARIANT,
+      },
+    }
+  );
+}
+
+/** The earliest of these lines by list position, or none. */
+function earliestLine(
+  lines: readonly (ListLine | undefined)[]
+): ListLine | undefined {
+  return lines
+    .filter((line): line is ListLine => line !== undefined)
+    .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
+}
+
+/**
+ * These lines once each by id, in list position order (plan 0260, section 1
+ * step 3): the order an answer of `ALREADY_ON_LIST` names them in.
+ */
+function inPositionOrder(lines: readonly ListLine[]): ListLine[] {
+  const byId = new Map<string, ListLine>();
+  for (const line of lines) {
+    if (!byId.has(line.id)) {
+      byId.set(line.id, line);
+    }
+  }
+  return [...byId.values()].sort((a, b) => (isEarlierLine(a, b) ? -1 : 1));
+}
+
+/**
+ * The product lines whose name {@link normalizeContent} folds to the typed
+ * name's (plan 0228, target 1.4), in the order they were read.
+ */
+function namedIn(rows: readonly ListLine[], content: string): ListLine[] {
+  const folded = normalizeContent(content);
+  return rows.filter((row) => normalizeContent(row.content) === folded);
+}
+
+/**
+ * The product lines whose set holds every one of these products (plan 0260
+ * R5), a line of several products included, in the order they were read.
+ */
+function holdingIn(
+  lines: ProductLines,
+  itemIds: readonly string[]
+): ListLine[] {
+  return lines.rows.filter((row) => {
+    const set = lines.sets.get(row.id);
+    return set !== undefined && itemIds.every((id) => set.has(id));
+  });
 }
 
 /**
@@ -909,53 +1046,62 @@ export class LineService {
    * somebody has been to the shop are different questions, and auto approving the
    * first answers nothing about the second.
    *
-   * ## It may raise a line instead of creating one (plan 0091)
+   * ## An add that meets a line already on the list adds nothing (plan 0260)
    *
-   * **A zone list holds one line per name and product combination.** Adding a
-   * thing the list already carries raises that line's quantity by the amount
-   * added and creates nothing, so a household never ends up with two Milks, two
-   * quantities and two things to delete for one thing they buy. The name is
-   * folded by {@link normalizeContent}, shared with the generation run so the
-   * two agree, and it is conservative: "milk" and "whole milk" stay two lines.
+   * **A zone list holds one line per name and product combination** (plan
+   * 0091). An add of a thing the list already asks for writes nothing: no row,
+   * no change record, no version and no event. It answers `ALREADY_ON_LIST`
+   * with the lines it met, so the client can show them and the person changes
+   * the amount there (A1). A line kept at zero asks for nothing, so an add
+   * that meets only kept lines raises one of them by the add's amount and
+   * answers `RAISED` (R2). An add that meets nothing creates a line at its
+   * amount, one step of its unit when it states none (A2), and answers
+   * `CREATED`. The name is folded by {@link normalizeContent}, shared with the
+   * generation run so the two agree, and it is conservative: "milk" and
+   * "whole milk" stay two lines.
    *
    * **The name alone is not the thing.** Two products can carry one name and
-   * differ in brand or in format, and those are two purchases. So an add lands
-   * on a line only when {@link lineIdentities} agrees: the same name and the same
-   * product group, or the same product set, or free text on both sides.
-   * Otherwise it creates a line beside the one that shares its name.
+   * differ in brand or in format, and those are two purchases. So a product add
+   * meets a line when {@link lineIdentities} agrees: the same name and the same
+   * product group, or the same product set. Failing that, it meets a line whose
+   * product set holds every product of the add, a line of several products
+   * included (R5, {@link findLinesHolding}).
    *
    * **A line that is not named is met by its products alone** (plan 0214). Its
    * name is a product's name in the adder's locale, so an add of the same set
-   * with `named: false` lands on it in any language. It never lands on a line
-   * somebody named, even one that holds the same set.
+   * with `named: false` lands on it in any language.
    *
-   * What a merge does and refuses to do is {@link raiseForAdd}, and which line it
-   * lands on is {@link findAddTarget}. The answer says which of the two
-   * happened, because a caller reading it back to a person cannot tell from the
-   * line alone.
+   * Which line an add lands on is {@link findAddTarget}, and a raise is
+   * {@link raiseForAdd}. The answer says which of the three happened, because
+   * a caller reading it back to a person cannot tell from the line alone.
    *
    * ## A typed name meets the line that holds that product (plan 0228)
    *
-   * A free text add, with no product and no group, is resolved in this order:
-   * the line the person chose in `intoLineId`; the free text line of the name,
-   * even beside `newLine`; a new line when `newLine` is true; and then the lines
-   * that hold a product or a group under the typed name
-   * ({@link findNamedProductLines}). One such line is raised, with no question
-   * and whatever the caller can ask, so an old client gets the merge too. Two or
-   * more refuse the add with `line_add_needs_choice` when the caller set
-   * `askIfAmbiguous`, and otherwise the add creates a line, as before. The
-   * three fields are ignored on an add that carries a product or a group.
+   * A free text add, with no product and no group, meets the free text line of
+   * the name and the lines that hold a product or a group under the typed name
+   * ({@link findNamedProductLines}). A `newLine` answer leaves out the second
+   * kind, and never the first, because a list holds one free text line per
+   * name.
    *
-   * ## A line of another unit is a question, never a sum (plan 0246 M5)
+   * ## Two or more matches are never guessed between (the owner, 2026-11-16)
    *
-   * The add lands on a line of its own unit first, whichever line of the
-   * thing sits earlier. Only when its unit holds none is a line that counts in
-   * another unit met, and it is not raised: the add refuses with
-   * `line_add_needs_choice` naming that one line, and writes nothing.
-   * `newLine: true` then creates a line in the add's unit, a product add
-   * included, which every later add of that unit raises. An `intoLineId` of
-   * another unit is `line_unit_differs`. {@link addMany} has no place for the
-   * question, so its item creates a line in its own unit instead.
+   * The matches of an add are every line it could land on, wanted and kept
+   * alike. None creates. One is met when wanted and raised when kept. Two or
+   * more refuse the add with `line_add_needs_choice` naming all of them when
+   * the caller set `askIfAmbiguous`, and otherwise answer `ALREADY_ON_LIST`
+   * with all of them and write nothing. `intoLineId` names one of the
+   * matches, on any add. `newLine` is refused on an add of a product or a
+   * group.
+   *
+   * ## A unit is never summed, and never a question (plan 0260 U2, R4)
+   *
+   * A product add meets a line of its own unit first: its identity line, or a
+   * line that holds the product. When no line of its unit holds the product
+   * and a line of another unit does, the add is refused with
+   * `line_unit_differs` before any write, whatever `newLine` says. A free text
+   * add counts pieces (U1) and is never refused for a unit: it meets a line of
+   * any unit by name, and a raise of a kept line of another unit is one step
+   * of that line's own unit.
    */
   async add(req: AddLineRequest): Promise<AddLineResult> {
     const { list, permissions } = await this.listAccess.requireAccess(
@@ -964,15 +1110,14 @@ export class LineService {
       ListPermission.WRITE
     );
     const itemIds = this.validateItemIds(req.itemIds ?? []);
-    // Validated out here rather than inside {@link newLine}, because the merge
+    // Validated out here rather than inside {@link newLine}, because the raise
     // path needs the same number and never builds a row to put it on. The bound
-    // is on what the request asked for; what a merge does to a line already near
+    // is on what the request asked for; what a raise does to a line already near
     // the ceiling is {@link raiseForAdd}'s cap.
     //
     // What the quantity counts comes first (plan 0246, section 3.2), because
-    // an add with no quantity starts at the amount of its unit (M4): one
-    // piece, or 1000 g or 1000 ml. Absent is `UNIT`, so a free text add counts
-    // pieces and never lands on a weight line by name.
+    // an add with no quantity starts at one step of its unit (plan 0260 A2).
+    // Absent is `UNIT`.
     const unit = this.validateUnit(req.unit) ?? 'UNIT';
     const quantity = this.validateQuantity(
       req.quantity ?? defaultQuantityOf(unit)
@@ -999,138 +1144,190 @@ export class LineService {
     // A basket's add sets `via`, and then the actor is the participant who typed
     // it rather than the account the write was checked against.
     const actor = actorOf(req);
-    // The three fields of plan 0228 are read on a free text add alone. An add
-    // of a product or a group lands where plans 0091 and 0214 put it.
+    // The question of plan 0228 is asked of every add that meets two or more
+    // lines, and `intoLineId` answers it on every add (the owner,
+    // 2026-11-16). `newLine` is an answer for a typed name alone: a second
+    // line of one product in one unit is what plan 0260 prevents.
     const freeText = itemIds.length === 0 && productGroupId === null;
-    const choice = this.validateAddChoice(req);
-    const outcome = await this.dataSource.transaction(async (manager) => {
-      await this.lockList(manager, req.listId);
-      const raise = async (line: ListLine) => ({
-        merged: true as const,
-        written: await this.raiseForAdd(manager, line, quantity, {
-          list: this.listRef(list),
-          actor,
-        }),
-      });
-      // A line of another unit is not raised (plan 0246 M5): the two amounts
-      // cannot be summed. The add is answered as the duplicate decision of
-      // plan 0228, `line_add_needs_choice` naming that one line, and nothing
-      // is written. The client opens the line or answers `newLine: true`,
-      // which then creates a line in the add's unit, a product add included:
-      // otherwise a product add would meet the same line on every try.
-      const differs = (line: ListLine) => (line.unit ?? 'UNIT') !== unit;
-      const unitChoice = (line: ListLine) =>
-        this.needsChoice(manager, req.content.trim(), [line], 'unit');
+    const choice = this.validateAddChoice(req, freeText);
+    const outcome = await this.dataSource.transaction(
+      async (manager): Promise<AddOutcome> => {
+        await this.lockList(manager, req.listId);
+        // A kept line is raised by the add's amount, or by one step of its own
+        // unit when that is not the add's (plan 0260 R4): only a free text add
+        // reaches a line of another unit, and its amount was said in pieces.
+        const raise = async (line: ListLine): Promise<AddOutcome> => ({
+          kind: 'RAISED',
+          written: await this.raiseForAdd(
+            manager,
+            line,
+            amountOnto(line, unit, quantity),
+            { list: this.listRef(list), actor }
+          ),
+        });
+        // Met lines are left as they were (A1): read for the answer, with no
+        // save, no change record and no event. A line deleted since the read
+        // that found it is no line, and with none left the add goes on.
+        const met = async (
+          lines: readonly ListLine[]
+        ): Promise<AddOutcome | null> => {
+          const views = await this.viewsOfMet(manager, lines);
+          return views.length > 0 ? { kind: 'ALREADY_ON_LIST', views } : null;
+        };
+        // A whole, locked line: wanted is met, kept is raised (R2).
+        const meet = async (line: ListLine): Promise<AddOutcome> =>
+          isWanted(line) ? ((await met([line])) as AddOutcome) : raise(line);
 
-      // The person chose a line (plan 0228, target 1.1). It is raised or the
-      // add is refused, and the add never falls back to a new line. A chosen
-      // line of another unit is `line_unit_differs`: the person already
-      // answered, so no question is left, and nothing can be summed.
-      if (freeText && choice.intoLineId !== undefined) {
-        const chosen = await this.lockChosenLine(
+        // The flag the new line would carry, so an add that is not named meets
+        // a line that is not named by its products alone (plan 0214, section 1).
+        const identities = lineIdentities({
+          content: req.content,
+          named: namedOnAdd(req.named, itemIds.length > 0),
+          itemSetHash: itemSetHash(itemIds),
+          productGroupId,
+        });
+        const targets = await this.findAddTarget(
           manager,
           req.listId,
-          choice.intoLineId
+          identities
         );
-        if (differs(chosen)) {
-          throw new LineUnitDiffersException(
-            `"${chosen.content}" counts in another unit`,
-            { messageArgs: { content: chosen.content } }
+        const linesUnder = (keys: readonly string[]): ListLine[] =>
+          keys
+            .map((key) => targets.get(key))
+            .filter((line): line is ListLine => line !== undefined);
+
+        // The matches of the add (the owner, 2026-11-16): every line it could
+        // land on, wanted and kept alike, once each and in position order.
+        let matches: ListLine[];
+        if (freeText) {
+          // The free text line of the name, of any unit (R4), and the lines
+          // that hold a product under the name (plan 0228, target 1.4), unless
+          // the person already chose a new line. The free text line of the
+          // name meets even a `newLine` answer (plan 0228, target 1.2).
+          const own = linesUnder(identities);
+          matches = choice.newLine
+            ? inPositionOrder(own)
+            : inPositionOrder([
+                ...own,
+                ...(await this.findNamedProductLines(
+                  manager,
+                  req.listId,
+                  req.content
+                )),
+              ]);
+        } else {
+          // The identity line of the add's unit (plan 0246 M5) and every line
+          // of its unit that holds every product of the add (R5). Only when
+          // no line of its unit holds the product does a line of another unit
+          // answer, and then as the refusal (plan 0260 U2; the owner,
+          // 2026-11-12: "only").
+          const held = await this.findLinesHolding(
+            manager,
+            req.listId,
+            itemIds
           );
+          matches = inPositionOrder([
+            ...linesUnder(identities.map((identity) => inUnit(identity, unit))),
+            ...held.filter((line) => unitOf(line) === unit),
+          ]);
+          if (matches.length === 0) {
+            const refused = earliestLine([...linesUnder(identities), ...held]);
+            if (refused !== undefined) {
+              throw lineUnitDiffers(refused, unit, null);
+            }
+          }
         }
-        return raise(chosen);
-      }
 
-      // The flag the new line would carry, so an add that is not named meets
-      // a line that is not named by its products alone (plan 0214, section 1).
-      const identities = lineIdentities({
-        content: req.content,
-        named: namedOnAdd(req.named, itemIds.length > 0),
-        itemSetHash: itemSetHash(itemIds),
-        productGroupId,
-      });
-      const targets = await this.findAddTarget(manager, req.listId, identities);
-      // The earliest line met in either way, which is the rule for two lines of
-      // one name (plan 0091, section 3.1) asked of two ways to be the same thing.
-      // For a free text add this is the free text line of the name, which takes
-      // the add even beside `newLine` (plan 0228, target 1.2).
-      //
-      // Asked first of the lines in the add's unit (plan 0246 M5), so the line
-      // a `newLine` answer created is the one the next add of that unit raises.
-      // Only when the unit holds none does a line of another unit answer, and
-      // then as a question.
-      const earliest = (keys: readonly string[]) =>
-        keys
-          .map((key) => targets.get(key))
-          .filter((line): line is ListLine => line !== undefined)
-          .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1))[0];
-      const sameUnit = earliest(
-        identities.map((identity) => inUnit(identity, unit))
-      );
-      if (sameUnit !== undefined) {
-        return raise(sameUnit);
-      }
-      const otherUnit = earliest(identities);
-      if (otherUnit !== undefined && !choice.newLine) {
-        throw await unitChoice(otherUnit);
-      }
+        // The person chose a line (plan 0228, target 1.1): one of the add's
+        // matches, a product add's included (the owner, 2026-11-16). It is
+        // met or raised, and the add never falls back to a new line.
+        if (choice.intoLineId !== undefined) {
+          const chosen = await this.lockChosenLine(
+            manager,
+            req.listId,
+            choice.intoLineId
+          );
+          if (!matches.some((line) => line.id === chosen.id)) {
+            throw new NotFoundException('Line not found');
+          }
+          return meet(chosen);
+        }
 
-      // A typed name meets the lines that hold a product under it (plan 0228,
-      // target 1.4), unless the person already chose a new line.
-      if (freeText && !choice.newLine) {
-        const candidates = await this.findNamedProductLines(
-          manager,
-          req.listId,
-          req.content
-        );
-        if (candidates.length === 1) {
-          // A candidate deleted since the read is no candidate, and the add
-          // creates, as {@link findEarliestLines} does on the same miss.
+        // Two or more are never guessed between (the owner, 2026-11-16): the
+        // caller that can ask is asked about all of them, and any other is
+        // answered with all of them, and nothing is written. Lines deleted
+        // since the read are no matches, so one left over is one match.
+        let single = matches.length === 1 ? matches[0] : undefined;
+        if (matches.length > 1) {
+          if (choice.askIfAmbiguous) {
+            throw await this.needsChoice(manager, req.content.trim(), matches, {
+              unit,
+              quantity,
+            });
+          }
+          const views = await this.viewsOfMet(manager, matches);
+          if (views.length > 1) {
+            return { kind: 'ALREADY_ON_LIST', views };
+          }
+          single = matches.find((line) => line.id === views[0]?.id);
+        }
+        // One match is met when it is wanted and raised when it is kept. It
+        // is read again whole and locked, and one deleted since is no match.
+        if (single !== undefined) {
           const line = await this.lockCandidateLine(
             manager,
             req.listId,
-            candidates[0].id
+            single.id
           );
-          if (line !== null && !differs(line)) {
-            return raise(line);
-          }
           if (line !== null) {
-            throw await unitChoice(line);
+            return meet(line);
           }
         }
-        if (candidates.length > 1 && choice.askIfAmbiguous) {
-          throw await this.needsChoice(manager, req.content.trim(), candidates);
-        }
-      }
 
-      const repo = manager.getRepository(ListLine);
-      const position = (await this.maxPosition(repo, req.listId)) + 1;
-      const line = await repo.save(
-        repo.create(
-          this.newLine(
-            { ...req, quantity, unit },
-            req.listId,
-            req.userId,
-            position,
-            approval,
-            productGroupId
+        const repo = manager.getRepository(ListLine);
+        const position = (await this.maxPosition(repo, req.listId)) + 1;
+        const line = await repo.save(
+          repo.create(
+            this.newLine(
+              { ...req, quantity, unit },
+              req.listId,
+              req.userId,
+              position,
+              approval,
+              productGroupId
+            )
           )
-        )
-      );
-      if (itemIds.length > 0) {
-        await this.writeItemSet(manager, line.id, itemIds, source);
+        );
+        if (itemIds.length > 0) {
+          await this.writeItemSet(manager, line.id, itemIds, source);
+        }
+        // Inside the add's own transaction, so a line and the record of it
+        // arriving cannot exist apart.
+        await this.changes.added(manager, this.listRef(list), line, actor);
+        return { kind: 'CREATED', line };
       }
-      // Inside the add's own transaction, so a line and the record of it
-      // arriving cannot exist apart.
-      await this.changes.added(manager, this.listRef(list), line, actor);
-      return { merged: false as const, line };
-    });
+    );
 
-    if (outcome.merged) {
-      // A merge is an update of a line that was already on the screen, so it
+    if (outcome.kind === 'ALREADY_ON_LIST') {
+      // Nothing was written, so nothing is announced: no list event and no
+      // basket nudge.
+      return {
+        line: outcome.views[0],
+        merged: true,
+        outcome: 'ALREADY_ON_LIST',
+        alreadyOnList: outcome.views,
+      };
+    }
+    if (outcome.kind === 'RAISED') {
+      // A raise is an update of a line that was already on the screen, so it
       // announces itself as one. `line.added` would put a second row in front of
       // every client that is drawing the first.
-      return { line: this.announce(list, outcome.written), merged: true };
+      return {
+        line: this.announce(list, outcome.written),
+        merged: true,
+        outcome: 'RAISED',
+        alreadyOnList: [],
+      };
     }
 
     // Everything on a subscribed line came from the group at this moment, and
@@ -1157,6 +1354,8 @@ export class LineService {
     return {
       line: toLineView(outcome.line, items, NO_LINE_SETTLEMENTS, claim),
       merged: false,
+      outcome: 'CREATED',
+      alreadyOnList: [],
     };
   }
 
@@ -1172,17 +1371,22 @@ export class LineService {
    * rules are a property of their permissions and the list's `autoApproveLines`,
    * and the per item bounds have already produced a 400 for the whole request at
    * the gateway. What is left is a database failure, which is not per item
-   * either. So one transaction, and `LineView[]` in request order, which is the
-   * shape `reorder` already established for a batch write on this resource.
+   * either, and a product item that meets only a line of another unit, which
+   * refuses the whole batch with `details.index` naming it (plan 0260 R7). So
+   * one transaction, and one result per item in request order.
    *
-   * **It merges, per item, and it folds duplicates inside the batch** (plan 0091,
-   * section 2). Section 6.3 decided the other way, on the argument that somebody
-   * pasting a list may have meant two entries; the list rule now says a list
-   * holds one line per name and product combination, and a rule the batch could
-   * walk through would not be one. Two items naming one thing therefore produce
-   * one line at the summed quantity, and both slots of the answer name it. Two
-   * items of one name and different products are two things, as they are for a
-   * single add ({@link lineIdentities}).
+   * **It follows the single add per item, and never sums** (plan 0260 R6). An
+   * item that meets one wanted line adds nothing and answers `ALREADY_ON_LIST`.
+   * One that meets one kept line raises it. One that meets two or more lines,
+   * kept ones included, writes nothing and answers `ALREADY_ON_LIST` with all
+   * of them, because a batch cannot ask which (the owner, 2026-11-16). A line
+   * an earlier item of this batch created or raised is wanted by then, so a
+   * later item that meets it adds nothing either: two items naming one thing
+   * make one line at the first item's amount, and both slots of the answer
+   * name it. Two items of one name
+   * and different products are two things, as they are for a single add
+   * ({@link lineIdentities}). A batch item has no `intoLineId`, no question and
+   * no group.
    *
    * **The permission set is resolved once** and applies to every item, which is
    * right because it is one adder and one list, and it is most of the point:
@@ -1219,7 +1423,8 @@ export class LineService {
       this.validateItemIds(item.itemIds ?? [])
     );
     // What each quantity counts (plan 0246, section 3.2). Absent is `UNIT`,
-    // and an item with no quantity starts at the amount of its unit (M4).
+    // and an item with no quantity starts at one step of its unit (plan 0260
+    // A2).
     const units = items.map((item) => this.validateUnit(item.unit) ?? 'UNIT');
     const quantities = items.map((item, index) =>
       this.validateQuantity(item.quantity ?? defaultQuantityOf(units[index]))
@@ -1236,6 +1441,10 @@ export class LineService {
           productGroupId: null,
         })[0]
     );
+    // Two items of one product in two units are refused in the plan loop
+    // below, and only when both would create a line: an item that meets a
+    // line of its own unit already on the list stands, as a single add of it
+    // would (plan 0260 R7).
     const actor = actorOf(req);
 
     const written = await this.dataSource.transaction(async (manager) => {
@@ -1244,40 +1453,195 @@ export class LineService {
       await this.lockList(manager, req.listId);
       const repo = manager.getRepository(ListLine);
       const targets = await this.findAddTarget(manager, req.listId, keys);
+      // The product lines of the list, read once for every item that needs
+      // them: the lines that hold an item's products (R5), and the lines
+      // that hold a product under a typed name (plan 0228).
+      let productLines: ProductLines | undefined;
+      const readProductLines = async () =>
+        (productLines ??= await this.readProductLines(manager, req.listId));
 
-      // Planned before anything is written, because a line this batch creates is
-      // a merge target for a later item in the same batch, and its quantity has
-      // to be the sum before the row is inserted rather than an insert followed
-      // by an update of a row nobody has seen yet.
-      const creations: { key: string; index: number; quantity: number }[] = [];
+      // Planned before anything is written, because a line this batch creates
+      // or raises is met by a later item of the same batch, which then adds
+      // nothing (R6).
+      const creations: { key: string; index: number }[] = [];
       const raises = new Map<string, { line: ListLine; delta: number }>();
       const byKey = new Map<string, number>();
-      const slots: ({ created: number } | { raised: string })[] = [];
+      const slots: BatchSlot[] = [];
+      // A whole, locked line: one this batch raises already is met, a wanted
+      // one is met, and a kept one is raised by the item's amount.
+      const meet = async (
+        line: ListLine,
+        index: number
+      ): Promise<BatchSlot> => {
+        if (raises.has(line.id)) {
+          return { met: [{ raised: line.id }] };
+        }
+        if (isWanted(line)) {
+          const views = await this.viewsOfMet(manager, [line]);
+          return { met: views.map((view) => ({ view })) };
+        }
+        raises.set(line.id, {
+          line,
+          delta: amountOnto(line, units[index], quantities[index]),
+        });
+        return { raised: line.id };
+      };
+      // The matches of one item (the owner, 2026-11-16): lines already on
+      // the list, in position order, and the creations this batch planned
+      // that the item meets, which come after them. None is null, and the
+      // item creates. One is met, or raised when it is a kept line this batch
+      // has not raised. Two or more are answered with all of them and nothing
+      // is written for the item, never a guess at which to raise: a batch
+      // cannot ask. A line deleted since the read is no match.
+      const resolve = async (
+        lines: readonly ListLine[],
+        index: number,
+        planned: readonly number[]
+      ): Promise<BatchSlot | null> => {
+        if (lines.length + planned.length === 1) {
+          if (planned.length === 1) {
+            return { met: [{ created: planned[0] }] };
+          }
+          if (raises.has(lines[0].id)) {
+            return { met: [{ raised: lines[0].id }] };
+          }
+          const line = await this.lockCandidateLine(
+            manager,
+            req.listId,
+            lines[0].id
+          );
+          return line === null ? null : meet(line, index);
+        }
+        // A line this batch raised or creates is always named, because it is
+        // the one the caller just made; the lines already on the list fill
+        // what the cap leaves.
+        const ownCount =
+          lines.filter((line) => raises.has(line.id)).length + planned.length;
+        const room = Math.max(LINE_ADD_CHOICE_MAX - ownCount, 0);
+        const met: BatchMet[] = [];
+        let viewed = 0;
+        for (const line of lines) {
+          if (raises.has(line.id)) {
+            met.push({ raised: line.id });
+          } else if (viewed < room) {
+            const [view] = await this.viewsOfMet(manager, [line]);
+            if (view !== undefined) {
+              met.push({ view });
+              viewed += 1;
+            }
+          }
+        }
+        // A planned line is created after every line already on the list,
+        // so it comes last in position order.
+        met.push(...planned.map((created) => ({ created })));
+        // The others deleted since the read leave one match.
+        const [only] = met;
+        if (met.length === 1 && 'view' in only) {
+          const line = await this.lockCandidateLine(
+            manager,
+            req.listId,
+            only.view.id
+          );
+          return line === null ? null : meet(line, index);
+        }
+        return met.length > 0
+          ? { met: met.slice(0, LINE_ADD_CHOICE_MAX) }
+          : null;
+      };
+      // The creations this batch planned that a single add of this item
+      // would meet once they were saved: a product line of the typed name
+      // for a free text item (plan 0228), a product line of the item's unit
+      // that holds every product of a product item (R5). A planned line of
+      // another unit is left alone here, because it has no row the refusal
+      // could name: {@link clashOf} refuses an item that would create beside
+      // it.
+      const plannedFor = (index: number): number[] =>
+        creations.flatMap((creation, planned) => {
+          const set = itemSets[creation.index];
+          if (set.length === 0) {
+            return [];
+          }
+          const meets =
+            itemSets[index].length === 0
+              ? normalizeContent(items[creation.index].content) ===
+                normalizeContent(items[index].content)
+              : units[creation.index] === units[index] &&
+                itemSets[index].every((id) => set.includes(id));
+          return meets ? [planned] : [];
+        });
+      // The earliest creation this batch planned in another unit that holds
+      // every product of a product item: a single add of the item after it
+      // would be refused for its unit (plan 0260 U2), and that line has no id
+      // yet, so the two items cannot both stand (R7).
+      const clashOf = (index: number) =>
+        creations.find(
+          (creation) =>
+            itemSets[creation.index].length > 0 &&
+            units[creation.index] !== units[index] &&
+            itemSets[index].every((id) => itemSets[creation.index].includes(id))
+        );
+
       for (const [index, key] of keys.entries()) {
-        // Only a line in the item's unit is a target (plan 0246 M5). A line of
-        // another unit cannot be summed, and a batch has no place to ask the
-        // question a single add asks, so the item creates its own line in its
-        // unit beside it.
-        const target = targets.get(inUnit(key, units[index]));
-        if (target) {
-          const raise = raises.get(target.id) ?? { line: target, delta: 0 };
-          raise.delta += quantities[index];
-          raises.set(target.id, raise);
-          slots.push({ raised: target.id });
-          continue;
+        const unit = units[index];
+        const product = itemSets[index].length > 0;
+        let slot: BatchSlot | null = null;
+        const lines = await readProductLines();
+        if (!product) {
+          // The free text line of the name, of any unit (R4), and the lines
+          // that hold a product under the name; then the free text line this
+          // batch creates under the name and the product lines it creates
+          // under it.
+          const target = targets.get(key);
+          const created = byKey.get(key);
+          slot = await resolve(
+            inPositionOrder([
+              ...(target === undefined ? [] : [target]),
+              ...namedIn(lines.rows, items[index].content),
+            ]),
+            index,
+            [...(created === undefined ? [] : [created]), ...plannedFor(index)]
+          );
+        } else {
+          // The identity line of the item's unit (plan 0246 M5) and every
+          // line of its unit that holds every product (R5), those already on
+          // the list and those this batch creates. Only when no line of its
+          // unit holds the product does a line of another unit answer: one
+          // already on the list refuses the batch with `line_unit_differs`
+          // (R7; the owner, 2026-11-12), and one this batch creates with the
+          // 400 on `items`.
+          const target = targets.get(inUnit(key, unit));
+          const held = holdingIn(lines, itemSets[index]);
+          slot = await resolve(
+            inPositionOrder([
+              ...(target === undefined ? [] : [target]),
+              ...held.filter((line) => unitOf(line) === unit),
+            ]),
+            index,
+            plannedFor(index)
+          );
+          if (slot === null) {
+            const refused = earliestLine([
+              targets.get(key),
+              ...held.filter((line) => unitOf(line) !== unit),
+            ]);
+            if (refused !== undefined) {
+              throw lineUnitDiffers(refused, unit, index);
+            }
+            const clash = clashOf(index);
+            if (clash !== undefined) {
+              throw new ValidationException(
+                `items ${clash.index} and ${index} name one product in two units`,
+                { messageArgs: { field: 'items' } }
+              );
+            }
+          }
         }
-        // Two items of one thing fold only in one unit (plan 0246, section
-        // 3.3): the second unit starts its own creation.
-        const unitKey = inUnit(key, units[index]);
-        const planned = byKey.get(unitKey);
-        if (planned !== undefined) {
-          creations[planned].quantity += quantities[index];
-          slots.push({ created: planned });
-          continue;
+        if (slot === null) {
+          byKey.set(key, creations.length);
+          slot = { created: creations.length };
+          creations.push({ key, index });
         }
-        byKey.set(unitKey, creations.length);
-        slots.push({ created: creations.length });
-        creations.push({ key, index, quantity: quantities[index] });
+        slots.push(slot);
       }
 
       // One MAX(position) for the whole batch, then an increment per created
@@ -1289,13 +1653,11 @@ export class LineService {
         const line = await repo.save(
           repo.create(
             this.newLine(
-              // The **first** item that named this thing supplies the content
-              // and the products; a later duplicate contributes its quantity and
-              // nothing else, which is the merge rule applied to a line this
-              // batch is creating rather than one it found.
+              // The **first** item that named this thing supplies the content,
+              // the products and the amount; a later one adds nothing (R6).
               {
                 ...items[creation.index],
-                quantity: this.capQuantity(creation.quantity),
+                quantity: quantities[creation.index],
                 unit: units[creation.index],
               },
               req.listId,
@@ -1341,7 +1703,8 @@ export class LineService {
     // client that has never heard of this plan gets a correct list. The burst is
     // exactly the fan out the N separate requests it replaces would have
     // produced anyway. A created line announces `line.added` and a raised one
-    // `line.updated`, which is what each of them is.
+    // `line.updated`, which is what each of them is. A line only met was not
+    // written and announces nothing.
     const views = new Map<string, LineView>();
     for (const [index, row] of written.created.entries()) {
       const items = {
@@ -1365,25 +1728,39 @@ export class LineService {
     for (const [lineId, entry] of written.raised) {
       views.set(lineId, this.announce(list, entry, 'caller'));
     }
-    // One basket announcement for the whole batch, naming every line it touched
+    // One basket announcement for the whole batch, naming every line it wrote
     // (plan 0139, section 3). The list rooms take the burst above, because each
     // of those events carries a whole line and a client applies them one by one.
     // A basket reads again whatever it is told, so N nudges would be N reads of
-    // the same basket for one write.
-    void this.baskets.linesChanged(list.id, [...views.keys()]);
+    // the same basket for one write. A batch that wrote nothing tells nobody.
+    if (views.size > 0) {
+      void this.baskets.linesChanged(list.id, [...views.keys()]);
+    }
 
-    // One result per item, in request order. Two items that folded into one line
-    // answer with that same line twice, and the second of them says `merged`.
-    const seen = new Set<number>();
-    return written.slots.map((slot) => {
-      if ('raised' in slot) {
-        return { line: views.get(slot.raised) as LineView, merged: true };
+    // One result per item, in request order. An item that met a line this
+    // batch wrote answers with that line, as `ALREADY_ON_LIST`.
+    const viewOf = (ref: BatchMet): LineView =>
+      'view' in ref
+        ? ref.view
+        : 'raised' in ref
+          ? (views.get(ref.raised) as LineView)
+          : (views.get(written.created[ref.created].id) as LineView);
+    return written.slots.map((slot): AddLineResult => {
+      if ('met' in slot) {
+        const met = slot.met.map(viewOf);
+        return {
+          line: met[0],
+          merged: true,
+          outcome: 'ALREADY_ON_LIST',
+          alreadyOnList: met,
+        };
       }
-      const merged = seen.has(slot.created);
-      seen.add(slot.created);
+      const raised = 'raised' in slot;
       return {
-        line: views.get(written.created[slot.created].id) as LineView,
-        merged,
+        line: viewOf(slot),
+        merged: raised,
+        outcome: raised ? 'RAISED' : 'CREATED',
+        alreadyOnList: [],
       };
     });
   }
@@ -1490,8 +1867,14 @@ export class LineService {
    * refused on every add, a product add included: the request is malformed
    * whatever it carries. So is an `intoLineId` that is not a uuid, which
    * {@link validateReference} refuses before it reaches a `uuid` column.
+   * `newLine: true` on an add of a product or a group is refused under
+   * `newLine` (the owner, 2026-11-16): a second line of one product in one
+   * unit is what plan 0260 prevents.
    */
-  private validateAddChoice(req: AddLineRequest): {
+  private validateAddChoice(
+    req: AddLineRequest,
+    freeText: boolean
+  ): {
     askIfAmbiguous: boolean;
     intoLineId: string | undefined;
     newLine: boolean;
@@ -1503,6 +1886,12 @@ export class LineService {
       throw new ValidationException(
         'intoLineId cannot be sent beside newLine true',
         { messageArgs: { field: 'intoLineId' } }
+      );
+    }
+    if (newLine && !freeText) {
+      throw new ValidationException(
+        'newLine true is an answer for a typed name alone',
+        { messageArgs: { field: 'newLine' } }
       );
     }
     return { askIfAmbiguous: req.askIfAmbiguous === true, intoLineId, newLine };
@@ -1573,21 +1962,51 @@ export class LineService {
    * The name is compared as {@link normalizeContent} folds it, against
    * `content` as the row holds it, whatever `named` says: for a line that is
    * not named that is the product's name in the adder's locale (section 2).
-   * Every quantity counts, so a bought line at zero is a candidate (D2). A
-   * `REJECTED` line is not, for the reason {@link findMergeTarget} gives, and a
-   * deleted one is kept out by the repository read.
+   * Every quantity counts, so a bought line at zero is a candidate (D2), and
+   * every unit does (plan 0260 R4). A `REJECTED` line is not, for the reason
+   * {@link findMergeTarget} gives, and a deleted one is kept out by the
+   * repository read.
    *
    * The same rows {@link findEarliestLines} reads, read under the list lock the
    * add already holds, so no other add to this list can change the answer
-   * before the add writes. A delete does not take that lock, which is why the
-   * one candidate is read again by {@link lockCandidateLine}.
+   * before the add writes. A delete does not take that lock, which is why a
+   * candidate that is raised is read again by {@link lockCandidateLine}.
    */
   private async findNamedProductLines(
     manager: EntityManager,
     listId: string,
     content: string
   ): Promise<ListLine[]> {
-    const folded = normalizeContent(content);
+    return namedIn(await this.readProductLineRows(manager, listId), content);
+  }
+
+  /**
+   * The lines of a list that hold every one of these products (plan 0260 R5),
+   * in list position order: the same set, or a set of several products that
+   * includes them (velista 0183). Read after the identity target of the add's
+   * unit, and before an identity target of another unit refuses the add: a
+   * line of the add's unit that holds the product takes it (the owner,
+   * 2026-11-12).
+   */
+  private async findLinesHolding(
+    manager: EntityManager,
+    listId: string,
+    itemIds: readonly string[]
+  ): Promise<ListLine[]> {
+    if (itemIds.length === 0) {
+      return [];
+    }
+    return holdingIn(await this.readProductLines(manager, listId), itemIds);
+  }
+
+  /**
+   * The lines of a list that hold a product or a group, a few columns of each,
+   * with no lock and in list position order. `REJECTED` lines are left out.
+   */
+  private async readProductLineRows(
+    manager: EntityManager,
+    listId: string
+  ): Promise<ListLine[]> {
     const rows = await manager.getRepository(ListLine).find({
       where: { listId },
       select: {
@@ -1596,6 +2015,9 @@ export class LineService {
         content: true,
         named: true,
         quantity: true,
+        // What each line counts, so a question names the line's own unit and
+        // an add can tell a line of its unit from one of another (plan 0260).
+        unit: true,
         itemSetHash: true,
         productGroupId: true,
         approvalStatus: true,
@@ -1608,24 +2030,85 @@ export class LineService {
         (row) =>
           row.listId === listId &&
           row.approvalStatus !== LineApprovalStatus.REJECTED &&
-          (row.itemSetHash !== null || row.productGroupId !== null) &&
-          normalizeContent(row.content) === folded
+          (row.itemSetHash !== null || row.productGroupId !== null)
       )
       .sort((a, b) => (isEarlierLine(a, b) ? -1 : 1));
   }
 
+  /** The same rows, with the products each holds, in one more query. */
+  private async readProductLines(
+    manager: EntityManager,
+    listId: string
+  ): Promise<ProductLines> {
+    const rows = await this.readProductLineRows(manager, listId);
+    const ids = rows
+      .filter((row) => row.itemSetHash !== null)
+      .map((row) => row.id);
+    const sets = new Map<string, Set<string>>();
+    if (ids.length > 0) {
+      const items = await manager.getRepository(ListLineItem).find({
+        where: { lineId: In(ids) },
+      });
+      for (const item of items) {
+        const set = sets.get(item.lineId) ?? new Set<string>();
+        set.add(item.itemId);
+        sets.set(item.lineId, set);
+      }
+    }
+    return { rows, sets };
+  }
+
   /**
-   * The refusal that asks which line a typed name means (plan 0228, section 3).
+   * The views of lines an add met and left as they were (plan 0260, section
+   * 2), at most {@link LINE_ADD_CHOICE_MAX}, in the order given.
    *
-   * The first {@link LINE_ADD_CHOICE_MAX} candidates, each with its products,
-   * read in one query. Nothing has been written when this is thrown, so the
-   * transaction rolls back an add that changed nothing.
+   * Read the way {@link writeEdit} reads one, through the transaction's
+   * manager, with no save, no change record and no event. Each line is read
+   * again whole, because the reads that find candidates ask for a few columns.
+   * A line deleted since is left out before the cap, so a deleted line never
+   * takes the place of a later match, and one view comes back only when one
+   * match is left.
+   */
+  private async viewsOfMet(
+    manager: EntityManager,
+    lines: readonly ListLine[]
+  ): Promise<LineView[]> {
+    const views: LineView[] = [];
+    for (const met of lines) {
+      if (views.length >= LINE_ADD_CHOICE_MAX) {
+        break;
+      }
+      const line = await manager
+        .getRepository(ListLine)
+        .findOne({ where: { id: met.id, listId: met.listId } });
+      if (!line || line.listId !== met.listId) {
+        continue;
+      }
+      const items = await this.itemSetOf(line.id, manager);
+      const settlements = await this.settlementsOf(line.id, manager);
+      const claim = await this.claims.claimOf(line.id, manager);
+      views.push(toLineView(line, items, settlements, claim));
+    }
+    return views;
+  }
+
+  /**
+   * The refusal that asks which line an add means (plan 0228, section 3),
+   * asked of every add that meets two or more lines, wanted and kept alike
+   * (the owner, 2026-11-16), and never of a unit.
+   *
+   * The first {@link LINE_ADD_CHOICE_MAX} matches, each with its products, its
+   * own unit and what choosing it does: a wanted line answers
+   * `ALREADY_ON_LIST` and keeps its quantity, and a kept one is raised by the
+   * add's amount onto it, as {@link raiseForAdd} would raise it. The products
+   * are read in one query. Nothing has been written when this is thrown, so
+   * the transaction rolls back an add that changed nothing.
    */
   private async needsChoice(
     manager: EntityManager,
     content: string,
     candidates: readonly ListLine[],
-    why: 'ambiguous' | 'unit' = 'ambiguous'
+    add: { unit: LineUnit; quantity: number }
   ): Promise<LineAddNeedsChoiceException> {
     const shown = candidates.slice(0, LINE_ADD_CHOICE_MAX);
     const rows = await manager.getRepository(ListLineItem).find({
@@ -1638,17 +2121,21 @@ export class LineService {
         content: line.content,
         named: line.named,
         quantity: line.quantity,
-        unit: line.unit ?? 'UNIT',
+        unit: unitOf(line),
         itemIds: toLineItemSet(rows.filter((row) => row.lineId === line.id))
           .itemIds,
         productGroupId: line.productGroupId ?? null,
         approvalStatus: line.approvalStatus,
+        outcome: isWanted(line) ? 'ALREADY_ON_LIST' : 'RAISED',
+        resultingQuantity: isWanted(line)
+          ? line.quantity
+          : this.capQuantity(
+              line.quantity + amountOnto(line, add.unit, add.quantity)
+            ),
       })),
     };
     return new LineAddNeedsChoiceException(
-      why === 'unit'
-        ? `The line "${content}" of this list counts in another unit`
-        : `${candidates.length} lines of this list that hold a product are called "${content}"`,
+      `${candidates.length} lines of this list match "${content}"`,
       { details: { ...details }, messageArgs: { content } }
     );
   }

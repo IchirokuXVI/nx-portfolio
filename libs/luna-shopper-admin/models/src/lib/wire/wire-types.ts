@@ -2523,6 +2523,7 @@ export type BasketBasketRowResult = {
   entries: BasketBasketRowEntryView[];
   progress: BasketBasketProgress;
   skippedCount?: number;
+  addOutcome?: EnumsAddLineOutcome;
 };
 
 /**
@@ -3916,6 +3917,11 @@ export type EnumsAdapterKey =
   | 'dia-api'
   | 'osm-places'
   | 'manual';
+
+/**
+ * `enums.AddLineOutcome` in the gateway's OpenAPI document.
+ */
+export type EnumsAddLineOutcome = 'CREATED' | 'RAISED' | 'ALREADY_ON_LIST';
 
 /**
  * `enums.AiTextProvider` in the gateway's OpenAPI document.
@@ -5476,6 +5482,8 @@ export type ImpersonationStartImpersonationView = {
 export type ListAddLineResult = {
   line: ListLineView;
   merged: boolean;
+  outcome: EnumsAddLineOutcome;
+  alreadyOnList: ListLineView[];
 };
 
 /**

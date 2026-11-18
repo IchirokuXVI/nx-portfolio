@@ -141,9 +141,9 @@ describe('the line unit vocabulary (plan 0246, section 1)', () => {
     ]);
   });
 
-  it('starts a new line at one piece, one kilo or one litre (M4)', () => {
+  it('starts a new line at one step: one piece, 25 g or 25 ml (plan 0260 A2)', () => {
     expect(defaultQuantityOf('UNIT')).toBe(1);
-    expect(defaultQuantityOf('GRAM')).toBe(1000);
-    expect(defaultQuantityOf('MILLILITER')).toBe(1000);
+    expect(defaultQuantityOf('GRAM')).toBe(25);
+    expect(defaultQuantityOf('MILLILITER')).toBe(25);
   });
 });

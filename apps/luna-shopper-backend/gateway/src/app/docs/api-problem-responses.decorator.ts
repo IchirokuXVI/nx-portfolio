@@ -78,12 +78,11 @@ export interface ProblemResponseOptions {
    */
   lineMerge?: boolean;
   /**
-   * The route adds a line, so a typed name that two or more lines hold with a
-   * product can answer 409 with a code of its own when the body set
-   * `askIfAmbiguous` (plan 0228). It is told apart from a plain conflict
-   * because the client asks the person which line, from `details.lines`. An
-   * add that meets a line of another unit and none of its own unit answers
-   * the same code with that line alone, whatever the body set (plan 0246 M5).
+   * The route adds a line, so an add that meets two or more lines, wanted or
+   * at zero, can answer 409 with a code of its own when the body set
+   * `askIfAmbiguous` (plan 0228; the owner, 2026-11-16). It is told apart
+   * from a plain conflict because the client asks the person which line,
+   * from `details.lines`. It is never asked about a unit.
    */
   lineAddChoice?: boolean;
   /**
@@ -94,8 +93,10 @@ export interface ProblemResponseOptions {
   lineUnitMismatch?: boolean;
   /**
    * The route renames lines, so a merge of two lines of different units
-   * answers 409 `line_unit_differs` (plan 0246, section 3.3). An add whose
-   * `intoLineId` names a line of another unit answers it too (M5).
+   * answers 409 `line_unit_differs` (plan 0246, section 3.3), or it adds a
+   * line, and a product add that meets only lines of another unit answers it
+   * with the line in `details.line`, the add's unit in `details.unit` and the
+   * batch item in `details.index` (plan 0260, section 3).
    */
   lineUnitDiffers?: boolean;
   /**

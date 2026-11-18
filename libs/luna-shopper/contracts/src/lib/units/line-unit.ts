@@ -124,11 +124,12 @@ export function lineUnitsOf(products: readonly ProductSizing[]): LineUnit[] {
 }
 
 /**
- * The amount a new line starts at in a unit (plan 0246 M4): one piece, one
- * kilo, one litre.
+ * One step of a unit (plan 0260 A2): one piece, 25 g or 25 ml. The amount an
+ * add that states none creates a line at, or raises a line kept at zero by.
+ * It replaced one kilo and one litre (plan 0246 M4).
  */
 export function defaultQuantityOf(unit: LineUnit): number {
-  return unit === 'UNIT' ? 1 : 1000;
+  return unit === 'UNIT' ? 1 : 25;
 }
 
 /** Whether the value is a {@link LineUnit}. */

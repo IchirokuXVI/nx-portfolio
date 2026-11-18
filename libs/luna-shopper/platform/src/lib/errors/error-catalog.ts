@@ -392,6 +392,12 @@ export const ERROR_CATALOG: Record<
 };
 
 /**
+ * The variant of `line_unit_differs` an add names (plan 0260, the owner's
+ * ruling of 2026-11-12). The code's own sentence is the merge's.
+ */
+export const LINE_UNIT_DIFFERS_ADD_VARIANT = 'add';
+
+/**
  * Codes whose sentence depends on which case refused, picked by
  * `messageArgs.variant` (plan 0234, section 8.1). A variant this map does not
  * hold falls back to the code's own sentence in {@link ERROR_CATALOG}.
@@ -418,6 +424,14 @@ export const ERROR_CATALOG_VARIANTS: Partial<
     'deployment.month': {
       en: 'The assistant is resting for now. It is back on {time}.',
       es: 'El asistente está descansando. Vuelve a estar disponible el {time}.',
+    },
+  },
+  // An add met the product only on a line of another unit (plan 0260). It
+  // says what happened and what to do, naming the line.
+  [ERROR_CODES.LINE_UNIT_DIFFERS]: {
+    [LINE_UNIT_DIFFERS_ADD_VARIANT]: {
+      en: '"{content}" is already on this list in another unit. Change the amount on that line.',
+      es: '"{content}" ya está en esta lista en otra unidad. Cambia la cantidad en esa línea.',
     },
   },
 };

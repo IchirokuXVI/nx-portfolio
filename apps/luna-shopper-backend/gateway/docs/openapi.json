@@ -8320,6 +8320,16 @@
               }
             }
           },
+          "409": {
+            "description": "`line_unit_differs` — These two lines count in different units, so they cannot be merged.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "422": {
             "description": "`line_unit_not_offered` — The products of this line cannot be counted in that unit.",
             "content": {
@@ -31421,7 +31431,8 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 999999
+            "maximum": 999999,
+            "description": "The amount of a line the add creates, or of the raise of a line at 0 (plan 0260). Never added to a wanted line: an add that meets one writes nothing and answers outcome ALREADY_ON_LIST. Absent is one step of the unit: 1 piece, 25 g or 25 ml."
           },
           "unit": {
             "type": "string",
@@ -31453,16 +31464,16 @@
           },
           "askIfAmbiguous": {
             "type": "boolean",
-            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before."
+            "description": "The client can ask which line an add means (plan 0228). An add that meets one line above 0 writes nothing and answers 201 with outcome ALREADY_ON_LIST and that line in alreadyOnList; one line at 0 is raised and answers RAISED (plan 0260). An add that meets two or more lines, above 0 or at 0, a product add included: true refuses it with 409 line_add_needs_choice and every one of them in details.lines, at most 10, in list position order, each with its own unit, its quantity, the outcome choosing it answers (ALREADY_ON_LIST for a line above 0, which nothing changes; RAISED for a line at 0) and the resultingQuantity; absent or false writes nothing and answers 201 ALREADY_ON_LIST with every one of them in alreadyOnList, lines at 0 included (the owner, 2026-11-16). Never asked about a unit."
           },
           "intoLineId": {
             "type": "string",
             "format": "uuid",
-            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+            "description": "The line the person chose, the answer to line_add_needs_choice (plan 0228), on a free text add or a product add. It must be one of the lines the add meets; any other id, a line of another list and a REJECTED line answer 404 not_found, and the add never falls back to a new line. Above 0, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised by the add amount, or by one step of its own unit when that is not the unit of the add, and answers RAISED (plan 0260). Refused beside newLine true."
           },
           "newLine": {
             "type": "boolean",
-            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
+            "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
           }
         },
         "required": [
@@ -31479,7 +31490,8 @@
           "quantity": {
             "type": "number",
             "minimum": 0,
-            "maximum": 999999
+            "maximum": 999999,
+            "description": "The amount of a line the add creates, or of the raise of a line at 0 (plan 0260). Never added to a wanted line: an add that meets one writes nothing and answers outcome ALREADY_ON_LIST. Absent is one step of the unit: 1 piece, 25 g or 25 ml."
           },
           "unit": {
             "type": "string",
@@ -32080,16 +32092,16 @@
           },
           "askIfAmbiguous": {
             "type": "boolean",
-            "description": "The client can ask which line a typed name means (plan 0228). A free text add whose name is the name of one line that holds a product raises that line in any case. With two or more such lines, true refuses the add with 409 line_add_needs_choice and the lines in details.lines, at most 10 of them, in list position order; absent or false creates a line, as before. Ignored on an add that carries itemIds or a productGroupId. Whatever it says, an add that meets a line of another unit and none in its own unit gets the same refusal naming that one line, each entry of details.lines with its unit (plan 0246 M5); a line in the unit of the add is raised as before."
+            "description": "The client can ask which line an add means (plan 0228). An add that meets one line above 0 writes nothing and answers 201 with outcome ALREADY_ON_LIST and that line in alreadyOnList; one line at 0 is raised and answers RAISED (plan 0260). An add that meets two or more lines, above 0 or at 0, a product add included: true refuses it with 409 line_add_needs_choice and every one of them in details.lines, at most 10, in list position order, each with its own unit, its quantity, the outcome choosing it answers (ALREADY_ON_LIST for a line above 0, which nothing changes; RAISED for a line at 0) and the resultingQuantity; absent or false writes nothing and answers 201 ALREADY_ON_LIST with every one of them in alreadyOnList, lines at 0 included (the owner, 2026-11-16). Never asked about a unit."
           },
           "intoLineId": {
             "type": "string",
             "format": "uuid",
-            "description": "The line the person chose, which a free text add raises (plan 0228). A line of the same list that is not REJECTED; any other id answers 404 not_found, and the add never falls back to a new line. The line need not carry the typed name. A line of another unit answers 409 line_unit_differs (plan 0246 M5). Refused beside newLine true. Ignored on an add that carries itemIds or a productGroupId."
+            "description": "The line the person chose, the answer to line_add_needs_choice (plan 0228), on a free text add or a product add. It must be one of the lines the add meets; any other id, a line of another list and a REJECTED line answer 404 not_found, and the add never falls back to a new line. Above 0, the add writes nothing and answers ALREADY_ON_LIST; at 0, it is raised by the add amount, or by one step of its own unit when that is not the unit of the add, and answers RAISED (plan 0260). Refused beside newLine true."
           },
           "newLine": {
             "type": "boolean",
-            "description": "The person chose a new line over the lines that hold a product under this name (plan 0228). A free text line of the same name in the unit of the add still takes the add, because a list holds one free text line per name and unit. Ignored on an add that carries itemIds or a productGroupId, except after a 409 line_add_needs_choice for a line of another unit (plan 0246 M5), which any add can meet: true then creates a line in the unit of the add."
+            "description": "The person chose a new line over the lines that hold a product under this typed name (plan 0228). A free text line of the same name still meets the add, because a list holds one free text line per name. A free text add only: true beside itemIds or a productGroupId answers 400 under newLine, because a second line of one product in one unit is what plan 0260 prevents (the owner, 2026-11-16)."
           }
         },
         "required": [
@@ -38233,6 +38245,9 @@
           "skippedCount": {
             "type": "integer",
             "minimum": 0
+          },
+          "addOutcome": {
+            "$ref": "#/components/schemas/enums.AddLineOutcome"
           }
         },
         "required": [
@@ -42971,6 +42986,14 @@
           "manual"
         ]
       },
+      "enums.AddLineOutcome": {
+        "type": "string",
+        "enum": [
+          "CREATED",
+          "RAISED",
+          "ALREADY_ON_LIST"
+        ]
+      },
       "enums.AiTextProvider": {
         "type": "string",
         "enum": [
@@ -47343,11 +47366,23 @@
           },
           "merged": {
             "type": "boolean"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/enums.AddLineOutcome"
+          },
+          "alreadyOnList": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/list.LineView"
+            },
+            "maxItems": 10
           }
         },
         "required": [
           "line",
-          "merged"
+          "merged",
+          "outcome",
+          "alreadyOnList"
         ],
         "additionalProperties": false
       },
@@ -48992,7 +49027,7 @@
           "details": {
             "type": "object",
             "additionalProperties": true,
-            "description": "Machine readable facts about this occurrence. Present when `code` is `line_merge_required` or `line_add_needs_choice`, the two codes whose bag is described here. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null. For `line_add_needs_choice` it carries `lines`, the lines of the list that hold a product under the typed name, in list position order and at most 10 of them (`lineId`, `content`, `named`, `quantity`, `itemIds`, `productGroupId`, `approvalStatus`): send the add again with `intoLineId` set to one of them, or with `newLine` true."
+            "description": "Machine readable facts about this occurrence. Present when `code` is `line_merge_required`, `line_add_needs_choice` or `line_unit_differs` on an add, the three codes whose bag is described here. For a zone line rename it carries `otherLineId`, `otherContent` and `otherQuantity`: the line the rename collided with. For a basket line rename it carries `lists`, one entry per list where the new name is taken (`listId`, `listName`, `zoneName`, `otherContent`, `otherQuantity`), and `basket`, the basket line it collided with (`otherLineId`, `otherContent`, `otherQuantity`) or null. For `line_add_needs_choice` it carries `lines`, every line the add meets, above zero and at zero alike, in list position order and at most 10 of them (`lineId`, `content`, `named`, `quantity`, `unit`, `itemIds`, `productGroupId`, `approvalStatus`, and `outcome` with `resultingQuantity`: `ALREADY_ON_LIST` and the quantity itself for a line above zero, which choosing it leaves as it is, `RAISED` and the raised quantity for a line at zero): send the add again with `intoLineId` set to one of them, or, on a typed name only, with `newLine` true. For `line_unit_differs` from a product add it carries `line`, the line the add met (`lineId`, `content`, `unit`, `quantity`), `unit`, what the add counted in, and `index`, the batch item or null on a single add; the same code from a rename carries none."
           }
         }
       },
