@@ -66,8 +66,10 @@ below that needs one; none of the recommended options does.
 4. A finished run is never finished again. A late outcome of a run that the reaper marked
    `STALE` writes no status, no alert and no strike, and leaves one line in the run's report.
 5. The counter of failures is written with one statement that names only its own columns, so
-   a run never writes back a source row it read when it started.
-6. Specs on real Postgres prove the statement timeout, the lock timeout and the guarded finish.
+   a run never writes back a source row it read when it started. PR #1011 does this (1.8).
+6. A run that completed stays `COMPLETED` when the write of its chain row fails (section 6,
+   D11).
+7. Specs on real Postgres prove the statement timeout, the lock timeout and the guarded finish.
 
 ### Scope
 
@@ -75,8 +77,8 @@ below that needs one; none of the recommended options does.
 - `app.module.ts` (the TypeORM options), and `db/data-source.ts` only if the owner decides the
   migrations run with the same limits (D3).
 - `harvest/harvest-run.store.ts` (`finish`), `harvest/run-executor.service.ts` (what a finish
-  that changed no row does), `harvest/supermarket-source.service.ts`
-  (`recordRunStarted`, `recordRunFinished`).
+  that changed no row does, and what a `recordVerdict` that throws after a finish does,
+  section 6). `harvest/supermarket-source.service.ts` is PR #1011's, not this plan's.
 - `harvest/run-report.sink.ts` only for the heartbeat of D8.
 - New specs, listed under Tests.
 
@@ -193,7 +195,16 @@ so a run that finishes hours later writes back the `consecutiveFailures`, `enabl
 during the run sees it on again, and a run of another chain finishing in between does not
 matter, but a second run of the same chain (possible after a reap, 1.4) loses its strike or its
 reset. This is the defect plan `0269` fixed for source entries, on another table. It is
-recorded here because the strike path goes through it; D5 asks whether this plan fixes it.
+recorded here because the strike path goes through it.
+
+**PR #1011 fixes 1.8** (owner decision 49a, 2026-11-18; open when this was written).
+`recordRunStarted` becomes one `update` of `lastRunAt`. `recordRunFinished` on a success
+becomes one `update` of `lastSuccessAt` and `consecutiveFailures = 0`, and on a failure one
+`UPDATE ... SET "consecutiveFailures" = "consecutiveFailures" + 1 ... RETURNING`. The object in
+memory takes the written values only after the write resolved. D5 is settled by it, and this
+plan does not change either method. What #1011 leaves is the executor's side: a
+`recordRunFinished` that throws on the success path still lands in the catch path. Section 6
+holds that defect.
 
 **1.9 What an abort does while a call hangs.** A person's abort sets `abortRequestedAt` and
 aborts the controller (`harvest/harvest-run.service.ts:600` to `:605`). The runner stops, but no
@@ -319,7 +330,71 @@ limit, an abort waits at most one limit. A `SIGTERM` keeps its grace period as t
 whose limit is longer than 30 s can outlive the pod, which leaves the run to the reaper as
 today. D7 asks whether the grace period should grow to the longest limit.
 
-## 6. What this plan leaves as it is
+## 6. A completed run whose last write fails
+
+Added on 2026-11-18 (owner decision 55a). Anchors read on `origin/dev` at `abb6c19d4`.
+
+**What the code does.** The success path of `execute` finishes the run first and records the
+verdict on the chain row last: `finishWith(runId, status, ...)` at
+`run-executor.service.ts:712`, then `recordVerdict(source, status)` at `:713`, which calls
+`SupermarketSourceService.recordRunFinished` (`:927` to `:938`). If that last write throws (a
+database blip), control falls into the catch path of the same `try`. The catch path picks
+`FAILED`, because the signal is not aborted (`!controller.signal.aborted`, `:729` to `:735`). It
+takes the database error as the sentence (`describeError(error).message`, `:749`), drafts a
+`RUN_FAILED` alert (`:751`), and calls `finishWith` (`:755`). `HarvestRunStore.finish` updates by
+id only (`harvest/harvest-run.store.ts:557` and `:561`), so the `COMPLETED` row becomes `FAILED`.
+The run had no alert, so the alert of key `run:<runId>` is inserted and mailed (a `MANUAL` or
+`SCHEDULED` run, `harvest/alerts/harvest-alert.rules.ts:211` to `:212`). Then `recordVerdict`
+runs a second time with `FAILED` (`:756`) and counts a strike. The walk wrote everything.
+
+Example: a Mercadona walk completes, the final write of the chain row fails on a database
+blip, and the owner gets a failure mail and a strike for a run that worked.
+
+**Details the code adds.**
+
+- The strike is counted only if the second write succeeds. If the database is still down,
+  `finishWith` in the catch path throws too, `execute` rejects, `start` logs "crashed"
+  (`:344` to `:348`), and the run stays `COMPLETED` with no alert and no strike. The chain row
+  then misses its `lastSuccessAt` and its reset to 0.
+- A run that the success path ended `FAILED` (a stop of the guard, a failed write, the ratio)
+  takes the same path when its strike write throws. Its alert is already written, so the second
+  insert does nothing (`ON CONFLICT ("dedupeKey") DO NOTHING`), but its sentence is replaced by
+  the database error.
+- The catch path also runs `context.flush` and `recordRefusals` again (`:717` and `:718`,
+  after `:665` and `:666`). `reportWrites` does not run again, because `writesReported` is already true
+  (`:451`, `:724`).
+
+**What PR #1011 changes here.** On `origin/dev`, `recordRunFinished` changes the object before
+it saves it. A `FAILED` run whose save throws has already added 1 in memory, and the catch path
+adds 1 more and saves, so a strike is counted twice. A `COMPLETED` run has already set the
+counter to 0 in memory, so the catch path's alert reads `failuresBefore` as 0 and the catch
+path saves 1, losing the chain's earlier strikes. With #1011 the increment is one statement in
+the database, and the object changes only after the write resolved. A write that throws before
+it commits therefore changes nothing, in the row or in memory: a `FAILED` run counts one strike,
+and a `COMPLETED` run that falls into the catch path counts the stored count plus 1 and its alert
+reads the count the run started with. #1011 does not change the executor, so the status, the
+alert and the strike of this section are still written.
+
+**Option A. The run stays `COMPLETED` and the failed write is reported apart.** `recordVerdict`
+after a finish is wrapped in its own `try`. A throw there is logged with the run and the chain,
+and merged into the run's report as one field (for example
+`verdictNotRecorded: { error, at }`, best effort, since the same blip may refuse that write
+too). No second finish, no alert, no strike. The chain row keeps the counter it had, so a chain
+with two strikes keeps two after a good run.
+
+**Option B. As today.** A failed write of the chain row is a failure of the run.
+
+**Option C. Option A, and the success write is tried once more.** The success write sets two
+columns to fixed values and is safe to repeat. The failure write adds 1 and is not. A retry is
+an action boundary of this plan, so it needs the owner's yes.
+
+**Recommended: A.** The status of a run says what the walk did, and the walk is done before the
+chain row is written. With D6 (option A, the guarded finish), the catch path's `finish` already
+changes no row of a `COMPLETED` run, writes no alert and calls no `recordVerdict`. Option A
+still matters: without it the catch path would record a `lateOutcome` for a run that was never
+reaped, and log the run as ended `FAILED` (`:757` to `:759`).
+
+## 7. What this plan leaves as it is
 
 - **An adapter's HTTP timeouts toward a storefront.** Each adapter library and runner keeps its
   own (for example `harvest/eljamon-catalog.runner.ts:43`). A storefront that never answers is a
@@ -358,7 +433,9 @@ today. D7 asks whether the grace period should grow to the longest limit.
 - A new executor spec in the shape of `run-executor.guard.spec.ts`: a run whose sink times out
   ends `FAILED` with the write sentence, one alert, one `recordVerdict`. A store whose `finish`
   answers that it changed no row (the run was reaped meanwhile) leads to no alert, no
-  `recordVerdict` and one `lateOutcome` in the report.
+  `recordVerdict` and one `lateOutcome` in the report. With D11 as A, a completed run whose
+  `recordRunFinished` rejects ends `COMPLETED`: one `finish`, no alert, no second
+  `recordVerdict`, and the failed write in the log and the report.
 
 **Integration specs on real Postgres** (`harvest/run-time-limits.integration.spec.ts`, in the
 shape of `harvest/walk-keeps-decisions.integration.spec.ts`, run under `test-integration` with
@@ -374,9 +451,10 @@ Postgres proves them.
 3. **The guarded finish.** A run row `STALE` with its `RUN_STALE` alert. `finish(FAILED)` with
    an alert answers no, leaves the status `STALE`, and inserts no alert row. A `RUNNING` row
    still finishes and answers yes.
-4. **The strike, if D5 is A.** A person turns the chain's row off while a run is in flight.
-   The run's `recordRunFinished` leaves `enabled` false and adds 1 to the counter the database
-   holds, not to the one the run read.
+4. **The strike.** PR #1011 proves it in
+   `harvest/supermarket-source.run-columns.integration.spec.ts`: a person changes the chain's
+   row while a run is in flight, and the run's writes leave the change and add 1 to the counter
+   the database holds. This plan adds no spec for it.
 
 Each case fails on `origin/dev` and passes on the branch.
 
@@ -389,7 +467,10 @@ Each case fails on `origin/dev` and passes on the branch.
       process lives.
 - [ ] A run marked `STALE` keeps `STALE`, its one alert and no strike, whatever its process
       does after the reap.
-- [ ] No write of the counter of failures writes back a column the run read at its start.
+- [ ] No write of the counter of failures writes back a column the run read at its start
+      (PR #1011).
+- [ ] A completed run whose chain row write fails stays `COMPLETED`, with no alert and no
+      strike (D11).
 - [ ] The integration specs fail on `origin/dev` and pass on the branch.
 
 ## Verification
@@ -412,7 +493,7 @@ npx nx affected -t lint test
 
 ## Open decisions
 
-All of these wait for the owner. None is answered.
+All of these wait for the owner, except D5, which PR #1011 settles.
 
 **D1. The catalog call limit: one for all, or one per kind (section 2). Open.** Recommended: per
 kind, a default for reads and single row writes and a longer budget for the batch writes, the
@@ -430,11 +511,11 @@ nobody waiting on it.
 yes, through the path of plan `0269` with no new path, and it counts a strike as any `FAILED`
 run does (plan `0269` D4).
 
-**D5. The source row written from a read at the start of the run (1.8). Open.** Recommended: fix
-it in this plan, because the strike path goes through it: `recordRunStarted` and
-`recordRunFinished` each become one `UPDATE` that names only `lastRunAt`, `lastSuccessAt` and
-`consecutiveFailures`, with `"consecutiveFailures" + 1` in the statement. The other choice is a
-plan of its own.
+**D5. The source row written from a read at the start of the run (1.8). Settled.** The owner
+decided on 2026-11-18 (decision 49a) to fix it at once, outside this plan. PR #1011 makes
+`recordRunStarted` and `recordRunFinished` write only their own columns, with
+`"consecutiveFailures" + 1` in the statement. What it leaves, a `recordRunFinished` that throws
+on the success path, is D11.
 
 **D6. A terminal state is never overwritten (section 4). Open.** Recommended: option A, the
 guarded finish. One outcome is one status, one alert and at most one strike, and a late outcome
@@ -454,6 +535,11 @@ grace period at 30 s and let a call that outlives a `SIGTERM` leave its run to t
 today. The other choice is a grace period at least as long as the longest limit, which slows
 every deploy of the velista unit by that much.
 
+**D11. A completed run whose chain row write fails (section 6). Open.** Recommended: option A.
+The run stays `COMPLETED`, the failed write is logged and merged into the report apart, and no
+alert and no strike are written. The other choices are today's `FAILED` (B), or A with one more
+try of the success write (C), which is a retry and needs the owner's yes.
+
 **Recorded, not open.** An abort followed by a failure of the run's final steps ends `ABORTED`,
 while an abort followed by a failed write ends `FAILED` (plan `0269` D10). The owner accepted
-this on 2026-11-18 (section 6). It is not a decision of this plan.
+this on 2026-11-18 (section 7). It is not a decision of this plan.
