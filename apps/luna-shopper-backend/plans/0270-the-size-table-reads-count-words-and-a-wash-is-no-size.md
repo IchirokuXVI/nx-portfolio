@@ -214,8 +214,10 @@ follows. `2x10 sobres` is 20 `UNIT` with a pack of 2 today. Two packs of three p
 pairs, the comparable price of plan `0245` divides by the size, so it is a price per pair, and
 the pack count says that two packs are sold as one.
 
-**What a wash loses.** On the next full read of each chain, every wash row of Carrefour, DIA and
-El Jamón states no size and no pack count, and so does every DEZA wash row. A size doubt held
+**What a wash loses.** On the next full read of each chain, the wash count of every wash row of
+Carrefour, DIA and El Jamón gives no size and no pack count by itself, and so does the wash
+count of every DEZA wash row. A pack phrase the chain prints beside it still counts:
+`pack de 2 botellas de 40 lavados` is pack 2 with no size (D6). A size doubt held
 on such a row clears, because `decide` in `size-doubt.ts` clears a doubt when the size goes.
 A new row with no size is created as `UNIT` with no size, unless the person names one.
 
@@ -391,7 +393,8 @@ key stays (D5).
 ## Acceptance criteria
 
 - [ ] The seven count words are `UNIT` 1 in the shared table and in the four closed lists.
-- [ ] No table maps a wash to a unit, and a wash states no size and no pack count anywhere.
+- [ ] No table maps a wash to a unit. A wash count gives no size and no pack count by itself,
+      and a pack phrase the chain prints beside it still counts (D6).
 - [ ] `w`, `h` and `ga` are in no table.
 - [ ] `2X100 g` reads as `2x100 g` on every chain that prints a multiplier.
 - [ ] The PR holds the replay before and after, for each chain, with counts by `status`.
@@ -464,9 +467,21 @@ carries its counts.
 **D5 (owner, answered 2026-11-17, decision 39a, was question 39):** the computed key of a DEZA
 row stays as it is, `entryKey(name, sizeFormat)` of the split. Renaming a product in the catalog
 never moves the key, because the key is built from the chain's printed description and not
-from the product. A change of the size split moves the key of a stored row one time only, as
-this plan does for the count words and the capital `X`, and the owner reviews the list of
-section 4.1 for it. No follow-up plan keys a source with no id on its whole description.
+from the product. A change of the size split moves the key of a stored row once for each
+change of the split, as this plan does for the count words and the capital `X`, and the owner
+reviews the list of section 4.1 for it. No follow-up plan keys a source with no id on its whole
+description.
+
+**D6 (owner, answered 2026-11-18, decision 43a):** a pack phrase beside a wash keeps its pack
+count. `Detergente pack de 2 40 lavados` (DEZA) and `pack de 2 botellas de 40 lavados`
+(Carrefour) read as pack 2 with no size. Two bottles are a count the chain states, and the
+harvester records what the chain states. Only the wash count itself states nothing: it gives no
+size and no pack count by itself.
+
+**D7 (owner, answered 2026-11-18, decision 44a):** `ración` and the sign `×` stay as built.
+`ración` is read by the shared table only, and `×` only by the El Jamón and LIDL adapters.
+Neither appeared in the 42,901 replayed rows. Adding either to DEZA would move the key of a
+matching stored row.
 
 ## Answered questions
 
