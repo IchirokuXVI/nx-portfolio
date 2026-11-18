@@ -32,12 +32,16 @@ import {
 import {
   exactAmount,
   followTyped,
+  isRefused,
   parseTypedAmount,
   shortAmount,
+  typedLimit,
   type AmountWords,
+  type TypedRefusal,
 } from '@portfolio/velista/platform';
 import { TrashIcon } from '../icons/icons';
 import { AmountFigure } from './amount-figure';
+import { AnchoredPopover, type AnchoredPopoverClose } from './anchored-popover';
 
 /** The three forms of the stepper (velista `0188`, section 3.1). */
 export type QuantityStepperVariant = 'row' | 'sheet' | 'sheet-narrow';
@@ -57,6 +61,33 @@ const TURNED_KEYS: Readonly<Record<string, string>> = {
   g: 'amount.turned.grams',
   ml: 'amount.turned.milliliters',
 };
+
+/**
+ * How long the popover that says why a key was not accepted stays by itself (the
+ * owner, 2026-11-17): long enough to read one short sentence twice.
+ */
+export const REFUSED_SHOWN_MS = 4000;
+
+/** The keys on the field that end or move the edit, and so take the popover away. */
+const ENDS_THE_EDIT: ReadonlySet<string> = new Set([
+  'Enter',
+  'ArrowUp',
+  'ArrowDown',
+  'Home',
+  'End',
+]);
+
+/** Why the field did not take a key, and the unit it read in then. */
+interface Refusal {
+  readonly reason: TypedRefusal;
+  readonly symbol: string;
+}
+
+/** One sentence of the refusal popover, as a translation key and its values. */
+export interface RefusalWords {
+  readonly key: string;
+  readonly values: Readonly<Record<string, unknown>>;
+}
 
 /**
  * An amount, as a minus, the amount and a plus in one outlined capsule (velista
@@ -86,10 +117,17 @@ const TURNED_KEYS: Readonly<Record<string, string>> = {
  * a whole number over 99 is read in grams at once ("500" g). An empty field reads in
  * grams, and a key the field does not accept is put back (`followTyped`). Every unit
  * goes no higher than 99 999, with the buttons as with typing ({@link ceiling}).
+ *
+ * **A key the field does not accept says why** (the owner, 2026-11-17): a small
+ * popover over the capsule holds one sentence ({@link refusalWords}), and the
+ * field's polite live region says it once. It never takes focus, and it goes on the
+ * next accepted key, when the edit ends, on Escape, and by itself after
+ * {@link REFUSED_SHOWN_MS}. A typed count over the ceiling is held to it when the
+ * edit ends, and the same popover says so then.
  */
 @Component({
   selector: 'lib-quantity-stepper',
-  imports: [AmountFigure, RokuTranslatorPipe, TrashIcon],
+  imports: [AmountFigure, AnchoredPopover, RokuTranslatorPipe, TrashIcon],
   templateUrl: './quantity-stepper.html',
   styleUrl: './quantity-stepper.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -234,6 +272,45 @@ export class QuantityStepper {
     return symbol === null ? null : (TURNED_KEYS[symbol] ?? null);
   });
 
+  /** Why the field did not take the last key, while its popover shows. */
+  private readonly _refusal = signal<Refusal | null>(null);
+  private _refusalTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The sentence of the refusal popover, or null when none shows (the owner,
+   * 2026-11-17). The most is said in the unit the field read in, through `Intl`.
+   */
+  readonly refusalWords = computed<RefusalWords | null>(() => {
+    const refusal = this._refusal();
+    if (refusal === null) {
+      return null;
+    }
+    switch (refusal.reason) {
+      case 'most':
+        return {
+          key: 'amount.refused.most',
+          values: {
+            amount: typedLimit(
+              this.ceiling(),
+              refusal.symbol,
+              this.unit(),
+              this.locale()
+            ),
+          },
+        };
+      case 'whole':
+        return {
+          key:
+            this.unit() === 'MILLILITER'
+              ? 'amount.refused.wholeMilliliters'
+              : 'amount.refused.wholeGrams',
+          values: {},
+        };
+      case 'decimals':
+        return { key: 'amount.refused.decimals', values: {} };
+    }
+  });
+
   /**
    * The amount the last press emitted, over the `value` it was computed from, until
    * the caller redraws. Presses that arrive before that redraw (a held key on a busy
@@ -267,6 +344,7 @@ export class QuantityStepper {
       if (this._announceTimer !== null) {
         clearTimeout(this._announceTimer);
       }
+      this._clearRefusal();
     });
   }
 
@@ -276,6 +354,11 @@ export class QuantityStepper {
    */
   press(direction: 1 | -1, event?: MouseEvent): void {
     const pointer = (event?.detail ?? 1) !== 0;
+    if (!pointer) {
+      // A key press of a button; a pointer's press cleared it on pointerdown, before
+      // the blur that may have said why a typed count was held.
+      this._clearRefusal();
+    }
     if (this._swallowClick && pointer) {
       // The release of a hold that already repeated adds no extra step.
       return;
@@ -305,6 +388,7 @@ export class QuantityStepper {
    * cannot undo the swallow of the first finger's release.
    */
   startHold(direction: 1 | -1, event: PointerEvent): void {
+    this._clearRefusal();
     const primary =
       (event as { isPrimary?: boolean }).isPrimary !== false &&
       (event.button === undefined || event.button === 0);
@@ -348,8 +432,19 @@ export class QuantityStepper {
 
   /** Arrow keys, Home and End on the sheet's field (the APG spinbutton pattern). */
   onFieldKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape' && this._refusal() !== null) {
+      // The popover goes, and the Escape goes no further: the sheet stays open.
+      event.preventDefault();
+      event.stopPropagation();
+      this._clearRefusal();
+      // Typed text stays: a second Escape puts the shown amount back.
+      return;
+    }
     if (this.disabled()) {
       return;
+    }
+    if (ENDS_THE_EDIT.has(event.key)) {
+      this._clearRefusal();
     }
     switch (event.key) {
       case 'ArrowUp':
@@ -408,8 +503,9 @@ export class QuantityStepper {
       ? (this._draftSymbol() ?? from.symbol)
       : from.symbol;
     const next = followTyped(input.value, symbol, unit, this.locale());
-    if (next === null) {
-      // Not accepted: the field keeps the text it had, and the caret its place.
+    if (isRefused(next)) {
+      // Not accepted: the field keeps the text it had, and the caret its place, and
+      // the popover says why.
       const caret = Math.max(
         0,
         (input.selectionStart ?? input.value.length) -
@@ -417,8 +513,10 @@ export class QuantityStepper {
       );
       input.value = before;
       input.setSelectionRange?.(caret, caret);
+      this._refuse(next.refused, symbol);
       return;
     }
+    this._clearRefusal();
     this._draftFrom = from;
     this.turnedTo.set(next.turned ? next.symbol : null);
     this._draftSymbol.set(next.symbol);
@@ -426,8 +524,20 @@ export class QuantityStepper {
   }
 
   onFieldBlur(event: FocusEvent): void {
+    this._clearRefusal();
     this._commitDraft();
     (event.target as HTMLInputElement).value = this.fieldText();
+  }
+
+  /**
+   * The refusal popover asks to close. Escape and the overlay being taken down close
+   * it. A press outside does not: the press that blurs the field and holds a typed
+   * count lands after the popover that says so opened, and would close it at once.
+   */
+  onRefusalClosed(why: AnchoredPopoverClose): void {
+    if (why !== 'outside') {
+      this._clearRefusal();
+    }
   }
 
   /** The repeat stops; the finger may still be down, so the release is still to come. */
@@ -531,17 +641,41 @@ export class QuantityStepper {
     // The draft is read in the symbol the edit held, or turned into while typing.
     const shown = { ...from, symbol: this._draftSymbol() ?? from.symbol };
     this._clearDraft();
-    const amount = parseTypedAmount(
-      draft,
-      shown,
-      this.unit(),
-      this.typedMin() ?? this.min(),
-      this.ceiling()
-    );
+    const floor = this.typedMin() ?? this.min();
+    const ceiling = this.ceiling();
+    const amount = parseTypedAmount(draft, shown, this.unit(), floor, ceiling);
     if (amount !== null) {
       this._emit(amount, false, true);
+      if (
+        amount === ceiling &&
+        (parseTypedAmount(draft, shown, this.unit(), floor, Infinity) ?? 0) >
+          ceiling
+      ) {
+        // A typed count over the most was held to it: the popover says so now.
+        this._refuse('most', shown.symbol);
+      }
     }
     return true;
+  }
+
+  /** Shows why a key was not taken, and starts the beat after which it goes. */
+  private _refuse(reason: TypedRefusal, symbol: string): void {
+    this._refusal.set({ reason, symbol });
+    if (this._refusalTimer !== null) {
+      clearTimeout(this._refusalTimer);
+    }
+    this._refusalTimer = setTimeout(() => {
+      this._refusalTimer = null;
+      this._refusal.set(null);
+    }, REFUSED_SHOWN_MS);
+  }
+
+  private _clearRefusal(): void {
+    if (this._refusalTimer !== null) {
+      clearTimeout(this._refusalTimer);
+      this._refusalTimer = null;
+    }
+    this._refusal.set(null);
   }
 
   private _clearDraft(): void {

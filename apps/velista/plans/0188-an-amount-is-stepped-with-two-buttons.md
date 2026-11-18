@@ -1,6 +1,8 @@
 > **PR:** [#978](https://github.com/IchirokuXVI/nx-portfolio/pull/978)
 >
 > **PR:** [#1003](https://github.com/IchirokuXVI/nx-portfolio/pull/1003), the owner's rulings of 2026-11-17 on typing and the ceiling
+>
+> **PR:** [#1006](https://github.com/IchirokuXVI/nx-portfolio/pull/1006), the owner's ruling of 2026-11-17 on a refused key
 
 # 0188: an amount is stepped with two buttons
 
@@ -432,6 +434,34 @@ the amount once after a run.
   - **A count** keeps the rule it had (decision K, rule 5 of the first reading: with a
     separator it reads in thousands) and only gets the ceiling: a typed count over 99 999 is
     held to 99 999 when the edit ends, and its digits are not limited while typing.
+
+  > **Note of 2026-11-17, the owner's ruling on a refused key.** "Nothing is drawn or said"
+  > above is replaced: when a key is not accepted, a small popover says why. As built:
+  >
+  > - `followTyped` answers which rule refused the key in place of null:
+  >   `{ refused: 'most' | 'whole' | 'decimals' }`. `isRefused` tells the two answers apart, and
+  >   `parseTypedAmount` still answers null for such a text. The reasons are grouped into
+  >   three sentences that stay true. `most`: a sixth digit, a paste of six, and a decimal
+  >   number over 99 under kg ("99,5" into "199,5" is more than 99,999 kg), "At most 99,999 g"
+  >   / "Como máximo, 99.999 g", the amount through `typedLimit` (`Intl`, the locale's
+  >   grouping) in the unit the field reads in, so "At most 99.999 kg" under kg. `whole`: a
+  >   separator under g or ml, "Grams take no decimals" / "Los gramos no llevan decimales"
+  >   and the same for milliliters. `decimals`: a fourth decimal under kg or l, "At most
+  >   three decimals" / "Como máximo, tres decimales". The keys are `amount.refused.*`.
+  > - It is `lib-anchored-popover` (velista `0110`), the surface of every popover in the app,
+  >   with a new `hint` frame at the width of its words, centred over the capsule, pushed
+  >   back onto a 320 px screen, in the top layer so no sheet clips it. It has no role and
+  >   takes no focus; the field's own polite live region (`.refusal-said`) says the sentence,
+  >   once while the same refusal repeats. Only the two sheet variants have a field, so only
+  >   the line sheet and the basket sheet ever show it.
+  > - It goes on the next accepted key, on Enter, an arrow, Home or End, a blur, a press of
+  >   either button, on Escape (which then goes no further and keeps the typed text; a
+  >   second Escape puts the shown amount back), and by itself after 4 s
+  >   (`REFUSED_SHOWN_MS`); a new refusal starts the 4 s again. A press outside it does not
+  >   close it, because the press that blurs the field lands after a popover the blur opened.
+  > - **A count over the most** (builder decision): its digits are still not limited while
+  >   typing, and when the edit ends and the amount is held to the ceiling, the same popover
+  >   says "At most 99,999" for its 4 s. A weight cannot pass the ceiling of 99 999 by typing.
 - **L. A tests' attribute.** The host carries `data-value` with the amount in base units, so the
   e2e suites read a row's amount without a spinbutton, which a row no longer has.
 - **M. The step follows the short form, also in a sheet.** S7b is stated for the row's reading.
@@ -584,7 +614,9 @@ The rules, in integers so no floating point rounding can move a digit:
   in after a keystroke and whether it turned, or null for a keystroke the field does not
   accept. It never rewrites the text. The stepper keeps the symbol of its draft and passes it
   back on the next keystroke, and puts a refused key back. `typedSymbol` is its symbol for a
-  text typed under `shown`, or `shown`'s for a refused text.
+  text typed under `shown`, or `shown`'s for a refused text. Since the note of 2026-11-17 on
+  a refused key (decision K) it answers `{ refused }` with the rule in place of null, and
+  `typedLimit(max, symbol, unit, locale)` writes the most for the popover that says why.
 
 `formatAmount` and `formatQuantity` keep their callers (captions, sentences, the dropped
 write note) and are not changed.

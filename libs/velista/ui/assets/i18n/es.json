@@ -757,6 +757,12 @@
     "turned": {
       "grams": "Ahora en gramos",
       "milliliters": "Ahora en mililitros"
+    },
+    "refused": {
+      "most": "Como máximo, {{- amount}}",
+      "wholeGrams": "Los gramos no llevan decimales",
+      "wholeMilliliters": "Los mililitros no llevan decimales",
+      "decimals": "Como máximo, tres decimales"
     }
   },
   "list": {

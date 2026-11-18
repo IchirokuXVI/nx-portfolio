@@ -110,6 +110,35 @@ describe('AnchoredPopover', () => {
     expect(positions(fixture).map((place) => place.offsetY)).toEqual([8, -8]);
   });
 
+  it('lines up with the anchor’s middle when asked, above first (velista 0188)', async () => {
+    const fixture = await render({ align: 'center' });
+
+    expect(sides(fixture)).toEqual(['above', 'below']);
+    expect(positions(fixture).map((place) => place.originX)).toEqual([
+      'center',
+      'center',
+    ]);
+    expect(positions(fixture).map((place) => place.overlayX)).toEqual([
+      'center',
+      'center',
+    ]);
+  });
+
+  it('pushes back onto the screen only when asked (velista 0188)', async () => {
+    const overlay = (fixture: ComponentFixture<AnchoredPopover>) =>
+      fixture.debugElement
+        .queryAllNodes(By.directive(CdkConnectedOverlay))[0]
+        .injector.get(CdkConnectedOverlay);
+    const plain = await render({});
+    expect(overlay(plain).push).toBe(false);
+
+    const pushed = await render({});
+    pushed.componentRef.setInput('push', true);
+    pushed.detectChanges();
+    expect(overlay(pushed).push).toBe(true);
+    expect(overlay(pushed).viewportMargin).toBe(16);
+  });
+
   it('gives the side that was asked for after it changes', async () => {
     const fixture = await render({});
 
