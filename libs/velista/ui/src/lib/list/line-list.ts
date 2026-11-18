@@ -7,6 +7,7 @@ import {
 import {
   basketMatchRange,
   type LineRowVm,
+  type ListRowLayout,
   type QuantityStep,
 } from '@portfolio/velista/models';
 import { LineRow, type LineRowAction } from './line-row';
@@ -55,6 +56,7 @@ import { LineRow, type LineRowAction } from './line-row';
             (opened)="opened.emit($event)"
             (quantityStepped)="quantityStepped.emit($event)"
             (retry)="retry.emit($event)"
+            [layout]="layout()"
             [line]="line"
             [match]="matchOf(line)"
             [pending]="pending().get(line.id) ?? null"
@@ -69,6 +71,12 @@ import { LineRow, type LineRowAction } from './line-row';
 })
 export class LineList {
   readonly lines = input.required<readonly LineRowVm[]>();
+
+  /**
+   * How every row is drawn, as the device chose (velista `0191`): the row of today or
+   * the compact row.
+   */
+  readonly layout = input<ListRowLayout>('default');
 
   /** What the live region currently says. Empty announces nothing. */
   readonly announcement = input('');
