@@ -40,6 +40,37 @@ export const SETUP_SOURCES_PART = 'sources';
 export const REVIEW_CHAIN_PARAM = 'chain';
 
 /**
+ * The query parameter that narrows the products queue to one source entry
+ * (admin plan 0073). It sits beside the chain, and while it is set the queue
+ * asks for that one row whatever its status.
+ */
+export const REVIEW_ENTRY_PARAM = 'entry';
+
+/** A screen of the section with the query string it opens on. */
+export interface HarvestAddress {
+  readonly commands: readonly string[];
+  readonly queryParams: Readonly<Record<string, string>>;
+}
+
+/**
+ * One source entry: the products queue narrowed to it, on its chain (admin
+ * plan 0073). The address is a query string on the queue rather than a route
+ * of its own, so the rail sees nothing new.
+ */
+export function harvestEntryAddress(
+  entryId: string,
+  supermarketId: string
+): HarvestAddress {
+  return {
+    commands: harvestReviewPath('products'),
+    queryParams: {
+      [REVIEW_ENTRY_PARAM]: entryId,
+      [REVIEW_CHAIN_PARAM]: supermarketId,
+    },
+  };
+}
+
+/**
  * The view of the places queue that reads the same places grouped by chain,
  * as the `view` query parameter holds it.
  */

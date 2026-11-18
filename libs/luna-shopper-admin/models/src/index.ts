@@ -32,12 +32,15 @@ export {
   HARVEST_SETUP_TAB,
   PLACES_GROUPED_VIEW,
   REVIEW_CHAIN_PARAM,
+  REVIEW_ENTRY_PARAM,
   REVIEW_QUEUES,
   SETUP_SOURCES_PART,
+  harvestEntryAddress,
   harvestReviewPath,
   harvestRunPath,
   harvestRunsPath,
   harvestSetupPath,
+  type HarvestAddress,
   type ReviewQueue,
 } from './lib/harvest/harvest-addresses';
 export {

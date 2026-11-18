@@ -91,6 +91,8 @@ export {
 export { HarvestApi } from './lib/harvest/harvest-api';
 export { HarvestMemory } from './lib/harvest/harvest-memory';
 export {
+  CARREFOUR_ACEITE_ENTRY,
+  CARREFOUR_YOGUR_ENTRY,
   DEZA_CATALOG_PRESET,
   DEZA_NIGHTLY_SCHEDULE,
   HARVEST_RUN_SEED,

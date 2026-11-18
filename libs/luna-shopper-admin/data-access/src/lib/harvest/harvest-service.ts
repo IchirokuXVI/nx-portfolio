@@ -471,6 +471,13 @@ export interface EntryQuery extends PageQuery {
    * person typing punctuation gets an empty list and not an error.
    */
   readonly brandKey?: string;
+  /**
+   * The one row with this id, whatever its status (admin plan 0073). Every
+   * other filter given still applies, and with no `status` the queue's default
+   * of the two waiting statuses is not added: the row a link names can be
+   * decided already. The gateway refuses a value that is not a uuid.
+   */
+  readonly entryId?: string;
 }
 
 /**

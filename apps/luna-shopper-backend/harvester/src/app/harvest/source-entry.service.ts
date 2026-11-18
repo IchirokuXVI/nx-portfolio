@@ -280,9 +280,15 @@ export class SourceEntryService {
     if (req.supermarketId) {
       qb.andWhere('e."supermarketId" = :sid', { sid: req.supermarketId });
     }
+    // Admin plan 0073: the id is how the back office addresses one entry, and
+    // the row a link names can be decided already, so an id with no `status`
+    // adds no default status clause. A `status` given beside it still applies.
+    if (req.entryId) {
+      qb.andWhere('e.id = :entryId', { entryId: req.entryId });
+    }
     if (req.status) {
       qb.andWhere('e.status = :status', { status: req.status });
-    } else {
+    } else if (!req.entryId) {
       qb.andWhere('e.status IN (:...queued)', { queued: QUEUED });
     }
     if (req.sourceKind) {

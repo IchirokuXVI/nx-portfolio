@@ -1,6 +1,9 @@
 import { DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { NavigationEnd, Router } from '@angular/router';
-import { REVIEW_CHAIN_PARAM } from '@portfolio/luna-shopper-admin/models';
+import {
+  REVIEW_CHAIN_PARAM,
+  REVIEW_ENTRY_PARAM,
+} from '@portfolio/luna-shopper-admin/models';
 
 /**
  * The chain the four queues of Review are narrowed to (admin plan 0044,
@@ -51,6 +54,9 @@ export class ReviewChain {
     const tree = this._router.parseUrl(this._router.url);
     const kept = { ...tree.queryParams };
     delete kept[REVIEW_CHAIN_PARAM];
+    // Another chain is another question, so it ends the products queue's one
+    // entry view as well (admin plan 0073).
+    delete kept[REVIEW_ENTRY_PARAM];
     tree.queryParams =
       supermarketId === ''
         ? kept

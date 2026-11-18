@@ -4,6 +4,8 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
 import {
+  CARREFOUR_ACEITE_ENTRY,
+  CARREFOUR_YOGUR_ENTRY,
   CATEGORY_SEED,
   ContentLocaleStore,
   DASHBOARD_SERVICE,
@@ -35,6 +37,7 @@ import { ReviewChain } from './review-chain';
  */
 
 const MERCADONA = '11111111-1111-4111-8111-111111111111';
+const CARREFOUR = '22222222-2222-4222-8222-222222222222';
 const DEZA = '33333333-3333-4333-8333-333333333333';
 
 /** What the directory answers for the two chains the seed holds rows for. */
@@ -255,6 +258,7 @@ describe('the one queue, with no chain chosen', () => {
       'entry-aceite',
       'entry-galletas',
       'entry-leche-leaflet',
+      CARREFOUR_YOGUR_ENTRY,
     ]);
   });
 
@@ -308,7 +312,7 @@ describe('the one queue, with no chain chosen', () => {
     page.open('');
     await drain();
     fixture.detectChanges();
-    expect(page.queue?.items().length).toBe(5);
+    expect(page.queue?.items().length).toBe(6);
   });
 
   /**
@@ -857,6 +861,146 @@ describe('the one queue, reading', () => {
     expect(page.queue?.items().map((entry) => entry.id)).toEqual([
       'entry-leche-leaflet',
     ]);
+  });
+});
+
+/**
+ * One entry by its address (admin plan 0073): what a size example of a run
+ * links to. The entry and the chain are the question, so the other filters
+ * are not sent, and any of them changed ends the view.
+ */
+describe('the one queue, narrowed to one entry', () => {
+  const notice = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    fixture.nativeElement.querySelector(
+      '[data-entry-notice]'
+    ) as HTMLElement | null;
+
+  it('asks with the entry and the chain only, opens the row and says so', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+      brandKey: 'hacendado',
+    });
+    const page = fixture.componentInstance;
+
+    expect(named(calls, 'listEntries')).toEqual([
+      [
+        {
+          entryId: CARREFOUR_YOGUR_ENTRY,
+          supermarketId: CARREFOUR,
+          cursor: undefined,
+        },
+      ],
+    ]);
+    expect(page.row()?.id).toBe(CARREFOUR_YOGUR_ENTRY);
+    expect(notice(fixture)?.textContent).toContain('harvest.entries.entry.one');
+    expect(notice(fixture)?.textContent).toContain('harvest.entries.entry.all');
+  });
+
+  it('reaches a decided row, which the default queue does not list', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_ACEITE_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    expect(fixture.componentInstance.queue?.current()).toMatchObject({
+      id: CARREFOUR_ACEITE_ENTRY,
+      status: 'ACTIVE',
+    });
+    expect(text(fixture)).toContain('Aceite de oliva virgen extra 1 l');
+  });
+
+  it('shows the whole queue again from the button, and keeps the chain', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+
+    (
+      fixture.nativeElement.querySelector('[data-entry-all]') as HTMLElement
+    ).click();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.entryFilter()).toBeNull();
+    expect(notice(fixture)).toBeNull();
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${CARREFOUR}`);
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toEqual({
+      supermarketId: CARREFOUR,
+      cursor: undefined,
+    });
+  });
+
+  it('ends the view when a filter changes', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="status"]'
+    );
+    select.value = 'ACTIVE';
+    select.dispatchEvent(new Event('change'));
+    await drain();
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.entryFilter()).toBeNull();
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${CARREFOUR}`);
+    const last = named(calls, 'listEntries').at(-1)?.[0];
+    expect(last).toMatchObject({ status: 'ACTIVE', supermarketId: CARREFOUR });
+    expect(last).not.toHaveProperty('entryId');
+  });
+
+  it('ends the view when the chain changes', async () => {
+    const { fixture, calls } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    TestBed.inject(ReviewChain).choose(DEZA);
+    await drain();
+    fixture.detectChanges();
+    await drain();
+
+    expect(fixture.componentInstance.entryFilter()).toBeNull();
+    expect(TestBed.inject(Router).url).toBe(`/?chain=${DEZA}`);
+    expect(named(calls, 'listEntries').at(-1)?.[0]).toEqual({
+      supermarketId: DEZA,
+      cursor: undefined,
+    });
+  });
+
+  it('asks nothing for a value that is not an id, and draws the empty state under the notice', async () => {
+    const { fixture, calls } = await render({
+      entry: 'not-an-id',
+      chain: CARREFOUR,
+    });
+
+    expect(named(calls, 'listEntries')).toEqual([]);
+    expect(fixture.componentInstance.queue?.empty()).toBe(true);
+    expect(notice(fixture)).not.toBeNull();
+    expect(text(fixture)).toContain('harvest.entries.empty');
+  });
+
+  it('keeps the row in the answer after a decision, as the decision left it', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+
+    page.reject();
+    await drain();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue?.current()).toMatchObject({
+      id: CARREFOUR_YOGUR_ENTRY,
+      status: 'REJECTED',
+    });
+    expect(notice(fixture)).not.toBeNull();
   });
 });
 

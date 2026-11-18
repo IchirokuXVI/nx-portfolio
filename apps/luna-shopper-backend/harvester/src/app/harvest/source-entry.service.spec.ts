@@ -1695,6 +1695,98 @@ describe('SourceEntryService', () => {
     });
   });
 
+  describe('list, addressed by entry id (admin plan 0073)', () => {
+    /**
+     * A query builder that keeps the rows the recorded clauses admit. It reads
+     * only the id and status clauses, which are the rule under test, so an
+     * `ACTIVE` row in the fixture is answered or not by the service's clauses
+     * and not by the fake.
+     */
+    function filteringBuilder(rows: SourceCatalogEntry[]) {
+      const clauses: { sql: string; params?: Record<string, unknown> }[] = [];
+      const admits = (row: SourceCatalogEntry) =>
+        clauses.every(({ sql, params }) => {
+          if (sql === 'e.id = :entryId') return row.id === params?.['entryId'];
+          if (sql === 'e.status = :status') {
+            return row.status === params?.['status'];
+          }
+          if (sql === 'e.status IN (:...queued)') {
+            return (params?.['queued'] as string[]).includes(row.status);
+          }
+          return true;
+        });
+      const qb = {
+        leftJoinAndSelect: () => qb,
+        orderBy: () => qb,
+        addOrderBy: () => qb,
+        take: () => qb,
+        andWhere: (sql: string, params?: Record<string, unknown>) => {
+          clauses.push({ sql, params });
+          return qb;
+        },
+        getMany: async () => rows.filter(admits),
+      };
+      return { qb, clauses };
+    }
+
+    const active = entry({
+      id: '00000000-0000-4000-8000-0000000000a1',
+      status: SourceEntryStatus.ACTIVE,
+      itemId: 'item-bound',
+    });
+    const waiting = entry({
+      id: '00000000-0000-4000-8000-0000000000a2',
+      status: SourceEntryStatus.CANDIDATE,
+    });
+
+    it('answers the row with that id and no status given, an ACTIVE row included', async () => {
+      const { service, entries } = build();
+      const { qb, clauses } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN, entryId: active.id });
+
+      expect(page.items.map((row) => row.id)).toEqual([active.id]);
+      expect(clauses.some((c) => c.sql.includes('IN (:...queued)'))).toBe(
+        false
+      );
+    });
+
+    it('answers a waiting row by its id as well', async () => {
+      const { service, entries } = build();
+      const { qb } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN, entryId: waiting.id });
+
+      expect(page.items.map((row) => row.id)).toEqual([waiting.id]);
+    });
+
+    it('answers nothing when a status is given that the row does not have', async () => {
+      const { service, entries } = build();
+      const { qb } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({
+        userId: ADMIN,
+        entryId: active.id,
+        status: SourceEntryStatus.CANDIDATE,
+      });
+
+      expect(page.items).toEqual([]);
+    });
+
+    it('keeps the waiting statuses when no id is asked for', async () => {
+      const { service, entries } = build();
+      const { qb } = filteringBuilder([active, waiting]);
+      (entries.createQueryBuilder as jest.Mock).mockReturnValue(qb);
+
+      const page = await service.list({ userId: ADMIN });
+
+      expect(page.items.map((row) => row.id)).toEqual([waiting.id]);
+    });
+  });
+
   describe('the revert helpers', () => {
     it('deletes only the rows this run created and no later run observed', async () => {
       const { service, entries } = build();

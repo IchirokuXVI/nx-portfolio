@@ -51,6 +51,14 @@ export const MERCADONA_WEEKDAYS_SCHEDULE =
 export const MERCADONA_SUNDAY_SCHEDULE = '77777777-7777-4777-8777-777777777772';
 export const DEZA_NIGHTLY_SCHEDULE = '77777777-7777-4777-8777-777777777773';
 
+/**
+ * The two Carrefour rows a size example of the reverted walk names, fixed so a
+ * spec can name them. A uuid, as the gateway reads one, because the products
+ * queue asks for nothing with an id of another shape (admin plan 0073).
+ */
+export const CARREFOUR_YOGUR_ENTRY = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee01';
+export const CARREFOUR_ACEITE_ENTRY = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeee02';
+
 const NOW = '2026-09-03T10:00:00.000Z';
 
 export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
@@ -178,7 +186,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
       probablePackCounts: 1,
       sizesDisprovedExamples: [
         {
-          entryId: 'entry-carrefour-yogur',
+          entryId: CARREFOUR_YOGUR_ENTRY,
           externalId: '521006',
           name: 'Yogur natural Carrefour 125 g',
           stated: 125,
@@ -189,7 +197,7 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
           probablePackCount: 4,
         },
         {
-          entryId: 'entry-carrefour-aceite',
+          entryId: CARREFOUR_ACEITE_ENTRY,
           externalId: '600214',
           name: 'Aceite de oliva virgen extra 1 l',
           stated: 1000,
@@ -1382,6 +1390,72 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       matchedBy: 'MANUAL',
       confidence: 1,
       decidedAt: '2026-08-20T09:00:00.000Z',
+      prices: [],
+    },
+    {
+      // The two rows the size examples of `run-catalog-reverted` name (admin
+      // plan 0073), so each link of its report lands on a row with nothing
+      // listening. This one still waits for a person.
+      id: CARREFOUR_YOGUR_ENTRY,
+      supermarketId: CARREFOUR,
+      externalId: '521006',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Yogur natural Carrefour 125 g',
+      brand: 'Carrefour',
+      ean: null,
+      unitSize: 125,
+      sizeUnit: 'GRAM',
+      soldByWeight: false,
+      sizeFormat: '125 g',
+      packCount: null,
+      categoryPath: ['Lácteos', 'Yogures'],
+      url: null,
+      imageUrl: null,
+      extra: null,
+      timesSeen: 1,
+      firstSeenAt: '2026-08-31T07:10:00.000Z',
+      lastSeenAt: '2026-08-31T07:10:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: null,
+      candidateEntryId: null,
+      status: 'UNRESOLVED',
+      matchedBy: null,
+      confidence: 0,
+      decidedAt: null,
+      prices: [],
+    },
+    {
+      // A walk doubts the size of a decided row too (backend plan 0249), so a
+      // size example can name an `ACTIVE` row, which the default queue does not
+      // list. The address reaches it all the same (admin plan 0073).
+      id: CARREFOUR_ACEITE_ENTRY,
+      supermarketId: CARREFOUR,
+      externalId: '600214',
+      sourceKind: 'OFFICIAL_WEB',
+      name: 'Aceite de oliva virgen extra 1 l',
+      brand: 'Carrefour',
+      ean: null,
+      unitSize: 1000,
+      sizeUnit: 'MILLILITER',
+      soldByWeight: false,
+      sizeFormat: '1 l',
+      packCount: null,
+      categoryPath: ['Despensa', 'Aceites'],
+      url: null,
+      imageUrl: null,
+      extra: null,
+      timesSeen: 5,
+      firstSeenAt: '2026-07-20T07:00:00.000Z',
+      lastSeenAt: '2026-08-31T07:12:00.000Z',
+      firstRunId: 'run-catalog-reverted',
+      lastRunId: 'run-catalog-reverted',
+      itemId: 'item-aceite',
+      candidateEntryId: null,
+      status: 'ACTIVE',
+      matchedBy: 'MANUAL',
+      confidence: 1,
+      decidedAt: '2026-08-01T09:00:00.000Z',
       prices: [],
     },
   ];

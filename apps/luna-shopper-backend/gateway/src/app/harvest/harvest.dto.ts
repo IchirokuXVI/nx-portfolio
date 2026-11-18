@@ -889,6 +889,15 @@ export class SourceEntryListQueryDto extends PageQueryDto {
   @Transform(asQueryFlag)
   @IsBoolean()
   delisted?: boolean;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description:
+      'The one row with this id, whatever its status, which is how the back office addresses one entry (admin plan 0073). Every other filter given still applies, and with no `status` the default CANDIDATE and UNRESOLVED clause is not added.',
+  })
+  @IsOptional()
+  @IsUUID()
+  entryId?: string;
 }
 
 /**

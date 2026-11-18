@@ -1805,6 +1805,13 @@ export interface ListSourceEntriesRequest extends PageQuery, AdminCredential {
    * false leaves them out, and absent lists both (plan 0220, section 12).
    */
   delisted?: boolean;
+  /**
+   * The one row with this id, whatever its status (admin plan 0073). Every
+   * other filter given still applies, and with no `status` the default
+   * `CANDIDATE` and `UNRESOLVED` clause is not added, because the row a link
+   * names can be decided already.
+   */
+  entryId?: string;
 }
 
 export interface SourceEntryIdRequest extends AdminCredential {

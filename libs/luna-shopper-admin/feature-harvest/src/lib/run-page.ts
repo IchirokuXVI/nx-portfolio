@@ -20,12 +20,14 @@ import {
 import {
   exportFileName,
   failureBlockReason,
+  harvestEntryAddress,
   harvestReviewPath,
   isFileImportRun,
   PRICE_WRITING_MODES,
   queuedByRun,
   REVIEW_CHAIN_PARAM,
   runWarningRows,
+  type HarvestAddress,
 } from '@portfolio/luna-shopper-admin/models';
 import {
   ConfirmDialog,
@@ -487,7 +489,20 @@ import {
                       <tbody>
                         @for (example of sizes.examples; track $index) {
                           <tr>
-                            <th scope="row">{{ example.name }}</th>
+                            <!-- The entry's address, when the example names
+                                 one (admin plan 0073). -->
+                            <th scope="row">
+                              @if (entryLink(example.entryId); as link) {
+                                <a
+                                  [queryParams]="link.queryParams"
+                                  [routerLink]="link.commands"
+                                  data-size-entry
+                                  >{{ example.name }}</a
+                                >
+                              } @else {
+                                {{ example.name }}
+                              }
+                            </th>
                             <td class="number">{{ amount(example.stated) }}</td>
                             <td class="number">
                               {{ amount(example.implied) }}
@@ -1085,6 +1100,21 @@ export class RunPage {
           params: { [REVIEW_CHAIN_PARAM]: run.supermarketId },
         };
   });
+
+  /**
+   * Where a size example's entry is: the products queue narrowed to it, on
+   * this run's chain (admin plan 0073).
+   *
+   * `null` for an example that names no entry, `''` from the report mapper,
+   * and for a run with no chain, so the name is drawn as text and not as a
+   * link with a hole in its query string.
+   */
+  entryLink(entryId: string): HarvestAddress | null {
+    const chain = this.watch.run()?.supermarketId ?? null;
+    return entryId === '' || chain === null
+      ? null
+      : harvestEntryAddress(entryId, chain);
+  }
 
   readonly facts = computed(() => {
     const run = this.watch.run();
