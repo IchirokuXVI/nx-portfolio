@@ -1416,6 +1416,69 @@ describe('DezaCatalogRunner (plan 0085)', () => {
     );
   });
 
+  it('keys a row whose count word now splits under one new key, walk after walk (plan 0270, section 5.2)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Calcetines 3 pares',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+
+    // Two runs, so two `Crawl` instances, read the same printed description.
+    const keys: string[] = [];
+    for (let walk = 0; walk < 2; walk++) {
+      const { runner, context, report } = build(listing);
+      await runner.run(
+        context,
+        report,
+        { supermarketId: CHAIN },
+        source({ baseUrl: listing.url })
+      );
+      expect(report.products).toHaveLength(1);
+      expect(report.products[0]).toMatchObject({
+        name: 'Calcetines',
+        sizeFormat: '3 pares',
+        unitSize: 3,
+        sizeUnit: 'UNIT',
+      });
+      keys.push(report.products[0].externalId);
+    }
+
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[0]).toBe(entryKey('Calcetines', '3 pares'));
+    // The key the split before this plan built for the same description,
+    // which kept the size in the name: the stored row moves once.
+    expect(keys[0]).not.toBe(entryKey('Calcetines 3 pares', null));
+  });
+
+  it('writes a wash as a split size with no number (plan 0270)', async () => {
+    listing = await startFakeListing(SECTIONS, [
+      {
+        description: 'Detergente ARIEL 40 lavados',
+        section: 'W011',
+        shops: ['T1'],
+      },
+    ]);
+    const { runner, context, report } = build(listing);
+
+    await runner.run(
+      context,
+      report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url })
+    );
+
+    expect(report.products[0]).toMatchObject({
+      externalId: entryKey('Detergente ARIEL', '40 lavados'),
+      name: 'Detergente ARIEL',
+      sizeFormat: '40 lavados',
+      unitSize: null,
+      sizeUnit: null,
+      packCount: null,
+    });
+  });
+
   it('writes a weight printed with aprox as an approximate weight and no size (plan 0266, D4)', async () => {
     listing = await startFakeListing(SECTIONS, [
       {

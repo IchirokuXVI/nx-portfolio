@@ -67,6 +67,15 @@ const UNITS = new Set([
   'm',
   'cm',
   'mm',
+  // Pairs, small bags and portions, each a count of one (plan 0270).
+  'par',
+  'pares',
+  'bolsita',
+  'bolsitas',
+  'porción',
+  'porcion',
+  'porciones',
+  // A wash is read, and states no size and no pack (plan 0270).
   'lavados',
   'dosis',
   'rollos',

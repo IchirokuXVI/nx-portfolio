@@ -67,6 +67,16 @@ describe('parseSize', () => {
     });
   });
 
+  it('reads a capital X as a small one (plan 0270)', () => {
+    expect(parseSize('2X100 g')).toEqual({
+      unitSize: 200,
+      unit: UnitOfMeasure.GRAM,
+      count: 2,
+      approximate: false,
+    });
+    expect(packCountIn('2X100 g')).toBe(2);
+  });
+
   it('reads the pack count as the N of NxQ (plan 0162)', () => {
     expect(packCountIn('3x200 ml')).toBe(3);
     expect(packCountIn('6x200ml')).toBe(6);

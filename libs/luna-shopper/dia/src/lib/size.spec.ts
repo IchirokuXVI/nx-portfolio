@@ -336,4 +336,67 @@ describe('splitSize', () => {
       expect(splitSize(printed).approxWeight).toBeNull();
     });
   });
+
+  describe('count words, a wash and a capital X (plan 0270)', () => {
+    it.each([
+      [
+        'Calcetines deportivos Dia 3 pares',
+        'Calcetines deportivos Dia',
+        '3 pares',
+        3,
+      ],
+      ['Manzanilla Dia 20 bolsitas', 'Manzanilla Dia', '20 bolsitas', 20],
+      [
+        'Queso en porciones Dia 8 porciones',
+        'Queso en porciones Dia',
+        '8 porciones',
+        8,
+      ],
+    ])('%s states a count', (printed, name, sizeFormat, unitSize) => {
+      expect(splitSize(printed)).toMatchObject({
+        name,
+        sizeFormat,
+        unitSize,
+        sizeUnit: 'UNIT',
+        packCount: null,
+      });
+    });
+
+    it('reads 2 x 3 pares as six pairs in a pack of two', () => {
+      expect(splitSize('Calcetines Dia 2 x 3 pares')).toMatchObject({
+        sizeFormat: '2 x 3 pares',
+        unitSize: 6,
+        sizeUnit: 'UNIT',
+        packCount: 2,
+      });
+    });
+
+    it.each([
+      ['Detergente líquido Dia 40 lavados', '40 lavados'],
+      ['Detergente líquido Dia 2 x 40 lavados', '2 x 40 lavados'],
+    ])(
+      '%s keeps the wash split off and states no size and no pack',
+      (printed, sizeFormat) => {
+        expect(splitSize(printed)).toEqual({
+          name: 'Detergente líquido Dia',
+          sizeFormat,
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          approximate: false,
+          approxWeight: null,
+        });
+      }
+    );
+
+    it('reads a capital X as a small one', () => {
+      expect(splitSize('Yogur natural Dia 2X125 g')).toMatchObject({
+        name: 'Yogur natural Dia',
+        sizeFormat: '2X125 g',
+        unitSize: 250,
+        sizeUnit: 'GRAM',
+        packCount: 2,
+      });
+    });
+  });
 });

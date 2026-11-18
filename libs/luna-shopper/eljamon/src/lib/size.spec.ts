@@ -67,13 +67,48 @@ describe('splitSize', () => {
       ['queso curado, 500g aprox.', '500g aprox.', 500, 'GRAM'],
       ['crema fresca de calabaza, 330ml', '330ml', 330, 'MILLILITER'],
       ['café en cápsulas, 16ud', '16ud', 16, 'UNIT'],
-      ['detergente líquido, 40 lavados', '40 lavados', 40, 'UNIT'],
+      ['calcetines deportivos, 3 pares', '3 pares', 3, 'UNIT'],
+      ['manzanilla, 20 bolsitas', '20 bolsitas', 20, 'UNIT'],
+      ['queso en porciones, 8 porciones', '8 porciones', 8, 'UNIT'],
+      ['yogur natural, 2X125g', '2X125g', 250, 'GRAM'],
     ])('%s', (printed, sizeFormat, unitSize, sizeUnit) => {
       // The printed text is the key, and it is exactly what the chain wrote.
       expect(splitSize(printed)).toMatchObject({
         sizeFormat,
         unitSize,
         sizeUnit,
+      });
+    });
+
+    describe('count words, a wash and a capital X (plan 0270)', () => {
+      it('reads 2x3 pares as six pairs in a pack of two', () => {
+        expect(splitSize('calcetines, 2x3 pares')).toMatchObject({
+          sizeFormat: '2x3 pares',
+          unitSize: 6,
+          sizeUnit: 'UNIT',
+          packCount: 2,
+        });
+      });
+
+      it.each([
+        ['detergente líquido, 40 lavados', '40 lavados'],
+        ['detergente líquido, 2x40 lavados', '2x40 lavados'],
+      ])(
+        '%p keeps the wash and states no size and no pack',
+        (printed, sizeFormat) => {
+          expect(splitSize(printed)).toEqual({
+            name: 'detergente líquido',
+            sizeFormat,
+            unitSize: null,
+            sizeUnit: null,
+            packCount: null,
+            soldByWeight: false,
+          });
+        }
+      );
+
+      it('reads the pack count of a capital X', () => {
+        expect(splitSize('yogur natural, 2X125g').packCount).toBe(2);
       });
     });
 

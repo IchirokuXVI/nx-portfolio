@@ -259,6 +259,67 @@ describe('splitCardName', () => {
     });
   });
 
+  describe('count words, a wash and a capital X (plan 0270)', () => {
+    it('reads a count word on a card priced per unit', () => {
+      expect(splitCardName('Calcetines CARREFOUR 3 pares', 'ud')).toEqual({
+        name: 'Calcetines CARREFOUR',
+        sizeFormat: '3 pares',
+        unitSize: 3,
+        sizeUnit: 'UNIT',
+        packCount: null,
+      });
+      expect(
+        splitCardName('Infusión manzanilla CARREFOUR 20 bolsitas', 'ud')
+      ).toMatchObject({ sizeFormat: '20 bolsitas', unitSize: 20 });
+      expect(splitCardName('Queso CARREFOUR 8 porciones', 'ud')).toMatchObject({
+        sizeFormat: '8 porciones',
+        unitSize: 8,
+      });
+    });
+
+    it('refuses a count word on a card priced per kilogram', () => {
+      expect(splitCardName('Calcetines CARREFOUR 3 pares', 'kg')).toEqual({
+        name: 'Calcetines CARREFOUR 3 pares',
+        sizeFormat: null,
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    });
+
+    it('splits a wash off the name and states no size and no pack', () => {
+      expect(splitCardName('Detergente ARIEL 40 lavados', 'ud')).toEqual({
+        name: 'Detergente ARIEL',
+        sizeFormat: '40 lavados',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+      expect(splitCardName('Detergente ARIEL 2x40 lavados', 'ud')).toEqual({
+        name: 'Detergente ARIEL',
+        sizeFormat: '2x40 lavados',
+        unitSize: null,
+        sizeUnit: null,
+        packCount: null,
+      });
+    });
+
+    it('reads a capital X as a small one', () => {
+      expect(splitCardName('Yogur natural CARREFOUR 2X100 g', 'kg')).toEqual({
+        ...splitCardName('Yogur natural CARREFOUR 2x100 g', 'kg'),
+        // The text stays as printed.
+        sizeFormat: '2X100 g',
+      });
+      expect(
+        splitCardName('Yogur natural CARREFOUR 2X100 g', 'kg')
+      ).toMatchObject({
+        name: 'Yogur natural CARREFOUR',
+        sizeFormat: '2X100 g',
+        packCount: 2,
+      });
+    });
+  });
+
   it('keeps the whole name when the name is nothing but a size', () => {
     expect(splitCardName('1,5 l', 'l')).toEqual({
       name: '1,5 l',

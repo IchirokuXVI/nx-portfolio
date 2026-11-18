@@ -71,6 +71,14 @@ export const DEZA_SIZE_UNITS: readonly string[] = [
   'unidades',
   'piezas',
   'docena',
+  // Pairs, small bags and portions, each a count of one (plan 0270)
+  'par',
+  'pares',
+  'bolsita',
+  'bolsitas',
+  'porción',
+  'porcion',
+  'porciones',
   // Length
   'm',
   'cm',
@@ -94,12 +102,14 @@ export const DEZA_SIZE_UNITS: readonly string[] = [
 const UNIT_SET = new Set(DEZA_SIZE_UNITS);
 
 /**
- * A quantity: one number, or several joined by `x` or `+`.
+ * A quantity: one number, or several joined by `x`, `X` or `+`.
  *
- * `3x187`, `5x30`, `28+16`, `330+165`, `1.75`, `1,5`. The separators are kept
- * because the size is stored verbatim; only the split point is decided here.
+ * `3x187`, `2X100`, `5x30`, `28+16`, `330+165`, `1.75`, `1,5`. The separators
+ * are kept because the size is stored verbatim; only the split point is
+ * decided here. A capital `X` multiplies as a small one does (plan 0270), as
+ * {@link STATED_SIZE} already reads it.
  */
-const QUANTITY = String.raw`\d+(?:[.,]\d+)?(?:\s*[x+]\s*\d+(?:[.,]\d+)?)*`;
+const QUANTITY = String.raw`\d+(?:[.,]\d+)?(?:\s*[xX+]\s*\d+(?:[.,]\d+)?)*`;
 
 /**
  * What the chain may print after the unit word of a size (plan 0266): a full
@@ -174,11 +184,13 @@ const STATED_SIZE = new RegExp(
  * pack, the way the LIDL adapter states one: `3x187 ml` is 561 millilitres,
  * which is what the shopper carries out.
  *
- * Two shapes answer no size at all, and both on purpose. A sum, `23+12
+ * Three shapes answer no size at all, each on purpose. A sum, `23+12
  * lavados`, is a bonus pack whose arithmetic the chain did not state, so the
  * pattern does not match it. A length, `30 m`, has no catalog unit, and a
- * number with no unit beside it is what this plan exists to stop writing. The
- * printed text is untouched either way: `sizeFormat` is half of the row's key.
+ * number with no unit beside it is what this plan exists to stop writing. A
+ * wash, `40 lavados`, is the brand's claim and measures nothing in the pack
+ * (plan 0270). The printed text is untouched in every case: `sizeFormat` is
+ * half of the row's key.
  *
  * A weight printed with `aprox`, `8 kg aprox.`, is not a fixed size either
  * (plan 0266, D4): it answers no size, and {@link approxWeightOf} states it.
