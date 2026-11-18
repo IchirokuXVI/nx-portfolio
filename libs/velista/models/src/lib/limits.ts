@@ -107,7 +107,7 @@ export const LINE_CONTENT_MAX_LENGTH = 400;
 export const LINE_CONTENT_COUNTER_FROM = 350;
 
 /**
- * `AddLineDto.quantity`. The reel simply cannot be driven past either end.
+ * `AddLineDto.quantity`. The stepper cannot be driven past either end.
  *
  * **The floor is zero**, and it moved there with the trip status (backend plan
  * 0047). Zero is not an empty line waiting to be deleted, it is the household

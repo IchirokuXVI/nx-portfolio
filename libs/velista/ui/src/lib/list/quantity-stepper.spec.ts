@@ -1,5 +1,7 @@
 import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   RokuTranslatorService,
   RokuTranslatorTestingModule,
@@ -559,7 +561,7 @@ describe('QuantityStepper (velista 0188)', () => {
       type(h, '1,5');
       expect(h.steps).toEqual([]);
       key(h, 'Enter');
-      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false }]);
+      expect(h.steps).toEqual([{ from: 500, to: 1500, repeat: false, typed: true }]);
       expect(field(h).value).toBe('1.5');
       expect(h.el.querySelector('.symbol')?.textContent).toBe('l');
     });
@@ -605,7 +607,7 @@ describe('QuantityStepper (velista 0188)', () => {
       const h = render({ value: 750, unit: 'GRAM', variant: 'sheet' });
       type(h, '900');
       h.plus.click();
-      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false }]);
+      expect(h.steps).toEqual([{ from: 750, to: 900, repeat: false, typed: true }]);
     });
 
     describe('a typed weight turns between grams and kilos (the owner, 2026-11-17)', () => {
@@ -642,7 +644,7 @@ describe('QuantityStepper (velista 0188)', () => {
           expect(state(h)).toBe('1 kg');
           expect(h.steps).toEqual([]);
           key(h, 'Enter');
-          expect(h.steps).toEqual([{ from: 500, to: 1000, repeat: false }]);
+          expect(h.steps).toEqual([{ from: 500, to: 1000, repeat: false, typed: true }]);
           expect(state(h)).toBe('1 kg');
           expect(turned(h)).toBe('');
         }
@@ -1140,7 +1142,7 @@ describe('QuantityStepper (velista 0188)', () => {
       );
       h.plus.click();
       expect(h.steps).toEqual([
-        { from: 750, to: 900, repeat: false },
+        { from: 750, to: 900, repeat: false, typed: true },
         { from: 900, to: 925, repeat: false },
       ]);
     });
@@ -1197,6 +1199,37 @@ describe('QuantityStepper (velista 0188)', () => {
       h.plus.click();
       h.plus.click();
       expect(tos(h)).toEqual([99, 100]);
+    });
+  });
+
+  describe('a typed amount says it was typed (velista 0190, section 4)', () => {
+    it('marks a committed typed amount, even one step away', () => {
+      const h = render({ value: 3, variant: 'sheet' });
+      type(h, '4');
+      key(h, 'Enter');
+      expect(h.steps).toEqual([{ from: 3, to: 4, repeat: false, typed: true }]);
+    });
+
+    it('marks nothing for an arrow, Home, End or a press', () => {
+      const h = render({ value: 3, variant: 'sheet' });
+      key(h, 'ArrowUp');
+      key(h, 'Home');
+      key(h, 'End');
+      h.plus.click();
+      expect(h.steps.some((step) => step.typed !== undefined)).toBe(false);
+    });
+  });
+
+  describe('the look (section 3.2)', () => {
+    it('pads the wide sheet by 6 and keeps 4 in the narrow one, where "999,999" needs the room', () => {
+      // The fit test of velista-luna-e2e measures the narrow field: 63 px of
+      // "999,999" in 72 less 6 on each side would scroll (2026-11-17).
+      const scss = readFileSync(join(__dirname, 'quantity-stepper.scss'), 'utf8');
+      const rule = /([^{}]*)\{[^}]*padding-inline:\s*var\(--app-stepper-cell-pad-sheet\)/.exec(
+        scss
+      );
+      expect(rule?.[1]).toContain(':host(.variant-sheet) .cell');
+      expect(rule?.[1]).not.toContain('variant-sheet-narrow');
     });
   });
 });

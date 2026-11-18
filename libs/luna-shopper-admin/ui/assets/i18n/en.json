@@ -217,7 +217,7 @@
       "categoryNotFound": "That category does not exist any more. Somebody may have deleted it.",
       "itemKilogramHasSize": "A product sold by the kilo has no size. Give it an approximate weight instead, or choose grams.",
       "itemApproxWeightBesideSize": "A product has a size or an approximate weight, not both. Clear one of them.",
-      "itemQuantityStepNotAllowed": "Only a product sold by the kilo or by the litre has a step. Choose the default, or sell it by the kilo or the litre.",
+      "itemQuantityStepNotAllowed": "Only a loose product sold by the kilo has a step. Choose the default, or sell it loose by the kilo.",
       "sectionNotFound": "That section does not exist any more. Somebody may have deleted it.",
       "sectionOfAnotherShop": "That section belongs to another shop. A shop can only order its own sections. Read the screen again and try once more.",
       "sectionSlugTaken": "This shop already has a section with that slug. Choose another one.",

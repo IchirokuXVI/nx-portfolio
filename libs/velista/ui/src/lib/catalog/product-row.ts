@@ -639,8 +639,8 @@ export type ProductRowExpanded = 'shops' | 'members';
                 <span class="held-onlist-text"
                   ><span [id]="onListId">{{
                     'catalog.held.alreadyOn' | rokuT: { list: add()?.list }
-                  }}</span>
-                  <a
+                  }}</span
+                  >&ngsp;<a
                     [queryParams]="{ line: onList.lineId }"
                     [routerLink]="onList.path"
                     class="held-onlist-link"

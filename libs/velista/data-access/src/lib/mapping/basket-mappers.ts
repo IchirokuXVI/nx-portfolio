@@ -226,7 +226,7 @@ function toBasketRowEntry(
     boughtElsewhere: atLeastZero(raw['boughtElsewhere']),
     // Not on the wire: the entry view carries `left` and `bought` and backend
     // `0130` section 4 defines the sum. It is stated once here rather than at the
-    // reel that needs a ceiling, which is the one arithmetic this file does and
+    // stepper that needs a ceiling, which is the one arithmetic this file does and
     // the only one the plan leaves it.
     asked: bought + left,
     state: oneOf(raw['state'], BASKET_ROW_STATES, BASKET_ROW_STATE_FALLBACK),

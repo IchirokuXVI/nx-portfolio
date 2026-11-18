@@ -467,7 +467,7 @@ export class LineMemory implements LineServiceI {
 
     // A floor of **zero**, which moved there with the trip status (backend plan
     // 0047). Zero is the household saying it is stocked rather than an empty line
-    // waiting to be deleted, so it is the ordinary end of the reel and not a refusal.
+    // waiting to be deleted, so it is the stepper's ordinary floor and not a refusal.
     if (
       changes.quantity !== undefined &&
       (changes.quantity < LINE_QUANTITY_MIN ||
@@ -626,7 +626,7 @@ export class LineMemory implements LineServiceI {
   /**
    * Move the quantity by a signed delta. `DECIDE`.
    *
-   * The reel's write. Applied to whatever the line currently holds rather than to a
+   * The stepper's write. Applied to whatever the line currently holds rather than to a
    * number the caller read a moment ago, which is the whole reason the route takes a
    * delta: two adjustments in flight at once both land, where two absolute writes
    * would have silently lost one.

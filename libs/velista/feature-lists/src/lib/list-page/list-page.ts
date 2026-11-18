@@ -1238,7 +1238,7 @@ export class ListPage {
     );
   }
 
-  /** "Send it again": the same delta, through the same path as a turn of the reel. */
+  /** "Send it again": the same delta, through the same path as a step. */
   async resendDropped(id: string): Promise<void> {
     const entry = this._dropped().find((dropped) => dropped.id === id);
     const replay = replayInUnit(
@@ -2584,7 +2584,7 @@ export class ListPage {
    * A product is held by a line whose products name it. A group is held by a line
    * that follows it, because choosing a group again would make a second line for
    * the same kind of thing. The stepper moves only for somebody who may decide
-   * quantities here, the rule the rows' own reel follows.
+   * quantities here, the rule the rows' own stepper follows.
    */
   readonly holdingsOf = computed(() => {
     const lines = this._lines.linesIn(this.listId());
@@ -2763,11 +2763,11 @@ export class ListPage {
   /**
    * A due line taken (velista `0089`, sections 2 and 6).
    *
-   * The reel's own write, from zero to the chosen amount, so the line is raised exactly
-   * as a drag would raise it. The write is optimistic, so the line is above zero before
-   * this awaits anything and the row leaves the section at once. A failed write puts the
+   * The stepper's own write, from zero to the chosen amount, so the line is raised
+   * exactly as a step would raise it. The write is optimistic, so the line is above
+   * zero before this awaits anything and the row leaves the section at once. A failed write puts the
    * quantity back, which brings the row back, and says why through the polite region:
-   * the line's own row, where a reel write reports, is not drawn while it is at zero.
+   * the line's own row, where a stepper write reports, is not drawn while it is at zero.
    *
    * Focus moves to the next due row's button, or to the line just added when none is
    * left, and the polite region says the line was added.

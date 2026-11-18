@@ -347,7 +347,7 @@ function toRow(
     // reader's rows sat there not answering; it opens what the app knows about the
     // thing now, and knowing is not a permission.
     interactive: true,
-    // The reel is the half that still follows `DECIDE`, because moving the number is
+    // The stepper is the half that still follows `DECIDE`, because moving the number is
     // saying what the household now has. The two came apart here for the first time,
     // and a `WRITE` only caller is why: they get a full composer, a row that opens, and
     // a number that does not move, with one caption at the top of the page saying who
@@ -614,7 +614,7 @@ function captionKeyFor(awaiting: boolean, rejected: boolean): string | null {
  * - **`WRITE` is what makes the fields live at all**, on every row. `DECIDE` is a separate
  *   permission rather than a larger one, so a caller holding it alone edits no content
  *   anywhere and gets no fields on any row. They are not left without a control: the
- *   quantity reel is `LineRowVm.adjustable`, which asks `canDecide` on its own, and
+ *   quantity stepper is `LineRowVm.adjustable`, which asks `canDecide` on its own, and
  *   approving and rejecting are theirs too;
  * - `WRITE` alone on an `APPROVED` line yields its content and not its number, because
  *   the content is what a person typed wrong and the quantity is what the group agreed

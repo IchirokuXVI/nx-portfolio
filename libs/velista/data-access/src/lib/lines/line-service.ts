@@ -142,7 +142,7 @@ export interface LineServiceI {
    * it, and reading adoption out of one would adopt the whole line every time
    * somebody removed a product.
    *
-   * Not the reel's path, deliberately. This is an absolute write, which is a last
+   * Not the stepper's path, deliberately. This is an absolute write, which is a last
    * writer wins race over a value somebody deliberately chose; a moving control
    * writes {@link addQuantity} instead.
    *
@@ -171,11 +171,11 @@ export interface LineServiceI {
   /**
    * Move a line's quantity by a signed delta (`POST /v1/lines/:id/quantity`).
    *
-   * **The reel's write, and the reason the reel is correct** (velista plan 0043,
-   * section 4.1). Applied atomically under the row's lock, so two people adjusting
-   * the same line both land where two absolute writes would have silently lost
-   * one. Built by backend plan 0040 for the assistant and never called by anything
-   * else until now.
+   * **The stepper's write, and the reason the stepper is correct** (velista plan
+   * 0043, section 4.1, which built it for the reel). Applied atomically under the
+   * row's lock, so two people adjusting the same line both land where two absolute
+   * writes would have silently lost one. Built by backend plan 0040 for the
+   * assistant and never called by anything else until now.
    *
    * `DECIDE`, like settling, because both say what the household now has.
    *

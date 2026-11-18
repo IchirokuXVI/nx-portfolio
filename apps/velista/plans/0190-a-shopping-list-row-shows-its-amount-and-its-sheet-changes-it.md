@@ -298,6 +298,10 @@ lists ask for (compare "D3 Outline"), a step that saves once after the presses s
   are `lib-amount-figure`'s own; the row sets none.
 - The row keeps `align-items: flex-start` (`:13`). The cell sits at the top of the row
   beside the name line, as in the mock.
+
+  > Note of 2026-11-17, from the review of the stepper batch: the cell was first built
+  > centred on the row (`align-self: center`); it now sits at the top as written here
+  > (`align-self: flex-start`).
 - `.row:has(.body:hover)` (`:168`) also matches `.amount:hover`, so the row lights the same
   way from either press.
 
@@ -370,6 +374,12 @@ nothing imports it. Keep `quantityCaption` (decision C).
 - A typed value committed by Enter or blur is a step with `repeat: false` like a press, and
   the sheet calls `flush(key)` right after it, so a typed amount is sent at once; only
   presses wait.
+
+  > Note of 2026-11-17, from the review of the stepper batch. As first built, the sheet told
+  > a typed amount from a press by its size: anything other than one step was sent at once.
+  > A typed amount exactly one step away therefore waited 800 ms, and Home and End were sent
+  > at once. Now the stepper marks a typed commit (`QuantityStep.typed`), and the sheet sends
+  > that alone at once; a press, a repeat, an arrow key, Home and End wait for the beat.
 - One write per line at a time, in the sheet. It keeps a map of the write in flight per key
   (a promise). A run that `quantityRuns` sends while a write of the same key is out waits
   for that write, then sends with `from` equal to the line's asks after the answer.
@@ -577,11 +587,21 @@ version for "no partial buy from the row":
    skipped count only).
 2. On a bought or "No había" row the cell shows what was asked, not 0 (decision B). Is that
    the number you want there?
+
+   Reviewed by the owner, stands as built (2026-11-17).
 3. The cell is a second button beside the row's text, both opening the same sheet, so a
    keyboard or screen reader user meets one more stop per row than the text alone would give
    (the same count as today, where the reel was that stop). Keep it, or make the cell a
    pointer target only and leave the text as the one stop?
+
+   Reviewed by the owner, stands as built (2026-11-17).
 4. The lists that do not ask yet, under "Añadir a otra lista", get the same typed control
    starting at 0 (decision H). Is that right, or should they keep a single "Añadir" action?
+
+   Reviewed by the owner, stands as built (2026-11-17).
 5. A step waits `QUANTITY_STEP_QUIET_MS`, 800 ms, after the last press before it is saved,
    the wait velista `0188` gives every surface. Is that the feel you want in the sheet too?
+
+   Answered by velista 0188 (2026-11-17): the quiet beat stays 800 ms on every surface, the
+   settle sheet included. A typed amount is sent at once and every press, arrow key, Home and
+   End waits for the beat (section 4, note of 2026-11-17).

@@ -263,7 +263,7 @@ export interface LineDetailVm {
    * line from the basket screen. A reader gets the sheet with its history and
    * neither button, which is the honest shape: knowing is not writing.
    *
-   * It is **not** the permission the reel follows any more. Moving what the
+   * It is **not** the permission the stepper follows any more. Moving what the
    * household asks for is a change of demand and stays behind `DECIDE`.
    */
   readonly canSettle: boolean;
@@ -434,7 +434,7 @@ export interface LinePageVm {
    * group cannot name.
    */
   readonly addedBy: string;
-  /** Whether the number has its two buttons. `DECIDE`, as the reel. */
+  /** Whether the number has its two buttons. `DECIDE`, as the row's stepper. */
   readonly canStep: boolean;
   /** The products as cards, the favourite first. Empty on a line of free text. */
   readonly cards: readonly LineProductCardVm[];

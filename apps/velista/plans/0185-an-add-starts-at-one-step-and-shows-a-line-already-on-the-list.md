@@ -447,6 +447,12 @@ a product card onto a line of several products set to `UNIT` draws the refusal s
   `catalog.held.openLine` with `[routerLink]="onList.path"` and `[queryParams]="{ line:
   onList.lineId }"`. The lines and their steppers below are unchanged and work. Without `onList`
   the card is as today.
+  > **Note of 2026-11-17**, from the review of the stepper batch: the reason and the link were
+  > drawn with no space between them ("Already on Review walk.See it on the list", the same in
+  > Spanish), because the template's line break between the two elements is dropped. A
+  > preserved space (`&ngsp;`) now sits between them, so the sentence reads and is spoken as
+  > two sentences. The `atZero` sentence has no link and had no such slip; the product page's
+  > Similar products draw the same card and are fixed with it.
 - **The look**, from the mock's frame "catalog D3": the switched off plus has the same outline in
   the disabled tokens; the sentence is body text in the secondary colour, the link in the app's
   link style, underlined. The sentence wraps; the link never breaks inside itself. Token names are

@@ -430,13 +430,14 @@
 // the settle sheet, so it takes the body's focus ring and its pointer. The number
 // and the symbol are drawn by `lib-amount-figure` at its own sizes and colours.
 //
-// Centred on the row's height, as the approved mock places it.
+// At the top of the row beside the name line, as the mock places it (velista
+// 0190, section 1): a row that wraps to two lines keeps its amount by the name.
 .amount {
   @include shared.tap-target;
 
   display: flex;
   align-items: center;
-  align-self: center;
+  align-self: flex-start;
   justify-content: center;
   flex: none;
   box-sizing: border-box;

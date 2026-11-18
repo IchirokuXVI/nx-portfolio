@@ -18,7 +18,7 @@ import {
  * translation key with a number in it, for the reason {@link formatMoney} gives.
  *
  * **Up to three decimals, where the plan says one** (builder decision of velista
- * `0182`), so the words always say the exact amount: 1250 g is a value the reel
+ * `0182`), so the words always say the exact amount: 1250 g is a value the stepper
  * lands on and reads "1,25 kg", and 975 g added twice sums to 1975 on the server
  * and reads "1,975 kg", not "1,98 kg". A value that needs one decimal or none
  * draws as the plan's examples do.

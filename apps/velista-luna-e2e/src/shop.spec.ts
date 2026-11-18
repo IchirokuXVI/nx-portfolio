@@ -45,7 +45,6 @@ import {
   searchBasket,
   sheet,
   signIn,
-  stepAmount,
 } from './support/app';
 
 /**
@@ -404,8 +403,9 @@ test.describe('one trip, by the owner', () => {
  *
  * One product sold by the kilo, with a price, on the Groceries list: added at
  * 1000 g, its row's amount cell reads 1 over kg, and the sheet's field is typed
- * down to 0.75 (read in the kilos it shows, so 750 g, velista 0188 decision K as
- * the owner ruled it on 2026-11-17), then typed key by key the owner's way:
+ * "750", which three whole digits under kilos turn into 750 g (velista 0188
+ * decision K as the owner ruled it on 2026-11-17), after it is typed key by key
+ * the owner's way:
  * "1000" turns into 1 kg, two more zeros turn back into 100 g, and Escape drops
  * it. The line then
  * asks for 750 g and nothing was bought (velista 0190). `aria-valuenow` stays
@@ -493,7 +493,9 @@ test.describe('a loose product, by weight (velista 0182)', () => {
         response.request().method() === 'POST' &&
         /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname)
     );
-    await field.fill('0.75');
+    // "750" under kg turns into 750 g as it is typed (decision K), so the
+    // plan's "750" is what a person types (velista 0190, section 8).
+    await field.fill('750');
     await field.press('Enter');
     await saved;
     await expect(field).toHaveAttribute('aria-valuenow', '750');
@@ -856,8 +858,9 @@ test.describe('the search field at the top of a list (velista 0189)', () => {
  * step of 100 g through the admin update. A separate product, so the bananas'
  * numbers above never depend on a step an earlier run left. Its line is made at
  * a stated kilo through the API, so the test holds whatever a first add asks for.
- * The settle sheet's stepper presses by 100 g: three down to 700, one up to 800,
- * and "Got all" then records a buy of the 800 g asked for.
+ * The zone list row's stepper presses by 100 g (velista 0186, section 4): three
+ * down to 700, one up to 800, and "Got all" then records a buy of the 800 g
+ * asked for, since no part of a row is bought from the shopping list.
  */
 test.describe('a product with a step of its own (velista 0186)', () => {
   const NAME = { en: 'Whole chicken e2e', es: 'Pollo entero e2e' };
@@ -898,52 +901,57 @@ test.describe('a product with a step of its own (velista 0186)', () => {
     await admin?.dispose();
   });
 
-  test('steps by 100 g in the settle sheet, and buys what it asks for', async ({
+  test('steps by 100 g on the list row, and buys what it asks for', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
-    const basketId = await generateBasket(
-      page,
-      ['Groceries'],
-      `Stepped ${Date.now()}`
+    await page.goto(`/en/zones/${ZONE_WEEKLY_ID}/lists/${LIST_GROCERIES_ID}`);
+    const listRow = page
+      .locator('lib-line-row', { hasText: NAME.en })
+      .locator('.row');
+    const stepper = listRow.locator('lib-quantity-stepper');
+    await expect(stepper).toHaveAttribute('data-value', '1000');
+    // The line steps by the default until its product's record is read (velista
+    // 0186, decision B); the plus names the step once it is.
+    await expect(stepper.locator('button.plus')).toHaveAccessibleName(
+      /^Add 100 g to /
     );
 
-    const dialog = await openSettleSheet(page, NAME.en);
-    const field = askAmount(dialog, 'Groceries');
-    await expect(field).toHaveAttribute('aria-valuenow', '1000');
-    const stepper = dialog
-      .locator('lib-row-entries lib-quantity-stepper')
-      .first();
-
-    // One key at a time, each drawn before the next: a stepper steps from the
-    // amount it draws, so a key pressed before the sheet draws the last one
-    // repeats it. The run is sent once, after the quiet beat.
-    const saved = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'POST' &&
-        /\/rows\/[^/]+\/demand$/.test(new URL(response.url()).pathname),
-      { timeout: 10_000 }
-    );
-    await field.focus();
+    // One press at a time, each drawn before the next. The run is written once,
+    // after the quiet beat (velista 0188).
     for (const amount of ['900', '800', '700']) {
-      await field.press('ArrowDown');
-      await expect(field).toHaveAttribute('aria-valuenow', amount);
+      await stepper.locator('button.minus').click();
+      await expect(stepper).toHaveAttribute('data-value', amount);
     }
-    await field.blur();
-    await saved;
-    await expect(stepper).toHaveAttribute('data-value', '700');
-    await expect(
-      dialog.getByRole('button', { name: /^Add 100 g to / })
-    ).toBeVisible();
+    await expect
+      .poll(
+        async () => (await readLine(alice, LIST_GROCERIES_ID, lineId)).quantity
+      )
+      .toBe(700);
+    await expect(stepper.locator('button.plus')).toHaveAccessibleName(
+      /^Add 100 g to /
+    );
 
-    await stepAmount(field, 1);
-    await expect(field).toHaveAttribute('aria-valuenow', '800');
+    await stepper.locator('button.plus').click();
+    await expect(stepper).toHaveAttribute('data-value', '800');
     await expect
       .poll(
         async () => (await readLine(alice, LIST_GROCERIES_ID, lineId)).quantity
       )
       .toBe(800);
 
+    // No part of a row is bought from the shopping list since velista 0190
+    // (the owner, 2026-11-11), so "Got all" buys the 800 g the line asks for.
+    const basketId = await generateBasket(
+      page,
+      ['Groceries'],
+      `Stepped ${Date.now()}`
+    );
+    const dialog = await openSettleSheet(page, NAME.en);
+    await expect(askAmount(dialog, 'Groceries')).toHaveAttribute(
+      'aria-valuenow',
+      '800'
+    );
     await dialog.getByRole('button', { name: /^Got all / }).click();
     await expectBasketUrl(page, basketId);
     await expect

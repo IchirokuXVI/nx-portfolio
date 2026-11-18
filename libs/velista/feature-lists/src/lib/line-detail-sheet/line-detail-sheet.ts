@@ -194,7 +194,7 @@ export class LineDetailSheet {
   /** A save is out. Everything else on the sheet waits for it (section 7). */
   readonly saving = signal(false);
 
-  /** A unit change is out (velista `0183`): the chip and the reel wait. */
+  /** A unit change is out (velista `0183`): the chip and the stepper wait. */
   readonly unitPending = signal(false);
 
   /** Any write is out, which is what keeps the sheet from closing under it. */
@@ -363,7 +363,7 @@ export class LineDetailSheet {
    * `WRITE`, since backend plan 0131: the list page and the basket now ask one
    * rule who may record a purchase, and a `WRITE` holder already settled the same
    * line from the basket. Approving, and moving an approved quantity, keep
-   * `DECIDE`, which is why the reel does not follow this.
+   * `DECIDE`, which is why the stepper does not follow this.
    */
   private readonly _canSettle = computed(
     () => this._abilities().canWrite || this._abilities().canManage
@@ -812,9 +812,9 @@ export class LineDetailSheet {
    * A segment of the unit chip (velista `0183`, target state 3): one write of
    * the unit with the amount it starts at (one piece, a kilo, a litre), which
    * backend `0246` requires with every unit change. Written at once, not held for
-   * Save: it changes what the reel counts, and the reel moves to that amount and
-   * steps by the new unit. A refusal puts the line back in the store, which puts
-   * the chip back, and the amount follows it with the sheet's error line.
+   * Save: it changes what the stepper counts, and the stepper moves to that amount
+   * and steps by the new unit. A refusal puts the line back in the store, which
+   * puts the chip back, and the amount follows it with the sheet's error line.
    */
   async chooseUnit(unit: LineUnit): Promise<void> {
     const line = this._line();

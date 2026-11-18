@@ -3,9 +3,9 @@ import {
   addAmount,
   LINE_APPROVAL_STATUS_FALLBACK,
   LINE_APPROVAL_STATUSES,
-  LINE_QUANTITY_MAX,
   LINE_UNIT_FALLBACK,
   LINE_UNITS,
+  lineQuantityMax,
   type AddChoice,
   type AddChoiceLine,
   type AddChoiceOutcome,
@@ -47,6 +47,19 @@ export function toAddChoice(error: unknown): AddChoice | null {
   return lines.length === 0 ? null : { lines };
 }
 
+/**
+ * One step of its unit more, when the server did not say what a raise comes to:
+ * held to the ceiling velista steps a line of that unit to (`lineQuantityMax`,
+ * 99 000 for a weight or a volume), and never under what the line already holds,
+ * so an amount the server keeps above the ceiling is drawn as it is.
+ */
+function raisedBy(quantity: number, unit: LineUnit): number {
+  return Math.min(
+    Math.max(lineQuantityMax(unit), quantity),
+    quantity + addAmount(unit)
+  );
+}
+
 /** One entry of `details.lines`, or null when it cannot be drawn. */
 export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
   if (!isRecord(raw)) {
@@ -80,7 +93,7 @@ export function toAddChoiceLine(raw: unknown): AddChoiceLine | null {
       ? quantity
       : typeof resulting === 'number' && Number.isFinite(resulting)
         ? resulting
-        : Math.min(LINE_QUANTITY_MAX, quantity + addAmount(unit));
+        : raisedBy(quantity, unit);
 
   return {
     lineId,

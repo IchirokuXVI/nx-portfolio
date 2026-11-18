@@ -632,13 +632,25 @@ The mock emulates the keyboard; it does not run on a phone. Not verified:
    means the order the lines were added in, plus whatever order a list had before today. Is
    that the order you want, or should the label change, or should the order become "newest
    first"? (decision A)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 2. Should the gateway's reorder route be removed later, once no installed Android bundle older
    than this plan is in use? That is a backend backlog plan. (decision A)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 3. The zone list's filter button in the page header disappears while the field holds words, as
    today; the mock draws it while typing. Keep it on screen while typing? (decision L)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 4. The drag also releases the keyboard when the field is focused and empty over the list, not
    only over the results. Is that what you want? (decision F)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 5. After an add, the page brings the new line into view where it landed rather than jumping to
    the end of the list. Is that right now that the field is at the top? (decision H)
+
+   Reviewed by the owner, stands as built (2026-11-17).
 6. On the shopping list the tools row and the chips stay while typing, above the field, as the
    mock draws them. Confirm. (decision D)
+
+   Reviewed by the owner, stands as built (2026-11-17).

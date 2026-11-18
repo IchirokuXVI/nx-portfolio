@@ -193,12 +193,11 @@ export interface UpdateLineRequest {
 /**
  * Move a line's quantity by a **signed delta** (backend plan 0040, section 3).
  *
- * Not an absolute number, and that is the whole design of the reel (velista plan
- * 0043, section 4.1). Absolute writes from a moving control race each other and
- * the loser silently wins; a delta is applied atomically under the row's lock and
- * cannot. One per settled adjustment, sent when the overlay closes rather than
- * during the drag, so it is one request however many times the thumb went back
- * for more inside that window.
+ * Not an absolute number, and that is the whole design of the stepper's write
+ * (velista plan 0043, section 4.1). Absolute writes from a moving control race each
+ * other and the loser silently wins; a delta is applied atomically under the row's
+ * lock and cannot. One per settled adjustment, sent after the presses stop (velista
+ * `0188`), so it is one request however many presses or repeats came before it.
  *
  * Never zero. The server refuses it, and a gesture that ended where it started is
  * not an adjustment to send.

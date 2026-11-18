@@ -108,7 +108,7 @@ describe('lineStepOf (backend 0261, section 5)', () => {
     ).toBe(50);
   });
 
-  it('ignores a step on a product not sold by the kilo or the litre (backend 0261 S3)', () => {
+  it('ignores a step on a product not sold loose by the kilo (backend 0261 S3)', () => {
     const stepped = new Map<string, LineUnitProduct>([
       ['rice-pack-100', product('GRAM', 500, 100)],
       [
