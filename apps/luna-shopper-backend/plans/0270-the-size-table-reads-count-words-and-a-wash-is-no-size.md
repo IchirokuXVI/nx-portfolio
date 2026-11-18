@@ -1,3 +1,5 @@
+> **PR:** [#1007](https://github.com/IchirokuXVI/nx-portfolio/pull/1007)
+
 # 0270: the size table reads the count words a chain prints, and a wash is no size
 
 > Three owner decisions of 2026-11-16, one plan, built in wave 2 of the harvester round of
@@ -133,8 +135,8 @@ the count of changed rows for each chain in the PR.
   own (D2). The leaflet prompts change in a later leaflet plan (D3).
 - No re-key and no carry of a decision from an old key to a new one (D4). A row whose key
   moves is a new entry, and the review list of section 4.1 is the whole answer to it.
-- No change to the identity of a DEZA row beyond the split itself. Question 39 (a key that a
-  change of the split never moves) is a follow-up plan, not part of this one.
+- No change to the identity of a DEZA row beyond the split itself. The owner kept the computed
+  key (D5, his answer 39a), so no plan makes a key that a change of the split never moves.
 
 ### Constraints
 
@@ -212,8 +214,10 @@ follows. `2x10 sobres` is 20 `UNIT` with a pack of 2 today. Two packs of three p
 pairs, the comparable price of plan `0245` divides by the size, so it is a price per pair, and
 the pack count says that two packs are sold as one.
 
-**What a wash loses.** On the next full read of each chain, every wash row of Carrefour, DIA and
-El Jamón states no size and no pack count, and so does every DEZA wash row. A size doubt held
+**What a wash loses.** On the next full read of each chain, the wash count of every wash row of
+Carrefour, DIA and El Jamón gives no size and no pack count by itself, and so does the wash
+count of every DEZA wash row. A pack phrase the chain prints beside it still counts:
+`pack de 2 botellas de 40 lavados` is pack 2 with no size (D6). A size doubt held
 on such a row clears, because `decide` in `size-doubt.ts` clears a doubt when the size goes.
 A new row with no size is created as `UNIT` with no size, unless the person names one.
 
@@ -367,7 +371,8 @@ The owner asked both on 2026-11-17. The answers are facts of the code and of the
 
 The owner's wish of the same day: "I don't want a computed key from name + size, the actual key
 of the deza product should be saved for future use." The site has no such key to save.
-Question 39 asks what to do instead. It is a follow-up plan and not part of this one.
+Question 39 asked what to do instead, and the owner answered 39a on 2026-11-17: the computed
+key stays (D5).
 
 ## Tests
 
@@ -388,7 +393,8 @@ Question 39 asks what to do instead. It is a follow-up plan and not part of this
 ## Acceptance criteria
 
 - [ ] The seven count words are `UNIT` 1 in the shared table and in the four closed lists.
-- [ ] No table maps a wash to a unit, and a wash states no size and no pack count anywhere.
+- [ ] No table maps a wash to a unit. A wash count gives no size and no pack count by itself,
+      and a pack phrase the chain prints beside it still counts (D6).
 - [ ] `w`, `h` and `ga` are in no table.
 - [ ] `2X100 g` reads as `2x100 g` on every chain that prints a multiplier.
 - [ ] The PR holds the replay before and after, for each chain, with counts by `status`.
@@ -458,11 +464,30 @@ back office (section 4.1).
 worktree is removed when it is cleaned up. The review list is not attached to the PR, which
 carries its counts.
 
-## Open questions
+**D5 (owner, answered 2026-11-17, decision 39a, was question 39):** the computed key of a DEZA
+row stays as it is, `entryKey(name, sizeFormat)` of the split. Renaming a product in the catalog
+never moves the key, because the key is built from the chain's printed description and not
+from the product. A change of the size split moves the key of a stored row once for each
+change of the split, as this plan does for the count words and the capital `X`, and the owner
+reviews the list of section 4.1 for it. No follow-up plan keys a source with no id on its whole
+description.
 
-**39 (owner, open; a follow-up plan, not part of this one):** the owner wants the real key of
-a DEZA product saved, not a key computed from name and size (section 5.3). The site has no such
-key. What should a source with no id be keyed on?
+**D6 (owner, answered 2026-11-18, decision 43a):** a pack phrase beside a wash keeps its pack
+count. `Detergente pack de 2 40 lavados` (DEZA) and `pack de 2 botellas de 40 lavados`
+(Carrefour) read as pack 2 with no size. Two bottles are a count the chain states, and the
+harvester records what the chain states. Only the wash count itself states nothing: it gives no
+size and no pack count by itself.
+
+**D7 (owner, answered 2026-11-18, decision 44a):** `ración` and the sign `×` stay as built.
+`ración` is read by the shared table only, and `×` only by the El Jamón and LIDL adapters.
+Neither appeared in the 42,901 replayed rows. Adding either to DEZA would move the key of a
+matching stored row.
+
+## Answered questions
+
+**39 (owner, answered 2026-11-17: 39a, see D5):** the owner wanted the real key of a DEZA
+product saved, not a key computed from name and size (section 5.3). The site has no such key.
+What should a source with no id be keyed on? The options as they were weighed:
 
 - **39a:** leave the key as it is, the name and size split. Each future change of the split
   moves the keys it touches once, and each time the owner reviews a list like the one of
@@ -527,10 +552,11 @@ What 39b costs, checked on the code of `origin/dev` on 2026-11-17:
   nullable column for the printed description, is a migration that adds the column and nothing
   more.
 
-**Recommendation: 39b**, as its own plan, deployed before the first DEZA walk on the code of
+**The planner recommended 39b; the owner chose 39a (D5).** The recommendation as written:
+39b, as its own plan, deployed before the first DEZA walk on the code of
 this plan. The split changed twice in this one round of plans (`0266` and `0270`), and it changes
 again whenever a size table grows. Under 39a each such change moves keys and sends `ACTIVE`
 rows back to the queue for the owner. Under 39b none of it moves a key, and only a rewording by
 DEZA does, which nothing can prevent. Landed before that walk, it also makes the moved rows of
-this plan stay on their rows in the clusters. D4 and the review list of section 4.1 stand until
-the owner answers.
+this plan stay on their rows in the clusters. Under the owner's 39a, D4 and the review list of
+section 4.1 stand.

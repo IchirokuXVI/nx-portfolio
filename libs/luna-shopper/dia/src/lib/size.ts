@@ -73,6 +73,15 @@ const UNITS = new Set([
   'uds',
   'unidad',
   'unidades',
+  // Pairs, small bags and portions, each a count of one (plan 0270).
+  'par',
+  'pares',
+  'bolsita',
+  'bolsitas',
+  'porción',
+  'porcion',
+  'porciones',
+  // A wash still splits off the name, and states no size (plan 0270).
   'lavados',
   'dosis',
   'rollos',

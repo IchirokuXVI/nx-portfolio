@@ -48,8 +48,12 @@ const UNIT: PrintedSizeUnit = { unit: UnitOfMeasure.UNIT, factor: 1 };
  * **A length is not here.** `m`, `cm` and `mm` have no catalog unit, and a
  * length is a dimension of the object rather than what is inside it, so a
  * size printed in one is no size at all ({@link isPrintedLength}, plan 0183).
- * The words a chain counts a household product in (`lavados`, `rollos`,
- * `cápsulas`) are counts, as the Carrefour reader already treats them.
+ * The words a chain counts the pieces of a pack in (`rollos`, `cápsulas`,
+ * `pares`, `porciones`) are counts of one each, and `docena` is a count of 12
+ * (plan 0270).
+ *
+ * **A wash is not here either.** `lavados` counts nothing in the pack
+ * ({@link statesNoSize}, plan 0270).
  */
 const PRINTED_SIZE_UNITS: Readonly<Record<string, PrintedSizeUnit>> = {
   g: GRAM,
@@ -81,8 +85,8 @@ const PRINTED_SIZE_UNITS: Readonly<Record<string, PrintedSizeUnit>> = {
   pieza: UNIT,
   piezas: UNIT,
   docena: { unit: UnitOfMeasure.UNIT, factor: 12 },
-  lavado: UNIT,
-  lavados: UNIT,
+  par: UNIT,
+  pares: UNIT,
   dosis: UNIT,
   capsula: UNIT,
   capsulas: UNIT,
@@ -94,6 +98,8 @@ const PRINTED_SIZE_UNITS: Readonly<Record<string, PrintedSizeUnit>> = {
   rollos: UNIT,
   bolsa: UNIT,
   bolsas: UNIT,
+  bolsita: UNIT,
+  bolsitas: UNIT,
   pastilla: UNIT,
   pastillas: UNIT,
   hoja: UNIT,
@@ -101,7 +107,11 @@ const PRINTED_SIZE_UNITS: Readonly<Record<string, PrintedSizeUnit>> = {
   plato: UNIT,
   platos: UNIT,
   racion: UNIT,
+  ración: UNIT,
   raciones: UNIT,
+  porcion: UNIT,
+  porción: UNIT,
+  porciones: UNIT,
   servicio: UNIT,
   servicios: UNIT,
 };
@@ -152,6 +162,34 @@ export function isPrintedLength(word: string | null | undefined): boolean {
 }
 
 /**
+ * The words a chain prints a brand's claim in, lower cased: a wash count
+ * (plan 0270).
+ *
+ * `40 lavados` is not something the pack holds forty of. It is how many loads
+ * the brand says the detergent does, which nobody can measure and which
+ * depends on the dose a person pours, so the owner ruled (2026-11-11) that it
+ * is a bad basis to compare prices on. It is not a length either, so it stays
+ * out of {@link PRINTED_LENGTHS}: the text is still a printed size the
+ * adapters split off a name, and only the number goes.
+ */
+const PRINTED_BRAND_CLAIMS: ReadonlySet<string> = new Set([
+  'lavado',
+  'lavados',
+]);
+
+/**
+ * Whether a printed size in this unit word is written as no size at all: a
+ * length (plan 0183) or a brand's claim (plan 0270).
+ *
+ * A number with no unit beside it reads as a count, so a size that measures
+ * nothing in the pack answers no number either.
+ */
+function statesNoSize(word: string | null | undefined): boolean {
+  const text = (word ?? '').trim().toLowerCase().replace(/\.$/, '');
+  return PRINTED_LENGTHS.has(text) || PRINTED_BRAND_CLAIMS.has(text);
+}
+
+/**
  * Whether a printed unit word measures what is inside the pack: a weight, a
  * volume or a count (plan 0183).
  *
@@ -183,7 +221,8 @@ export interface SourceSize {
  * The one place the conversion happens, so every adapter writes a size the
  * same way: `33` and `cl` is 330 `MILLILITER`, `1,5` and `l` is 1.5 `LITER`.
  * A length is a dimension and not a size, so `30` and `m` is no size at all
- * (plan 0183). Any other word that names no catalog unit keeps the number as
+ * (plan 0183), and so is a wash count, `40` and `lavados` (plan 0270). Any
+ * other word that names no catalog unit keeps the number as
  * it was printed and states no unit. Rounded to four decimals, which is what
  * the column stores.
  */
@@ -194,7 +233,7 @@ export function sourceSizeOf(
   if (amount === null || amount === undefined || !Number.isFinite(amount)) {
     return { unitSize: null, sizeUnit: null };
   }
-  if (isPrintedLength(word)) {
+  if (statesNoSize(word)) {
     return { unitSize: null, sizeUnit: null };
   }
   const printed = printedSizeUnit(word);

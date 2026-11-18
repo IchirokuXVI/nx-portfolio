@@ -203,13 +203,201 @@ describe('splitSize', () => {
       for (const description of [
         'Pila botón JUPITER lr44 1.5 v',
         'Gafas sol HELLO SUNSHINE señora 18GA',
-        'Calcetines caballero GLOKO trabajo 3 pares',
-        'Manzanilla ALTEZA 25 bolsitas',
+        'Bombilla LED 60 w',
+        'Crema de día 24 h',
         // The owner does not accept `servicios` as a unit (plan 0266).
         'Rollo de cocina multiusos SELEX jumbo 138 m 600 servicios',
       ]) {
         expect(splitSize(description).sizeFormat).toBeNull();
       }
+    });
+  });
+});
+
+describe('count words, a wash and a capital X (plan 0270)', () => {
+  it.each([
+    ['Calcetines 3 pares', 'Calcetines', '3 pares', 3],
+    [
+      'Calcetines caballero GLOKO trabajo 3 pares',
+      'Calcetines caballero GLOKO trabajo',
+      '3 pares',
+      3,
+    ],
+    ['Infusión 20 bolsitas', 'Infusión', '20 bolsitas', 20],
+    ['Manzanilla ALTEZA 25 bolsitas', 'Manzanilla ALTEZA', '25 bolsitas', 25],
+    ['Queso 8 porciones', 'Queso', '8 porciones', 8],
+    ['Queso fundido 1 porción', 'Queso fundido', '1 porción', 1],
+    ['Plantillas 1 par', 'Plantillas', '1 par', 1],
+  ])(
+    'splits the count word of %s and states a count',
+    (description, name, sizeFormat, unitSize) => {
+      expect(splitSize(description)).toEqual({ name, sizeFormat });
+      expect(measuresIn(description)).toEqual({
+        unitSize,
+        sizeUnit: 'UNIT',
+        approxWeight: null,
+        packCount: null,
+      });
+    }
+  );
+
+  it('reads 2x3 pares as six pairs in a pack of two', () => {
+    expect(splitSize('Calcetines 2x3 pares')).toEqual({
+      name: 'Calcetines',
+      sizeFormat: '2x3 pares',
+    });
+    expect(measuresIn('Calcetines 2x3 pares')).toEqual({
+      unitSize: 6,
+      sizeUnit: 'UNIT',
+      approxWeight: null,
+      packCount: 2,
+    });
+  });
+
+  it.each([
+    ['Detergente 40 lavados', '40 lavados'],
+    ['Detergente 2x40 lavados', '2x40 lavados'],
+    ['Detergente 1 lavado', '1 lavado'],
+    ['Detergente en cápsulas ARIEL ORIGINAL 23+12 lavados', '23+12 lavados'],
+  ])(
+    'keeps the wash of %s split off the name and states no size and no pack',
+    (description, sizeFormat) => {
+      expect(splitSize(description).sizeFormat).toBe(sizeFormat);
+      expect(measuresIn(description)).toEqual({
+        unitSize: null,
+        sizeUnit: null,
+        approxWeight: null,
+        packCount: null,
+      });
+    }
+  );
+
+  it('reads a capital X as a small one', () => {
+    expect(splitSize('Yogur 2X125 g')).toEqual({
+      name: 'Yogur',
+      sizeFormat: '2X125 g',
+    });
+    expect(measuresIn('Yogur 2X125 g')).toEqual({
+      unitSize: 250,
+      sizeUnit: 'GRAM',
+      approxWeight: null,
+      packCount: 2,
+    });
+    expect(splitSize('Yogur 2X125 g').name).toBe(
+      splitSize('Yogur 2x125 g').name
+    );
+  });
+
+  describe('hostile names', () => {
+    const NOTHING = {
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: null,
+      packCount: null,
+    };
+
+    it.each([
+      'Pañales DODOT talla 6 XL',
+      'Camiseta térmica hombre 2XL',
+      'Maquinilla GILLETTE Mach3 MAX',
+      'Pilas alcalinas DURACELL AA X2',
+      'Bombilla halógena 2X60 w',
+    ])(
+      'does not split %p, whose capital X multiplies nothing',
+      (description) => {
+        expect(splitSize(description)).toEqual({
+          name: description,
+          sizeFormat: null,
+        });
+        expect(measuresIn(description)).toEqual(NOTHING);
+      }
+    );
+
+    it.each([
+      ['Mantel ALTEZA 55X60 cm', 'Mantel ALTEZA', '55X60 cm'],
+      ['Toalla de playa 1.2X1.8 m', 'Toalla de playa', '1.2X1.8 m'],
+    ])(
+      'splits the length of %p and states no size and no pack',
+      (description, name, sizeFormat) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(measuresIn(description)).toEqual(NOTHING);
+      }
+    );
+
+    it.each([
+      [
+        'Detergente líquido ARIEL 40 lavados 2 L',
+        'Detergente líquido ARIEL 40 lavados',
+        '2 L',
+        2,
+        'LITER',
+      ],
+      [
+        'Calcetines ALTEZA 3 pares 40 g',
+        'Calcetines ALTEZA 3 pares',
+        '40 g',
+        40,
+        'GRAM',
+      ],
+      [
+        'Té verde ALTEZA 10 bolsitas 1,5 g',
+        'Té verde ALTEZA 10 bolsitas',
+        '1,5 g',
+        1.5,
+        'GRAM',
+      ],
+    ])(
+      'takes the last size of %p and leaves the count or the wash in the name',
+      (description, name, sizeFormat, unitSize, sizeUnit) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(measuresIn(description)).toEqual({
+          unitSize,
+          sizeUnit,
+          approxWeight: null,
+          packCount: null,
+        });
+      }
+    );
+
+    it('reads a spaced capital X as a multiplier', () => {
+      expect(splitSize('Yogur natural ALTEZA 2 X 125 g')).toEqual({
+        name: 'Yogur natural ALTEZA',
+        sizeFormat: '2 X 125 g',
+      });
+      expect(measuresIn('Yogur natural ALTEZA 2 X 125 g')).toEqual({
+        unitSize: 250,
+        sizeUnit: 'GRAM',
+        approxWeight: null,
+        packCount: 2,
+      });
+    });
+
+    it.each([
+      ['Queso fundido 1 PORCIÓN', 'Queso fundido', '1 PORCIÓN', 1],
+      ['Calcetines ALTEZA 3 Pares.', 'Calcetines ALTEZA', '3 Pares.', 3],
+    ])(
+      'reads the count word of %p in capitals or with a stop',
+      (description, name, sizeFormat, unitSize) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(measuresIn(description)).toEqual({
+          unitSize,
+          sizeUnit: 'UNIT',
+          approxWeight: null,
+          packCount: null,
+        });
+      }
+    );
+
+    it.each([
+      'Detergente para lavado a mano ALTEZA',
+      'Par de calcetines ALTEZA',
+      'Calcetines 1 par de deporte',
+    ])('does not split %p, where lavado or par ends no size', (description) => {
+      expect(splitSize(description)).toEqual({
+        name: description,
+        sizeFormat: null,
+      });
+      expect(measuresIn(description)).toEqual(NOTHING);
     });
   });
 });
@@ -224,7 +412,6 @@ describe('sizeOf (plan 0177)', () => {
     ['400 g', 400, 'GRAM'],
     ['10 ud', 10, 'UNIT'],
     ['16 ud', 16, 'UNIT'],
-    ['44 lavados', 44, 'UNIT'],
   ])('reads %p as %p %p', (sizeFormat, unitSize, sizeUnit) => {
     expect(sizeOf(sizeFormat)).toEqual({ unitSize, sizeUnit });
   });
