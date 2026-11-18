@@ -189,8 +189,11 @@ function entryIn(value: unknown): string | null {
     <section class="filters">
       <label>
         <span>{{ 'harvest.entries.filter.status' | rokuT }}</span>
+        <!-- Not sent while one entry is shown, so it does not claim to be a
+             filter then (admin plan 0073, decision 47b). -->
         <select
           (ngModelChange)="chooseStatus($event)"
+          [disabled]="entryFilter() !== null"
           [ngModel]="status()"
           name="status"
         >
@@ -277,12 +280,12 @@ function entryIn(value: unknown): string | null {
         [confirmKey]="confirmKey()"
         [currentId]="row()?.id ?? null"
         [empty]="queue!.empty()"
+        [emptyKey]="emptyKey()"
         [errorKey]="errorKey()"
         [failed]="queue!.failed()"
         [loading]="queue!.loading()"
         [loadingMore]="queue!.loadingMore()"
         [rows]="listRows()"
-        emptyKey="harvest.entries.empty"
         rejectKey="harvest.entries.reject"
         rejectShortKey="harvest.entries.rejectShort"
         titleKey="harvest.entries.heading"
@@ -310,6 +313,14 @@ function entryIn(value: unknown): string | null {
           <div class="head">
             <h2>{{ entry.name }}</h2>
             <p class="identity">
+              <!-- The row's own status, whatever the filter asked for (admin
+                   plan 0073, decision 47b). -->
+              <span
+                [class.good]="entry.status === 'ACTIVE'"
+                class="chip"
+                data-status
+                >{{ 'harvest.entryStatus.' + entry.status | rokuT }}</span
+              >
               @if (chainName(entry.supermarketId); as chain) {
                 <span class="chip chain">{{ chain }}</span>
               }
@@ -357,7 +368,14 @@ function entryIn(value: unknown): string | null {
 
             <section [class.has]="proposal() !== 'none'" class="proposed">
               <div class="proposed-head">
-                <h3>{{ 'harvest.entries.proposal.heading' | rokuT }}</h3>
+                <h3 data-proposal-heading>
+                  {{
+                    (bound()
+                      ? 'harvest.entries.proposal.boundHeading'
+                      : 'harvest.entries.proposal.heading'
+                    ) | rokuT
+                  }}
+                </h3>
                 <!-- Why this product was proposed, as a state. -->
                 @if (proposal() === 'none') {
                   <span class="chip">{{
@@ -392,11 +410,15 @@ function entryIn(value: unknown): string | null {
                       }}</a>
                     }
                   }
-                  <p class="hint">
-                    {{
-                      'harvest.entries.proposal.item'
-                        | rokuT: { confidence: entry.confidence }
-                    }}
+                  <p class="hint" data-proposal-hint>
+                    @if (bound()) {
+                      {{ 'harvest.entries.proposal.bound' | rokuT }}
+                    } @else {
+                      {{
+                        'harvest.entries.proposal.item'
+                          | rokuT: { confidence: entry.confidence }
+                      }}
+                    }
                   </p>
                 }
                 @case ('sibling') {
@@ -648,9 +670,14 @@ function entryIn(value: unknown): string | null {
           @if (chainName(row.supermarketId); as chain) {
             <span class="line-chain">{{ chain }}</span>
           }
-          <span [class.good]="proposalKind(row) !== 'none'" class="chip">{{
-            'harvest.entries.proposalBadge.' + proposalKind(row) | rokuT
-          }}</span>
+          <span
+            [class.good]="proposalKind(row) !== 'none'"
+            class="chip"
+            data-line-badge
+            >{{
+              'harvest.entries.proposalBadge.' + lineBadge(row) | rokuT
+            }}</span
+          >
         </ng-template>
       </lib-queue-frame>
 
@@ -1305,6 +1332,29 @@ export class EntriesQueuePage implements OnDestroy {
   });
 
   /**
+   * Whether the row in front is bound to its product (admin plan 0073,
+   * decision 47b).
+   *
+   * Read off the row's own status and never off the filter, because the one
+   * entry view sends no status and still answers a decided row. A bound row's
+   * product is no proposal, so the panel names it as what it is. The buttons
+   * stay as they are: what they may do on a decided row is a later plan.
+   */
+  readonly bound = computed(() => this.row()?.status === 'ACTIVE');
+
+  /**
+   * The empty state, which in the one entry view is about the address and
+   * not about the queue (admin plan 0073, decision 45a): a malformed id, an
+   * entry that does not exist and a chain that does not match all answer
+   * nothing, and none of them means everything was decided.
+   */
+  readonly emptyKey = computed(() =>
+    this.entryFilter() === null
+      ? 'harvest.entries.empty'
+      : 'harvest.entries.entry.empty'
+  );
+
+  /**
    * The sibling row the ladder proposed, when the queue is holding it.
    *
    * Resolved out of the rows already loaded rather than read by id, because
@@ -1743,6 +1793,15 @@ export class EntriesQueuePage implements OnDestroy {
   /** What a line of the column says about a row's proposal, in one word. */
   proposalKind(row: SourceEntryRow): string {
     return proposalOf(row);
+  }
+
+  /**
+   * The word on a line of the column: "Bound" for a bound row's product,
+   * where a waiting row says it has a proposal (admin plan 0073, decision 47b).
+   */
+  lineBadge(row: SourceEntryRow): string {
+    const kind = proposalOf(row);
+    return kind === 'item' && row.status === 'ACTIVE' ? 'bound' : kind;
   }
 
   /** Where a run is read. Absolute, because this screen has no route to pop. */

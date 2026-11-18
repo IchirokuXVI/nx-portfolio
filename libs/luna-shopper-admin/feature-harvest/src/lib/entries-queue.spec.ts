@@ -102,6 +102,19 @@ const BREAD = {
   },
 };
 
+/** The product the seeded accepted row is bound to (admin plan 0073). */
+const OLIVE_OIL = {
+  id: 'it_olive_oil_1l',
+  title: 'Aceite de oliva virgen extra',
+  row: {
+    id: 'it_olive_oil_1l',
+    brand: 'Carrefour',
+    ean: '8480000000017',
+    unitSize: 1,
+    defaultUnit: 'LITER',
+  },
+};
+
 async function render(
   queryParams: Record<string, string> = {},
   /** A wide screen, where the rows are a column beside the open row. */
@@ -133,6 +146,9 @@ async function render(
             // The product a proposal names, for the panel beside the row.
             if (resource === 'items' && id === BREAD.id) {
               return BREAD;
+            }
+            if (resource === 'items' && id === OLIVE_OIL.id) {
+              return OLIVE_OIL;
             }
             // The category picker's rows, which carry the slug the create
             // sends (admin plan 0036).
@@ -981,7 +997,81 @@ describe('the one queue, narrowed to one entry', () => {
     expect(named(calls, 'listEntries')).toEqual([]);
     expect(fixture.componentInstance.queue?.empty()).toBe(true);
     expect(notice(fixture)).not.toBeNull();
+    // An address that names nothing is not a queue with nothing left in it
+    // (decision 45a).
+    expect(text(fixture)).toContain('harvest.entries.entry.empty');
+    expect(text(fixture)).not.toContain('harvest.entries.empty');
+  });
+
+  it('says no entry has the address when the answer is empty', async () => {
+    // An id of the right shape that names nothing, and a known entry under
+    // a chain that is not its own.
+    for (const params of [
+      { entry: 'ffffffff-ffff-4fff-8fff-ffffffffffff', chain: CARREFOUR },
+      { entry: CARREFOUR_YOGUR_ENTRY, chain: DEZA },
+    ]) {
+      const { fixture } = await render(params);
+
+      expect(fixture.componentInstance.queue?.empty()).toBe(true);
+      expect(text(fixture)).toContain('harvest.entries.entry.empty');
+      expect(text(fixture)).not.toContain('harvest.entries.empty');
+    }
+  });
+
+  it('keeps the old sentence for an ordinary empty queue', async () => {
+    const { fixture, page } = await opened(DEZA);
+
+    page.brandText.set('nothing-carries-this');
+    page.reload();
+    await drain();
+    fixture.detectChanges();
+
+    expect(page.queue?.empty()).toBe(true);
     expect(text(fixture)).toContain('harvest.entries.empty');
+    expect(text(fixture)).not.toContain('harvest.entries.entry.empty');
+  });
+
+  /** Not sent while one entry is shown, so it claims no filter then. */
+  it('disables the State select while one entry is shown, and only then', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+    await drain();
+    fixture.detectChanges();
+    const select = (): HTMLSelectElement =>
+      fixture.nativeElement.querySelector('select[name="status"]');
+    const kind = (): HTMLSelectElement =>
+      fixture.nativeElement.querySelector('select[name="sourceKind"]');
+
+    expect(select().disabled).toBe(true);
+    expect(kind().disabled).toBe(false);
+    expect(
+      (fixture.nativeElement.querySelector('[data-brand]') as HTMLInputElement)
+        .disabled
+    ).toBe(false);
+
+    fixture.componentInstance.showWholeQueue();
+    await drain();
+    fixture.detectChanges();
+    await drain();
+    fixture.detectChanges();
+
+    expect(select().disabled).toBe(false);
+  });
+
+  it('leaves the State select enabled on the whole queue', async () => {
+    const { fixture } = await opened(DEZA);
+    await drain();
+    fixture.detectChanges();
+
+    expect(
+      (
+        fixture.nativeElement.querySelector(
+          'select[name="status"]'
+        ) as HTMLSelectElement
+      ).disabled
+    ).toBe(false);
   });
 
   it('keeps the row in the answer after a decision, as the decision left it', async () => {
@@ -1001,6 +1091,147 @@ describe('the one queue, narrowed to one entry', () => {
       status: 'REJECTED',
     });
     expect(notice(fixture)).not.toBeNull();
+  });
+});
+
+/**
+ * Decision 47b (admin plan 0073): a decided row says its status, and a bound
+ * row's product is named as bound rather than proposed. No action changes.
+ */
+describe('the one queue, the status of a row', () => {
+  const status = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    (
+      fixture.nativeElement.querySelector(
+        '.identity [data-status]'
+      ) as HTMLElement | null
+    )?.textContent?.trim();
+  const heading = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    (
+      fixture.nativeElement.querySelector(
+        '[data-proposal-heading]'
+      ) as HTMLElement
+    ).textContent?.trim();
+  const hint = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    (
+      fixture.nativeElement.querySelector(
+        '[data-proposal-hint]'
+      ) as HTMLElement | null
+    )?.textContent?.trim();
+  const badges = (fixture: ComponentFixture<EntriesQueuePage>) =>
+    [
+      ...fixture.nativeElement.querySelectorAll('.column [data-line-badge]'),
+    ].map((badge: Element) => badge.textContent?.trim());
+
+  async function settle(fixture: ComponentFixture<EntriesQueuePage>) {
+    for (let round = 0; round < 3; round++) {
+      await drain();
+      fixture.detectChanges();
+    }
+  }
+
+  it('draws a bound row as bound in the one entry view', async () => {
+    const { fixture } = await render(
+      { entry: CARREFOUR_ACEITE_ENTRY, chain: CARREFOUR },
+      true
+    );
+    await settle(fixture);
+
+    expect(status(fixture)).toBe('harvest.entryStatus.ACTIVE');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.boundHeading');
+    expect(hint(fixture)).toBe('harvest.entries.proposal.bound');
+    expect(text(fixture)).not.toContain('harvest.entries.proposal.item');
+    expect(badges(fixture)).toEqual(['harvest.entries.proposalBadge.bound']);
+    // The bound product, drawn as the proposal panel draws one. Its link
+    // needs the products mounted, which this spec does not do.
+    const proposed: HTMLElement =
+      fixture.nativeElement.querySelector('.proposed');
+    expect(proposed.textContent).toContain('Aceite de oliva virgen extra');
+  });
+
+  it('draws a bound row as bound under the State filter', async () => {
+    const { fixture } = await render({}, true);
+    const page = fixture.componentInstance;
+
+    const select: HTMLSelectElement = fixture.nativeElement.querySelector(
+      'select[name="status"]'
+    );
+    select.value = 'ACTIVE';
+    select.dispatchEvent(new Event('change'));
+    await settle(fixture);
+
+    const rows = page.listRows();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.status === 'ACTIVE')).toBe(true);
+    expect(status(fixture)).toBe('harvest.entryStatus.ACTIVE');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.boundHeading');
+    expect(hint(fixture)).toBe('harvest.entries.proposal.bound');
+    expect(badges(fixture)).toEqual(
+      rows.map(() => 'harvest.entries.proposalBadge.bound')
+    );
+  });
+
+  it('keeps every button of a bound row', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_ACEITE_ENTRY,
+      chain: CARREFOUR,
+    });
+    const page = fixture.componentInstance;
+    await settle(fixture);
+    const host: HTMLElement = fixture.nativeElement;
+
+    for (const action of ['confirm', 'skip', 'reject']) {
+      const button = host.querySelector(
+        `.actions [data-action="${action}"]`
+      ) as HTMLButtonElement | null;
+      expect(button).not.toBeNull();
+      expect(button?.disabled).toBe(false);
+    }
+    expect(page.confirmKey()).toBe('harvest.entries.accept');
+    expect(
+      [...host.querySelectorAll('.actions .other button')].map((button) =>
+        button.textContent?.trim()
+      )
+    ).toEqual(['harvest.entries.pick', 'harvest.entries.create.open']);
+    expect(host.querySelector('.links [data-panel="pick"]')).not.toBeNull();
+    expect(host.querySelector('.links [data-panel="create"]')).not.toBeNull();
+  });
+
+  it('leaves a waiting row as it was, with its status said', async () => {
+    const { fixture, page } = await opened(MERCADONA, true);
+    page.skip();
+    await settle(fixture);
+
+    expect(page.row()?.id).toBe('entry-bread');
+    expect(status(fixture)).toBe('harvest.entryStatus.CANDIDATE');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.heading');
+    expect(hint(fixture)).toBe('harvest.entries.proposal.item');
+    expect(badges(fixture)).not.toContain(
+      'harvest.entries.proposalBadge.bound'
+    );
+    expect(badges(fixture)).toContain('harvest.entries.proposalBadge.item');
+  });
+
+  it('says the status of a waiting row in the one entry view', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    expect(status(fixture)).toBe('harvest.entryStatus.UNRESOLVED');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.heading');
+  });
+
+  it('says a rejected row is rejected', async () => {
+    const { fixture } = await render({
+      entry: CARREFOUR_YOGUR_ENTRY,
+      chain: CARREFOUR,
+    });
+
+    fixture.componentInstance.reject();
+    await settle(fixture);
+
+    expect(status(fixture)).toBe('harvest.entryStatus.REJECTED');
+    expect(heading(fixture)).toBe('harvest.entries.proposal.heading');
   });
 });
 

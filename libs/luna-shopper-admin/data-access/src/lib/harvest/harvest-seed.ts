@@ -1450,7 +1450,9 @@ export const SOURCE_ENTRY_SEED: readonly Wire.HarvestSourceCatalogEntryView[] =
       lastSeenAt: '2026-08-31T07:12:00.000Z',
       firstRunId: 'run-catalog-reverted',
       lastRunId: 'run-catalog-reverted',
-      itemId: 'item-aceite',
+      // The catalog seed's own olive oil, so the panel beside the row draws
+      // the product it is bound to.
+      itemId: 'it_olive_oil_1l',
       candidateEntryId: null,
       status: 'ACTIVE',
       matchedBy: 'MANUAL',
