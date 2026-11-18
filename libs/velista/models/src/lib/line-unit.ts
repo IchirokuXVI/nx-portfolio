@@ -204,33 +204,6 @@ export interface QuantityStep {
 }
 
 /**
- * `steps` whole steps from `value`, one press at a time through {@link stepFrom},
- * held inside `[min, max]`. Only the reel's last two uses on the shopping list read
- * it; velista `0190` removes it with the reel.
- */
-export function stepsFrom(
-  value: number,
-  unit: LineUnit,
-  steps: number,
-  min: number,
-  max: number
-): number {
-  let at = value;
-  const direction = steps < 0 ? -1 : 1;
-  for (let taken = 0; taken < Math.abs(steps); taken++) {
-    const next = stepFrom(at, unit, direction);
-    if (next > max) {
-      return max;
-    }
-    if (next < min) {
-      return min;
-    }
-    at = next;
-  }
-  return Math.min(max, Math.max(min, at));
-}
-
-/**
  * A product as {@link lineUnits} reads it (velista `0183`, section 1): the
  * fields `soldAs` reads, plus the size. `unit` is the unit the product was
  * created in, `size` its size in that unit, `approxWeight` one piece in grams.

@@ -1,17 +1,18 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 import {
   RokuLocaleStore,
   RokuTranslatorTestingModule,
 } from '@portfolio/localization/rokutranslator-angular';
 import {
-  QUANTITY_REEL_IDLE_MS,
   type BasketListRef,
   type BasketProductList,
   type BasketRow,
   type BasketRowEntry,
 } from '@portfolio/velista/models';
 import { provideVelistaTesting } from '@portfolio/velista/platform';
+import { QuantityStepper } from '@portfolio/velista/ui';
 import { RowEntries, type OtherListsState } from './row-entries';
 
 /**
@@ -19,7 +20,8 @@ import { RowEntries, type OtherListsState } from './row-entries';
  * section 3).
  *
  * An entry is its list, then "zone · line", then the quantity the list asks for,
- * which is the reel where the server allows it and the number where it does not.
+ * which is the stepper of velista 0188 where the server allows it and the number
+ * where it does not (velista 0190).
  * "Add it to another list" is last and closed, and is drawn only when the sheet
  * hands it a read.
  *
@@ -149,9 +151,18 @@ type Fixture = Awaited<ReturnType<typeof render>>;
 
 const html = (fixture: Fixture) => fixture.nativeElement as HTMLElement;
 
-const askReels = (fixture: Fixture) => [
-  ...html(fixture).querySelectorAll<HTMLElement>('.entries > .rows .ask-reel'),
+const askAmounts = (fixture: Fixture) => [
+  ...html(fixture).querySelectorAll<HTMLElement>(
+    '.entries > .rows lib-quantity-stepper.ask-amount'
+  ),
 ];
+
+/** The name each stepper of the lists that ask was given, in order. */
+const stepperNames = (fixture: Fixture) =>
+  fixture.debugElement
+    .queryAll(By.directive(QuantityStepper))
+    .filter((held) => held.nativeElement.closest('.others') === null)
+    .map((held) => (held.componentInstance as QuantityStepper).name());
 
 const texts = (fixture: Fixture, selector: string) =>
   [...html(fixture).querySelectorAll(selector)].map(
@@ -166,20 +177,9 @@ function open(fixture: Fixture): void {
   fixture.detectChanges();
 }
 
-/**
- * The keyboard half of the reel, which is a real path and the one a spec can
- * drive: jsdom has no `PointerEvent`, and the keys move the same pending value
- * and commit on the same idle beat.
- */
-function key(reel: HTMLElement, fixture: Fixture, name: string): void {
-  reel.dispatchEvent(
-    new KeyboardEvent('keydown', { key: name, bubbles: true })
-  );
-  fixture.detectChanges();
-}
-
-function letGo(fixture: Fixture): void {
-  jest.advanceTimersByTime(QUANTITY_REEL_IDLE_MS);
+/** One press of a stepper's plus. */
+function plus(stepper: HTMLElement, fixture: Fixture): void {
+  stepper.querySelector<HTMLButtonElement>('button.step.plus')?.click();
   fixture.detectChanges();
 }
 
@@ -241,11 +241,15 @@ describe('RowEntries: Change (velista 0140, section 1)', () => {
       false,
       true,
     ]);
-    // The list, Change, the quantity.
+    // The list, Change, the amount.
     const change = rows[1].querySelector('.change');
-    expect(change?.nextElementSibling?.classList.contains('ask-reel')).toBe(
+    expect(change?.nextElementSibling?.classList.contains('ask-amount')).toBe(
       true
     );
+    // The swap icon and no word, named after the list (velista 0190).
+    expect(change?.tagName).toBe('BUTTON');
+    expect(change?.querySelector('lib-swap-icon')).not.toBeNull();
+    expect(change?.textContent?.trim()).toBe('');
     expect(change?.getAttribute('aria-label')).toBe('basket.change.oneLabel');
   });
 
@@ -294,22 +298,45 @@ describe('RowEntries: who may change what a list asks for', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
-  it('draws the reel when the server says the owner may, on a served list', async () => {
+  it('draws the stepper when the server says the owner may, on a served list', async () => {
     const fixture = await render(row([entry()]));
 
-    expect(askReels(fixture)).toHaveLength(1);
-    expect(askReels(fixture)[0].getAttribute('aria-label')).toContain(
-      'basket.demand.askLabel'
-    );
+    expect(askAmounts(fixture)).toHaveLength(1);
+    expect(askAmounts(fixture)[0].classList).toContain('variant-sheet-narrow');
+    expect(stepperNames(fixture)).toEqual(['basket.demand.askLabel']);
+  });
+
+  it('is not a live region, because the stepper says the amount itself', async () => {
+    const fixture = await render(row([entry()]));
+    const section = html(fixture).querySelector('section.entries');
+
+    expect(section?.getAttribute('aria-live')).toBeNull();
+    expect(section?.getAttribute('role')).toBeNull();
   });
 
   it('draws the number and no control when the server says the owner may not', async () => {
     const fixture = await render(row([entry({ demandEditable: false })]));
 
-    expect(askReels(fixture)).toHaveLength(0);
-    expect(html(fixture).querySelector('.row-number')?.textContent).toContain(
-      '2'
-    );
+    expect(askAmounts(fixture)).toHaveLength(0);
+    // The exact form, drawn by the amount figure (decision I).
+    expect(
+      html(fixture).querySelector('.row-number lib-amount-figure .number')
+        ?.textContent
+    ).toBe('2');
+  });
+
+  it('says the number with no control in words with its unit', async () => {
+    const fixture = await render({
+      ...row([entry({ demandEditable: false, left: 1275 })]),
+      unit: 'GRAM',
+    });
+    const drawn = fixture.componentInstance['entries']();
+
+    // Not "asks for 1275": the amount the screen reader hears names its unit.
+    expect(drawn[0].asksSpoken).toBe('1.275 kilograms');
+    expect(
+      html(fixture).querySelector('.row-number .visually-hidden')?.textContent
+    ).toContain('basket.entries.asks');
   });
 
   it('draws no control on an unserved entry of a row of several lists', async () => {
@@ -317,7 +344,7 @@ describe('RowEntries: who may change what a list asks for', () => {
       row([entry(), entry({ lineId: 'zl-2', listId: null })])
     );
 
-    expect(askReels(fixture)).toHaveLength(1);
+    expect(askAmounts(fixture)).toHaveLength(1);
     expect(html(fixture).querySelectorAll('.row-number')).toHaveLength(1);
   });
 
@@ -326,16 +353,14 @@ describe('RowEntries: who may change what a list asks for', () => {
       lists: new Map(),
     });
 
-    expect(askReels(fixture)).toHaveLength(1);
-    expect(askReels(fixture)[0].getAttribute('aria-label')).toBe(
-      'basket.demand.label'
-    );
+    expect(askAmounts(fixture)).toHaveLength(1);
+    expect(stepperNames(fixture)).toEqual(['basket.demand.label']);
   });
 
   it('takes it off a finished trip', async () => {
     const fixture = await render(row([entry()]), { finished: true });
 
-    expect(askReels(fixture)).toHaveLength(0);
+    expect(askAmounts(fixture)).toHaveLength(0);
   });
 
   it('keeps it on an entry bought outside this shopping list, at 0 and already bought (velista 0142)', async () => {
@@ -350,7 +375,7 @@ describe('RowEntries: who may change what a list asks for', () => {
       ])
     );
 
-    expect(askReels(fixture)).toHaveLength(1);
+    expect(askAmounts(fixture)).toHaveLength(1);
     expect(
       (fixture.nativeElement as HTMLElement).querySelector('.row-where')
         ?.textContent
@@ -365,16 +390,26 @@ describe('RowEntries: who may change what a list asks for', () => {
     );
   });
 
-  it('sends one demand, with where it started and where it landed', async () => {
+  it('emits one demand per step, and leaves the waiting to the sheet', async () => {
     const fixture = await render(row([entry()]));
     const demanded = jest.fn();
     fixture.componentInstance.demanded.subscribe(demanded);
 
-    key(askReels(fixture)[0], fixture, 'ArrowUp');
-    expect(demanded).not.toHaveBeenCalled();
-    letGo(fixture);
+    plus(askAmounts(fixture)[0], fixture);
 
-    expect(demanded).toHaveBeenCalledWith({ lineId: 'zl-1', from: 2, to: 3 });
+    expect(demanded).toHaveBeenCalledTimes(1);
+    expect(demanded).toHaveBeenCalledWith({
+      lineId: 'zl-1',
+      step: { from: 2, to: 3, repeat: false },
+    });
+  });
+
+  it('draws the run the sheet holds open for a line', async () => {
+    const fixture = await render(row([entry()]));
+    fixture.componentRef.setInput('pending', new Map([['zl-1', 5]]));
+    fixture.detectChanges();
+
+    expect(askAmounts(fixture)[0].getAttribute('data-value')).toBe('5');
   });
 });
 
@@ -460,10 +495,12 @@ describe('RowEntries: Add it to another list', () => {
       'Casa · Leche',
       'Oficina',
     ]);
-    expect(html(fixture).querySelectorAll('.others .ask-reel')).toHaveLength(2);
+    expect(
+      html(fixture).querySelectorAll('.others lib-quantity-stepper.ask-amount')
+    ).toHaveLength(2);
   });
 
-  it('raises a list with the quantity it was given', async () => {
+  it('emits a raise per step, starting at 0', async () => {
     const fixture = await render(row([entry()]), {
       others: { state: 'ready', lists: [PANTRY] },
     });
@@ -471,10 +508,16 @@ describe('RowEntries: Add it to another list', () => {
     fixture.componentInstance.raised.subscribe(raised);
     open(fixture);
 
-    const reel = html(fixture).querySelector<HTMLElement>('.others .ask-reel');
-    key(reel as HTMLElement, fixture, 'ArrowUp');
-    letGo(fixture);
+    const stepper = html(fixture).querySelector<HTMLElement>(
+      '.others lib-quantity-stepper'
+    );
+    plus(stepper as HTMLElement, fixture);
+    plus(stepper as HTMLElement, fixture);
 
-    expect(raised).toHaveBeenCalledWith({ list: PANTRY, to: 1 });
+    expect(raised).toHaveBeenCalledTimes(2);
+    expect(raised).toHaveBeenNthCalledWith(1, {
+      list: PANTRY,
+      step: { from: 0, to: 1, repeat: false },
+    });
   });
 });

@@ -45,8 +45,6 @@ export type BasketOperation =
   | 'basket.share'
   /** Removing somebody from the basket. */
   | 'basket.people'
-  /** Saying how many are still to get, from the row's own number (velista 0054). */
-  | 'basket.outstanding'
   /** The summary: reading every list on a line, and changing what one asked for. */
   | 'basket.origins'
   /**
@@ -147,7 +145,6 @@ export function basketErrorKey(
     case 'conflict':
       switch (operation) {
         case 'basket.settle':
-        case 'basket.outstanding':
         case 'basket.originSettled':
           // Somebody else finished this line between the sheet opening and the tap
           // landing, which luna `0054` section 4 is what makes reachable as a
@@ -188,7 +185,6 @@ export function basketErrorKey(
         // fact the first two report.
         case 'basket.settle':
         case 'basket.reopen':
-        case 'basket.outstanding':
         case 'basket.origins':
         case 'basket.originSettled':
           // Access to one of the lists behind this line moved since the basket was

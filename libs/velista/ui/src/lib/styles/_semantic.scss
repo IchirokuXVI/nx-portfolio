@@ -355,23 +355,6 @@ $app-landing-short: 700px;
   --app-choice-card-tick-width: 11px;
   --app-choice-card-tick-height: 6px;
 
-  // **The one number that decides how the reel feels.** It is positional, one to one
-  // with the finger, so this is the distance a thumb travels per unit. 40px leaves
-  // roughly seven units in the ~280px of comfortable travel on a 390px phone, which
-  // is what makes two to five a single gesture rather than three.
-  //
-  // It is duplicated in `@portfolio/velista/models` as `QUANTITY_REEL_PX_PER_UNIT`,
-  // which is the copy the gesture arithmetic reads; this one only draws the tape.
-  // They have to agree, and the component asserts nothing about it: a drift shows up
-  // as a reel whose highlighted number is not the one under the thumb.
-  --app-reel-unit: 40px;
-  --app-reel-height: 56px;
-  --app-reel-radius: 14px;
-  // Each number in the overlay keeps this width whether or not it has anything in it,
-  // so the current number does not slide sideways as the reel reaches zero and the
-  // neighbour to its left disappears.
-  --app-reel-digit-width: 28px;
-
   // The stepper (velista 0188, the owner's D3 Outline): minus, the amount cell and
   // plus in one outlined capsule, each button 48 by 48. The cells were measured in the
   // mock, never guessed: the row's 59px holds "99,975" at 16px 700 with 4px of air a
