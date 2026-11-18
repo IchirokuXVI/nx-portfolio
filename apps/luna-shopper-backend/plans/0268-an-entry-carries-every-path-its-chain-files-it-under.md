@@ -18,8 +18,8 @@
 > - In the owner's words: "it would be nice to know which products come from unmapped
 >   categories".
 >
-> The owner answered D1 to D5 on 2026-11-11. The answer to D2 widens the plan from DIA to every
-> chain, so the plan took a new title and file name.
+> The owner answered D1 to D5 on 2026-11-11 and D6 on 2026-11-18. The answer to D2 widens the
+> plan from DIA to every chain, so the plan took a new title and file name.
 >
 > **Note of 2026-11-18, checked against `origin/dev`.** The neighbours of this plan moved after
 > it was written. The design does not change. Where the text below disagrees, this note holds:
@@ -305,7 +305,7 @@ category path" is about `categoryPath`, which this plan does not change.
 
 **Which lands first.** With the call at the end, the two plans do not depend on each other's
 order for correctness. They do touch the same runner files, so two PRs on one runner must not
-be open at the same time. The recommended order is D6.
+be open at the same time. The order is D6, answered (a).
 
 ## 5. The DIA products that come only from leaves with no slug
 
@@ -375,7 +375,9 @@ Recommended:
 1. **The base and DIA.** The call and its write in `drain()`, the column and its migration, the
    contract type and schema, the view mapper, the two regenerations, the curation packet and
    prompt, the back office mapping and queue, and DIA with its report block of section 5. This
-   PR alone gives the owner what was first asked for.
+   PR alone gives the owner what was first asked for. It also adds a spec in
+   `libs/luna-shopper/contracts` that asserts `UNIT_BASES` holds exactly `KILOGRAM`, `LITER`,
+   `UNIT` and `DOZEN`. Plan `0264` asked for that spec, and its build (PR #974) did not write it.
 2. **One PR for each remaining adapter, or a small group.** Carrefour, El Jamón, Mercadona,
    LIDL, DEZA, and the leaflet and file import. A small group that fits one review is
    Carrefour with DEZA (both add a path at a later sighting), and LIDL with the leaflet import
@@ -419,6 +421,9 @@ Each later PR names this plan and its row of section 3.
 - Curation: the packet carries `categoryPaths`, and the prompt test finds its line.
 - `entry-view.spec.ts`: the paths map, and a malformed value maps to no paths.
 - `category-resolution.spec.ts`: unchanged, and green.
+- A spec in `libs/luna-shopper/contracts`, in PR 1: `UNIT_BASES` holds exactly `KILOGRAM`,
+  `LITER`, `UNIT` and `DOZEN`. Plan `0264` asked for it, and its build (PR #974) did not write
+  it.
 
 ## Acceptance criteria
 
@@ -472,15 +477,19 @@ walk of their chain.
 **D5 (owner, answered 2026-11-11):** the run page words of section 5 as written. Admin plan
 `0071` uses them.
 
-**D6. The order of this plan and plan `0267`. Open.** Section 4 shows that the order does not
-change the result. It decides only which PR rebases onto which, runner by runner.
+**D6 (owner, answered 2026-11-18):** option (a). PR 1 of this plan (section 6) first. Then, for
+each runner, the PR of plan `0267` before the PR of this plan for that runner. Section 4 shows
+that the order does not change the result. It decides only which PR rebases onto which, runner
+by runner. DIA thus gets this plan before plan `0267`, because DIA is in PR 1 and plan `0267`
+builds DIA last. Plan `0267` part 1 (Carrefour and El Jamón) is PR #973 and merges before PR 1
+starts, so the Carrefour and El Jamón PRs of this plan find their `0267` change in `dev`.
 
-- (a) PR 1 of this plan (section 6) first. Then, for each runner, the PR of plan `0267` before
-  the PR of this plan for that runner.
+Not taken:
+
 - (b) Plan `0267` first for every runner, then this plan.
 - (c) This plan first for every runner, then plan `0267`.
 
-Recommended: (a). PR 1 touches the sink, the contract and the DIA runner, and plan `0267`
+The reasons for (a): PR 1 touches the sink, the contract and the DIA runner, and plan `0267`
 builds DIA last, so PR 1 conflicts with nothing that plan `0267` builds first. After that, plan
 `0267` moves the report calls of a runner, and the adapter PR of this plan then adds one end of
 walk call to code that has stopped moving. Plan `0267` starts with Carrefour and El Jamón, the
