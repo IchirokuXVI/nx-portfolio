@@ -1,3 +1,5 @@
+> **PR:** [#1008](https://github.com/IchirokuXVI/nx-portfolio/pull/1008)
+
 # 0073: a source entry has an address
 
 > Follow up of admin plan `0071` (PR #972, open on 2026-11-11), and checked against `origin/dev`
