@@ -753,7 +753,13 @@
     "less": "Quitar {{step}} de {{name}}",
     "more": "Añadir {{step}} a {{name}}",
     "settled": "{{name}}, {{amount}}",
-    "inList": "{{name}} en {{list}}"
+    "inList": "{{name}} en {{list}}",
+    "turned": {
+      "grams": "Ahora en gramos",
+      "kilograms": "Ahora en kilogramos",
+      "milliliters": "Ahora en mililitros",
+      "liters": "Ahora en litros"
+    }
   },
   "list": {
     "header": {

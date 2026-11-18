@@ -404,7 +404,10 @@ test.describe('one trip, by the owner', () => {
  *
  * One product sold by the kilo, with a price, on the Groceries list: added at
  * 1000 g, its row's amount cell reads 1 over kg, and the sheet's field is typed
- * down to 0.75 (a kilo figure, so 750 g, velista 0188 decision K). The line then
+ * down to 0.75 (read in the kilos it shows, so 750 g, velista 0188 decision K as
+ * the owner ruled it on 2026-11-17), then typed key by key the owner's way:
+ * "1000" turns into 1 kg, two more zeros turn back into 100 g, and Escape drops
+ * it. The line then
  * asks for 750 g and nothing was bought (velista 0190). `aria-valuenow` stays
  * the integer in grams. "Got all" then records one buy of 750 in grams.
  *
@@ -467,6 +470,24 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     const dialog = await openSettleSheet(page, NAME.en);
     const field = askAmount(dialog, 'Groceries');
     await expect(field).toHaveAttribute('aria-valuenow', '1000');
+
+    // The owner's loop (2026-11-17): typed key by key, 1000 g turns into 1 kg,
+    // and two more zeros pass 99 kg and turn back into 100 g. Nothing is saved.
+    const symbol = field
+      .locator('xpath=ancestor::lib-quantity-stepper')
+      .locator('.field-cell .symbol');
+    await field.click();
+    await field.press('ControlOrMeta+a');
+    await field.pressSequentially('1000');
+    await expect(field).toHaveValue('1');
+    await expect(symbol).toHaveText('kg');
+    await field.pressSequentially('00');
+    await expect(field).toHaveValue('100');
+    await expect(symbol).toHaveText('g');
+    await field.press('Escape');
+    await expect(field).toHaveValue('1');
+    await expect(symbol).toHaveText('kg');
+
     const saved = page.waitForResponse(
       (response) =>
         response.request().method() === 'POST' &&

@@ -121,6 +121,15 @@ export const LINE_CONTENT_COUNTER_FROM = 350;
 export const LINE_QUANTITY_MIN = 0;
 export const LINE_QUANTITY_MAX = 999999;
 
+/**
+ * The most velista lets a weight or a volume reach, 99 kg or 99 l, with the buttons,
+ * the hold and typing alike (the owner, 2026-11-17, velista `0188` decision K). A
+ * typed amount turns back into grams over 99 kg, so the field never holds more. The
+ * server still accepts {@link LINE_QUANTITY_MAX}: a line that already holds more
+ * draws as it is and steps down. A count keeps {@link LINE_QUANTITY_MAX}.
+ */
+export const LINE_MEASURED_QUANTITY_MAX = 99_000;
+
 /** How long a held stepper button waits before it repeats (velista 0188). */
 export const QUANTITY_HOLD_DELAY_MS = 400;
 

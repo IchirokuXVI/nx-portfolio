@@ -1,4 +1,5 @@
 import type { ProductOffer } from './domain';
+import { LINE_MEASURED_QUANTITY_MAX, LINE_QUANTITY_MAX } from './limits';
 import { soldAs, soldAsOf, type SoldAs } from './sold-as';
 
 /**
@@ -133,6 +134,17 @@ export function addAmount(unit: LineUnit, step?: number | null): number {
  */
 export function isMeasured(unit: LineUnit | undefined): boolean {
   return unit === 'GRAM' || unit === 'MILLILITER';
+}
+
+/**
+ * The most a stepper of this unit reaches, never above `max`: 99 000 for a weight or
+ * a volume ({@link LINE_MEASURED_QUANTITY_MAX}), `max` itself for a count.
+ */
+export function lineQuantityMax(
+  unit: LineUnit,
+  max: number = LINE_QUANTITY_MAX
+): number {
+  return isMeasured(unit) ? Math.min(max, LINE_MEASURED_QUANTITY_MAX) : max;
 }
 
 /**
