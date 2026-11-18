@@ -129,6 +129,9 @@ The owner's, 2026-11-05, not to reopen:
 
 - **W1. A shopper chooses a unit only on a line that several products can serve.** A line
   with one product has that product's unit and no chip. A free text line counts pieces.
+  _Note of 2026-11-17 (the owner): the sentence on a free text line is replaced. A free text
+  line may be created and edited in `UNIT`, `GRAM` or `MILLILITER`, and keeps the unit it was
+  given. The rest of W1 stands._
   "Several products" means the product set of the line (`list_line_items`), whether it came
   from a catalog group or was picked by hand. Velista cannot create a line bound to a catalog
   group today (velista `0115` took groups out of the typeahead), so the second reading is the
@@ -172,6 +175,11 @@ The writer's, open to the owner:
   `lineUnitOf(kind)` is the one rule. Core stores what it is told; the gateway refuses a unit
   that none of the line's products offers (`line_unit_not_offered`), because the gateway is
   the one place that holds the line and the catalog together.
+  _Amended on 2026-11-17 (the owner): the check is asked of a line with products only. A free
+  text line is never refused for its unit: an add, a batch item, a basket add, and an edit
+  that changes its unit or clears its products all pass in any of the three. An edit that
+  gives a free text line in grams a product that does not offer grams is still refused, and a
+  line whose products the catalog names none of still offers `UNIT` alone._
 - **M4. A new weight line starts at 1000.** That is W3's "default value of 1 kg" applied to
   the amount a shopper first sees. A new volume line starts at 1000 ml. A count starts at 1.
 - **M5. A merge across units is a duplicate decision.** On add, the existing line is answered
@@ -310,6 +318,7 @@ W1 and W2, `toLineView` maps it, and `LineService.emit` carries it on `line.adde
 
 `LINE_QUANTITY_MIN` and `LINE_QUANTITY_MAX` do not move: 0 is stocked in any unit, and
 100000 g is 100 kg of anything.
+_Note of 2026-11-17: the ceiling is 99 999 since backend `0262` as amended that day._
 
 ### 3.2 Writes state the unit
 
@@ -397,6 +406,9 @@ gateway reads the line's products from the catalog (it reads them for the basket
 is refused with `line_unit_not_offered`, a 422 with the offered units in `details`. A free
 text line offers `UNIT` alone. A product the catalog no longer names offers nothing and does
 not widen the set.
+
+_Amended on 2026-11-17 (the owner): a free text line offers all three units and the gateway
+asks nothing of it (M3 as amended)._
 
 ### 4.3 The basket's pick
 
@@ -508,6 +520,9 @@ plan.
 - **A free text line counts pieces** (W1). "Ham 300 g" with no product is a line named
   "ham 300 g" at quantity 1, as today. Letting a label line carry a unit is a product
   decision the owner has not taken.
+  _Taken on 2026-11-17: a free text line may count in `UNIT`, `GRAM` or `MILLILITER` through
+  the API (W1 and M3 as amended). Velista still creates it in `UNIT`, and the assistant still
+  folds a spoken weight into the name._
 - **Velista cannot create a line bound to a catalog group** (velista `0115`). The chip of
   velista `0183` appears on a line whose product set the shopper widened on the line page, or
   that a server flow created. Bringing groups back to the typeahead is not this series.

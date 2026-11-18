@@ -978,9 +978,10 @@ describe('AssistantService', () => {
         turnRequest('añade 300 gramos de queso, agua y leche')
       );
 
-      // A new line is free text, which counts pieces: the gateway refuses
-      // any other unit on it with 422 `line_unit_not_offered`, so the batch
-      // the real gateway accepts names no unit at all.
+      // A new line is free text, which this tool creates in pieces, so the
+      // batch names no unit at all and the amount goes into the name. The
+      // gateway would take a unit there since 2026-11-17; the assistant was
+      // left as it was.
       const items = api.of('addLines')[0].detail['items'] as Record<
         string,
         unknown
@@ -1009,8 +1010,8 @@ describe('AssistantService', () => {
 
       await service.turn(turnRequest('pon 300 g de queso'));
 
-      // The gateway answers 422 line_unit_not_offered to a unit on a line
-      // that names no product, so the amount goes into the name at one.
+      // This tool keeps a line that names no product in pieces, so the
+      // amount goes into the name at one.
       expect(api.of('addLines')).toHaveLength(0);
       expect(api.of('updateLine')).toHaveLength(1);
       expect(api.of('updateLine')[0].detail).toEqual({

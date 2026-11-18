@@ -44,9 +44,9 @@ import {
  */
 export const LINE_UNIT_DOCS = {
   optional:
-    'What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit, and a free text line counts pieces.',
+    'What `quantity` counts: UNIT for pieces or packs, GRAM for a weight in grams, MILLILITER for a volume in millilitres (plan 0246). Base units only, so 750 g is 750 and 1.5 l is 1500. Absent is UNIT. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, with the units it does offer in `details.offered`. A line with one product counts in that product’s unit. A free text line, with no product, counts in whichever of the three it is given and is never refused for its unit.',
   update:
-    'Change what `quantity` counts (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, and so does an edit of the products that leaves the line with products that do not offer its unit: name the new unit and quantity in the same request.',
+    'Change what `quantity` counts (plan 0246). It must come with `quantity`, the amount the line starts from in the new unit, or the edit answers 400. Absent leaves the unit alone. A unit none of the line’s products can be counted in answers 422 `line_unit_not_offered`, and so does an edit of the products that leaves the line with products that do not offer its unit: name the new unit and quantity in the same request. A free text line, with no product, takes any of the three.',
   required:
     'The unit the number was made in, which must be the line’s (plan 0246). Required: a unit that is not the line’s answers 409 `line_unit_mismatch` and changes nothing, and the client reads the line again.',
 } as const;
@@ -414,14 +414,12 @@ export class UpdateLineDto {
 
   @ApiPropertyOptional({
     minimum: LINE_QUANTITY_MIN,
-    maximum: LINE_QUANTITY_MAX,
     description:
-      'The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given.',
+      'The quantity of the line as the client drew it (plan 0209). When present, the line must still hold it when the edit is written, or the edit answers 409 stale_quantity and writes nothing, as a stale from on the demand of a basket row does: somebody bought from the line in between. Absent, the edit writes what it was given. It has no ceiling, because it is what the line holds and not what the edit writes: a line stored above the ceiling is edited down with its own amount here (plan 0262).',
   })
   @IsOptional()
   @IsInt()
   @Min(LINE_QUANTITY_MIN)
-  @Max(LINE_QUANTITY_MAX)
   from?: number;
 
   @ApiPropertyOptional({

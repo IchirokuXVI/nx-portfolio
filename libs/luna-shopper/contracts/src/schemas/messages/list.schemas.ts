@@ -640,7 +640,9 @@ const addLineQuantityRequest = object(
     unit: ref(ENUM_IDS.lineUnit),
     // Optional: a delta needs no starting point, and the basket sends one so a
     // settle that landed in between refuses the gesture (plan 0136, section 5.3).
-    expect: integer({ minimum: 0, maximum: LINE_QUANTITY_MAX }),
+    // What the line holds, and not a write, so it has no ceiling: a line stored
+    // above the ceiling is still stepped down (plan 0262, 2026-11-17).
+    expect: integer({ minimum: 0 }),
   },
   ['userId', 'lineId', 'delta', 'unit']
 );
@@ -659,8 +661,10 @@ const updateLineRequest = object(
     // for the reason the settle's `quantity` rule is not (plan 0047, section 4).
     unit: ref(ENUM_IDS.lineUnit),
     // The quantity the client saw (plan 0209, section 2.2). Optional: absent,
-    // the edit writes what it was given.
-    from: integer({ minimum: LINE_QUANTITY_MIN, maximum: LINE_QUANTITY_MAX }),
+    // the edit writes what it was given. What the line holds, and not a write,
+    // so it has no ceiling, as the basket's `from` has none: a line stored
+    // above the ceiling is still edited down (plan 0262, 2026-11-17).
+    from: integer({ minimum: LINE_QUANTITY_MIN }),
     // Replace the line's product set (plan 0048, section 1.1); `[]` clears it.
     //
     // The **ceiling** and not the cap (plan 0070, section 7.2). A subscribed line

@@ -367,6 +367,51 @@ describe('an add states the unit of the line (plan 0246, sections 3.2 and 3.3)',
     expect(w.saved.map((row) => row.unit)).toEqual(['GRAM', 'UNIT']);
   });
 
+  it('creates a free text line in the unit it names, at one step of it (the owner, 2026-11-17)', async () => {
+    // A free text line counts in any of the three units, and stores and
+    // returns the one it was given. With no quantity it starts at
+    // `defaultQuantityOf` that unit.
+    const w = build({});
+
+    const oil = await add(w, 'Olive oil', { unit: 'MILLILITER' });
+    const flour = await add(w, 'Flour', { unit: 'GRAM', quantity: 500 });
+
+    expect(oil).toMatchObject({
+      outcome: 'CREATED',
+      line: { unit: 'MILLILITER', quantity: 25, itemIds: [] },
+    });
+    expect(flour.line).toMatchObject({ unit: 'GRAM', quantity: 500 });
+    expect(w.saved.map((row) => [row.unit, row.quantity])).toEqual([
+      ['MILLILITER', 25],
+      ['GRAM', 500],
+    ]);
+    expect(w.events.map((entry) => entry.line.unit)).toEqual([
+      'MILLILITER',
+      'GRAM',
+    ]);
+  });
+
+  it('creates free text batch items in the units they name (the owner, 2026-11-17)', async () => {
+    const w = build({});
+
+    const results = await w.service.addMany({
+      userId: ADDER,
+      listId: LIST_ID,
+      items: [
+        { content: 'Flour', unit: 'GRAM' },
+        { content: 'Oil', unit: 'MILLILITER', quantity: 750 },
+      ],
+    });
+
+    expect(
+      results.map((result) => [result.line.unit, result.line.quantity])
+    ).toEqual([
+      ['GRAM', 25],
+      ['MILLILITER', 750],
+    ]);
+    expect(w.saved.map((row) => row.unit)).toEqual(['GRAM', 'MILLILITER']);
+  });
+
   it('refuses a unit that is not one of the three', async () => {
     const w = build({});
 
