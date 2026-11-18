@@ -115,20 +115,13 @@ export const LINE_CONTENT_COUNTER_FROM = 350;
  * knows about itself, and somebody drags it back up in a fortnight. A floor of
  * one would make the ordinary end of the gesture impossible.
  *
- * **The ceiling is 999 999 base units** (backend plan 0262): 999,999 kg,
- * 999,999 l or 999 999 pieces, the same number as the contracts.
+ * **The ceiling is 99 999 base units for every unit** (the owner, 2026-11-17,
+ * velista `0188` S6): 99,999 kg, 99,999 l or 99 999 pieces, the server's own
+ * number. The buttons, the hold, End and typing all stop at it. A line stored
+ * above it (only 100 000, from before the ruling) draws as it is and steps down.
  */
 export const LINE_QUANTITY_MIN = 0;
-export const LINE_QUANTITY_MAX = 999999;
-
-/**
- * The most velista lets a weight or a volume reach, 99 kg or 99 l, with the buttons,
- * the hold and typing alike (the owner, 2026-11-17, velista `0188` decision K). A
- * typed amount turns back into grams over 99 kg, so the field never holds more. The
- * server still accepts {@link LINE_QUANTITY_MAX}: a line that already holds more
- * draws as it is and steps down. A count keeps {@link LINE_QUANTITY_MAX}.
- */
-export const LINE_MEASURED_QUANTITY_MAX = 99_000;
+export const LINE_QUANTITY_MAX = 99999;
 
 /** How long a held stepper button waits before it repeats (velista 0188). */
 export const QUANTITY_HOLD_DELAY_MS = 400;

@@ -185,12 +185,14 @@ export async function openSettleSheet(
 
 /**
  * The amount one list asks for on an open settle sheet (velista `0139`,
- * section 3): the typed field of its stepper, by the list's name.
+ * section 3): the typed field of its stepper, by the list's name. The field is
+ * named `basket.demand.askLabel` as given, "Weekly, asks for" (velista `0190`,
+ * section 5, as fixed on 2026-11-17).
  */
 export function askAmount(dialog: Locator, list: string): Locator {
   return amountField(
     dialog.locator('lib-row-entries'),
-    new RegExp(`^Amount of ${list}, asks for$`)
+    new RegExp(`^${list}, asks for$`)
   );
 }
 

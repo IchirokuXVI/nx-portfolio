@@ -812,6 +812,25 @@ describe('LineMemory mirrors where an add lands (backend 0228, 0260, velista 017
     expect(again.line.id).toBe(result.line.id);
   });
 
+  it('keeps a free text line in grams in grams, as the server allows since 2026-11-17', async () => {
+    const { lines } = await build();
+    const made = await lines.addLine(
+      OWNED_LIST,
+      'Queso de la feria',
+      undefined,
+      [],
+      undefined,
+      undefined,
+      'GRAM'
+    );
+    expect(made).toMatchObject({ itemIds: [], quantity: 25, unit: 'GRAM' });
+
+    // A typed add of the same name meets it and raises it in its own unit.
+    await lines.updateLine(made.id, { quantity: 0 });
+    const met = await lines.addLineResult(OWNED_LIST, 'Queso de la feria');
+    expect(met.line).toMatchObject({ id: made.id, quantity: 25, unit: 'GRAM' });
+  });
+
   it('raises a line at zero by one step of its own unit', async () => {
     const { lines } = await build();
     const bananas = await lines.addLine(

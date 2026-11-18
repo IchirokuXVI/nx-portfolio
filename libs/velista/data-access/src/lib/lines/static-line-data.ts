@@ -219,7 +219,8 @@ function line(
     // Typed by a person, like every line of the fixture.
     named: true,
     quantity,
-    // Counted, as every free text line is (velista `0182`).
+    // Counted, as velista makes every free text line (velista `0182`). The server
+    // also keeps one in grams or millilitres since 2026-11-17, drawn in its unit.
     unit: 'UNIT',
     position,
     // Free text, which is what most lines are and stays first class (section 6).

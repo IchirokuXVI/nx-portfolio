@@ -471,18 +471,23 @@ test.describe('a loose product, by weight (velista 0182)', () => {
     const field = askAmount(dialog, 'Groceries');
     await expect(field).toHaveAttribute('aria-valuenow', '1000');
 
-    // The owner's loop (2026-11-17): typed key by key, 1000 g turns into 1 kg,
-    // and two more zeros pass 99 kg and turn back into 100 g. Nothing is saved.
+    // The owner's second ruling of 2026-11-17: under kg a whole number over 99
+    // turns into grams at once, and the field then waits in grams until the edit
+    // ends. A sixth digit is not accepted. Escape saves nothing.
     const symbol = field
       .locator('xpath=ancestor::lib-quantity-stepper')
       .locator('.field-cell .symbol');
     await field.click();
     await field.press('ControlOrMeta+a');
-    await field.pressSequentially('1000');
-    await expect(field).toHaveValue('1');
+    await field.pressSequentially('10');
+    await expect(field).toHaveValue('10');
     await expect(symbol).toHaveText('kg');
-    await field.pressSequentially('00');
+    await field.pressSequentially('0');
     await expect(field).toHaveValue('100');
+    await expect(symbol).toHaveText('g');
+    await field.pressSequentially('000');
+    // The third zero would be a sixth digit, and is put back.
+    await expect(field).toHaveValue('10000');
     await expect(symbol).toHaveText('g');
     await field.press('Escape');
     await expect(field).toHaveValue('1');

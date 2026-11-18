@@ -19,7 +19,6 @@ import {
   isMeasured,
   LINE_QUANTITY_MAX,
   LINE_QUANTITY_MIN,
-  lineQuantityMax,
   QUANTITY_HOLD_DELAY_MS,
   QUANTITY_HOLD_FACTOR,
   QUANTITY_HOLD_FASTEST_MS,
@@ -50,12 +49,13 @@ export type QuantityStepperVariant = 'row' | 'sheet' | 'sheet-narrow';
  */
 export const TOOK_DURATION_MS = 2500;
 
-/** What the field's live region says when a weight's typing turns its unit. */
+/**
+ * What the field's live region says when a weight's typing turns its unit. Typing
+ * only ever turns kilos into grams (decision K as the owner ruled it on 2026-11-17).
+ */
 const TURNED_KEYS: Readonly<Record<string, string>> = {
   g: 'amount.turned.grams',
-  kg: 'amount.turned.kilograms',
   ml: 'amount.turned.milliliters',
-  l: 'amount.turned.liters',
 };
 
 /**
@@ -80,11 +80,12 @@ const TURNED_KEYS: Readonly<Record<string, string>> = {
  * **It never changes size**, whatever it holds: 155, 191 or 168 by 48 CSS px.
  * Typing is possible only in the two sheet variants (S9).
  *
- * **A typed weight or volume turns between grams and kilos as it is typed** (the
- * owner, 2026-11-17, decision K): 1000 g or more turns into kilos showing the same
- * amount, three whole digits under kilos turn back into grams, and an empty field
- * reads in grams (`followTyped`). A weight or a volume goes no higher than 99 kg or
- * 99 l, with the buttons as with typing ({@link ceiling}).
+ * **A typed weight or volume keeps the unit the edit started under** (the owner,
+ * 2026-11-17, decision K): "25000" typed under grams stays "25000 g" until the edit
+ * ends, and the field then rests as "25 kg". The one turn while typing: under kilos
+ * a whole number over 99 is read in grams at once ("500" g). An empty field reads in
+ * grams, and a key the field does not accept is put back (`followTyped`). Every unit
+ * goes no higher than 99 999, with the buttons as with typing ({@link ceiling}).
  */
 @Component({
   selector: 'lib-quantity-stepper',
@@ -114,6 +115,13 @@ export class QuantityStepper {
   readonly step = input<number | null>(null);
   /** What the amount is of, translated: "Plátano de Canarias IGP", or with its list. */
   readonly name = input.required<string>();
+  /**
+   * The sheet field's accessible name as given, translated, when it is not "Amount
+   * of {@link name}": the basket sheet names each list's field "Compra semanal, pide"
+   * (velista `0190`, section 5). Null, the default, wraps {@link name}. The buttons
+   * and the live region always read {@link name}.
+   */
+  readonly fieldName = input<string | null>(null);
   readonly variant = input<QuantityStepperVariant>('row');
   /**
    * The lowest amount minus reaches. A line's own floor unless the caller needs a
@@ -148,11 +156,11 @@ export class QuantityStepper {
   readonly typed = computed(() => this.variant() !== 'row');
 
   /**
-   * The most a plus, End or a typed amount reaches: {@link max}, and no more than
-   * 99 000 for a weight or a volume (the owner, 2026-11-17). A line that already
-   * holds more draws as it is and steps down.
+   * The most a plus, End or a typed amount reaches: {@link max}, 99 999 for every
+   * unit unless the caller says less (the owner, 2026-11-17). A line that already
+   * holds more draws as it is, its plus is at its end, and it steps down.
    */
-  readonly ceiling = computed(() => lineQuantityMax(this.unit(), this.max()));
+  readonly ceiling = computed(() => this.max());
 
   /** The words of the amount, in the form this variant reads. */
   readonly words = computed<AmountWords>(() =>
@@ -385,29 +393,36 @@ export class QuantityStepper {
 
   /**
    * A keystroke or a paste. A weight or a volume reads the whole text in the unit
-   * the field shows now and may turn it (decision K): the field then holds the
-   * turned text with the caret at its end, and the live region names the new unit.
-   * A count reads in the symbol the typing started under, as before.
+   * the edit holds (decision K): the text stays as typed, a whole number over 99
+   * under kilos turns the label into grams and the live region names it, and a key
+   * the field does not accept is put back with the caret where it was. A count
+   * reads in the symbol the typing started under, as before.
    */
   onFieldInput(event: Event): void {
     const input = event.target as HTMLInputElement;
-    if (this.draft() === null) {
-      this._draftFrom = this.words();
-    }
-    const from = this._draftFrom ?? this.words();
+    const before = this.draft() ?? this.words().figure;
+    const from =
+      this.draft() === null ? this.words() : (this._draftFrom ?? this.words());
     const unit = this.unit();
     const symbol = isMeasured(unit)
       ? (this._draftSymbol() ?? from.symbol)
       : from.symbol;
     const next = followTyped(input.value, symbol, unit, this.locale());
-    if (next.text !== input.value) {
-      input.value = next.text;
-      const end = next.text.length;
-      input.setSelectionRange?.(end, end);
+    if (next === null) {
+      // Not accepted: the field keeps the text it had, and the caret its place.
+      const caret = Math.max(
+        0,
+        (input.selectionStart ?? input.value.length) -
+          (input.value.length - before.length)
+      );
+      input.value = before;
+      input.setSelectionRange?.(caret, caret);
+      return;
     }
+    this._draftFrom = from;
     this.turnedTo.set(next.turned ? next.symbol : null);
     this._draftSymbol.set(next.symbol);
-    this.draft.set(next.text);
+    this.draft.set(input.value);
   }
 
   onFieldBlur(event: FocusEvent): void {
@@ -513,7 +528,7 @@ export class QuantityStepper {
       return false;
     }
     const from = this._draftFrom ?? this.words();
-    // The draft is already turned, so it is read in the symbol it ended under.
+    // The draft is read in the symbol the edit held, or turned into while typing.
     const shown = { ...from, symbol: this._draftSymbol() ?? from.symbol };
     this._clearDraft();
     const amount = parseTypedAmount(

@@ -410,7 +410,14 @@ nothing imports it. Keep `quantityCaption` (decision C).
   accessibility tree, so it is not read twice. Nothing on the row announces by itself.
 - **In the sheet.** Each list's control is the `spinbutton` of `lib-quantity-stepper`
   (`0188` section 3.5), its `name` the existing `basket.demand.askLabel` ("Compra semanal,
-  pide"), with its value text, Arrow Up and Down, Home and End as `0188` defines them. A
+  pide"), with its value text, Arrow Up and Down, Home and End as `0188` defines them.
+
+  > Note of 2026-11-17: as built, the stepper wrapped the label again ("Amount of Review
+  > walk, asks for"). The spinbutton now carries the label as given, through the stepper's
+  > `fieldName` input. The stepper's `name` is the list's name ("Compra semanal"), which the
+  > minus and plus read ("Quitar 25 g de Compra semanal", "Add 1 to Review walk") and the
+  > settled amount says ("Compra semanal, 750 gramos"). Every other stepper keeps "Amount of
+  > {{name}}". A
   focused spinbutton's value is announced by the screen reader as it changes. For steps made
   with the minus and plus buttons the stepper says the amount once when the presses stop
   (`0188` decision E). The sheet adds no live region and no sentence of its own.

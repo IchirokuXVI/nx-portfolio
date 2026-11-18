@@ -902,6 +902,22 @@ describe('BasketMemory: adding a line', () => {
     expect(result.entries[0]).toMatchObject({ left: 25 });
   });
 
+  it('draws a free text line in grams as a row in grams (the owner, 2026-11-17)', async () => {
+    const memory = new BasketMemory();
+    const result = await memory.addLine(BASKET, {
+      targetListId: 'list-weekly',
+      content: 'Queso de la feria',
+      quantity: 500,
+      unit: 'GRAM',
+    });
+
+    expect(result.addOutcome).toBe('created');
+    expect(result.entries[0]).toMatchObject({ left: 500, unit: 'GRAM' });
+    const row = rowOf(await rowsOf(memory), 'Queso de la feria');
+    expect(row.unit).toBe('GRAM');
+    expect(row.entries[0]).toMatchObject({ left: 500, unit: 'GRAM' });
+  });
+
   it('refuses a product the list counts in another unit, naming the line', async () => {
     const memory = new BasketMemory();
     let refusal: unknown = null;

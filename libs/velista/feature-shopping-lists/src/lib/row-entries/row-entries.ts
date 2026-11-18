@@ -47,7 +47,10 @@ interface DrawnEntry {
   readonly editable: boolean;
   /** The step its stepper presses by: its line's, or null for the unit's default. */
   readonly step: number | null;
+  /** The field's accessible name as given: "Compra semanal, pide" (velista `0190`). */
   readonly label: string;
+  /** What the buttons and the settled amount name: the list, "Compra semanal". */
+  readonly name: string;
   /** Change is drawn on this entry (velista `0140`, section 1). */
   readonly changeable: boolean;
   /** Change's accessible name, which names the list. */
@@ -59,7 +62,10 @@ interface DrawnOther {
   readonly list: BasketProductList;
   /** "zone · line name" for a list that holds the product at zero, else the zone. */
   readonly where: string;
+  /** The field's accessible name as given: "Compra semanal, pide" (velista `0190`). */
   readonly label: string;
+  /** What the buttons and the settled amount name: the list. */
+  readonly name: string;
   /** What the stepper draws: the sheet's open run on this list, else what it holds. */
   readonly shown: number;
 }
@@ -247,6 +253,7 @@ export class RowEntries {
       label: this._translator.t('basket.demand.askLabel', undefined, locale, {
         name: list.listName,
       }),
+      name: list.listName,
     }));
   });
 
@@ -323,6 +330,7 @@ export class RowEntries {
           : this._translator.t('basket.demand.askLabel', undefined, locale, {
               name: list,
             }),
+      name: list,
       changeable: this.changeable().has(entry.lineId),
       changeLabel: this._translator.t(
         'basket.change.oneLabel',

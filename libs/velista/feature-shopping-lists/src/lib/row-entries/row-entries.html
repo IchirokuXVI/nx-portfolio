@@ -49,8 +49,9 @@
           <lib-quantity-stepper
             (stepped)="onAsked(entry.lineId, $event)"
             [disabled]="busy()"
+            [fieldName]="entry.label"
             [min]="0"
-            [name]="entry.label"
+            [name]="entry.name"
             [step]="entry.step"
             [unit]="unit()"
             [value]="entry.shown"
@@ -122,8 +123,9 @@
                   <lib-quantity-stepper
                     (stepped)="onRaised(other.list, $event)"
                     [disabled]="busy()"
+                    [fieldName]="other.label"
                     [min]="0"
-                    [name]="other.label"
+                    [name]="other.name"
                     [step]="step()"
                     [unit]="unit()"
                     [value]="other.shown"

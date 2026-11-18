@@ -48,7 +48,9 @@
             (input)="onFieldInput($event)"
             (keydown)="onFieldKey($event)"
             [attr.aria-disabled]="disabled() ? 'true' : null"
-            [attr.aria-label]="'amount.group' | rokuT: { name: name() }"
+            [attr.aria-label]="
+              fieldName() ?? ('amount.group' | rokuT: { name: name() })
+            "
             [attr.aria-valuemax]="ceiling()"
             [attr.aria-valuemin]="typedMin() ?? min()"
             [attr.aria-valuenow]="value()"

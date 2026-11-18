@@ -1,9 +1,8 @@
-import { LINE_MEASURED_QUANTITY_MAX, LINE_QUANTITY_MAX } from './limits';
+import { LINE_QUANTITY_MAX } from './limits';
 import {
   addAmount,
   canStepUp,
   legacyLineUnit,
-  lineQuantityMax,
   lineUnitOfProduct,
   lineUnits,
   QUANTITY_STEP,
@@ -157,7 +156,7 @@ describe('stepFrom (velista 0188, S7b and decision B: no grid)', () => {
     for (let value = 0; value <= 1100; value++) {
       amounts.push(value);
     }
-    for (let value = 999_900; value <= 999_999; value++) {
+    for (let value = 99_900; value <= 99_999; value++) {
       amounts.push(value);
     }
     for (const unit of ['UNIT', 'GRAM', 'MILLILITER'] as const) {
@@ -170,17 +169,27 @@ describe('stepFrom (velista 0188, S7b and decision B: no grid)', () => {
 });
 
 describe('canStepUp (velista 0188, S8)', () => {
-  it('is off from 999 985 to 999 999 for a count, where the reading stays "999,99"', () => {
+  it('is off for a count where the next step of 10 passes 99 999 (the owner, 2026-11-17)', () => {
+    expect(canStepUp(99_980, 'UNIT', LINE_QUANTITY_MAX)).toBe(true);
+    for (let value = 99_990; value <= 100_000; value++) {
+      expect(canStepUp(value, 'UNIT', LINE_QUANTITY_MAX)).toBe(false);
+    }
+  });
+
+  it('is off from 99 975 for grams and millilitres, one step before the most, and never clamps', () => {
+    expect(canStepUp(99_950, 'GRAM', LINE_QUANTITY_MAX)).toBe(true);
+    expect(canStepUp(99_974, 'GRAM', LINE_QUANTITY_MAX)).toBe(true);
+    expect(canStepUp(99_975, 'GRAM', LINE_QUANTITY_MAX)).toBe(false);
+    expect(canStepUp(99_999, 'MILLILITER', LINE_QUANTITY_MAX)).toBe(false);
+    // A line stored above the ceiling, from before the ruling.
+    expect(canStepUp(100_000, 'GRAM', LINE_QUANTITY_MAX)).toBe(false);
+  });
+
+  it('is off for a count from 999 985 under a larger max, where the reading stays "999,99"', () => {
     expect(canStepUp(999_980, 'UNIT', 999_999)).toBe(true);
     for (let value = 999_985; value <= 999_999; value++) {
       expect(canStepUp(value, 'UNIT', 999_999)).toBe(false);
     }
-  });
-
-  it('is off from 999 975 for grams, one step before the most, and never clamps', () => {
-    expect(canStepUp(999_950, 'GRAM', 999_999)).toBe(true);
-    expect(canStepUp(999_975, 'GRAM', 999_999)).toBe(false);
-    expect(canStepUp(999_999, 'GRAM', 999_999)).toBe(false);
   });
 
   it('follows the max it is given', () => {
@@ -290,12 +299,8 @@ describe('stepping from an amount off the step (velista 0186, ruling 44)', () =>
   });
 });
 
-describe('lineQuantityMax (the owner, 2026-11-17)', () => {
-  it('holds a weight or a volume to 99 000 and leaves a count at the most', () => {
-    expect(lineQuantityMax('GRAM')).toBe(LINE_MEASURED_QUANTITY_MAX);
-    expect(lineQuantityMax('MILLILITER')).toBe(99_000);
-    expect(lineQuantityMax('UNIT')).toBe(LINE_QUANTITY_MAX);
-    expect(lineQuantityMax('GRAM', 500)).toBe(500);
-    expect(lineQuantityMax('UNIT', 500)).toBe(500);
+describe('LINE_QUANTITY_MAX (the owner, 2026-11-17, velista 0188 S6)', () => {
+  it('is one ceiling of 99 999 base units for every unit', () => {
+    expect(LINE_QUANTITY_MAX).toBe(99_999);
   });
 });

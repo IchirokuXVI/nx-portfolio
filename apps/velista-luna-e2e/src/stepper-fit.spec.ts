@@ -22,17 +22,19 @@ import { generateBasket, openSettleSheet, signIn } from './support/app';
  * measures it in the browser: no figure and no symbol may leave its cell, and the
  * control keeps its size (155 by 48 in a row, 191 by 48 in the list's line sheet).
  *
- * The row is given "999,99" and "125,25", the longest short forms (S4: a row never
- * reads more than three whole digits and two decimals, so it can never draw
- * "999,999"), with the one step smaller size a six character figure takes. The
- * sheet is given "999,999" and "125,25", the longest exact forms (S5). Velista 0190
- * adds the shopping list sheet's `sheet-narrow` variant, 168 by 48, with the same
- * exact forms, on a settle sheet of a generated basket.
+ * Since the owner's ceiling of 99 999 for every unit (2026-11-17) the row's
+ * longest short form is "99,99" at the full size, and the sheet's longest exact
+ * form is "99,999". The row is also given "999,99" and "125,25", the six character
+ * figures drawn one step smaller, and "100", a line stored above the ceiling. The
+ * sheet is given "99,999" and "125,25". Velista 0190 adds the shopping list
+ * sheet's `sheet-narrow` variant, 168 by 48, with the same exact forms, on a settle
+ * sheet of a generated basket; its cell is padded by 6 since the ceiling, as the
+ * wide sheet's is (0188, section 3.2).
  *
- * A sheet's "999,999" always carries a symbol: 999 999 g reads "999,999 kg" and a
- * count of 999 999 reads "999,999 K", so it is drawn at the 17 px figure and never
- * at the 18 px a bare count takes (0188, section 3.2). The sheet cases therefore
- * measure a field in that state, not the bare count the seed's lines start in.
+ * A sheet's "99,999" always carries a symbol: 99 999 g reads "99,999 kg", so it is
+ * drawn at the 17 px figure and never at the 18 px a bare count takes (0188,
+ * section 3.2). The sheet cases therefore measure a field in that state, not the
+ * bare count the seed's lines start in.
  */
 
 /** Half a pixel, for subpixel layout. */
@@ -122,7 +124,7 @@ function writeAndMeasure(
 }
 
 /**
- * Puts a sheet's stepper in the state a real "999,999" is drawn in: a field with a
+ * Puts a sheet's stepper in the state a real "99,999" is drawn in: a field with a
  * symbol, at the 17 px figure. Text with a separator is read in the top name, so
  * "1,5" draws a symbol whatever the line's unit, and nothing is saved until Enter
  * or a blur. {@link dropDraft} takes it back.
@@ -181,13 +183,13 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     await alice?.dispose();
   });
 
-  test('a row stepper holds "999,99", "125,25" and a four letter symbol', async ({
+  test('a row stepper holds "99,99", "999,99", "125,25" and a four letter symbol', async ({
     page,
   }) => {
     await openList(page);
     const stepper = fitRow(page).locator('lib-quantity-stepper.variant-row');
 
-    for (const figure of ['999,99', '125,25', '0']) {
+    for (const figure of ['99,99', '999,99', '125,25', '100', '0']) {
       await test.step(`row ${figure} ${SYMBOL}`, async () => {
         const fit = await writeAndMeasure(stepper, figure, SYMBOL);
         expect.soft(fit.problems).toEqual([]);
@@ -197,7 +199,7 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     }
   });
 
-  test('the line sheet stepper holds "999,999", "125,25" and a four letter symbol', async ({
+  test('the line sheet stepper holds "99,999", "125,25" and a four letter symbol', async ({
     page,
   }) => {
     await openList(page);
@@ -209,7 +211,7 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     await expect(stepper).toBeVisible();
 
     await withSymbol(stepper);
-    for (const figure of ['999,999', '125,25', '0']) {
+    for (const figure of ['99,999', '125,25', '0']) {
       await test.step(`sheet ${figure} ${SYMBOL}`, async () => {
         const fit = await writeAndMeasure(stepper, figure, SYMBOL);
         console.log(`sheet: ${fit.measured}`);
@@ -221,7 +223,7 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     await dropDraft(stepper);
   });
 
-  test('the settle sheet stepper holds "999,999", "125,25" and a four letter symbol', async ({
+  test('the settle sheet stepper holds "99,999", "125,25" and a four letter symbol', async ({
     page,
   }) => {
     await signIn(page, ALICE_EMAIL);
@@ -233,7 +235,7 @@ test.describe('the stepper fits its longest amount (velista 0188)', () => {
     await expect(stepper).toBeVisible();
 
     await withSymbol(stepper);
-    for (const figure of ['999,999', '125,25', '0']) {
+    for (const figure of ['99,999', '125,25', '0']) {
       await test.step(`settle sheet ${figure} ${SYMBOL}`, async () => {
         const fit = await writeAndMeasure(stepper, figure, SYMBOL);
         console.log(`settle sheet: ${fit.measured}`);
