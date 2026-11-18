@@ -246,27 +246,53 @@ export class SupermarketSourceService {
     });
   }
 
+  /**
+   * A run started on this chain. Writes `lastRunAt` and nothing else.
+   *
+   * **Never `save` the object a run holds.** The run read it when it started,
+   * and the owner may switch the chain off or change its rate, workers or
+   * config from the back office while the run works. A whole row save then
+   * puts the old values back, and a chain switched off during a run comes back
+   * on. Both run writes thus name their own columns only.
+   */
   async recordRunStarted(source: SupermarketSource): Promise<void> {
-    source.lastRunAt = new Date();
-    await this.sources.save(source);
+    const at = new Date();
+    await this.sources.update({ id: source.id }, { lastRunAt: at });
+    source.lastRunAt = at;
   }
 
   /**
-   * A finished run's verdict. `consecutiveFailures` is what a future scheduler
-   * would back off on; nothing reads it yet, and it is one column rather than the
-   * schedule block section 4.1 refuses to add before anything needs it.
+   * A finished run's verdict: `lastSuccessAt` and `consecutiveFailures`, and
+   * no other column (see {@link recordRunStarted}). A failure is counted in
+   * the database, so a count the object read at the start of the run is never
+   * written back. The object takes the stored count, for a caller that reads
+   * it afterwards.
    */
   async recordRunFinished(
     source: SupermarketSource,
     succeeded: boolean
   ): Promise<void> {
     if (succeeded) {
-      source.lastSuccessAt = new Date();
+      const at = new Date();
+      await this.sources.update(
+        { id: source.id },
+        { lastSuccessAt: at, consecutiveFailures: 0 }
+      );
+      source.lastSuccessAt = at;
       source.consecutiveFailures = 0;
-    } else {
-      source.consecutiveFailures += 1;
+      return;
     }
-    await this.sources.save(source);
+    const result = await this.sources
+      .createQueryBuilder()
+      .update(SupermarketSource)
+      .set({ consecutiveFailures: () => '"consecutiveFailures" + 1' })
+      .where('id = :id', { id: source.id })
+      .returning(['consecutiveFailures'])
+      .execute();
+    const counted = (result.raw as { consecutiveFailures?: unknown }[])[0]
+      ?.consecutiveFailures;
+    source.consecutiveFailures =
+      counted === undefined ? source.consecutiveFailures + 1 : Number(counted);
   }
 }
 
