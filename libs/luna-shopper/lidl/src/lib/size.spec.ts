@@ -77,6 +77,22 @@ describe('parseSize', () => {
     expect(packCountIn('2X100 g')).toBe(2);
   });
 
+  it.each(['XL', '2XL', 'MAX', 'X2', '2X60 w'])(
+    'reads no size and no count in %p, whose capital X multiplies nothing (plan 0270)',
+    (printed) => {
+      expect(parseSize(printed)).toBeNull();
+      expect(packCountIn(printed)).toBeNull();
+    }
+  );
+
+  it.each(['55X60 cm', '1.2X1.8 m'])(
+    'reads no size and no count in the length %p (plan 0270)',
+    (printed) => {
+      expect(parseSize(printed)).toBeNull();
+      expect(packCountIn(printed)).toBeNull();
+    }
+  );
+
   it('reads the pack count as the N of NxQ (plan 0162)', () => {
     expect(packCountIn('3x200 ml')).toBe(3);
     expect(packCountIn('6x200ml')).toBe(6);

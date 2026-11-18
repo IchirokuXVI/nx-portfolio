@@ -187,6 +187,47 @@ describe('what a printed unit word measures (plan 0183)', () => {
   });
 });
 
+describe('the words a hostile name ends in (plan 0270)', () => {
+  it.each(['XL', 'xl', '2XL', 'MAX', 'X', 'X2', 'w'])(
+    '%p names no unit and measures nothing',
+    (word) => {
+      expect(printedSizeUnit(word)).toBeNull();
+      expect(measuresContent(word)).toBe(false);
+      expect(isPrintedLength(word)).toBe(false);
+    }
+  );
+
+  it('reads a count word in capitals or with a trailing stop', () => {
+    expect(printedSizeUnit('PORCIÓN')).toEqual({
+      unit: UnitOfMeasure.UNIT,
+      factor: 1,
+    });
+    expect(printedSizeUnit('PORCIONES')).toEqual({
+      unit: UnitOfMeasure.UNIT,
+      factor: 1,
+    });
+    expect(sourceSizeOf(1, 'PORCIÓN')).toEqual({
+      unitSize: 1,
+      sizeUnit: UnitOfMeasure.UNIT,
+    });
+    expect(sourceSizeOf(3, 'Pares.')).toEqual({
+      unitSize: 3,
+      sizeUnit: UnitOfMeasure.UNIT,
+    });
+  });
+
+  it('reads no unit in a phrase that only holds the word lavado', () => {
+    expect(printedSizeUnit('lavado a mano')).toBeNull();
+    expect(measuresContent('lavado a mano')).toBe(false);
+    expect(isPrintedLength('lavado a mano')).toBe(false);
+  });
+
+  it('reads no count in a phrase that opens with par', () => {
+    expect(printedSizeUnit('par de')).toBeNull();
+    expect(measuresContent('par de')).toBe(false);
+  });
+});
+
 describe('toBaseUnit (plan 0183)', () => {
   it.each([
     [0.25, UnitOfMeasure.KILOGRAM, 250, UnitOfMeasure.GRAM],

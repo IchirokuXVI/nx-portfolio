@@ -110,6 +110,83 @@ describe('splitSize', () => {
       it('reads the pack count of a capital X', () => {
         expect(splitSize('yogur natural, 2X125g').packCount).toBe(2);
       });
+
+      describe('hostile sizes', () => {
+        const NOTHING = {
+          unitSize: null,
+          sizeUnit: null,
+          packCount: null,
+          soldByWeight: false,
+        };
+
+        it.each(['XL', '2XL', 'MAX', 'X2', '2X60 w'])(
+          'keeps %p after the comma and states no size and no pack',
+          (sizeFormat) => {
+            expect(splitSize(`camiseta térmica, ${sizeFormat}`)).toEqual({
+              name: 'camiseta térmica',
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+
+        it.each(['55X60 cm', '1.2X1.8 m'])(
+          'keeps the length %p and states no size and no pack',
+          (sizeFormat) => {
+            expect(splitSize(`mantel, ${sizeFormat}`)).toEqual({
+              name: 'mantel',
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+
+        it.each([
+          ['calcetines 3 pares, 40g', 'calcetines 3 pares', '40g', 40],
+          ['té verde 10 bolsitas, 1,5g', 'té verde 10 bolsitas', '1,5g', 1.5],
+        ])(
+          'reads only the size after the comma of %p',
+          (printed, name, sizeFormat, unitSize) => {
+            expect(splitSize(printed)).toEqual({
+              name,
+              sizeFormat,
+              unitSize,
+              sizeUnit: 'GRAM',
+              packCount: null,
+              soldByWeight: false,
+            });
+          }
+        );
+
+        it.each([
+          ['queso fundido, 1 PORCIÓN', '1 PORCIÓN', 1],
+          ['calcetines, 3 Pares.', '3 Pares.', 3],
+        ])(
+          'reads the count word of %p in capitals or with a stop',
+          (printed, sizeFormat, unitSize) => {
+            expect(splitSize(printed)).toMatchObject({
+              sizeFormat,
+              unitSize,
+              sizeUnit: 'UNIT',
+              packCount: null,
+            });
+          }
+        );
+
+        it.each([
+          ['detergente, lavado a mano', 'detergente', 'lavado a mano'],
+          ['par de calcetines', 'par de calcetines', null],
+        ])(
+          'reads no size in %p, where lavado or par has no number',
+          (printed, name, sizeFormat) => {
+            expect(splitSize(printed)).toEqual({
+              name,
+              sizeFormat,
+              ...NOTHING,
+            });
+          }
+        );
+      });
     });
 
     describe('a length is a dimension, not a size (plan 0183)', () => {

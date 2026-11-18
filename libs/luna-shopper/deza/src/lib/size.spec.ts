@@ -287,6 +287,119 @@ describe('count words, a wash and a capital X (plan 0270)', () => {
       splitSize('Yogur 2x125 g').name
     );
   });
+
+  describe('hostile names', () => {
+    const NOTHING = {
+      unitSize: null,
+      sizeUnit: null,
+      approxWeight: null,
+      packCount: null,
+    };
+
+    it.each([
+      'Pañales DODOT talla 6 XL',
+      'Camiseta térmica hombre 2XL',
+      'Maquinilla GILLETTE Mach3 MAX',
+      'Pilas alcalinas DURACELL AA X2',
+      'Bombilla halógena 2X60 w',
+    ])(
+      'does not split %p, whose capital X multiplies nothing',
+      (description) => {
+        expect(splitSize(description)).toEqual({
+          name: description,
+          sizeFormat: null,
+        });
+        expect(measuresIn(description)).toEqual(NOTHING);
+      }
+    );
+
+    it.each([
+      ['Mantel ALTEZA 55X60 cm', 'Mantel ALTEZA', '55X60 cm'],
+      ['Toalla de playa 1.2X1.8 m', 'Toalla de playa', '1.2X1.8 m'],
+    ])(
+      'splits the length of %p and states no size and no pack',
+      (description, name, sizeFormat) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(measuresIn(description)).toEqual(NOTHING);
+      }
+    );
+
+    it.each([
+      [
+        'Detergente líquido ARIEL 40 lavados 2 L',
+        'Detergente líquido ARIEL 40 lavados',
+        '2 L',
+        2,
+        'LITER',
+      ],
+      [
+        'Calcetines ALTEZA 3 pares 40 g',
+        'Calcetines ALTEZA 3 pares',
+        '40 g',
+        40,
+        'GRAM',
+      ],
+      [
+        'Té verde ALTEZA 10 bolsitas 1,5 g',
+        'Té verde ALTEZA 10 bolsitas',
+        '1,5 g',
+        1.5,
+        'GRAM',
+      ],
+    ])(
+      'takes the last size of %p and leaves the count or the wash in the name',
+      (description, name, sizeFormat, unitSize, sizeUnit) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(measuresIn(description)).toEqual({
+          unitSize,
+          sizeUnit,
+          approxWeight: null,
+          packCount: null,
+        });
+      }
+    );
+
+    it('reads a spaced capital X as a multiplier', () => {
+      expect(splitSize('Yogur natural ALTEZA 2 X 125 g')).toEqual({
+        name: 'Yogur natural ALTEZA',
+        sizeFormat: '2 X 125 g',
+      });
+      expect(measuresIn('Yogur natural ALTEZA 2 X 125 g')).toEqual({
+        unitSize: 250,
+        sizeUnit: 'GRAM',
+        approxWeight: null,
+        packCount: 2,
+      });
+    });
+
+    it.each([
+      ['Queso fundido 1 PORCIÓN', 'Queso fundido', '1 PORCIÓN', 1],
+      ['Calcetines ALTEZA 3 Pares.', 'Calcetines ALTEZA', '3 Pares.', 3],
+    ])(
+      'reads the count word of %p in capitals or with a stop',
+      (description, name, sizeFormat, unitSize) => {
+        expect(splitSize(description)).toEqual({ name, sizeFormat });
+        expect(measuresIn(description)).toEqual({
+          unitSize,
+          sizeUnit: 'UNIT',
+          approxWeight: null,
+          packCount: null,
+        });
+      }
+    );
+
+    it.each([
+      'Detergente para lavado a mano ALTEZA',
+      'Par de calcetines ALTEZA',
+      'Calcetines 1 par de deporte',
+    ])('does not split %p, where lavado or par ends no size', (description) => {
+      expect(splitSize(description)).toEqual({
+        name: description,
+        sizeFormat: null,
+      });
+      expect(measuresIn(description)).toEqual(NOTHING);
+    });
+  });
 });
 
 describe('sizeOf (plan 0177)', () => {
