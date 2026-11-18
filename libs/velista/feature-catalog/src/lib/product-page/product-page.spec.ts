@@ -1096,6 +1096,39 @@ describe('ProductPage', () => {
       expect(store.count()).toBe(0);
     });
 
+    it('draws the trash on the minus of a line it made at one step, 25 ml of a loose product, and that press takes it back (velista 0185)', async () => {
+      const loose: CatalogItem = { ...OIL, size: null };
+      const { fixture, lines, store } = await render({
+        items: [loose, RICE],
+        lists: [WEEKLY, PARTY],
+      });
+
+      listRow(fixture, 'list-party').main?.plus?.click();
+      await settle(fixture);
+
+      expect(lines.addLineResult).toHaveBeenCalledWith(
+        'list-party',
+        'Extra virgin olive oil',
+        25,
+        ['item-oil'],
+        false,
+        undefined,
+        'MILLILITER'
+      );
+      const made = listRow(fixture, 'list-party').main;
+      expect(made?.quantity).toBe('25');
+      // One press reaches 0, so the minus draws the trash (velista 0188).
+      expect(made?.minus?.classList).toContain('is-clear');
+      expect(made?.minus?.querySelector('lib-trash-icon')).not.toBeNull();
+
+      made?.minus?.click();
+      await quiet(fixture);
+
+      expect(lines.deleteLine).toHaveBeenCalledWith('line-list-party-item-oil');
+      expect(lines.addQuantity).not.toHaveBeenCalled();
+      expect(store.count()).toBe(0);
+    });
+
     it('sets a line that was there before to zero with the minus, and deletes nothing', async () => {
       const { fixture, lines } = await render({
         lines: [{ ...OIL_LINE, quantity: 1 }],
@@ -1331,6 +1364,41 @@ describe('ProductPage', () => {
         'UNIT'
       );
       expect(stepperIn(line())?.quantity).toBe('3');
+    });
+
+    it('switches the plus of a similar product held only at zero off, and says so (decision 51)', async () => {
+      const { fixture, lines } = await render({
+        ...group,
+        lines: [
+          {
+            id: 'line-carbonell',
+            listId: 'list-weekly',
+            content: 'Carbonell olive oil',
+            quantity: 0,
+            itemIds: ['item-oil-other'],
+          },
+        ],
+      });
+      const row = similar(fixture)[0];
+      const plus = row?.querySelector<HTMLButtonElement>('button.add');
+
+      expect(plus?.getAttribute('aria-disabled')).toBe('true');
+      const reason = row?.querySelector(
+        `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+      );
+      expect(reason?.textContent).toContain('catalog.held.atZero');
+      // No link: the list hides its lines at zero.
+      expect(row?.querySelector('a.held-onlist-link')).toBeNull();
+      // The other similar product, on no line, keeps its plus.
+      expect(
+        similar(fixture)[1]
+          ?.querySelector('button.add')
+          ?.hasAttribute('aria-disabled')
+      ).toBe(false);
+
+      plus?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).not.toHaveBeenCalled();
     });
 
     it('opens the page of a similar product when its row is pressed', async () => {

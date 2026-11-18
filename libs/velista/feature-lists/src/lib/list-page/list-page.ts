@@ -49,6 +49,7 @@ import {
   SessionStore,
   ShoppingProfileStore,
   toAddChoice,
+  toAddUnitRefusal,
   TripStore,
   ZoneStore,
 } from '@portfolio/velista/data-access';
@@ -58,6 +59,7 @@ import {
   type AddChoiceRow,
   addChoiceRows,
   type AddLineOptions,
+  addUnitRefusalKey,
   APP_BASE_PATH,
   type CatalogSuggestion,
   DUE_LINE_ADDS_ON_STEP,
@@ -100,6 +102,7 @@ import {
   quantityRuns,
   RECORDING_LIMITS,
   type RecordingLimits,
+  rowInView,
   searchOpenOf,
   sheetSegments,
   StorageKeys,
@@ -1946,13 +1949,20 @@ export class ListPage {
     }
   }
 
-  /** Say a sentence in the page's polite region, after a gap when it repeats. */
-  private _say(sentence: string, repeat: boolean): void {
+  /**
+   * Say a sentence in the page's polite region, after a gap when it repeats: the region
+   * is emptied now and filled again a moment later, because the same text a second
+   * time is no change a screen reader hears.
+   */
+  private _say(
+    sentence: string,
+    repeat = this.announcement() === sentence
+  ): void {
     if (!repeat) {
       this._announce(sentence);
       return;
     }
-    this._cancelSay();
+    this._announce('');
     this._sayTimer = setTimeout(() => {
       this._sayTimer = null;
       this._announcement.set(sentence);
@@ -2049,10 +2059,10 @@ export class ListPage {
    * the defect plan 0030 section 5 exists to remove.
    */
   async add(entry: LineComposerSubmit): Promise<void> {
-    // Typed words say the page can ask which line (backend `0228`). A card says
-    // nothing new: its products already decide where it lands.
-    const typed = (entry.itemIds ?? []).length === 0;
-    await this._send(entry, typed ? { askIfAmbiguous: true } : undefined);
+    // Every add from the composer can be asked about, typed words and a chosen card
+    // alike: two or more lines it meets are a question, never a guess (the owner's
+    // ruling of 2026-11-16, backend `0260` rule 4).
+    await this._send(entry, { askIfAmbiguous: true });
   }
 
   /**
@@ -2069,6 +2079,10 @@ export class ListPage {
     options: AddLineOptions | undefined,
     listId: string = this.listId()
   ): Promise<void> {
+    // A sentence of the last add goes with the next send, whatever this one answers
+    // (velista `0185`, section 4): a send that is not drawn calls `sent()` only on its
+    // answer, and a failure never does.
+    this.composerNotice.set(null);
     const current = this.loaded();
     const drawn = this._lines.drawsBeforeAnswer(
       listId,
@@ -2109,12 +2123,24 @@ export class ListPage {
         outcome.error instanceof GatewayError &&
         outcome.error.code === 'not_found'
       ) {
-        // The chosen line went while the question was open (backend `0228`, section
-        // 3). The list is still there, so the same add asks again, once: the
-        // question redraws with the lines left, the one line left is raised, or a
-        // line is made. A list that went too answers `not_found` again, and that
-        // one is said as the list being gone.
-        await this._send(entry, { askIfAmbiguous: true }, listId);
+        // The chosen line went while the question was open, or is no longer one the
+        // add meets (backend `0260`, rule 6). The question is already shut; the
+        // words stay, and the add's own failure is drawn under the field where a
+        // refused add says why, so a press of the plus asks again with the lines as
+        // they are now. That region is a polite live one, so it is said once.
+        if (listId !== this.listId()) {
+          return;
+        }
+        // An add that names its line draws no row and leaves the field alone. Typed
+        // words cleared meanwhile come back; a card's name never goes into the
+        // field, because it is not what was typed.
+        if (
+          (entry.itemIds ?? []).length === 0 &&
+          (this._composer()?.content().trim() ?? '') === ''
+        ) {
+          this._composer()?.restore(entry.content);
+        }
+        this._setNotice(this._translator.t('list.error.failed'));
         return;
       }
       const choice = toAddChoice(outcome.error);
@@ -2134,6 +2160,39 @@ export class ListPage {
         this._openChoice(listId, entry, entry.anchor, choice);
         return;
       }
+      const refusal =
+        (entry.itemIds ?? []).length > 0
+          ? toAddUnitRefusal(outcome.error, entry.content)
+          : null;
+      if (refusal !== null) {
+        if (listId !== this.listId()) {
+          // The page went to another list while the add was out, and the
+          // sentence is about the list it left.
+          return;
+        }
+        // The list counts this product in another unit (velista `0185`, section 4):
+        // nothing was made, the row drawn for it is gone, and the words and focus
+        // come back so the person can go to that line. The sentence says why.
+        if (drawn && (this._composer()?.content().trim() ?? '') === '') {
+          this._composer()?.restore(entry.content);
+        }
+        this._setNotice(
+          this._translator.t(
+            addUnitRefusalKey(refusal, 'list'),
+            undefined,
+            this._locale(),
+            { name: refusal.name }
+          )
+        );
+        // The line the sentence names is marked and brought into view, as an add
+        // already on the list does (owner ruling 45 of 2026-11-16). A line the page
+        // does not draw (a filter, a section shut, a line hidden at 0): the sentence
+        // alone.
+        if (refusal.lineId !== null) {
+          this._markTook([refusal.lineId]);
+        }
+        return;
+      }
       if (drawn) {
         this._query.set('');
       }
@@ -2149,10 +2208,45 @@ export class ListPage {
     }
     this._query.set('');
 
+    if (outcome.outcome === 'alreadyOnList') {
+      // The list already asks for it, so nothing was added (velista `0185`, A1):
+      // every line it met is shown, the first brought into view, and marked. A met
+      // line the page does not draw (a filter, a section shut, a page not loaded) is
+      // said on the composer instead; the page changes no filter by itself. Either
+      // way it is said once: the list's live region speaks for a drawn row, the
+      // notice's own region for one that is not.
+      const met = outcome.alreadyOnList;
+      // Named after a line the list draws: an answer to an add nobody could be asked
+      // about can name lines kept at 0 too (backend `0260`, rule 5), which are not
+      // drawn and are passed over by the mark.
+      const named = met.find((line) => line.quantity > 0) ?? met[0];
+      const sentence = this._translator.t(
+        'list.add.alreadyOn',
+        undefined,
+        this._locale(),
+        { name: this._lineName(named ?? outcome.line) }
+      );
+      this._markTook(
+        met.map((line) => line.id),
+        (shown) => {
+          if (listId !== this.listId()) {
+            return;
+          }
+          if (shown) {
+            // A second identical add says it again (`_say` leaves a gap).
+            this._say(sentence);
+          } else {
+            this._setNotice(sentence);
+          }
+        }
+      );
+      return;
+    }
+
     if (outcome.merged) {
       // The units went to a line already on the list, which stays where it is: the
       // page shows it and marks its quantity (target 4).
-      this._markTook(outcome.line.id);
+      this._markTook([outcome.line.id]);
       this._announce(
         this._translator.t('list.addChoice.merged', undefined, this._locale(), {
           name: this._lineName(outcome.line),
@@ -2201,6 +2295,14 @@ export class ListPage {
     return anchor?.closest('.composer-dock') ? 'below' : 'above';
   });
 
+  /**
+   * Whether the question offers "A new line": for typed words alone (the owner's
+   * ruling of 2026-11-16). A chosen product never makes a second line of itself.
+   */
+  readonly choiceOffersNewLine = computed(
+    () => (this.addChoice()?.entry.itemIds ?? []).length === 0
+  );
+
   /** The name the question's title says, as the first line stores it. */
   readonly choiceName = computed(() => {
     const asked = this.addChoice();
@@ -2221,18 +2323,13 @@ export class ListPage {
     }
     const facts = this._catalogFacts();
     const lines = this._lines.linesIn(asked.listId);
-    return addChoiceRows(
-      asked.choice,
-      asked.entry.quantity,
-      {
-        itemOf: (itemId) => this._itemNames.nameOf(itemId),
-        favoriteOf: (lineId) =>
-          lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
-        locale: facts.locale,
-        brandSizeOf: facts.brandSizeOf,
-      },
-      asked.entry.unit
-    );
+    return addChoiceRows(asked.choice, {
+      itemOf: (itemId) => this._itemNames.nameOf(itemId),
+      favoriteOf: (lineId) =>
+        lines.find((line) => line.id === lineId)?.favoriteItemId ?? null,
+      locale: facts.locale,
+      brandSizeOf: facts.brandSizeOf,
+    });
   });
 
   /** A line of the question was chosen: the same add, into that line. */
@@ -2248,7 +2345,9 @@ export class ListPage {
   /** "A new line" was chosen: the same add, as a line of its own. */
   chooseNewLine(): void {
     const asked = this.addChoice();
-    if (asked === null) {
+    if (asked === null || (asked.entry.itemIds ?? []).length > 0) {
+      // Offered for typed words alone; the gateway refuses `newLine` beside
+      // products.
       return;
     }
     this.addChoice.set(null);
@@ -2283,31 +2382,62 @@ export class ListPage {
   }
 
   /**
-   * The line an add just raised, whose quantity carries the amber edge for
-   * {@link TOOK_DURATION_MS} (velista `0170`, target 4).
+   * The lines an add just raised or met, whose quantity carries the amber edge for
+   * {@link TOOK_DURATION_MS} (velista `0170`, target 4; velista `0185`, decision E).
    */
-  readonly tookLine = signal<string | null>(null);
+  readonly tookLines = signal<ReadonlySet<string>>(new Set());
 
   private _tookTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** Mark a raised row, after the list has scrolled it into view if it was not. */
-  private _markTook(lineId: string): void {
+  /**
+   * One sentence under the composer's row, or null (velista `0185`): a line an add
+   * met that the page does not draw, or why a product could not be added. It goes
+   * on the next words, the next send and its cross. The voice strip sits in the
+   * same place, so the two are never drawn together: whichever came last stays.
+   */
+  readonly composerNotice = signal<string | null>(null);
+
+  /** The cross of the composer's sentence. */
+  dismissNotice(): void {
+    this.composerNotice.set(null);
+  }
+
+  private _setNotice(text: string): void {
+    this.voiceStrip.set(null);
+    this.composerNotice.set(text);
+  }
+
+  /**
+   * Mark the rows an add raised or met, after the list has scrolled the first of
+   * them into view if it was not. `found` runs after the next render, with whether
+   * any of them is drawn.
+   */
+  private _markTook(
+    lineIds: readonly string[],
+    found?: (shown: boolean) => void
+  ): void {
     if (this._tookTimer !== null) {
       clearTimeout(this._tookTimer);
     }
-    this.tookLine.set(lineId);
+    this.tookLines.set(new Set(lineIds));
     this._tookTimer = setTimeout(() => {
       this._tookTimer = null;
-      this.tookLine.set(null);
+      this.tookLines.set(new Set());
     }, TOOK_DURATION_MS);
 
     afterNextRender(
       () => {
         const column = this._column()?.nativeElement;
-        const row = Array.from(
+        const rows = Array.from(
           column?.querySelectorAll<HTMLElement>('[data-line-id]') ?? []
-        ).find((candidate) => candidate.dataset['lineId'] === lineId);
+        );
+        const row = lineIds
+          .map((lineId) =>
+            rows.find((candidate) => candidate.dataset['lineId'] === lineId)
+          )
+          .find((found) => found !== undefined);
         if (column === undefined || row === undefined) {
+          found?.(false);
           return;
         }
         if (!rowInView(row, column)) {
@@ -2315,6 +2445,7 @@ export class ListPage {
           // news, not the trip.
           row.scrollIntoView?.({ block: 'center', behavior: 'auto' });
         }
+        found?.(true);
       },
       { injector: this._injector }
     );
@@ -2351,6 +2482,8 @@ export class ListPage {
     this._tone.play();
 
     this._voiceBusy.set(true);
+    // The strip takes the place under the field (velista `0185`).
+    this.composerNotice.set(null);
     // Said at once, and replaced by the reply or the failure exactly as nothing used
     // to be (velista `0079`, section 5). A turn takes seconds, and a strip that is
     // empty for all of them reads as a recording that went nowhere.
@@ -2403,6 +2536,7 @@ export class ListPage {
 
   /** The microphone did not start. Two sentences, because they read differently. */
   onRecordingFailed(): void {
+    this.composerNotice.set(null);
     this.voiceStrip.set({
       heard: '',
       reply: '',
@@ -2503,6 +2637,8 @@ export class ListPage {
 
   onComposerQuery(query: string): void {
     this._query.set(query);
+    // The sentence about the last add goes with the next words (velista `0185`).
+    this.composerNotice.set(null);
     // New words are a new add: the open question was about the old ones.
     const asked = this.addChoice();
     if (asked !== null && query.trim() !== asked.entry.content) {
@@ -2836,18 +2972,6 @@ export class ListPage {
  * about", and a ring that stayed would start saying something about the item itself.
  */
 const MARK_DURATION_MS = 4000;
-
-/**
- * Whether a row is wholly inside the scrolling column. The field is pinned above the
- * column, outside it, so the column's own box is the whole of what shows. Reads
- * geometry, so it says yes where there is none to read (jsdom), and nothing scrolls
- * there.
- */
-function rowInView(row: HTMLElement, column: HTMLElement): boolean {
-  const box = row.getBoundingClientRect();
-  const frame = column.getBoundingClientRect();
-  return box.top >= frame.top && box.bottom <= frame.bottom;
-}
 
 /**
  * The words above a list shown one category at a time: this app's own for "No

@@ -1605,3 +1605,190 @@ describe('ProductRow, its layers', () => {
     expect(host).toMatch(/isolation:\s*isolate;/);
   });
 });
+
+/** Velista `0185`, C1 and decisions D and G: a product already on the list. */
+describe('ProductRow, a product already on the list', () => {
+  const LINE: HoldingRow = {
+    lineId: 'line-oil',
+    name: 'Extra virgin olive oil',
+    quantity: 2,
+    editable: true,
+    pending: false,
+  };
+
+  async function render(add: ProductRowAdd): Promise<HTMLElement> {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ProductRow, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProductRow);
+    fixture.componentRef.setInput('row', productRowView(OIL, options()));
+    fixture.componentRef.setInput('add', add);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('switches the plus off, keeps its name, and describes it by the sentence', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+      onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    // Inert but focusable (decision G, the owner's on 2026-11-12).
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    expect(plus?.getAttribute('aria-label')).toBe('catalog.add.label');
+    const sentence = host.querySelector('.held-onlist');
+    expect(sentence).not.toBeNull();
+    // The reason alone describes the plus, not the link's words after it.
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason).not.toBeNull();
+    expect(sentence?.contains(reason)).toBe(true);
+    expect(reason?.textContent?.trim()).toContain('catalog.held.alreadyOn');
+    expect(reason?.textContent).not.toContain('catalog.held.openLine');
+    expect(reason?.querySelector('a')).toBeNull();
+    expect(
+      sentence?.querySelector('lib-info-icon')?.getAttribute('aria-hidden')
+    ).toBe('true');
+    expect(sentence?.textContent).toContain('catalog.held.alreadyOn');
+    // In place of the heading of the lines.
+    expect(host.querySelector('.held-title')).toBeNull();
+  });
+
+  it('keeps focus on the plus when an add lands and switches it off, and a second press adds nothing', async () => {
+    TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [ProductRow, RokuTranslatorTestingModule.forTesting()],
+      providers: [provideRouter([])],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(ProductRow);
+    fixture.componentRef.setInput('row', productRowView(OIL, options()));
+    fixture.componentRef.setInput('add', { list: 'Weekly shop', lines: [] });
+    fixture.detectChanges();
+    document.body.appendChild(fixture.nativeElement);
+    const pressed: string[] = [];
+    fixture.componentInstance.added.subscribe((event) =>
+      pressed.push(event.id)
+    );
+    try {
+      const plus = (fixture.nativeElement as HTMLElement).querySelector(
+        'button.add'
+      ) as HTMLButtonElement;
+      plus.focus();
+      plus.click();
+      expect(pressed).toEqual([OIL.id]);
+
+      // The add landed: the line is on the list, and the plus switches off.
+      fixture.componentRef.setInput('add', {
+        list: 'Weekly shop',
+        lines: [LINE],
+        onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+      });
+      fixture.detectChanges();
+
+      expect(document.activeElement).toBe(plus);
+      expect(plus.getAttribute('aria-disabled')).toBe('true');
+      expect(plus.hasAttribute('disabled')).toBe(false);
+      plus.click();
+      expect(pressed).toEqual([OIL.id]);
+    } finally {
+      (fixture.nativeElement as HTMLElement).remove();
+    }
+  });
+
+  it('links to the list at that line, and keeps the line and its stepper working', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+      onList: { lineId: 'line-oil', path: '/en/zones/z1/lists/l1' },
+    });
+
+    const link = host.querySelector<HTMLAnchorElement>('a.held-onlist-link');
+    expect(link?.textContent?.trim()).toBe('catalog.held.openLine');
+    expect(link?.getAttribute('href')).toBe(
+      '/en/zones/z1/lists/l1?line=line-oil'
+    );
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(2);
+    expect(
+      [...steps].some((step) => step.getAttribute('aria-disabled') === 'true')
+    ).toBe(false);
+  });
+
+  it('keeps the plus and the heading while the host sets neither reason, as for an add on its way', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [LINE],
+    });
+
+    expect(host.querySelector<HTMLButtonElement>('button.add')?.disabled).toBe(
+      false
+    );
+    expect(
+      host.querySelector('button.add')?.hasAttribute('aria-disabled')
+    ).toBe(false);
+    expect(
+      host.querySelector('button.add')?.hasAttribute('aria-describedby')
+    ).toBe(false);
+    expect(host.querySelector('.held-title')).not.toBeNull();
+    expect(host.querySelector('.held-onlist')).toBeNull();
+  });
+
+  it('switches the plus off for one line at zero, says to raise it below, and links nowhere (decision 51 of 2026-11-16)', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [{ ...LINE, quantity: 0 }],
+      atZero: true,
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason?.textContent?.trim()).toBe('catalog.held.atZero');
+    expect(host.querySelector('a.held-onlist-link')).toBeNull();
+    expect(host.querySelector('.held-title')).toBeNull();
+    // The line keeps its stepper, which is how it is raised, and its plus works.
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(2);
+    expect(steps[1]?.getAttribute('aria-disabled')).not.toBe('true');
+  });
+
+  it('switches the plus off the same way for two lines at zero', async () => {
+    const host = await render({
+      list: 'Weekly shop',
+      lines: [
+        { ...LINE, quantity: 0 },
+        { ...LINE, lineId: 'line-oil-b', name: 'Oil for frying', quantity: 0 },
+      ],
+      atZero: true,
+    });
+
+    const plus = host.querySelector<HTMLButtonElement>('button.add');
+    expect(plus?.getAttribute('aria-disabled')).toBe('true');
+    expect(plus?.hasAttribute('disabled')).toBe(false);
+    const reason = host.querySelector(
+      `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+    );
+    expect(reason?.textContent?.trim()).toBe('catalog.held.atZero');
+    expect(host.querySelector('a.held-onlist-link')).toBeNull();
+    expect(host.querySelector('.held-title')).toBeNull();
+    // Each line keeps its stepper, which is how one is raised.
+    const steps = host.querySelectorAll<HTMLButtonElement>(
+      'li.held-line lib-quantity-stepper button.step'
+    );
+    expect(steps).toHaveLength(4);
+  });
+});

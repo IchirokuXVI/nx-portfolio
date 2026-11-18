@@ -36,8 +36,8 @@ export interface ListPickerChoice {
    */
   readonly listName: string | null;
   readonly rows: readonly AddChoiceRow[];
-  /** How many the add carries. */
-  readonly added: number;
+  /** "A new line" is offered for typed words alone (the owner's ruling of 2026-11-16). */
+  readonly offerNewLine: boolean;
 }
 
 /** Numbers each picker's title, so two on a page never share an id. */
@@ -97,9 +97,9 @@ let pickerCount = 0;
             (dismissed)="close('escape', origin)"
             (newLine)="choseNewLine.emit()"
             (returned)="backToLists.emit()"
-            [added]="asked.added"
             [back]="asked.listName"
             [name]="asked.name"
+            [offerNewLine]="asked.offerNewLine"
             [rows]="asked.rows"
             [titleId]="choiceTitleId"
             scope="basket"

@@ -1786,7 +1786,7 @@ describe('ListPage', () => {
       ]);
     });
 
-    it('sends nothing new for a card, whose products decide where it lands', async () => {
+    it('lets a card be asked about too, as typed words are (the ruling of 2026-11-16)', async () => {
       const { fixture, lines } = await render({ permissions: ADMIN });
 
       await fixture.componentInstance.add({
@@ -1803,6 +1803,7 @@ describe('ListPage', () => {
           quantity: 1,
           itemIds: ['item-a'],
           named: false,
+          options: { askIfAmbiguous: true },
         },
       ]);
     });
@@ -1859,6 +1860,8 @@ describe('ListPage', () => {
             itemIds: held.itemIds,
             productGroupId: null,
             approvalStatus: 'APPROVED',
+            outcome: held.quantity > 0 ? 'ALREADY_ON_LIST' : 'RAISED',
+            resultingQuantity: held.quantity > 0 ? held.quantity : 1,
           })),
         },
       });
@@ -1922,6 +1925,494 @@ describe('ListPage', () => {
       );
     });
 
+    /** Velista `0185`: an add that meets a line already asked for adds nothing. */
+    describe('an add that meets a line already on the list (velista 0185)', () => {
+      it('draws no row, marks every line it met, and says the first is already on the list', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: ['ln-bread', 'ln-whole'],
+        });
+        const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        const page = fixture.componentInstance;
+        expect(lines.linesIn().map((held) => held.id)).toEqual([
+          'ln-whole',
+          'ln-other',
+          'ln-bread',
+        ]);
+        expect([...page.tookLines()]).toEqual(['ln-bread', 'ln-whole']);
+        for (const id of ['ln-bread', 'ln-whole']) {
+          expect(
+            (
+              query(
+                fixture,
+                `[data-line-id="${id}"] lib-quantity-stepper`
+              ) as HTMLElement
+            ).classList.contains('is-took')
+          ).toBe(true);
+        }
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+        expect(
+          t.mock.calls.find(([key]) => key === 'list.add.alreadyOn')?.[3]
+        ).toEqual({ name: 'Pan' });
+        // The words go and the search closes, as after any add.
+        expect(field(fixture).value).toBe('');
+        // Every met line is drawn, so nothing is said under the field.
+        expect(page.composerNotice()).toBeNull();
+
+        jest.advanceTimersByTime(TOOK_DURATION_MS);
+        expect(page.tookLines().size).toBe(0);
+      });
+
+      it('names a drawn line and passes over lines at 0 it is not drawing, for an answer nobody was asked (rule 5)', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        // A replayed add: every match, the one at 0 first.
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: ['ln-other', 'ln-whole'],
+        });
+        const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+        await typeAndAdd(fixture, 'Leche entera');
+        await Promise.resolve();
+        fixture.detectChanges();
+
+        const page = fixture.componentInstance;
+        // The drawn line is marked, the one at 0 is not drawn and nothing says it.
+        expect(
+          query(
+            fixture,
+            '[data-line-id="ln-whole"] lib-quantity-stepper'
+          )?.classList.contains('is-took')
+        ).toBe(true);
+        expect(query(fixture, '[data-line-id="ln-other"]')).toBeNull();
+        expect(
+          t.mock.calls.find(([key]) => key === 'list.add.alreadyOn')?.[3]
+        ).toEqual({ name: 'Whole milk' });
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+        expect(page.composerNotice()).toBeNull();
+      });
+
+      it('says it again when the same add meets the same line a second time', async () => {
+        jest.useFakeTimers();
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-bread'] });
+        const page = fixture.componentInstance;
+
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+
+        lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-bread'] });
+        await typeAndAdd(fixture, 'Pan');
+        await Promise.resolve();
+        fixture.detectChanges();
+        // The same text twice is no change to the region: it is emptied first and
+        // filled again after a short gap.
+        expect(page.announcement()).toBe('');
+
+        jest.advanceTimersByTime(1_000);
+        expect(page.announcement()).toBe('list.add.alreadyOn');
+      });
+
+      it('scrolls to the first met line that is drawn', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({
+            state: 'alreadyOnList',
+            lineIds: ['ln-bread', 'ln-whole'],
+          });
+          // Out of view: below the column's frame.
+          jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineId'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+
+          await typeAndAdd(fixture, 'Pan');
+          await fixture.whenStable();
+
+          expect(scrolled).toEqual(['ln-bread']);
+        } finally {
+          Element.prototype.scrollIntoView = original;
+          jest.restoreAllMocks();
+        }
+      });
+
+      it('says it under the field when the page draws none of the lines it met', async () => {
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+        // A line the page has not loaded, past the pages it read.
+        lines.answerAddWith({
+          state: 'alreadyOnList',
+          lineIds: [],
+          unseen: [line('ln-far', { content: 'Pan de molde', position: 400 })],
+        });
+
+        await typeAndAdd(fixture, 'Pan de molde');
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(fixture.componentInstance.composerNotice()).toBe(
+          'list.add.alreadyOn'
+        );
+        expect(
+          query(fixture, 'lib-line-composer .notice-text')?.textContent
+        ).toBe('list.add.alreadyOn');
+        // Said once: the notice speaks in its own region, so the list's does not.
+        expect(fixture.componentInstance.announcement()).not.toBe(
+          'list.add.alreadyOn'
+        );
+
+        // The next words take it away.
+        const input = field(fixture);
+        input.value = 'H';
+        input.dispatchEvent(new Event('input'));
+        fixture.detectChanges();
+        expect(fixture.componentInstance.composerNotice()).toBeNull();
+      });
+
+      it('draws no row for a card a loaded line holds, at any amount (decision I)', async () => {
+        const { fixture, lines } = await render({
+          lines: MILKS,
+          items: [ITEM_A],
+        });
+
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-a'])).toBe(
+          false
+        );
+        // A line kept at zero is raised where it stands, so no row is drawn either.
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-b'])).toBe(
+          false
+        );
+        expect(lines.drawsBeforeAnswer('list-1', 'Leche', ['item-z'])).toBe(
+          true
+        );
+        fixture.detectChanges();
+      });
+    });
+
+    it('says why under the field when a card the list counts in another unit is refused (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_unit_differs',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            line: {
+              lineId: 'ln-whole',
+              content: 'Leche entera',
+              unit: 'MILLILITER',
+              quantity: 2,
+            },
+            unit: 'UNIT',
+            index: null,
+          },
+        }),
+      });
+      const t = jest.spyOn(TestBed.inject(RokuTranslatorService), 't');
+
+      const composer = fixture.debugElement.query(By.directive(LineComposer))
+        .componentInstance as LineComposer;
+      composer.submitted.emit({
+        content: 'Leche',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-c'],
+        named: false,
+        anchor: plus(fixture),
+      });
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(fixture.componentInstance.composerNotice()).toBe(
+        'list.error.addUnitDiffers.MILLILITER'
+      );
+      expect(
+        t.mock.calls.find(
+          ([key]) => key === 'list.error.addUnitDiffers.MILLILITER'
+        )?.[3]
+      ).toEqual({ name: 'Leche entera' });
+      // Nothing was made, and the words are back in the field.
+      expect(lines.linesIn().map((held) => held.id)).toEqual([
+        'ln-whole',
+        'ln-other',
+        'ln-bread',
+      ]);
+      expect(field(fixture).value).toBe('Leche');
+      expect(fixture.componentInstance.announcement()).not.toContain(
+        'list.error'
+      );
+    });
+
+    const unitRefusal = (lineId = 'ln-whole') =>
+      new GatewayError({
+        code: 'line_unit_differs',
+        status: 409,
+        correlationId: 'ref',
+        details: {
+          line: {
+            lineId,
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 2,
+          },
+          unit: 'UNIT',
+          index: null,
+        },
+      });
+
+    /** Owner ruling 45 of 2026-11-16: the refusal shows the line it names. */
+    describe('a refusal for another unit shows the line it names', () => {
+      it('marks the line and scrolls to it, and keeps the sentence under the field', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+          jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineId'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+
+          sendCard(fixture);
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const page = fixture.componentInstance;
+          expect([...page.tookLines()]).toEqual(['ln-whole']);
+          expect(
+            (
+              query(
+                fixture,
+                '[data-line-id="ln-whole"] lib-quantity-stepper'
+              ) as HTMLElement
+            ).classList.contains('is-took')
+          ).toBe(true);
+          expect(scrolled).toEqual(['ln-whole']);
+          expect(page.composerNotice()).toBe(
+            'list.error.addUnitDiffers.MILLILITER'
+          );
+        } finally {
+          Element.prototype.scrollIntoView = original;
+          jest.restoreAllMocks();
+        }
+      });
+
+      it('says the sentence alone for a line the page does not draw, hidden at 0', async () => {
+        const original = Element.prototype.scrollIntoView;
+        const scrolled: string[] = [];
+        Element.prototype.scrollIntoView = function (this: HTMLElement) {
+          scrolled.push(this.dataset['lineId'] ?? '');
+        };
+        try {
+          const { fixture, lines } = await render({
+            lines: MILKS,
+            items: [ITEM_A],
+          });
+          lines.answerAddWith({
+            state: 'failed',
+            error: unitRefusal('ln-other'),
+          });
+
+          sendCard(fixture);
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          expect(query(fixture, '[data-line-id="ln-other"]')).toBeNull();
+          expect(scrolled).toEqual([]);
+          expect(fixture.componentInstance.composerNotice()).toBe(
+            'list.error.addUnitDiffers.MILLILITER'
+          );
+        } finally {
+          Element.prototype.scrollIntoView = original;
+        }
+      });
+    });
+
+    const sendCard = (fixture: ComponentFixture<ListPage>) =>
+      (
+        fixture.debugElement.query(By.directive(LineComposer))
+          .componentInstance as LineComposer
+      ).submitted.emit({
+        content: 'Leche',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-c'],
+        named: false,
+        anchor: plus(fixture),
+      });
+
+    it('takes the sentence away on the next send, also one that is not drawn and fails (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+      sendCard(fixture);
+      await fixture.whenStable();
+      fixture.detectChanges();
+      expect(fixture.componentInstance.composerNotice()).not.toBeNull();
+
+      // A name a loaded line carries is not drawn, so `sent()` waits for an answer
+      // that never comes: the send fails. Sent as the composer sends it, with no
+      // new words typed, which would take the sentence away by themselves.
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'internal',
+          status: 500,
+          correlationId: 'ref',
+        }),
+      });
+      (
+        fixture.debugElement.query(By.directive(LineComposer))
+          .componentInstance as LineComposer
+      ).submitted.emit({ content: 'Pan', anchor: plus(fixture) });
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(2);
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+    });
+
+    it('says no refusal on a list the page moved to while the add was out (velista 0185)', async () => {
+      const { fixture, lines, activatedRoute } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.holdAdds();
+      lines.answerAddWith({ state: 'failed', error: unitRefusal() });
+      sendCard(fixture);
+      fixture.detectChanges();
+
+      activatedRoute.setList('list-2');
+      fixture.detectChanges();
+      lines.releaseAdds();
+      // The held answer, then each step of the add after it.
+      for (let tick = 0; tick < 10; tick++) {
+        await Promise.resolve();
+      }
+      fixture.detectChanges();
+
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(1);
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+    });
+
+    it('draws each row of the question from 0 to one step of its own unit (velista 0185)', async () => {
+      const { fixture, lines } = await render({
+        lines: [
+          line('ln-a', {
+            content: 'Plátanos',
+            named: false,
+            itemIds: ['item-a'],
+            quantity: 0,
+            unit: 'GRAM',
+            position: 1,
+          }),
+          line('ln-b', {
+            content: 'Plátanos',
+            named: false,
+            itemIds: ['item-b'],
+            quantity: 0,
+            position: 2,
+          }),
+        ],
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({
+        state: 'failed',
+        error: new GatewayError({
+          code: 'line_add_needs_choice',
+          status: 409,
+          correlationId: 'ref',
+          details: {
+            lines: [
+              {
+                lineId: 'ln-a',
+                content: 'Plátanos',
+                named: false,
+                quantity: 0,
+                unit: 'GRAM',
+                itemIds: ['item-a'],
+                productGroupId: null,
+                approvalStatus: 'APPROVED',
+              },
+              {
+                lineId: 'ln-b',
+                content: 'Plátanos',
+                named: false,
+                quantity: 0,
+                unit: 'UNIT',
+                itemIds: ['item-b'],
+                productGroupId: null,
+                approvalStatus: 'APPROVED',
+              },
+            ],
+          },
+        }),
+      });
+
+      await typeAndAdd(fixture, 'Plátanos');
+
+      expect(
+        choiceRows().map((row) => row.querySelector('.count')?.textContent)
+      ).toEqual([
+        expect.stringMatching(/0 g\s*→\s*25 g/),
+        expect.stringMatching(/0\s*→\s*1/),
+        undefined,
+      ]);
+    });
+
     it('marks the raised row where it stands, for 2.5 s, and says where the units went', async () => {
       jest.useFakeTimers();
       const { fixture, lines } = await render({
@@ -1933,7 +2424,7 @@ describe('ListPage', () => {
       await typeAndAdd(fixture, 'Pan');
 
       const page = fixture.componentInstance;
-      expect(page.tookLine()).toBe('ln-bread');
+      expect([...page.tookLines()]).toEqual(['ln-bread']);
       // No row was drawn for it, and the raised row is where it was.
       expect(lines.linesIn().map((held) => held.id)).toEqual([
         'ln-whole',
@@ -1951,7 +2442,7 @@ describe('ListPage', () => {
       jest.advanceTimersByTime(TOOK_DURATION_MS);
       fixture.detectChanges();
 
-      expect(page.tookLine()).toBeNull();
+      expect(page.tookLines().size).toBe(0);
       expect(raised.classList.contains('is-took')).toBe(false);
     });
 
@@ -2007,11 +2498,18 @@ describe('ListPage', () => {
       expect(first.querySelector('.product')).not.toBeNull();
       // A product this page does not hold has no product line yet.
       expect(choiceRows()[1].querySelector('.product')).toBeNull();
-      expect(first.querySelector('.count')?.textContent).toMatch(/2\s*→\s*3/);
-      // A bought line counts, from 0 (D2).
+      // Above zero: already on the list, its amount alone, and words that say so
+      // (the ruling of 2026-11-16).
+      expect(first.querySelector('.count')?.textContent?.trim()).toBe('2');
+      expect(first.querySelector('.state')?.textContent?.trim()).toBe(
+        'list.addChoice.onList'
+      );
+      expect(first.getAttribute('aria-label')).toBe('list.addChoice.rowOnList');
+      // A bought line counts, from 0 (D2), and is raised.
       expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
         /0\s*→\s*1/
       );
+      expect(choiceRows()[1].querySelector('.state')).toBeNull();
       expect(choiceRows()[2].classList.contains('new')).toBe(true);
       // Focus moves to the first row, and the words wait in the field.
       expect(document.activeElement).toBe(first);
@@ -2114,10 +2612,10 @@ describe('ListPage', () => {
       await fixture.whenStable();
       fixture.detectChanges();
 
+      // A typed name states no amount, also as an answer (velista 0185).
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        quantity: 1,
         options: { intoLineId: 'ln-other' },
       });
       expect(choiceRows()).toHaveLength(0);
@@ -2130,7 +2628,6 @@ describe('ListPage', () => {
       expect(lines.calls.at(-1)).toEqual({
         kind: 'add',
         content: 'Leche entera',
-        quantity: 1,
         options: { newLine: true },
       });
     });
@@ -2166,7 +2663,7 @@ describe('ListPage', () => {
       expect(fixture.componentInstance.choiceName()).toBe('Leche entera');
     });
 
-    it('asks again, once, when the chosen line went while the question was open', async () => {
+    it('closes the question and says the add failed when the chosen line went (the ruling of 2026-11-16)', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
         items: [ITEM_A],
@@ -2174,7 +2671,7 @@ describe('ListPage', () => {
       lines.answerAddWith({ state: 'failed', error: refusal() });
       await typeAndAdd(fixture, 'Leche entera');
 
-      // Backend 0228, section 3: an answer onto a deleted line is the not found.
+      // Backend 0260, rule 6: a chosen line the add no longer meets is the not found.
       lines.answerAddWith({
         state: 'failed',
         error: new GatewayError({
@@ -2183,34 +2680,32 @@ describe('ListPage', () => {
           correlationId: 'gone',
         }),
       });
-      lines.answerAddWith({ state: 'failed', error: refusal() });
       choiceRows()[1]?.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(lines.calls.slice(-2)).toEqual([
-        {
-          kind: 'add',
-          content: 'Leche entera',
-          quantity: 1,
-          options: { intoLineId: 'ln-other' },
-        },
-        {
-          kind: 'add',
-          content: 'Leche entera',
-          quantity: 1,
-          options: { askIfAmbiguous: true },
-        },
-      ]);
-      // The question is drawn again, and the list is not said to be gone.
-      expect(choiceRows()).toHaveLength(3);
+      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(2);
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        options: { intoLineId: 'ln-other' },
+      });
+      expect(choiceRows()).toHaveLength(0);
+      // The add's own failure, never the list being gone, drawn under the field
+      // where a refused add says why, and said once by that region alone.
+      expect(fixture.componentInstance.composerNotice()).toBe(
+        'list.error.failed'
+      );
+      expect(
+        query(fixture, 'lib-line-composer .notice-text')?.textContent
+      ).toContain('list.error.failed');
       expect(fixture.componentInstance.announcement()).not.toBe(
-        'list.error.notAvailable'
+        'list.error.failed'
       );
       expect(field(fixture).value).toBe('Leche entera');
     });
 
-    it('raises the one line left when the chosen one went', async () => {
+    it('shows and marks a chosen line already on the list, and says so once', async () => {
       const { fixture, lines } = await render({
         lines: MILKS,
         items: [ITEM_A],
@@ -2218,22 +2713,82 @@ describe('ListPage', () => {
       lines.answerAddWith({ state: 'failed', error: refusal() });
       await typeAndAdd(fixture, 'Leche entera');
 
-      lines.answerAddWith({
-        state: 'failed',
-        error: new GatewayError({
-          code: 'not_found',
-          status: 404,
-          correlationId: 'gone',
-        }),
+      lines.answerAddWith({ state: 'alreadyOnList', lineIds: ['ln-whole'] });
+      choiceRows()[0]?.click();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toEqual({
+        kind: 'add',
+        content: 'Leche entera',
+        options: { intoLineId: 'ln-whole' },
       });
-      lines.answerAddWith({ state: 'raised', lineId: 'ln-whole' });
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-whole']);
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.add.alreadyOn'
+      );
+      expect(fixture.componentInstance.composerNotice()).toBeNull();
+      expect(
+        lines.linesIn().find((held) => held.id === 'ln-whole')?.quantity
+      ).toBe(2);
+    });
+
+    it('raises and marks a chosen line at zero', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      await typeAndAdd(fixture, 'Leche entera');
+
+      lines.answerAddWith({ state: 'raised', lineId: 'ln-other' });
       choiceRows()[1]?.click();
       await fixture.whenStable();
       fixture.detectChanges();
 
-      expect(lines.calls.filter((call) => call.kind === 'add')).toHaveLength(3);
-      expect(fixture.componentInstance.tookLine()).toBe('ln-whole');
+      expect([...fixture.componentInstance.tookLines()]).toEqual(['ln-other']);
+      expect(fixture.componentInstance.announcement()).toBe(
+        'list.addChoice.merged'
+      );
       expect(choiceRows()).toHaveLength(0);
+    });
+
+    it('asks about a chosen product too, with no new line to offer', async () => {
+      const { fixture, lines } = await render({
+        lines: MILKS,
+        items: [ITEM_A],
+      });
+      lines.answerAddWith({ state: 'failed', error: refusal() });
+      const card = document.createElement('button');
+      document.body.append(card);
+
+      await fixture.componentInstance.add({
+        content: 'Leche entera',
+        quantity: 1,
+        unit: 'UNIT',
+        itemIds: ['item-a'],
+        named: false,
+        anchor: card,
+      });
+      fixture.detectChanges();
+      await fixture.whenStable();
+      fixture.detectChanges();
+
+      expect(lines.calls.at(-1)).toMatchObject({
+        itemIds: ['item-a'],
+        options: { askIfAmbiguous: true },
+      });
+      // Two lines, and no "A new line" for a product.
+      expect(choiceRows()).toHaveLength(2);
+      expect(choiceRows().some((row) => row.classList.contains('new'))).toBe(
+        false
+      );
+
+      // A new line is never sent for it, whatever asks.
+      const before = lines.calls.length;
+      fixture.componentInstance.chooseNewLine();
+      await fixture.whenStable();
+      expect(lines.calls).toHaveLength(before);
     });
 
     it('closes the question when the page moves to another list', async () => {
@@ -2683,6 +3238,46 @@ describe('ListPage', () => {
       expect(query(fixture, '.line.marked')?.getAttribute('data-line-id')).toBe(
         'ln-2'
       );
+    });
+
+    it('centres and marks a row the catalog linked to past the first frame (velista 0185)', async () => {
+      // "See it on the list" opens the list at a line far down it.
+      const scrolled: { id: string; options: unknown }[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (
+        this: HTMLElement,
+        options?: unknown
+      ) {
+        scrolled.push({ id: this.dataset['lineId'] ?? '', options });
+      };
+      const many = Array.from({ length: 40 }, (_, index) =>
+        line(`ln-${index + 1}`, {
+          content: `Line ${index + 1}`,
+          position: index + 1,
+        })
+      );
+      jest
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: HTMLElement) {
+          const index = Number(
+            (this.dataset['lineId'] ?? 'ln-0').replace('ln-', '')
+          );
+          return { top: index * 60, bottom: index * 60 + 56 } as DOMRect;
+        });
+      try {
+        const { fixture } = await render({ line: 'ln-35', lines: many });
+
+        expect(scrolled).toEqual([
+          { id: 'ln-35', options: { block: 'center', behavior: 'auto' } },
+        ]);
+        expect(fixture.componentInstance.markedLine()).toBe('ln-35');
+        expect(
+          query(fixture, '.line.marked')?.getAttribute('data-line-id')
+        ).toBe('ln-35');
+      } finally {
+        Element.prototype.scrollIntoView = original;
+        jest.restoreAllMocks();
+      }
     });
 
     it('opens no sheet, which is the whole reason it is a query parameter', async () => {

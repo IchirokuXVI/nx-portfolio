@@ -1,6 +1,33 @@
 import { expect, test, type Page } from '@playwright/test';
-import { ALICE_EMAIL } from './support/api';
+import {
+  LINE_BREAD_ID,
+  LINE_MILK_ID,
+} from '@portfolio/luna-shopper/test-fixtures';
+import {
+  ALICE_EMAIL,
+  deleteLine,
+  ensurePostalCode,
+  login,
+  resetAliceWorld,
+  setLineQuantity,
+  type Session,
+} from './support/api';
 import { signIn } from './support/app';
+
+/**
+ * What every walk below reads, set here so the file passes alone as well as after
+ * the others: a postal code on Alice's profile, which is what gives the catalog a
+ * shop and so its prices. `resetAliceWorld` sets it too, and the files that call
+ * it run first in a full run; this file must not rely on that.
+ */
+test.beforeAll(async () => {
+  const alice = await login(ALICE_EMAIL);
+  try {
+    await ensurePostalCode(alice, '46004');
+  } finally {
+    await alice.dispose();
+  }
+});
 
 /**
  * The category picker (velista plan 0119), walked once as a shopper would: the
@@ -175,6 +202,19 @@ test.describe('the Supermarket selector', () => {
  * opens a page with its prices, their history and the person's lists.
  */
 test.describe('adding from the catalog', () => {
+  /** The line the last step makes and follows the link to, deleted after. */
+  let followed = '';
+
+  test.afterAll(async () => {
+    if (followed === '') return;
+    const alice = await login(ALICE_EMAIL);
+    try {
+      await deleteLine(alice, followed);
+    } finally {
+      await alice.dispose();
+    }
+  });
+
   test('adds a product to the named list, takes it back, orders by price, and opens a product page', async ({
     page,
   }) => {
@@ -207,6 +247,20 @@ test.describe('adding from the catalog', () => {
       await expect(adding.locator('[data-adding="count"]')).toHaveText(
         '1 product added'
       );
+
+      // The list asks for it now, so its plus is off and the card says why, with
+      // the way to the line (velista 0185, C1).
+      // Inert by aria-disabled and still focusable (decision G).
+      const bread = products(page, 'Bread');
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      await expect(bread.locator('button.add')).not.toHaveAttribute('disabled');
+      await expect(bread.locator('.held-onlist')).toContainText('Already on');
+      await expect(
+        bread.getByRole('link', { name: 'See it on the list' })
+      ).toBeVisible();
     });
 
     await test.step('3. the stepper of that line raises it', async () => {
@@ -248,6 +302,10 @@ test.describe('adding from the catalog', () => {
       await expect(page).toHaveURL(/\/en\/catalog$/);
       await expect(adding.locator('[data-adding="count"]')).toHaveCount(0);
       await expect(held).toHaveCount(0);
+      // On no line any more, so the plus adds again (velista 0185).
+      await expect(
+        products(page, 'Bread').locator('button.add')
+      ).not.toHaveAttribute('aria-disabled', 'true');
     });
 
     await test.step('6. the order menu puts the list in a price order, kept in the URL', async () => {
@@ -284,14 +342,10 @@ test.describe('adding from the catalog', () => {
     await test.step('8. the stepper of a list adds the product once, then steps it', async () => {
       // The demo world's Milk is a litre with no size, so a line of it counts
       // millilitres (velista `0182`). From zero the list's plus is an add, which
-      // makes the line. After that the plus steps the line that exists by the one
-      // step of velista 0188, 25 ml, as the list page does (velista 0187, U5).
-      // The minus steps it down, and a press at the amount the visit started it
-      // at takes the product back.
-      //
-      // Until velista 0185 makes an add one step, the add puts a litre on, so the
-      // reads are 1000, 1025, 1050 and back down to 0. Whichever of 0185 and
-      // 0187 lands second sets the final numbers: 25, 50, 75, then 50, 25, 0.
+      // makes the line at one step, 25 ml (velista 0185). After that the plus
+      // steps the line that exists by the one step of velista 0188, 25 ml, as the
+      // list page does (velista 0187, U5). The minus steps it down, and a press at
+      // the amount the visit started it at takes the product back.
       const list = page.locator('lib-lists-table .list').first();
       const row = list.locator('.row');
       const count = row.locator('lib-quantity-stepper');
@@ -299,11 +353,11 @@ test.describe('adding from the catalog', () => {
       const fewer = row.getByRole('button', { name: /^Remove / });
       await expect(count).toHaveAttribute('data-value', '0');
 
-      for (const reads of ['1000', '1025', '1050']) {
+      for (const reads of ['25', '50', '75']) {
         await more.click();
         await expect(count).toHaveAttribute('data-value', reads);
       }
-      for (const reads of ['1025', '1000', '0']) {
+      for (const reads of ['50', '25', '0']) {
         await fewer.click();
         await expect(count).toHaveAttribute('data-value', reads);
       }
@@ -314,6 +368,131 @@ test.describe('adding from the catalog', () => {
       await expect(page).toHaveURL(/\/en\/catalog\?order=price$/);
       await expect(products(page, 'Bread')).toBeVisible();
     });
+
+    await test.step('10. a product on the list links to its line, which the list centres and marks', async () => {
+      const bread = products(page, 'Bread');
+      await bread.locator('button.add').click();
+      await expect(bread.locator('button.add')).toHaveAttribute(
+        'aria-disabled',
+        'true'
+      );
+      // The press switched it off under the focus, which stays on it.
+      await expect(bread.locator('button.add')).toBeFocused();
+
+      await bread.getByRole('link', { name: 'See it on the list' }).click();
+
+      await expect(page).toHaveURL(
+        /\/en\/zones\/[0-9a-f-]{36}\/lists\/[0-9a-f-]{36}\?line=[0-9a-f-]{36}$/
+      );
+      followed = new URL(page.url()).searchParams.get('line') ?? '';
+      const line = page.locator(`lib-line-list [data-line-id="${followed}"]`);
+      await expect(line).toBeVisible();
+      await expect(line).toContainText('Bread');
+      await expect(line).toHaveClass(/marked/);
+    });
+  });
+});
+
+/**
+ * A product whose every line on the list stands at 0 has the catalog's plus off
+ * (velista 0185, the owner's decision 51 of 2026-11-16), one line or several: the
+ * card says to raise the line under it with its own buttons, and links nowhere,
+ * because the list hides its lines at 0. The plus never raises a line at 0.
+ *
+ * Groceries holds Bread on two lines in the demo world, the Bread line and the Milk
+ * line that carries Bread as a second product, and Milk on the Milk line alone. Both
+ * go to 0 for the walk and back after it. The list the catalog adds to is held by
+ * this browser alone, so the other walks keep theirs.
+ */
+test.describe('a product on the list only at 0', () => {
+  let alice: Session;
+
+  test.beforeAll(async () => {
+    alice = await login(ALICE_EMAIL);
+    await resetAliceWorld(alice);
+    await setLineQuantity(alice, LINE_BREAD_ID, 0);
+    await setLineQuantity(alice, LINE_MILK_ID, 0);
+  });
+
+  test.afterAll(async () => {
+    await resetAliceWorld(alice);
+    await alice?.dispose();
+  });
+
+  test('switch the plus off for one line or two, say to raise it below, and let the line step', async ({
+    page,
+  }) => {
+    const sentence =
+      'This is on Groceries at 0. Raise it below with its own buttons.';
+    const adding = page.locator('lib-adding-bar');
+    await signIn(page, ALICE_EMAIL);
+    await page.goto('/en/catalog');
+
+    // The catalog adds to Groceries for this walk.
+    await adding.locator('[data-adding="list"]').click();
+    const lists = page.getByRole('dialog');
+    await lists.getByRole('radio', { name: /Groceries/ }).click();
+    await expect(page).toHaveURL(/\/en\/catalog(\?.*)?$/);
+
+    // Bread, on two lines at 0.
+    const bread = products(page, 'Bread');
+    const breadPlus = bread.locator('button.add');
+    await expect(bread.locator('.held-line')).toHaveCount(2);
+    await expect(breadPlus).toHaveAttribute('aria-disabled', 'true');
+    await expect(bread.locator('.held-onlist')).toContainText(sentence);
+    // The reason, and only the reason, describes the plus.
+    const reasonId = await breadPlus.getAttribute('aria-describedby');
+    expect(reasonId).not.toBeNull();
+    await expect(page.locator(`[id="${reasonId}"]`)).toHaveText(sentence);
+
+    // Milk, on one line at 0: the same, and a press of the plus raises nothing.
+    // By the card's own name: the Bread card draws the Milk line under it too.
+    const milk = page.locator('lib-product-row').filter({
+      has: page.locator('span.name', { hasText: /^\s*Milk\s*$/ }),
+    });
+    const milkPlus = milk.locator('button.add');
+    const milkLine = milk.locator('.held-line');
+    await expect(milkLine).toHaveCount(1);
+    await expect(milkPlus).toHaveAttribute('aria-disabled', 'true');
+    await expect(milk.locator('.held-onlist')).toContainText(sentence);
+    // No link to the list: its lines at 0 are hidden there.
+    for (const card of [bread, milk]) {
+      await expect(
+        card.getByRole('link', { name: 'See it on the list' })
+      ).toHaveCount(0);
+    }
+    // Every add the page sends from here on: the switched off plus must send none.
+    // A value of 0 alone would pass before a wrong draw showed.
+    const adds: string[] = [];
+    page.on('request', (request) => {
+      if (
+        request.method() === 'POST' &&
+        /\/v1\/lists\/[^/]+\/lines$/.test(new URL(request.url()).pathname)
+      ) {
+        adds.push(request.url());
+      }
+    });
+    await milkPlus.click({ force: true });
+    await expect(milkLine.locator('lib-quantity-stepper')).toHaveAttribute(
+      'data-value',
+      '0'
+    );
+
+    // The line's own stepper raises it.
+    await milkLine.getByRole('button', { name: /^Add / }).click();
+    await expect(milkLine.locator('lib-quantity-stepper')).not.toHaveAttribute(
+      'data-value',
+      '0'
+    );
+    // A line above 0 now: both products read as on the list, with the link.
+    for (const card of [milk, bread]) {
+      await expect(card.locator('.held-onlist')).toContainText('Already on');
+      await expect(
+        card.getByRole('link', { name: 'See it on the list' })
+      ).toBeVisible();
+    }
+    // The stepper's raise went out as its own write, and the forced press as nothing.
+    expect(adds).toEqual([]);
   });
 });
 

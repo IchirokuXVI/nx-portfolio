@@ -44,6 +44,16 @@ describe('addLineOptionsRequest', () => {
   it('never sends an empty id', () => {
     expect(addLineOptionsRequest({ intoLineId: '' })).toEqual({});
   });
+
+  it('asks and chooses beside products too, and never sends a new line there (the ruling of 2026-11-16)', () => {
+    expect(addLineOptionsRequest({ askIfAmbiguous: true }, true)).toEqual({
+      askIfAmbiguous: true,
+    });
+    expect(addLineOptionsRequest({ intoLineId: 'line-a' }, true)).toEqual({
+      intoLineId: 'line-a',
+    });
+    expect(addLineOptionsRequest({ newLine: true }, true)).toEqual({});
+  });
 });
 
 /**
@@ -124,6 +134,107 @@ describe('LineApi, the unit on every write (velista 0182)', () => {
     expect('unit' in second.request.body).toBe(false);
     second.flush({ line: { ...LINE, unit: 'UNIT' }, merged: false });
     await typed;
+  });
+
+  it('sends the question flag with a product add (the ruling of 2026-11-16)', async () => {
+    const asked = api.addLineResult(
+      'list-1',
+      'Plátanos',
+      25,
+      ['item-bananas'],
+      false,
+      { askIfAmbiguous: true },
+      'GRAM'
+    );
+    const req = next();
+    expect(req.request.body).toEqual({
+      content: 'Plátanos',
+      quantity: 25,
+      unit: 'GRAM',
+      itemIds: ['item-bananas'],
+      named: false,
+      askIfAmbiguous: true,
+    });
+    req.flush({ line: LINE, merged: false });
+    await asked;
+  });
+
+  it('sends a typed name with neither amount nor unit, also as an answer to the question (velista 0185)', async () => {
+    for (const options of [
+      undefined,
+      { askIfAmbiguous: true as const },
+      { intoLineId: 'ln-1' },
+      { newLine: true as const },
+    ]) {
+      const typed = api.addLineResult(
+        'list-1',
+        'Plátanos',
+        undefined,
+        undefined,
+        undefined,
+        options
+      );
+      const req = next();
+      expect('quantity' in req.request.body).toBe(false);
+      expect('unit' in req.request.body).toBe(false);
+      req.flush({ line: LINE, merged: false });
+      await typed;
+    }
+  });
+
+  it('reads what the add did, and every line it met (backend 0260)', async () => {
+    const met = api.addLineResult('list-1', 'Plátanos');
+    next().flush({
+      line: LINE,
+      merged: true,
+      outcome: 'ALREADY_ON_LIST',
+      alreadyOnList: [LINE, { ...LINE, id: 'ln-2' }, { broken: true }],
+    });
+    const answer = await met;
+    expect(answer.outcome).toBe('alreadyOnList');
+    expect(answer.merged).toBe(true);
+    expect(answer.alreadyOnList.map((line) => line.id)).toEqual([
+      'ln-1',
+      'ln-2',
+    ]);
+    // The line is unchanged: the same amount and the same version.
+    expect(answer.line).toEqual(
+      expect.objectContaining({ quantity: 750, version: 2 })
+    );
+
+    const raised = api.addLineResult('list-1', 'Plátanos');
+    next().flush({
+      line: LINE,
+      merged: true,
+      outcome: 'RAISED',
+      alreadyOnList: [LINE],
+    });
+    expect(await raised).toEqual(
+      expect.objectContaining({ outcome: 'raised', alreadyOnList: [] })
+    );
+  });
+
+  it('reads an answer with no outcome from merged, as before backend 0260', async () => {
+    const merged = api.addLineResult('list-1', 'Plátanos');
+    next().flush({ line: LINE, merged: true });
+    expect((await merged).outcome).toBe('raised');
+
+    const created = api.addLineResult('list-1', 'Plátanos');
+    next().flush({ line: LINE, merged: false, outcome: 'SOMETHING_NEW' });
+    expect(await created).toEqual(
+      expect.objectContaining({ outcome: 'created', alreadyOnList: [] })
+    );
+  });
+
+  it('names the first met line when no entry of the list maps', async () => {
+    const met = api.addLineResult('list-1', 'Plátanos');
+    next().flush({
+      line: LINE,
+      merged: true,
+      outcome: 'ALREADY_ON_LIST',
+      alreadyOnList: 'nope',
+    });
+    expect((await met).alreadyOnList.map((line) => line.id)).toEqual(['ln-1']);
   });
 
   it('sends the unit with the quantity of an absolute update, and never alone', async () => {

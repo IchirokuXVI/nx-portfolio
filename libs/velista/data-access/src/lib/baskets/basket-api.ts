@@ -445,12 +445,14 @@ export class BasketApi implements BasketServiceI {
     basketId: string,
     body: BasketAddLineRequest
   ): Promise<BasketRowResult> {
-    // A free text add can be refused with `line_add_needs_choice` (backend `0228`),
-    // which reaches the store as any refusal does.
+    // An add that meets two or more lines can be refused with
+    // `line_add_needs_choice` (backend `0260`), which reaches the store as any
+    // refusal does.
     const request: Record<string, unknown> = {
       targetListId: body.targetListId,
       content: body.content,
-      quantity: body.quantity,
+      // Absent for a typed name (velista `0185`): the server decides the amount.
+      ...(body.quantity === undefined ? {} : { quantity: body.quantity }),
       // A weight or a volume only (velista `0182`). A count is the server's default,
       // and every add before backend `0246` named none.
       ...(isMeasured(body.unit) ? { unit: body.unit } : {}),
@@ -461,11 +463,17 @@ export class BasketApi implements BasketServiceI {
       if (body.named === false) {
         request['named'] = false;
       }
-    } else {
-      // Free text only, each only as itself, as the list's own add sends them
-      // (backend `0228`).
-      Object.assign(request, addLineOptionsRequest(body));
     }
+    // Each only as itself, as the list's own add sends them (backend `0228`), with a
+    // product too since the owner's ruling of 2026-11-16, and never `newLine`
+    // beside products (backend `0260`, rule 7).
+    Object.assign(
+      request,
+      addLineOptionsRequest(
+        body,
+        body.itemIds !== undefined && body.itemIds.length > 0
+      )
+    );
 
     const answer = await firstValueFrom(
       this._http.post<unknown>(

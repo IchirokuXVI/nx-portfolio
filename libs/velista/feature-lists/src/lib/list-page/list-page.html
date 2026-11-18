@@ -97,6 +97,7 @@
           as a question. Escape belongs to the question while it is open.
         -->
         <lib-line-composer
+          (noticeDismissed)="dismissNotice()"
           (queryChanged)="onComposerQuery($event)"
           (recordingFailed)="onRecordingFailed()"
           (spoke)="addAloud($event)"
@@ -104,6 +105,7 @@
           [busy]="composerBusy()"
           [escapeClears]="addChoice() === null"
           [holdOnSend]="true"
+          [notice]="composerNotice()"
           [resultsId]="resultsId"
           [takeFocus]="page.empty"
           [voice]="voiceOffered()"
@@ -158,8 +160,9 @@
       </div>
 
       <!--
-        Which line takes it? A typed name two or more lines with a product carry
-        (velista 0170, alternative D), held against the plus that was pressed. Below
+        Which line takes it? An add that two or more lines of the list meet, typed
+        or a chosen product (velista 0170, alternative D; the owner's ruling of
+        2026-11-16), held against the plus that was pressed. Below
         the composer's plus, which sits at the top of the page, and above a card's
         button in the results (velista 0189).
       -->
@@ -177,8 +180,8 @@
             (chose)="chooseLine($event)"
             (dismissed)="closeChoice('escape')"
             (newLine)="chooseNewLine()"
-            [added]="asked.entry.quantity"
             [name]="choiceName()"
+            [offerNewLine]="choiceOffersNewLine()"
             [rows]="choiceRows()"
             [titleId]="choiceTitleId"
             scope="list"
@@ -346,7 +349,7 @@
             [lines]="drawnLines()"
             [markedId]="markedLine()"
             [pending]="quantityRuns.pending()"
-            [tookId]="tookLine()"
+            [tookIds]="tookLines()"
           />
         }
 
@@ -433,7 +436,7 @@
             [lines]="wantedLines()"
             [markedId]="markedLine()"
             [pending]="quantityRuns.pending()"
-            [tookId]="tookLine()"
+            [tookIds]="tookLines()"
           />
 
           <section aria-labelledby="due-label" class="due">
@@ -476,7 +479,7 @@
               [lines]="restLines()"
               [markedId]="markedLine()"
               [pending]="quantityRuns.pending()"
-              [tookId]="tookLine()"
+              [tookIds]="tookLines()"
             />
           }
         } @else {
@@ -492,7 +495,7 @@
             [lines]="drawnLines()"
             [markedId]="markedLine()"
             [pending]="quantityRuns.pending()"
-            [tookId]="tookLine()"
+            [tookIds]="tookLines()"
           />
         }
 

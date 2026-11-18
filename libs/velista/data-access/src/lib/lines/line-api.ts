@@ -21,6 +21,7 @@ import type {
 import { firstValueFrom } from 'rxjs';
 import { ApiUrl } from '../api-url';
 import { operation } from '../auth/http-context';
+import { toAddOutcome } from '../mapping/add-choice-mappers';
 import {
   toAlsoOnPlace,
   toDeletedId,
@@ -41,9 +42,14 @@ import type {
  * The fields of {@link AddLineOptions} as the request carries them: `true` or an id,
  * never `false` and never an empty string, so an absent field keeps the server's
  * default as the single source of it.
+ *
+ * `products` says the add carries products. `newLine` is then never sent: it is an
+ * answer for typed words alone, and the gateway refuses it beside products (backend
+ * `0260`, rule 7). The other two go with a product add as with typed words.
  */
 export function addLineOptionsRequest(
-  options: AddLineOptions | undefined
+  options: AddLineOptions | undefined,
+  products = false
 ): Pick<AddLineRequest, 'askIfAmbiguous' | 'intoLineId' | 'newLine'> {
   if (options === undefined) {
     return {};
@@ -52,7 +58,7 @@ export function addLineOptionsRequest(
     return { intoLineId: options.intoLineId };
   }
   if (options.newLine === true) {
-    return { newLine: true };
+    return products ? {} : { newLine: true };
   }
   return options.askIfAmbiguous === true ? { askIfAmbiguous: true } : {};
 }
@@ -147,10 +153,10 @@ export class LineApi implements LineServiceI {
       // Only ever `false` on the wire, and only with a product: typed text says
       // nothing, and the server's default names it (backend `0207`).
       ...(named === false && products ? { named } : {}),
-      // Free text only, and each only as itself (backend `0228`): the server
-      // ignores them beside products, so sending them there would only be noise
-      // that reads like a statement.
-      ...(products ? {} : addLineOptionsRequest(options)),
+      // Each only as itself (backend `0228`), and with a product too since the
+      // owner's ruling of 2026-11-16: a product add that meets two or more lines is
+      // a question as well. Never `newLine` beside products (backend `0260`, R7).
+      ...addLineOptionsRequest(options, products),
     };
 
     const body = await firstValueFrom(
@@ -160,11 +166,26 @@ export class LineApi implements LineServiceI {
     );
 
     // The route answers what the add did, not the line alone (plan 0091): it may
-    // have raised a line the list already held rather than created one.
-    const record = body as Record<string, unknown> | null;
+    // have met a line the list already held rather than created one. Since backend
+    // `0260` it says which of three things happened; a gateway of before it names
+    // none, and `merged` then reads as a raise, as it always did.
+    const record = isRecord(body) ? body : null;
+    const merged = record?.['merged'] === true;
+    const outcome =
+      toAddOutcome(record?.['outcome']) ?? (merged ? 'raised' : 'created');
+    const line = required(toLine(record?.['line']), 'lines.add');
+    // A met line that does not map is dropped. `line` is the first one met, so a
+    // list that maps to nothing still names it.
+    const met =
+      outcome === 'alreadyOnList'
+        ? mapArray(record?.['alreadyOnList'], toLine)
+        : [];
     return {
-      line: required(toLine(record?.['line']), 'lines.add'),
-      merged: record?.['merged'] === true,
+      line,
+      merged,
+      outcome,
+      alreadyOnList:
+        outcome === 'alreadyOnList' && met.length === 0 ? [line] : met,
     };
   }
 

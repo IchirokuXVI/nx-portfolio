@@ -1,8 +1,11 @@
 import type { ActivatedRouteSnapshot } from '@angular/router';
+import type { CatalogAddMet } from '@portfolio/velista/data-access';
 import {
+  addUnitRefusalKey,
   canStepLine,
   isUnsavedLine,
   type AddTargetList,
+  type AddUnitRefusal,
   type HeldLine,
   type HoldingRow,
 } from '@portfolio/velista/models';
@@ -16,8 +19,12 @@ export interface RowAdds {
    * list to add to, which draws no plus at all.
    */
   readonly plain: ProductRowAdd | null;
-  /** The rows whose product the chosen list holds, by product. */
-  readonly byItem: ReadonlyMap<string, ProductRowAdd>;
+  /**
+   * What the plus of one row draws: the same object for the same product until
+   * the lines move, so a row is redrawn only when its own lines do. Null with no
+   * list to add to.
+   */
+  readonly of: (itemId: string) => ProductRowAdd | null;
 }
 
 /**
@@ -26,14 +33,27 @@ export interface RowAdds {
  *
  * Shared by the catalog page and the product page, whose similar products carry
  * the same plus and add to the same list.
+ *
+ * The plus is on only for a product that no saved line of the list holds (the
+ * owner's decision 51 of 2026-11-16, which replaces velista `0185` decision C).
+ * Any line counts, alone or among other products, at any amount, zero included,
+ * and in any unit (decision 52 a): a line of another unit than the add's switches
+ * the plus off too, so the server's refusal for a unit is never the answer to a
+ * press. The line an add still on its way drew does not count, because it has no
+ * id the list knows.
+ *
+ * A line above zero sets `onList`: the first such line in the order the card draws
+ * them, and `pathOf` the list's URL, which the card's link opens with `?line=`.
+ * Lines all at zero set `atZero`: the person raises the line under the card with
+ * its own stepper, and there is no link, because the list hides its lines at zero.
  */
 export function rowAdds(
   target: AddTargetList | null,
-  held: readonly HeldLine[]
+  held: readonly HeldLine[],
+  pathOf: (target: AddTargetList) => string
 ): RowAdds {
-  const byItem = new Map<string, ProductRowAdd>();
   if (target === null) {
-    return { plain: null, byItem };
+    return { plain: null, of: () => null };
   }
 
   const lines = new Map<string, HoldingRow[]>();
@@ -60,11 +80,67 @@ export function rowAdds(
       }
     }
   }
-  for (const [itemId, rows] of lines) {
-    byItem.set(itemId, { list: target.name, lines: rows });
-  }
+  const path = pathOf(target);
+  const plain: ProductRowAdd = { list: target.name, lines: [] };
+  const drawn = new Map<string, ProductRowAdd>();
+  const of = (itemId: string): ProductRowAdd => {
+    const rows = lines.get(itemId);
+    if (rows === undefined) {
+      return plain;
+    }
+    const known = drawn.get(itemId);
+    if (known !== undefined) {
+      return known;
+    }
+    const saved = rows.filter((row) => !isUnsavedLine(row.lineId));
+    const wanted = saved.find((row) => row.quantity > 0);
+    const add: ProductRowAdd = {
+      list: target.name,
+      lines: rows,
+      ...(wanted !== undefined
+        ? { onList: { lineId: wanted.lineId, path } }
+        : saved.length > 0
+          ? { atZero: true as const }
+          : {}),
+    };
+    drawn.set(itemId, add);
+    return add;
+  };
 
-  return { plain: { list: target.name, lines: [] }, byItem };
+  return { plain, of };
+}
+
+/**
+ * The sentence a failed add says (velista `0134`, section 4.1), as a key and its
+ * arguments: why, for a product the list counts in another unit (velista `0185`,
+ * section 4), which a card drawn before another device changed the list can still
+ * meet; why, for a plus the server answered with a line already on the list
+ * (`met`, a card drawn the same way), in the card's own words; and the generic
+ * sentence for any other failure.
+ */
+export function addFailedCopy(
+  refusal: AddUnitRefusal | null,
+  met: CatalogAddMet | null = null
+): {
+  readonly key: string;
+  readonly args: Record<string, unknown>;
+} {
+  if (refusal !== null) {
+    return {
+      key: addUnitRefusalKey(refusal, 'list'),
+      args: { name: refusal.name },
+    };
+  }
+  if (met !== null) {
+    return {
+      key:
+        met.kind === 'onList'
+          ? 'catalog.held.alreadyOn'
+          : 'catalog.held.atZero',
+      args: { list: met.list },
+    };
+  }
+  return { key: 'catalog.add.failed', args: {} };
 }
 
 /**

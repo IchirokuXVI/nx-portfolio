@@ -40,6 +40,7 @@ import {
   type LiveBasketSummary,
   type ScopeLocation,
 } from '@portfolio/velista/models';
+import { toAddOutcome } from './add-choice-mappers';
 import { toProductCategories } from './category-mappers';
 import { toLocalizedName, toProductOffer } from './mappers';
 import {
@@ -469,9 +470,12 @@ export function toBasketRowResult(raw: unknown): BasketRowResult | null {
     return null;
   }
 
+  // Only the line add names it (backend `0260`); every other write leaves it out.
+  const addOutcome = toAddOutcome(raw['addOutcome']);
   return {
     entries: mapArray(raw['entries'], (entry) => toBasketRowEntry(entry)),
     skippedCount: atLeastZero(raw['skippedCount']),
+    ...(addOutcome === null ? {} : { addOutcome }),
   };
 }
 

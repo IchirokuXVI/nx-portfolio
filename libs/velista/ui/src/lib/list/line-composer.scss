@@ -135,6 +135,60 @@
   font-size: var(--app-icon-md);
 }
 
+// The sentence under the row (velista 0185), drawn as the voice strip under the field
+// is: its hairline is the rule between the two, so the pair reads as one container,
+// and it has no inline padding, so the words line up with the field over them. Under
+// rather than above, so the field never moves when a sentence appears.
+.notice-region {
+  display: block;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--app-space-2);
+  margin-block-start: var(--app-space-3);
+  padding: var(--app-space-3) 0 var(--app-space-2);
+  border-block-start: 1px solid var(--app-border-subtle);
+  font-size: var(--app-text-xs);
+  line-height: var(--app-leading-body);
+  color: var(--app-text-secondary);
+}
+
+.notice-text {
+  flex: 1;
+  min-inline-size: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+// A full touch target, pulled back into the sentence's own padding so a 44px control
+// does not make the line 44px tall on its own.
+.notice-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  inline-size: var(--app-touch-target);
+  block-size: var(--app-touch-target);
+  margin-block: calc(var(--app-space-3) * -1) calc(var(--app-space-2) * -1);
+  margin-inline-end: calc(var(--app-space-3) * -1);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: var(--app-focus-ring-width) solid var(--app-focus-ring);
+    outline-offset: var(--app-focus-ring-offset);
+  }
+}
+
+.notice-dismiss-glyph {
+  font-size: var(--app-icon-sm);
+}
+
 // While it listens, the whole row is this (plan 0038, section 4.1). Same height as
 // the row it replaced, so the list below does not jump when the mode changes.
 //

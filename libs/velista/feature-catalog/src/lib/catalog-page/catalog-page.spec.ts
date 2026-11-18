@@ -298,6 +298,17 @@ function plusOf(
   return rowOf(fixture, name).querySelector<HTMLButtonElement>('button.add');
 }
 
+/**
+ * Whether a plus is switched off for a product the list asks for: inert by
+ * `aria-disabled`, and still focusable (velista `0185`, decision G).
+ */
+function switchedOff(plus: HTMLButtonElement | null): boolean {
+  return (
+    plus?.getAttribute('aria-disabled') === 'true' &&
+    !plus.hasAttribute('disabled')
+  );
+}
+
 /** The names of the products drawn, in the order drawn. */
 function names(fixture: ComponentFixture<CatalogPage>): string[] {
   return [...host(fixture).querySelectorAll('lib-product-row .name')].map(
@@ -1002,13 +1013,91 @@ describe('CatalogPage', () => {
         host(fixture).querySelectorAll('lib-product-row .held')
       ).toHaveLength(1);
 
-      // A second press raises that line. It does not make another.
+      // The list now asks for it, so the plus is off and the card says so
+      // (velista 0185, C1). A press does nothing more.
+      expect(switchedOff(plusOf(fixture, OIL))).toBe(true);
       plusOf(fixture, OIL)?.click();
       await settle(fixture);
-      expect(lines.addLineResult).toHaveBeenCalledTimes(2);
+      expect(lines.addLineResult).toHaveBeenCalledTimes(1);
       expect(heldLines(fixture, OIL).map((line) => line.quantity)).toEqual([
-        '2',
+        '1',
       ]);
+    });
+
+    it('switches the plus off for a product on the list, with the sentence and a link to the line (velista 0185)', async () => {
+      const { fixture } = await render('priced', {
+        lines: [OIL_LINE, FRYING_LINE],
+      });
+
+      const plus = plusOf(fixture, OIL);
+      expect(switchedOff(plus)).toBe(true);
+      const held = rowOf(fixture, OIL).querySelector('.held');
+      const sentence = held?.querySelector('.held-onlist');
+      // Described by the reason inside the sentence, not by the link after it.
+      const reason = sentence?.querySelector(
+        `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+      );
+      expect(reason?.textContent).toContain('catalog.held.alreadyOn');
+      expect(reason?.textContent).not.toContain('catalog.held.openLine');
+      expect(sentence?.textContent).toContain('catalog.held.alreadyOn');
+      expect(held?.querySelector('.held-title')).toBeNull();
+      // The first line in the order drawn, on the list's own URL.
+      const link = held?.querySelector<HTMLAnchorElement>('a.held-onlist-link');
+      expect(link?.getAttribute('href')).toMatch(
+        /\/zones\/[^/]+\/lists\/list-weekly\?line=line-oil$/
+      );
+      // The lines keep their steppers, and they work.
+      expect(
+        held?.querySelectorAll('lib-quantity-stepper:not(.is-disabled)')
+      ).toHaveLength(2);
+      // A product on no line keeps its plus.
+      expect(plusOf(fixture, RICE)?.disabled).toBe(false);
+      expect(plusOf(fixture, RICE)?.hasAttribute('aria-disabled')).toBe(false);
+    });
+
+    it('switches the plus off for a product held only at zero, and the line is raised with its own stepper (decision 51)', async () => {
+      const { fixture, lines } = await render('priced', {
+        lines: [{ ...OIL_LINE, quantity: 0 }],
+      });
+
+      const plus = plusOf(fixture, OIL);
+      expect(switchedOff(plus)).toBe(true);
+      const held = rowOf(fixture, OIL).querySelector('.held');
+      const reason = held?.querySelector(
+        `#${plus?.getAttribute('aria-describedby') ?? 'none'}`
+      );
+      expect(reason?.textContent).toContain('catalog.held.atZero');
+      // No link: the list hides its lines at zero.
+      expect(held?.querySelector('a.held-onlist-link')).toBeNull();
+
+      plus?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+
+      heldLines(fixture, OIL)[0]?.plus?.click();
+      await quiet(fixture);
+      expect(lines.addQuantity).toHaveBeenCalledWith('line-oil', 1, 'UNIT');
+      expect(heldLines(fixture, OIL)[0]?.quantity).toBe('1');
+      // Above zero now, so the card says it is on the list, with its link.
+      expect(
+        rowOf(fixture, OIL).querySelector('a.held-onlist-link')
+      ).not.toBeNull();
+      expect(lines.addLineResult).not.toHaveBeenCalled();
+    });
+
+    it('switches the plus off for a product held only on a line of another unit (decision 52 a)', async () => {
+      const { fixture, lines } = await render('priced', {
+        lines: [{ ...OIL_LINE, quantity: 0, unit: 'GRAM' }],
+      });
+
+      const plus = plusOf(fixture, OIL);
+      expect(switchedOff(plus)).toBe(true);
+      expect(
+        rowOf(fixture, OIL).querySelector('.held-onlist')?.textContent
+      ).toContain('catalog.held.atZero');
+      plus?.click();
+      await settle(fixture);
+      expect(lines.addLineResult).not.toHaveBeenCalled();
     });
 
     it('shows under a row the lines of the chosen list that already hold the product, each with its quantity', async () => {
@@ -1038,8 +1127,10 @@ describe('CatalogPage', () => {
         { lineId: 'line-frying', name: 'Oil for frying', quantity: '1' },
       ]);
       const held = rowOf(fixture, OIL).querySelector('.held');
-      expect(held?.querySelector('.held-title')?.textContent?.trim()).toBe(
-        'catalog.held.title'
+      // Already on the list, so the card says so in place of the heading
+      // (velista 0185).
+      expect(held?.querySelector('.held-onlist')?.textContent).toContain(
+        'catalog.held.alreadyOn'
       );
       expect(
         held
@@ -1145,6 +1236,15 @@ describe('CatalogPage', () => {
       plusOf(fixture, RICE)?.click();
       await settle(fixture);
       expect(heldLines(fixture, RICE)[0]?.quantity).toBe('1');
+      // A first add is one step, so one press of minus reaches 0 and draws the
+      // trash (velista 0185 and 0188), on a line that was there before too.
+      for (const line of [
+        heldLines(fixture, RICE)[0],
+        heldLines(fixture, OIL)[0],
+      ]) {
+        expect(line?.minus?.classList).toContain('is-clear');
+        expect(line?.minus?.querySelector('lib-trash-icon')).not.toBeNull();
+      }
 
       // The visit made the rice's line, so nothing of it is left behind.
       heldLines(fixture, RICE)[0]?.minus?.click();

@@ -1,6 +1,7 @@
 import { inject, Injectable, signal } from '@angular/core';
 import {
   ADD_CHOICE_MAX,
+  addAmount,
   ALSO_ON_MAX_LISTS,
   foldName,
   LINE_ITEM_SET_MAX,
@@ -130,15 +131,23 @@ export class LineMemory implements LineServiceI {
    * history in the same breath as being created.
    */
   /**
-   * The add that says what it did. Unlike {@link addLine} it models the merge
-   * (backend plan 0091): a line of the same name, or holding exactly the same
-   * products, is raised and answered instead of a second one being made.
+   * The add that says what it did. Unlike {@link addLine} it models where an add
+   * lands, as backend `0260` resolves it since the owner's ruling of 2026-11-16.
    *
-   * A free text add follows backend `0228`, target 1, in its order: the line the
-   * person chose, then a free text line of that name, then a new line when the
-   * person asked for one, and then the lines that hold a product under that name.
-   * One of those is raised. Two or more refuse the add with `line_add_needs_choice`
-   * when the caller can ask, and otherwise a line is made, as before `0228`.
+   * - The matches: for a product add, the lines of its unit of the same name, of
+   *   exactly the same products, or holding every product of the add; a line of
+   *   another unit only refuses the add with `line_unit_differs`. For typed words,
+   *   the free text line of the name, then (unless the person asked for a new line)
+   *   the lines that hold a product under that name, in any unit. Never a turned
+   *   down line, in list position order.
+   * - `intoLineId` must name one of them, or the answer is `not_found`.
+   * - None makes a line, at one step of its unit when no amount is given.
+   * - One, or the chosen one: a line with an amount answers `alreadyOnList` and
+   *   changes nothing; a line at zero is raised.
+   * - Two or more refuse with `line_add_needs_choice` when the caller can ask, each
+   *   named with what choosing it does. Asked about lines above zero too.
+   * - Two or more with nobody to ask answer `alreadyOnList` with all of them, lines
+   *   at zero included, and change nothing.
    */
   async addLineResult(
     listId: string,
@@ -152,137 +161,186 @@ export class LineMemory implements LineServiceI {
     this._require(listId, 'WRITE');
 
     const products = (itemIds ?? []).length > 0;
-    const existing = products
-      ? this._productAddTarget(listId, content, itemIds ?? [])
-      : this._typedAddTarget(listId, content, options);
-    if (existing === null) {
-      return {
-        line: await this.addLine(
+    if (products && options?.newLine === true) {
+      // An answer for typed words alone (backend `0260`, rule 7).
+      throw memoryFailure('validation_failed', 400);
+    }
+    const matches = products
+      ? this._productAddTargets(
           listId,
           content,
-          quantity,
-          itemIds,
+          itemIds ?? [],
           named,
-          options,
-          unit
-        ),
-        merged: false,
-      };
+          unit ?? 'UNIT'
+        )
+      : this._typedAddTargets(listId, content, options);
+
+    // What the add raises a line at zero by: its own amount when the units agree,
+    // one step of the line's unit otherwise (backend `0260`, rule 4).
+    const raiseOf = (line: Line) =>
+      Math.min(
+        LINE_QUANTITY_MAX,
+        line.quantity +
+          (quantity !== undefined && (unit ?? 'UNIT') === line.unit
+            ? quantity
+            : addAmount(line.unit))
+      );
+
+    let met: readonly Line[] = matches;
+    if (options?.intoLineId !== undefined) {
+      const chosen = matches.find((held) => held.id === options.intoLineId);
+      if (chosen === undefined) {
+        throw memoryFailure('not_found', 404);
+      }
+      met = [chosen];
+    }
+
+    if (met.length === 0) {
+      const line = await this.addLine(
+        listId,
+        content,
+        quantity,
+        itemIds,
+        named,
+        options,
+        unit
+      );
+      return { line, merged: false, outcome: 'created', alreadyOnList: [] };
     }
 
     this._maybeFail();
-    if ((existing.unit ?? 'UNIT') !== (unit ?? 'UNIT')) {
-      // Grams are not added to pieces (backend `0246` M5): the line that is
-      // there is answered as the duplicate, and nothing is summed.
-      return { line: existing, merged: true };
+    if (met.length > 1) {
+      const shown = met.slice(0, ADD_CHOICE_MAX);
+      if (options?.askIfAmbiguous === true) {
+        throw new GatewayError({
+          code: 'line_add_needs_choice',
+          status: 409,
+          correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
+          detail: 'produced by LineMemory, no request was sent',
+          details: {
+            lines: shown.map((line) => ({
+              lineId: line.id,
+              content: line.content,
+              named: line.named,
+              quantity: line.quantity,
+              unit: line.unit,
+              itemIds: [...line.itemIds],
+              productGroupId: line.productGroupId,
+              approvalStatus: line.approvalStatus,
+              outcome: line.quantity > 0 ? 'ALREADY_ON_LIST' : 'RAISED',
+              resultingQuantity:
+                line.quantity > 0 ? line.quantity : raiseOf(line),
+            })),
+          },
+        });
+      }
+      // Nothing is written and nothing is versioned (rule 5).
+      return {
+        line: shown[0],
+        merged: true,
+        outcome: 'alreadyOnList',
+        alreadyOnList: shown,
+      };
+    }
+
+    const only = met[0];
+    if (only.quantity > 0) {
+      // Nothing is written and nothing is versioned (backend `0260`, A1).
+      return {
+        line: only,
+        merged: true,
+        outcome: 'alreadyOnList',
+        alreadyOnList: [only],
+      };
     }
     const raised: Line = {
-      ...existing,
-      // Capped as `raiseForAdd` caps it, so a raise never answers a number the
-      // server would refuse.
-      quantity: Math.min(
-        LINE_QUANTITY_MAX,
-        existing.quantity + (quantity ?? 1)
-      ),
-      version: existing.version + 1,
+      ...only,
+      quantity: raiseOf(only),
+      version: only.version + 1,
     };
     this._write(
       listId,
       this._lines(listId).map((held) => (held.id === raised.id ? raised : held))
     );
-    return { line: raised, merged: true };
-  }
-
-  /** A product add: a line of the same name, or holding exactly the same set. */
-  private _productAddTarget(
-    listId: string,
-    content: string,
-    itemIds: readonly string[]
-  ): Line | null {
-    const name = content.trim().toLocaleLowerCase();
-    const set = [...itemIds].sort().join(',');
-    return (
-      this._lines(listId).find(
-        (held) =>
-          held.content.trim().toLocaleLowerCase() === name ||
-          [...held.itemIds].sort().join(',') === set
-      ) ?? null
-    );
+    return { line: raised, merged: true, outcome: 'raised', alreadyOnList: [] };
   }
 
   /**
-   * Where a free text add lands, or null for a new line (backend `0228`, target 1).
-   * Throws the refusal the server would send, and the not found the server answers
-   * a chosen line with when it is gone or turned down.
+   * The lines a product add meets in its own unit, in list position order (backend
+   * `0260`, the matches of an add): its identity lines, by the backend's
+   * `lineIdentities` ({@link lineIdentities} below), and every line that holds every
+   * product of the add. A free text line of the same name is no match, and neither
+   * is a line of that name that holds other products. Throws the refusal the server
+   * sends when only lines of another unit would match.
    */
-  private _typedAddTarget(
+  private _productAddTargets(
     listId: string,
     content: string,
-    options: AddLineOptions | undefined
-  ): Line | null {
-    const lines = this._lines(listId);
-
-    if (options?.intoLineId !== undefined) {
-      const chosen = lines.find(
-        (held) =>
-          held.id === options.intoLineId && held.approvalStatus !== 'REJECTED'
-      );
-      if (chosen === undefined) {
-        throw memoryFailure('not_found', 404);
-      }
-      return chosen;
-    }
-
-    const typed = foldName(content);
-    const holdsProduct = (line: Line) =>
-      line.itemIds.length > 0 || line.productGroupId !== null;
-
-    // Plan 0091 first, and even over `newLine`: a free text line of that name always
-    // takes the add. A turned down line takes nothing, as `findEarliestLines` skips it.
-    const text = lines.find(
-      (held) =>
-        held.approvalStatus !== 'REJECTED' &&
-        !holdsProduct(held) &&
-        foldName(held.content) === typed
-    );
-    if (text !== undefined) {
-      return text;
-    }
-    if (options?.newLine === true) {
-      return null;
-    }
-
-    const candidates = [...lines]
+    itemIds: readonly string[],
+    named: false | undefined,
+    unit: LineUnit
+  ): readonly Line[] {
+    const own = lineIdentities({
+      content,
+      // `namedOnAdd`: an add that holds products is named unless it says not.
+      named: named !== false,
+      itemIds,
+      productGroupId: null,
+    });
+    const met = this._lines(listId)
       .filter(
         (held) =>
           held.approvalStatus !== 'REJECTED' &&
-          holdsProduct(held) &&
-          foldName(held.content) === typed
+          (lineIdentities(held).some((key) => own.includes(key)) ||
+            itemIds.every((id) => held.itemIds.includes(id)))
       )
       .sort((a, b) => a.position - b.position);
-    if (candidates.length === 1) {
-      return candidates[0];
-    }
-    if (candidates.length > 1 && options?.askIfAmbiguous === true) {
+    const inUnit = met.filter((held) => (held.unit ?? 'UNIT') === unit);
+    if (inUnit.length === 0 && met.length > 0) {
+      const other = met[0];
       throw new GatewayError({
-        code: 'line_add_needs_choice',
+        code: 'line_unit_differs',
         status: 409,
         correlationId: `memory-${Math.random().toString(36).slice(2, 10)}`,
         detail: 'produced by LineMemory, no request was sent',
         details: {
-          lines: candidates.slice(0, ADD_CHOICE_MAX).map((line) => ({
-            lineId: line.id,
-            content: line.content,
-            named: line.named,
-            quantity: line.quantity,
-            itemIds: [...line.itemIds],
-            productGroupId: line.productGroupId,
-            approvalStatus: line.approvalStatus,
-          })),
+          line: {
+            lineId: other.id,
+            content: other.content,
+            unit: other.unit,
+            quantity: other.quantity,
+          },
+          unit,
+          index: null,
         },
       });
     }
-    return null;
+    return inUnit;
+  }
+
+  /**
+   * The lines a typed add meets, in list position order (backend `0260`): the free
+   * text line of the name, then the lines that hold a product under that name, in
+   * any unit. `newLine` leaves out the product lines only, so a new line asked for
+   * beside a free text line of that name still lands on it (backend `0228`, 1.2).
+   */
+  private _typedAddTargets(
+    listId: string,
+    content: string,
+    options: AddLineOptions | undefined
+  ): readonly Line[] {
+    const typed = foldName(content);
+    const holdsProduct = (line: Line) =>
+      line.itemIds.length > 0 || line.productGroupId !== null;
+
+    return this._lines(listId)
+      .filter(
+        (held) =>
+          held.approvalStatus !== 'REJECTED' &&
+          foldName(held.content) === typed &&
+          (!holdsProduct(held) || options?.newLine !== true)
+      )
+      .sort((a, b) => a.position - b.position);
   }
 
   async addLine(
@@ -311,7 +369,8 @@ export class LineMemory implements LineServiceI {
       // The two rules of backend `0207`, section 1.2: a line with no product is
       // named whatever the add says, and an add with no flag names the line.
       named: named !== false || (itemIds ?? []).length === 0,
-      quantity: quantity ?? 1,
+      // One step of its unit when the add states no amount (backend `0260`, A2).
+      quantity: quantity ?? addAmount(unit ?? 'UNIT'),
       // Absent is a count, as on the server (backend `0246`, section 3.2).
       unit: unit ?? 'UNIT',
       itemIds: [...(itemIds ?? [])],
@@ -1142,4 +1201,37 @@ function namedAfter(
     return false;
   }
   return changes.content !== undefined ? true : line.named;
+}
+
+/**
+ * What an add has to share with a line to land on it, as the backend decides it
+ * (`apps/luna-shopper-backend/core/src/app/lists/line-content.ts`,
+ * `lineIdentities`), with the product set written out where the backend hashes it.
+ * A line that is not named and holds products is met by them alone; a named line
+ * and a free text line keep their folded name in every key, so the two shapes
+ * never meet.
+ */
+function lineIdentities(line: {
+  readonly content: string;
+  readonly named: boolean;
+  readonly itemIds: readonly string[];
+  readonly productGroupId: string | null;
+}): string[] {
+  const set =
+    line.itemIds.length === 0
+      ? null
+      : [...new Set(line.itemIds)].sort().join(',');
+  const byProduct =
+    line.named === false && (set !== null || line.productGroupId !== null);
+  const name = byProduct ? '' : `${foldName(line.content)}\u0000`;
+  const identities: string[] = [];
+  if (line.productGroupId !== null) {
+    identities.push(`${name}group:${line.productGroupId}`);
+  }
+  if (set !== null) {
+    identities.push(`${name}set:${set}`);
+  } else if (line.productGroupId === null) {
+    identities.push(`${name}text`);
+  }
+  return identities;
 }

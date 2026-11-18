@@ -3392,7 +3392,6 @@ describe('the composer and the list it adds to', () => {
     it('adds to the picked list, then clears the field and keeps focus in it', async () => {
       const { fixture, store } = await render({ served });
       typeInto(fixture, 'Batteries');
-      composer(fixture).quantity.set(2);
       plus(fixture).click();
       fixture.detectChanges();
 
@@ -3403,18 +3402,16 @@ describe('the composer and the list it adds to', () => {
       expect(store.addLine).toHaveBeenCalledWith({
         targetListId: 'l-parents',
         content: 'Batteries',
-        quantity: 2,
-        unit: 'UNIT',
-        // Typed words say the page can ask which line (velista 0170).
+        // Typed words state no amount and no unit (velista 0185), and say the
+        // page can ask which line (velista 0170).
         askIfAmbiguous: true,
       });
       expect(field(fixture).value).toBe('');
-      expect(composer(fixture).quantity()).toBe(1);
       expect(document.activeElement).toBe(field(fixture));
       expect(options()).toHaveLength(0);
     });
 
-    it('sends a card’s product set as itemIds', async () => {
+    it('sends a card’s product set as itemIds, and lets it be asked about (the ruling of 2026-11-16)', async () => {
       const { fixture, store } = await render({ served });
       const card = document.createElement('button');
       document.body.append(card);
@@ -3434,6 +3431,7 @@ describe('the composer and the list it adds to', () => {
         content: 'Milk',
         quantity: 1,
         itemIds: ['i-1', 'i-2'],
+        askIfAmbiguous: true,
       });
       card.remove();
     });
@@ -3518,6 +3516,8 @@ describe('the composer and the list it adds to', () => {
                 itemIds: ['item-a'],
                 productGroupId: null,
                 approvalStatus: 'APPROVED',
+                outcome: 'ALREADY_ON_LIST',
+                resultingQuantity: 2,
               },
               {
                 lineId: 'zl-b',
@@ -3527,6 +3527,8 @@ describe('the composer and the list it adds to', () => {
                 itemIds: ['item-b'],
                 productGroupId: null,
                 approvalStatus: 'APPROVED',
+                outcome: 'RAISED',
+                resultingQuantity: 1,
               },
             ],
           },
@@ -3584,8 +3586,13 @@ describe('the composer and the list it adds to', () => {
         );
         // One row per line and "A new line" last.
         expect(choiceRows()).toHaveLength(3);
-        expect(choiceRows()[0].querySelector('.count')?.textContent).toMatch(
-          /2\s*→\s*3/
+        // Above zero: already on the list, said in words (the ruling of 2026-11-16).
+        expect(
+          choiceRows()[0].querySelector('.count')?.textContent?.trim()
+        ).toBe('2');
+        expect(choiceRows()[0].querySelector('.state')).not.toBeNull();
+        expect(choiceRows()[1].querySelector('.count')?.textContent).toMatch(
+          /0\s*→\s*1/
         );
         expect(choiceRows()[2].classList.contains('new')).toBe(true);
         // One lookup of the products named, for their brand and size.
@@ -3604,8 +3611,6 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           intoLineId: 'zl-b',
         });
         expect(document.querySelector('.pop')).toBeNull();
@@ -3621,10 +3626,70 @@ describe('the composer and the list it adds to', () => {
         expect(store.addLine).toHaveBeenLastCalledWith({
           targetListId: 'l-weekly',
           content: 'Leche entera',
-          quantity: 1,
-          unit: 'UNIT',
           newLine: true,
         });
+      });
+
+      it('closes the question and says the add failed when the chosen line went', async () => {
+        const { fixture, store } = await asked();
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'not_found',
+              status: 404,
+              correlationId: 'gone',
+            })
+          );
+          return Promise.resolve(null);
+        });
+
+        choiceRows()[1]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(document.querySelector('.pop')).toBeNull();
+        const said = query(fixture, '.said')?.textContent ?? '';
+        // The add's own failure, not the basket being gone.
+        expect(said).not.toContain('basket.error.gone');
+        expect(said).toContain('basket.error');
+        expect(field(fixture).value).toBe('Leche entera');
+      });
+
+      it('asks about a card too, with no new line to offer, and never sends one', async () => {
+        const rendered = await render({ served });
+        const { fixture, store } = rendered;
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(refusal());
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        expect(choiceRows()).toHaveLength(2);
+        expect(choiceRows().some((row) => row.classList.contains('new'))).toBe(
+          false
+        );
+
+        choiceRows()[0]?.click();
+        await fixture.whenStable();
+        expect(store.addLine).toHaveBeenLastCalledWith({
+          targetListId: 'l-weekly',
+          content: 'Leche entera',
+          quantity: 1,
+          itemIds: ['item-a'],
+          intoLineId: 'zl-a',
+        });
+        card.remove();
       });
 
       it('goes back to the lists, unchanged, and keeps the words', async () => {
@@ -3638,6 +3703,93 @@ describe('the composer and the list it adds to', () => {
         ).toEqual(['Weekly shop', 'Groceries']);
         expect(choiceRows()).toHaveLength(0);
         expect(field(fixture).value).toBe('Leche entera');
+      });
+
+      describe('a card found by typed words', () => {
+        async function cardAsked() {
+          const rendered = await render({ served });
+          const { fixture, store } = rendered;
+          store.addLine.mockImplementationOnce(() => {
+            store.error.set(refusal());
+            return Promise.resolve(null);
+          });
+          // The search words stay in the field: picking a card does not clear it.
+          typeInto(fixture, 'lech');
+          const card = document.createElement('button');
+          document.body.append(card);
+          composer(fixture).submitted.emit({
+            content: 'Leche entera Pascual',
+            quantity: 1,
+            itemIds: ['item-a'],
+            anchor: card,
+          });
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+          return { ...rendered, card };
+        }
+
+        const queryOf = (fixture: ComponentFixture<BasketPage>) =>
+          (
+            fixture.componentInstance as unknown as { _query: () => string }
+          )._query();
+
+        it('goes back to the lists with the typed words in the field and the typeahead on them, never the card’s name', async () => {
+          const { fixture, store, card } = await cardAsked();
+          expect(choiceRows()).toHaveLength(2);
+
+          (document.querySelector('.pop .back') as HTMLButtonElement).click();
+          fixture.detectChanges();
+
+          expect(field(fixture).value).toBe('lech');
+          // The search is still the one that found the card, as before the pick.
+          expect(queryOf(fixture)).toBe('lech');
+          expect(
+            options().map((one) => one.querySelector('.name')?.textContent)
+          ).toEqual(['Weekly shop', 'Groceries']);
+          card.remove();
+
+          // A plus now adds the typed words, not the card's name with no product.
+          store.addLine.mockClear();
+          (
+            fixture.componentInstance as unknown as { dismissPicker(): void }
+          ).dismissPicker();
+          fixture.detectChanges();
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          expect(store.addLine).toHaveBeenLastCalledWith(
+            expect.objectContaining({ content: 'lech' })
+          );
+          expect(store.addLine.mock.lastCall?.[0]).not.toHaveProperty(
+            'itemIds'
+          );
+        });
+
+        it('puts the typed words back, not the card’s name, when the chosen line fails', async () => {
+          const { fixture, store, card } = await cardAsked();
+          store.addLine.mockImplementationOnce(() => {
+            store.error.set(
+              new GatewayError({
+                code: 'not_found',
+                status: 404,
+                correlationId: 'gone',
+              })
+            );
+            return Promise.resolve(null);
+          });
+
+          choiceRows()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          expect(document.querySelector('.pop')).toBeNull();
+          expect(field(fixture).value).toBe('lech');
+          expect(queryOf(fixture)).toBe('lech');
+          card.remove();
+        });
       });
 
       it('marks the row of the line a raise went to', async () => {
@@ -3705,6 +3857,298 @@ describe('the composer and the list it adds to', () => {
         expect(said).toContain('list.addChoice.merged');
         expect(said).toContain('"name":"Whole milk"');
         expect(said).toContain('"quantity":"8"');
+      });
+
+      /** Velista `0185`: an add that met a line already asked for adds nothing. */
+      describe('an add that meets a line already on the list (velista 0185)', () => {
+        const WHOLE_MILK: BasketProduct = {
+          id: 'i-milk',
+          name: { en: 'Whole milk', es: 'Whole milk' },
+          brand: null,
+          imageUrl: null,
+          size: null,
+          unit: null,
+          offer: null,
+          offers: [],
+          atShop: null,
+          productGroupId: null,
+          categories: [],
+          sectionIds: [],
+          approxWeight: null,
+        };
+        const milk = line('Leche entera', {
+          productId: 'i-milk',
+          left: 8,
+          entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+        });
+
+        async function met(lineIds: readonly string[]) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockResolvedValueOnce({
+            entries: lineIds.map((lineId) =>
+              entry(null, lineId, 8, { content: 'Leche entera' })
+            ),
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(rendered.fixture, 'Leche entera');
+          plus(rendered.fixture).click();
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          return rendered;
+        }
+
+        it('finds the row by its lines, marks it, and says it is already on that list', async () => {
+          const { fixture } = await met(['zl-milk']);
+
+          const host = fixture.nativeElement as HTMLElement;
+          const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+          expect(row).not.toBeNull();
+          expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+          const said = query(fixture, '.said')?.textContent ?? '';
+          expect(said).toContain('basket.add.alreadyOn');
+          expect(said).toContain('"name":"Whole milk"');
+          expect(said).toContain('"list":"Weekly shop"');
+          // The words go, as on any add that landed, and nothing is said under the field.
+          expect(field(fixture).value).toBe('');
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+        });
+
+        it('says it again when the same add meets the same line a second time', async () => {
+          const { fixture, store } = await met(['zl-milk']);
+          expect(query(fixture, '.said')?.textContent ?? '').toContain(
+            'basket.add.alreadyOn'
+          );
+
+          store.addLine.mockResolvedValueOnce({
+            entries: [entry(null, 'zl-milk', 8, { content: 'Leche entera' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          await fixture.whenStable();
+          fixture.detectChanges();
+          // The same text twice is no change to the region: it is emptied first and
+          // filled again after a short gap.
+          expect(query(fixture, '.said')?.textContent?.trim() ?? '').toBe('');
+
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          fixture.detectChanges();
+          expect(query(fixture, '.said')?.textContent ?? '').toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
+        /** Owner ruling 45 of 2026-11-16: the refusal shows the line it names. */
+        async function refused(lineId: string) {
+          const rendered = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          rendered.store.addLine.mockImplementationOnce(() => {
+            rendered.store.error.set(
+              new GatewayError({
+                code: 'line_unit_differs',
+                status: 409,
+                correlationId: 'ref',
+                details: {
+                  line: {
+                    lineId,
+                    content: 'Leche entera',
+                    unit: 'MILLILITER',
+                    quantity: 1500,
+                  },
+                  unit: 'UNIT',
+                  index: null,
+                },
+              })
+            );
+            return Promise.resolve(null);
+          });
+          const card = document.createElement('button');
+          document.body.append(card);
+          composer(rendered.fixture).submitted.emit({
+            content: 'Leche',
+            quantity: 1,
+            unit: 'UNIT',
+            itemIds: ['i-milk'],
+            named: false,
+            anchor: card,
+          });
+          rendered.fixture.detectChanges();
+          options()[0]?.click();
+          await rendered.fixture.whenStable();
+          rendered.fixture.detectChanges();
+          card.remove();
+          return rendered;
+        }
+
+        it('marks and scrolls to the line a refusal for another unit names', async () => {
+          const original = Element.prototype.scrollIntoView;
+          const scrolled: string[] = [];
+          Element.prototype.scrollIntoView = function (this: HTMLElement) {
+            scrolled.push(this.dataset['lineIds'] ?? '');
+          };
+          const rect = jest
+            .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+            .mockImplementation(function (this: HTMLElement) {
+              const below = this.dataset['lineIds'] !== undefined;
+              return {
+                top: below ? 900 : 0,
+                bottom: below ? 950 : 800,
+              } as DOMRect;
+            });
+          try {
+            const { fixture } = await refused('zl-milk');
+
+            const host = fixture.nativeElement as HTMLElement;
+            const row = host.querySelector('li[data-line-ids~="zl-milk"]');
+            expect(row?.querySelector('.took, .is-took')).not.toBeNull();
+            expect(scrolled).toEqual(['zl-milk']);
+            expect(
+              host.querySelector('lib-line-composer .notice-text')?.textContent
+            ).toContain('basket.error.addUnitDiffers.MILLILITER');
+          } finally {
+            Element.prototype.scrollIntoView = original;
+            rect.mockRestore();
+          }
+        });
+
+        it('says the refusal alone when no drawn row holds the line it names', async () => {
+          const original = Element.prototype.scrollIntoView;
+          const scrolled: string[] = [];
+          Element.prototype.scrollIntoView = function (this: HTMLElement) {
+            scrolled.push(this.dataset['lineIds'] ?? '');
+          };
+          try {
+            const { fixture } = await refused('zl-elsewhere');
+
+            const host = fixture.nativeElement as HTMLElement;
+            expect(host.querySelector('.took, .is-took')).toBeNull();
+            expect(scrolled).toEqual([]);
+            expect(
+              host.querySelector('lib-line-composer .notice-text')?.textContent
+            ).toContain('basket.error.addUnitDiffers.MILLILITER');
+          } finally {
+            Element.prototype.scrollIntoView = original;
+          }
+        });
+
+        it('says it under the field when no drawn row holds the line', async () => {
+          const { fixture } = await met(['zl-elsewhere']);
+
+          const notice = (fixture.nativeElement as HTMLElement).querySelector(
+            'lib-line-composer .notice-text'
+          );
+          expect(notice?.textContent).toContain('basket.add.alreadyOn');
+          // Said once: the notice speaks in its own region, so the page's does not.
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+
+        it('says nothing on a basket the page followed to while the add was out', async () => {
+          const { fixture, store } = await render({
+            served,
+            lines: [milk],
+            products: new Map([['i-milk', WHOLE_MILK]]),
+            echoValues: true,
+          });
+          let answer: (value: unknown) => void = () => undefined;
+          store.addLine.mockImplementationOnce(
+            () => new Promise((resolve) => (answer = resolve))
+          );
+          typeInto(fixture, 'Leche entera');
+          plus(fixture).click();
+          fixture.detectChanges();
+          options()[0]?.click();
+          fixture.detectChanges();
+
+          const basket = TestBed.inject(BasketStore).basket as unknown as {
+            update: (fn: (value: { id: string }) => { id: string }) => void;
+          };
+          basket.update((value) => ({ ...value, id: 'basket-sunday' }));
+          answer({
+            entries: [entry(null, 'zl-elsewhere', 8, { content: 'Leche' })],
+            skippedCount: 0,
+            addOutcome: 'alreadyOnList',
+          });
+          await fixture.whenStable();
+          fixture.detectChanges();
+
+          const host = fixture.nativeElement as HTMLElement;
+          expect(host.querySelector('lib-line-composer .notice')).toBeNull();
+          expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+            'basket.add.alreadyOn'
+          );
+        });
+      });
+
+      it('says why under the field when a card the list counts in another unit is refused (velista 0185)', async () => {
+        const { fixture, store } = await render({ served, echoValues: true });
+        store.addLine.mockImplementationOnce(() => {
+          store.error.set(
+            new GatewayError({
+              code: 'line_unit_differs',
+              status: 409,
+              correlationId: 'ref',
+              details: {
+                line: {
+                  lineId: 'zl-milk',
+                  content: 'Leche entera',
+                  unit: 'MILLILITER',
+                  quantity: 1500,
+                },
+                unit: 'UNIT',
+                index: null,
+              },
+            })
+          );
+          return Promise.resolve(null);
+        });
+        const card = document.createElement('button');
+        document.body.append(card);
+        composer(fixture).submitted.emit({
+          content: 'Leche',
+          quantity: 1,
+          unit: 'UNIT',
+          itemIds: ['i-milk'],
+          named: false,
+          anchor: card,
+        });
+        fixture.detectChanges();
+        options()[0]?.click();
+        await fixture.whenStable();
+        fixture.detectChanges();
+
+        const notice = (fixture.nativeElement as HTMLElement).querySelector(
+          'lib-line-composer .notice-text'
+        );
+        expect(notice?.textContent).toContain(
+          'basket.error.addUnitDiffers.MILLILITER'
+        );
+        expect(notice?.textContent).toContain('"name":"Leche entera"');
+        expect(notice?.textContent).toContain('"list":"Weekly shop"');
+        // The typed words come back, which here were none: never the card's
+        // name, which a plus would add as words with no product. The generic
+        // sentence is not said.
+        expect(field(fixture).value).toBe('');
+        expect(query(fixture, '.said')?.textContent ?? '').not.toContain(
+          'basket.error'
+        );
+        card.remove();
       });
 
       it('titles the question with the line as it is stored, not as it was typed', async () => {

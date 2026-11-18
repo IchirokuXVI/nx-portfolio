@@ -1,6 +1,10 @@
 import { ADD_CHOICE_MAX } from '@portfolio/velista/models';
 import { GatewayError } from '../errors';
-import { toAddChoice } from './add-choice-mappers';
+import {
+  toAddChoice,
+  toAddUnitRefusal,
+  toRefusedLine,
+} from './add-choice-mappers';
 
 function refusal(details: Record<string, unknown> | undefined): GatewayError {
   return new GatewayError({
@@ -44,14 +48,59 @@ describe('toAddChoice', () => {
           itemIds: ['item-a'],
           productGroupId: null,
           approvalStatus: 'APPROVED',
+          // No outcome from an older backend: an amount is already on the list.
+          outcome: 'alreadyOnList',
+          resultingQuantity: 2,
         },
         expect.objectContaining({
           lineId: 'line-b',
           named: false,
           quantity: 0,
+          // ...and a line at zero is raised by one step of its unit.
+          outcome: 'raised',
+          resultingQuantity: 1,
         }),
       ],
     });
+  });
+
+  it('reads what choosing each line does, as the server says it (the ruling of 2026-11-16)', () => {
+    const choice = toAddChoice(
+      refusal({
+        lines: [
+          {
+            ...ENTRY,
+            lineId: 'line-z',
+            quantity: 0,
+            unit: 'GRAM',
+            outcome: 'RAISED',
+            resultingQuantity: 250,
+          },
+          {
+            ...ENTRY,
+            lineId: 'line-w',
+            quantity: 750,
+            unit: 'GRAM',
+            outcome: 'ALREADY_ON_LIST',
+            resultingQuantity: 750,
+          },
+          // An outcome this build does not know falls back to the amount.
+          { ...ENTRY, lineId: 'line-u', quantity: 0, outcome: 'MERGED' },
+        ],
+      })
+    );
+
+    expect(
+      choice?.lines.map(({ lineId, outcome, resultingQuantity }) => ({
+        lineId,
+        outcome,
+        resultingQuantity,
+      }))
+    ).toEqual([
+      { lineId: 'line-z', outcome: 'raised', resultingQuantity: 250 },
+      { lineId: 'line-w', outcome: 'alreadyOnList', resultingQuantity: 750 },
+      { lineId: 'line-u', outcome: 'raised', resultingQuantity: 1 },
+    ]);
   });
 
   it('reads the unit of a line, a count when it is absent or unknown (velista 0182)', () => {
@@ -123,5 +172,139 @@ describe('toAddChoice', () => {
     }));
 
     expect(toAddChoice(refusal({ lines }))?.lines).toHaveLength(ADD_CHOICE_MAX);
+  });
+});
+
+/** Velista `0185`, section 4: the refusal of a product add of another unit. */
+describe('toAddUnitRefusal', () => {
+  function differs(details?: Record<string, unknown>): GatewayError {
+    return new GatewayError({
+      code: 'line_unit_differs',
+      status: 409,
+      correlationId: 'ref',
+      details,
+    });
+  }
+
+  it('reads the line the add met: its id, its own spelling and its unit', () => {
+    expect(
+      toAddUnitRefusal(
+        differs({
+          line: {
+            lineId: 'line-milk',
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 1500,
+          },
+          unit: 'UNIT',
+          index: null,
+        }),
+        'Leche'
+      )
+    ).toEqual({
+      lineId: 'line-milk',
+      name: 'Leche entera',
+      unit: 'MILLILITER',
+    });
+  });
+
+  it('is still the refusal with no line: the added name and no unit', () => {
+    expect(toAddUnitRefusal(differs(undefined), 'Leche')).toEqual({
+      lineId: null,
+      name: 'Leche',
+      unit: null,
+    });
+    expect(toAddUnitRefusal(differs({ line: 'x' }), 'Leche')).toEqual({
+      lineId: null,
+      name: 'Leche',
+      unit: null,
+    });
+  });
+
+  it('reads a missing or unknown unit as none, and blank words as the added name', () => {
+    expect(
+      toAddUnitRefusal(
+        differs({ line: { lineId: 'l1', content: '  ', unit: 'LITRE' } }),
+        'Leche'
+      )
+    ).toEqual({ lineId: 'l1', name: 'Leche', unit: null });
+    expect(
+      toAddUnitRefusal(differs({ line: { lineId: 'l1', content: 'Pan' } }), 'x')
+    ).toEqual({ lineId: 'l1', name: 'Pan', unit: null });
+  });
+
+  it('is null for any other failure', () => {
+    expect(toAddUnitRefusal(new Error('boom'), 'Leche')).toBeNull();
+    expect(
+      toAddUnitRefusal(
+        new GatewayError({
+          code: 'line_add_needs_choice',
+          status: 409,
+          correlationId: 'ref',
+        }),
+        'Leche'
+      )
+    ).toBeNull();
+  });
+});
+
+/** Velista `0185`, decision 51: the line a refusal of another unit names, held by the card. */
+describe('toRefusedLine', () => {
+  function differs(details?: Record<string, unknown>): GatewayError {
+    return new GatewayError({
+      code: 'line_unit_differs',
+      status: 409,
+      correlationId: 'ref',
+      details,
+    });
+  }
+
+  it('reads the whole line the add met, a line at zero included', () => {
+    expect(
+      toRefusedLine(
+        differs({
+          line: {
+            lineId: 'line-milk',
+            content: 'Leche entera',
+            unit: 'MILLILITER',
+            quantity: 0,
+          },
+          unit: 'UNIT',
+          index: null,
+        })
+      )
+    ).toEqual({
+      lineId: 'line-milk',
+      content: 'Leche entera',
+      unit: 'MILLILITER',
+      quantity: 0,
+    });
+  });
+
+  it('is null for a bag that does not name the line in full', () => {
+    expect(toRefusedLine(differs(undefined))).toBeNull();
+    expect(
+      toRefusedLine(
+        differs({ line: { lineId: 'l1', content: 'Pan', unit: 'UNIT' } })
+      )
+    ).toBeNull();
+    expect(
+      toRefusedLine(
+        differs({
+          line: { lineId: 'l1', content: 'Pan', unit: 'LITRE', quantity: 2 },
+        })
+      )
+    ).toBeNull();
+    expect(
+      toRefusedLine(
+        differs({
+          line: { lineId: '', content: 'Pan', unit: 'UNIT', quantity: 2 },
+        })
+      )
+    ).toBeNull();
+  });
+
+  it('is null for any other failure', () => {
+    expect(toRefusedLine(new Error('boom'))).toBeNull();
   });
 });

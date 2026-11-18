@@ -101,9 +101,25 @@ export function shownLineUnit(
   return legacy !== null && line.quantity === 0 ? legacy : line.unit;
 }
 
-/** The amount a new line starts at in a unit: one piece, one kilo, one litre. */
+/**
+ * The amount a line moves to when its unit changes: one piece, one kilo, one
+ * litre. An add no longer uses it (velista `0185`): see {@link addAmount}.
+ */
 export function defaultQuantity(unit: LineUnit): number {
   return isMeasured(unit) ? 1000 : 1;
+}
+
+/**
+ * The amount an add asks for (velista `0185`, the owner's A2): one step of the
+ * unit at the first add, 25 g, 25 ml or one piece. It is the server's own
+ * default since backend `0260`, so an add that states it and one that does not
+ * make the same line.
+ *
+ * Not the stepper's step: a count steps by ten from a thousand, which a first
+ * add never reaches.
+ */
+export function addAmount(unit: LineUnit): number {
+  return isMeasured(unit) ? 25 : 1;
 }
 
 /**
