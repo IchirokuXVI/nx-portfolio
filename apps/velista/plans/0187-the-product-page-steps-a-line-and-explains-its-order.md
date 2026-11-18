@@ -1,5 +1,13 @@
+> **PR:** [#982](https://github.com/IchirokuXVI/nx-portfolio/pull/982)
+
 # 0187: the product page steps a line and explains its order
 
+> Amended on 2026-11-12 (the owner): a line that reaches 0 is never deleted by a write any
+> more, because backend `0263` is withdrawn; it is hidden on its list (section 1). The minus
+> draws a red trash where its next press reaches 0 (velista `0188`), always, also when the line
+> has buys, and that settles how the lists table lowers an existing line to 0 (section 0). The
+> Spanish copy says "similares", not "parecidos" (section 2).
+>
 > Amended on 2026-11-11: the lists table draws the stepper of velista `0188` (D3, the amount
 > with its unit) and builds on its event shape, so this plan now needs `0188`; a plus on a
 > list that holds the product steps that line by one step of `0188` section 1; a first add puts
@@ -166,6 +174,19 @@ returns to the page.
   mark CHEAPEST by the cost of the line's amount (`0246` W3). A small info icon on the product
   page explains that in a sentence or two.
 
+### The owner's, 2026-11-12
+
+- **Lowering an existing line to 0 on the product page.** The owner did not choose between
+  keeping the list's own stepper and decision B. He decided instead that the minus draws a red
+  trash where its next press reaches 0, "that way the user knows the line will disappear",
+  always, also when the line has buys. That is velista `0188`'s stepper (the class `is-clear`
+  on the minus), so the lists table has it with no code of its own. `lists-table.spec.ts`
+  asserts that a list's own stepper at one step draws the trash, and that after the press the
+  line at 0 is drawn as its own row (decision B, as built).
+- **A line at 0 is kept.** Backend `0263` is withdrawn: no write deletes a line that reaches 0;
+  it is hidden on its list. Section 1 says so.
+- **"similares" stays** in the Spanish copy, over "parecidos". Section 2 says so.
+
 ### The writer's, open to the owner
 
 - **A. The rule is one for every unit, not for weights only.** A plus on a `main` line that is
@@ -232,8 +253,10 @@ U5 asks once the plus reaches it, writes one change per run, and keeps the take 
   started at (`visitFloor`, `catalog-visit.ts:152`). Once velista `0185` makes an add one step,
   one minus from 25 ml removes the Milk the visit added. A repeat never takes back.
 - A line that was there before the visit is not taken back: a minus lowers it, and taking it
-  back lowers it to what it held before. A minus that takes such a line to 0 can remove it,
-  by backend `0263`, when it has nothing to keep; velista `0192` says what the page does then.
+  back lowers it to what it held before. A minus that takes such a line to 0 keeps the line:
+  no write deletes it, and its list hides it (the owner, 2026-11-12, backend `0263`
+  withdrawn). The minus draws the red trash of velista `0188` before that press. The take
+  back of a line this visit made, above, is unchanged.
 
 After velista `0186` is built, `_step` reads the product's own step through `lineStepOf` and
 this table steps by it with no change here.
@@ -265,14 +288,15 @@ are unchanged.
 | --- | --- | --- |
 | `catalog.similar.aboutLabel` | How these are sorted | Cómo se ordenan |
 | `catalog.similar.about.title` | How these are sorted | Cómo se ordenan |
-| `catalog.similar.about.order` | Similar products are sorted by price per kilo or litre, so a big pack and a small one are compared fairly. | Los productos parecidos se ordenan por precio por kilo o litro, para comparar bien un paquete grande con uno pequeño. |
+| `catalog.similar.about.order` | Similar products are sorted by price per kilo or litre, so a big pack and a small one are compared fairly. | Los productos similares se ordenan por precio por kilo o litro, para comparar bien un paquete grande con uno pequeño. |
 | `catalog.similar.about.line` | On a list, the product marked cheapest is the one that costs least for the amount you asked for. For 300 g, a small pack can cost less than a big pack that is cheaper per kilo. | En una lista, el producto marcado como el más barato es el que menos cuesta para la cantidad que pides. Para 300 g, un paquete pequeño puede costar menos que uno grande que sale más barato por kilo. |
 | `catalog.similar.about.close` | Close | Cerrar |
 
   "300 g" is part of the sentence and not an argument: it is an example, not a value, and a
   number formatted by `Intl` would change nothing in either locale. The word "cheapest" is in
   lower case because the card's mark is drawn in capitals by its own key, and the sentence
-  names the mark, it does not draw it.
+  names the mark, it does not draw it. The Spanish says "similares", as the section's own
+  title "Productos similares" does; the owner chose it over "parecidos" on 2026-11-12.
 
 ## 3. Specs
 

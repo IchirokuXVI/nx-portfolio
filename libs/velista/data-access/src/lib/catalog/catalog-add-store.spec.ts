@@ -1376,6 +1376,29 @@ describe('CatalogAddStore', () => {
       ]);
     });
 
+    it('records a volume line it steps up as a merged add would, and its take back only lowers it (velista 0187)', async () => {
+      // The plus of the product page's table on a list that holds 2 l of milk.
+      const { store, calls, server } = setup({
+        ...alone(['READ', 'WRITE', 'DECIDE', 'MANAGE']),
+        lines: [line('old', 'weekly', { quantity: 2000, unit: 'MILLILITER' })],
+      });
+      await store.ensure();
+
+      await stepped(store, on('weekly', MILK), 'old', 1);
+
+      expect(calls).toContain('quantity:old:25');
+      expect(store.visit()).toMatchObject([
+        { lineId: 'old', quantity: 2025, before: 2000, created: false },
+      ]);
+
+      await store.takeBack('old');
+
+      expect(calls).toContain('quantity:old:-25');
+      expect(calls.some((call) => call.startsWith('delete:'))).toBe(false);
+      expect(server.get('old')?.quantity).toBe(2000);
+      expect(store.visit()).toEqual([]);
+    });
+
     it('leaves the record when the line is back at what it held before', async () => {
       const { store, server, drawn } = setup(STOCKED);
       await store.ensure();
