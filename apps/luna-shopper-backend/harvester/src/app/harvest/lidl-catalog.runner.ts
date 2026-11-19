@@ -243,10 +243,13 @@ function reportProduct(
  *
  * **`REPLACE` when the page stated its paths, else `ADD`.** A product's paths
  * are read from its own page, all at once: the need world path and the
- * `wonCategoryBreadcrumbs` list of the online shop tree. A page that stated
- * both has said where the chain files the product now, so a stored path it
- * does not name no longer holds. A path taken from the index row, or a page
- * that left the list out, has disproved nothing, and says `ADD`.
+ * `wonCategoryBreadcrumbs` list of the online shop tree. A page that states
+ * a need world path and a list that is not empty and is read in full has
+ * said where the chain files the product now, so a stored path it does not
+ * name no longer holds. Anything less has disproved nothing, and says
+ * `ADD`: a path taken from the index row, a page that left the list out, an
+ * empty list (owner decision 95b), or a list with a part that could not be
+ * read. `categoryPathsStated` of the product holds that test.
  *
  * **The rolling window does not change that.** What LIDL publishes is a week
  * of offers, so a run proves nothing about a product it did not meet, and

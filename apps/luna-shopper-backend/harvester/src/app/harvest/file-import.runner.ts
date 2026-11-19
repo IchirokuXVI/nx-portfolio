@@ -47,6 +47,27 @@ export interface FileImportCounters extends SourceIngestCounters {
 }
 
 /**
+ * The write of the category paths failed after the ingest wrote its rows and
+ * prices (plan 0268, owner decision 96c).
+ *
+ * The run still fails, but those rows and prices are saved, so the report of
+ * the failed run states them, as a walk whose drain failed states what its
+ * chunks wrote (plan 0269, D9). {@link counters} is what the ingest counted,
+ * and `categoryPathsWritten` the rows whose paths changed before the failure.
+ * The message is that of {@link failure}, the error the write threw, so the
+ * run's sentence is the one the write gave.
+ */
+export class FileImportPathsFailedError extends Error {
+  constructor(
+    readonly counters: FileImportCounters,
+    readonly failure: unknown
+  ) {
+    super(failure instanceof Error ? failure.message : String(failure));
+    this.name = 'FileImportPathsFailedError';
+  }
+}
+
+/**
  * The currency a document that names none is stating.
  *
  * Every producer this backend has is Spanish and every price it has ever seen is
@@ -204,17 +225,26 @@ export class FileImportRunner {
     });
 
     await this.recordOutcomes(context, document.products, outcomes);
-    const categoryPathsWritten = await this.writeCategoryPaths(
-      document.products,
-      outcomes
-    );
+    // Counted as each row lands, so a failure midway leaves the true count.
+    let categoryPathsWritten = 0;
+    try {
+      await this.writeCategoryPaths(document.products, outcomes, () => {
+        categoryPathsWritten += 1;
+      });
+    } catch (error) {
+      throw new FileImportPathsFailedError(
+        { ...counters, categoryPathsWritten },
+        error
+      );
+    }
     await context.flush();
     return { ...counters, categoryPathsWritten };
   }
 
   /**
    * The one category path each product of the document states, added to the
-   * paths its row holds (plan 0268, section 3). Answers how many rows changed.
+   * paths its row holds (plan 0268, section 3). `onWritten` is called once
+   * for each row whose paths changed, as it lands.
    *
    * **Always `ADD`.** A document is one reading of one source: a leaflet
    * shows one department of a product, not every shelf it sits on, and the
@@ -223,7 +253,9 @@ export class FileImportRunner {
    *
    * Written after the ingest, so each row the import created exists, as a
    * walk writes its paths at the drain after the last chunk. An ingest that
-   * throws reaches no line here, so a failed import writes no path. A product
+   * throws reaches no line here, so a failed import writes no path. A write
+   * here that throws fails the run, which {@link run} raises as a
+   * {@link FileImportPathsFailedError} carrying what the ingest wrote. A product
    * with no path makes no write. Two products of the document that resolve to
    * one row (`DUPLICATE_KEY`) add their paths to it together.
    *
@@ -233,8 +265,9 @@ export class FileImportRunner {
    */
   private async writeCategoryPaths(
     products: readonly HarvestDocumentProduct[],
-    outcomes: readonly SourceEntryOutcome[]
-  ): Promise<number> {
+    outcomes: readonly SourceEntryOutcome[],
+    onWritten: () => void
+  ): Promise<void> {
     const byEntry = new Map<string, string[][]>();
     outcomes.forEach((outcome, index) => {
       const path = products[index]?.category_path ?? [];
@@ -256,9 +289,9 @@ export class FileImportRunner {
       }))
       .filter((write) => write.paths.length > 0);
     if (writes.length === 0) {
-      return 0;
+      return;
     }
-    return this.ingest.writeCategoryPaths(writes);
+    await this.ingest.writeCategoryPaths(writes, onWritten);
   }
 
   /**

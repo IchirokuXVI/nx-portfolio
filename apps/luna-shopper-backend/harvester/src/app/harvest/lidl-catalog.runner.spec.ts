@@ -6,6 +6,7 @@ import {
   SourceGuard,
 } from '@portfolio/luna-shopper/source-guard';
 import type { SupermarketSource } from '../entities';
+import { mergeCategoryPaths } from './category-paths';
 import { FailingRunReport } from './failing-run-report.fake';
 import { LidlCatalogRunner } from './lidl-catalog.runner';
 import type { RunContext } from './run-context';
@@ -918,7 +919,8 @@ describe('LidlCatalogRunner', () => {
             groups: priced,
             breadcrumbs: [SHOP, AUTUMN],
           }),
-          // The page states the list, and it is empty.
+          // The page states the list, and it is empty: no statement (owner
+          // decision 95b).
           '/p/x/p2': product({ id: '2', groups: priced, breadcrumbs: [] }),
         },
       });
@@ -937,7 +939,7 @@ describe('LidlCatalogRunner', () => {
       expect(callFor('2')).toEqual({
         externalId: '2',
         paths: [QUESO],
-        mode: 'REPLACE',
+        mode: 'ADD',
       });
       // One call a product.
       expect(report.categoryPathCalls).toHaveLength(2);
@@ -1036,9 +1038,7 @@ describe('LidlCatalogRunner', () => {
       ]);
     });
 
-    it('today: says REPLACE for a page that states an empty list, pending the owner', async () => {
-      // Today's behaviour, pinned. Whether an empty list may clear the stored
-      // breadcrumb paths is an open owner decision; this spec changes with it.
+    it('says ADD for a page that states an empty list, so a path stored earlier survives (owner decision 95b)', async () => {
       const runner = new TestRunner({
         index: [row({ id: '1', title: 'Queso', category: 'Food' })],
         products: {
@@ -1049,7 +1049,49 @@ describe('LidlCatalogRunner', () => {
       await runner.run(context(), report, { supermarketId: CHAIN }, source());
 
       expect(report.categoryPathCalls).toEqual([
-        { externalId: '1', paths: [QUESO], mode: 'REPLACE' },
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
+      ]);
+      // What the entry holds after the call: the breadcrumb an earlier week
+      // stored is still there, beside the need world path.
+      const [call] = report.categoryPathCalls;
+      expect(mergeCategoryPaths([SHOP], call.paths, call.mode)).toEqual([
+        SHOP,
+        QUESO,
+      ]);
+    });
+
+    it('says REPLACE for a page that states a real list read in full, so a path it no longer names goes', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, breadcrumbs: [SHOP] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO, SHOP], mode: 'REPLACE' },
+      ]);
+      const [call] = report.categoryPathCalls;
+      expect(mergeCategoryPaths([AUTUMN], call.paths, call.mode)).toEqual([
+        QUESO,
+        SHOP,
+      ]);
+    });
+
+    it('says ADD for a page whose list holds one empty breadcrumb', async () => {
+      const runner = new TestRunner({
+        index: [row({ id: '1', title: 'Queso', category: 'Food' })],
+        products: {
+          '/p/x/p1': product({ id: '1', groups: priced, rawBreadcrumbs: [[]] }),
+        },
+      });
+
+      await runner.run(context(), report, { supermarketId: CHAIN }, source());
+
+      expect(report.categoryPathCalls).toEqual([
+        { externalId: '1', paths: [QUESO], mode: 'ADD' },
       ]);
     });
 

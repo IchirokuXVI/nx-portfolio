@@ -336,7 +336,7 @@ describe('every path a product is filed under (plan 0268)', () => {
     expect(product?.categoryPathsStated).toBe(false);
   });
 
-  it('gives a product with no breadcrumb one path, stated by its page', () => {
+  it('gives a product with no breadcrumb one path, and says it did not state its paths', () => {
     // Captured on 2026-11-05, when the page states the list, and it is empty.
     const product = readFixture(productApproximateWeight, '11031963');
 
@@ -348,7 +348,8 @@ describe('every path a product is filed under (plan 0268)', () => {
         'Carne de cerdo',
       ],
     ]);
-    expect(product?.categoryPathsStated).toBe(true);
+    // An empty list states nothing (owner decision 95b).
+    expect(product?.categoryPathsStated).toBe(false);
   });
 
   it('takes the page list over the row list, even when the page list is empty', () => {
@@ -472,9 +473,7 @@ describe('every path a product is filed under (plan 0268)', () => {
     expect(row?.categoryBreadcrumbs).toBeNull();
   });
 
-  it('today: says a page with a need world path and an empty list stated its paths, pending the owner', () => {
-    // Today's behaviour, pinned. Whether an empty list may clear the stored
-    // breadcrumb paths is an open owner decision; this spec changes with it.
+  it('says a page with a need world path and an empty list did not state its paths (owner decision 95b)', () => {
     const product = normalizeProduct(
       {
         keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
@@ -484,7 +483,36 @@ describe('every path a product is filed under (plan 0268)', () => {
     );
 
     expect(product?.categoryPaths).toEqual([NEED_WORLD_QUESO]);
+    // An empty list is not a statement: it cannot clear a stored path.
+    expect(product?.categoryPathsStated).toBe(false);
+  });
+
+  it('says a page with a need world path and a real list read in full stated its paths', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[{ id: '1', name: 'Alimentación' }]],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPaths).toEqual([
+      NEED_WORLD_QUESO,
+      ['Alimentación'],
+    ]);
     expect(product?.categoryPathsStated).toBe(true);
+  });
+
+  it('says a page whose list holds one empty breadcrumb did not state its paths', () => {
+    const product = normalizeProduct(
+      {
+        keyfacts: { wonCategoryPrimary: NEED_WORLD_QUESO.join('/') },
+        wonCategoryBreadcrumbs: [[]],
+      },
+      { row: emptyRow('1'), observedAt: OBSERVED_AT }
+    );
+
+    expect(product?.categoryPathsStated).toBe(false);
   });
 
   it('says a page that states no need world path did not state its paths', () => {

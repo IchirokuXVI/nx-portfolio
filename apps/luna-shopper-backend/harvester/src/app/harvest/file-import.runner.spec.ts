@@ -14,7 +14,11 @@ import type {
 } from '../entities';
 import eljamon from './__fixtures__/eljamon.vision.harvest-document.json';
 import type { CatalogClient } from './catalog-client.service';
-import { FileImportRunner, unpayableForOne } from './file-import.runner';
+import {
+  FileImportPathsFailedError,
+  FileImportRunner,
+  unpayableForOne,
+} from './file-import.runner';
 import { entryKey } from './matching';
 import { PriceScopeResolver } from './price-scope-resolver';
 import type { RunContext } from './run-context';
@@ -150,6 +154,7 @@ function build(options: {
       new PriceScopeResolver(catalog as unknown as CatalogClient)
     ),
     context,
+    ingest,
     stored,
     saved,
     priceRows,
@@ -863,6 +868,52 @@ describe('FileImportRunner (plan 0086)', () => {
 
       expect(saved).toHaveLength(1);
       expect(saved[0].categoryPaths).toEqual([DAIRY, ['Desayuno']]);
+    });
+
+    it('carries what the ingest wrote on an error when the path write fails after it (owner decision 96c)', async () => {
+      const { runner, context, ingest, saved, priceRows } = build({
+        document: document({
+          products: [
+            {
+              name: 'Leche semidesnatada',
+              size: { label: '1 L' },
+              price: { amount: 0.89, currency: 'EUR' },
+              category_path: DAIRY,
+            },
+            {
+              name: 'Pan de molde',
+              size: { label: '500 g' },
+              price: { amount: 1.2, currency: 'EUR' },
+              category_path: ['Panadería'],
+            },
+          ],
+        }),
+      });
+      // One row lands, then the database goes away.
+      jest
+        .spyOn(ingest, 'writeCategoryPaths')
+        .mockImplementation(async (_writes, onWritten = () => undefined) => {
+          onWritten();
+          throw new Error('connection terminated');
+        });
+
+      const failure = await runner.run(context, input).then(
+        () => null,
+        (error: unknown) => error
+      );
+
+      expect(failure).toBeInstanceOf(FileImportPathsFailedError);
+      const error = failure as FileImportPathsFailedError;
+      // The run's sentence is the write's own.
+      expect(error.message).toBe('connection terminated');
+      // The ingest wrote both rows and both prices before the paths.
+      expect(saved).toHaveLength(2);
+      expect(priceRows).toHaveLength(2);
+      expect(error.counters).toMatchObject({
+        created: 2,
+        pricesRecorded: 2,
+        categoryPathsWritten: 1,
+      });
     });
   });
 

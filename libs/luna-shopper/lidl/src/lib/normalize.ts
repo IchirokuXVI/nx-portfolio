@@ -201,10 +201,13 @@ export function normalizeProduct(
       categoryPath,
       pageBreadcrumbs?.paths ?? row.categoryBreadcrumbs ?? []
     ),
-    // Only a list read in full states every path (plan 0268): a part the
-    // code could not read may name a path a REPLACE would drop.
+    // Only a list that is not empty and was read in full states every path
+    // (plan 0268): a part the code could not read may name a path a REPLACE
+    // would drop, and an empty list states nothing (owner decision 95b).
     categoryPathsStated:
-      pagePrimary.length > 0 && pageBreadcrumbs?.wholly === true,
+      pagePrimary.length > 0 &&
+      pageBreadcrumbs?.wholly === true &&
+      pageBreadcrumbs.paths.length > 0,
     // A weight the chain does not promise is no size (plan 0244, section
     // 5.2): it travels as `approxWeight`, and the row has neither a size nor
     // a unit.
@@ -463,7 +466,9 @@ function pickPath(fromPage: string[], fromRow: string[]): string[] {
  * still returned, but they are not every path the page names, so they cannot
  * disprove a path stored before. A list that is not empty and of which no
  * path can be read is null, as an absent list is: it proves nothing. The
- * empty list `[]` is read wholly and stays a list that states no path.
+ * empty list `[]` is read wholly and stays a list of no path, which
+ * {@link normalizeProduct} does not take as a statement either (owner
+ * decision 95b).
  */
 function readCategoryBreadcrumbs(
   holder: Json

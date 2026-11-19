@@ -142,11 +142,12 @@ export interface LidlProduct {
   categoryPaths: string[][];
   /**
    * Whether the page itself stated both fields the paths come from: its need
-   * world path and its `wonCategoryBreadcrumbs` list, and every breadcrumb of
-   * that list could be read. Only then are {@link categoryPaths} every place
-   * the chain files the product under that a read can reach. A path taken
-   * from the index row, a list the page left out, or a list with a part the
-   * code could not read, proves nothing about a path stored before.
+   * world path and a `wonCategoryBreadcrumbs` list that is not empty, every
+   * breadcrumb of which could be read. Only then are {@link categoryPaths}
+   * every place the chain files the product under that a read can reach. A
+   * path taken from the index row, a list the page left out, an empty list,
+   * or a list with a part the code could not read, proves nothing about a
+   * path stored before (owner decision 95b for the empty list).
    */
   categoryPathsStated: boolean;
   /** Null beside an {@link approxWeight}: a weight that varies is no size. */
