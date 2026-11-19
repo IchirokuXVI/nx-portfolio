@@ -1322,6 +1322,7 @@
         "revertedBy": "Reverted by",
         "correlationId": "Correlation identifier"
       },
+      "revertedByUnknown": "An admin no longer listed",
       "tabs": {
         "label": "Views of this run",
         "overview": "Overview",
@@ -1524,7 +1525,8 @@
         "heading": "The source says",
         "openAtChain": "Open the product page at the chain"
       },
-      "timesSeen": "Seen {{count}} times",
+      "timesSeen_one": "Seen once",
+      "timesSeen_other": "Seen {{count}} times",
       "extra": "Everything else the source sent",
       "lastRun": "The run that last saw it",
       "filter": {

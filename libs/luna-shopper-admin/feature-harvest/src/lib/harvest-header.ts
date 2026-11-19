@@ -221,6 +221,13 @@ export class HarvestHeader {
       return '';
     }
 
+    // A computed caches what `t` answered, and `t` is no signal. After a full
+    // reload the run can arrive before the strings do, and the line kept the
+    // raw key. Reading the two signals the pipe reads makes the words replace
+    // the key when the strings load, and follow a change of locale.
+    this._translate.locale();
+    this._translate.loaded();
+
     return [
       run.supermarketId === '' ? '' : this._chains.nameOf(run.supermarketId),
       this._translate.t(`harvest.mode.${run.mode}`),

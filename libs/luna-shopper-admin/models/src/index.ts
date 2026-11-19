@@ -62,6 +62,7 @@ export {
   canAbort,
   canRevert,
   failureBlockReason,
+  isReverted,
   isTerminalRun,
   runPriceCounters,
   runPricesPublished,

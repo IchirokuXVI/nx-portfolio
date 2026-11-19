@@ -212,7 +212,9 @@ export const HARVEST_RUN_SEED: readonly Wire.HarvestHarvestRunView[] = [
     correlationId: 'seed-correlation-4',
     requestedByUserId: null,
     revertedAt: '2026-09-01T11:20:00.000Z',
-    revertedByUserId: '44444444-4444-4444-8444-444444444444',
+    // An admin of the seed, so the run screen names who reverted it (admin
+    // plan 0074, section 2).
+    revertedByUserId: 'admin-ichiroku',
     revertedPriceCount: 214,
   },
   {

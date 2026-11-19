@@ -7,9 +7,9 @@ import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
+  ServerReachability,
   type HarvestServiceI,
   type RunQuery,
-  ServerReachability,
 } from '@portfolio/luna-shopper-admin/data-access';
 import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
 import { RunsPage } from './runs-page';
@@ -145,17 +145,37 @@ describe('RunsPage, a reverted run', () => {
     expect(text(fixture)).not.toContain('harvest.runs.row.reverted');
   });
 
-  /** A uuid in the row would make the row mostly uuid, so it is on hover. */
+  /**
+   * The operator is named on hover rather than in the row, and by name and
+   * not by id (admin plan 0074): the memory back end lists the seed's admins.
+   */
   it('names the operator on hover rather than in the row', async () => {
+    const { fixture } = await render([
+      run({
+        revertedAt: '2026-09-04T08:00:00.000Z',
+        revertedByUserId: 'admin-ichiroku',
+      }),
+    ]);
+    await drain();
+    fixture.detectChanges();
+
+    const chip = fixture.nativeElement.querySelector('.reverted');
+    expect(chip.getAttribute('title')).toBe('Ichiroku');
+    expect(text(fixture)).not.toContain('Ichiroku');
+  });
+
+  it('says an operator is no longer listed, and never shows the id', async () => {
     const { fixture } = await render([
       run({
         revertedAt: '2026-09-04T08:00:00.000Z',
         revertedByUserId: 'owner-1',
       }),
     ]);
+    await drain();
+    fixture.detectChanges();
 
     const chip = fixture.nativeElement.querySelector('.reverted');
-    expect(chip.getAttribute('title')).toBe('owner-1');
+    expect(chip.getAttribute('title')).toBe('harvest.run.revertedByUnknown');
   });
 
   it('asks for both until the filter says otherwise', async () => {

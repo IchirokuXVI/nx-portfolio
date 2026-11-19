@@ -119,3 +119,53 @@ describe('RunProgressView', () => {
     expect(fixture.nativeElement.querySelector('.prices')).toBeNull();
   });
 });
+
+/**
+ * Which run shows its phase (admin plan 0074, section 1b).
+ *
+ * The harvester leaves the last phase on a run when it ends. A completed run
+ * and a reverted run hide it. A run that stopped short keeps it, because it
+ * says where the run stopped.
+ */
+describe('RunProgressView phase', () => {
+  const REVERTED = {
+    revertedAt: '2026-09-10T08:00:00.000Z',
+    revertedByUserId: 'admin-1',
+    revertedPriceCount: 3,
+  };
+
+  function stage(fixture: { nativeElement: HTMLElement }): string | null {
+    const element = fixture.nativeElement.querySelector('.stage');
+    return element === null ? null : (element.textContent ?? '').trim();
+  }
+
+  it('hides the phase of a completed run', async () => {
+    const fixture = await render(
+      run({ status: 'COMPLETED', stageLabel: 'Fetching products' })
+    );
+
+    expect(stage(fixture)).toBeNull();
+  });
+
+  it.each(['COMPLETED', 'FAILED', 'ABORTED', 'STALE'] as const)(
+    'hides the phase of a reverted %s run',
+    async (status) => {
+      const fixture = await render(
+        run({ status, stageLabel: 'Fetching products', ...REVERTED })
+      );
+
+      expect(stage(fixture)).toBeNull();
+    }
+  );
+
+  it.each(['FAILED', 'ABORTED', 'STALE', 'RUNNING', 'PENDING'] as const)(
+    'draws the phase of a %s run that is not reverted',
+    async (status) => {
+      const fixture = await render(
+        run({ status, stageLabel: 'Fetching products' })
+      );
+
+      expect(stage(fixture)).toBe('Fetching products');
+    }
+  );
+});

@@ -1,8 +1,11 @@
 import { provideLocationMocks } from '@angular/common/testing';
-import { Component, signal } from '@angular/core';
+import { Component, signal, type WritableSignal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
+import {
+  RokuTranslatorService,
+  RokuTranslatorTestingModule,
+} from '@portfolio/localization/rokutranslator-angular';
 import {
   DASHBOARD_SERVICE,
   DashboardStore,
@@ -64,6 +67,8 @@ const drain = async () => {
 interface World {
   readonly running?: HarvestRun | null;
   readonly compact?: boolean;
+  /** Runs after the module is configured and before the header is created. */
+  readonly before?: () => void;
 }
 
 async function render<T>(component: new () => T, world: World = {}) {
@@ -98,6 +103,7 @@ async function render<T>(component: new () => T, world: World = {}) {
 
   const status = TestBed.inject(HarvestStatus);
   const follow = jest.spyOn(status, 'followRuns');
+  world.before?.();
 
   const fixture = TestBed.createComponent(component);
   fixture.detectChanges();
@@ -171,6 +177,47 @@ describe('HarvestHeader', () => {
       expect(
         one(fixture, '[data-running="header"]')?.getAttribute('href')
       ).toBe(`/harvest/runs/${RUNNING.id}`);
+    });
+
+    /**
+     * After a full reload the run can arrive before the strings do. The line
+     * used to keep the raw `harvest.mode.CATALOG_DISCOVERY` it computed then
+     * (decision 46a of the harvester round).
+     */
+    it('reads the kind of run in words once the strings load', async () => {
+      let translator!: {
+        readonly loaded: WritableSignal<boolean>;
+        t(key: string): string;
+      };
+      const words = 'A walk of the whole catalog';
+      // Read by the double through a plain variable and not the signal, so the
+      // double itself adds no dependency to what the header computes.
+      let ready = false;
+
+      const { fixture } = await render(HarvestHeader, {
+        before: () => {
+          translator = TestBed.inject(
+            RokuTranslatorService
+          ) as unknown as typeof translator;
+          translator.loaded.set(false);
+          jest
+            .spyOn(translator, 't')
+            .mockImplementation((key: string) =>
+              ready && key === `harvest.mode.${RUNNING.mode}` ? words : key
+            );
+        },
+      });
+      const what = () =>
+        one(fixture, '[data-running="header"] .what')?.textContent ?? '';
+
+      expect(what()).toContain(`harvest.mode.${RUNNING.mode}`);
+
+      ready = true;
+      translator.loaded.set(true);
+      fixture.detectChanges();
+
+      expect(what()).toContain(words);
+      expect(what()).not.toContain('harvest.mode.');
     });
 
     it('is named for a screen reader', async () => {
