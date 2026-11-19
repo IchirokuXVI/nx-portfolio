@@ -1709,6 +1709,245 @@ describe('DezaCatalogRunner (plan 0085)', () => {
   });
 });
 
+describe('deza: a walk reports what it has read as it goes (plan 0267)', () => {
+  let listing: FakeListing | undefined;
+
+  afterEach(async () => {
+    await listing?.close();
+    listing = undefined;
+  });
+
+  /** One `report.product` call, and where the walk stood when it came. */
+  interface Reported {
+    externalId: string;
+    stage: string | null;
+    /** The queries the listing had answered by then. */
+    queries: string[];
+    /** The availability claims stated by then. */
+    claims: number;
+  }
+
+  /** Records every product call with the stage and the queries before it. */
+  function watch(built: Built, fake: FakeListing): Reported[] {
+    const calls: Reported[] = [];
+    let stage: string | null = null;
+    (built.context.setStage as jest.Mock).mockImplementation(
+      async (name: string) => {
+        stage = name;
+      }
+    );
+    const product = built.report.product.bind(built.report);
+    built.report.product = (observation) => {
+      calls.push({
+        externalId: observation.externalId,
+        stage,
+        queries: [...fake.queries],
+        claims: built.report.availabilities.length,
+      });
+      product(observation);
+    };
+    return calls;
+  }
+
+  /**
+   * Carniceria capped (400 rows) and split under a floor of 3, then Bolleria
+   * with 40 rows over three pages. One product is listed in both sections.
+   */
+  function twoSections() {
+    return [
+      // First, so the section's own query shows it under the ceiling.
+      { description: 'Fuet ALTEZA 180 g', section: 'W011', shops: ['T1'] },
+      ...cappedSection(),
+      ...Array.from({ length: 40 }, (_, index) => ({
+        description: `Bolleria ALTEZA numero${index} ${index} g`,
+        section: 'W051',
+        shops: ['T2'],
+      })),
+      { description: 'Fuet ALTEZA 180 g', section: 'W051', shops: ['T2'] },
+    ];
+  }
+
+  it('reports each product once when the section that saw it first ends, before the end of the walk', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    // Every product of the crawl, each once.
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(built.context.setTotalPlanned).toHaveBeenCalledWith(ids.length);
+
+    const carniceriaQueries = carniceria(listing);
+    expect(carniceriaQueries.length).toBeGreaterThan(1);
+    const fuet = entryKey('Fuet ALTEZA', '180 g');
+    const fromCarniceria = built.report.products.filter(
+      (product) => product.categoryPath[1] === 'Carniceria'
+    );
+    const fromBolleria = built.report.products.filter(
+      (product) => product.categoryPath[1] === 'Bolleria'
+    );
+    expect(fromBolleria).toHaveLength(40);
+    for (const call of calls) {
+      // Never at the end of the walk, and never before a claim is stated.
+      expect(call.stage).toBe('ENUMERATE');
+      expect(call.claims).toBe(0);
+    }
+    for (const call of calls.slice(0, fromCarniceria.length)) {
+      // **A section is the unit, not a query.** Carniceria's products came
+      // after every one of its split queries and before Bolleria's first.
+      expect(call.queries).toEqual(carniceriaQueries);
+    }
+    for (const call of calls.slice(fromCarniceria.length)) {
+      expect(call.queries).toEqual(listing.queries);
+    }
+    // The product of both sections keeps the path of its first sighting, and
+    // its second sighting only added a shop, which availability states.
+    expect(
+      built.report.products.find((product) => product.externalId === fuet)
+        ?.categoryPath
+    ).toEqual(['FRIO', 'Carniceria']);
+    expect(
+      built.report.availabilities
+        .filter((claim) => claim.externalId === fuet && claim.available)
+        .map((claim) => claim.shopCode)
+        .sort()
+    ).toEqual(['T1', 'T2']);
+    // DEZA writes no price, ever.
+    expect(
+      built.report.products.every((product) => product.prices.length === 0)
+    ).toBe(true);
+  });
+
+  it('reports each product once when sections run side by side', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 }, 4)
+    );
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(calls.every((call) => call.stage === 'ENUMERATE')).toBe(true);
+  });
+
+  it('has reported the finished sections when a walk stalls, and states no availability and no report', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+    const fake = listing;
+    const controller = new AbortController();
+    let release: () => void = () => undefined;
+    let stalled: () => void = () => undefined;
+    const stall = new Promise<void>((resolve) => {
+      stalled = resolve;
+    });
+    // Bolleria's second page never comes: the walk is as a process killed
+    // there leaves it, with its first page recorded and nothing after it.
+    Object.assign(built.context, {
+      signal: controller.signal,
+      acquire: async () => {
+        if (fake.queries.some((query) => query.startsWith('W051|'))) {
+          stalled();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        }
+      },
+    });
+
+    const walk = built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+    await stall;
+
+    // Carniceria ended, so its products are with the sink. Bolleria has not.
+    expect(calls.length).toBeGreaterThan(300);
+    expect(
+      built.report.products.every(
+        (product) => product.categoryPath[1] === 'Carniceria'
+      )
+    ).toBe(true);
+    // Nothing that needs the whole crawl has been said: no claim, so no
+    // negative one, no whole listing, no warning and no run report.
+    expect(built.report.availabilities).toHaveLength(0);
+    expect(built.report.wholeListings).toHaveLength(0);
+    expect(built.context.warn).not.toHaveBeenCalled();
+    expect(built.context.setReport).not.toHaveBeenCalled();
+    const finished = calls.length;
+
+    // An abort now is a graceful stop: the walk hands over what Bolleria
+    // read before it, and names no section unread.
+    controller.abort();
+    release();
+    await walk;
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(ids.length).toBeGreaterThanOrEqual(finished);
+    expect(built.report.wholeListings).toHaveLength(0);
+    expect(built.context.warn).not.toHaveBeenCalled();
+    expect(
+      built.report.products.every((product) => product.prices.length === 0)
+    ).toBe(true);
+  });
+
+  it('reports what a section that threw recorded, and names it unread', async () => {
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const built = build(listing);
+    const calls = watch(built, listing);
+    const fake = listing;
+    let thrown = false;
+    // Bolleria's second page fails the section, after its first was read.
+    Object.assign(built.context, {
+      acquire: async () => {
+        if (
+          !thrown &&
+          fake.queries.some((query) => query.startsWith('W051|'))
+        ) {
+          thrown = true;
+          throw new Error('boom');
+        }
+      },
+    });
+
+    await built.runner.run(
+      built.context,
+      built.report,
+      { supermarketId: CHAIN },
+      source({ baseUrl: listing.url, sectionQueryBudget: 3 })
+    );
+
+    const ids = calls.map((call) => call.externalId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toHaveLength(built.runReport['products'] as number);
+    expect(calls.every((call) => call.stage === 'ENUMERATE')).toBe(true);
+    expect(built.context.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: HarvestWarningCode.LISTING_UNREAD,
+        name: 'Bolleria',
+      })
+    );
+  });
+});
+
 describe('deza keys: a DEZA walk and the stored keys (plan 0272)', () => {
   let listing: FakeListing | undefined;
 
