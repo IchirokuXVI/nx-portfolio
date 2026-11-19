@@ -32,8 +32,9 @@
 # `last-applied-configuration` annotation, and an annotation is capped at
 # 256 KiB, far below the 1 MiB a ConfigMap holds. It prints the line count and
 # the ConfigMap's name, never a line: the deploy log is public. A run that
-# re-keyed nothing leaves an earlier record in place. Nothing deletes that
-# ConfigMap; the owner does.
+# skipped collisions and re-keyed nothing saves its record too. A run that
+# neither re-keyed nor skipped a row leaves an earlier record in place.
+# Nothing deletes that ConfigMap; the owner does.
 #
 # A record is kept on this host until the ConfigMap holds it (RECORD_KEEP).
 # After the commit the old keys exist nowhere else: a second run counts
@@ -43,9 +44,19 @@
 # task at `pre-done`, and the next deploy's run writes the kept record into
 # the ConfigMap before it counts. The deploy host is the cluster's own VPS,
 # and the keep file lies outside the directory the deploy rsyncs with
-# --delete. The one case that loses a record is a commit whose stream breaks
-# before `record-end` arrives; this file then says so in plain words, and the
-# dump of the harvester database still holds the old keys.
+# --delete. When the apply fails, its error text is never printed: it can
+# quote a piece of the record. It goes into a file beside the keep file
+# (RECORD_KEEP with `.apply-error.txt` added, mode 600), and the message names
+# that file and the exit code only.
+#
+# The one case that loses a record is a commit whose stream breaks before the
+# whole record arrives. A stream that breaks before `committed` arrives can
+# also hide a commit, so this file then counts again: when `moves` fell below
+# the count taken before the run, the run committed, and this file says that
+# its record is lost and exits 1. When `moves` did not fall, nothing changed.
+# When the recount fails too, it says that the outcome is unknown and how to
+# find out. In every lost case the dump of the harvester database still holds
+# the old keys.
 #
 # It refuses where the harvester deployment's pod has no `deza-keys.js`: the
 # rollout did not happen there. The runner then leaves the task at
@@ -91,6 +102,9 @@ if [ -z "${RECORD_KEEP:-}" ] && [ -z "${HOME:-}" ]; then
   exit 1
 fi
 RECORD_KEEP="${RECORD_KEEP:-$HOME/release-task-records/$NAMESPACE-$CONFIGMAP.tsv}"
+# Where the error of a failed apply goes, beside the keep file.
+APPLY_ERROR="$RECORD_KEEP.apply-error.txt"
+apply_status=0
 
 # What a command wrote to stderr is kept aside and never read as its answer.
 ERR="$(mktemp)"
@@ -194,7 +208,7 @@ count() {
     return 1
   fi
   if [ "$collisions" -gt "$max_collisions" ]; then
-    echo "  $collisions moved DEZA rows have a new key another row holds, above the ceiling of $max_collisions. Nothing was changed." >&2
+    echo "  $collisions moved DEZA rows are collisions, above the ceiling of $max_collisions: each one's new key is held by a row that keeps it after every possible move, or is the new key of two moved rows, or the rows form a swap or a ring, or the row's chain ends on one of these. A chain whose holder moves too is not a collision. Nothing was changed." >&2
     return 1
   fi
   if [ "$moves" -gt "$max_moves" ]; then
@@ -203,20 +217,29 @@ count() {
   fi
 }
 
-# What a failed apply wrote to stderr, with anything shaped like an entry id
-# or a key taken out: an error about the object can quote a piece of it.
-apply_error() {
-  tr -d '\r' < "$ERR" | sed -E 's/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{40}/<id or key>/g'
+# A failed apply, in one fixed sentence with its exit code. Its error text is
+# never printed, because an error about the object can quote a piece of it:
+# it goes into $APPLY_ERROR, mode 600, named by path only.
+apply_failed() {
+  if mkdir -p "$(dirname "$APPLY_ERROR")" && (umask 077 && tr -d '\r' < "$ERR" > "$APPLY_ERROR"); then
+    echo "  the ConfigMap $CONFIGMAP could not be written: the apply exited $apply_status. Its error is kept in $APPLY_ERROR on this host." >&2
+  else
+    echo "  the ConfigMap $CONFIGMAP could not be written: the apply exited $apply_status. Its error could not be kept on this host." >&2
+  fi
 }
 
 # Writes a record file into the ConfigMap, replacing the object, and prints
-# its line count. Never a line of it.
+# its line count. Never a line of it. Leaves the exit code in $apply_status.
 save_record() {
   local file="$1" lines
-  if ! kubectl create configmap "$CONFIGMAP" -n "$NAMESPACE" \
-    --from-file=record.tsv="$file" \
-    --dry-run=client -o json \
-    | ${RECORD_APPLY:-kubectl -n "$NAMESPACE" apply --server-side --force-conflicts --field-manager="release-task-$NUMBER" -f -} > /dev/null 2> "$ERR"; then
+  apply_status=0
+  {
+    kubectl create configmap "$CONFIGMAP" -n "$NAMESPACE" \
+      --from-file=record.tsv="$file" \
+      --dry-run=client -o json \
+      | ${RECORD_APPLY:-kubectl -n "$NAMESPACE" apply --server-side --force-conflicts --field-manager="release-task-$NUMBER" -f -} > /dev/null
+  } 2> "$ERR" || apply_status=$?
+  if [ "$apply_status" -ne 0 ]; then
     return 1
   fi
   # The header line is not a row.
@@ -229,11 +252,11 @@ save_record() {
 save_kept() {
   [ -f "$RECORD_KEEP" ] || return 0
   if ! save_record "$RECORD_KEEP" "the record an earlier run kept"; then
-    echo "  the ConfigMap $CONFIGMAP could not be written: $(apply_error)" >&2
+    apply_failed
     echo "  The record an earlier run kept stays in $RECORD_KEEP on this host. Nothing was changed." >&2
     return 1
   fi
-  rm -f "$RECORD_KEEP"
+  rm -f "$RECORD_KEEP" "$APPLY_ERROR"
 }
 
 if ! cmd="$(command_for)"; then exit 1; fi
@@ -274,12 +297,12 @@ fi
 echo "  re-keying $moves DEZA rows"
 run_out="$WORK/run.out"
 record="$WORK/record.tsv"
+# The count before the run, which a recount is compared with when the
+# `committed` line does not arrive.
+moves_before="$moves"
+status=0
 # shellcheck disable=SC2086
-if $cmd --max "$max_moves" --record - > "$run_out" 2> "$ERR"; then
-  status=0
-else
-  status=1
-fi
+$cmd --max "$max_moves" --record - > "$run_out" 2> "$ERR" || status=$?
 printed="$(sed $'/^record\t/d' "$run_out" | tr -d '\r')"
 sed -n $'s/^record\t//p' "$run_out" | tr -d '\r' > "$record"
 printf '%s\n' "$printed" | sed 's/^/    /'
@@ -292,47 +315,74 @@ if [ -n "$record_end" ] && [ "$(wc -l < "$record")" -eq "$record_end" ]; then
 fi
 
 if [ -z "$committed" ]; then
-  # The command prints `committed` first after the commit: without it,
-  # nothing was committed.
-  echo "  the run failed: $(cat "$ERR")" >&2
-  echo "  One transaction holds every update, so no row was re-keyed. The next deploy" >&2
-  echo "  runs this file again." >&2
+  # The command prints `committed` first after the commit. Its absence does
+  # not prove that nothing was committed: the stream can drop, or the process
+  # die, between the commit and that line. Only a recount tells.
+  echo "  the run printed no committed line and exited $status: $(cat "$ERR")" >&2
+  moves_after=''
+  # shellcheck disable=SC2086
+  if out="$($cmd --count 2> "$ERR")"; then
+    moves_after="$(count_of moves "$out")"
+  fi
+  if [ -z "$moves_after" ]; then
+    echo "  The recount after it failed too, so the outcome is unknown: the run may have committed." >&2
+    echo "  To find out, run node deza-keys.js --count in the harvester pod and compare its moves" >&2
+    echo "  with $moves_before, the count before the run. A lower number means the run committed" >&2
+    echo "  and its record is lost; the dump of the harvester database taken before helm upgrade" >&2
+    echo "  still holds every old key. The same number means nothing changed." >&2
+  elif [ "$moves_after" -lt "$moves_before" ]; then
+    echo "  A recount gives moves $moves_after, against $moves_before before the run: the run committed." >&2
+    echo "  Its record is lost: no ConfigMap $CONFIGMAP holds it, and the next run counts" >&2
+    echo "  moves $moves_after. The dump of the harvester database taken before helm upgrade" >&2
+    echo "  still holds every old key." >&2
+  else
+    echo "  A recount gives moves $moves_after, as before the run: nothing changed. The next deploy" >&2
+    echo "  runs this file again." >&2
+  fi
   exit 1
 fi
 if [ "$status" -ne 0 ]; then
-  echo "  the run committed and then failed: $(cat "$ERR")" >&2
+  echo "  the run committed and then exited $status: $(cat "$ERR")" >&2
 fi
 
-# The record of what the run did replaces the one the ConfigMap held. A run
-# that re-keyed nothing leaves it in place.
-if [ "$committed" -gt 0 ]; then
+# The record of what the run did replaces the one the ConfigMap held, also
+# when the run re-keyed nothing and only skipped collisions. The command
+# streams a record whenever it re-keyed or skipped a row. A run that did
+# neither streams none and leaves an earlier record in place.
+if [ "$committed" -gt 0 ] || [ -n "$record_end" ]; then
   if [ "$whole" != true ]; then
-    echo "  The run re-keyed $committed DEZA rows and committed, but its record did not arrive whole." >&2
-    echo "  The record of this run is lost: no ConfigMap $CONFIGMAP holds it, and a second run" >&2
-    echo "  counts moves 0. The dump of the harvester database taken before helm upgrade" >&2
-    echo "  still holds every old key." >&2
+    if [ "$committed" -gt 0 ]; then
+      echo "  The run re-keyed $committed DEZA rows and committed, but its record did not arrive whole." >&2
+      echo "  The record of this run is lost: no ConfigMap $CONFIGMAP holds it, and the next run" >&2
+      echo "  has no moves of these rows to build it from. The dump of the harvester database" >&2
+      echo "  taken before helm upgrade still holds every old key." >&2
+    else
+      echo "  The run re-keyed 0 DEZA rows, and its record of the skipped rows did not arrive whole." >&2
+      echo "  Nothing changed. The next deploy runs this file again." >&2
+    fi
     exit 1
   fi
+  skipped=$(($(wc -l < "$record") - 1 - committed))
   # Kept on this host first. Once the ConfigMap holds it, the keep file goes.
   kept=false
   if mkdir -p "$(dirname "$RECORD_KEEP")" && (umask 077 && cp "$record" "$RECORD_KEEP"); then
     kept=true
   fi
   if ! save_record "$record" "after the run"; then
-    echo "  the ConfigMap $CONFIGMAP could not be written: $(apply_error)" >&2
+    apply_failed
     if [ "$kept" = true ]; then
-      echo "  The run re-keyed $committed DEZA rows and committed. Its record is kept in" >&2
-      echo "  $RECORD_KEEP on this host, and the next deploy writes it into the" >&2
+      echo "  The run re-keyed $committed DEZA rows, skipped $skipped and committed. Its record is" >&2
+      echo "  kept in $RECORD_KEEP on this host, and the next deploy writes it into the" >&2
       echo "  ConfigMap before anything else." >&2
     else
-      echo "  The run re-keyed $committed DEZA rows and committed, and its record could not be" >&2
-      echo "  kept on this host either: the record of this run is lost. The dump of the" >&2
-      echo "  harvester database taken before helm upgrade still holds every old key." >&2
+      echo "  The run re-keyed $committed DEZA rows, skipped $skipped and committed, and its record" >&2
+      echo "  could not be kept on this host either: the record of this run is lost. The dump of" >&2
+      echo "  the harvester database taken before helm upgrade still holds every old key." >&2
     fi
     exit 1
   fi
   if [ "$kept" = true ]; then
-    rm -f "$RECORD_KEEP"
+    rm -f "$RECORD_KEEP" "$APPLY_ERROR"
   fi
 fi
 

@@ -535,8 +535,8 @@ product would no longer be seen.
   the same transaction, so a chain of any length is re-keyed in one run. A key
   counts as held only by a row that keeps it after every move that can be
   made.
-- **A collision is skipped.** A moved row whose new key a row that does not
-  move holds, two moved rows that give one new key, and a swap or a longer
+- **A collision is skipped.** A moved row whose new key is held by a row that
+  keeps it after every possible move, two moved rows that give one new key, and a swap or a longer
   ring of rows that each want the next one's key are left as they are and
   counted under `collisions`, and so is every row whose chain ends on one of
   them. `--count`, the write run and the guard read the same selection, so
@@ -559,11 +559,17 @@ product would no longer be seen.
   its old key, its new key, the outcome, and for a collision the id of the row
   that holds the key. No name. The write run streams the record in the same
   `kubectl exec` that commits, and `post.sh` applies it server side, so no
-  annotation cap limits its size. Until the ConfigMap holds it, the record is
-  kept on the host in `~/release-task-records/`; when the apply fails,
-  `post.sh` exits 1 and the next deploy writes the kept record first. The
-  deploy log shows the line count only. Read it over SSH on the host, as the
-  `deploy` user:
+  annotation cap limits its size. A run that only skipped collisions saves
+  its record too. Until the ConfigMap holds it, the record is kept on the
+  host in `~/release-task-records/`. That file holds the same lines as the
+  ConfigMap: entry ids and keys, no names. When the apply fails, `post.sh`
+  exits 1, prints only the exit code, and keeps the apply's error in a file
+  beside the record (`.apply-error.txt` added to its name, mode 600). The
+  next successful run writes the kept record into the ConfigMap first and
+  removes both files. The `~` is the home of the user that runs `post.sh`:
+  the deploy runs it as `deploy`, and a run by hand as another user keeps its
+  file in that user's home. The deploy log shows the line count only. Read
+  the record over SSH on the host, as the `deploy` user:
 
   ```sh
   kubectl -n luna-shopper get configmap release-task-0008-record \
@@ -581,7 +587,9 @@ product would no longer be seen.
   after the task.
 
 To rehearse it, point the override at the built bundle and at a database that
-you made for the rehearsal:
+you made for the rehearsal. A rehearsal with `RECORD_APPLY` still needs
+`kubectl` on the PATH: `post.sh` builds the ConfigMap's JSON with
+`kubectl create configmap --dry-run=client`, which reaches no cluster.
 
 ```sh
 ENVIRONMENT=staging \
