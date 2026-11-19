@@ -6,10 +6,12 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  AdminNames,
   HARVEST_SERVICE,
   RunWatches,
 } from '@portfolio/luna-shopper-admin/data-access';
@@ -34,6 +36,7 @@ import {
   HarvestNotice,
   PageHeader,
   RunProgressView,
+  Viewport,
 } from '@portfolio/luna-shopper-admin/ui';
 import { formatInstant } from './format-instant';
 import { HarvestShell } from './harvest-shell';
@@ -74,6 +77,8 @@ import {
     RunProgressView,
     RunPricesTab,
   ],
+  // The names of the admins, read once for this page (admin plan 0074).
+  providers: [AdminNames],
   template: `
     <!-- Drawn in every state, so that the way back and the tabs do not appear
          only once the run has loaded. Until then the title is the screen this
@@ -87,14 +92,18 @@ import {
       "
       backLink=".."
     >
-      @if (watch.run(); as run) {
+      <!-- On a phone the chips are the first line of the overview and not in
+           the header (admin plan 0074, choice C1): the header cuts a chip to
+           an ellipsis on every page, and two chips beside a long title read
+           "COMPLE..." and "REVER...". -->
+      @if (headerChips() ? watch.run() : null; as run) {
         <p [class]="run.status" class="status" pageChip>
           {{ 'harvest.status.' + run.status | rokuT }}
         </p>
       }
       <!-- Beside the status and never instead of it: a revert takes back what
            the run wrote and does not change how the run ended. -->
-      @if (watch.run()?.revertedAt) {
+      @if (headerChips() && watch.run()?.revertedAt) {
         <p class="reverted" pageChip>
           {{ 'harvest.run.reverted.chip' | rokuT }}
         </p>
@@ -103,7 +112,7 @@ import {
            the way to that schedule. -->
       <!-- One block for each, because a chip is projected into the header
            only as the one element of its block. -->
-      @if (scheduled()?.link; as link) {
+      @if (headerChips() ? scheduled()?.link : null; as link) {
         <a
           [attr.title]="'harvest.schedules.runs.openSchedule' | rokuT"
           [routerLink]="link"
@@ -113,7 +122,9 @@ import {
           >{{ 'harvest.schedules.runs.scheduled' | rokuT }}</a
         >
       }
-      @if (scheduled() !== null && scheduled()?.link === null) {
+      @if (
+        headerChips() && scheduled() !== null && scheduled()?.link === null
+      ) {
         <p class="scheduled" pageChip data-scheduled>
           {{ 'harvest.schedules.runs.scheduled' | rokuT }}
         </p>
@@ -155,6 +166,36 @@ import {
       @if (tab() === 'prices') {
         <lib-run-prices-tab [runId]="run.id" role="tabpanel" />
       } @else {
+        <!-- The same chips as the header's, as a line of the page that may
+             wrap, so each reads in full on a phone. -->
+        @if (!headerChips()) {
+          <div class="run-chips" data-run-chips>
+            <p [class]="run.status" class="status">
+              {{ 'harvest.status.' + run.status | rokuT }}
+            </p>
+            @if (run.revertedAt) {
+              <p class="reverted">
+                {{ 'harvest.run.reverted.chip' | rokuT }}
+              </p>
+            }
+            @if (scheduled(); as schedule) {
+              @if (schedule.link; as link) {
+                <a
+                  [attr.title]="'harvest.schedules.runs.openSchedule' | rokuT"
+                  [routerLink]="link"
+                  class="scheduled"
+                  data-scheduled
+                  >{{ 'harvest.schedules.runs.scheduled' | rokuT }}</a
+                >
+              } @else {
+                <p class="scheduled" data-scheduled>
+                  {{ 'harvest.schedules.runs.scheduled' | rokuT }}
+                </p>
+              }
+            }
+          </div>
+        }
+
         <lib-run-progress [progress]="watch.progress()!" [run]="run" />
 
         @if (watch.paused()) {
@@ -179,10 +220,14 @@ import {
 
         <dl class="facts">
           @for (fact of facts(); track fact.key) {
-            @if (fact.value !== '') {
-              <div>
+            @if (fact.value !== '' || fact.valueKey !== '') {
+              <div [attr.data-fact]="fact.key">
                 <dt>{{ 'harvest.run.fact.' + fact.key | rokuT }}</dt>
-                <dd>{{ fact.value }}</dd>
+                <dd [attr.title]="fact.title === '' ? null : fact.title">
+                  {{
+                    fact.valueKey === '' ? fact.value : (fact.valueKey | rokuT)
+                  }}
+                </dd>
               </div>
             }
           }
@@ -232,54 +277,61 @@ import {
             </dl>
 
             @if (report().copies.length > 0) {
-              <table class="copies">
-                <caption>
-                  {{
-                    'harvest.run.report.copies.caption' | rokuT
-                  }}
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      {{ 'harvest.run.report.copies.from' | rokuT }}
-                    </th>
-                    <th scope="col">
-                      {{ 'harvest.run.report.copies.to' | rokuT }}
-                    </th>
-                    <th class="number" scope="col">
-                      {{ 'harvest.run.report.copies.prices' | rokuT }}
-                    </th>
-                    <th class="number" scope="col">
-                      {{ 'harvest.run.report.copies.availability' | rokuT }}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (copy of report().copies; track copy.from) {
+              <div class="scroll">
+                <table class="copies" data-copies>
+                  <caption>
+                    {{
+                      'harvest.run.report.copies.caption' | rokuT
+                    }}
+                  </caption>
+                  <thead>
                     <tr>
-                      <th scope="row">{{ scopeName(copy.from) }}</th>
-                      <td>
-                        {{ targetNames(copy.from, copy.to) }}
-                        @if (hiddenTargets(copy.from, copy.to) > 0) {
-                          <button
-                            (click)="expandCopy(copy.from)"
-                            class="more"
-                            type="button"
-                          >
-                            {{
-                              'harvest.run.report.copies.more'
-                                | rokuT
-                                  : { count: hiddenTargets(copy.from, copy.to) }
-                            }}
-                          </button>
-                        }
-                      </td>
-                      <td class="number">{{ copy.pricesCopied }}</td>
-                      <td class="number">{{ copy.availabilityCopied }}</td>
+                      <th scope="col">
+                        {{ 'harvest.run.report.copies.from' | rokuT }}
+                      </th>
+                      <th scope="col">
+                        {{ 'harvest.run.report.copies.to' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.copies.prices' | rokuT }}
+                      </th>
+                      <th class="number" scope="col">
+                        {{ 'harvest.run.report.copies.availability' | rokuT }}
+                      </th>
                     </tr>
-                  }
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    @for (copy of report().copies; track copy.from) {
+                      <tr>
+                        <th scope="row">{{ scopeName(copy.from) }}</th>
+                        <td>
+                          {{ targetNames(copy.from, copy.to) }}
+                          @if (hiddenTargets(copy.from, copy.to) > 0) {
+                            <button
+                              (click)="expandCopy(copy.from)"
+                              class="more"
+                              type="button"
+                            >
+                              {{
+                                'harvest.run.report.copies.more'
+                                  | rokuT
+                                    : {
+                                        count: hiddenTargets(
+                                          copy.from,
+                                          copy.to
+                                        ),
+                                      }
+                              }}
+                            </button>
+                          }
+                        </td>
+                        <td class="number">{{ copy.pricesCopied }}</td>
+                        <td class="number">{{ copy.availabilityCopied }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
             }
 
             <!-- What a walk did not read, by the runner that says so (admin
@@ -466,7 +518,7 @@ import {
                 }
                 @if (sizes.examples.length > 0) {
                   <div class="scroll">
-                    <table class="copies">
+                    <table class="copies" data-size-examples>
                       <thead>
                         <tr>
                           <th scope="col">
@@ -510,7 +562,7 @@ import {
                             <td>
                               {{ 'harvest.unit.' + example.unit | rokuT }}
                             </td>
-                            <td>{{ example.label }}</td>
+                            <td class="nowrap">{{ example.label }}</td>
                           </tr>
                         }
                       </tbody>
@@ -673,6 +725,15 @@ import {
       background: var(--admin-surface);
       font-size: 0.75rem;
       text-transform: uppercase;
+    }
+
+    /* On a phone the chip sits on the page, whose ground is the surface it
+       takes in the header, so a state with no wash of its own takes the grey
+       of a run that ended, as in the list of runs. Before the washes below,
+       which win at the same weight. */
+    .run-chips .status {
+      background: var(--admin-neutral-wash);
+      color: var(--admin-neutral-on-wash);
     }
 
     .status.RUNNING,
@@ -845,11 +906,62 @@ import {
       cursor: pointer;
     }
 
-    /* What a walk did not read (admin plan 0071). A table scrolls inside its
-       own box on a phone, so the page itself never scrolls sideways. */
+    /* A table scrolls inside its own box on a phone, so the page itself never
+       scrolls sideways (admin plan 0071). The box shows a shadow on each side
+       that has more to show (admin plan 0074, section 3), with no script: the
+       two covers are painted in the page colour and scroll with the table,
+       the two shadows stay at the edges of the box. A cover sits on its
+       shadow while that edge of the table is in view, so a table that fits,
+       as every one does at 1360 px, draws no shadow at all.
+
+       The shadow fades from the control outline, the one grey of plan 0041
+       dark enough to read on the page at a glance; the panel border was too
+       light to notice. It fades to nothing over 1.25rem, a soft edge. */
     .scroll {
       inline-size: 100%;
       overflow-x: auto;
+      background:
+        linear-gradient(to right, var(--admin-surface) 50%, transparent) left /
+          2.5rem 100% no-repeat local,
+        linear-gradient(to left, var(--admin-surface) 50%, transparent) right /
+          2.5rem 100% no-repeat local,
+        linear-gradient(to right, var(--admin-border-strong), transparent)
+          left / 1.25rem 100% no-repeat scroll,
+        linear-gradient(to left, var(--admin-border-strong), transparent)
+          right / 1.25rem 100% no-repeat scroll;
+    }
+
+    /* A header and a number never wrap. A body cell wraps between words only,
+       so no word is ever cut in half: the table grows and the box scrolls. */
+    .copies thead th,
+    .copies .number {
+      white-space: nowrap;
+    }
+
+    .copies th,
+    .copies td {
+      overflow-wrap: normal;
+      word-break: normal;
+    }
+
+    /* The name of a row keeps room for two or three words a line, so the
+       table scrolls before a name is stacked one word a line. */
+    .copies tbody th {
+      min-inline-size: 9rem;
+    }
+
+    /* A price per unit reads as one value, like a number. */
+    .copies .nowrap {
+      white-space: nowrap;
+    }
+
+    /* The chips of the header, as the first line of the overview on a phone
+       (admin plan 0074, section 1). A line of the page, so it may wrap. */
+    .run-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--admin-space-2);
+      align-items: center;
     }
 
     .part {
@@ -952,12 +1064,20 @@ import {
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class RunPage {
+  private readonly _viewport = inject(Viewport);
   private readonly _route = inject(ActivatedRoute);
   private readonly _service = inject(HARVEST_SERVICE);
   private readonly _references = inject(ResourceReferences);
   private readonly _registry = inject(ResourceRegistry);
+  private readonly _admins = inject(AdminNames);
 
   readonly shell = inject(HarvestShell);
+
+  /**
+   * Whether the chips sit in the header: on a wide screen. On a phone they are
+   * the first line of the overview (admin plan 0074, section 1).
+   */
+  readonly headerChips = computed(() => !this._viewport.compact());
 
   /**
    * Which view of the run is drawn: the counters and the report, or the price
@@ -1116,29 +1236,66 @@ export class RunPage {
       : harvestEntryAddress(entryId, chain);
   }
 
-  readonly facts = computed(() => {
+  readonly facts = computed<readonly RunFact[]>(() => {
     const run = this.watch.run();
     if (run === null) {
       return [];
     }
 
     return [
-      { key: 'requested', value: formatInstant(run.requestedAt) },
-      { key: 'started', value: formatInstant(run.startedAt) },
-      { key: 'finished', value: formatInstant(run.finishedAt) },
-      { key: 'heartbeat', value: formatInstant(run.heartbeatAt) },
+      fact('requested', formatInstant(run.requestedAt)),
+      fact('started', formatInstant(run.startedAt)),
+      fact('finished', formatInstant(run.finishedAt)),
+      fact('heartbeat', formatInstant(run.heartbeatAt)),
       // What the revert actually did, from the operation's own answer rather
       // than from the estimate the confirmation offered (backend plan 0082).
-      { key: 'reverted', value: formatInstant(run.revertedAt) },
-      {
-        key: 'revertedPrices',
-        value:
-          run.revertedPriceCount === null ? '' : String(run.revertedPriceCount),
-      },
-      { key: 'revertedBy', value: run.revertedByUserId ?? '' },
-      { key: 'correlationId', value: run.correlationId ?? '' },
+      fact('reverted', formatInstant(run.revertedAt)),
+      fact(
+        'revertedPrices',
+        run.revertedPriceCount === null ? '' : String(run.revertedPriceCount)
+      ),
+      this._revertedBy(run.revertedByUserId ?? null),
+      fact('correlationId', run.correlationId ?? ''),
     ];
   });
+
+  /**
+   * Who reverted the run, by name (admin plan 0074, section 2).
+   *
+   * Nothing while the list of admins is read, so a uuid never shows for a
+   * moment first. Then the name, the words for an admin the list does not
+   * hold, or the words for a list that could not be read: a failed read says
+   * nothing about the admin, so it never claims one is gone. The id stays in
+   * the hover, for whoever needs it.
+   */
+  private _revertedBy(adminId: string | null): RunFact {
+    if (adminId === null || adminId === '') {
+      return fact('revertedBy', '');
+    }
+
+    const state = this._admins.state();
+    if (state === 'idle' || state === 'loading') {
+      return fact('revertedBy', '');
+    }
+    if (state === 'failed') {
+      return {
+        key: 'revertedBy',
+        value: '',
+        valueKey: REVERTED_BY_UNREAD,
+        title: adminId,
+      };
+    }
+
+    const name = this._admins.nameOf(adminId);
+    return name === null
+      ? {
+          key: 'revertedBy',
+          value: '',
+          valueKey: REVERTED_BY_UNKNOWN,
+          title: adminId,
+        }
+      : { key: 'revertedBy', value: name, valueKey: '', title: adminId };
+  }
 
   /** Whether the confirmation is up. Nothing is deleted until it is answered. */
   readonly confirming = signal(false);
@@ -1274,11 +1431,40 @@ export class RunPage {
       }
     });
 
+    // The admins are read only for a run that was reverted, and once: the
+    // reader ignores a second call.
+    effect(() => {
+      if ((this.watch.run()?.revertedByUserId ?? '') !== '') {
+        untracked(() => void this._admins.load());
+      }
+    });
+
     // On the component, never on a route provider. A route's injector is not
     // destroyed when the screen leaves, so teardown declared there never runs
     // and the poll would carry on against a screen nobody is looking at.
     inject(DestroyRef).onDestroy(() => this.watch.stop());
   }
+}
+
+/** The words for an admin the list of admins does not hold. */
+const REVERTED_BY_UNKNOWN = 'harvest.run.revertedByUnknown';
+
+/** The words for a list of admins that could not be read. */
+const REVERTED_BY_UNREAD = 'harvest.run.revertedByUnread';
+
+/**
+ * One fact of the run: a value as text, or a key to translate, and what its
+ * hover says. Empty strings stand for none.
+ */
+interface RunFact {
+  readonly key: string;
+  readonly value: string;
+  readonly valueKey: string;
+  readonly title: string;
+}
+
+function fact(key: string, value: string): RunFact {
+  return { key, value, valueKey: '', title: '' };
 }
 
 /**

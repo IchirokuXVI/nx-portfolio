@@ -1,4 +1,5 @@
 import { provideLocationMocks } from '@angular/common/testing';
+import { signal } from '@angular/core';
 import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { ActivatedRoute, provideRouter } from '@angular/router';
 import { RokuTranslatorTestingModule } from '@portfolio/localization/rokutranslator-angular';
@@ -6,11 +7,13 @@ import {
   DEPLOYMENT_SERVICE,
   DeploymentStore,
   HARVEST_SERVICE,
+  RESOURCE_GATEWAYS,
   ServerReachability,
   type HarvestServiceI,
 } from '@portfolio/luna-shopper-admin/data-access';
 import { ResourceReferences } from '@portfolio/luna-shopper-admin/feature-resource';
 import type { HarvestRun } from '@portfolio/luna-shopper-admin/models';
+import { Viewport } from '@portfolio/luna-shopper-admin/ui';
 import { RunPage } from './run-page';
 
 /**
@@ -109,12 +112,34 @@ function importRun(over: Partial<HarvestRun> = {}): HarvestRun {
   });
 }
 
+/** A gateway whose one list is the admins, or a refusal. */
+function gatewaysAnswering(admins: readonly unknown[] | 'fail') {
+  return {
+    for: () => ({
+      list: async () => {
+        if (admins === 'fail') {
+          throw new Error('refused');
+        }
+        return { items: admins, nextCursor: null };
+      },
+    }),
+  };
+}
+
 /** What the last export answered with, so a spec can assert on the file. */
 let exported: Readonly<Record<string, unknown>> = {};
 
+/** The screen around the run: its width, and the admins the gateway lists. */
+interface Around {
+  readonly compact?: boolean;
+  /** The rows of `GET /v1/admin/admins`, or `'fail'` for a refused read. */
+  readonly admins?: readonly unknown[] | 'fail';
+}
+
 async function render(
   answer: HarvestRun,
-  reverted?: HarvestRun
+  reverted?: HarvestRun,
+  around: Around = {}
 ): Promise<ComponentFixture<RunPage>> {
   const service = {
     readRun: async () => answer,
@@ -158,6 +183,21 @@ async function render(
         provide: ActivatedRoute,
         useValue: { snapshot: { paramMap: new Map([['id', 'run-1']]) } },
       },
+      {
+        provide: Viewport,
+        useValue: {
+          compact: signal(around.compact ?? false),
+          split: signal(false),
+        },
+      },
+      ...(around.admins === undefined
+        ? []
+        : [
+            {
+              provide: RESOURCE_GATEWAYS,
+              useValue: gatewaysAnswering(around.admins),
+            },
+          ]),
     ],
   }).compileComponents();
 
@@ -1128,6 +1168,184 @@ describe('RunPage, what a walk did not read', () => {
       '[data-sizes]',
     ]) {
       expect(part(fixture, selector)).toBeNull();
+    }
+    fixture.componentInstance.watch.stop();
+  });
+});
+
+/**
+ * The run page on a phone, who reverted a run, and the report tables (admin
+ * plan 0074).
+ */
+describe('RunPage, on a phone and after a revert', () => {
+  const REVERTED = {
+    status: 'COMPLETED' as const,
+    finishedAt: '2026-09-03T09:30:00.000Z',
+    revertedAt: '2026-09-05T10:00:00.000Z',
+    revertedByUserId: 'admin-1',
+    revertedPriceCount: 214,
+  };
+
+  const ADMINS = [
+    {
+      adminId: 'admin-1',
+      username: 'ichiroku',
+      displayName: 'Ichiroku',
+      lastLoginAt: null,
+      disabledAt: null,
+    },
+    {
+      adminId: 'admin-2',
+      username: 'retired',
+      displayName: null,
+      lastLoginAt: null,
+      disabledAt: null,
+    },
+  ];
+
+  const one = (fixture: ComponentFixture<RunPage>, selector: string) =>
+    fixture.nativeElement.querySelector(selector) as HTMLElement | null;
+
+  async function settled(fixture: ComponentFixture<RunPage>) {
+    await drain();
+    fixture.detectChanges();
+    return fixture;
+  }
+
+  const revertedBy = (fixture: ComponentFixture<RunPage>) =>
+    one(fixture, '[data-fact="revertedBy"] dd');
+
+  it('draws the chips in the overview and not in the header on a phone', async () => {
+    const fixture = await render(run(REVERTED), undefined, {
+      compact: true,
+      admins: ADMINS,
+    });
+
+    const line = one(fixture, '[data-run-chips]');
+    expect(line?.textContent).toContain('harvest.status.COMPLETED');
+    expect(line?.textContent).toContain('harvest.run.reverted.chip');
+    expect(one(fixture, 'lib-page-header .status')).toBeNull();
+    expect(one(fixture, 'lib-page-header .reverted')).toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('draws the chips in the header and not in the overview when wide', async () => {
+    const fixture = await render(run(REVERTED), undefined, { admins: ADMINS });
+
+    expect(one(fixture, '[data-run-chips]')).toBeNull();
+    expect(one(fixture, 'lib-page-header .status')?.textContent).toContain(
+      'harvest.status.COMPLETED'
+    );
+    expect(one(fixture, 'lib-page-header .reverted')).not.toBeNull();
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('names the admin who reverted it, with the id in the hover', async () => {
+    const fixture = await settled(
+      await render(run(REVERTED), undefined, { admins: ADMINS })
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe('Ichiroku');
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-1');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('names the admin by username when the display name is null', async () => {
+    const fixture = await settled(
+      await render(
+        run({ ...REVERTED, revertedByUserId: 'admin-2' }),
+        undefined,
+        { admins: ADMINS }
+      )
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe('retired');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('says an admin is no longer listed, and never shows the id alone', async () => {
+    const fixture = await settled(
+      await render(
+        run({ ...REVERTED, revertedByUserId: 'admin-gone' }),
+        undefined,
+        { admins: ADMINS }
+      )
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe(
+      'harvest.run.revertedByUnknown'
+    );
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-gone');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('says the list could not be read, not that the admin is gone', async () => {
+    const fixture = await settled(
+      await render(run(REVERTED), undefined, { admins: 'fail' })
+    );
+
+    expect(revertedBy(fixture)?.textContent?.trim()).toBe(
+      'harvest.run.revertedByUnread'
+    );
+    expect(revertedBy(fixture)?.getAttribute('title')).toBe('admin-1');
+    fixture.componentInstance.watch.stop();
+  });
+
+  it('puts every report table inside a scroll box', async () => {
+    const fixture = await render(
+      run({
+        status: 'COMPLETED',
+        finishedAt: '2026-09-03T09:30:00.000Z',
+        report: {
+          writes: 'PRICES',
+          copies: [
+            {
+              from: 'scope-national',
+              to: ['t1'],
+              pricesCopied: 3,
+              availabilityCopied: 0,
+            },
+          ],
+          sections: [
+            {
+              code: 'S1',
+              name: 'Droguería',
+              products: 412,
+              queries: 14,
+              stoppedBy: 'GROWTH',
+              openQueries: [],
+            },
+          ],
+          categories: [
+            {
+              code: '01',
+              name: 'DESPENSA',
+              printedCount: 1200,
+              rowsRead: 1188,
+              rowsRepeated: 12,
+            },
+          ],
+          sizesDisproved: 1,
+          sizesDisprovedExamples: [
+            {
+              entryId: '',
+              name: 'Yogur natural',
+              stated: 125,
+              implied: 333.333,
+              unit: 'GRAM',
+              label: '1,20 €/kg',
+            },
+          ],
+        },
+      })
+    );
+
+    const tables = [
+      ...fixture.nativeElement.querySelectorAll('.report table'),
+    ] as HTMLElement[];
+    expect(tables).toHaveLength(4);
+    for (const table of tables) {
+      expect(table.parentElement?.classList.contains('scroll')).toBe(true);
     }
     fixture.componentInstance.watch.stop();
   });

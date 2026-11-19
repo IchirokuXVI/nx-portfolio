@@ -90,6 +90,17 @@ function dashboard(
   } as unknown as DashboardDocument;
 }
 
+/** The accounts `GET /v1/admin/admins` lists, by the seed's ids. */
+const ADMINS = [
+  {
+    adminId: 'admin-ichiroku',
+    username: 'ichiroku',
+    displayName: 'Ichiroku',
+    lastLoginAt: null,
+    disabledAt: null,
+  },
+];
+
 /** What a spec changes about the world behind the page. */
 interface RenderOptions {
   /** The presets read answers none, so every preset a run names is gone. */
@@ -184,7 +195,12 @@ async function render(options: RenderOptions = {}) {
       {
         provide: RESOURCE_GATEWAYS,
         useValue: {
-          for: () => ({ list: async () => ({ items: [], nextCursor: null }) }),
+          for: (source: { path: string }) => ({
+            list: async () => ({
+              items: source.path === '/v1/admin/admins' ? ADMINS : [],
+              nextCursor: null,
+            }),
+          }),
         },
       },
       {
@@ -291,6 +307,15 @@ describe('the Runs tab, and whether runs may start', () => {
     expect(one(fixture, 'lib-harvest-header lib-info-button')).not.toBeNull();
     // The switch panel is gone, and so is its list of two switches.
     expect(one(fixture, 'lib-switch-panel')).toBeNull();
+  });
+
+  /** The header cuts a chip, so on a phone the state is a line of the page. */
+  it('draws the state under the header on a phone, and not in it', async () => {
+    const { fixture } = await render({ compact: true });
+
+    expect(one(fixture, 'lib-harvest-header [data-runs-state]')).toBeNull();
+    expect(one(fixture, '.state-line [data-runs-state]')).not.toBeNull();
+    expect(one(fixture, '.state-line lib-info-button')).not.toBeNull();
   });
 });
 
@@ -602,6 +627,22 @@ describe('the runs list, and what a row says', () => {
     const { fixture } = await render({ runs: 'none', running: null });
 
     expect(text(fixture)).toContain('harvest.runs.empty');
+  });
+
+  /**
+   * The run holds only the admin's id, which is a uuid. The hover names the
+   * admin and keeps the id after the name (admin plan 0074, section 4).
+   */
+  it('names the admin who reverted a run in the hover of its chip', async () => {
+    const { fixture, page } = await render();
+    await drain();
+    fixture.detectChanges();
+
+    expect(
+      page.rows().find((row) => row.id === 'run-catalog-reverted')?.revertedBy
+    ).toBe('Ichiroku (admin-ichiroku)');
+    const chip = one<HTMLElement>(fixture, '.runs lib-run-row .reverted');
+    expect(chip?.getAttribute('title')).toBe('Ichiroku (admin-ichiroku)');
   });
 });
 

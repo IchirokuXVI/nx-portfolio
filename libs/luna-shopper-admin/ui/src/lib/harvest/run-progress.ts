@@ -6,6 +6,7 @@ import {
 } from '@angular/core';
 import { RokuTranslatorPipe } from '@portfolio/localization/rokutranslator-angular';
 import {
+  isReverted,
   runPriceCounters,
   type HarvestRun,
   type RunProgress,
@@ -163,8 +164,19 @@ export class RunProgressView {
    * `stageLabel` and not `stage`: the first is written for a person and the
    * second is a key. Neither is translated here, because both come from the
    * service and this app owns no copy of the harvester's stage list.
+   *
+   * The harvester never clears the phase when a run ends, so this is where a
+   * finished run stops showing it (admin plan 0074, section 1b). A completed
+   * run reached every phase, and a reverted run had its writes taken back, so
+   * for both the last phase says nothing. A run that stopped short keeps it,
+   * because it says where the run stopped.
    */
-  readonly stageLabel = computed(() => this.run().stageLabel);
+  readonly stageLabel = computed(() => {
+    const run = this.run();
+    return run.status === 'COMPLETED' || isReverted(run)
+      ? null
+      : run.stageLabel;
+  });
 
   /**
    * The run's own counters, shown separately rather than summed.
