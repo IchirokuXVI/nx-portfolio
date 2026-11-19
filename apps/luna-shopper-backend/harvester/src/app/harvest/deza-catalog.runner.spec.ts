@@ -2021,6 +2021,9 @@ describe('deza: every path a product is filed under (plan 0268)', () => {
     listing = await startFakeListing(SECTIONS, twoSections());
     const built = build(listing);
     const events: string[] = [];
+    (built.context.flush as jest.Mock).mockImplementation(async () => {
+      events.push('flush');
+    });
     const product = built.report.product.bind(built.report);
     built.report.product = (observation) => {
       events.push('product');
@@ -2038,8 +2041,6 @@ describe('deza: every path a product is filed under (plan 0268)', () => {
       { supermarketId: CHAIN },
       source({ baseUrl: listing.url })
     );
-    // The executor drains the sink after the run returns.
-    events.push('drain');
 
     // **Always ADD**: no DEZA walk proves it saw every section a product sits
     // in, so none can say a stored path is gone.
@@ -2053,25 +2054,44 @@ describe('deza: every path a product is filed under (plan 0268)', () => {
       expect(observed.prices).toEqual([]);
     }
     expect(events.lastIndexOf('product')).toBeLessThan(events.indexOf('paths'));
-    expect(events.at(-1)).toBe('drain');
+    // The run's own flush comes after every path call, so the paths are with
+    // the sink before the run hands it over.
+    expect(events.filter((event) => event === 'flush')).toHaveLength(1);
+    expect(events.lastIndexOf('paths')).toBeLessThan(events.indexOf('flush'));
   });
 
   it('makes no call when the walk dies before its end', async () => {
-    // A listing that is gone before the section tree is read.
-    const gone = await startFakeListing(SECTIONS, twoSections());
-    const url = gone.url;
-    await gone.close();
-    const built = build(gone);
+    listing = await startFakeListing(SECTIONS, twoSections());
+    const fake = listing;
+    const built = build(listing);
+    // Carniceria ends and reports its products. On the first row of Bolleria
+    // the heartbeat fails, which fails that section, and the run row then
+    // refuses the failure count too, which is what kills a DEZA walk: a
+    // section that fails alone does not.
+    (built.context.heartbeat as jest.Mock).mockImplementation(async () => {
+      if (fake.queries.some((query) => query.startsWith('W051|'))) {
+        throw new Error('The heartbeat did not answer.');
+      }
+    });
+    (built.context.report as jest.Mock).mockRejectedValue(
+      new Error('The run row did not answer.')
+    );
 
     await expect(
       built.runner.run(
         built.context,
         built.report,
         { supermarketId: CHAIN },
-        source({ baseUrl: url })
+        source({ baseUrl: listing.url })
       )
-    ).rejects.toThrow();
+    ).rejects.toThrow('The run row did not answer.');
 
+    // The finished section reported its product, which by then had a path
+    // recorded, and Bolleria had listed it again: still no path call.
+    const product = built.report.products.find((p) => p.externalId === lenor);
+    expect(product?.categoryPath).toEqual(['FRIO', 'Carniceria']);
+    expect(carniceria(fake).length).toBeGreaterThan(0);
+    expect(built.context.setTotalPlanned).not.toHaveBeenCalled();
     expect(built.report.categoryPathCalls).toEqual([]);
   });
 });

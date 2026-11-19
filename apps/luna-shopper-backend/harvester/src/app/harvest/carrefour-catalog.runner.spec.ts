@@ -1371,8 +1371,12 @@ describe('CarrefourCatalogRunner', () => {
       ]);
     });
 
-    it('puts the paths on no observation, and makes every call after the last product and before the run returns', async () => {
+    it('puts the paths on no observation, and makes every call after the last product and before the run flushes', async () => {
       const events: string[] = [];
+      const runContext = context();
+      (runContext.flush as jest.Mock).mockImplementation(async () => {
+        events.push('flush');
+      });
       const product = report.product.bind(report);
       report.product = (observation) => {
         events.push('product');
@@ -1384,12 +1388,9 @@ describe('CarrefourCatalogRunner', () => {
         paths(externalId, list, mode);
       };
 
-      await crawl(new TestRunner(states()), context(), {
+      await crawl(new TestRunner(states()), runContext, {
         delistCountsCrawl: true,
       });
-      // The executor drains the sink after the run returns, so every call is
-      // with the sink by then.
-      events.push('drain');
 
       for (const observed of report.products) {
         expect(observed).not.toHaveProperty('categoryPaths');
@@ -1398,7 +1399,10 @@ describe('CarrefourCatalogRunner', () => {
         events.indexOf('paths')
       );
       expect(events.filter((event) => event === 'paths')).toHaveLength(3);
-      expect(events.at(-1)).toBe('drain');
+      // The run's own flush comes after every path call, so the paths are
+      // with the sink before the run hands it over.
+      expect(events.filter((event) => event === 'flush')).toHaveLength(1);
+      expect(events.lastIndexOf('paths')).toBeLessThan(events.indexOf('flush'));
     });
 
     it('makes no call when the walk dies before its end', async () => {
