@@ -853,7 +853,10 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       provider: 'osm',
       externalRef: 'node/7654321',
       brandKey: 'Q925132',
-      brandName: 'Dia',
+      // The printed brand is the `brand` tag, as the OpenStreetMap adapter
+      // reads it. It names no chain of the catalog, so only the key resolves
+      // this place to Dia.
+      brandName: 'Maxi Dia',
       name: 'Maxi Dia',
       latitude: 40.4169,
       longitude: -3.7039,

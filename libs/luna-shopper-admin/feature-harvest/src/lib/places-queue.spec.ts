@@ -955,8 +955,12 @@ describe('the places queue, linking to a shop a person picks', () => {
     });
   });
 
-  /** Dia and Maxi Dia share the key of Dia, and the catalog holds that chain. */
-  it('opens on the held chain of Dia, found by the key of a Dia place', async () => {
+  /**
+   * Dia and Maxi Dia share the key of Dia, and the catalog holds that chain.
+   * The place prints `Maxi Dia`, a name no chain carries, so only the key
+   * finds the chain.
+   */
+  it('opens on the held chain of Dia, found by the key of a Maxi Dia place', async () => {
     const { fixture, page } = await render('place-dia-2');
 
     page.startLinking();
