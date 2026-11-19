@@ -983,9 +983,13 @@ export class SourceIngest {
    * row whose paths change is written, and only its one column, with an
    * `update` and never a `save` of a cached row (plan 0269, section 3). A row
    * that no longer exists writes nothing.
+   *
+   * `onWritten` is called as each update lands, so a caller that counts
+   * through it holds the true count when an update midway rejects.
    */
   async writeCategoryPaths(
-    writes: readonly CategoryPathsWrite[]
+    writes: readonly CategoryPathsWrite[],
+    onWritten: () => void = () => undefined
   ): Promise<number> {
     let changed = 0;
     for (let i = 0; i < writes.length; i += DECISION_READ_CHUNK) {
@@ -1009,6 +1013,7 @@ export class SourceIngest {
           categoryPaths: after,
         } as QueryDeepPartialEntity<SourceCatalogEntry>);
         changed += 1;
+        onWritten();
       }
     }
     return changed;
@@ -2615,10 +2620,14 @@ export class SourceIngestSession {
 
   /**
    * The category paths of the run's rows (plan 0268, section 2). Written by
-   * the drain, after {@link close}, as {@link activeItemsOf} is read there.
+   * the drain, after {@link close} and after every other write of the end of
+   * the run, so a failure here costs nothing else.
    */
-  writeCategoryPaths(writes: readonly CategoryPathsWrite[]): Promise<number> {
-    return this.ingest.writeCategoryPaths(writes);
+  writeCategoryPaths(
+    writes: readonly CategoryPathsWrite[],
+    onWritten?: () => void
+  ): Promise<number> {
+    return this.ingest.writeCategoryPaths(writes, onWritten);
   }
 
   /**

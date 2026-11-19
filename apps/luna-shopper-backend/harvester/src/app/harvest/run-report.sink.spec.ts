@@ -145,6 +145,8 @@ function build(
     storedPaths?: Record<string, string[][]>;
     /** Whether the run's signal is aborted by the time it drains. */
     aborted?: boolean;
+    /** The update of category paths, by its index from 0, that rejects. */
+    pathUpdateFails?: { at: number; error: Error };
   } = {}
 ) {
   const pushed: SourceObservation[][] = [];
@@ -193,6 +195,7 @@ function build(
     ])
   );
   const pathUpdates: Array<{ id: string; categoryPaths: string[][] }> = [];
+  let pathUpdateCalls = 0;
   const pathsRepository = {
     find: jest.fn(async (query: { where: { id: FindOperator<string[]> } }) =>
       (query.where.id.value as unknown as string[])
@@ -205,6 +208,11 @@ function build(
     ),
     update: jest.fn(
       async (where: { id: string }, values: { categoryPaths: string[][] }) => {
+        const call = pathUpdateCalls;
+        pathUpdateCalls += 1;
+        if (options.pathUpdateFails?.at === call) {
+          throw options.pathUpdateFails.error;
+        }
         storedPaths.set(where.id, values.categoryPaths);
         pathUpdates.push({ id: where.id, categoryPaths: values.categoryPaths });
         return { affected: 1 };
@@ -216,8 +224,9 @@ function build(
     {} as never,
     {} as never
   );
-  const writeCategoryPaths = jest.fn((writes: readonly CategoryPathsWrite[]) =>
-    pathsIngest.writeCategoryPaths(writes)
+  const writeCategoryPaths = jest.fn(
+    (writes: readonly CategoryPathsWrite[], onWritten?: () => void) =>
+      pathsIngest.writeCategoryPaths(writes, onWritten)
   );
   const closed = jest.fn(async () => totalsOf());
   /** What the chunks so far wrote, without a close (plan 0269, D9). */
@@ -454,6 +463,7 @@ function build(
     totals,
     storedPaths,
     pathUpdates,
+    pathsRepository,
     writeCategoryPaths,
   };
 }
@@ -1865,19 +1875,121 @@ describe('RunReportSink, the category paths of a run (plan 0268)', () => {
     expect(storedPaths.get('entry-a')).toEqual([IBERICOS, COLA]);
   });
 
-  it('writes in the drain, after the last chunk, and a run that never drains writes no path', async () => {
-    const { sink, pushed, writeCategoryPaths, pathUpdates } = build();
+  it('keeps every stored path, in its order, under ADD, even one a longer run path covers', async () => {
+    const A = ['Frescos'];
+    const AB = ['Frescos', 'Frutas'];
+    const C = ['Despensa'];
+    const { sink, storedPaths } = build({
+      storedPaths: { short: [A], two: [A, C] },
+    });
+
+    sink.product(observation({ externalId: 'short' }));
+    sink.product(observation({ externalId: 'two' }));
+    sink.categoryPaths('short', [AB], 'ADD');
+    sink.categoryPaths('two', [AB], 'ADD');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-short')).toEqual([A, AB]);
+    expect(storedPaths.get('entry-two')).toEqual([A, C, AB]);
+  });
+
+  it('removes no stored path in an aborted run, not even one its longer path covers', async () => {
+    const A = ['Frescos'];
+    const AB = ['Frescos', 'Frutas'];
+    const C = ['Despensa'];
+    const { sink, storedPaths } = build({
+      storedPaths: { a: [A, C] },
+      aborted: true,
+    });
 
     sink.product(observation({ externalId: 'a' }));
-    sink.categoryPaths('a', [COLA], 'REPLACE');
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(writeCategoryPaths).not.toHaveBeenCalled();
+    sink.categoryPaths('a', [AB], 'REPLACE');
+    await sink.drain();
+
+    expect(storedPaths.get('entry-a')).toEqual([A, C, AB]);
+  });
+
+  it('writes no path for a run that only settles, though a whole chunk of its products landed', async () => {
+    const { sink, pushed, writeCategoryPaths, pathUpdates, storedPaths } =
+      build({ storedPaths: { 'p-0': [IBERICOS] } });
+
+    // A whole chunk, which the sink queues the moment it fills, so the
+    // settle below awaits a real write of rows.
+    for (let n = 0; n < 400; n += 1) {
+      sink.product(observation({ externalId: `p-${n}` }));
+    }
+    sink.categoryPaths('p-0', [COLA], 'REPLACE');
+    sink.categoryPaths('p-1', [COLA], 'REPLACE');
 
     // A run that fails before its drain only settles what it queued.
     await sink.settle();
-    expect(pushed).toEqual([]);
+
+    expect(pushed.flat()).toHaveLength(400);
     expect(writeCategoryPaths).not.toHaveBeenCalled();
     expect(pathUpdates).toEqual([]);
+    expect(storedPaths.get('entry-p-0')).toEqual([IBERICOS]);
+    expect(sink.writtenSoFar.categoryPathsWritten).toBe(0);
+  });
+
+  it('writes the paths last, and a failed path write fails the drain with the rows that landed counted', async () => {
+    const failure = new Error('connection terminated');
+    const {
+      sink,
+      storedPaths,
+      catalog,
+      availability,
+      shopsObserved,
+      pathsRepository,
+    } = build({
+      resolves: {
+        a: { itemId: 'item-a', active: true },
+        b: { itemId: 'item-b', active: true },
+        c: { itemId: 'item-c', active: true },
+      },
+      shops: [
+        {
+          id: 'shop-T1',
+          externalId: 'T1',
+          printedName: 'Centro',
+          supermarketLocationId: 'loc-1',
+          status: SourceLocationStatus.ACTIVE,
+        } as Partial<SourceLocation>,
+      ],
+      pathUpdateFails: { at: 1, error: failure },
+    });
+
+    for (const externalId of ['a', 'b', 'c']) {
+      sink.product(
+        observation({ externalId, packCount: 6, approxWeight: 1540 })
+      );
+      sink.availability({ externalId, available: true, shopCode: 'T1' });
+      sink.categoryPaths(externalId, [COLA], 'REPLACE');
+    }
+
+    await expect(sink.drain()).rejects.toBe(failure);
+
+    // The first row landed and is counted, the second rejected, and the
+    // third was never reached.
+    expect(storedPaths.get('entry-a')).toEqual([COLA]);
+    expect(storedPaths.has('entry-b')).toBe(false);
+    expect(storedPaths.has('entry-c')).toBe(false);
+    expect(sink.writtenSoFar.categoryPathsWritten).toBe(1);
+
+    // Every other write of the end of the run was done before it.
+    const firstPathUpdate = pathsRepository.update.mock.invocationCallOrder[0];
+    for (const before of [
+      catalog.fillPackCounts,
+      catalog.setApproxWeights,
+      availability.store,
+      availability.writeForRun,
+      availability.writePricelessOffersForRun,
+    ] as unknown as jest.Mock[]) {
+      expect(before).toHaveBeenCalledTimes(1);
+      expect(before.mock.invocationCallOrder[0]).toBeLessThan(firstPathUpdate);
+    }
+    expect(shopsObserved).toHaveLength(1);
+    expect(sink.writtenSoFar.packCountsFilled).toBe(3);
+    expect(sink.writtenSoFar.approxWeightsWritten).toBe(3);
   });
 
   it('writes the paths once the products are written, and a new row holds them', async () => {
@@ -1896,9 +2008,10 @@ describe('RunReportSink, the category paths of a run (plan 0268)', () => {
 
     // The last chunk, which only the drain queues, came first.
     expect(order).toEqual(['paths after 401 product(s)']);
-    expect(writeCategoryPaths).toHaveBeenCalledWith([
-      { entryId: 'entry-p-400', paths: [COLA], mode: 'REPLACE' },
-    ]);
+    expect(writeCategoryPaths).toHaveBeenCalledWith(
+      [{ entryId: 'entry-p-400', paths: [COLA], mode: 'REPLACE' }],
+      expect.any(Function)
+    );
     expect(storedPaths.has('entry-p-400')).toBe(false);
   });
 

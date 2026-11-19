@@ -418,6 +418,74 @@ describe('DiaCatalogRunner', () => {
       ).toBe(true);
     });
 
+    it('replaces when one store that listed the product read its whole listing, and adds for a product only an unfinished store listed', async () => {
+      const barcelonaOnly = Array.from({ length: 45 }, (_, index) => ({
+        ...COKE,
+        sku: `bcn-${index}`,
+      }));
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA],
+          listings: {
+            // Madrid's listing is one page, and it is read whole.
+            '13835': { L2108: [COKE] },
+            // Barcelona's is three pages, and its second page fails, so its
+            // walk did not finish.
+            '959': { L2108: [COKE, ...barcelonaOnly] },
+          },
+          fail: (_, path) => (path.endsWith('?page=2') ? 404 : undefined),
+        })
+      );
+      const ctx = context();
+      await runner.run(ctx, report, input(), source());
+
+      const modeOf = (externalId: string) =>
+        report.categoryPathCalls.find((call) => call.externalId === externalId)
+          ?.mode;
+      // Listed by both stores, and Madrid's whole listing is enough.
+      expect(modeOf('659')).toBe('REPLACE');
+      // Listed only by Barcelona, whose walk did not finish.
+      expect(modeOf('bcn-0')).toBe('ADD');
+    });
+
+    it('counts a leaf that DIA_CATEGORY_NAMES does not name and that has no slug in unslottedOnly', async () => {
+      const UNKNOWN: FakeDiaLeaf = {
+        id: 'L9990001',
+        name: 'Hoja nueva',
+        path: '/agua-y-refrescos/hoja-nueva/c/L9990001',
+        rootId: 'L117',
+        rootName: 'Agua y refrescos',
+      };
+      const runner = new TestRunner(
+        world({
+          leaves: [COLA, UNKNOWN],
+          listings: { '13835': { L2108: [COKE], L9990001: [HAM] } },
+        })
+      );
+      const ctx = context();
+      await runner.run(ctx, report, input({ priceScopes: [MADRID] }), source());
+
+      // A leaf the table does not know at all is news to an operator...
+      expect(reportOf(ctx)['unmappedLeaves']).toEqual([
+        { id: 'L9990001', name: 'Hoja nueva' },
+      ]);
+      // ...and its product, filed under no other leaf, is counted too.
+      expect(reportOf(ctx)['unslottedOnly']).toEqual({
+        products: 1,
+        leaves: [
+          {
+            id: 'L9990001',
+            rootName: 'Agua y refrescos',
+            name: 'Hoja nueva',
+            products: 1,
+            examples: [
+              { externalId: '90001', name: 'Jamón ibérico Dia 100 g' },
+            ],
+          },
+        ],
+      });
+    });
+
     it('names the products every leaf of which has no slug, by leaf, with at most five examples', async () => {
       const cheeses = Array.from({ length: 6 }, (_, index) => ({
         ...CHEESE,

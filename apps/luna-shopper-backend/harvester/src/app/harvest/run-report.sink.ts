@@ -691,7 +691,6 @@ export class RunReportSink implements RunReport {
       // screen fell back to `updated`, which is rows the ladder changed.
       const ingested = await this.session.close();
       this.takeIngested(ingested);
-      await this.writeCategoryPaths(this.session);
       // The decisions as they are now, read once for the pack counts, the
       // weights and the availability alike (plan 0269, D5 and D8): a row a
       // person decided after its chunk sends nothing to the product it left.
@@ -716,13 +715,21 @@ export class RunReportSink implements RunReport {
       await this.writeScopeAvailability();
       await this.writePricelessOffers();
     }
+    // Last of all (plan 0268, section 2): the paths are context and nothing
+    // else reads them, so a failed path write costs no pack count, weight or
+    // availability. It still fails the run (plan 0269), and the count holds
+    // the rows that landed before it.
+    if (this.session) {
+      await this.writeCategoryPaths(this.session);
+    }
     return this.result;
   }
 
   /**
    * The category paths the runner stated, onto the rows this run wrote them
    * to (plan 0268, section 2). After the last chunk, so every row the run
-   * created exists. A product the run did not report has no row of this run
+   * created exists, and after every other write of the drain, so a failure
+   * here costs no pack count, weight or availability. A product the run did not report has no row of this run
    * and is not touched, and neither is a row no call named.
    *
    * **An aborted run writes every call as `ADD`**, by the rule of
@@ -751,8 +758,11 @@ export class RunReportSink implements RunReport {
     if (writes.length === 0) {
       return;
     }
-    this.result.categoryPathsWritten +=
-      await session.writeCategoryPaths(writes);
+    // Counted as each row lands, so a failure midway leaves the true count
+    // for the report of the failed run (plan 0269, D9).
+    await session.writeCategoryPaths(writes, () => {
+      this.result.categoryPathsWritten += 1;
+    });
   }
 
   /**
