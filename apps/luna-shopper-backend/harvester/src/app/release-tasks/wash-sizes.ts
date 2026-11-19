@@ -28,11 +28,19 @@ import {
  * themselves go to the review list file (section 5), which `post.sh` copies
  * into a ConfigMap and never prints.
  *
- * **The Mercadona note.** Mercadona is outside the selection. A pack it prices
- * per wash (label `lv`) and sizes as `ud` holds the number of washes as a
- * `UNIT` size, because `readUnitSize` of the adapter takes `total_units` when
- * the comparison price is the pack price over it. Those rows are listed for
- * the curator in a second file and never corrected.
+ * **The Mercadona note.** Mercadona is outside the selection. The note lists
+ * every ACTIVE bound Mercadona row that states a count of units above 1 as its
+ * size (`unitSize` above 1, `sizeUnit` `UNIT`) and whose latest price label is
+ * `lv`, the chain pricing it per wash. Such a count may be the number of
+ * washes, whichever path of the adapter's `readUnitSize` produced it: the
+ * stored `unit_size`, or `total_units` when the comparison price is the pack
+ * price over it. Those rows are listed for the curator in a second file and
+ * never corrected.
+ *
+ * **Across runs.** A list never loses a line an earlier run recorded. The
+ * command reads the ConfigMap the earlier runs saved (`--recorded`) and keeps
+ * each of its lines as it stands, old size and all, adding only the lines of
+ * products it does not hold yet ({@link mergeList}).
  */
 
 /** The chain whose per wash packs are noted and never corrected. */
@@ -112,7 +120,7 @@ SELECT e."itemId"
 /**
  * Every ACTIVE bound row of the products in `$1`, with the label of its
  * latest price row, and every ACTIVE bound Mercadona row priced per wash and
- * sized as a count, for the note.
+ * sized as a count above 1, for the note.
  */
 export const SELECT_STATED_ROWS_SQL = `
 SELECT r.* FROM (
@@ -127,10 +135,12 @@ SELECT r.* FROM (
     LEFT JOIN supermarket_sources s ON s."supermarketId" = e."supermarketId"
    WHERE e.status = 'ACTIVE' AND e."itemId" IS NOT NULL
      AND (e."itemId" = ANY($1::uuid[])
-          OR (s."adapterKey" = '${MERCADONA_ADAPTER}' AND e."sizeUnit" = 'UNIT'))
+          OR (s."adapterKey" = '${MERCADONA_ADAPTER}' AND e."sizeUnit" = 'UNIT'
+              AND e."unitSize" > 1))
 ) r
  WHERE r."itemId" = ANY($1::uuid[])
-    OR (r."adapterKey" = '${MERCADONA_ADAPTER}' AND r.label = 'lv')
+    OR (r."adapterKey" = '${MERCADONA_ADAPTER}' AND r.label = 'lv'
+        AND r."unitSize" > 1)
  ORDER BY r."itemId", r."supermarketId", r.id`;
 
 export interface HarvesterDb {
@@ -142,9 +152,13 @@ export interface CatalogPort {
   update(input: UpdateItemInput): Promise<ItemView>;
 }
 
-/** Where the write run and `--review` put their lists. */
+/**
+ * Where the write run and `--review` put their lists, and where they read
+ * what earlier runs recorded. `read('-')` is standard input.
+ */
 export interface ReviewSink {
   write(path: string, text: string): Promise<void>;
+  read(path: string): Promise<string>;
 }
 
 export interface WashSizesPorts {
@@ -154,10 +168,22 @@ export interface WashSizesPorts {
   log(line: string): void;
 }
 
+/**
+ * `recorded` names the file that holds what earlier runs saved: the
+ * ConfigMap as `kubectl get -o json` prints it, or nothing when there is none.
+ */
 export type WashSizesOptions =
   | { mode: 'count' }
-  | { mode: 'review'; file: string }
-  | { mode: 'write'; max: number; file: string };
+  | { mode: 'review'; file: string; recorded: string | null }
+  | { mode: 'write'; max: number; file: string; recorded: string | null };
+
+/**
+ * A refusal the command words itself. Its message names no product, so it is
+ * the one kind of error whose message is printed ({@link describe}).
+ */
+export class WashSizesRefusal extends Error {
+  override readonly name = 'WashSizesRefusal';
+}
 
 /** One product the task corrects, as it was read. */
 export interface Correction {
@@ -192,13 +218,14 @@ export interface WashSizesPlan {
 }
 
 /**
- * Reads `--count`, `--review <file>`, or `--max <n> --review <file>`.
- * Anything else is refused, so a typo never becomes a run without a ceiling.
+ * Reads `--count`, `--review <file>`, or `--max <n> --review <file>`, the
+ * last two with an optional `--recorded <file|->`. Anything else is refused,
+ * so a typo never becomes a run without a ceiling.
  */
 export function parseWashSizesArgs(argv: string[]): WashSizesOptions {
   const usage =
     'usage: node wash-sizes.js --count | --review <file> | ' +
-    '--max <n> --review <file>';
+    '--max <n> --review <file>, each list with [--recorded <file|->]';
   if (argv.length === 1 && argv[0] === '--count') {
     return { mode: 'count' };
   }
@@ -207,24 +234,25 @@ export function parseWashSizesArgs(argv: string[]): WashSizesOptions {
     const flag = argv[i];
     const value = argv[i + 1];
     if (
-      !['--max', '--review'].includes(flag) ||
+      !['--max', '--review', '--recorded'].includes(flag) ||
       flag in values ||
       value === undefined ||
       value.startsWith('--') ||
       (flag === '--max' && !/^\d+$/.test(value))
     ) {
-      throw new Error(usage);
+      throw new WashSizesRefusal(usage);
     }
     values[flag] = value;
   }
   const file = values['--review'];
   if (file === undefined) {
-    throw new Error(usage);
+    throw new WashSizesRefusal(usage);
   }
+  const recorded = values['--recorded'] ?? null;
   if (values['--max'] === undefined) {
-    return { mode: 'review', file };
+    return { mode: 'review', file, recorded };
   }
-  return { mode: 'write', max: Number(values['--max']), file };
+  return { mode: 'write', max: Number(values['--max']), file, recorded };
 }
 
 /** The products that bear a wash row, then every row the plan reads. */
@@ -346,7 +374,7 @@ export function planWashSizes(
       ...new Set(
         onItem
           .filter((row) => row.sizeFormat !== null && row.sizeFormat.trim())
-          .map((row) => `${row.chain}: ${String(row.sizeFormat).trim()}`)
+          .map((row) => `${row.chain}: ${statedSizeOf(row)}`)
       ),
     ].sort();
     plan.corrections.push({
@@ -374,6 +402,8 @@ export function planWashSizes(
     if (
       row.adapterKey === MERCADONA_ADAPTER &&
       row.sizeUnit === UnitOfMeasure.UNIT &&
+      row.unitSize !== null &&
+      row.unitSize > 1 &&
       row.label === 'lv' &&
       !corrected.has(row.itemId)
     ) {
@@ -384,6 +414,21 @@ export function planWashSizes(
     }
   }
   return plan;
+}
+
+/**
+ * One row's size text for `stated_sizes`, from its stored columns. Mercadona
+ * stores the bare unit as `sizeFormat` (`l`, `ud`) and the number in
+ * `unitSize`, so a text with no digit is printed after the stored number:
+ * `2 l`. A text with no digit and no stored number is printed as it stands.
+ * This renders stored fields and reads no name.
+ */
+export function statedSizeOf(row: StatedRow): string {
+  const text = String(row.sizeFormat ?? '').trim();
+  if (/\d/.test(text) || row.unitSize === null) {
+    return text;
+  }
+  return `${row.unitSize} ${text}`;
 }
 
 /** The count lines both shell files read (section 6). Numbers only. */
@@ -478,6 +523,84 @@ export function notePathOf(reviewPath: string): string {
   return reviewPath.replace(/(\.tsv)?$/, '.mercadona-per-wash.tsv');
 }
 
+/** The ConfigMap keys the two lists are saved under (`post.sh`). */
+export const REVIEW_KEY = 'review.tsv';
+export const NOTE_KEY = 'mercadona-per-wash.tsv';
+
+/** What earlier runs saved in the ConfigMap, by key. */
+export interface RecordedLists {
+  review: string;
+  note: string;
+}
+
+/**
+ * The lists earlier runs saved, read out of the ConfigMap as
+ * `kubectl get configmap -o json` prints it. Empty text means there is no
+ * ConfigMap yet. Anything else that cannot be read is refused, and the
+ * refusal quotes none of it.
+ */
+export function readRecorded(text: string): RecordedLists {
+  if (text.trim() === '') {
+    return { review: '', note: '' };
+  }
+  let data: unknown;
+  try {
+    data = (JSON.parse(text) as { data?: unknown }).data ?? {};
+  } catch {
+    data = null;
+  }
+  if (!data || typeof data !== 'object') {
+    throw new WashSizesRefusal(
+      'Refused, and nothing was changed: the recorded review ConfigMap ' +
+        'cannot be read.'
+    );
+  }
+  const value = (key: string) => {
+    const held = (data as Record<string, unknown>)[key];
+    return typeof held === 'string' ? held : '';
+  };
+  return { review: value(REVIEW_KEY), note: value(NOTE_KEY) };
+}
+
+/**
+ * One list: every line `recorded` holds, as it stands, and every line of
+ * `next` whose product and chain it does not hold yet (keyed on `chain` and
+ * `item_id`, the first two columns). An earlier run's line keeps the old
+ * size it recorded, so a product corrected by a run that failed later is
+ * never dropped by the next one, and merging the same lines twice changes
+ * nothing. One header, the same order as {@link reviewList}.
+ */
+export function mergeList(
+  header: string[],
+  recorded: string,
+  next: string
+): string {
+  const lines = new Map<string, Line>();
+  for (const [source, text] of [
+    ['recorded', recorded],
+    ['next', next],
+  ] as const) {
+    const rows = text.split('\n').filter((line) => line.trim() !== '');
+    if (rows.length === 0) {
+      continue;
+    }
+    if (rows[0].replace(/\r$/, '') !== header.join('\t')) {
+      throw new WashSizesRefusal(
+        `Refused, and nothing was changed: the ${source} list does not ` +
+          'start with the header of this task.'
+      );
+    }
+    for (const row of rows.slice(1)) {
+      const cells = row.replace(/\r$/, '').split('\t');
+      const key = `${cells[0]}\t${cells[1]}`;
+      if (!lines.has(key)) {
+        lines.set(key, { chain: cells[0], name: cells[2] ?? '', cells });
+      }
+    }
+  }
+  return table(header, sortLines([...lines.values()]));
+}
+
 /**
  * The command. Answers the number of failures; each failure stops only its
  * own product. Prints counts and never a product.
@@ -498,20 +621,32 @@ export async function runWashSizes(
   if (options.mode === 'count') {
     return 0;
   }
+  // Read before any write, so a recorded list that cannot be read refuses
+  // while nothing has changed.
+  const recorded =
+    options.recorded === null
+      ? readRecorded('')
+      : readRecorded(await ports.files.read(options.recorded));
   if (options.mode === 'review') {
-    await writeLists(ports, options.file, plan.corrections, plan.notes);
+    await writeLists(
+      ports,
+      options.file,
+      plan.corrections,
+      plan.notes,
+      recorded
+    );
     ports.log(`review ${plan.corrections.length}`);
     return 0;
   }
 
   if (plan.unread > 0) {
-    throw new Error(
+    throw new WashSizesRefusal(
       `Refused, and nothing was changed: ${plan.unread} rows print a wash ` +
         'count that is not a whole number above 0.'
     );
   }
   if (plan.corrections.length > options.max) {
-    throw new Error(
+    throw new WashSizesRefusal(
       `Refused, and nothing was changed: ${plan.corrections.length} ` +
         `products, above ${options.max}.`
     );
@@ -538,7 +673,7 @@ export async function runWashSizes(
       ports.log(`failed ${codeOf(error) ?? 'error'}`);
     }
   }
-  await writeLists(ports, options.file, done, plan.notes);
+  await writeLists(ports, options.file, done, plan.notes, recorded);
   ports.log(`corrected ${done.length}`);
   ports.log(`skipped ${skipped}`);
   ports.log(`failures ${failures}`);
@@ -577,10 +712,18 @@ async function writeLists(
   ports: WashSizesPorts,
   file: string,
   corrections: Correction[],
-  notes: PerWashNote[]
+  notes: PerWashNote[],
+  recorded: RecordedLists
 ): Promise<void> {
-  await ports.files.write(file, reviewList(corrections));
-  await ports.files.write(notePathOf(file), perWashNote(notes));
+  // Both merged before either is written, so a refusal writes neither.
+  const review = mergeList(
+    REVIEW_HEADER,
+    recorded.review,
+    reviewList(corrections)
+  );
+  const note = mergeList(NOTE_HEADER, recorded.note, perWashNote(notes));
+  await ports.files.write(file, review);
+  await ports.files.write(notePathOf(file), note);
 }
 
 interface Line {
@@ -633,10 +776,35 @@ export function codeOf(error: unknown): string | null {
   return null;
 }
 
-/** The message of a failure that stops the command. Names no product. */
+/**
+ * The line printed for a failure that stops the command. Names no product.
+ *
+ * Only a {@link WashSizesRefusal} is printed with its message, because the
+ * command wrote that message. Any other error can carry a value out of a row
+ * or a product (a `QueryFailedError` quotes its parameters, a rejected read
+ * may quote what it read), so it is printed as its class name and its code,
+ * and never as its message.
+ */
 export function describe(error: unknown): string {
-  if (error instanceof Error) {
+  if (error instanceof WashSizesRefusal) {
     return error.message;
   }
-  return codeOf(error) ?? 'the command failed';
+  const code = codeOf(error) ?? sqlStateOf(error);
+  const name =
+    error instanceof Error && /^[A-Za-z]{1,40}$/.test(error.name)
+      ? error.name
+      : null;
+  const what = [name, code].filter((part) => part !== null).join(' ');
+  return what ? `the command failed: ${what}` : 'the command failed';
+}
+
+/** A Postgres error's SQLSTATE, five letters or digits, which names nothing. */
+function sqlStateOf(error: unknown): string | null {
+  if (error && typeof error === 'object') {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string' && /^[0-9A-Z]{5}$/.test(code)) {
+      return code;
+    }
+  }
+  return null;
 }
