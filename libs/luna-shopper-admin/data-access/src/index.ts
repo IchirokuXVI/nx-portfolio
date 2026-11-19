@@ -82,13 +82,7 @@ export {
   notFoundError,
   toGatewayError,
 } from './lib/gateway-error';
-export {
-  ADMIN_NAMES_SOURCE,
-  ADMIN_NAME_SEED,
-  AdminNames,
-  adminNamesOf,
-  type AdminNamesState,
-} from './lib/harvest/admin-names';
+export { AdminNames } from './lib/harvest/admin-names';
 export {
   type ApplyEntryDecisionsInput,
   type EntryDecisionOperation,
