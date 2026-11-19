@@ -987,17 +987,73 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       candidates: [],
     },
     {
+      // A place that names ALDI by its Wikidata key, a chain the catalog does
+      // not hold. Neither the key nor the printed name resolves a chain, so a
+      // link names its shop and an import names the chain. The key is the one
+      // the recorded Overpass fixture of `osm-places` carries for ALDI.
+      id: 'place-aldi-1',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/5550101',
+      brandKey: 'Q41171373',
+      brandName: 'ALDI',
+      name: 'ALDI',
+      latitude: 40.4152,
+      longitude: -3.7074,
+      street: 'Calle de Toledo 40',
+      city: 'Madrid',
+      postalCode: '28005',
+      postalCodeSource: 'SOURCE',
+      country: 'ES',
+      website: 'https://www.aldi.es',
+      openingHours: 'Mo-Sa 09:00-21:30',
+      tags: { shop: 'supermarket', brand: 'ALDI' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:02:30.000Z',
+      lastSeenAt: '2026-09-01T08:02:30.000Z',
+      candidates: [],
+    },
+    {
+      // An OpenStreetMap place with no brand key, whose printed name the catalog
+      // resolves: the catalog row of DEZA is named `Deza` (backend plan 0153).
+      id: 'place-osm-deza',
+      runId: 'run-store-aborted',
+      provider: 'osm',
+      externalRef: 'node/5550002',
+      brandKey: null,
+      brandName: 'Deza',
+      name: 'Supermercado Deza',
+      latitude: 37.8812,
+      longitude: -4.7701,
+      street: 'Avenida de Libia 31',
+      city: 'Córdoba',
+      postalCode: '14007',
+      postalCodeSource: 'DERIVED',
+      country: 'ES',
+      website: null,
+      openingHours: null,
+      tags: { shop: 'supermarket', brand: 'Deza' },
+      scopeKey: null,
+      status: 'NEW',
+      supermarketLocationId: null,
+      firstSeenAt: '2026-09-01T08:04:50.000Z',
+      lastSeenAt: '2026-09-01T08:04:50.000Z',
+      candidates: [],
+    },
+    {
       // An OpenStreetMap place with no brand key, whose printed name matches no
-      // chain of the catalog (backend plan 0153): the catalog row of DEZA is
-      // named `Supermercados Deza`. OpenStreetMap prints no language, so an
-      // import names the chain with `newChain` or is refused.
+      // chain of the catalog (backend plan 0153): the catalog holds no Aldi.
+      // OpenStreetMap prints no language, so an import names the chain with
+      // `newChain` or is refused.
       id: 'place-osm-unbranded',
       runId: 'run-store-aborted',
       provider: 'osm',
       externalRef: 'node/5550001',
       brandKey: null,
-      brandName: 'Deza',
-      name: 'Supermercado Deza',
+      brandName: 'Aldi',
+      name: 'Supermercado Aldi',
       latitude: 37.8791,
       longitude: -4.7646,
       street: 'Calle Isla de Fuerteventura 48',
@@ -1007,7 +1063,7 @@ export const DISCOVERED_PLACE_SEED: readonly Wire.HarvestDiscoveredPlaceView[] =
       country: 'ES',
       website: null,
       openingHours: null,
-      tags: { shop: 'supermarket', brand: 'Deza' },
+      tags: { shop: 'supermarket', brand: 'Aldi' },
       scopeKey: null,
       status: 'NEW',
       supermarketLocationId: null,
@@ -1140,13 +1196,13 @@ export const PLACE_CHAIN_SEED: readonly LinkableChain[] = [
   },
   {
     id: 'sm_deza',
-    name: { en: 'Supermercados Deza', es: 'Supermercados Deza' },
+    name: { en: 'Deza', es: 'Deza' },
     brandKey: null,
   },
   {
     id: 'sm_dia',
-    name: { en: 'Supermercados Dia', es: 'Supermercados Dia' },
-    brandKey: null,
+    name: { en: 'Dia', es: 'Dia' },
+    brandKey: 'Q925132',
   },
   {
     id: 'sm_eljamon',

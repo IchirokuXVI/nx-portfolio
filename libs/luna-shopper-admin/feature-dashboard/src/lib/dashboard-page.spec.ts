@@ -213,7 +213,7 @@ describe('DashboardPage against the seed', () => {
     // The two per chain queues are one tile each: the sum of their chains.
     expect(byKey.get('entries')?.value).toBe(66);
     expect(byKey.get('shops')?.value).toBe(4);
-    expect(byKey.get('places')?.value).toBe(7);
+    expect(byKey.get('places')?.value).toBe(9);
     expect(byKey.get('memberships')?.value).toBe(3);
     expect(byKey.get('stale')?.value).toBe(623);
     expect(byKey.get('loginFailures')?.value).toBe(2);

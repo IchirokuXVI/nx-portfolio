@@ -173,7 +173,8 @@ const HARVEST: Wire.AdminDashboardAdminHarvestDashboard = {
       { supermarketId: CARREFOUR, candidate: 0, unresolved: 0 },
       { supermarketId: DEZA, candidate: 6, unresolved: 0 },
     ],
-    places: 7,
+    // The places of `DISCOVERED_PLACE_SEED`, so the tab and the list agree.
+    places: 9,
     shops: [
       { supermarketId: MERCADONA, unmapped: 4 },
       { supermarketId: CARREFOUR, unmapped: 0 },
