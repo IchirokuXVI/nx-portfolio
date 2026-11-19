@@ -51,5 +51,16 @@ module.exports = {
       outputHashing: 'none',
       generatePackageJson: false,
     }),
+    // The one off command of release task 0007 (plan 0271), for the same reason.
+    new NxAppWebpackPlugin({
+      target: 'node',
+      compiler: 'tsc',
+      main: './src/wash-sizes.ts',
+      outputFileName: 'wash-sizes.js',
+      tsConfig: './tsconfig.app.json',
+      optimization: false,
+      outputHashing: 'none',
+      generatePackageJson: false,
+    }),
   ],
 };

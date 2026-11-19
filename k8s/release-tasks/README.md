@@ -432,6 +432,66 @@ ENVIRONMENT=staging \
   bash k8s/release-tasks/tasks/0005-unlink-deleted-accounts/check.sh
 ```
 
+## Task 0007
+
+`0007-wash-count-leaves-products` takes the wash count off the products that
+were made from a row printing one (backend plan `0271`). Before plan `0270`,
+`40 lavados` was read as 40 `UNIT`, and a product created from such a row kept
+that size.
+
+- **It runs a command inside the harvester pod.** `post.sh` runs
+  `node wash-sizes.js`. The command selects every ACTIVE bound row whose
+  printed size is a wash count (`40 lavados`, `2x40 lavados`, `44 Lavados.`,
+  and not `23+12 lavados`), and every product of such a row that is `UNIT` and
+  holds that count as its size. Each product loses its size, and its pack count
+  when that is the pack the row printed, through one `item.update` with the
+  harvester's actor. No size is set, no price changes, and nothing is deleted.
+- **It is armed for staging and for production.** The staging window ends on
+  2026-11-26 and the production one on 2026-12-03, and `PRODUCTION_RELEASE` is
+  `0.20.0`. A release published after that date needs the dates moved in a
+  commit before it.
+- **It states one ceiling per environment**, `MAX_PRODUCTS_<ENVIRONMENT>`.
+  `check.sh` counts with `--count` and refuses above it, and so does a row
+  whose wash count is not a whole number above 0. `post.sh` counts again and
+  passes the ceiling as `--max`, so the command refuses too.
+- **Its `check.sh` passes where the pod has no `wash-sizes.js` yet**, because
+  this release adds the command. `post.sh` refuses there.
+- **It leaves no marker, and it does not need one.** A corrected product has
+  no size, so a second run counts 0 and writes nothing.
+- **It leaves a review list for the curator.** `post.sh` saves the list of the
+  products it corrected in the ConfigMap `release-task-0007-review`, key
+  `review.tsv`: the chain, the product, the size it took off, the wash text
+  that qualified it, and every size text the product's rows state. The key
+  `mercadona-per-wash.tsv` beside it lists the Mercadona packs that the chain
+  prices per wash (label `lv`) and sizes as a count. The task does not correct
+  those. The deploy log shows the line counts only, because it is public. Read
+  the lists over SSH on the host, as the `deploy` user:
+
+  ```sh
+  kubectl -n luna-shopper get configmap release-task-0007-review \
+    -o jsonpath='{.data.review\.tsv}'
+  kubectl -n luna-shopper get configmap release-task-0007-review \
+    -o jsonpath='{.data.mercadona-per-wash\.tsv}'
+  ```
+
+  Nothing deletes the ConfigMap. Delete it when the curator has worked through
+  it. `node wash-sizes.js --review <file>` writes the same lists again for the
+  products that still qualify.
+
+- **To undo one product, send one item update** with the old size the list
+  names. A restore of the dump also removes everything written to catalog
+  after the task.
+
+To rehearse it, point the override at the built bundle and at databases that
+you made for the rehearsal, with a catalog on that NATS that knows the actor:
+
+```sh
+ENVIRONMENT=staging \
+  WASH_SIZES='node dist/apps/luna-shopper-backend-harvester/wash-sizes.js' \
+  REVIEW_APPLY='tee configmap.yaml' \
+  bash k8s/release-tasks/tasks/0007-wash-count-leaves-products/post.sh
+```
+
 ## Reverting a task
 
 Restore each dump that the ledger names into a scratch database, then promote
